@@ -23,6 +23,7 @@ package handlercore
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -71,21 +72,60 @@ type CalendarImageRenderer interface {
 	RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error)
 }
 
+type BroadcastHistoryQuery struct {
+	ChannelID  string
+	Type       string
+	TopicID    string
+	Limit      int
+	Since      time.Time
+	IncludeAll bool
+}
+
+type BroadcastThumbnailQuery struct {
+	VideoID string
+}
+
+type BroadcastHistoryEntry struct {
+	VideoID             string
+	ChannelID           string
+	MemberName          string
+	Title               string
+	TopicID             string
+	ThumbnailURL        string
+	BroadcastType       string
+	BroadcastTypeSource string
+	ScheduledStartTime  *time.Time
+	StartedAt           *time.Time
+	EndedAt             *time.Time
+	LastSeenAt          time.Time
+}
+
+type BroadcastHistoryRepository interface {
+	ListEndedBroadcasts(ctx context.Context, query BroadcastHistoryQuery) ([]BroadcastHistoryEntry, error)
+	GetEndedBroadcast(ctx context.Context, query BroadcastThumbnailQuery) (*BroadcastHistoryEntry, error)
+}
+
+type BroadcastThumbnailDownloader interface {
+	Download(ctx context.Context, entry BroadcastHistoryEntry) ([]byte, string, error)
+}
+
 type Dependencies struct {
-	Holodex          domain.StreamProvider
-	Chzzk            *chzzk.Client
-	Cache            cache.Client
-	Alarm            domain.AlarmCRUD
-	Matcher          *matcher.Matcher
-	OfficialProfiles *member.ProfileService
-	MemberNews       MemberNewsService
-	MembersData      member.DataProvider
-	Formatter        *adapter.ResponseFormatter
-	SendMessage      func(ctx context.Context, room, message string) error
-	SendImage        func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
-	SendError        func(ctx context.Context, room, message string) error
-	Dispatcher       Dispatcher
-	Logger           *slog.Logger
+	Holodex             domain.StreamProvider
+	Chzzk               *chzzk.Client
+	Cache               cache.Client
+	Alarm               domain.AlarmCRUD
+	Matcher             *matcher.Matcher
+	OfficialProfiles    *member.ProfileService
+	MemberNews          MemberNewsService
+	BroadcastHistory    BroadcastHistoryRepository
+	ThumbnailDownloader BroadcastThumbnailDownloader
+	MembersData         member.DataProvider
+	Formatter           *adapter.ResponseFormatter
+	SendMessage         func(ctx context.Context, room, message string) error
+	SendImage           func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
+	SendError           func(ctx context.Context, room, message string) error
+	Dispatcher          Dispatcher
+	Logger              *slog.Logger
 }
 
 type NormalizeFunc func(domain.CommandType, map[string]any) (string, map[string]any)

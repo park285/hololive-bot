@@ -29,7 +29,7 @@ import (
 func TestCommandType_IsValid(t *testing.T) {
 	t.Parallel()
 
-	// 유효한 16개 명령어 상수
+	// 유효한 명령어 상수
 	validCmds := []domain.CommandType{
 		domain.CommandLive,
 		domain.CommandUpcoming,
@@ -46,6 +46,9 @@ func TestCommandType_IsValid(t *testing.T) {
 		domain.CommandMemberNews,
 		domain.CommandMemberNewsSubscription,
 		domain.CommandMajorEvent,
+		domain.CommandCalendar,
+		domain.CommandBroadcastHistory,
+		domain.CommandBroadcastThumbnail,
 		domain.CommandUnknown,
 	}
 

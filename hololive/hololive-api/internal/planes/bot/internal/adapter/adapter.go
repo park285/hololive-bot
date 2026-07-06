@@ -6,6 +6,8 @@ import (
 )
 
 type AlarmListEntry = formatter.AlarmListEntry
+type BroadcastHistoryEntry = formatter.BroadcastHistoryEntry
+type BroadcastHistoryFilter = formatter.BroadcastHistoryFilter
 type CommandParser = messaging.CommandParser
 type MemberDirectoryEntry = formatter.MemberDirectoryEntry
 type MemberDirectoryGroup = formatter.MemberDirectoryGroup

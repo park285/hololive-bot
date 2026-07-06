@@ -1,0 +1,296 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package messaging
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/park285/shared-go/pkg/stringutil"
+)
+
+func (ma *MessageAdapter) tryBroadcastHistoryCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
+	if ma.isBroadcastThumbnailCommand(command) {
+		return broadcastThumbnailCommand(args, raw), true
+	}
+	if !ma.isBroadcastHistoryCommand(command) {
+		return nil, false
+	}
+	if len(args) > 0 && isBroadcastThumbnailAction(args[0]) {
+		return broadcastThumbnailCommand(args[1:], raw), true
+	}
+	return &ParsedCommand{Type: domain.CommandBroadcastHistory, Params: parseBroadcastHistoryArgs(args), RawMessage: raw}, true
+}
+
+func (ma *MessageAdapter) isBroadcastHistoryCommand(cmd string) bool {
+	return stringutil.ContainsString([]string{"방송이력", "방송기록", "종료방송", "이전방송", "history", "broadcast_history"}, cmd)
+}
+
+func (ma *MessageAdapter) isBroadcastThumbnailCommand(cmd string) bool {
+	return stringutil.ContainsString([]string{"방송썸네일", "썸네일", "썸네일다운", "썸네일다운로드", "thumbnail", "thumbnail_download", "thumbnaildownload", "broadcast_thumbnail"}, cmd)
+}
+
+func broadcastThumbnailCommand(args []string, raw string) *ParsedCommand {
+	params := make(map[string]any)
+	if len(args) > 0 {
+		params["video_id"] = strings.TrimSpace(args[0])
+	}
+	return &ParsedCommand{Type: domain.CommandBroadcastThumbnail, Params: params, RawMessage: raw}
+}
+
+func parseBroadcastHistoryArgs(args []string) map[string]any {
+	params := make(map[string]any)
+	memberTokens := make([]string, 0, len(args))
+
+	for i := 0; i < len(args); i++ {
+		consumed := applyBroadcastHistoryArg(params, &memberTokens, args, i)
+		i += consumed
+	}
+
+	if member := stringutil.TrimSpace(strings.Join(memberTokens, " ")); member != "" {
+		params["member"] = member
+	}
+	return params
+}
+
+func applyBroadcastHistoryArg(params map[string]any, memberTokens *[]string, args []string, index int) int {
+	token := stringutil.TrimSpace(args[index])
+	if token == "" {
+		return 0
+	}
+	normalized := stringutil.Normalize(token)
+	if applyBroadcastHistorySimpleToken(params, token, normalized) {
+		return 0
+	}
+	if consumed, ok := applyBroadcastHistoryFilterArg(params, token, args[index+1:]); ok {
+		return consumed
+	}
+	if applyBroadcastHistoryValueToken(params, token, normalized) {
+		return 0
+	}
+	*memberTokens = append(*memberTokens, token)
+	return 0
+}
+
+func applyBroadcastHistorySimpleToken(params map[string]any, _ string, normalized string) bool {
+	if normalized == "최근" {
+		return true
+	}
+	if isAllBroadcastHistoryToken(normalized) {
+		params["all"] = true
+		return true
+	}
+	return false
+}
+
+func applyBroadcastHistoryFilterArg(params map[string]any, token string, rest []string) (int, bool) {
+	key, value, ok := splitBroadcastHistoryFilter(token)
+	if !ok {
+		return 0, false
+	}
+	consumed := 0
+	if value == "" {
+		value, consumed = consumeBroadcastHistoryFilterValue(key, rest)
+	}
+	applyBroadcastHistoryFilter(params, key, value)
+	return consumed, true
+}
+
+func applyBroadcastHistoryValueToken(params map[string]any, token, normalized string) bool {
+	if days, ok := parseBroadcastHistoryDaysToken(token); ok {
+		params["days"] = days
+		return true
+	}
+	if limit, ok := parsePositiveInt(token); ok {
+		params["limit"] = limit
+		return true
+	}
+	if isBroadcastHistoryTypeToken(normalized) {
+		params["type"] = token
+		return true
+	}
+	return false
+}
+
+func splitBroadcastHistoryFilter(token string) (key, value string, ok bool) {
+	before, after, found := strings.Cut(token, ":")
+	if !found {
+		before, after, found = strings.Cut(token, "=")
+	}
+	if !found {
+		return "", "", false
+	}
+	key = stringutil.Normalize(before)
+	if !isBroadcastHistoryFilterKey(key) {
+		return "", "", false
+	}
+	value = stringutil.TrimSpace(after)
+	return key, value, true
+}
+
+func consumeBroadcastHistoryFilterValue(key string, args []string) (string, int) {
+	if broadcastHistoryFilterKinds[key] != "member" {
+		return consumeSingleBroadcastHistoryFilterValue(args)
+	}
+	return consumeMemberBroadcastHistoryFilterValue(args)
+}
+
+func consumeSingleBroadcastHistoryFilterValue(args []string) (string, int) {
+	for i, arg := range args {
+		value := stringutil.TrimSpace(arg)
+		if value != "" {
+			return value, i + 1
+		}
+	}
+	return "", len(args)
+}
+
+func consumeMemberBroadcastHistoryFilterValue(args []string) (string, int) {
+	values := make([]string, 0, len(args))
+	consumed := 0
+	for _, arg := range args {
+		value := stringutil.TrimSpace(arg)
+		if value == "" {
+			consumed++
+			continue
+		}
+		if isBroadcastHistoryOptionBoundary(value) {
+			break
+		}
+		values = append(values, value)
+		consumed++
+	}
+	return strings.Join(values, " "), consumed
+}
+
+func isBroadcastHistoryOptionBoundary(token string) bool {
+	normalized := stringutil.Normalize(token)
+	if normalized == "최근" || isAllBroadcastHistoryToken(normalized) || isBroadcastHistoryTypeToken(normalized) {
+		return true
+	}
+	if _, _, ok := splitBroadcastHistoryFilter(token); ok {
+		return true
+	}
+	if _, ok := parseBroadcastHistoryDaysToken(token); ok {
+		return true
+	}
+	_, ok := parsePositiveInt(token)
+	return ok
+}
+
+func isBroadcastHistoryFilterKey(key string) bool {
+	_, ok := broadcastHistoryFilterKinds[key]
+	return ok
+}
+
+func applyBroadcastHistoryFilter(params map[string]any, key, value string) {
+	value = stringutil.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	applier, ok := broadcastHistoryFilterAppliers[broadcastHistoryFilterKinds[key]]
+	if ok {
+		applier(params, value)
+	}
+}
+
+func applyBroadcastHistoryStringFilter(params map[string]any, key, value string) {
+	params[key] = value
+}
+
+func applyBroadcastHistoryDaysFilter(params map[string]any, value string) {
+	if days, ok := parseBroadcastHistoryDays(value); ok {
+		params["days"] = days
+	}
+}
+
+func applyBroadcastHistoryLimitFilter(params map[string]any, value string) {
+	if limit, ok := parsePositiveInt(value); ok {
+		params["limit"] = limit
+	}
+}
+
+func isBroadcastThumbnailAction(token string) bool {
+	return stringutil.ContainsString([]string{"썸네일", "thumbnail", "thumb", "다운로드", "download"}, stringutil.Normalize(token))
+}
+
+func isAllBroadcastHistoryToken(token string) bool {
+	return stringutil.ContainsString([]string{"전체", "전부", "모두", "all"}, token)
+}
+
+func parseBroadcastHistoryDays(token string) (int, bool) {
+	normalized := strings.TrimSpace(strings.ToLower(token))
+	normalized = strings.TrimSuffix(normalized, "days")
+	normalized = strings.TrimSuffix(normalized, "day")
+	normalized = strings.TrimSuffix(normalized, "일")
+	return parsePositiveInt(normalized)
+}
+
+func parseBroadcastHistoryDaysToken(token string) (int, bool) {
+	normalized := strings.TrimSpace(strings.ToLower(token))
+	if !strings.HasSuffix(normalized, "days") && !strings.HasSuffix(normalized, "day") && !strings.HasSuffix(normalized, "일") {
+		return 0, false
+	}
+	return parseBroadcastHistoryDays(normalized)
+}
+
+func parsePositiveInt(token string) (int, bool) {
+	value, err := strconv.Atoi(strings.TrimSpace(token))
+	if err != nil || value <= 0 {
+		return 0, false
+	}
+	return value, true
+}
+
+func isBroadcastHistoryTypeToken(token string) bool {
+	_, ok := broadcastHistoryTypeTokens[token]
+	return ok
+}
+
+var broadcastHistoryFilterKinds = map[string]string{
+	"type": "type", "타입": "type", "종류": "type", "category": "type", "카테고리": "type", "분류": "type",
+	"topic": "topic", "topic_id": "topic", "토픽": "topic",
+	"days": "days", "day": "days", "일": "days", "기간": "days",
+	"limit": "limit", "개수": "limit", "갯수": "limit",
+	"member": "member", "멤버": "member",
+}
+
+var broadcastHistoryFilterAppliers = map[string]func(map[string]any, string){
+	"type":   func(params map[string]any, value string) { applyBroadcastHistoryStringFilter(params, "type", value) },
+	"topic":  func(params map[string]any, value string) { applyBroadcastHistoryStringFilter(params, "topic", value) },
+	"days":   applyBroadcastHistoryDaysFilter,
+	"limit":  applyBroadcastHistoryLimitFilter,
+	"member": func(params map[string]any, value string) { applyBroadcastHistoryStringFilter(params, "member", value) },
+}
+
+var broadcastHistoryTypeTokens = map[string]struct{}{
+	"game": {}, "games": {}, "gaming": {}, "게임": {}, "겜": {}, "게임방송": {},
+	"talk": {}, "zatsudan": {}, "free_talk": {}, "free-talk": {}, "잡담": {}, "토크": {}, "수다": {},
+	"singing": {}, "song": {}, "karaoke": {}, "music": {}, "노래": {}, "노래방": {}, "歌枠": {}, "우타와꾸": {},
+	"asmr":       {},
+	"membership": {}, "member": {}, "members": {}, "membersonly": {}, "memberonly": {}, "멤버십": {}, "멤버": {}, "멤버한정": {}, "멤버전용": {},
+	"event": {}, "events": {}, "birthday": {}, "3d": {}, "outfit": {}, "이벤트": {}, "기념": {}, "생일": {}, "신의상": {}, "3d방송": {},
+	"watchalong": {}, "watch-along": {}, "watch_party": {}, "watchparty": {}, "동시시청": {}, "같이보기": {},
+	"news": {}, "notice": {}, "announcement": {}, "뉴스": {}, "공지": {},
+	"other": {}, "variety": {}, "etc": {}, "기타": {},
+	"unknown": {}, "미분류": {},
+}

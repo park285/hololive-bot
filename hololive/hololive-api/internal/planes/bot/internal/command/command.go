@@ -4,6 +4,13 @@ import handlers "github.com/kapu/hololive-api/internal/planes/bot/internal/comma
 
 type AlarmCommand = handlers.AlarmCommand
 type BaseCommand = handlers.BaseCommand
+type BroadcastHistoryCommand = handlers.BroadcastHistoryCommand
+type BroadcastHistoryEntry = handlers.BroadcastHistoryEntry
+type BroadcastHistoryQuery = handlers.BroadcastHistoryQuery
+type BroadcastHistoryRepository = handlers.BroadcastHistoryRepository
+type BroadcastThumbnailDownloader = handlers.BroadcastThumbnailDownloader
+type BroadcastThumbnailCommand = handlers.BroadcastThumbnailCommand
+type BroadcastThumbnailQuery = handlers.BroadcastThumbnailQuery
 type Command = handlers.Command
 type Dependencies = handlers.Dependencies
 type Dispatcher = handlers.Dispatcher
@@ -34,6 +41,10 @@ var FindActiveMemberOrError = handlers.FindActiveMemberOrError
 var FindMemberOrError = handlers.FindMemberOrError
 var NewAlarmCommand = handlers.NewAlarmCommand
 var NewBaseCommand = handlers.NewBaseCommand
+var NewBroadcastHistoryCommand = handlers.NewBroadcastHistoryCommand
+var NewBroadcastThumbnailCommand = handlers.NewBroadcastThumbnailCommand
+var NewPgBroadcastHistoryRepository = handlers.NewPgBroadcastHistoryRepository
+var NewYouTubeThumbnailDownloader = handlers.NewYouTubeThumbnailDownloader
 var NewSequentialDispatcher = handlers.NewSequentialDispatcher
 var NewHelpCommand = handlers.NewHelpCommand
 var NewLiveCommand = handlers.NewLiveCommand

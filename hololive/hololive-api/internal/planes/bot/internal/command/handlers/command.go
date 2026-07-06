@@ -8,6 +8,11 @@ type Dispatcher = handlercore.Dispatcher
 type MemberNewsService = handlercore.MemberNewsService
 type MajorEventRepository = handlercore.MajorEventRepository
 type Dependencies = handlercore.Dependencies
+type BroadcastHistoryEntry = handlercore.BroadcastHistoryEntry
+type BroadcastHistoryQuery = handlercore.BroadcastHistoryQuery
+type BroadcastHistoryRepository = handlercore.BroadcastHistoryRepository
+type BroadcastThumbnailDownloader = handlercore.BroadcastThumbnailDownloader
+type BroadcastThumbnailQuery = handlercore.BroadcastThumbnailQuery
 
 type NormalizeFunc = handlercore.NormalizeFunc
 

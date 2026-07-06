@@ -35,7 +35,9 @@ func ShouldExecuteAsync(cmdType domain.CommandType) bool {
 		domain.CommandSchedule,
 		domain.CommandMemberInfo,
 		domain.CommandSubscriber,
-		domain.CommandCalendar:
+		domain.CommandCalendar,
+		domain.CommandBroadcastHistory,
+		domain.CommandBroadcastThumbnail:
 		return true
 	case domain.CommandAlarmAdd,
 		domain.CommandAlarmRemove,

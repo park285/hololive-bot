@@ -12,6 +12,9 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
   {{.Prefix}}예정 - 예정 방송 목록
   {{.Prefix}}예정 [멤버명] - 멤버 예정 방송
   {{.Prefix}}멤버 [이름] - 일주일 이내 방송 일정
+  {{.Prefix}}방송이력 [멤버명] - 종료된 방송 이력
+  {{.Prefix}}방송이력 게임 14일 10 - 타입·기간·개수 필터
+  {{.Prefix}}방송이력 썸네일 [video_id] - 종료 방송 썸네일
 
 [멤버]
   {{.Prefix}}멤버 - 전체 멤버 목록

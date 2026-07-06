@@ -41,6 +41,8 @@ func TestShouldExecuteAsync(t *testing.T) {
 		{name: "member news digest", cmdType: domain.CommandMemberNews, want: false},
 		{name: "news subscription", cmdType: domain.CommandMemberNewsSubscription, want: false},
 		{name: "calendar", cmdType: domain.CommandCalendar, want: true},
+		{name: "broadcast history", cmdType: domain.CommandBroadcastHistory, want: true},
+		{name: "broadcast thumbnail", cmdType: domain.CommandBroadcastThumbnail, want: true},
 		{name: "major event", cmdType: domain.CommandMajorEvent, want: false},
 		{name: "custom command", cmdType: domain.CommandType("custom"), want: false},
 	}

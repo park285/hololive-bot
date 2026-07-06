@@ -95,3 +95,21 @@ func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 		}
 	}
 }
+
+func TestSeedTemplates_CommandHelpMentionsBroadcastHistory(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	var body string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id IS NULL`,
+		domain.TemplateKeyCmdHelp,
+	).Scan(&body); err != nil {
+		t.Fatalf("query CMD_HELP seed: %v", err)
+	}
+
+	for _, token := range []string{"방송이력", "썸네일"} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("CMD_HELP missing %q: %s", token, body)
+		}
+	}
+}

@@ -27,6 +27,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/iris-client-go/iris"
 
@@ -40,6 +41,7 @@ type commandInitView struct {
 	holodex               domain.StreamProvider
 	chzzk                 *chzzk.Client
 	cache                 cache.Client
+	postgres              database.Client
 	alarm                 domain.AlarmCRUD
 	matcher               *matcher.Matcher
 	officialProfiles      *member.ProfileService
@@ -65,6 +67,7 @@ func (b *Bot) commandInitView() commandInitView {
 		holodex:               b.holodex,
 		chzzk:                 b.chzzk,
 		cache:                 b.cache,
+		postgres:              b.postgres,
 		alarm:                 b.alarm,
 		matcher:               b.matcher,
 		officialProfiles:      b.officialProfiles,
@@ -84,19 +87,21 @@ func (b *Bot) commandInitView() commandInitView {
 
 func (v *commandInitView) toCommandDependencies(registry *command.Registry) *command.Dependencies {
 	deps := &command.Dependencies{
-		Holodex:          v.holodex,
-		Chzzk:            v.chzzk,
-		Cache:            v.cache,
-		Alarm:            v.alarm,
-		Matcher:          v.matcher,
-		OfficialProfiles: v.officialProfiles,
-		MemberNews:       v.memberNews,
-		MembersData:      v.membersData,
-		Formatter:        v.formatter,
-		SendMessage:      v.sendMessage,
-		SendImage:        v.sendImage,
-		SendError:        v.sendError,
-		Logger:           v.logger,
+		Holodex:             v.holodex,
+		Chzzk:               v.chzzk,
+		Cache:               v.cache,
+		Alarm:               v.alarm,
+		Matcher:             v.matcher,
+		OfficialProfiles:    v.officialProfiles,
+		MemberNews:          v.memberNews,
+		BroadcastHistory:    command.NewPgBroadcastHistoryRepository(v.postgres),
+		ThumbnailDownloader: command.NewYouTubeThumbnailDownloader(nil),
+		MembersData:         v.membersData,
+		Formatter:           v.formatter,
+		SendMessage:         v.sendMessage,
+		SendImage:           v.sendImage,
+		SendError:           v.sendError,
+		Logger:              v.logger,
 	}
 
 	deps.Dispatcher = command.NewSequentialDispatcher(registry, orchcmd.NormalizeCommandKey)
@@ -113,6 +118,8 @@ func (v *commandInitView) buildCommands(deps *command.Dependencies) []command.Co
 		command.NewAlarmCommand(deps),
 		command.NewMemberInfoCommand(deps),
 		command.NewSubscriberCommand(deps),
+		command.NewBroadcastHistoryCommand(deps),
+		command.NewBroadcastThumbnailCommand(deps),
 	}
 
 	if v.memberRepository != nil {
