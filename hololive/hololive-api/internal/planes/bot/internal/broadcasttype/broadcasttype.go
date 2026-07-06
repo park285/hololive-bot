@@ -27,7 +27,7 @@ var aliases = map[string]Type{
 	"talk": Talk, "zatsudan": Talk, "free_talk": Talk, "free-talk": Talk, "잡담": Talk, "토크": Talk, "수다": Talk,
 	"singing": Singing, "song": Singing, "karaoke": Singing, "music": Singing, "노래": Singing, "노래방": Singing, "歌枠": Singing, "우타와꾸": Singing,
 	"asmr":       ASMR,
-	"membership": Membership, "member": Membership, "members": Membership, "membersonly": Membership, "memberonly": Membership, "멤버십": Membership, "멤버": Membership, "멤버한정": Membership, "멤버전용": Membership,
+	"membership": Membership, "member": Membership, "members": Membership, "membersonly": Membership, "memberonly": Membership, "멤버십": Membership, "멤버한정": Membership, "멤버전용": Membership,
 	"event": Event, "events": Event, "birthday": Event, "3d": Event, "outfit": Event, "이벤트": Event, "기념": Event, "생일": Event, "신의상": Event, "3d방송": Event,
 	"horse_racing": HorseRacing, "horse-racing": HorseRacing, "horseracing": HorseRacing, "keiba": HorseRacing, "경마": HorseRacing, "競馬": HorseRacing,
 	"watchalong": Watchalong, "watch-along": Watchalong, "watch-party": Watchalong, "watch_party": Watchalong, "watchparty": Watchalong, "동시시청": Watchalong, "같이보기": Watchalong,

@@ -36,3 +36,11 @@ func TestParseRejectsUnknownToken(t *testing.T) {
 		t.Fatalf("Parse(정체불명) = (%q, true), want ok=false", typ)
 	}
 }
+
+func TestParseDoesNotTreatBareMemberAsMembership(t *testing.T) {
+	t.Parallel()
+
+	if typ, ok := Parse("멤버"); ok {
+		t.Fatalf("Parse(멤버) = (%q, true), want ok=false", typ)
+	}
+}

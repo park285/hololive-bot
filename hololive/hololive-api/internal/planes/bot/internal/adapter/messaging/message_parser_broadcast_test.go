@@ -54,9 +54,9 @@ func TestParseMessage_BroadcastHistoryCategoryAlias(t *testing.T) {
 	}
 }
 
-func TestParseMessage_BroadcastHistoryMembershipAlias(t *testing.T) {
+func TestParseMessage_BroadcastHistoryMembershipTypeAlias(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &webhook.Message{Msg: "!방송이력 멤버"}
+	msg := &webhook.Message{Msg: "!방송이력 멤버십"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -65,11 +65,55 @@ func TestParseMessage_BroadcastHistoryMembershipAlias(t *testing.T) {
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
-	if got := result.Params["type"]; got != "멤버" {
-		t.Fatalf("type = %v, want 멤버", got)
+	if got := result.Params["type"]; got != "멤버십" {
+		t.Fatalf("type = %v, want 멤버십", got)
 	}
 	if got := result.Params["member"]; got != nil {
 		t.Fatalf("member = %v, want nil", got)
+	}
+}
+
+func TestParseMessage_BroadcastHistoryBareMemberNameAndType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		msg        string
+		wantMember string
+		wantType   string
+	}{
+		{name: "member then type with command alias", msg: "!방송기록 사쿠라 미코 게임", wantMember: "사쿠라 미코", wantType: "게임"},
+		{name: "type then member with command alias", msg: "!방송기록 게임 사쿠라 미코", wantMember: "사쿠라 미코", wantType: "게임"},
+		{name: "member then broadcast type filter", msg: "!방송기록 페코라 방송타입:게임", wantMember: "페코라", wantType: "게임"},
+		{name: "member then membership type", msg: "!방송기록 사쿠라 미코 멤버십", wantMember: "사쿠라 미코", wantType: "멤버십"},
+		{name: "bare korean member token is member filter", msg: "!방송기록 멤버", wantMember: "멤버", wantType: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			adapter := NewMessageAdapter("!", "")
+			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
+			if result == nil {
+				t.Fatal("expected parsed command, got nil")
+			}
+			if result.Type != domain.CommandBroadcastHistory {
+				t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
+			}
+			if got := result.Params["member"]; got != tt.wantMember {
+				t.Fatalf("member = %v, want %s", got, tt.wantMember)
+			}
+			if tt.wantType == "" {
+				if got := result.Params["type"]; got != nil {
+					t.Fatalf("type = %v, want nil", got)
+				}
+				return
+			}
+			if got := result.Params["type"]; got != tt.wantType {
+				t.Fatalf("type = %v, want %s", got, tt.wantType)
+			}
+		})
 	}
 }
 
@@ -150,7 +194,7 @@ func TestParseMessage_BroadcastHistoryAliasVariants(t *testing.T) {
 		{name: "free talk underscore", msg: "!방송이력 free_talk", want: "free_talk"},
 		{name: "watch party hyphen", msg: "!방송이력 watch-party", want: "watch-party"},
 		{name: "watch along hyphen", msg: "!방송이력 watch-along", want: "watch-along"},
-		{name: "member korean", msg: "!방송이력 멤버", want: "멤버"},
+		{name: "membership korean", msg: "!방송이력 멤버십", want: "멤버십"},
 		{name: "horse racing korean", msg: "!방송이력 경마", want: "경마"},
 	}
 

@@ -38,9 +38,10 @@ Representative forms:
 
 - `!방송이력`
 - `!방송이력 페코라`
+- `!방송기록 페코라 게임`
+- `!방송기록 사쿠라 미코 게임`
 - `!방송이력 카테고리:게임 멤버:페코라 7일`
 - `!방송이력 경마 30`
-- `!방송이력 멤버`
 - `!방송이력 type:멤버십 14일 10`
 - `!방송이력 카테고리:게임 14일 개수:10`
 - `!방송이력 topic:Forza all`
@@ -49,7 +50,7 @@ Representative forms:
 
 Bare positive numbers are interpreted as days unless a days value is already present or a later token explicitly supplies days; in those cases they are interpreted as the response limit. Explicit `limit:`, `개수:`, and `갯수:` keep working regardless of order.
 
-Supported category labels include: `게임`, `잡담`, `노래`, `ASMR`, `멤버십`, `멤버`, `이벤트`, `경마`, `동시시청`, `뉴스`, `기타`, `미분류` and English aliases.
+Supported category labels include: `게임`, `잡담`, `노래`, `ASMR`, `멤버십`, `이벤트`, `경마`, `동시시청`, `뉴스`, `기타`, `미분류` and English aliases.
 
 ## Implementation files to review
 
@@ -98,14 +99,14 @@ Tests:
 The read-only review passes all returned `qualified/disagree` against the earlier implementation. Main findings:
 
 - Type/topic filters were applied after a bounded SQL `LIMIT`, so valid sparse matches could be missed.
-- Bare `멤버` parsed as a member name instead of the membership category.
+- Bare `멤버` must remain available for member-name parsing; membership category filtering should use `멤버십` or explicit membership aliases.
 - Topic-first classification could hide strong title evidence such as members-only or watchalong.
 - The removed `102` migration was a one-shot update and did not match the migration convention for backfills.
 
 Resolution in this working tree:
 
 - Replaced bounded prefetch with keyset pagination and added `TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTypeFilter`.
-- Added bare `멤버` parser support and `TestParseMessage_BroadcastHistoryMembershipAlias`.
+- Reserved bare `멤버` for member-name parsing, kept membership type filtering on `멤버십`, and added command-alias/member-name/type regression coverage.
 - Added strong title override policy and source tests for members-only/watchalong while preserving game-topic priority over generic talk.
 - Moved broadcast type rules into embedded `broadcast_type_rules.json`, added `경마`/`horse_racing`, and covered JRA G1/J-G1 race-name classification without matching bare `G1` or `的中` alone.
 - Refined the title classifier with strict hard/generic rule phases, NFKC normalization, ASCII token-boundary matching, shared broadcast type aliases, and regression coverage for `nte` false positives, broad event overmatching, and observed game false negatives.

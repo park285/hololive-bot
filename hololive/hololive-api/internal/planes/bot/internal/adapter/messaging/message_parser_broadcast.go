@@ -282,7 +282,7 @@ func isBroadcastHistoryTypeToken(token string) bool {
 }
 
 var broadcastHistoryFilterKinds = map[string]string{
-	"type": "type", "타입": "type", "종류": "type", "category": "type", "카테고리": "type", "분류": "type",
+	"type": "type", "타입": "type", "방송타입": "type", "종류": "type", "category": "type", "카테고리": "type", "분류": "type",
 	"topic": "topic", "topic_id": "topic", "토픽": "topic",
 	"days": "days", "day": "days", "일": "days", "기간": "days",
 	"limit": "limit", "개수": "limit", "갯수": "limit",
