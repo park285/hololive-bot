@@ -40,8 +40,23 @@ ENV GOWORK=off
 WORKDIR /workspace/hololive-bot
 
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
-COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
 COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
+COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
+COPY hololive/hololive-api/go.mod hololive/hololive-api/go.sum ./hololive/hololive-api/
+
+WORKDIR /workspace/hololive-bot/hololive/hololive-api
+
+# go.mod의 `replace github.com/kapu/hololive-shared => ../hololive-shared` 상대 경로는
+# 위 COPY 레이아웃으로 그대로 성립한다. 외부 형제 워크스페이스 두 개만 로컬 경로로 치환한다.
+RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
+    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+WORKDIR /workspace/hololive-bot
+
+COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
 COPY --from=iris_client_go_workspace iris /workspace/iris-client-go/iris
 COPY --from=iris_client_go_workspace internal /workspace/iris-client-go/internal
 COPY --from=iris_client_go_workspace webhook /workspace/iris-client-go/webhook
@@ -52,8 +67,6 @@ COPY hololive/hololive-api ./hololive/hololive-api
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-api
 
-# go.mod의 `replace github.com/kapu/hololive-shared => ../hololive-shared` 상대 경로는
-# 위 COPY 레이아웃으로 그대로 성립한다. 외부 형제 워크스페이스 두 개만 로컬 경로로 치환한다.
 RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
     go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
 
