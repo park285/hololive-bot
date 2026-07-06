@@ -195,13 +195,13 @@ func TestRemovedRuntimeGateIsWiredIntoArchitectureChecks(t *testing.T) {
 
 	root := repoRootFromHelper(t)
 
-	checkScript := "scripts/architecture/check-removed-runtime-references.sh"
+	checkScript := "scripts/architecture/check-removed-runtime-regressions.sh"
 	if _, err := os.Stat(filepath.Join(root, checkScript)); err != nil {
 		t.Fatalf("%s missing: %v", checkScript, err)
 	}
 
 	ciGate := readRepoFile(t, root, "scripts/architecture/ci-boundary-gate.sh")
-	if !strings.Contains(ciGate, "check-removed-runtime-references.sh") {
+	if !strings.Contains(ciGate, "check-removed-runtime-regressions.sh") {
 		t.Fatal("ci-boundary-gate.sh is not wiring the removed runtime check")
 	}
 }

@@ -6,7 +6,7 @@
 
 | Area | Finding | Resolution | Verification |
 | --- | --- | --- | --- |
-| Standalone notification dispatcher | `hololive-dispatcher-go`, `dispatcher-go`, `legacy-dispatcher-go`가 활성 compose, docs, CI, build path에 남아 있을 수 있었음 | standalone dispatcher runtime, compose profile, deploy/log/runbook references removed | `check-removed-runtime-references.sh`, `ci-notification-egress-gate.sh`, active `rg` scan |
+| Standalone notification dispatcher | `hololive-dispatcher-go`, `dispatcher-go`, `legacy-dispatcher-go`가 활성 compose, docs, CI, build path에 남아 있을 수 있었음 | standalone dispatcher runtime, compose profile, deploy/log/runbook references removed | `check-removed-runtime-regressions.sh`, `ci-notification-egress-gate.sh`, active `rg` scan |
 | Go workspace module lists | CI/build commands carried repeated module package lists | `scripts/ci/go-workspace-modules.sh` owns active Go module package expansion | `go test` and architecture gate use the helper |
 | Compose service aliases | `build-all.sh`, `compose-redeploy-service.sh`, and logs tooling had separate alias maps | `scripts/deploy/lib/compose-services.sh` owns build, redeploy, and log target resolution | `scripts/deploy/test-compose-services.sh` in architecture gate |
 | OpenBao compose env source | build, redeploy, and direct compose could diverge on env resolution | `scripts/deploy/lib/compose-env.sh` and `scripts/deploy/compose.sh` enforce one env policy | `scripts/deploy/test-compose-env.sh` in architecture gate |

@@ -29,12 +29,8 @@ echo "[M0] cross-cutting boundary guardrail check"
 "${SCRIPT_DIR}/check-crosscutting-guardrails.sh"
 echo
 
-echo "[M0] removed runtime reference check"
-"${SCRIPT_DIR}/check-removed-runtime-references.sh"
-echo
-
-echo "[M0] removed runtime build/deploy path check"
-"${SCRIPT_DIR}/check-removed-runtime-build-paths.sh"
+echo "[M0] removed runtime regression check"
+"${SCRIPT_DIR}/check-removed-runtime-regressions.sh"
 echo
 
 echo "[M0] tracked local artifact check"
