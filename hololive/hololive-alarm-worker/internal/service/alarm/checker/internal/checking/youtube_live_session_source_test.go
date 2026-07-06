@@ -179,7 +179,8 @@ type liveSessionPool interface {
 func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.YouTubeLiveSession) {
 	t.Helper()
 
-	for _, session := range sessions {
+	for i := range sessions {
+		session := &sessions[i]
 		_, err := pool.Exec(t.Context(), `
 			INSERT INTO youtube_live_sessions(
 				video_id, channel_id, status, title, scheduled_start_time,

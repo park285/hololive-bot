@@ -81,7 +81,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		return failAlarmWorkerBuild(infra, "scheduler", err)
 	}
 
-	notificationEgress, err := buildNotificationEgress(appConfig, infra, logger) //nolint:contextcheck // guard 콜백(func(net.IP) error)에 dial ctx 미전달로 per-dial DNS가 자체 ctx를 root함; 도달 가능한 build ctx는 bounded라 관통 시 프로덕션 장애. workspace-wide 분석 전용 call-graph false positive.
+	notificationEgress, err := buildNotificationEgress(appConfig, infra, logger) //nolint:contextcheck // H3 dial guard 콜백에는 dial ctx가 없고, build ctx를 넘기면 기동 후 DNS allowlist가 만료된다.
 	if err != nil {
 		return failAlarmWorkerBuild(infra, "notification egress", err)
 	}

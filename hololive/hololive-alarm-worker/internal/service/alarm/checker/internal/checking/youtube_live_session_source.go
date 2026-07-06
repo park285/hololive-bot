@@ -97,8 +97,9 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
 	}
 
 	sessions := make([]PersistedYouTubeLiveSession, 0, len(rows))
-	for _, row := range rows {
-		stream := streamFromYouTubeLiveSession(&row)
+	for i := range rows {
+		row := &rows[i]
+		stream := streamFromYouTubeLiveSession(row)
 		if stream == nil {
 			continue
 		}

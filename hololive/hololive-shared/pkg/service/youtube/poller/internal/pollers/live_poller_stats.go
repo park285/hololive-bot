@@ -82,7 +82,8 @@ func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, cu
 	}
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	for _, session := range liveSessions {
+	for i := range liveSessions {
+		session := &liveSessions[i]
 		p.endStaleSession(ctx, channelID, session.VideoID, activeIDs, now)
 	}
 }
