@@ -73,6 +73,28 @@ func TestParseMessage_BroadcastHistoryMembershipAlias(t *testing.T) {
 	}
 }
 
+func TestParseMessage_BroadcastHistoryHorseRacingAlias(t *testing.T) {
+	adapter := NewMessageAdapter("!", "")
+	msg := &webhook.Message{Msg: "!방송이력 경마 20"}
+
+	result := adapter.ParseMessage(msg)
+	if result == nil {
+		t.Fatal("expected parsed command, got nil")
+	}
+	if result.Type != domain.CommandBroadcastHistory {
+		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
+	}
+	if got := result.Params["type"]; got != "경마" {
+		t.Fatalf("type = %v, want 경마", got)
+	}
+	if got := result.Params["limit"]; got != 20 {
+		t.Fatalf("limit = %v, want 20", got)
+	}
+	if got := result.Params["member"]; got != nil {
+		t.Fatalf("member = %v, want nil", got)
+	}
+}
+
 func TestParseMessage_BroadcastHistorySeparatedFilters(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
 	msg := &webhook.Message{Msg: "!방송이력 카테고리: 게임 멤버: 사쿠라 미코 14일 10"}

@@ -20,7 +20,14 @@
 
 package handlers
 
-import "strings"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	_ "embed"
+)
 
 type BroadcastType string
 
@@ -30,70 +37,23 @@ type BroadcastClassification struct {
 }
 
 const (
-	BroadcastTypeGame       BroadcastType = "game"
-	BroadcastTypeTalk       BroadcastType = "talk"
-	BroadcastTypeSinging    BroadcastType = "singing"
-	BroadcastTypeASMR       BroadcastType = "asmr"
-	BroadcastTypeMembership BroadcastType = "membership"
-	BroadcastTypeEvent      BroadcastType = "event"
-	BroadcastTypeWatchalong BroadcastType = "watchalong"
-	BroadcastTypeNews       BroadcastType = "news"
-	BroadcastTypeOther      BroadcastType = "other"
-	BroadcastTypeUnknown    BroadcastType = "unknown"
+	BroadcastTypeGame        BroadcastType = "game"
+	BroadcastTypeTalk        BroadcastType = "talk"
+	BroadcastTypeSinging     BroadcastType = "singing"
+	BroadcastTypeASMR        BroadcastType = "asmr"
+	BroadcastTypeMembership  BroadcastType = "membership"
+	BroadcastTypeEvent       BroadcastType = "event"
+	BroadcastTypeHorseRacing BroadcastType = "horse_racing"
+	BroadcastTypeWatchalong  BroadcastType = "watchalong"
+	BroadcastTypeNews        BroadcastType = "news"
+	BroadcastTypeOther       BroadcastType = "other"
+	BroadcastTypeUnknown     BroadcastType = "unknown"
 )
 
-var observedTopicTypes = map[string]BroadcastType{
-	"3d_stream":                              BroadcastTypeEvent,
-	"apex":                                   BroadcastTypeGame,
-	"arknights:_endfield":                    BroadcastTypeGame,
-	"a_taste_of_home":                        BroadcastTypeGame,
-	"birthday":                               BroadcastTypeEvent,
-	"bunny_garden":                           BroadcastTypeGame,
-	"burglin'_gnomes":                        BroadcastTypeGame,
-	"chrono_trigger":                         BroadcastTypeGame,
-	"clubhouse51":                            BroadcastTypeGame,
-	"dorfromantik":                           BroadcastTypeGame,
-	"dread_flats":                            BroadcastTypeGame,
-	"earthbound":                             BroadcastTypeGame,
-	"fallguys":                               BroadcastTypeGame,
-	"final_fantasy_online":                   BroadcastTypeGame,
-	"final_fantasy":                          BroadcastTypeGame,
-	"forza":                                  BroadcastTypeGame,
-	"geoguessr":                              BroadcastTypeGame,
-	"heartopia":                              BroadcastTypeGame,
-	"holovillage":                            BroadcastTypeGame,
-	"home_sweet_home":                        BroadcastTypeGame,
-	"hyakushakusama":                         BroadcastTypeGame,
-	"jump_king":                              BroadcastTypeGame,
-	"librarian:_tidy_up_the_arcane_library!": BroadcastTypeGame,
-	"mahjong":                                BroadcastTypeGame,
-	"mario_64":                               BroadcastTypeGame,
-	"meccha_chameleon":                       BroadcastTypeGame,
-	"membersonly":                            BroadcastTypeMembership,
-	"minecraft":                              BroadcastTypeGame,
-	"music_cover":                            BroadcastTypeSinging,
-	"news_show":                              BroadcastTypeNews,
-	"original_song":                          BroadcastTypeSinging,
-	"overwatch":                              BroadcastTypeGame,
-	"pokemon":                                BroadcastTypeGame,
-	"power_pros":                             BroadcastTypeGame,
-	"r.e.p.o.":                               BroadcastTypeGame,
-	"residentevil":                           BroadcastTypeGame,
-	"rhythm_heaven":                          BroadcastTypeGame,
-	"sausage_legend":                         BroadcastTypeGame,
-	"school_666":                             BroadcastTypeGame,
-	"shadowverse":                            BroadcastTypeGame,
-	"singing":                                BroadcastTypeSinging,
-	"super_mario":                            BroadcastTypeGame,
-	"sword_art_online":                       BroadcastTypeGame,
-	"talk":                                   BroadcastTypeTalk,
-	"tomodachi_life":                         BroadcastTypeGame,
-	"valorant":                               BroadcastTypeGame,
-	"vlog":                                   BroadcastTypeOther,
-	"watchalong":                             BroadcastTypeWatchalong,
-	"wii_fit":                                BroadcastTypeGame,
-	"wuthering_waves":                        BroadcastTypeGame,
-}
+//go:embed broadcast_type_rules.json
+var broadcastTypeRulesJSON []byte
+
+var broadcastRules = mustLoadBroadcastRules(broadcastTypeRulesJSON)
 
 var broadcastTypeAliases = map[string]BroadcastType{
 	"game": BroadcastTypeGame, "games": BroadcastTypeGame, "gaming": BroadcastTypeGame, "게임": BroadcastTypeGame, "겜": BroadcastTypeGame, "게임방송": BroadcastTypeGame,
@@ -102,6 +62,7 @@ var broadcastTypeAliases = map[string]BroadcastType{
 	"asmr":       BroadcastTypeASMR,
 	"membership": BroadcastTypeMembership, "member": BroadcastTypeMembership, "members": BroadcastTypeMembership, "membersonly": BroadcastTypeMembership, "memberonly": BroadcastTypeMembership, "멤버십": BroadcastTypeMembership, "멤버": BroadcastTypeMembership, "멤버한정": BroadcastTypeMembership, "멤버전용": BroadcastTypeMembership,
 	"event": BroadcastTypeEvent, "events": BroadcastTypeEvent, "birthday": BroadcastTypeEvent, "3d": BroadcastTypeEvent, "outfit": BroadcastTypeEvent, "이벤트": BroadcastTypeEvent, "기념": BroadcastTypeEvent, "생일": BroadcastTypeEvent, "신의상": BroadcastTypeEvent, "3d방송": BroadcastTypeEvent,
+	"horse_racing": BroadcastTypeHorseRacing, "horse-racing": BroadcastTypeHorseRacing, "horseracing": BroadcastTypeHorseRacing, "keiba": BroadcastTypeHorseRacing, "경마": BroadcastTypeHorseRacing, "競馬": BroadcastTypeHorseRacing,
 	"watchalong": BroadcastTypeWatchalong, "watch-along": BroadcastTypeWatchalong, "watch_party": BroadcastTypeWatchalong, "watchparty": BroadcastTypeWatchalong, "동시시청": BroadcastTypeWatchalong, "같이보기": BroadcastTypeWatchalong,
 	"news": BroadcastTypeNews, "notice": BroadcastTypeNews, "announcement": BroadcastTypeNews, "뉴스": BroadcastTypeNews, "공지": BroadcastTypeNews,
 	"other": BroadcastTypeOther, "variety": BroadcastTypeOther, "etc": BroadcastTypeOther, "기타": BroadcastTypeOther,
@@ -109,31 +70,35 @@ var broadcastTypeAliases = map[string]BroadcastType{
 }
 
 var broadcastTypeLabels = map[BroadcastType]string{
-	BroadcastTypeGame:       "게임",
-	BroadcastTypeTalk:       "잡담",
-	BroadcastTypeSinging:    "노래",
-	BroadcastTypeASMR:       "ASMR",
-	BroadcastTypeMembership: "멤버십",
-	BroadcastTypeEvent:      "이벤트",
-	BroadcastTypeWatchalong: "동시시청",
-	BroadcastTypeNews:       "뉴스/공지",
-	BroadcastTypeOther:      "기타",
+	BroadcastTypeGame:        "게임",
+	BroadcastTypeTalk:        "잡담",
+	BroadcastTypeSinging:     "노래",
+	BroadcastTypeASMR:        "ASMR",
+	BroadcastTypeMembership:  "멤버십",
+	BroadcastTypeEvent:       "이벤트",
+	BroadcastTypeHorseRacing: "경마",
+	BroadcastTypeWatchalong:  "동시시청",
+	BroadcastTypeNews:        "뉴스/공지",
+	BroadcastTypeOther:       "기타",
 }
 
 type broadcastTitleRule struct {
-	typ      BroadcastType
-	keywords []string
+	Type     BroadcastType `json:"type"`
+	Keywords []string      `json:"keywords"`
 }
 
-var broadcastTitleRules = []broadcastTitleRule{
-	{typ: BroadcastTypeMembership, keywords: []string{"メン限", "メンバー限定", "メンバー限定配信", "members only", "member only", "membership"}},
-	{typ: BroadcastTypeWatchalong, keywords: []string{"同時視聴", "watchalong", "watch along", "watchparty", "watch party", "ウォッチパーティー"}},
-	{typ: BroadcastTypeSinging, keywords: []string{"歌枠", "karaoke", "singing stream", "3dカラオケ", "カラオケ", "(cover)", "【cover】", "original song", "オリジナル曲"}},
-	{typ: BroadcastTypeASMR, keywords: []string{"asmr"}},
-	{typ: BroadcastTypeEvent, keywords: []string{"生誕", "birthday", "3d live", "3dlive", "新衣装", "お披露目"}},
-	{typ: BroadcastTypeNews, keywords: []string{"昼ホロ", "朝ミオ", "朝こよ", "ニュース", "お知らせ"}},
-	{typ: BroadcastTypeTalk, keywords: []string{"雑談", "free talk", "freetalk", "朝活雑談", "寝る前雑談", "おはすば"}},
-	{typ: BroadcastTypeOther, keywords: []string{"【vlog】", "vlog", "カメラ有", "開封", "unboxing", "爆買い"}},
+type broadcastGameTagRules struct {
+	RejectKeywords []string `json:"reject_keywords"`
+	Exact          []string `json:"exact"`
+	Contains       []string `json:"contains"`
+}
+
+type broadcastTypeRules struct {
+	Version     string                   `json:"version"`
+	SourceNotes []string                 `json:"source_notes,omitempty"`
+	Topics      map[string]BroadcastType `json:"topics"`
+	TitleRules  []broadcastTitleRule     `json:"title_rules"`
+	GameTag     broadcastGameTagRules    `json:"game_title_tag"`
 }
 
 func ClassifyBroadcast(topicID, title string) BroadcastType {
@@ -167,6 +132,7 @@ func broadcastTitleOverridesTopic(titleType, topicType BroadcastType) bool {
 		BroadcastTypeASMR,
 		BroadcastTypeMembership,
 		BroadcastTypeEvent,
+		BroadcastTypeHorseRacing,
 		BroadcastTypeWatchalong,
 		BroadcastTypeNews:
 		return true
@@ -190,7 +156,7 @@ func (t BroadcastType) Label() string {
 func classifyBroadcastTopic(topicID string) BroadcastType {
 	topics := broadcastTopics(topicID)
 	for _, topic := range topics {
-		if typ, ok := observedTopicTypes[topic]; ok {
+		if typ, ok := broadcastRules.Topics[topic]; ok {
 			return typ
 		}
 	}
@@ -202,6 +168,9 @@ func classifyBroadcastTitle(title string) BroadcastType {
 	if typ, ok := classifyBroadcastTitleByKeyword(normalized); ok {
 		return typ
 	}
+	if containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.Contains) {
+		return BroadcastTypeGame
+	}
 	if titleLooksLikeGameBroadcast(title) {
 		return BroadcastTypeGame
 	}
@@ -209,9 +178,9 @@ func classifyBroadcastTitle(title string) BroadcastType {
 }
 
 func classifyBroadcastTitleByKeyword(normalized string) (BroadcastType, bool) {
-	for _, rule := range broadcastTitleRules {
-		if containsAnyBroadcastKeyword(normalized, rule.keywords) {
-			return rule.typ, true
+	for _, rule := range broadcastRules.TitleRules {
+		if containsAnyBroadcastKeyword(normalized, rule.Keywords) {
+			return rule.Type, true
 		}
 	}
 	return BroadcastTypeUnknown, false
@@ -226,83 +195,13 @@ func titleLooksLikeGameBroadcast(title string) bool {
 	if strings.HasPrefix(normalized, "#") {
 		return false
 	}
-	if containsAnyBroadcastKeyword(normalized, []string{"hololive", "ホロライブ", "ぶいすぽ", "vspo", "/", "／", "生スバル", "朝ミオ", "朝こよ", "昼ホロ"}) {
+	if containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.RejectKeywords) {
 		return false
 	}
-	if containsAnyBroadcastKeyword(normalized, []string{"雑談", "歌枠", "同時視聴", "メン限", "メンバー", "asmr", "朝活", "お知らせ", "生誕", "birthday", "3d", "live", "cover", "official", "vlog", "カメラ", "開封", "unboxing"}) {
-		return false
-	}
-	if _, ok := observedGameTitleExactMarkers[normalized]; ok {
+	if containsExactBroadcastKeyword(normalized, broadcastRules.GameTag.Exact) {
 		return true
 	}
-	return containsAnyBroadcastKeyword(normalized, observedGameTitleContainsMarkers)
-}
-
-var observedGameTitleExactMarkers = map[string]struct{}{
-	"ff7":  {},
-	"ff10": {},
-	"ff14": {},
-	"lol":  {},
-	"tft":  {},
-	"vct":  {},
-}
-
-var observedGameTitleContainsMarkers = []string{
-	"7 days to die",
-	"apex",
-	"arknights",
-	"backseat drivers",
-	"biohazard",
-	"cast n chill",
-	"counter-strike",
-	"danganronpa",
-	"dark souls",
-	"detroit",
-	"dragon quest",
-	"escape from tarkov",
-	"final fantasy",
-	"gta",
-	"hytale",
-	"league of legends",
-	"mario",
-	"minecraft",
-	"monster hunter",
-	"overwatch",
-	"pokemon",
-	"pokémon",
-	"r.e.p.o",
-	"reanimal",
-	"resident evil",
-	"slay the spire",
-	"stardew valley",
-	"street fighter",
-	"teamfight tactics",
-	"terraria",
-	"valorant",
-	"アークナイツ",
-	"ウマ娘",
-	"スト6",
-	"スト６",
-	"スーパーマリオ",
-	"スレイザスパイア",
-	"テラリア",
-	"トモコレ",
-	"ドラゴンクエスト",
-	"ドラゴンボール",
-	"バイオハザード",
-	"パワプロ",
-	"ポケモン",
-	"マイクラ",
-	"マリオ",
-	"モンハン",
-	"めっちゃカメレオン",
-	"リズム天国",
-	"仁王",
-	"原神",
-	"艦これ",
-	"遊戯王",
-	"龍が如く",
-	"鳴潮",
+	return containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.Contains)
 }
 
 func firstBroadcastTitleTag(title string) string {
@@ -318,9 +217,18 @@ func firstBroadcastTitleTag(title string) string {
 	return strings.TrimSpace(rest[:end])
 }
 
+func containsExactBroadcastKeyword(value string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if value == keyword {
+			return true
+		}
+	}
+	return false
+}
+
 func containsAnyBroadcastKeyword(value string, keywords []string) bool {
 	for _, keyword := range keywords {
-		if strings.Contains(value, strings.ToLower(keyword)) {
+		if strings.Contains(value, keyword) {
 			return true
 		}
 	}
@@ -364,4 +272,93 @@ func normalizeBroadcastToken(value string) string {
 
 func normalizeBroadcastTitleTag(value string) string {
 	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
+}
+
+func mustLoadBroadcastRules(data []byte) broadcastTypeRules {
+	var rules broadcastTypeRules
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&rules); err != nil {
+		panic(fmt.Sprintf("load broadcast type rules: %v", err))
+	}
+	if err := validateBroadcastRules(&rules); err != nil {
+		panic(fmt.Sprintf("validate broadcast type rules: %v", err))
+	}
+	normalizeBroadcastRules(&rules)
+	return rules
+}
+
+func validateBroadcastRules(rules *broadcastTypeRules) error {
+	if strings.TrimSpace(rules.Version) == "" {
+		return fmt.Errorf("missing version")
+	}
+	for topic, typ := range rules.Topics {
+		if !knownBroadcastType(typ) {
+			return fmt.Errorf("topic %q uses unknown type %q", topic, typ)
+		}
+	}
+	for _, rule := range rules.TitleRules {
+		if !knownBroadcastType(rule.Type) {
+			return fmt.Errorf("title rule uses unknown type %q", rule.Type)
+		}
+		if len(rule.Keywords) == 0 {
+			return fmt.Errorf("title rule %q has no keywords", rule.Type)
+		}
+	}
+	return nil
+}
+
+func normalizeBroadcastRules(rules *broadcastTypeRules) {
+	topics := make(map[string]BroadcastType, len(rules.Topics))
+	for topic, typ := range rules.Topics {
+		topics[normalizeBroadcastTopic(topic)] = typ
+	}
+	rules.Topics = topics
+	for i := range rules.TitleRules {
+		rules.TitleRules[i].Keywords = normalizeBroadcastKeywords(rules.TitleRules[i].Keywords)
+	}
+	rules.GameTag.RejectKeywords = normalizeBroadcastKeywords(rules.GameTag.RejectKeywords)
+	rules.GameTag.Exact = normalizeBroadcastTitleTags(rules.GameTag.Exact)
+	rules.GameTag.Contains = normalizeBroadcastKeywords(rules.GameTag.Contains)
+}
+
+func normalizeBroadcastKeywords(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value != "" {
+			normalized = append(normalized, value)
+		}
+	}
+	return normalized
+}
+
+func normalizeBroadcastTitleTags(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = normalizeBroadcastTitleTag(value)
+		if value != "" {
+			normalized = append(normalized, value)
+		}
+	}
+	return normalized
+}
+
+func knownBroadcastType(typ BroadcastType) bool {
+	switch typ {
+	case BroadcastTypeGame,
+		BroadcastTypeTalk,
+		BroadcastTypeSinging,
+		BroadcastTypeASMR,
+		BroadcastTypeMembership,
+		BroadcastTypeEvent,
+		BroadcastTypeHorseRacing,
+		BroadcastTypeWatchalong,
+		BroadcastTypeNews,
+		BroadcastTypeOther,
+		BroadcastTypeUnknown:
+		return true
+	default:
+		return false
+	}
 }

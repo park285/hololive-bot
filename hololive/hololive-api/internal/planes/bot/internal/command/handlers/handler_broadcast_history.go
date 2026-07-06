@@ -124,7 +124,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context,
 	}
 	typ, ok := ParseBroadcastType(rawType)
 	if !ok {
-		return true, c.Deps().SendMessage(ctx, cmdCtx.Room, "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 동시시청, 뉴스, 기타, 미분류")
+		return true, c.Deps().SendMessage(ctx, cmdCtx.Room, "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류")
 	}
 	query.Type = string(typ)
 	filter.TypeLabel = typ.Label()
