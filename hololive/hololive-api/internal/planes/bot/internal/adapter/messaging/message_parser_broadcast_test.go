@@ -9,7 +9,7 @@ import (
 
 func TestParseMessage_BroadcastHistory(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
-	msg := &webhook.Message{Msg: "!방송이력 게임 20 30일 topic:Forza 페코라"}
+	msg := &webhook.Message{Msg: "!방송이력 게임 30일 20 topic:Forza 페코라"}
 
 	result := adapter.ParseMessage(msg)
 	if result == nil {
@@ -87,11 +87,55 @@ func TestParseMessage_BroadcastHistoryHorseRacingAlias(t *testing.T) {
 	if got := result.Params["type"]; got != "경마" {
 		t.Fatalf("type = %v, want 경마", got)
 	}
-	if got := result.Params["limit"]; got != 20 {
-		t.Fatalf("limit = %v, want 20", got)
+	if got := result.Params["days"]; got != 20 {
+		t.Fatalf("days = %v, want 20", got)
+	}
+	if got := result.Params["limit"]; got != nil {
+		t.Fatalf("limit = %v, want nil", got)
 	}
 	if got := result.Params["member"]; got != nil {
 		t.Fatalf("member = %v, want nil", got)
+	}
+}
+
+func TestParseMessage_BroadcastHistoryExplicitLimitFilter(t *testing.T) {
+	adapter := NewMessageAdapter("!", "")
+	msg := &webhook.Message{Msg: "!방송이력 경마 limit:20"}
+
+	result := adapter.ParseMessage(msg)
+	if result == nil {
+		t.Fatal("expected parsed command, got nil")
+	}
+	if result.Type != domain.CommandBroadcastHistory {
+		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
+	}
+	if got := result.Params["type"]; got != "경마" {
+		t.Fatalf("type = %v, want 경마", got)
+	}
+	if got := result.Params["limit"]; got != 20 {
+		t.Fatalf("limit = %v, want 20", got)
+	}
+}
+
+func TestParseMessage_BroadcastHistoryLegacyLimitBeforeDays(t *testing.T) {
+	adapter := NewMessageAdapter("!", "")
+	msg := &webhook.Message{Msg: "!방송이력 게임 20 기간:30"}
+
+	result := adapter.ParseMessage(msg)
+	if result == nil {
+		t.Fatal("expected parsed command, got nil")
+	}
+	if result.Type != domain.CommandBroadcastHistory {
+		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
+	}
+	if got := result.Params["type"]; got != "게임" {
+		t.Fatalf("type = %v, want 게임", got)
+	}
+	if got := result.Params["limit"]; got != 20 {
+		t.Fatalf("limit = %v, want 20", got)
+	}
+	if got := result.Params["days"]; got != 30 {
+		t.Fatalf("days = %v, want 30", got)
 	}
 }
 

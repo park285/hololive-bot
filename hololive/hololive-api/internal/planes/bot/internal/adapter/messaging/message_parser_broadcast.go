@@ -85,7 +85,7 @@ func applyBroadcastHistoryArg(params map[string]any, memberTokens *[]string, arg
 	if consumed, ok := applyBroadcastHistoryFilterArg(params, token, args[index+1:]); ok {
 		return consumed
 	}
-	if applyBroadcastHistoryValueToken(params, token, normalized) {
+	if applyBroadcastHistoryValueToken(params, token, normalized, args[index+1:]) {
 		return 0
 	}
 	*memberTokens = append(*memberTokens, token)
@@ -116,18 +116,34 @@ func applyBroadcastHistoryFilterArg(params map[string]any, token string, rest []
 	return consumed, true
 }
 
-func applyBroadcastHistoryValueToken(params map[string]any, token, normalized string) bool {
+func applyBroadcastHistoryValueToken(params map[string]any, token, normalized string, rest []string) bool {
 	if days, ok := parseBroadcastHistoryDaysToken(token); ok {
 		params["days"] = days
 		return true
 	}
-	if limit, ok := parsePositiveInt(token); ok {
-		params["limit"] = limit
+	if value, ok := parsePositiveInt(token); ok {
+		if _, hasDays := params["days"]; hasDays || containsBroadcastHistoryDaysToken(rest) {
+			params["limit"] = value
+		} else {
+			params["days"] = value
+		}
 		return true
 	}
 	if isBroadcastHistoryTypeToken(normalized) {
 		params["type"] = token
 		return true
+	}
+	return false
+}
+
+func containsBroadcastHistoryDaysToken(args []string) bool {
+	for _, arg := range args {
+		if _, ok := parseBroadcastHistoryDaysToken(arg); ok {
+			return true
+		}
+		if key, _, ok := splitBroadcastHistoryFilter(arg); ok && broadcastHistoryFilterKinds[key] == "days" {
+			return true
+		}
 	}
 	return false
 }

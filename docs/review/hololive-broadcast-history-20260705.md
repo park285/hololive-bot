@@ -39,11 +39,15 @@ Representative forms:
 - `!방송이력`
 - `!방송이력 페코라`
 - `!방송이력 카테고리:게임 멤버:페코라 7일`
-- `!방송이력 경마 30일`
+- `!방송이력 경마 30`
+- `!방송이력 멤버`
 - `!방송이력 type:멤버십 14일 10`
+- `!방송이력 카테고리:게임 14일 개수:10`
 - `!방송이력 topic:Forza all`
 - `!방송이력 썸네일 AqxEw3kXcgU`
 - `!썸네일 AqxEw3kXcgU`
+
+Bare positive numbers are interpreted as days unless a days value is already present or a later token explicitly supplies days; in those cases they are interpreted as the response limit. Explicit `limit:`, `개수:`, and `갯수:` keep working regardless of order.
 
 Supported category labels include: `게임`, `잡담`, `노래`, `ASMR`, `멤버십`, `멤버`, `이벤트`, `경마`, `동시시청`, `뉴스`, `기타`, `미분류` and English aliases.
 

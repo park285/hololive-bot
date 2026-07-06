@@ -35,6 +35,7 @@ type BroadcastHistoryFilter struct {
 	TypeLabel  string
 	TopicID    string
 	Days       int
+	Limit      int
 	IncludeAll bool
 }
 
@@ -130,6 +131,9 @@ func broadcastHistoryFilterLine(filter BroadcastHistoryFilter) string {
 		parts = append(parts, "기간: 전체")
 	} else if filter.Days > 0 {
 		parts = append(parts, fmt.Sprintf("기간: 최근 %d일", filter.Days))
+	}
+	if filter.Limit > 0 {
+		parts = append(parts, fmt.Sprintf("개수: 최대 %d건", filter.Limit))
 	}
 	if len(parts) == 0 {
 		return ""

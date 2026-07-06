@@ -102,8 +102,9 @@ func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *domain
 
 func newBroadcastHistoryQuery(params map[string]any) (query handlercore.BroadcastHistoryQuery, filter adapter.BroadcastHistoryFilter) {
 	days := normalizeBroadcastHistoryDays(intBroadcastHistoryParam(params, "days", defaultBroadcastHistoryDays))
+	limit := normalizeBroadcastHistoryLimit(intBroadcastHistoryParam(params, "limit", defaultBroadcastHistoryLimit))
 	query = handlercore.BroadcastHistoryQuery{
-		Limit:      intBroadcastHistoryParam(params, "limit", defaultBroadcastHistoryLimit),
+		Limit:      limit,
 		TopicID:    stringParam(params, "topic"),
 		IncludeAll: boolParam(params, "all"),
 	}
@@ -113,6 +114,7 @@ func newBroadcastHistoryQuery(params map[string]any) (query handlercore.Broadcas
 	return query, adapter.BroadcastHistoryFilter{
 		TopicID:    query.TopicID,
 		Days:       days,
+		Limit:      limit,
 		IncludeAll: query.IncludeAll,
 	}
 }
@@ -124,7 +126,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context,
 	}
 	typ, ok := ParseBroadcastType(rawType)
 	if !ok {
-		return true, c.Deps().SendMessage(ctx, cmdCtx.Room, "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류")
+		return true, c.Deps().SendMessage(ctx, cmdCtx.Room, "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 멤버, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류")
 	}
 	query.Type = string(typ)
 	filter.TypeLabel = typ.Label()

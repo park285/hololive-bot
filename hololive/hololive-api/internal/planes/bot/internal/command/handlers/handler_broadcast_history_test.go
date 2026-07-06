@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,6 +128,9 @@ func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 	}
 	if sent == "" {
 		t.Fatal("expected invalid type message")
+	}
+	if !strings.Contains(sent, "멤버") {
+		t.Fatalf("invalid type message = %q, want supported alias 멤버", sent)
 	}
 }
 

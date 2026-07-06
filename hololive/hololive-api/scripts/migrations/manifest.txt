@@ -97,3 +97,4 @@
 097 101_add_youtube_live_session_sort_index.sql
 098 102_add_youtube_live_session_channel_sort_index.sql
 099 103_add_youtube_live_session_topic_index.sql
+100 104_update_broadcast_history_help.sql
