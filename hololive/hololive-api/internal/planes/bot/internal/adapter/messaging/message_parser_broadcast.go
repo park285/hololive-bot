@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
@@ -262,8 +263,7 @@ func parsePositiveInt(token string) (int, bool) {
 }
 
 func isBroadcastHistoryTypeToken(token string) bool {
-	_, ok := broadcastHistoryTypeTokens[token]
-	return ok
+	return broadcasttype.IsAlias(token)
 }
 
 var broadcastHistoryFilterKinds = map[string]string{
@@ -280,18 +280,4 @@ var broadcastHistoryFilterAppliers = map[string]func(map[string]any, string){
 	"days":   applyBroadcastHistoryDaysFilter,
 	"limit":  applyBroadcastHistoryLimitFilter,
 	"member": func(params map[string]any, value string) { applyBroadcastHistoryStringFilter(params, "member", value) },
-}
-
-var broadcastHistoryTypeTokens = map[string]struct{}{
-	"game": {}, "games": {}, "gaming": {}, "게임": {}, "겜": {}, "게임방송": {},
-	"talk": {}, "zatsudan": {}, "free_talk": {}, "free-talk": {}, "잡담": {}, "토크": {}, "수다": {},
-	"singing": {}, "song": {}, "karaoke": {}, "music": {}, "노래": {}, "노래방": {}, "歌枠": {}, "우타와꾸": {},
-	"asmr":       {},
-	"membership": {}, "member": {}, "members": {}, "membersonly": {}, "memberonly": {}, "멤버십": {}, "멤버": {}, "멤버한정": {}, "멤버전용": {},
-	"event": {}, "events": {}, "birthday": {}, "3d": {}, "outfit": {}, "이벤트": {}, "기념": {}, "생일": {}, "신의상": {}, "3d방송": {},
-	"horse_racing": {}, "horse-racing": {}, "horseracing": {}, "keiba": {}, "경마": {}, "競馬": {},
-	"watchalong": {}, "watch-along": {}, "watch_party": {}, "watchparty": {}, "동시시청": {}, "같이보기": {},
-	"news": {}, "notice": {}, "announcement": {}, "뉴스": {}, "공지": {},
-	"other": {}, "variety": {}, "etc": {}, "기타": {},
-	"unknown": {}, "미분류": {},
 }

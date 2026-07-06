@@ -95,6 +95,43 @@ func TestParseMessage_BroadcastHistoryHorseRacingAlias(t *testing.T) {
 	}
 }
 
+func TestParseMessage_BroadcastHistoryAliasVariants(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		msg  string
+		want string
+	}{
+		{name: "free talk underscore", msg: "!방송이력 free_talk", want: "free_talk"},
+		{name: "watch party hyphen", msg: "!방송이력 watch-party", want: "watch-party"},
+		{name: "watch along hyphen", msg: "!방송이력 watch-along", want: "watch-along"},
+		{name: "member korean", msg: "!방송이력 멤버", want: "멤버"},
+		{name: "horse racing korean", msg: "!방송이력 경마", want: "경마"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			adapter := NewMessageAdapter("!", "")
+			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
+			if result == nil {
+				t.Fatal("expected parsed command, got nil")
+			}
+			if result.Type != domain.CommandBroadcastHistory {
+				t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
+			}
+			if got := result.Params["type"]; got != tt.want {
+				t.Fatalf("type = %v, want %s", got, tt.want)
+			}
+			if got := result.Params["member"]; got != nil {
+				t.Fatalf("member = %v, want nil", got)
+			}
+		})
+	}
+}
+
 func TestParseMessage_BroadcastHistorySeparatedFilters(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
 	msg := &webhook.Message{Msg: "!방송이력 카테고리: 게임 멤버: 사쿠라 미코 14일 10"}

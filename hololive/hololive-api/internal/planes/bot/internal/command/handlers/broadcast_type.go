@@ -25,11 +25,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
+	"golang.org/x/text/unicode/norm"
 
 	_ "embed"
 )
 
-type BroadcastType string
+type BroadcastType = broadcasttype.Type
 
 type BroadcastClassification struct {
 	Type   BroadcastType
@@ -37,50 +42,23 @@ type BroadcastClassification struct {
 }
 
 const (
-	BroadcastTypeGame        BroadcastType = "game"
-	BroadcastTypeTalk        BroadcastType = "talk"
-	BroadcastTypeSinging     BroadcastType = "singing"
-	BroadcastTypeASMR        BroadcastType = "asmr"
-	BroadcastTypeMembership  BroadcastType = "membership"
-	BroadcastTypeEvent       BroadcastType = "event"
-	BroadcastTypeHorseRacing BroadcastType = "horse_racing"
-	BroadcastTypeWatchalong  BroadcastType = "watchalong"
-	BroadcastTypeNews        BroadcastType = "news"
-	BroadcastTypeOther       BroadcastType = "other"
-	BroadcastTypeUnknown     BroadcastType = "unknown"
+	BroadcastTypeGame        = broadcasttype.Game
+	BroadcastTypeTalk        = broadcasttype.Talk
+	BroadcastTypeSinging     = broadcasttype.Singing
+	BroadcastTypeASMR        = broadcasttype.ASMR
+	BroadcastTypeMembership  = broadcasttype.Membership
+	BroadcastTypeEvent       = broadcasttype.Event
+	BroadcastTypeHorseRacing = broadcasttype.HorseRacing
+	BroadcastTypeWatchalong  = broadcasttype.Watchalong
+	BroadcastTypeNews        = broadcasttype.News
+	BroadcastTypeOther       = broadcasttype.Other
+	BroadcastTypeUnknown     = broadcasttype.Unknown
 )
 
 //go:embed broadcast_type_rules.json
 var broadcastTypeRulesJSON []byte
 
 var broadcastRules = mustLoadBroadcastRules(broadcastTypeRulesJSON)
-
-var broadcastTypeAliases = map[string]BroadcastType{
-	"game": BroadcastTypeGame, "games": BroadcastTypeGame, "gaming": BroadcastTypeGame, "게임": BroadcastTypeGame, "겜": BroadcastTypeGame, "게임방송": BroadcastTypeGame,
-	"talk": BroadcastTypeTalk, "zatsudan": BroadcastTypeTalk, "free_talk": BroadcastTypeTalk, "free-talk": BroadcastTypeTalk, "잡담": BroadcastTypeTalk, "토크": BroadcastTypeTalk, "수다": BroadcastTypeTalk,
-	"singing": BroadcastTypeSinging, "song": BroadcastTypeSinging, "karaoke": BroadcastTypeSinging, "music": BroadcastTypeSinging, "노래": BroadcastTypeSinging, "노래방": BroadcastTypeSinging, "歌枠": BroadcastTypeSinging, "우타와꾸": BroadcastTypeSinging,
-	"asmr":       BroadcastTypeASMR,
-	"membership": BroadcastTypeMembership, "member": BroadcastTypeMembership, "members": BroadcastTypeMembership, "membersonly": BroadcastTypeMembership, "memberonly": BroadcastTypeMembership, "멤버십": BroadcastTypeMembership, "멤버": BroadcastTypeMembership, "멤버한정": BroadcastTypeMembership, "멤버전용": BroadcastTypeMembership,
-	"event": BroadcastTypeEvent, "events": BroadcastTypeEvent, "birthday": BroadcastTypeEvent, "3d": BroadcastTypeEvent, "outfit": BroadcastTypeEvent, "이벤트": BroadcastTypeEvent, "기념": BroadcastTypeEvent, "생일": BroadcastTypeEvent, "신의상": BroadcastTypeEvent, "3d방송": BroadcastTypeEvent,
-	"horse_racing": BroadcastTypeHorseRacing, "horse-racing": BroadcastTypeHorseRacing, "horseracing": BroadcastTypeHorseRacing, "keiba": BroadcastTypeHorseRacing, "경마": BroadcastTypeHorseRacing, "競馬": BroadcastTypeHorseRacing,
-	"watchalong": BroadcastTypeWatchalong, "watch-along": BroadcastTypeWatchalong, "watch_party": BroadcastTypeWatchalong, "watchparty": BroadcastTypeWatchalong, "동시시청": BroadcastTypeWatchalong, "같이보기": BroadcastTypeWatchalong,
-	"news": BroadcastTypeNews, "notice": BroadcastTypeNews, "announcement": BroadcastTypeNews, "뉴스": BroadcastTypeNews, "공지": BroadcastTypeNews,
-	"other": BroadcastTypeOther, "variety": BroadcastTypeOther, "etc": BroadcastTypeOther, "기타": BroadcastTypeOther,
-	"unknown": BroadcastTypeUnknown, "미분류": BroadcastTypeUnknown,
-}
-
-var broadcastTypeLabels = map[BroadcastType]string{
-	BroadcastTypeGame:        "게임",
-	BroadcastTypeTalk:        "잡담",
-	BroadcastTypeSinging:     "노래",
-	BroadcastTypeASMR:        "ASMR",
-	BroadcastTypeMembership:  "멤버십",
-	BroadcastTypeEvent:       "이벤트",
-	BroadcastTypeHorseRacing: "경마",
-	BroadcastTypeWatchalong:  "동시시청",
-	BroadcastTypeNews:        "뉴스/공지",
-	BroadcastTypeOther:       "기타",
-}
 
 type broadcastTitleRule struct {
 	Type     BroadcastType `json:"type"`
@@ -98,7 +76,22 @@ type broadcastTypeRules struct {
 	SourceNotes []string                 `json:"source_notes,omitempty"`
 	Topics      map[string]BroadcastType `json:"topics"`
 	TitleRules  []broadcastTitleRule     `json:"title_rules"`
+	Generic     []broadcastTitleRule     `json:"generic_title_rules,omitempty"`
 	GameTag     broadcastGameTagRules    `json:"game_title_tag"`
+}
+
+type broadcastTitleStrength int
+
+const (
+	broadcastTitleStrengthUnknown broadcastTitleStrength = iota
+	broadcastTitleStrengthGeneric
+	broadcastTitleStrengthLead
+	broadcastTitleStrengthStrong
+)
+
+type broadcastTitleClassification struct {
+	Type     BroadcastType
+	Strength broadcastTitleStrength
 }
 
 func ClassifyBroadcast(topicID, title string) BroadcastType {
@@ -107,50 +100,43 @@ func ClassifyBroadcast(topicID, title string) BroadcastType {
 
 func ClassifyBroadcastWithSource(topicID, title string) BroadcastClassification {
 	topicType := classifyBroadcastTopic(topicID)
-	titleType := classifyBroadcastTitle(title)
-	if broadcastTitleOverridesTopic(titleType, topicType) {
-		return BroadcastClassification{Type: titleType, Source: "title"}
+	titleClass := classifyBroadcastTitle(title)
+	if broadcastTitleOverridesTopic(titleClass, topicType) {
+		return BroadcastClassification{Type: titleClass.Type, Source: "title"}
 	}
 	if topicType != BroadcastTypeUnknown {
 		return BroadcastClassification{Type: topicType, Source: "topic"}
 	}
-	if titleType != BroadcastTypeUnknown {
-		return BroadcastClassification{Type: titleType, Source: "title"}
+	if titleClass.Type != BroadcastTypeUnknown {
+		return BroadcastClassification{Type: titleClass.Type, Source: "title"}
 	}
 	return BroadcastClassification{Type: BroadcastTypeUnknown, Source: "unknown"}
 }
 
-func broadcastTitleOverridesTopic(titleType, topicType BroadcastType) bool {
-	if titleType == BroadcastTypeUnknown || topicType == BroadcastTypeUnknown {
+func broadcastTitleOverridesTopic(titleClass broadcastTitleClassification, topicType BroadcastType) bool {
+	if titleClass.Type == BroadcastTypeUnknown || topicType == BroadcastTypeUnknown {
 		return false
 	}
 	if topicType != BroadcastTypeGame && topicType != BroadcastTypeOther {
 		return false
 	}
-	switch titleType {
+	switch titleClass.Type {
 	case BroadcastTypeSinging,
 		BroadcastTypeASMR,
 		BroadcastTypeMembership,
-		BroadcastTypeEvent,
 		BroadcastTypeHorseRacing,
 		BroadcastTypeWatchalong,
 		BroadcastTypeNews:
 		return true
+	case BroadcastTypeEvent:
+		return titleClass.Strength == broadcastTitleStrengthStrong || titleClass.Strength == broadcastTitleStrengthLead
 	default:
 		return false
 	}
 }
 
 func ParseBroadcastType(raw string) (BroadcastType, bool) {
-	typ, ok := broadcastTypeAliases[normalizeBroadcastToken(raw)]
-	return typ, ok
-}
-
-func (t BroadcastType) Label() string {
-	if label, ok := broadcastTypeLabels[t]; ok {
-		return label
-	}
-	return "미분류"
+	return broadcasttype.Parse(raw)
 }
 
 func classifyBroadcastTopic(topicID string) BroadcastType {
@@ -163,22 +149,28 @@ func classifyBroadcastTopic(topicID string) BroadcastType {
 	return BroadcastTypeUnknown
 }
 
-func classifyBroadcastTitle(title string) BroadcastType {
-	normalized := strings.ToLower(strings.TrimSpace(title))
-	if typ, ok := classifyBroadcastTitleByKeyword(normalized); ok {
-		return typ
+func classifyBroadcastTitle(title string) broadcastTitleClassification {
+	normalized := normalizeBroadcastText(title)
+	leadTag := normalizeBroadcastTitleTag(firstBroadcastTitleTag(title))
+	if typ, ok := classifyBroadcastTitleByKeyword(normalized, broadcastRules.TitleRules); ok {
+		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthStrong}
 	}
-	if containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.Contains) {
-		return BroadcastTypeGame
+	if leadTag != "" {
+		if typ, ok := classifyBroadcastTitleByKeyword(leadTag, broadcastRules.Generic); ok {
+			return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthLead}
+		}
 	}
-	if titleLooksLikeGameBroadcast(title) {
-		return BroadcastTypeGame
+	if titleLooksLikeGameBroadcast(normalized, leadTag) {
+		return broadcastTitleClassification{Type: BroadcastTypeGame, Strength: broadcastTitleStrengthStrong}
 	}
-	return BroadcastTypeUnknown
+	if typ, ok := classifyBroadcastTitleByKeyword(normalized, broadcastRules.Generic); ok {
+		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthGeneric}
+	}
+	return broadcastTitleClassification{Type: BroadcastTypeUnknown, Strength: broadcastTitleStrengthUnknown}
 }
 
-func classifyBroadcastTitleByKeyword(normalized string) (BroadcastType, bool) {
-	for _, rule := range broadcastRules.TitleRules {
+func classifyBroadcastTitleByKeyword(normalized string, rules []broadcastTitleRule) (BroadcastType, bool) {
+	for _, rule := range rules {
 		if containsAnyBroadcastKeyword(normalized, rule.Keywords) {
 			return rule.Type, true
 		}
@@ -186,19 +178,13 @@ func classifyBroadcastTitleByKeyword(normalized string) (BroadcastType, bool) {
 	return BroadcastTypeUnknown, false
 }
 
-func titleLooksLikeGameBroadcast(title string) bool {
-	tag := firstBroadcastTitleTag(title)
-	if tag == "" {
-		return false
+func titleLooksLikeGameBroadcast(normalized, leadTag string) bool {
+	if leadTag != "" && containsExactBroadcastKeyword(leadTag, broadcastRules.GameTag.Exact) {
+		return true
 	}
-	normalized := normalizeBroadcastTitleTag(tag)
-	if strings.HasPrefix(normalized, "#") {
-		return false
-	}
-	if containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.RejectKeywords) {
-		return false
-	}
-	if containsExactBroadcastKeyword(normalized, broadcastRules.GameTag.Exact) {
+	if leadTag != "" &&
+		!containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.RejectKeywords) &&
+		containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.Contains) {
 		return true
 	}
 	return containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.Contains)
@@ -228,11 +214,63 @@ func containsExactBroadcastKeyword(value string, keywords []string) bool {
 
 func containsAnyBroadcastKeyword(value string, keywords []string) bool {
 	for _, keyword := range keywords {
-		if strings.Contains(value, keyword) {
+		if broadcastKeywordMatches(value, keyword) {
 			return true
 		}
 	}
 	return false
+}
+
+func broadcastKeywordMatches(value, keyword string) bool {
+	if keyword == "" {
+		return false
+	}
+	if !isASCIIBroadcastKeyword(keyword) {
+		return strings.Contains(value, keyword)
+	}
+	start := 0
+	for start <= len(value) {
+		idx := strings.Index(value[start:], keyword)
+		if idx < 0 {
+			return false
+		}
+		matchStart := start + idx
+		matchEnd := matchStart + len(keyword)
+		if hasBroadcastKeywordBoundary(value, matchStart, matchEnd) {
+			return true
+		}
+		start = matchStart + 1
+	}
+	return false
+}
+
+func isASCIIBroadcastKeyword(value string) bool {
+	for _, r := range value {
+		if r > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
+}
+
+func hasBroadcastKeywordBoundary(value string, start, end int) bool {
+	if start > 0 {
+		r, _ := utf8.DecodeLastRuneInString(value[:start])
+		if isBroadcastWordRune(r) {
+			return false
+		}
+	}
+	if end < len(value) {
+		r, _ := utf8.DecodeRuneInString(value[end:])
+		if isBroadcastWordRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isBroadcastWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 func broadcastTopics(topicID string) []string {
@@ -261,17 +299,26 @@ func broadcastTopicMatches(topicID, wanted string) bool {
 }
 
 func normalizeBroadcastTopic(value string) string {
-	return strings.Trim(strings.ToLower(strings.TrimSpace(value)), ",")
-}
-
-func normalizeBroadcastToken(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = strings.TrimPrefix(value, "#")
-	return strings.ReplaceAll(value, " ", "_")
+	value = normalizeBroadcastText(value)
+	return strings.Trim(value, ",")
 }
 
 func normalizeBroadcastTitleTag(value string) string {
-	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
+	return normalizeBroadcastText(value)
+}
+
+func normalizeBroadcastText(value string) string {
+	value = norm.NFKC.String(value)
+	value = strings.Map(func(r rune) rune {
+		switch r {
+		case '\u200b', '\u200c', '\u200d', '\ufeff':
+			return -1
+		default:
+			return r
+		}
+	}, value)
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.Join(strings.Fields(value), " ")
 }
 
 func mustLoadBroadcastRules(data []byte) broadcastTypeRules {
@@ -305,6 +352,14 @@ func validateBroadcastRules(rules *broadcastTypeRules) error {
 			return fmt.Errorf("title rule %q has no keywords", rule.Type)
 		}
 	}
+	for _, rule := range rules.Generic {
+		if !knownBroadcastType(rule.Type) {
+			return fmt.Errorf("generic title rule uses unknown type %q", rule.Type)
+		}
+		if len(rule.Keywords) == 0 {
+			return fmt.Errorf("generic title rule %q has no keywords", rule.Type)
+		}
+	}
 	return nil
 }
 
@@ -317,6 +372,9 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 	for i := range rules.TitleRules {
 		rules.TitleRules[i].Keywords = normalizeBroadcastKeywords(rules.TitleRules[i].Keywords)
 	}
+	for i := range rules.Generic {
+		rules.Generic[i].Keywords = normalizeBroadcastKeywords(rules.Generic[i].Keywords)
+	}
 	rules.GameTag.RejectKeywords = normalizeBroadcastKeywords(rules.GameTag.RejectKeywords)
 	rules.GameTag.Exact = normalizeBroadcastTitleTags(rules.GameTag.Exact)
 	rules.GameTag.Contains = normalizeBroadcastKeywords(rules.GameTag.Contains)
@@ -325,7 +383,7 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 func normalizeBroadcastKeywords(values []string) []string {
 	normalized := make([]string, 0, len(values))
 	for _, value := range values {
-		value = strings.ToLower(strings.TrimSpace(value))
+		value = normalizeBroadcastText(value)
 		if value != "" {
 			normalized = append(normalized, value)
 		}
@@ -345,20 +403,5 @@ func normalizeBroadcastTitleTags(values []string) []string {
 }
 
 func knownBroadcastType(typ BroadcastType) bool {
-	switch typ {
-	case BroadcastTypeGame,
-		BroadcastTypeTalk,
-		BroadcastTypeSinging,
-		BroadcastTypeASMR,
-		BroadcastTypeMembership,
-		BroadcastTypeEvent,
-		BroadcastTypeHorseRacing,
-		BroadcastTypeWatchalong,
-		BroadcastTypeNews,
-		BroadcastTypeOther,
-		BroadcastTypeUnknown:
-		return true
-	default:
-		return false
-	}
+	return broadcasttype.Known(typ)
 }

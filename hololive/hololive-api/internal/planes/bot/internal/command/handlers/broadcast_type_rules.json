@@ -59,11 +59,27 @@
   "title_rules": [
     {
       "type": "membership",
-      "keywords": ["メン限", "メンバー限定", "メンバー限定配信", "members only", "member only", "membership", "membersonly"]
+      "keywords": [
+        "メン限",
+        "メンバー限定",
+        "メンバー限定配信",
+        "members only",
+        "member only",
+        "membership",
+        "membersonly"
+      ]
     },
     {
       "type": "watchalong",
-      "keywords": ["同時視聴", "watchalong", "watch along", "watchparty", "watch party", "future games show", "ウォッチパーティー"]
+      "keywords": [
+        "同時視聴",
+        "watchalong",
+        "watch along",
+        "watchparty",
+        "watch party",
+        "future games show",
+        "ウォッチパーティー"
+      ]
     },
     {
       "type": "singing",
@@ -90,7 +106,9 @@
     },
     {
       "type": "asmr",
-      "keywords": ["asmr"]
+      "keywords": [
+        "asmr"
+      ]
     },
     {
       "type": "horse_racing",
@@ -170,30 +188,51 @@
         "新衣装",
         "お披露目",
         "outfit reveal",
-        "企画",
-        "大会",
-        "決定戦",
-        "リーグ",
-        "本配信",
         "復帰",
         "初配信",
         "debut",
         "卒業",
         "graduation",
         "hololive dreams",
+        "ホロドリ",
         "#hologuidetokyo",
         "催眠regloss",
         "マイクラバーサス",
         "無礼講アモアス",
         "#学術v登山隊",
-        "オフコラボ",
-        "凸待ち",
-        "耐久"
+        "ホロマリオテニス大会",
+        "ホロ新春ゲーム祭",
+        "ポケモンチャンピオンズ大会",
+        "漢義リーグ"
       ]
     },
     {
       "type": "news",
-      "keywords": ["昼ホロ", "朝ミオ", "朝こよ", "ニュース", "お知らせ", "重大告知", "告知！", "announcement"]
+      "keywords": [
+        "昼ホロ",
+        "朝ミオ",
+        "朝こよ",
+        "ニュース",
+        "お知らせ",
+        "重大告知",
+        "告知！",
+        "announcement"
+      ]
+    }
+  ],
+  "generic_title_rules": [
+    {
+      "type": "event",
+      "keywords": [
+        "企画",
+        "大会",
+        "決定戦",
+        "リーグ",
+        "本配信",
+        "オフコラボ",
+        "凸待ち",
+        "耐久"
+      ]
     },
     {
       "type": "talk",
@@ -297,7 +336,16 @@
       "開封",
       "unboxing"
     ],
-    "exact": ["ff7", "ff10", "ff14", "lol", "ow", "ow2", "tft", "vct"],
+    "exact": [
+      "ff7",
+      "ff10",
+      "ff14",
+      "lol",
+      "ow",
+      "ow2",
+      "tft",
+      "vct"
+    ],
     "contains": [
       "7 days to die",
       "777real",
@@ -326,6 +374,7 @@
       "counter-strike",
       "chrono trigger",
       "crime simulator",
+      "creature kitchen",
       "cookie run",
       "cookierun",
       "cursed companions",
@@ -334,6 +383,7 @@
       "dark souls",
       "dbd",
       "dead by daylight",
+      "delta force",
       "dead rising",
       "dead space",
       "detroit",
@@ -360,12 +410,16 @@
       "fortnite",
       "gacha capsule shop simulator",
       "geoguessr",
+      "geoguesser",
       "golf it",
       "gta",
       "goat simulator",
+      "hades ii",
+      "hades 2",
       "hellmart",
       "hitman",
       "holo vs robo",
+      "holodungeon",
       "hologuard",
       "holotype",
       "honkai",
@@ -380,8 +434,10 @@
       "log riders",
       "marathon",
       "mario",
+      "mario kart",
       "master duel",
       "metal gear",
+      "metroid prime",
       "mewgenics",
       "mini tokyo 3d",
       "minecraft",
@@ -399,6 +455,7 @@
       "paranormasight",
       "phasmophobia",
       "plateup",
+      "plate up",
       "portal",
       "poppy playtime",
       "pop'n music",
@@ -420,6 +477,8 @@
       "slay the spire",
       "shashingo",
       "story of seasons",
+      "super smash bros",
+      "super smash bros. ultimate",
       "stardew valley",
       "starsavior",
       "street fighter",
@@ -449,6 +508,7 @@
       "アーケロン",
       "あつまれ どうぶつの森",
       "エターナルリターン",
+      "エスケープシミュレーター",
       "ウマ娘",
       "ウミガリ",
       "ガンダム",
@@ -460,6 +520,7 @@
       "スト6",
       "スト６",
       "スーパーマリオ",
+      "スイカゲーム",
       "スレイザスパイア",
       "スプラトゥーン",
       "シーオブレムナンツ",
@@ -477,16 +538,21 @@
       "ファイアーエムブレム",
       "ぷちホロの村",
       "ポケモン",
+      "ホロダンジョン",
       "ホロガード",
       "ホロタイプ",
       "ホロ新春ゲーム祭",
       "マイクラ",
       "マリオ",
+      "マリオカート",
       "マリオテニス",
+      "マリパ",
       "マスターデュエル",
+      "メトロイドプライム",
       "モンハン",
       "モノクロームメビウス",
       "めっちゃカメレオン",
+      "リトルナイトメア",
       "リズム天国",
       "ロックマン",
       "ロマサガ",
