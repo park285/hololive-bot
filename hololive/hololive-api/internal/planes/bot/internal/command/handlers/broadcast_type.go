@@ -118,9 +118,17 @@ func broadcastTitleOverridesTopic(titleClass broadcastTitleClassification, topic
 	if titleClass.Type == BroadcastTypeUnknown || topicType == BroadcastTypeUnknown {
 		return false
 	}
-	if topicType != BroadcastTypeGame && topicType != BroadcastTypeOther {
+	if !broadcastTopicAcceptsTitleOverride(topicType) {
 		return false
 	}
+	return broadcastTitleClassOverridesTopic(titleClass)
+}
+
+func broadcastTopicAcceptsTitleOverride(topicType BroadcastType) bool {
+	return topicType == BroadcastTypeGame || topicType == BroadcastTypeOther
+}
+
+func broadcastTitleClassOverridesTopic(titleClass broadcastTitleClassification) bool {
 	switch titleClass.Type {
 	case BroadcastTypeSinging,
 		BroadcastTypeASMR,
@@ -357,25 +365,31 @@ func validateBroadcastRules(rules *broadcastTypeRules) error {
 	if strings.TrimSpace(rules.Version) == "" {
 		return fmt.Errorf("missing version")
 	}
-	for topic, typ := range rules.Topics {
+	if err := validateBroadcastTopics(rules.Topics); err != nil {
+		return err
+	}
+	if err := validateBroadcastRuleSet("title rule", rules.TitleRules); err != nil {
+		return err
+	}
+	return validateBroadcastRuleSet("generic title rule", rules.Generic)
+}
+
+func validateBroadcastTopics(topics map[string]BroadcastType) error {
+	for topic, typ := range topics {
 		if !knownBroadcastType(typ) {
 			return fmt.Errorf("topic %q uses unknown type %q", topic, typ)
 		}
 	}
-	for _, rule := range rules.TitleRules {
+	return nil
+}
+
+func validateBroadcastRuleSet(kind string, rules []broadcastTitleRule) error {
+	for _, rule := range rules {
 		if !knownBroadcastType(rule.Type) {
-			return fmt.Errorf("title rule uses unknown type %q", rule.Type)
+			return fmt.Errorf("%s uses unknown type %q", kind, rule.Type)
 		}
 		if len(rule.Keywords) == 0 {
-			return fmt.Errorf("title rule %q has no keywords", rule.Type)
-		}
-	}
-	for _, rule := range rules.Generic {
-		if !knownBroadcastType(rule.Type) {
-			return fmt.Errorf("generic title rule uses unknown type %q", rule.Type)
-		}
-		if len(rule.Keywords) == 0 {
-			return fmt.Errorf("generic title rule %q has no keywords", rule.Type)
+			return fmt.Errorf("%s %q has no keywords", kind, rule.Type)
 		}
 	}
 	return nil

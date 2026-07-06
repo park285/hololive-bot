@@ -103,19 +103,26 @@ func (d *youTubeThumbnailDownloader) downloadCandidate(ctx context.Context, rawU
 		}
 	}()
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, "", fmt.Errorf("thumbnail status %d", resp.StatusCode)
-	}
-
-	contentType = normalizeThumbnailContentType(resp.Header.Get("Content-Type"))
-	if contentType == "" {
-		return nil, "", fmt.Errorf("unsupported thumbnail content type %q", resp.Header.Get("Content-Type"))
+	contentType, err = validateThumbnailResponse(resp)
+	if err != nil {
+		return nil, "", err
 	}
 	body, err := readBroadcastThumbnailBody(resp.Body)
 	if err != nil {
 		return nil, "", err
 	}
 	return body, contentType, nil
+}
+
+func validateThumbnailResponse(resp *http.Response) (string, error) {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("thumbnail status %d", resp.StatusCode)
+	}
+	contentType := normalizeThumbnailContentType(resp.Header.Get("Content-Type"))
+	if contentType == "" {
+		return "", fmt.Errorf("unsupported thumbnail content type %q", resp.Header.Get("Content-Type"))
+	}
+	return contentType, nil
 }
 
 func readBroadcastThumbnailBody(body io.Reader) ([]byte, error) {
