@@ -80,3 +80,19 @@ func TestYouTubeThumbnailDownloaderFallsBack(t *testing.T) {
 		t.Fatalf("paths = %v", paths)
 	}
 }
+
+func TestYouTubeThumbnailDownloaderRejectsNilEntry(t *testing.T) {
+	downloader := NewYouTubeThumbnailDownloader(&http.Client{})
+
+	_, _, err := downloader.Download(t.Context(), nil)
+	if err == nil || !strings.Contains(err.Error(), "entry is required") {
+		t.Fatalf("Download() error = %v", err)
+	}
+}
+
+func TestValidateThumbnailResponseRejectsNil(t *testing.T) {
+	_, err := validateThumbnailResponse(nil)
+	if err == nil || !strings.Contains(err.Error(), "response is nil") {
+		t.Fatalf("validateThumbnailResponse() error = %v", err)
+	}
+}

@@ -51,6 +51,9 @@ type stubBroadcastThumbnailDownloader struct {
 }
 
 func (s *stubBroadcastThumbnailDownloader) Download(_ context.Context, entry *handlercore.BroadcastHistoryEntry) (image []byte, contentType string, err error) {
+	if entry == nil {
+		return nil, "", errors.New("broadcast history entry is required")
+	}
 	s.entry = *entry
 	if s.err != nil {
 		return nil, "", s.err

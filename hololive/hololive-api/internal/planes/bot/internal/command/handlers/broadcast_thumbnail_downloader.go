@@ -64,6 +64,9 @@ func (d *youTubeThumbnailDownloader) Download(ctx context.Context, entry *handle
 	if d == nil || d.client == nil {
 		return nil, "", errors.New("thumbnail downloader not configured")
 	}
+	if entry == nil {
+		return nil, "", errors.New("broadcast history entry is required")
+	}
 	target := *entry
 	target.VideoID = strings.TrimSpace(target.VideoID)
 	if !validYouTubeVideoID(target.VideoID) {
@@ -97,24 +100,55 @@ func (d *youTubeThumbnailDownloader) downloadCandidate(ctx context.Context, rawU
 	if err != nil {
 		return nil, "", fmt.Errorf("request thumbnail: %w", err)
 	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close thumbnail body: %w", closeErr)
-		}
-	}()
+	bodyReader, err := thumbnailResponseBody(resp)
+	if err != nil {
+		return nil, "", err
+	}
 
 	contentType, err = validateThumbnailResponse(resp)
 	if err != nil {
 		return nil, "", err
 	}
-	body, err := readBroadcastThumbnailBody(resp.Body)
+	body, err := readAndCloseBroadcastThumbnailBody(bodyReader)
 	if err != nil {
 		return nil, "", err
 	}
 	return body, contentType, nil
 }
 
+func thumbnailResponseBody(resp *http.Response) (io.ReadCloser, error) {
+	if resp == nil {
+		return nil, errors.New("thumbnail response is nil")
+	}
+	if resp.Body == nil {
+		return nil, errors.New("thumbnail response body is nil")
+	}
+	return resp.Body, nil
+}
+
+func closeThumbnailBody(body io.Closer) error {
+	if body == nil {
+		return nil
+	}
+	if closeErr := body.Close(); closeErr != nil {
+		return fmt.Errorf("close thumbnail body: %w", closeErr)
+	}
+	return nil
+}
+
+func readAndCloseBroadcastThumbnailBody(body io.ReadCloser) (data []byte, err error) {
+	defer func() {
+		if closeErr := closeThumbnailBody(body); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+	return readBroadcastThumbnailBody(body)
+}
+
 func validateThumbnailResponse(resp *http.Response) (string, error) {
+	if resp == nil {
+		return "", errors.New("thumbnail response is nil")
+	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return "", fmt.Errorf("thumbnail status %d", resp.StatusCode)
 	}

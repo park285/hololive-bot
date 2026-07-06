@@ -214,6 +214,9 @@ func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Co
 }
 
 func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Context, cmdCtx *domain.CommandContext, entry *handlercore.BroadcastHistoryEntry) (image []byte, contentType string, handled bool, err error) {
+	if entry == nil {
+		return nil, "", true, c.Deps().SendMessage(ctx, cmdCtx.Room, "종료된 방송 이력에서 해당 video_id를 찾지 못했습니다.")
+	}
 	image, contentType, err = c.Deps().ThumbnailDownloader.Download(ctx, entry)
 	if err == nil {
 		return image, contentType, false, nil
