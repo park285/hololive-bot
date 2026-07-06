@@ -408,9 +408,9 @@ func insertPollerTestLiveSession(ctx context.Context, db *pgxpool.Pool, row *dom
 	}
 	return execPollerTestInsert(ctx, db, `
 		INSERT INTO youtube_live_sessions
-			(video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		row.VideoID, row.ChannelID, row.Status, row.Title, row.ScheduledStartTime, row.StartedAt, row.EndedAt, row.LiveFirstSeenAt, row.LastSeenAt)
+			(video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, live_first_seen_at, topic_id, thumbnail_url, last_seen_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		row.VideoID, row.ChannelID, row.Status, row.Title, row.ScheduledStartTime, row.StartedAt, row.EndedAt, row.LiveFirstSeenAt, row.TopicID, row.ThumbnailURL, row.LastSeenAt)
 }
 
 func insertPollerTestLiveViewerSample(ctx context.Context, db *pgxpool.Pool, row *domain.YouTubeLiveViewerSample) (int64, error) {
@@ -489,7 +489,7 @@ func pollerTestSelectColumns(table string) string {
 	case "youtube_channel_profiles":
 		return "channel_id, avatar, banner, updated_at"
 	case "youtube_live_sessions":
-		return "video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at"
+		return "video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, live_first_seen_at, topic_id, thumbnail_url, last_seen_at"
 	default:
 		return "*"
 	}

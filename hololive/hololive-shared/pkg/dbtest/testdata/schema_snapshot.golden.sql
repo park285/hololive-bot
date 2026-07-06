@@ -426,12 +426,17 @@ TABLE youtube_live_sessions
   COLUMN ended_at timestamp with time zone
   COLUMN last_seen_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN live_first_seen_at timestamp with time zone
+  COLUMN topic_id text NOT NULL DEFAULT ''::text
+  COLUMN thumbnail_url text NOT NULL DEFAULT ''::text
   CONSTRAINT chk_youtube_live_sessions_status_vocab CHECK ((status = ANY (ARRAY[('UPCOMING'::character varying)::text, ('LIVE'::character varying)::text, ('ENDED'::character varying)::text])))
   CONSTRAINT youtube_live_sessions_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_yls_channel_last_seen ON public.youtube_live_sessions USING btree (channel_id, last_seen_at DESC)
+  INDEX CREATE INDEX idx_yls_ended_channel_sort_video ON public.youtube_live_sessions USING btree (channel_id, COALESCE(ended_at, started_at, scheduled_start_time, last_seen_at) DESC, video_id DESC) WHERE (status = 'ENDED'::text)
   INDEX CREATE INDEX idx_yls_ended_cleanup ON public.youtube_live_sessions USING btree (ended_at, video_id) WHERE ((status = 'ENDED'::text) AND (ended_at IS NOT NULL))
+  INDEX CREATE INDEX idx_yls_ended_sort_video ON public.youtube_live_sessions USING btree (COALESCE(ended_at, started_at, scheduled_start_time, last_seen_at) DESC, video_id DESC) WHERE (status = 'ENDED'::text)
   INDEX CREATE INDEX idx_yls_live_first_seen ON public.youtube_live_sessions USING btree (live_first_seen_at, channel_id) WHERE (status = 'LIVE'::text)
   INDEX CREATE INDEX idx_yls_status_last_seen ON public.youtube_live_sessions USING btree (status, last_seen_at DESC)
+  INDEX CREATE INDEX idx_yls_status_topic_last_seen ON public.youtube_live_sessions USING btree (status, topic_id, last_seen_at DESC) WHERE (topic_id <> ''::text)
 
 TABLE youtube_live_viewer_samples
   COLUMN video_id character varying(20) NOT NULL

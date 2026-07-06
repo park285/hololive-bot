@@ -84,7 +84,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
 	var rows []domain.YouTubeLiveSession
 	if err := pgxscan.Select(ctx, s.pool, &rows, `
 		SELECT video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at,
-		       live_first_seen_at, last_seen_at
+		       live_first_seen_at, topic_id, thumbnail_url, last_seen_at
 		FROM youtube_live_sessions
 		WHERE channel_id = ANY($1)
 		  AND (
@@ -284,6 +284,12 @@ func streamFromYouTubeLiveSession(row *domain.YouTubeLiveSession) *domain.Stream
 		StartActual:    utcTimePtr(row.StartedAt),
 		Link:           &link,
 		Channel:        &domain.Channel{ID: channelID, Name: channelID},
+	}
+	if topicID := strings.TrimSpace(row.TopicID); topicID != "" {
+		stream.TopicID = &topicID
+	}
+	if thumbnailURL := strings.TrimSpace(row.ThumbnailURL); thumbnailURL != "" {
+		stream.Thumbnail = &thumbnailURL
 	}
 	return stream
 }

@@ -167,6 +167,7 @@ func fillMissingYouTubeStreamTimeFields(dst, src *domain.Stream) {
 
 func fillMissingYouTubeStreamPointerFields(dst, src *domain.Stream) {
 	dst.Thumbnail = firstStringPtr(dst.Thumbnail, src.Thumbnail)
+	dst.TopicID = firstStringPtr(dst.TopicID, src.TopicID)
 	dst.Link = firstStringPtr(dst.Link, src.Link)
 	if dst.Channel == nil && src.Channel != nil {
 		channel := *src.Channel

@@ -34,6 +34,8 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 			Title:           " live title ",
 			StartedAt:       &liveStart,
 			LiveFirstSeenAt: &liveFirstSeen,
+			TopicID:         "Rhythm_Heaven",
+			ThumbnailURL:    "https://i.ytimg.com/vi/live-included/maxresdefault.jpg",
 			LastSeenAt:      recentSeen,
 		},
 		{
@@ -70,6 +72,10 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	assert.ElementsMatch(t, []string{"live-included", "upcoming-included"}, gotIDs)
 	assert.Equal(t, "live title", sessionsByID(sessions)["live-included"].Stream.Title)
 	assert.Equal(t, liveFirstSeen, sessionsByID(sessions)["live-included"].LiveFirstSeenAt)
+	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.TopicID)
+	assert.Equal(t, "Rhythm_Heaven", *sessionsByID(sessions)["live-included"].Stream.TopicID)
+	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.Thumbnail)
+	assert.Equal(t, "https://i.ytimg.com/vi/live-included/maxresdefault.jpg", *sessionsByID(sessions)["live-included"].Stream.Thumbnail)
 	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.Link)
 	assert.Equal(t, "https://youtube.com/watch?v=live-included", *sessionsByID(sessions)["live-included"].Stream.Link)
 
@@ -177,9 +183,9 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 		_, err := pool.Exec(t.Context(), `
 			INSERT INTO youtube_live_sessions(
 				video_id, channel_id, status, title, scheduled_start_time,
-				started_at, ended_at, live_first_seen_at, last_seen_at
+				started_at, ended_at, live_first_seen_at, topic_id, thumbnail_url, last_seen_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		`,
 			session.VideoID,
 			session.ChannelID,
@@ -189,6 +195,8 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 			session.StartedAt,
 			session.EndedAt,
 			session.LiveFirstSeenAt,
+			session.TopicID,
+			session.ThumbnailURL,
 			session.LastSeenAt,
 		)
 		require.NoError(t, err)

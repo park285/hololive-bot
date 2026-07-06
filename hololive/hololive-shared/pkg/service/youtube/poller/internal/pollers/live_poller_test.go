@@ -156,6 +156,90 @@ func TestLivePollerSaveLiveSessionPreservesExistingLiveFirstSeenAtOnConflict(t *
 	require.Equal(t, firstSeenAt, session.LiveFirstSeenAt.UTC())
 }
 
+func TestLivePollerSaveLiveSessionPreservesExistingMetadataOnEmptyObservation(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+
+	firstSeenAt := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, db.Create(&domain.YouTubeLiveSession{
+		VideoID:      "metadata-live",
+		ChannelID:    "UC_LIVE",
+		Status:       domain.LiveStatusLive,
+		Title:        "Metadata Live",
+		TopicID:      "Rhythm_Heaven",
+		ThumbnailURL: "https://i.ytimg.com/vi/metadata-live/maxresdefault.jpg",
+		LastSeenAt:   firstSeenAt,
+	}).Error)
+
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	stream := &domain.Stream{
+		ID:        "metadata-live",
+		ChannelID: "UC_LIVE",
+		Title:     "Metadata Live Updated",
+		Status:    domain.StreamStatusLive,
+	}
+
+	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, firstSeenAt.Add(time.Minute)))
+
+	var session domain.YouTubeLiveSession
+	require.NoError(t, db.First(&session, "video_id = ?", "metadata-live").Error)
+	require.Equal(t, "Rhythm_Heaven", session.TopicID)
+	require.Equal(t, "https://i.ytimg.com/vi/metadata-live/maxresdefault.jpg", session.ThumbnailURL)
+}
+
+func TestLivePollerSaveLiveSessionStoresNewMetadataOnObservation(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+
+	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	topicID := "Overwatch"
+	thumbnailURL := "https://i.ytimg.com/vi/new-metadata/maxresdefault.jpg"
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	stream := &domain.Stream{
+		ID:        "new-metadata",
+		ChannelID: "UC_LIVE",
+		Title:     "New Metadata Live",
+		Status:    domain.StreamStatusLive,
+		TopicID:   &topicID,
+		Thumbnail: &thumbnailURL,
+	}
+
+	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, now))
+
+	var session domain.YouTubeLiveSession
+	require.NoError(t, db.First(&session, "video_id = ?", "new-metadata").Error)
+	require.Equal(t, topicID, session.TopicID)
+	require.Equal(t, thumbnailURL, session.ThumbnailURL)
+}
+
+func TestLivePollerSaveLiveSessionClearsEndedAtOnLiveObservation(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+
+	endedAt := time.Date(2026, 7, 5, 11, 30, 0, 0, time.UTC)
+	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, db.Create(&domain.YouTubeLiveSession{
+		VideoID:    "stale-ended-live",
+		ChannelID:  "UC_LIVE",
+		Status:     domain.LiveStatusEnded,
+		Title:      "Stale Ended Live",
+		EndedAt:    &endedAt,
+		LastSeenAt: endedAt,
+	}).Error)
+
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	stream := &domain.Stream{
+		ID:        "stale-ended-live",
+		ChannelID: "UC_LIVE",
+		Title:     "Stale Ended Live",
+		Status:    domain.StreamStatusLive,
+	}
+
+	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, now))
+
+	var session domain.YouTubeLiveSession
+	require.NoError(t, db.First(&session, "video_id = ?", "stale-ended-live").Error)
+	require.Equal(t, domain.LiveStatusLive, session.Status)
+	require.Nil(t, session.EndedAt)
+}
+
 func requireLiveOutboxEmpty(t *testing.T, db *pollerBatchTestDB) {
 	t.Helper()
 

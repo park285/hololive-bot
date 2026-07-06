@@ -93,3 +93,7 @@
 093 097_integrity_and_type_unification.sql
 094 098_type_philosophy_unification.sql
 095 099_complete_vocab_text_unification.sql
+096 100_add_youtube_live_session_metadata.sql
+097 101_add_youtube_live_session_sort_index.sql
+098 102_add_youtube_live_session_channel_sort_index.sql
+099 103_add_youtube_live_session_topic_index.sql
