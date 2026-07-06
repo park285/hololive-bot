@@ -83,6 +83,7 @@ func TestParseMessage_BroadcastHistoryBareMemberNameAndType(t *testing.T) {
 		wantType   string
 	}{
 		{name: "member then type with command alias", msg: "!방송기록 사쿠라 미코 게임", wantMember: "사쿠라 미코", wantType: "게임"},
+		{name: "member alias then type with command alias", msg: "!방송기록 미코치 게임", wantMember: "미코치", wantType: "게임"},
 		{name: "type then member with command alias", msg: "!방송기록 게임 사쿠라 미코", wantMember: "사쿠라 미코", wantType: "게임"},
 		{name: "member then broadcast type filter", msg: "!방송기록 페코라 방송타입:게임", wantMember: "페코라", wantType: "게임"},
 		{name: "member then membership type", msg: "!방송기록 사쿠라 미코 멤버십", wantMember: "사쿠라 미코", wantType: "멤버십"},
