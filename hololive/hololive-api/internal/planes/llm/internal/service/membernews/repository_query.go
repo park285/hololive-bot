@@ -34,7 +34,7 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 		return false, fmt.Errorf("membernews repository pool is nil")
 	}
 
-	query := `SELECT EXISTS(SELECT 1 FROM member_news_subscriptions WHERE room_id = $1)`
+	query := mustSQL("repository_query_0037_01.sql")
 	var exists bool
 	if err := r.pool.QueryRow(ctx, query, roomID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("is member news subscribed: %w", err)
@@ -47,11 +47,7 @@ func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.Subscribe
 		return nil, fmt.Errorf("membernews repository pool is nil")
 	}
 
-	query := `
-		SELECT id, room_id, COALESCE(room_name, ''), created_at
-		FROM member_news_subscriptions
-		ORDER BY created_at ASC
-	`
+	query := mustSQL("repository_query_0050_02.sql")
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("list member news rooms: %w", err)
@@ -77,25 +73,7 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 		return nil, fmt.Errorf("membernews repository pool is nil")
 	}
 
-	query := `
-		SELECT DISTINCT
-			COALESCE(
-				NULLIF(a.member_name, ''),
-				NULLIF(m.korean_name, ''),
-				NULLIF(m.english_name, ''),
-				NULLIF(m.japanese_name, '')
-			) AS member_name
-		FROM alarms a
-		LEFT JOIN members m ON m.channel_id = a.channel_id
-		WHERE a.room_id = $1
-		  AND COALESCE(
-				NULLIF(a.member_name, ''),
-				NULLIF(m.korean_name, ''),
-				NULLIF(m.english_name, ''),
-				NULLIF(m.japanese_name, '')
-			) IS NOT NULL
-		ORDER BY member_name ASC
-	`
+	query := mustSQL("repository_query_0080_03.sql")
 
 	rows, err := r.pool.Query(ctx, query, roomID)
 	if err != nil {
@@ -126,21 +104,7 @@ func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]model.Candida
 		return nil, fmt.Errorf("membernews repository pool is nil")
 	}
 
-	query := `
-		SELECT
-			id,
-			type,
-			COALESCE(title, ''),
-			COALESCE(description, ''),
-			COALESCE(members, '{}'::text[]),
-			pub_date,
-			event_start_date,
-			COALESCE(link, '')
-		FROM major_events
-		WHERE status = 'active'
-		  AND type IN ('news', 'event')
-		  AND COALESCE(link_status, 'unchecked') NOT IN ('failed', 'blocked')
-	`
+	query := mustSQL("repository_query_0129_04.sql")
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {

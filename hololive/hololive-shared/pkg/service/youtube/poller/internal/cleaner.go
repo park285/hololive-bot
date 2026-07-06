@@ -116,7 +116,7 @@ func (c *ViewerSampleCleaner) cleanupLocked(ctx context.Context, db dbx.Querier)
 
 func acquireViewerSampleCleanupLock(ctx context.Context, db dbx.Querier) (bool, error) {
 	var locked bool
-	if err := db.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", viewerSampleCleanupLockKey).Scan(&locked); err != nil {
+	if err := db.QueryRow(ctx, mustSQL("cleaner_0119_01.sql"), viewerSampleCleanupLockKey).Scan(&locked); err != nil {
 		return false, fmt.Errorf("acquire viewer sample cleanup lock: %w", err)
 	}
 	return locked, nil
@@ -124,7 +124,7 @@ func acquireViewerSampleCleanupLock(ctx context.Context, db dbx.Querier) (bool, 
 
 func releaseViewerSampleCleanupLock(ctx context.Context, db dbx.Querier) {
 	// ctx가 취소돼도 세션 락은 반드시 해제돼야 한다. 안 하면 conn이 락을 쥔 채 pool로 반환된다.
-	if _, err := db.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", viewerSampleCleanupLockKey); err != nil {
+	if _, err := db.Exec(context.WithoutCancel(ctx), mustSQL("cleaner_0127_02.sql"), viewerSampleCleanupLockKey); err != nil {
 		slog.Warn("release viewer sample cleanup lock failed", "error", err)
 	}
 }
@@ -173,19 +173,7 @@ func runViewerSampleCleanupBatch(ctx context.Context, db dbx.Querier, cutoff tim
 }
 
 func deleteViewerSampleCleanupBatch(ctx context.Context, db dbx.Querier, cutoff time.Time, batchSize int) (int64, error) {
-	tag, err := db.Exec(ctx, `
-		WITH picked AS (
-			SELECT s.video_id, s.captured_at
-			FROM youtube_live_viewer_samples s
-			JOIN youtube_live_sessions l ON l.video_id = s.video_id
-			WHERE l.status = $1 AND l.ended_at < $2
-			ORDER BY s.video_id ASC, s.captured_at ASC
-			LIMIT $3
-		)
-		DELETE FROM youtube_live_viewer_samples
-		USING picked
-		WHERE youtube_live_viewer_samples.video_id = picked.video_id
-			AND youtube_live_viewer_samples.captured_at = picked.captured_at`,
+	tag, err := db.Exec(ctx, mustSQL("cleaner_0176_03.sql"),
 		domain.LiveStatusEnded,
 		cutoff,
 		batchSize,

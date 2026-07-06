@@ -1,0 +1,1 @@
+SELECT DISTINCT channel_id FROM alarms

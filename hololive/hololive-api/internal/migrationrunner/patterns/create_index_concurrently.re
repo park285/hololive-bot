@@ -1,0 +1,1 @@
+(?is)\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b

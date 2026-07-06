@@ -63,11 +63,7 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 		statusClause = " AND d.status = ?"
 		args = append(args, *status)
 	}
-	if err := deliverysql.SelectDeliverySQL(ctx, db, &targets, "query delivery alarm sent targets", `
-		SELECT o.kind AS kind, o.content_id AS content_id
-		FROM youtube_notification_delivery AS d
-		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
-		WHERE `+deliverysql.DeliveryInClause("d.id", len(uniqueIDs))+`
+	if err := deliverysql.SelectDeliverySQL(ctx, db, &targets, "query delivery alarm sent targets", mustSQL("delivery_repository_tracking_0066_01.sql")+deliverysql.DeliveryInClause("d.id", len(uniqueIDs))+`
 		  AND `+deliverysql.DeliveryInClause("o.kind", len(postKinds))+`
 		`+statusClause, args...); err != nil {
 		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)

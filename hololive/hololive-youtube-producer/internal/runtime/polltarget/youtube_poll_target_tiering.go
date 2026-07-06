@@ -94,48 +94,19 @@ func loadYouTubeChannelLastActivity(ctx context.Context, pool *pgxpool.Pool, cha
 }
 
 func loadYouTubeContentAlarmTrackingActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string, lastActivity map[string]time.Time) error {
-	return loadYouTubeActivityRows(ctx, pool, "youtube_content_alarm_tracking", channelIDs, lastActivity, `
-		SELECT channel_id,
-		       MAX(GREATEST(COALESCE(actual_published_at, '-infinity'::timestamptz), detected_at, created_at)) AS activity_at
-		FROM youtube_content_alarm_tracking
-		WHERE channel_id = ANY($1)
-		GROUP BY channel_id
-	`)
+	return loadYouTubeActivityRows(ctx, pool, "youtube_content_alarm_tracking", channelIDs, lastActivity, mustSQL("youtube_poll_target_tiering_0097_01.sql"))
 }
 
 func loadYouTubeLiveSessionActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string, lastActivity map[string]time.Time) error {
-	return loadYouTubeActivityRows(ctx, pool, "youtube_live_sessions", channelIDs, lastActivity, `
-		SELECT channel_id,
-		       MAX(GREATEST(
-		           last_seen_at,
-		           COALESCE(scheduled_start_time, '-infinity'::timestamptz),
-		           COALESCE(started_at, '-infinity'::timestamptz),
-		           COALESCE(ended_at, '-infinity'::timestamptz)
-		       )) AS activity_at
-		FROM youtube_live_sessions
-		WHERE channel_id = ANY($1)
-		GROUP BY channel_id
-	`)
+	return loadYouTubeActivityRows(ctx, pool, "youtube_live_sessions", channelIDs, lastActivity, mustSQL("youtube_poll_target_tiering_0107_02.sql"))
 }
 
 func loadYouTubeVideoActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string, lastActivity map[string]time.Time) error {
-	return loadYouTubeActivityRows(ctx, pool, "youtube_videos", channelIDs, lastActivity, `
-		SELECT channel_id,
-		       MAX(GREATEST(COALESCE(published_at, '-infinity'::timestamptz), first_seen_at)) AS activity_at
-		FROM youtube_videos
-		WHERE channel_id = ANY($1)
-		GROUP BY channel_id
-	`)
+	return loadYouTubeActivityRows(ctx, pool, "youtube_videos", channelIDs, lastActivity, mustSQL("youtube_poll_target_tiering_0122_03.sql"))
 }
 
 func loadYouTubeCommunityPostActivity(ctx context.Context, pool *pgxpool.Pool, channelIDs []string, lastActivity map[string]time.Time) error {
-	return loadYouTubeActivityRows(ctx, pool, "youtube_community_posts", channelIDs, lastActivity, `
-		SELECT channel_id,
-		       MAX(GREATEST(COALESCE(published_at, '-infinity'::timestamptz), first_seen_at)) AS activity_at
-		FROM youtube_community_posts
-		WHERE channel_id = ANY($1)
-		GROUP BY channel_id
-	`)
+	return loadYouTubeActivityRows(ctx, pool, "youtube_community_posts", channelIDs, lastActivity, mustSQL("youtube_poll_target_tiering_0132_04.sql"))
 }
 
 func loadYouTubeActivityRows(ctx context.Context, pool *pgxpool.Pool, tableName string, channelIDs []string, lastActivity map[string]time.Time, query string) error {
@@ -165,7 +136,7 @@ func loadYouTubeActivityRows(ctx context.Context, pool *pgxpool.Pool, tableName 
 
 func tableExists(ctx context.Context, pool *pgxpool.Pool, tableName string) (bool, error) {
 	var exists bool
-	if err := pool.QueryRow(ctx, `SELECT to_regclass($1) IS NOT NULL`, tableName).Scan(&exists); err != nil {
+	if err := pool.QueryRow(ctx, mustSQL("youtube_poll_target_tiering_0168_05.sql"), tableName).Scan(&exists); err != nil {
 		return false, err
 	}
 	return exists, nil

@@ -46,11 +46,7 @@ func (p *LivePoller) saveLiveViewerSample(ctx context.Context, channelID string,
 		slog.Warn("Live viewer sample skipped because db is nil", "video_id", stream.ID)
 		return
 	}
-	if _, err := p.db.Exec(ctx, `
-		INSERT INTO youtube_live_viewer_samples
-			(video_id, captured_at, channel_id, concurrent_viewers)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT DO NOTHING`,
+	if _, err := p.db.Exec(ctx, mustSQL("live_poller_stats_0049_01.sql"),
 		sample.VideoID,
 		sample.CapturedAt,
 		sample.ChannelID,
@@ -99,10 +95,7 @@ func (p *LivePoller) endStaleSession(ctx context.Context, channelID, videoID str
 }
 
 func (p *LivePoller) markSessionEnded(ctx context.Context, videoID string, now time.Time) bool {
-	if _, err := p.db.Exec(ctx, `
-		UPDATE youtube_live_sessions
-		SET status = $1, ended_at = $2, last_seen_at = $2
-		WHERE video_id = $3`,
+	if _, err := p.db.Exec(ctx, mustSQL("live_poller_stats_0102_02.sql"),
 		domain.LiveStatusEnded,
 		now,
 		videoID,
@@ -158,13 +151,7 @@ func (p *LivePoller) finalizeStreamStats(ctx context.Context, videoID, channelID
 
 func (p *LivePoller) aggregateLiveViewerStats(ctx context.Context, videoID string) (liveViewerStatsResult, bool) {
 	var result liveViewerStatsResult
-	if err := pgxscan.Get(ctx, p.db, &result, `
-		SELECT
-			COALESCE(MAX(concurrent_viewers), 0)::int AS max_viewers,
-			COALESCE(AVG(concurrent_viewers), 0)::int AS avg_viewers,
-			COUNT(*)::int AS count
-		FROM youtube_live_viewer_samples
-		WHERE video_id = $1`,
+	if err := pgxscan.Get(ctx, p.db, &result, mustSQL("live_poller_stats_0161_03.sql"),
 		videoID,
 	); err != nil {
 		slog.Warn("Failed to aggregate live stream stats", "video_id", videoID, "error", err)
@@ -185,16 +172,7 @@ func (p *LivePoller) saveStreamStats(ctx context.Context, videoID, channelID str
 	}
 	stats.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
 
-	if _, err := p.db.Exec(ctx, `
-		INSERT INTO youtube_stream_stats
-			(video_id, channel_id, started_at, ended_at, max_concurrent_viewers, avg_concurrent_viewers, sample_count, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (video_id) DO UPDATE SET
-			ended_at = excluded.ended_at,
-			max_concurrent_viewers = excluded.max_concurrent_viewers,
-			avg_concurrent_viewers = excluded.avg_concurrent_viewers,
-			sample_count = excluded.sample_count,
-			updated_at = excluded.updated_at`,
+	if _, err := p.db.Exec(ctx, mustSQL("live_poller_stats_0188_04.sql"),
 		stats.VideoID,
 		stats.ChannelID,
 		stats.StartedAt,

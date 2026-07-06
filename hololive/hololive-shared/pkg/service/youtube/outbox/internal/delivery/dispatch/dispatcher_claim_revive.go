@@ -106,28 +106,7 @@ func reviveStaleFailedOutboxTx(ctx context.Context, tx dbx.Querier, freshCutoff,
 
 func selectStaleFailedOutboxIDs(ctx context.Context, tx dbx.Querier, freshCutoff, lockCutoff time.Time, batchSize int) ([]int64, error) {
 	var ids []int64
-	if err := deliverysql.SelectDeliverySQL(ctx, tx, &ids, "revive: select stale failed outbox", `
-		SELECT o.id
-		FROM youtube_notification_outbox o
-		WHERE o.status = ?
-		  AND o.sent_at IS NULL
-		  AND o.created_at >= ?
-		  AND (o.locked_at IS NULL OR o.locked_at < ?)
-		  AND (
-			EXISTS (
-			  SELECT 1 FROM youtube_notification_delivery d
-			  WHERE d.outbox_id = o.id
-				AND d.status = ?
-			)
-			OR NOT EXISTS (
-			  SELECT 1 FROM youtube_notification_delivery d
-			  WHERE d.outbox_id = o.id
-			)
-		  )
-		ORDER BY o.id
-		LIMIT ?
-		FOR UPDATE SKIP LOCKED
-	`, string(domain.OutboxStatusFailed), freshCutoff, lockCutoff, string(domain.OutboxStatusFailed), batchSize); err != nil {
+	if err := deliverysql.SelectDeliverySQL(ctx, tx, &ids, "revive: select stale failed outbox", mustSQL("dispatcher_claim_revive_0109_01.sql"), string(domain.OutboxStatusFailed), freshCutoff, lockCutoff, string(domain.OutboxStatusFailed), batchSize); err != nil {
 		return nil, fmt.Errorf("revive: select stale failed outbox: %w", err)
 	}
 	return ids, nil
@@ -138,10 +117,7 @@ func resetFailedDeliveryRows(ctx context.Context, tx dbx.Querier, ids []int64, n
 	deliveryArgs := []any{now}
 	deliveryArgs = deliverysql.AppendDeliveryInt64Args(deliveryArgs, ids)
 	deliveryArgs = append(deliveryArgs, string(domain.OutboxStatusFailed))
-	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset failed delivery rows", `
-		UPDATE youtube_notification_delivery
-		SET status = 'PENDING', attempt_count = 0, next_attempt_at = ?, locked_at = NULL, sent_at = NULL, error = ''
-		WHERE `+deliverysql.DeliveryInClause("outbox_id", len(ids))+`
+	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset failed delivery rows", mustSQL("dispatcher_claim_revive_0141_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(ids))+`
 		  AND status = ?
 	`, deliveryArgs...); err != nil {
 		return fmt.Errorf("revive: reset failed delivery rows: %w", err)
@@ -153,10 +129,7 @@ func resetFailedOutboxRows(ctx context.Context, tx dbx.Querier, ids []int64, now
 	outboxArgs := []any{now}
 	outboxArgs = deliverysql.AppendDeliveryInt64Args(outboxArgs, ids)
 	outboxArgs = append(outboxArgs, string(domain.OutboxStatusFailed))
-	affected, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset outbox rows", `
-		UPDATE youtube_notification_outbox
-		SET status = 'PENDING', attempt_count = 0, next_attempt_at = ?, locked_at = NULL, error = ''
-		WHERE `+deliverysql.DeliveryInClause("id", len(ids))+`
+	affected, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset outbox rows", mustSQL("dispatcher_claim_revive_0156_03.sql")+deliverysql.DeliveryInClause("id", len(ids))+`
 		  AND status = ?
 	`, outboxArgs...)
 	if err != nil {

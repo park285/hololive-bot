@@ -45,7 +45,7 @@ func (r *PgxBatchRepository) dropAlreadyKnownVideoNotifications(
 
 	var rows []knownVideoIDRow
 	if err := dbx.SelectSQL(ctx, tx, &rows, "query existing videos for new-video dedup",
-		`SELECT video_id FROM youtube_videos WHERE is_short = FALSE AND video_id IN (`+dbx.InPlaceholders(len(videoIDs))+`)`,
+		mustSQL("repository_batch_new_video_dedup_0048_01.sql")+dbx.InPlaceholders(len(videoIDs))+`)`,
 		dbx.AnyArgs(videoIDs)...); err != nil {
 		return nil, fmt.Errorf("query existing videos for new-video dedup: %w", err)
 	}

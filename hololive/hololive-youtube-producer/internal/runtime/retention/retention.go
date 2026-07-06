@@ -43,34 +43,12 @@ const (
 )
 
 // BRIN(time/captured_at)은 정렬을 제공하지 않아 ORDER BY 시 매 배치가 cutoff 미만 잔여 전량을 스캔+정렬한다. cutoff 미만 전량 삭제라 순서 무관 → 생략(live_sessions는 btree idx_yls_ended_cleanup이라 ORDER BY 유지).
-const deleteChannelSnapshotsSQL = `
-WITH picked AS (
-	SELECT channel_id, captured_at
-	FROM youtube_channel_stats_snapshots
-	WHERE captured_at < $1
-	LIMIT $2
-)
-DELETE FROM youtube_channel_stats_snapshots s
-USING picked
-WHERE s.channel_id = picked.channel_id AND s.captured_at = picked.captured_at`
+var deleteChannelSnapshotsSQL = mustSQL("retention_0046_01.sql")
 
 // youtube_live_viewer_samples cleaner(shared poller/internal/cleaner.go)가 이 테이블을 JOIN
 // 게이트로 써서 삭제 대상 샘플을 고른다. 샘플이 남은 세션을 먼저 지우면 그 게이트가 사라져
 // 해당 샘플이 영구 고아가 되므로(두 테이블 사이 FK·cascade 없음), 샘플이 모두 지워진 세션만 삭제한다.
-const deleteLiveSessionsSQL = `
-WITH picked AS (
-	SELECT l.video_id
-	FROM youtube_live_sessions l
-	WHERE l.status = 'ENDED' AND l.ended_at < $1
-	  AND NOT EXISTS (
-		SELECT 1 FROM youtube_live_viewer_samples s WHERE s.video_id = l.video_id
-	)
-	ORDER BY l.ended_at ASC, l.video_id ASC
-	LIMIT $2
-)
-DELETE FROM youtube_live_sessions l
-USING picked
-WHERE l.video_id = picked.video_id`
+var deleteLiveSessionsSQL = mustSQL("retention_0060_02.sql")
 
 type Config struct {
 	ChannelSnapshotsDays int
@@ -261,7 +239,7 @@ func deleteOneBatch(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, c
 
 func acquireLock(ctx context.Context, conn *pgxpool.Conn) (bool, error) {
 	var locked bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", cleanupLockKey).Scan(&locked); err != nil {
+	if err := conn.QueryRow(ctx, mustSQL("retention_0264_03.sql"), cleanupLockKey).Scan(&locked); err != nil {
 		return false, fmt.Errorf("acquire youtube retention cleanup lock: %w", err)
 	}
 	return locked, nil
@@ -269,7 +247,7 @@ func acquireLock(ctx context.Context, conn *pgxpool.Conn) (bool, error) {
 
 func releaseLock(ctx context.Context, conn *pgxpool.Conn, logger *slog.Logger) {
 	// ctx가 취소돼도 세션 락은 반드시 해제돼야 한다. 안 하면 conn이 락을 쥔 채 pool로 반환된다.
-	if _, err := conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", cleanupLockKey); err != nil && logger != nil {
+	if _, err := conn.Exec(context.WithoutCancel(ctx), mustSQL("retention_0272_04.sql"), cleanupLockKey); err != nil && logger != nil {
 		logger.Warn("release youtube retention cleanup lock failed", slog.Any("error", err))
 	}
 }

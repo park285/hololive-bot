@@ -272,7 +272,7 @@ func rollbackAlarmDispatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
 
 func acquireAlarmDispatchLock(ctx context.Context, tx pgx.Tx, key int64) (bool, error) {
 	var locked bool
-	err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", key).Scan(&locked)
+	err := tx.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0275_01.sql"), key).Scan(&locked)
 	if err == nil {
 		return locked, nil
 	}
@@ -301,11 +301,7 @@ func (s alarmDispatchMaintenancePgxStore) BacklogSnapshot(ctx context.Context) (
 }
 
 func (s alarmDispatchMaintenancePgxStore) loadBacklogRows(ctx context.Context, out map[dispatchoutbox.Status]int64) error {
-	rows, err := s.db.Query(ctx, `
-SELECT status, COUNT(*) AS rows
-FROM alarm_dispatch_deliveries
-WHERE status IN ('pending', 'retry', 'leased', 'sending')
-GROUP BY status`)
+	rows, err := s.db.Query(ctx, mustSQL("alarm_dispatch_maintenance_0304_02.sql"))
 	if err != nil {
 		return err
 	}
@@ -322,13 +318,7 @@ GROUP BY status`)
 }
 
 func (s alarmDispatchMaintenancePgxStore) loadOldestAges(ctx context.Context, snapshot *alarmDispatchBacklogSnapshot) error {
-	return s.db.QueryRow(ctx, `
-SELECT
-  COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - next_attempt_at))) FILTER (WHERE status = 'pending'), 0),
-  COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - next_attempt_at))) FILTER (WHERE status = 'retry'), 0),
-  COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - sending_started_at))) FILTER (WHERE status = 'sending'), 0)
-FROM alarm_dispatch_deliveries
-WHERE status IN ('pending', 'retry', 'sending')`).
+	return s.db.QueryRow(ctx, mustSQL("alarm_dispatch_maintenance_0325_03.sql")).
 		Scan(
 			&snapshot.OldestPendingAgeSeconds,
 			&snapshot.OldestRetryAgeSeconds,
@@ -345,18 +335,7 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 	if !ok {
 		return 0, fmt.Errorf("unsupported alarm dispatch retention status: %s", status)
 	}
-	query := fmt.Sprintf(`
-WITH picked AS (
-    SELECT id
-    FROM alarm_dispatch_deliveries
-    WHERE status = $1
-      AND %s < NOW() - ($2::int * INTERVAL '1 day')
-    ORDER BY %s ASC, id ASC
-    LIMIT $3
-)
-DELETE FROM alarm_dispatch_deliveries d
-USING picked
-WHERE d.id = picked.id`, column, column)
+	query := fmt.Sprintf(mustSQL("alarm_dispatch_maintenance_0348_04.sql"), column, column)
 	tag, err := s.db.Exec(ctx, query, string(status), retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
 		return 0, err
@@ -365,20 +344,7 @@ WHERE d.id = picked.id`, column, column)
 }
 
 func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (int64, error) {
-	tag, err := s.db.Exec(ctx, `
-WITH picked AS (
-    SELECT e.id
-    FROM alarm_dispatch_events e
-    WHERE e.created_at < NOW() - ($1::int * INTERVAL '1 day')
-      AND NOT EXISTS (
-          SELECT 1 FROM alarm_dispatch_deliveries d WHERE d.event_id = e.id
-      )
-    ORDER BY e.created_at ASC, e.id ASC
-    LIMIT $2
-)
-DELETE FROM alarm_dispatch_events e
-USING picked
-WHERE e.id = picked.id`, retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0368_05.sql"), retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
 		return 0, err
 	}

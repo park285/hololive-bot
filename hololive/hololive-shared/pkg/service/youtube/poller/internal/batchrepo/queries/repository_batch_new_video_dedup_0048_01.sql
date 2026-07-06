@@ -1,0 +1,1 @@
+SELECT video_id FROM youtube_videos WHERE is_short = FALSE AND video_id IN (

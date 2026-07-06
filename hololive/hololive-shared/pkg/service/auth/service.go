@@ -130,10 +130,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 		UpdatedAt:    now,
 	}
 
-	if _, err := s.db.Exec(ctx, `
-		INSERT INTO auth_users (id, email, password_hash, display_name, avatar_url, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, model.ID, model.Email, model.PasswordHash, model.DisplayName, model.AvatarURL, model.CreatedAt, model.UpdatedAt); err != nil {
+	if _, err := s.db.Exec(ctx, mustSQL("service_0133_01.sql"), model.ID, model.Email, model.PasswordHash, model.DisplayName, model.AvatarURL, model.CreatedAt, model.UpdatedAt); err != nil {
 		if dbx.IsDuplicateKey(err) {
 			return nil, newError(CodeEmailExists, "email already exists", err)
 		}
@@ -241,19 +238,11 @@ func scanUser(row rowScanner) (userModel, error) {
 }
 
 func (s *Service) findUserByEmail(ctx context.Context, email string) (userModel, error) {
-	return scanUser(s.db.QueryRow(ctx, `
-		SELECT id, email, password_hash, display_name, avatar_url, created_at, updated_at
-		FROM auth_users
-		WHERE email = $1
-	`, email))
+	return scanUser(s.db.QueryRow(ctx, mustSQL("service_0244_02.sql"), email))
 }
 
 func (s *Service) findUserByID(ctx context.Context, id string) (userModel, error) {
-	return scanUser(s.db.QueryRow(ctx, `
-		SELECT id, email, password_hash, display_name, avatar_url, created_at, updated_at
-		FROM auth_users
-		WHERE id = $1
-	`, id))
+	return scanUser(s.db.QueryRow(ctx, mustSQL("service_0252_03.sql"), id))
 }
 
 func (s *Service) validateLoginPassword(ctx context.Context, email, passwordHash, password string) error {

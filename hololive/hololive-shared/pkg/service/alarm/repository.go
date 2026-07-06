@@ -52,16 +52,7 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 		alarmTypes = domain.DefaultAlarmTypes
 	}
 
-	query := `
-		INSERT INTO alarms (room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (room_id, channel_id) DO UPDATE
-		SET member_name = COALESCE(EXCLUDED.member_name, alarms.member_name),
-		    room_name = COALESCE(EXCLUDED.room_name, alarms.room_name),
-		    user_name = COALESCE(EXCLUDED.user_name, alarms.user_name),
-		    user_id = EXCLUDED.user_id,
-		    alarm_types = EXCLUDED.alarm_types
-	`
+	query := mustSQL("repository_0055_01.sql")
 
 	typesValue, err := alarmTypes.Value()
 	if err != nil {
@@ -79,7 +70,7 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 }
 
 func (r *Repository) Remove(ctx context.Context, roomID, channelID string) error {
-	query := `DELETE FROM alarms WHERE room_id = $1 AND channel_id = $2`
+	query := mustSQL("repository_0082_02.sql")
 	_, err := r.pool.Exec(ctx, query, roomID, channelID)
 	if err != nil {
 		return fmt.Errorf("remove alarm: %w", err)
@@ -88,7 +79,7 @@ func (r *Repository) Remove(ctx context.Context, roomID, channelID string) error
 }
 
 func (r *Repository) ClearByRoom(ctx context.Context, roomID string) (int64, error) {
-	query := `DELETE FROM alarms WHERE room_id = $1`
+	query := mustSQL("repository_0091_03.sql")
 	cmdTag, err := r.pool.Exec(ctx, query, roomID)
 	if err != nil {
 		return 0, fmt.Errorf("clear alarms: %w", err)
@@ -97,12 +88,7 @@ func (r *Repository) ClearByRoom(ctx context.Context, roomID string) (int64, err
 }
 
 func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	query := `
-		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
-		FROM alarms
-		WHERE room_id = $1
-		ORDER BY created_at ASC
-	`
+	query := mustSQL("repository_0100_04.sql")
 
 	rows, err := r.pool.Query(ctx, query, roomID)
 	if err != nil {
@@ -114,12 +100,7 @@ func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.A
 }
 
 func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*domain.Alarm, error) {
-	query := `
-		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
-		FROM alarms
-		WHERE channel_id = $1
-		ORDER BY created_at ASC
-	`
+	query := mustSQL("repository_0117_05.sql")
 
 	rows, err := r.pool.Query(ctx, query, channelID)
 	if err != nil {
@@ -131,16 +112,7 @@ func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*do
 }
 
 func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
-	query := `
-		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
-		FROM alarms
-		WHERE channel_id = $1
-		  AND (
-		        alarm_types @> ARRAY[$2::alarm_type]
-		     OR cardinality(alarm_types) = 0
-		  )
-		ORDER BY created_at ASC
-	`
+	query := mustSQL("repository_0134_06.sql")
 
 	rows, err := r.pool.Query(ctx, query, channelID, string(alarmType))
 	if err != nil {
@@ -152,29 +124,7 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 }
 
 func (r *Repository) GetMemberName(ctx context.Context, channelID string) (string, error) {
-	query := `
-		WITH latest_alarm_name AS (
-			SELECT member_name
-			FROM alarms
-			WHERE channel_id = $1
-			  AND member_name IS NOT NULL
-			  AND member_name <> ''
-			ORDER BY created_at DESC
-			LIMIT 1
-		),
-		member_display_name AS (
-			SELECT COALESCE(NULLIF(short_korean_name, ''), NULLIF(korean_name, ''), '') AS member_name
-			FROM members
-			WHERE channel_id = $1
-			ORDER BY id ASC
-			LIMIT 1
-		)
-		SELECT COALESCE(
-			NULLIF((SELECT member_name FROM member_display_name), ''),
-			(SELECT member_name FROM latest_alarm_name),
-			''
-		)
-	`
+	query := mustSQL("repository_0155_07.sql")
 
 	var memberName string
 	err := r.pool.QueryRow(ctx, query, channelID).Scan(&memberName)
@@ -188,11 +138,7 @@ func (r *Repository) GetMemberName(ctx context.Context, channelID string) (strin
 }
 
 func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
-	query := `
-		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
-		FROM alarms
-		ORDER BY created_at ASC
-	`
+	query := mustSQL("repository_0191_08.sql")
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -204,7 +150,7 @@ func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
 }
 
 func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
-	query := `SELECT DISTINCT channel_id FROM alarms`
+	query := mustSQL("repository_0207_09.sql")
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -228,36 +174,7 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 }
 
 func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, error) {
-	query := `
-		WITH alarm_channels AS (
-			SELECT DISTINCT channel_id
-			FROM alarms
-			WHERE channel_id IS NOT NULL AND channel_id != ''
-		),
-		latest_alarm_names AS (
-			SELECT DISTINCT ON (channel_id) channel_id, member_name
-			FROM alarms
-			WHERE channel_id IS NOT NULL AND channel_id != ''
-			  AND member_name IS NOT NULL
-			  AND member_name <> ''
-			ORDER BY channel_id, created_at DESC
-		),
-		member_display_names AS (
-			SELECT DISTINCT ON (channel_id)
-			       channel_id,
-			       COALESCE(NULLIF(short_korean_name, ''), NULLIF(korean_name, ''), '') AS member_name
-			FROM members
-			WHERE channel_id IS NOT NULL AND channel_id != ''
-			ORDER BY channel_id, id ASC
-		)
-		SELECT c.channel_id,
-		       COALESCE(NULLIF(m.member_name, ''), a.member_name, '') AS member_name
-		FROM alarm_channels c
-		LEFT JOIN latest_alarm_names a ON a.channel_id = c.channel_id
-		LEFT JOIN member_display_names m ON m.channel_id = c.channel_id
-		WHERE COALESCE(NULLIF(m.member_name, ''), a.member_name, '') != ''
-		ORDER BY c.channel_id
-	`
+	query := mustSQL("repository_0231_10.sql")
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {

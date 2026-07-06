@@ -6,7 +6,7 @@ import (
 )
 
 func (r *Repository) GetAllDistinctRoomIDs(ctx context.Context) ([]string, error) {
-	rows, err := r.pool.Query(ctx, `SELECT DISTINCT room_id FROM alarms`)
+	rows, err := r.pool.Query(ctx, mustSQL("repository_rooms_0009_01.sql"))
 	if err != nil {
 		return nil, fmt.Errorf("get all distinct room ids: %w", err)
 	}

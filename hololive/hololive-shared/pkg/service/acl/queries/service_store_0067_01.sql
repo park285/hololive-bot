@@ -1,0 +1,1 @@
+SELECT value FROM acl_settings WHERE key = $1

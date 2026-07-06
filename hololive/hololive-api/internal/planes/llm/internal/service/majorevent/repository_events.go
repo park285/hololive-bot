@@ -35,13 +35,7 @@ func (r *Repository) GetRecentExternalIDs(ctx context.Context, eventType domain.
 		limit = 1
 	}
 
-	query := `
-		SELECT external_id, pub_date
-		FROM major_events
-		WHERE type = $1
-		ORDER BY pub_date DESC NULLS LAST, updated_at DESC
-		LIMIT $2
-	`
+	query := mustSQL("repository_events_0038_01.sql")
 
 	rows, err := r.pool.Query(ctx, query, eventType, limit)
 	if err != nil {
@@ -102,34 +96,7 @@ func (r *Repository) queryEvents(ctx context.Context, action, query string, args
 }
 
 func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) error {
-	query := `
-		INSERT INTO major_events (external_id, type, title, link, description, members, pub_date, event_start_date, event_end_date, status, link_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	ON CONFLICT (external_id) DO UPDATE
-	SET title = EXCLUDED.title,
-		link = EXCLUDED.link,
-		description = EXCLUDED.description,
-		members = EXCLUDED.members,
-		pub_date = EXCLUDED.pub_date,
-		event_start_date = EXCLUDED.event_start_date,
-		event_end_date = EXCLUDED.event_end_date,
-		type = EXCLUDED.type,
-		status = CASE
-			WHEN major_events.status = 'canceled' THEN major_events.status
-			WHEN major_events.status = 'ended' AND EXCLUDED.event_start_date >= CURRENT_DATE THEN 'active'
-			ELSE major_events.status
-		END,
-		link_status = CASE
-			WHEN major_events.link IS DISTINCT FROM EXCLUDED.link THEN 'unchecked'
-			ELSE major_events.link_status
-		END,
-		link_checked_at = CASE
-			WHEN major_events.link IS DISTINCT FROM EXCLUDED.link THEN NULL
-			ELSE major_events.link_checked_at
-		END,
-		updated_at = NOW()
-	RETURNING id
-	`
+	query := mustSQL("repository_events_0105_02.sql")
 
 	eventType, linkStatus := normalizeEventForUpsert(event)
 
@@ -206,12 +173,7 @@ func (r *Repository) MarkEventsAsMonthlyNotified(ctx context.Context, eventIDs [
 		return nil
 	}
 
-	query := `
-		UPDATE major_events
-		SET notified_month = $1,
-			updated_at = NOW()
-		WHERE id = ANY($2)
-	`
+	query := mustSQL("repository_events_0209_03.sql")
 
 	_, err := r.pool.Exec(ctx, query, monthKey, eventIDs)
 	if err != nil {
@@ -225,13 +187,7 @@ func (r *Repository) MarkEventsAsNotified(ctx context.Context, eventIDs []int, w
 		return nil
 	}
 
-	query := `
-		UPDATE major_events
-		SET notified_at = NOW(),
-			notified_week = $1,
-			updated_at = NOW()
-		WHERE id = ANY($2)
-	`
+	query := mustSQL("repository_events_0228_04.sql")
 
 	_, err := r.pool.Exec(ctx, query, weekKey, eventIDs)
 	if err != nil {
@@ -241,16 +197,7 @@ func (r *Repository) MarkEventsAsNotified(ctx context.Context, eventIDs []int, w
 }
 
 func (r *Repository) UpdateExpiredEvents(ctx context.Context) (int64, error) {
-	query := `
-		UPDATE major_events
-		SET status = $1,
-			updated_at = NOW()
-		WHERE status = $2
-		  AND (
-			event_end_date < CURRENT_DATE
-			OR (event_end_date IS NULL AND event_start_date < CURRENT_DATE)
-		  )
-	`
+	query := mustSQL("repository_events_0244_05.sql")
 
 	result, err := r.pool.Exec(ctx, query, domain.MajorEventStatusEnded, domain.MajorEventStatusActive)
 	if err != nil {

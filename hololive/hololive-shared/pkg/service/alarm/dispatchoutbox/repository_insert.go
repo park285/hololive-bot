@@ -89,27 +89,7 @@ func buildEventBatchRows(events []eventInsert) (result0 []eventBatchRow, result1
 }
 
 func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (result0 map[string]int64, result1 int, err error) {
-	rows, err := tx.Query(ctx, `
-		WITH input AS (
-			SELECT *
-			FROM jsonb_to_recordset($1::jsonb) AS x(
-				event_key TEXT,
-				payload_hash TEXT,
-				alarm_type TEXT,
-				channel_id TEXT,
-				stream_id TEXT,
-				category TEXT,
-				payload JSONB
-			)
-		)
-		INSERT INTO alarm_dispatch_events (
-			event_key, payload_hash, alarm_type, channel_id, stream_id, category,
-			payload_schema_version, payload
-		)
-		SELECT event_key, payload_hash, alarm_type::alarm_type, channel_id, stream_id, category, 1, payload
-		FROM input
-		ON CONFLICT (event_key) DO NOTHING
-		RETURNING id, event_key, payload_hash`, jsonbRecordsetParam(raw))
+	rows, err := tx.Query(ctx, mustSQL("repository_insert_0092_01.sql"), jsonbRecordsetParam(raw))
 	if err != nil {
 		return nil, 0, fmt.Errorf("insert dispatch events: %w", err)
 	}
@@ -180,42 +160,7 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 }
 
 func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected, inserted int, err error) {
-	err = tx.QueryRow(ctx, `
-		WITH input AS (
-			SELECT *
-			FROM jsonb_to_recordset($1::jsonb) AS x(
-				event_id BIGINT,
-				room_id TEXT,
-				dedupe_key TEXT,
-				legacy_dedupe_key TEXT,
-				claim_keys JSONB,
-				delivery_context JSONB,
-				status TEXT
-			)
-		), normalized AS (
-			SELECT event_id,
-				room_id,
-				dedupe_key,
-				legacy_dedupe_key,
-				COALESCE(ARRAY(SELECT jsonb_array_elements_text(COALESCE(claim_keys, '[]'::jsonb))), ARRAY[]::TEXT[]) AS claim_keys,
-				delivery_context,
-				status
-			FROM input
-		), inserted AS (
-		INSERT INTO alarm_dispatch_deliveries (
-			event_id, room_id, dedupe_key, claim_keys, delivery_context, status, next_attempt_at
-		)
-			SELECT event_id, room_id, dedupe_key, claim_keys, delivery_context, status, NOW()
-			FROM normalized
-			WHERE NOT EXISTS (
-				SELECT 1
-				FROM alarm_dispatch_deliveries existing
-				WHERE existing.dedupe_key = normalized.legacy_dedupe_key
-			)
-			ON CONFLICT (dedupe_key) DO NOTHING
-			RETURNING dedupe_key
-		)
-		SELECT (SELECT count(*) FROM normalized), (SELECT count(*) FROM inserted)`, jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
+	err = tx.QueryRow(ctx, mustSQL("repository_insert_0183_02.sql"), jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
 	if err != nil {
 		return 0, 0, fmt.Errorf("insert dispatch deliveries: %w", err)
 	}

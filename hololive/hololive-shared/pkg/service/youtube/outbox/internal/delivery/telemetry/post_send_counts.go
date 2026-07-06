@@ -85,8 +85,7 @@ func (r *Repository) listPostSendCounts(
 ) ([]PostSendCount, error) {
 	var scanned []postSendCountScanRow
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
-	query := `
-		SELECT ` + postSendCountsSelectSQL() + `
+	query := mustSQL("post_send_counts_0088_01.sql") + postSendCountsSelectSQL() + `
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
 		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?

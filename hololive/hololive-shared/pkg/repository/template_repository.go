@@ -48,7 +48,7 @@ func NewTemplateRepository(pool *pgxpool.Pool, logger *slog.Logger) *TemplateRep
 }
 
 func (r *TemplateRepository) List(ctx context.Context, key *domain.TemplateKey, channelID *string) ([]*domain.NotificationTemplate, error) {
-	query := `SELECT id, template_key, channel_id, body, created_at, updated_at FROM notification_templates`
+	query := mustSQL("template_repository_0051_01.sql")
 	args := make([]any, 0, 2)
 	conditions := make([]string, 0, 2)
 
@@ -75,9 +75,7 @@ func (r *TemplateRepository) List(ctx context.Context, key *domain.TemplateKey, 
 
 func (r *TemplateRepository) FindByKeyAndChannel(ctx context.Context, key domain.TemplateKey, channelID *string) (*domain.NotificationTemplate, error) {
 	var tmpl domain.NotificationTemplate
-	query := `SELECT id, template_key, channel_id, body, created_at, updated_at
-		FROM notification_templates
-		WHERE template_key = $1`
+	query := mustSQL("template_repository_0078_02.sql")
 	args := []any{key}
 	if channelID == nil {
 		query += " AND channel_id IS NULL"
@@ -113,9 +111,7 @@ func (r *TemplateRepository) Upsert(ctx context.Context, key domain.TemplateKey,
 func (r *TemplateRepository) createTemplate(ctx context.Context, key domain.TemplateKey, channelID *string, body string) (*domain.NotificationTemplate, error) {
 	var newTmpl domain.NotificationTemplate
 	err := pgxscan.Get(ctx, r.pool, &newTmpl,
-		`INSERT INTO notification_templates(template_key, channel_id, body)
-		 VALUES ($1, $2, $3)
-		 RETURNING id, template_key, channel_id, body, created_at, updated_at`,
+		mustSQL("template_repository_0116_03.sql"),
 		key,
 		channelID,
 		body,
@@ -147,10 +143,7 @@ func (r *TemplateRepository) handleCreateTemplateError(ctx context.Context, key 
 
 func (r *TemplateRepository) updateTemplate(ctx context.Context, existing *domain.NotificationTemplate, body string) (*domain.NotificationTemplate, error) {
 	err := pgxscan.Get(ctx, r.pool, existing,
-		`UPDATE notification_templates
-		 SET body = $1, updated_at = NOW()
-		 WHERE id = $2
-		 RETURNING id, template_key, channel_id, body, created_at, updated_at`,
+		mustSQL("template_repository_0150_04.sql"),
 		body,
 		existing.ID,
 	)
@@ -162,7 +155,7 @@ func (r *TemplateRepository) updateTemplate(ctx context.Context, existing *domai
 
 func (r *TemplateRepository) DeleteOverride(ctx context.Context, key domain.TemplateKey, channelID string) error {
 	if _, err := r.pool.Exec(ctx,
-		`DELETE FROM notification_templates WHERE template_key = $1 AND channel_id = $2`,
+		mustSQL("template_repository_0165_05.sql"),
 		key,
 		channelID,
 	); err != nil {
@@ -174,9 +167,7 @@ func (r *TemplateRepository) DeleteOverride(ctx context.Context, key domain.Temp
 func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKey) (defaultTmpl *domain.NotificationTemplate, overrides []*domain.NotificationTemplate, err error) {
 	var tmpl domain.NotificationTemplate
 	err = pgxscan.Get(ctx, r.pool, &tmpl,
-		`SELECT id, template_key, channel_id, body, created_at, updated_at
-		 FROM notification_templates
-		 WHERE template_key = $1 AND channel_id IS NULL`,
+		mustSQL("template_repository_0177_06.sql"),
 		key,
 	)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -187,10 +178,7 @@ func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKe
 	}
 
 	if err := pgxscan.Select(ctx, r.pool, &overrides,
-		`SELECT id, template_key, channel_id, body, created_at, updated_at
-		 FROM notification_templates
-		 WHERE template_key = $1 AND channel_id IS NOT NULL
-		 ORDER BY channel_id`,
+		mustSQL("template_repository_0190_07.sql"),
 		key,
 	); err != nil {
 		return nil, nil, fmt.Errorf("get overrides: %w", err)
@@ -201,7 +189,7 @@ func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKe
 
 func (r *TemplateRepository) CreateRevision(ctx context.Context, templateID int64, body string) error {
 	if _, err := r.pool.Exec(ctx,
-		`INSERT INTO notification_template_revisions(template_id, body) VALUES ($1, $2)`,
+		mustSQL("template_repository_0204_08.sql"),
 		templateID,
 		body,
 	); err != nil {
@@ -213,11 +201,7 @@ func (r *TemplateRepository) CreateRevision(ctx context.Context, templateID int6
 func (r *TemplateRepository) GetRevisions(ctx context.Context, templateID int64, limit int) ([]*domain.NotificationTemplateRevision, error) {
 	var revisions []*domain.NotificationTemplateRevision
 	if err := pgxscan.Select(ctx, r.pool, &revisions,
-		`SELECT id, template_id, body, created_at
-		 FROM notification_template_revisions
-		 WHERE template_id = $1
-		 ORDER BY created_at DESC
-		 LIMIT $2`,
+		mustSQL("template_repository_0216_09.sql"),
 		templateID,
 		limit,
 	); err != nil {
@@ -229,9 +213,7 @@ func (r *TemplateRepository) GetRevisions(ctx context.Context, templateID int64,
 func (r *TemplateRepository) GetRevisionByID(ctx context.Context, id int64) (*domain.NotificationTemplateRevision, error) {
 	var revision domain.NotificationTemplateRevision
 	err := pgxscan.Get(ctx, r.pool, &revision,
-		`SELECT id, template_id, body, created_at
-		 FROM notification_template_revisions
-		 WHERE id = $1`,
+		mustSQL("template_repository_0232_10.sql"),
 		id,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -250,15 +232,7 @@ func (r *TemplateRepository) PruneOldRevisions(ctx context.Context, templateID i
 
 	return dbx.InPgxTx(ctx, r.pool, func(tx dbx.Tx) error {
 		if _, err := tx.Exec(ctx,
-			`DELETE FROM notification_template_revisions
-			 WHERE template_id = $1
-			   AND id NOT IN (
-			       SELECT id
-			       FROM notification_template_revisions
-			       WHERE template_id = $1
-			       ORDER BY created_at DESC
-			       LIMIT $2
-			   )`,
+			mustSQL("template_repository_0253_11.sql"),
 			templateID,
 			keepCount,
 		); err != nil {

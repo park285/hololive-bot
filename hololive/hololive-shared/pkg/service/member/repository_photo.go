@@ -32,11 +32,7 @@ import (
 
 func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string) error {
 	now := time.Now()
-	if _, err := r.pool.Exec(ctx, `
-		UPDATE members
-		SET photo = $2, photo_updated_at = $3
-		WHERE channel_id = $1
-	`, channelID, photoURL, now); err != nil {
+	if _, err := r.pool.Exec(ctx, mustSQL("repository_photo_0035_01.sql"), channelID, photoURL, now); err != nil {
 		return fmt.Errorf("failed to update photo: %w", err)
 	}
 
@@ -45,12 +41,7 @@ func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string
 
 func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) (string, error) {
 	var photo *string
-	err := r.pool.QueryRow(ctx, `
-		SELECT photo
-		FROM members
-		WHERE channel_id = $1
-		LIMIT 1
-	`, channelID).Scan(&photo)
+	err := r.pool.QueryRow(ctx, mustSQL("repository_photo_0048_02.sql"), channelID).Scan(&photo)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -70,12 +61,7 @@ func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) 
 func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error) {
 	staleTime := time.Now().Add(-staleThreshold)
 
-	rows, err := r.pool.Query(ctx, `
-		SELECT channel_id
-		FROM members
-		WHERE channel_id IS NOT NULL
-		  AND (photo IS NULL OR photo_updated_at IS NULL OR photo_updated_at < $1)
-	`, staleTime)
+	rows, err := r.pool.Query(ctx, mustSQL("repository_photo_0073_03.sql"), staleTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get members needing photo sync: %w", err)
 	}

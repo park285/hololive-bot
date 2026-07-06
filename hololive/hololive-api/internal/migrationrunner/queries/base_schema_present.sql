@@ -1,0 +1,1 @@
+SELECT to_regclass('public.members') IS NOT NULL AND to_regclass('public.alarms') IS NOT NULL

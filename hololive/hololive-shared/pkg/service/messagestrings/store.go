@@ -186,7 +186,7 @@ func (s *Store) ensureLoaded(ctx context.Context) {
 }
 
 func (s *Store) reload(ctx context.Context) error {
-	rows, err := s.pool.Query(ctx, `SELECT namespace, key, value FROM message_strings`)
+	rows, err := s.pool.Query(ctx, mustSQL("store_0189_01.sql"))
 	if err != nil {
 		return fmt.Errorf("query message_strings: %w", err)
 	}

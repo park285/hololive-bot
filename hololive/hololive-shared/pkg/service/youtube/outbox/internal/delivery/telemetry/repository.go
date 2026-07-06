@@ -133,13 +133,7 @@ func (r *Repository) EnqueuePrepared(
 
 func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
 	var sb strings.Builder
-	sb.WriteString(`
-		INSERT INTO youtube_notification_delivery_telemetry (
-			delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type,
-			actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at,
-			dedupe_key, delivery_path, delivery_mode, send_result, failure_reason,
-			attempt_started_at, attempt_finished_at, event_at, next_attempt_at, locked_at, logged_at, error
-		) VALUES `)
+	sb.WriteString(mustSQL("repository_0136_01.sql"))
 
 	args := make([]any, 0, len(rows)*enqueueTelemetryColumnsPerRow)
 	for i := range rows {
@@ -149,7 +143,7 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.You
 		writeTelemetryRowPlaceholders(&sb, i*enqueueTelemetryColumnsPerRow)
 		args = appendTelemetryRowArgs(args, &rows[i])
 	}
-	sb.WriteString(` ON CONFLICT (delivery_id, attempt_ordinal) DO NOTHING`)
+	sb.WriteString(mustSQL("repository_0152_02.sql"))
 
 	if _, err := r.db.Exec(ctx, sb.String(), args...); err != nil {
 		return fmt.Errorf("enqueue delivery telemetry: %w", err)
@@ -205,8 +199,7 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 	now := time.Now().UTC()
 	lockExpiry := now.Add(-lockTimeout)
 
-	candidates, err := r.queryTelemetryRows(ctx, "fetch pending delivery telemetry", `
-		SELECT `+deliveryTelemetrySelectColumns()+`
+	candidates, err := r.queryTelemetryRows(ctx, "fetch pending delivery telemetry", mustSQL("repository_0208_03.sql")+deliveryTelemetrySelectColumns()+`
 		FROM youtube_notification_delivery_telemetry
 		WHERE logged_at IS NULL
 		  AND next_attempt_at <= $1
@@ -234,8 +227,7 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 
 	reloadArgs := deliverysql.AppendDeliveryInt64Args(nil, candidateIDs)
 	reloadArgs = append(reloadArgs, now)
-	locked, err := r.queryTelemetryRows(ctx, "reload locked delivery telemetry rows", `
-		SELECT `+deliveryTelemetrySelectColumns()+`
+	locked, err := r.queryTelemetryRows(ctx, "reload locked delivery telemetry rows", mustSQL("repository_0237_04.sql")+deliveryTelemetrySelectColumns()+`
 		FROM youtube_notification_delivery_telemetry
 		WHERE `+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
 		  AND locked_at = ?
@@ -255,10 +247,7 @@ func (r *Repository) lockPendingTelemetryRows(ctx context.Context, candidateIDs 
 	lockArgs := []any{now}
 	lockArgs = deliverysql.AppendDeliveryInt64Args(lockArgs, candidateIDs)
 	lockArgs = append(lockArgs, lockExpiry)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "lock delivery telemetry rows", `
-		UPDATE youtube_notification_delivery_telemetry
-		SET locked_at = ?
-		WHERE `+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "lock delivery telemetry rows", mustSQL("repository_0258_05.sql")+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
 		  AND logged_at IS NULL
 		  AND (locked_at IS NULL OR locked_at < ?)
 	`, lockArgs...); err != nil {
@@ -276,10 +265,7 @@ func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
 	now := time.Now().UTC()
 	args := []any{now}
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry logged", `
-		UPDATE youtube_notification_delivery_telemetry
-		SET logged_at = ?, locked_at = NULL, error = ''
-		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry logged", mustSQL("repository_0279_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery telemetry logged: %w", err)
 	}
@@ -296,10 +282,7 @@ func (r *Repository) MarkRetryBatch(ctx context.Context, ids []int64, backoff ti
 	nextAttemptAt := time.Now().UTC().Add(backoff)
 	args := []any{nextAttemptAt, deliverysql.TruncateString(errMsg, 500)}
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry retry", `
-		UPDATE youtube_notification_delivery_telemetry
-		SET locked_at = NULL, next_attempt_at = ?, error = ?
-		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry retry", mustSQL("repository_0299_07.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery telemetry retry: %w", err)
 	}
@@ -340,16 +323,7 @@ func (r *Repository) refreshLockedRows(
 		return nil
 	}
 
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "refresh locked delivery telemetry rows", `
-		UPDATE youtube_notification_delivery_telemetry AS t
-		SET actual_published_at = v.actual_published_at,
-		    alarm_sent_at = v.alarm_sent_at,
-		    alarm_latency_millis = v.alarm_latency_millis,
-		    detected_at = v.detected_at
-		FROM unnest(?::bigint[], ?::timestamptz[], ?::timestamptz[], ?::bigint[], ?::timestamptz[])
-			AS v(id, actual_published_at, alarm_sent_at, alarm_latency_millis, detected_at)
-		WHERE t.id = v.id
-	`, ids, actualPublishedAt, alarmSentAt, alarmLatencyMillis, detectedAt); err != nil {
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "refresh locked delivery telemetry rows", mustSQL("repository_0343_08.sql"), ids, actualPublishedAt, alarmSentAt, alarmLatencyMillis, detectedAt); err != nil {
 		return err
 	}
 
@@ -361,10 +335,7 @@ func (r *Repository) DeleteLoggedBefore(ctx context.Context, cutoff time.Time) (
 		return 0, nil
 	}
 
-	tag, err := r.db.Exec(ctx, `
-		DELETE FROM youtube_notification_delivery_telemetry
-		WHERE logged_at IS NOT NULL AND event_at < $1
-	`, cutoff.UTC())
+	tag, err := r.db.Exec(ctx, mustSQL("repository_0364_09.sql"), cutoff.UTC())
 	if err != nil {
 		return 0, fmt.Errorf("delete delivery telemetry before cutoff: %w", err)
 	}

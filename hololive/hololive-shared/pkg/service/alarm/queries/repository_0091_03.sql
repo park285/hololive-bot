@@ -1,0 +1,1 @@
+DELETE FROM alarms WHERE room_id = $1

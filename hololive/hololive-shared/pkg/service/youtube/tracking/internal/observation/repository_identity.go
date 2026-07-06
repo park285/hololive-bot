@@ -46,18 +46,7 @@ func (r *identityRepository) findByIdentityRecords(
 	var records []domain.YouTubeContentAlarmTracking
 	query := `
 		WITH input(kind, preferred_content_id, candidate_content_id) AS (
-			VALUES ` + values + `
-		)
-		SELECT DISTINCT t.kind, t.content_id, t.canonical_content_id, t.channel_id, t.actual_published_at, t.detected_at,
-		       t.alarm_sent_at, t.alarm_latency_millis, t.alarm_latency_exceeded, t.delivery_status,
-		       COALESCE(t.latency_classification_status, '') AS latency_classification_status,
-		       COALESCE(t.delay_source, '') AS delay_source,
-		       COALESCE(t.internal_delay_cause, '') AS internal_delay_cause,
-		       t.created_at, t.updated_at
-		FROM youtube_content_alarm_tracking t
-		JOIN input i
-		  ON t.kind = i.kind
-		 AND (t.canonical_content_id = i.preferred_content_id OR t.content_id = i.candidate_content_id)`
+			VALUES ` + values + mustSQL("repository_identity_0049_01.sql")
 	if err := dbx.SelectSQL(ctx, r.db, &records, "find tracking by identity: query row", query, args...); err != nil {
 		return nil, err
 	}
@@ -180,11 +169,7 @@ func buildTrackingUpsertQuery(
 ) (result1 string, result2 []any) {
 	args := make([]any, 0, len(normalized)*12)
 	var sb strings.Builder
-	sb.WriteString(`
-		INSERT INTO youtube_content_alarm_tracking
-			(kind, content_id, canonical_content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, alarm_latency_millis, alarm_latency_exceeded, delivery_status, created_at, updated_at)
-		VALUES
-	`)
+	sb.WriteString(mustSQL("repository_identity_0183_02.sql"))
 	for i, record := range normalized {
 		if i > 0 {
 			sb.WriteByte(',')
@@ -192,21 +177,7 @@ func buildTrackingUpsertQuery(
 		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 		args = appendTrackingUpsertValues(args, record, now)
 	}
-	sb.WriteString(`
-		ON CONFLICT (kind, canonical_content_id) DO UPDATE
-		SET channel_id = EXCLUDED.channel_id,
-		    actual_published_at = COALESCE(youtube_content_alarm_tracking.actual_published_at, EXCLUDED.actual_published_at),
-		    detected_at = CASE
-		        WHEN EXCLUDED.detected_at < youtube_content_alarm_tracking.detected_at THEN EXCLUDED.detected_at
-		        ELSE youtube_content_alarm_tracking.detected_at
-		    END,
-		    alarm_sent_at = CASE
-		        WHEN youtube_content_alarm_tracking.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
-		        WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_content_alarm_tracking.alarm_sent_at
-		        WHEN EXCLUDED.alarm_sent_at < youtube_content_alarm_tracking.alarm_sent_at THEN EXCLUDED.alarm_sent_at
-		        ELSE youtube_content_alarm_tracking.alarm_sent_at
-		    END,
-		    alarm_latency_millis = `)
+	sb.WriteString(mustSQL("repository_identity_0195_03.sql"))
 	sb.WriteString(latencyMillisExpr)
 	sb.WriteString(`,
 		    alarm_latency_exceeded = `)

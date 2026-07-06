@@ -1,0 +1,1 @@
+SELECT DISTINCT room_id FROM alarms

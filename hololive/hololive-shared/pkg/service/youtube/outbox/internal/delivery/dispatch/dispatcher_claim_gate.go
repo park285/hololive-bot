@@ -227,10 +227,7 @@ func markRecoveredSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueID
 	args := []any{domain.OutboxStatusSent, sentAt}
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
 	args = append(args, store.DeliveryStatusSending)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "mark recovered sent delivery rows", `
-		UPDATE youtube_notification_delivery
-		SET status = ?, sent_at = ?, locked_at = NULL, error = ''
-		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
+	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "mark recovered sent delivery rows", mustSQL("dispatcher_claim_gate_0230_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
 		return fmt.Errorf("mark recovered sent delivery rows: %w", err)
 	}

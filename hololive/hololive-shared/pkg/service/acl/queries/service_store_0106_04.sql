@@ -1,0 +1,1 @@
+SELECT id, room_id, list_type FROM acl_rooms

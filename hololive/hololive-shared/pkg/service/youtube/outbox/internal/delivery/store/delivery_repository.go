@@ -97,11 +97,7 @@ func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, r
 		args = append(args, rows[i].OutboxID, rows[i].RoomID, rows[i].Status, rows[i].AttemptCount, rows[i].NextAttemptAt)
 	}
 
-	if _, err := r.db.Exec(ctx, `
-		INSERT INTO youtube_notification_delivery (outbox_id, room_id, status, attempt_count, next_attempt_at)
-		VALUES `+strings.Join(valueExprs, ", ")+`
-		ON CONFLICT (outbox_id, room_id) DO NOTHING
-	`, args...); err != nil {
+	if _, err := r.db.Exec(ctx, mustSQL("delivery_repository_0100_01.sql")+strings.Join(valueExprs, ", ")+mustSQL("delivery_repository_0102_02.sql"), args...); err != nil {
 		return fmt.Errorf("enqueue delivery batch: create rows: %w", err)
 	}
 
@@ -116,24 +112,7 @@ func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lo
 	lockExpiry := time.Now().Add(-lockTimeout)
 	now := time.Now()
 
-	pgxRows, err := r.db.Query(ctx, `
-		WITH claim AS (
-			SELECT id
-			FROM youtube_notification_delivery
-			WHERE status = $1
-			  AND (locked_at IS NULL OR locked_at < $2)
-			  AND next_attempt_at <= $3
-			ORDER BY next_attempt_at ASC, created_at ASC, id ASC
-			LIMIT $4
-			FOR UPDATE SKIP LOCKED
-		)
-		UPDATE youtube_notification_delivery d
-		SET locked_at = $5
-		FROM claim
-		WHERE d.id = claim.id
-		RETURNING d.id, d.outbox_id, d.room_id, d.status, d.attempt_count,
-		          d.next_attempt_at, d.created_at, d.locked_at, d.sent_at, COALESCE(d.error, '') AS error
-	`, domain.OutboxStatusPending, lockExpiry, now, batchSize, now)
+	pgxRows, err := r.db.Query(ctx, mustSQL("delivery_repository_0119_03.sql"), domain.OutboxStatusPending, lockExpiry, now, batchSize, now)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock delivery rows: %w", err)
 	}
@@ -185,10 +164,7 @@ func updateSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int
 	args := []any{domain.OutboxStatusSent, sentAt}
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
 	args = append(args, domain.OutboxStatusPending)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "update delivery rows", `
-		UPDATE youtube_notification_delivery
-		SET status = ?, sent_at = ?, locked_at = NULL, error = ''
-		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
+	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "update delivery rows", mustSQL("delivery_repository_0188_04.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
 		return fmt.Errorf("update delivery rows: %w", err)
 	}
@@ -228,15 +204,7 @@ func (r *DeliveryRepository) MarkFailed(ctx context.Context, id int64, maxRetrie
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
 
-	_, err := r.db.Exec(ctx, `
-		UPDATE youtube_notification_delivery
-		SET attempt_count = attempt_count + 1,
-		    error = $1,
-		    status = CASE WHEN attempt_count + 1 >= $2 THEN $3 ELSE $4 END,
-		    next_attempt_at = CASE WHEN attempt_count + 1 >= $5 THEN next_attempt_at ELSE $6 END,
-		    locked_at = NULL
-		WHERE id = $7
-	`, deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, id)
+	_, err := r.db.Exec(ctx, mustSQL("delivery_repository_0231_05.sql"), deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, id)
 	if err != nil {
 		return fmt.Errorf("mark delivery row failed: %w", err)
 	}
@@ -255,14 +223,7 @@ func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int
 
 	args := []any{deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt}
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery rows failed batch", `
-		UPDATE youtube_notification_delivery
-		SET attempt_count = attempt_count + 1,
-		    error = ?,
-		    status = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE ? END,
-		    next_attempt_at = CASE WHEN attempt_count + 1 >= ? THEN next_attempt_at ELSE ? END,
-		    locked_at = NULL
-		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery rows failed batch", mustSQL("delivery_repository_0258_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery rows failed batch: %w", err)
 	}
@@ -279,13 +240,7 @@ func (r *DeliveryRepository) MarkPermanentFailureBatch(ctx context.Context, ids 
 	args := []any{maxRetries, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed}
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
 	args = append(args, domain.OutboxStatusPending)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery rows permanent failed batch", `
-		UPDATE youtube_notification_delivery
-		SET attempt_count = CASE WHEN attempt_count >= ? THEN attempt_count ELSE ? END,
-		    error = ?,
-		    status = ?,
-		    locked_at = NULL
-		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery rows permanent failed batch", mustSQL("delivery_repository_0282_07.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery rows permanent failed batch: %w", err)
 	}
@@ -304,10 +259,7 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, 
 	}
 
 	var counts []deliveryStatusCount
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &counts, "count delivery statuses", `
-		SELECT outbox_id, status, COUNT(*) AS count
-		FROM youtube_notification_delivery
-		WHERE `+deliverysql.DeliveryInClause("outbox_id", len(uniqueIDs))+`
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &counts, "count delivery statuses", mustSQL("delivery_repository_0307_08.sql")+deliverysql.DeliveryInClause("outbox_id", len(uniqueIDs))+`
 		GROUP BY outbox_id, status
 	`, deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)...); err != nil {
 		return fmt.Errorf("update outbox aggregate statuses: count delivery statuses: %w", err)
@@ -331,13 +283,7 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 
 	args := outboxAggregateStatusUpdateArgs(status)
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "update outbox aggregate statuses: apply update", `
-		UPDATE youtube_notification_outbox
-		SET status = ?::text,
-		    locked_at = NULL,
-		    sent_at = CASE WHEN ?::text = ?::text THEN ? ELSE sent_at END,
-		    error = CASE WHEN ?::text = ?::text THEN ? ELSE '' END
-		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "update outbox aggregate statuses: apply update", mustSQL("delivery_repository_0334_09.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("update outbox aggregate statuses: apply update: %w", err)
 	}
@@ -370,16 +316,7 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 	}
 
 	var outboxIDs []int64
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", `
-		SELECT d.outbox_id
-		FROM youtube_notification_delivery d
-		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
-		WHERE o.status = ?
-		GROUP BY d.outbox_id
-		HAVING SUM(CASE WHEN d.status IN (?, ?) THEN 1 ELSE 0 END) = 0
-		ORDER BY d.outbox_id ASC
-		LIMIT ?
-	`, domain.OutboxStatusPending, domain.OutboxStatusPending, DeliveryStatusSending, batchSize); err != nil {
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), domain.OutboxStatusPending, domain.OutboxStatusPending, DeliveryStatusSending, batchSize); err != nil {
 		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
 	}
 

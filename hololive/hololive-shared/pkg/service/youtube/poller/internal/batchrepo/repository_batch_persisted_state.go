@@ -114,11 +114,7 @@ func loadPersistedOutboxSentState(
 	var outboxRows []persistedOutboxSentStateRow
 	if err := dbx.SelectSQL(ctx, tx, &outboxRows, "query outbox rows", `
 		WITH input(kind, content_id) AS (
-			VALUES `+values.String()+`
-		)
-		SELECT o.id, o.kind, o.content_id, o.sent_at
-		FROM youtube_notification_outbox o
-		JOIN input i ON o.kind = i.kind AND o.content_id = i.content_id`, args...); err != nil {
+			VALUES `+values.String()+mustSQL("repository_batch_persisted_state_0117_01.sql"), args...); err != nil {
 		return nil, fmt.Errorf("query outbox rows: %w", err)
 	}
 	return outboxRows, nil
@@ -159,10 +155,7 @@ func mergePersistedDeliverySentState(
 	var deliveryRows []persistedDeliverySentStateRow
 	args := dbx.AnyArgs(outboxIDs)
 	args = append(args, domain.OutboxStatusSent)
-	if err := dbx.SelectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", `
-		SELECT outbox_id, sent_at
-		FROM youtube_notification_delivery
-		WHERE outbox_id IN (`+dbx.InPlaceholders(len(outboxIDs))+`)
+	if err := dbx.SelectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", mustSQL("repository_batch_persisted_state_0162_02.sql")+dbx.InPlaceholders(len(outboxIDs))+`)
 		  AND status = ?
 		  AND sent_at IS NOT NULL`, args...); err != nil {
 		return fmt.Errorf("query sent delivery rows: %w", err)

@@ -102,7 +102,7 @@ func (r *Renderer) loadTemplateBody(ctx context.Context, key domain.TemplateKey,
 
 	if channelID != "" {
 		err := r.pool.QueryRow(ctx,
-			`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id = $2`,
+			mustSQL("renderer_0105_01.sql"),
 			key,
 			channelID,
 		).Scan(&body)
@@ -115,7 +115,7 @@ func (r *Renderer) loadTemplateBody(ctx context.Context, key domain.TemplateKey,
 	}
 
 	err := r.pool.QueryRow(ctx,
-		`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id IS NULL`,
+		mustSQL("renderer_0118_02.sql"),
 		key,
 	).Scan(&body)
 	if err != nil {

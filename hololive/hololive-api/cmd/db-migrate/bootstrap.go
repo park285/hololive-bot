@@ -44,7 +44,7 @@ func ensureScraperRole(ctx context.Context, connString, scraperUser, scraperPass
 		return err
 	}
 
-	grant := fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", pgx.Identifier{database}.Sanitize(), pgx.Identifier{scraperUser}.Sanitize())
+	grant := fmt.Sprintf(mustSQL("grant_connect.sql.tpl"), pgx.Identifier{database}.Sanitize(), pgx.Identifier{scraperUser}.Sanitize())
 	if _, err := conn.Exec(ctx, grant); err != nil {
 		return fmt.Errorf("bootstrap: grant connect: %w", err)
 	}
@@ -53,20 +53,20 @@ func ensureScraperRole(ctx context.Context, connString, scraperUser, scraperPass
 
 func upsertScraperRole(ctx context.Context, conn *pgx.Conn, scraperUser, scraperPassword string) error {
 	var exists bool
-	if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)", scraperUser).Scan(&exists); err != nil {
+	if err := conn.QueryRow(ctx, mustSQL("check_scraper_role.sql"), scraperUser).Scan(&exists); err != nil {
 		return fmt.Errorf("bootstrap: check scraper role: %w", err)
 	}
 
 	roleIdent := pgx.Identifier{scraperUser}.Sanitize()
 	passwordLiteral := quoteSQLLiteral(scraperPassword)
 	if !exists {
-		if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD %s", roleIdent, passwordLiteral)); err != nil {
+		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_scraper_role.sql.tpl"), roleIdent, passwordLiteral)); err != nil {
 			return fmt.Errorf("bootstrap: create scraper role: %w", err)
 		}
 	}
 
 	alter := fmt.Sprintf(
-		"ALTER ROLE %s WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD %s",
+		mustSQL("alter_scraper_role.sql.tpl"),
 		roleIdent, passwordLiteral,
 	)
 	if _, err := conn.Exec(ctx, alter); err != nil {
@@ -82,7 +82,7 @@ func grantScraperSchemaUsage(ctx context.Context, connString, scraperUser string
 	}
 	defer func() { err = closeConn(ctx, conn, "database", err) }()
 
-	stmt := fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", pgx.Identifier{scraperUser}.Sanitize())
+	stmt := fmt.Sprintf(mustSQL("grant_schema_usage.sql.tpl"), pgx.Identifier{scraperUser}.Sanitize())
 	if _, err := conn.Exec(ctx, stmt); err != nil {
 		return fmt.Errorf("bootstrap: grant schema usage: %w", err)
 	}

@@ -1,0 +1,1 @@
+SELECT namespace, key, value FROM message_strings

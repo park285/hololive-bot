@@ -26,15 +26,7 @@ func (r *PgxRepository) findByDedupeKeyAny(ctx context.Context, dedupeKeys ...st
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("find dispatch delivery by dedupe key: dedupe key is empty")
 	}
-	row := r.pool.QueryRow(ctx, `
-		SELECT id, event_id, room_id, dedupe_key, claim_keys, delivery_context, status,
-			attempt_count, next_attempt_at, locked_by, locked_at, lock_expires_at,
-			sending_started_at, sent_at, dlq_at, quarantined_at, cancelled_at,
-			last_error, created_at, updated_at
-		FROM alarm_dispatch_deliveries
-		WHERE dedupe_key = ANY($1)
-		ORDER BY CASE WHEN dedupe_key = $2 THEN 0 ELSE 1 END, id ASC
-		LIMIT 1`, keys, keys[0])
+	row := r.pool.QueryRow(ctx, mustSQL("repository_claim_0029_01.sql"), keys, keys[0])
 	record, err := scanDeliveryRecord(row)
 	if err != nil {
 		return nil, fmt.Errorf("find dispatch delivery by dedupe key: %w", err)
@@ -50,31 +42,7 @@ func (r *PgxRepository) ClaimDue(ctx context.Context, workerID string, limit int
 	if leaseSeconds <= 0 {
 		leaseSeconds = 60
 	}
-	rows, err := r.pool.Query(ctx, `
-		WITH picked AS (
-			SELECT id
-			FROM alarm_dispatch_deliveries
-			WHERE status IN ('pending', 'retry')
-			  AND next_attempt_at <= NOW()
-			ORDER BY next_attempt_at ASC, id ASC
-			LIMIT $1
-			FOR UPDATE SKIP LOCKED
-		), updated AS (
-			UPDATE alarm_dispatch_deliveries d
-			SET status = 'leased',
-				locked_by = $2,
-				locked_at = NOW(),
-				lock_expires_at = NOW() + ($3::INT * INTERVAL '1 second'),
-				updated_at = NOW()
-			FROM picked
-			WHERE d.id = picked.id
-			RETURNING d.id, d.event_id, d.room_id, d.dedupe_key, d.claim_keys, d.delivery_context,
-				d.status, d.attempt_count, d.next_attempt_at, d.locked_by, d.locked_at,
-				d.lock_expires_at, d.sending_started_at, d.sent_at, d.dlq_at,
-				d.quarantined_at, d.cancelled_at, d.last_error, d.created_at, d.updated_at
-		)
-		SELECT * FROM updated
-		ORDER BY next_attempt_at ASC, id ASC`, limit, workerID, leaseSeconds)
+	rows, err := r.pool.Query(ctx, mustSQL("repository_claim_0053_02.sql"), limit, workerID, leaseSeconds)
 	if err != nil {
 		return nil, fmt.Errorf("claim due dispatch deliveries: %w", err)
 	}
@@ -99,11 +67,7 @@ func (r *PgxRepository) LoadEventsByID(ctx context.Context, eventIDs []int64) (m
 	if len(eventIDs) == 0 {
 		return events, nil
 	}
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, event_key, payload_hash, alarm_type, channel_id, stream_id, category,
-			payload_schema_version, payload, created_at, updated_at
-		FROM alarm_dispatch_events
-		WHERE id = ANY($1)`, eventIDs)
+	rows, err := r.pool.Query(ctx, mustSQL("repository_claim_0102_03.sql"), eventIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load dispatch events: %w", err)
 	}

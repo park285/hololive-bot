@@ -62,25 +62,7 @@ func (r *DeliveryRepository) MarkSendingBatchIfLocked(ctx context.Context, token
 	}
 
 	sendingStartedAt := time.Now().UTC()
-	rows, err := r.db.Query(ctx, `
-		WITH input AS (
-			SELECT *
-			FROM unnest($1::bigint[], $2::timestamptz[]) WITH ORDINALITY AS t(id, locked_at, ord)
-		), updated AS (
-			UPDATE youtube_notification_delivery d
-			SET status = $3, locked_at = $4
-			FROM input i
-			WHERE d.id = i.id
-			  AND d.status = $5
-			  AND d.locked_at = i.locked_at
-			RETURNING i.ord, d.id, d.outbox_id, d.room_id, d.status, d.attempt_count,
-			          d.next_attempt_at, d.created_at, d.locked_at, d.sent_at, COALESCE(d.error, '') AS error
-		)
-		SELECT id, outbox_id, room_id, status, attempt_count,
-		       next_attempt_at, created_at, locked_at, sent_at, error
-		FROM updated
-		ORDER BY ord ASC
-	`, ids, lockedAts, DeliveryStatusSending, sendingStartedAt, domain.OutboxStatusPending)
+	rows, err := r.db.Query(ctx, mustSQL("delivery_repository_lock_0065_01.sql"), ids, lockedAts, DeliveryStatusSending, sendingStartedAt, domain.OutboxStatusPending)
 	if err != nil {
 		return nil, fmt.Errorf("mark delivery rows sending: %w", err)
 	}
@@ -139,21 +121,7 @@ func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens 
 		return nil, nil
 	}
 
-	rows, err := tx.Query(ctx, `
-		WITH input AS (
-			SELECT *
-			FROM unnest($1::bigint[], $2::timestamptz[]) AS t(id, locked_at)
-		), updated AS (
-			UPDATE youtube_notification_delivery d
-			SET status = $3, sent_at = $4, locked_at = NULL, error = ''
-			FROM input i
-			WHERE d.id = i.id
-			  AND d.status = $5
-			  AND d.locked_at = i.locked_at
-			RETURNING d.id
-		)
-		SELECT id FROM updated
-	`, ids, lockedAts, domain.OutboxStatusSent, sentAt, DeliveryStatusSending)
+	rows, err := tx.Query(ctx, mustSQL("delivery_repository_lock_0142_02.sql"), ids, lockedAts, domain.OutboxStatusSent, sentAt, DeliveryStatusSending)
 	if err != nil {
 		return nil, fmt.Errorf("batch update sent delivery rows: %w", err)
 	}
@@ -187,22 +155,7 @@ func (r *DeliveryRepository) MarkFailedRetryBatchIfLocked(ctx context.Context, t
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
 
-	_, err := r.db.Exec(ctx, `
-		WITH input AS (
-			SELECT *
-			FROM unnest($1::bigint[], $2::timestamptz[]) AS t(id, locked_at)
-		)
-		UPDATE youtube_notification_delivery d
-		SET attempt_count = attempt_count + 1,
-		    error = $3,
-		    status = CASE WHEN attempt_count + 1 >= $4 THEN $5 ELSE $6 END,
-		    next_attempt_at = CASE WHEN attempt_count + 1 >= $4 THEN next_attempt_at ELSE $7 END,
-		    locked_at = NULL
-		FROM input i
-		WHERE d.id = i.id
-		  AND d.status = $8
-		  AND d.locked_at = i.locked_at
-	`, ids, lockedAts, deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, nextAttempt, DeliveryStatusSending)
+	_, err := r.db.Exec(ctx, mustSQL("delivery_repository_lock_0190_03.sql"), ids, lockedAts, deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, nextAttempt, DeliveryStatusSending)
 	if err != nil {
 		return fmt.Errorf("batch mark failed retry delivery rows: %w", err)
 	}
@@ -221,21 +174,7 @@ func (r *DeliveryRepository) MarkPermanentFailureBatchIfLocked(ctx context.Conte
 		return nil
 	}
 
-	_, err := r.db.Exec(ctx, `
-		WITH input AS (
-			SELECT *
-			FROM unnest($1::bigint[], $2::timestamptz[]) AS t(id, locked_at)
-		)
-		UPDATE youtube_notification_delivery d
-		SET attempt_count = CASE WHEN attempt_count >= $3 THEN attempt_count ELSE $3 END,
-		    error = $4,
-		    status = $5,
-		    locked_at = NULL
-		FROM input i
-		WHERE d.id = i.id
-		  AND d.status = $6
-		  AND d.locked_at = i.locked_at
-	`, ids, lockedAts, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed, DeliveryStatusSending)
+	_, err := r.db.Exec(ctx, mustSQL("delivery_repository_lock_0224_04.sql"), ids, lockedAts, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed, DeliveryStatusSending)
 	if err != nil {
 		return fmt.Errorf("batch mark permanent failure delivery rows: %w", err)
 	}
@@ -252,28 +191,7 @@ func (r *DeliveryRepository) QuarantineStaleSending(ctx context.Context, olderTh
 	}
 
 	cutoff := time.Now().UTC().Add(-olderThan)
-	rows, err := r.db.Query(ctx, `
-		WITH picked AS (
-			SELECT id
-			FROM youtube_notification_delivery
-			WHERE status = $1
-			  AND locked_at IS NOT NULL
-			  AND locked_at < $2
-			ORDER BY locked_at ASC, id ASC
-			LIMIT $3
-			FOR UPDATE SKIP LOCKED
-		), updated AS (
-			UPDATE youtube_notification_delivery d
-			SET status = $4,
-			    attempt_count = attempt_count + 1,
-			    locked_at = NULL,
-			    error = $5
-			FROM picked
-			WHERE d.id = picked.id
-			RETURNING d.outbox_id
-		)
-		SELECT outbox_id FROM updated
-	`, DeliveryStatusSending, cutoff, limit, DeliveryStatusQuarantined, "stale sending; external send outcome unknown")
+	rows, err := r.db.Query(ctx, mustSQL("delivery_repository_lock_0255_05.sql"), DeliveryStatusSending, cutoff, limit, DeliveryStatusQuarantined, "stale sending; external send outcome unknown")
 	if err != nil {
 		return nil, 0, fmt.Errorf("quarantine stale sending delivery rows: %w", err)
 	}

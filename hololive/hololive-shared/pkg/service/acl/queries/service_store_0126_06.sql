@@ -1,0 +1,1 @@
+DELETE FROM acl_rooms WHERE room_id = $1 AND list_type = $2

@@ -51,11 +51,7 @@ func (r *PgxBatchRepository) upsertVideosChunk(ctx context.Context, tx batchDB, 
 	now := time.Now()
 	args := make([]any, 0, len(videos)*12)
 	var sb strings.Builder
-	sb.WriteString(`
-		INSERT INTO youtube_videos
-			(video_id, channel_id, title, thumbnail, duration, published_text, published_at, is_short, is_live_replay, view_count, first_seen_at, last_seen_at)
-		VALUES
-	`)
+	sb.WriteString(mustSQL("repository_batch_writes_0054_01.sql"))
 
 	for i, video := range videos {
 		publishedAt := yttimestamp.NormalizePtr(video.PublishedAt)
@@ -80,12 +76,7 @@ func (r *PgxBatchRepository) upsertVideosChunk(ctx context.Context, tx batchDB, 
 		)
 	}
 
-	sb.WriteString(`
-		ON CONFLICT (video_id) DO UPDATE
-		SET last_seen_at = EXCLUDED.last_seen_at,
-		    published_at = COALESCE(youtube_videos.published_at, EXCLUDED.published_at),
-		    view_count = EXCLUDED.view_count
-	`)
+	sb.WriteString(mustSQL("repository_batch_writes_0083_02.sql"))
 
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec video upsert chunk (%d rows)", len(videos)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec video upsert chunk (%d rows): %w", len(videos), err)
@@ -114,11 +105,7 @@ func (r *PgxBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx b
 	now := time.Now()
 	args := make([]any, 0, len(posts)*13)
 	var sb strings.Builder
-	sb.WriteString(`
-		INSERT INTO youtube_community_posts
-			(post_id, channel_id, author_name, author_photo, content_text, published_text, published_at, like_count, comment_count, images, attached_video, first_seen_at, last_seen_at)
-		VALUES
-	`)
+	sb.WriteString(mustSQL("repository_batch_writes_0117_03.sql"))
 
 	for i, post := range posts {
 		publishedAt := yttimestamp.NormalizePtr(post.PublishedAt)
@@ -144,13 +131,7 @@ func (r *PgxBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx b
 		)
 	}
 
-	sb.WriteString(`
-		ON CONFLICT (post_id) DO UPDATE
-		SET last_seen_at = EXCLUDED.last_seen_at,
-		    published_at = COALESCE(youtube_community_posts.published_at, EXCLUDED.published_at),
-		    like_count = EXCLUDED.like_count,
-		    comment_count = EXCLUDED.comment_count
-	`)
+	sb.WriteString(mustSQL("repository_batch_writes_0147_04.sql"))
 
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec community post upsert chunk (%d rows)", len(posts)), sb.String(), args...); err != nil {
 		return fmt.Errorf("exec community post upsert chunk (%d rows): %w", len(posts), err)
@@ -231,29 +212,13 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 	kind := notifications[0].Kind
 	args := make([]any, 0, len(notifications)*8)
 	var sb strings.Builder
-	sb.WriteString(`
-		INSERT INTO youtube_notification_outbox
-			(kind, channel_id, content_id, payload, status, attempt_count, next_attempt_at, created_at)
-		VALUES
-	`)
+	sb.WriteString(mustSQL("repository_batch_writes_0234_05.sql"))
 
 	for i, notification := range notifications {
 		appendNotificationInsertArgs(&sb, &args, i, notification, now)
 	}
 
-	sb.WriteString(`
-		ON CONFLICT (kind, content_id) DO UPDATE
-		SET channel_id = EXCLUDED.channel_id,
-		    payload = EXCLUDED.payload,
-		    status = 'PENDING',
-		    attempt_count = 0,
-		    next_attempt_at = EXCLUDED.next_attempt_at,
-		    locked_at = NULL,
-		    sent_at = NULL,
-		    error = ''
-		WHERE youtube_notification_outbox.status = 'FAILED'
-		  AND youtube_notification_outbox.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
-	`)
+	sb.WriteString(mustSQL("repository_batch_writes_0244_06.sql"))
 
 	rowsAffected, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...)
 	if err != nil {
@@ -344,15 +309,7 @@ func (r *PgxBatchRepository) upsertWatermark(ctx context.Context, tx batchDB, wa
 	}
 
 	now := time.Now()
-	if _, err := dbx.ExecSQL(ctx, tx, "exec watermark upsert", `
-		INSERT INTO youtube_content_watermarks
-			(channel_id, watermark_type, initialized, last_content_id, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (channel_id, watermark_type) DO UPDATE
-		SET initialized = EXCLUDED.initialized,
-		    last_content_id = EXCLUDED.last_content_id,
-		    updated_at = EXCLUDED.updated_at
-	`,
+	if _, err := dbx.ExecSQL(ctx, tx, "exec watermark upsert", mustSQL("repository_batch_writes_0347_07.sql"),
 		watermark.ChannelID,
 		watermark.WatermarkType,
 		watermark.Initialized,

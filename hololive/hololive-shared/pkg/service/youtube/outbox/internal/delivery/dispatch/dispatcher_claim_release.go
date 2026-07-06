@@ -16,11 +16,7 @@ import (
 )
 
 func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64, lockedAt *time.Time) {
-	query := `
-		UPDATE youtube_notification_outbox
-		SET locked_at = NULL
-		WHERE id = ? AND status = ?
-	`
+	query := mustSQL("dispatcher_claim_release_0019_01.sql")
 	args := []any{id, domain.OutboxStatusPending}
 	if lockedAt != nil {
 		query += " AND locked_at = ?"
@@ -39,10 +35,7 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 
 	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
-	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup old outbox items", `
-		DELETE FROM youtube_notification_outbox
-		WHERE status IN (?, ?) AND COALESCE(sent_at, created_at) < ?
-	`, domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff)
+	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup old outbox items", mustSQL("dispatcher_claim_release_0042_02.sql"), domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff)
 	if err != nil {
 		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", err))
 		return
@@ -69,17 +62,7 @@ func (d *ClaimManager) cleanupOrphanPendingOutbox(ctx context.Context) {
 	pendingCutoff := now.Add(-d.orphanPendingCutoff())
 	lockExpiry := now.Add(-d.config.LockTimeout)
 
-	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup orphan pending outbox items", `
-		DELETE FROM youtube_notification_outbox o
-		WHERE o.status = ?
-		  AND o.sent_at IS NULL
-		  AND o.created_at < ?
-		  AND (o.locked_at IS NULL OR o.locked_at < ?)
-		  AND NOT EXISTS (
-			SELECT 1 FROM youtube_notification_delivery d
-			WHERE d.outbox_id = o.id
-		  )
-	`, domain.OutboxStatusPending, pendingCutoff, lockExpiry)
+	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup orphan pending outbox items", mustSQL("dispatcher_claim_release_0072_03.sql"), domain.OutboxStatusPending, pendingCutoff, lockExpiry)
 	if err != nil {
 		d.logger.Warn("Failed to cleanup orphan pending outbox items", slog.Any("error", err))
 		return

@@ -10,21 +10,7 @@ import (
 )
 
 func (r *Repository) FindMembersWithCelebrationsInMonth(ctx context.Context, month, referenceYear int) ([]domain.CalendarEntry, error) {
-	query := fmt.Sprintf(`
-		SELECT %s, 'birthday' AS celebration_kind,
-			EXTRACT(DAY FROM birthday)::int AS celebration_day
-		FROM members
-		WHERE EXTRACT(MONTH FROM birthday) = $1
-		  AND status = 'active'
-		UNION ALL
-		SELECT %s, 'anniversary' AS celebration_kind,
-			EXTRACT(DAY FROM debut_date)::int AS celebration_day
-		FROM members
-		WHERE EXTRACT(MONTH FROM debut_date) = $1
-		  AND EXTRACT(YEAR FROM debut_date) < $2
-		  AND status = 'active'
-		ORDER BY celebration_day, celebration_kind, id
-	`, celebrationMemberColumns, celebrationMemberColumns)
+	query := fmt.Sprintf(mustSQL("repository_celebration_0013_01.sql"), celebrationMemberColumns, celebrationMemberColumns)
 
 	rows, err := r.pool.Query(ctx, query, month, referenceYear)
 	if err != nil {
@@ -91,13 +77,7 @@ const celebrationMemberColumns = `id, slug, channel_id, english_name, japanese_n
 	birthday, debut_date`
 
 func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day int) ([]*domain.Member, error) {
-	query := fmt.Sprintf(`
-		SELECT %s
-		FROM members
-		WHERE EXTRACT(MONTH FROM birthday) = $1
-		  AND EXTRACT(DAY FROM birthday) = $2
-		  AND status = 'active'
-	`, celebrationMemberColumns)
+	query := fmt.Sprintf(mustSQL("repository_celebration_0094_02.sql"), celebrationMemberColumns)
 
 	rows, err := r.pool.Query(ctx, query, month, day)
 	if err != nil {
@@ -109,14 +89,7 @@ func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day i
 }
 
 func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, day, referenceYear int) ([]*domain.Member, error) {
-	query := fmt.Sprintf(`
-		SELECT %s
-		FROM members
-		WHERE EXTRACT(MONTH FROM debut_date) = $1
-		  AND EXTRACT(DAY FROM debut_date) = $2
-		  AND EXTRACT(YEAR FROM debut_date) < $3
-		  AND status = 'active'
-	`, celebrationMemberColumns)
+	query := fmt.Sprintf(mustSQL("repository_celebration_0112_03.sql"), celebrationMemberColumns)
 
 	rows, err := r.pool.Query(ctx, query, month, day, referenceYear)
 	if err != nil {

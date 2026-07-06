@@ -57,10 +57,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 	postKinds := []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
 	terminalStatuses := []domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusFailed}
 	var outboxes []domain.YouTubeNotificationOutbox
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", `
-			SELECT id, kind, channel_id, content_id, payload::text AS payload, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, COALESCE(error, '') AS error
-		FROM youtube_notification_outbox
-		WHERE `+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", mustSQL("delivery_final_result_0060_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 		  AND `+deliverysql.DeliveryInClause("kind", len(postKinds))+`
 		  AND `+deliverysql.DeliveryInClause("status", len(terminalStatuses))+`
 		ORDER BY id ASC
@@ -79,10 +76,7 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	outboxResultIDs := collectOutboxIDs(outboxes)
 	var deliveries []domain.YouTubeNotificationDelivery
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", `
-		SELECT id, outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, error
-		FROM youtube_notification_delivery
-		WHERE `+deliverysql.DeliveryInClause("outbox_id", len(outboxResultIDs))+`
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", mustSQL("delivery_final_result_0082_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(outboxResultIDs))+`
 		ORDER BY outbox_id ASC, id ASC
 	`, deliverysql.AppendDeliveryInt64Args(nil, outboxResultIDs)...); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts deliveries: %w", err)

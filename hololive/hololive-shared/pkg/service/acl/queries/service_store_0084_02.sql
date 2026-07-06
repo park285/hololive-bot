@@ -1,0 +1,1 @@
+INSERT INTO acl_settings (key, value) VALUES ($1, $2)

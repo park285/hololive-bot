@@ -60,12 +60,7 @@ func loadFailedNotificationOutboxRows(ctx context.Context, tx batchDB, notificat
 	var rows []failedNotificationOutboxRow
 	if err := dbx.SelectSQL(ctx, tx, &rows, "query failed outbox rows", `
 		WITH input(kind, content_id) AS (
-			VALUES `+values.String()+`
-		)
-		SELECT o.id, o.kind, o.content_id
-		FROM youtube_notification_outbox o
-		JOIN input i ON o.kind = i.kind AND o.content_id = i.content_id
-		WHERE o.status = ?`, args...); err != nil {
+			VALUES `+values.String()+mustSQL("repository_batch_delivery_state_0063_01.sql"), args...); err != nil {
 		return nil, fmt.Errorf("query failed outbox rows: %w", err)
 	}
 	return rows, nil
@@ -195,15 +190,7 @@ func rearmFailedDeliveryRows(ctx context.Context, tx batchDB, outboxIDs []int64,
 	args = append(args, domain.OutboxStatusPending, nextAttemptAt)
 	args = append(args, dbx.AnyArgs(outboxIDs)...)
 	args = append(args, domain.OutboxStatusFailed)
-	if _, err := dbx.ExecSQL(ctx, tx, "update delivery rows", `
-		UPDATE youtube_notification_delivery
-		SET status = ?,
-		    attempt_count = 0,
-		    next_attempt_at = ?,
-		    locked_at = NULL,
-		    sent_at = NULL,
-		    error = ''
-		WHERE outbox_id IN (`+dbx.InPlaceholders(len(outboxIDs))+`)
+	if _, err := dbx.ExecSQL(ctx, tx, "update delivery rows", mustSQL("repository_batch_delivery_state_0198_02.sql")+dbx.InPlaceholders(len(outboxIDs))+`)
 		  AND status = ?`,
 		args...,
 	); err != nil {

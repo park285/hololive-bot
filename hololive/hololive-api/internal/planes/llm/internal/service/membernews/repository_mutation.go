@@ -30,13 +30,7 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 		return fmt.Errorf("membernews repository pool is nil")
 	}
 
-	query := `
-		INSERT INTO member_news_subscriptions (room_id, room_name)
-		VALUES ($1, $2)
-		ON CONFLICT (room_id) DO UPDATE
-		SET room_name = COALESCE(EXCLUDED.room_name, member_news_subscriptions.room_name),
-		    updated_at = NOW()
-	`
+	query := mustSQL("repository_mutation_0033_01.sql")
 
 	if err := r.pool.Exec(ctx, query, roomID, roomName); err != nil {
 		return fmt.Errorf("subscribe member news: %w", err)
@@ -51,7 +45,7 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 		return fmt.Errorf("membernews repository pool is nil")
 	}
 
-	query := `DELETE FROM member_news_subscriptions WHERE room_id = $1`
+	query := mustSQL("repository_mutation_0054_02.sql")
 	if err := r.pool.Exec(ctx, query, roomID); err != nil {
 		return fmt.Errorf("unsubscribe member news: %w", err)
 	}

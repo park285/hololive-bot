@@ -147,9 +147,7 @@ func mergeResolvedShortContentIDs(
 	args := make([]any, 0, 1+len(aliases))
 	args = append(args, domain.OutboxKindNewShort)
 	args = append(args, dbx.AnyArgs(aliases)...)
-	if err := dbx.SelectSQL(ctx, tx, &rows, action, `
-		SELECT content_id
-		FROM `+table+`
+	if err := dbx.SelectSQL(ctx, tx, &rows, action, mustSQL("repository_batch_short_identity_0150_01.sql")+table+`
 		WHERE kind = ?
 		  AND content_id IN (`+dbx.InPlaceholders(len(aliases))+`)`, args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)

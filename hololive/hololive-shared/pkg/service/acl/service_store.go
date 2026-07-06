@@ -64,7 +64,7 @@ func newPgxACLStore(pool *pgxpool.Pool) *pgxACLStore {
 func (s *pgxACLStore) GetSetting(ctx context.Context, key string) (value string, ok bool, err error) {
 	var stored *string
 
-	scanErr := pgxscan.Get(ctx, s.pool, &stored, `SELECT value FROM acl_settings WHERE key = $1`, key)
+	scanErr := pgxscan.Get(ctx, s.pool, &stored, mustSQL("service_store_0067_01.sql"), key)
 	if scanErr != nil {
 		if stdErrors.Is(scanErr, pgx.ErrNoRows) {
 			return "", false, nil
@@ -81,7 +81,7 @@ func (s *pgxACLStore) GetSetting(ctx context.Context, key string) (value string,
 }
 
 func (s *pgxACLStore) CreateSetting(ctx context.Context, key, value string) error {
-	if _, err := s.pool.Exec(ctx, `INSERT INTO acl_settings (key, value) VALUES ($1, $2)`, key, value); err != nil {
+	if _, err := s.pool.Exec(ctx, mustSQL("service_store_0084_02.sql"), key, value); err != nil {
 		return fmt.Errorf("create acl setting %q: %w", key, err)
 	}
 
@@ -90,8 +90,7 @@ func (s *pgxACLStore) CreateSetting(ctx context.Context, key, value string) erro
 
 func (s *pgxACLStore) UpsertSetting(ctx context.Context, key, value string) error {
 	if _, err := s.pool.Exec(ctx,
-		`INSERT INTO acl_settings (key, value) VALUES ($1, $2)
-		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		mustSQL("service_store_0093_03.sql"),
 		key, value,
 	); err != nil {
 		return fmt.Errorf("upsert acl setting %q: %w", key, err)
@@ -103,7 +102,7 @@ func (s *pgxACLStore) UpsertSetting(ctx context.Context, key, value string) erro
 func (s *pgxACLStore) ListRooms(ctx context.Context) ([]Room, error) {
 	var rooms []Room
 
-	if err := pgxscan.Select(ctx, s.pool, &rooms, `SELECT id, room_id, list_type FROM acl_rooms`); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rooms, mustSQL("service_store_0106_04.sql")); err != nil {
 		return nil, fmt.Errorf("list acl rooms: %w", err)
 	}
 
@@ -112,7 +111,7 @@ func (s *pgxACLStore) ListRooms(ctx context.Context) ([]Room, error) {
 
 func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) error {
 	if _, err := s.pool.Exec(ctx,
-		`INSERT INTO acl_rooms (room_id, list_type) VALUES ($1, $2)`,
+		mustSQL("service_store_0115_05.sql"),
 		roomID, listType,
 	); err != nil {
 		return fmt.Errorf("create acl room %q/%q: %w", roomID, listType, err)
@@ -123,7 +122,7 @@ func (s *pgxACLStore) CreateRoom(ctx context.Context, roomID, listType string) e
 
 func (s *pgxACLStore) DeleteRoom(ctx context.Context, roomID, listType string) error {
 	if _, err := s.pool.Exec(ctx,
-		`DELETE FROM acl_rooms WHERE room_id = $1 AND list_type = $2`,
+		mustSQL("service_store_0126_06.sql"),
 		roomID, listType,
 	); err != nil {
 		return fmt.Errorf("delete acl room %q/%q: %w", roomID, listType, err)
@@ -139,9 +138,9 @@ func (s *pgxACLStore) CountRooms(ctx context.Context, roomID, listType string) (
 	)
 
 	if listType == "" {
-		err = s.pool.QueryRow(ctx, `SELECT count(*) FROM acl_rooms WHERE room_id = $1`, roomID).Scan(&count)
+		err = s.pool.QueryRow(ctx, mustSQL("service_store_0142_07.sql"), roomID).Scan(&count)
 	} else {
-		err = s.pool.QueryRow(ctx, `SELECT count(*) FROM acl_rooms WHERE room_id = $1 AND list_type = $2`, roomID, listType).Scan(&count)
+		err = s.pool.QueryRow(ctx, mustSQL("service_store_0144_08.sql"), roomID, listType).Scan(&count)
 	}
 
 	if err != nil {

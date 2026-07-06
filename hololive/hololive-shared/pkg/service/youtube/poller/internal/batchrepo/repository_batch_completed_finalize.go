@@ -85,15 +85,7 @@ func bulkUpdateCompletedFailedNotificationOutboxRows(
 	args = append(args, domain.OutboxStatusSent, domain.OutboxStatusFailed)
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("bulk update completed failed outbox rows (%d rows)", len(inputs)), `
 		WITH input(id, sent_at) AS (
-			VALUES `+query+`
-		)
-		UPDATE youtube_notification_outbox o
-		SET status = ?,
-		    locked_at = NULL,
-		    sent_at = CASE WHEN o.sent_at IS NULL OR o.sent_at > i.sent_at THEN i.sent_at ELSE o.sent_at END,
-		    error = ''
-		FROM input i
-		WHERE o.id = i.id AND o.status = ?`, args...); err != nil {
+			VALUES `+query+mustSQL("repository_batch_completed_finalize_0088_01.sql"), args...); err != nil {
 		return fmt.Errorf("bulk update completed failed outbox rows: %w", err)
 	}
 	return nil
@@ -108,15 +100,7 @@ func bulkUpdateCompletedFailedNotificationDeliveryRows(
 	args = append(args, domain.OutboxStatusSent, domain.OutboxStatusFailed)
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("bulk update completed failed delivery rows (%d rows)", len(inputs)), `
 		WITH input(id, sent_at) AS (
-			VALUES `+query+`
-		)
-		UPDATE youtube_notification_delivery d
-		SET status = ?,
-		    locked_at = NULL,
-		    sent_at = CASE WHEN d.sent_at IS NULL OR d.sent_at > i.sent_at THEN i.sent_at ELSE d.sent_at END,
-		    error = ''
-		FROM input i
-		WHERE d.outbox_id = i.id AND d.status = ?`, args...); err != nil {
+			VALUES `+query+mustSQL("repository_batch_completed_finalize_0111_02.sql"), args...); err != nil {
 		return fmt.Errorf("bulk update completed failed delivery rows: %w", err)
 	}
 	return nil

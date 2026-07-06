@@ -1,0 +1,1 @@
+INSERT INTO notification_template_revisions(template_id, body) VALUES ($1, $2)

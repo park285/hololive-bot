@@ -1,0 +1,1 @@
+INSERT INTO acl_rooms (room_id, list_type) VALUES ($1, $2)

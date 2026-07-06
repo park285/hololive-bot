@@ -49,7 +49,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 		return "", nil
 	}
 
-	if _, err := s.db.Exec(ctx, `DELETE FROM auth_password_reset_tokens WHERE user_id = $1 AND used_at IS NULL`, user.ID); err != nil {
+	if _, err := s.db.Exec(ctx, mustSQL("service_password_reset_0052_01.sql"), user.ID); err != nil {
 		return "", newError(CodeInternal, "failed to clear existing reset tokens", err)
 	}
 
@@ -67,10 +67,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 		CreatedAt: now,
 	}
 
-	if _, err := s.db.Exec(ctx, `
-		INSERT INTO auth_password_reset_tokens (token_hash, user_id, expires_at, used_at, created_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`, model.TokenHash, model.UserID, model.ExpiresAt, model.UsedAt, model.CreatedAt); err != nil {
+	if _, err := s.db.Exec(ctx, mustSQL("service_password_reset_0070_02.sql"), model.TokenHash, model.UserID, model.ExpiresAt, model.UsedAt, model.CreatedAt); err != nil {
 		return "", newError(CodeInternal, "failed to create reset token", err)
 	}
 
@@ -127,11 +124,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 }
 
 func (s *Service) findValidPasswordResetToken(ctx context.Context, tokenHash string, now time.Time) (passwordResetTokenModel, error) {
-	reset, err := scanPasswordResetToken(s.db.QueryRow(ctx, `
-		SELECT token_hash, user_id, expires_at, used_at, created_at
-		FROM auth_password_reset_tokens
-		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
-	`, tokenHash, now))
+	reset, err := scanPasswordResetToken(s.db.QueryRow(ctx, mustSQL("service_password_reset_0130_03.sql"), tokenHash, now))
 	if err == nil {
 		return reset, nil
 	}
@@ -174,23 +167,14 @@ func (s *Service) applyPasswordReset(
 
 func claimTokenAndUpdatePassword(ctx context.Context, tx dbx.Tx, tokenHash, passwordHash string, now time.Time) (string, error) {
 	var claimedUserID string
-	if err := tx.QueryRow(ctx, `
-		UPDATE auth_password_reset_tokens
-		SET used_at = $1
-		WHERE token_hash = $2 AND used_at IS NULL AND expires_at > $1
-		RETURNING user_id
-	`, now, tokenHash).Scan(&claimedUserID); err != nil {
+	if err := tx.QueryRow(ctx, mustSQL("service_password_reset_0177_04.sql"), now, tokenHash).Scan(&claimedUserID); err != nil {
 		if stdErrors.Is(err, pgx.ErrNoRows) {
 			return "", newError(CodeInvalidInput, "invalid reset token", nil)
 		}
 		return "", newError(CodeInternal, "failed to claim reset token", err)
 	}
 
-	if _, err := tx.Exec(ctx, `
-		UPDATE auth_users
-		SET password_hash = $1, updated_at = $2
-		WHERE id = $3
-	`, passwordHash, now, claimedUserID); err != nil {
+	if _, err := tx.Exec(ctx, mustSQL("service_password_reset_0189_05.sql"), passwordHash, now, claimedUserID); err != nil {
 		return "", newError(CodeInternal, "failed to update password", err)
 	}
 

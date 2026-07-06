@@ -82,17 +82,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
 	upcomingUntil := now.UTC().Add(s.effectiveUpcomingLookahead())
 
 	var rows []domain.YouTubeLiveSession
-	if err := pgxscan.Select(ctx, s.pool, &rows, `
-		SELECT video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at,
-		       live_first_seen_at, topic_id, thumbnail_url, last_seen_at
-		FROM youtube_live_sessions
-		WHERE channel_id = ANY($1)
-		  AND (
-		      (status = $2 AND last_seen_at >= $3)
-		      OR (status = $4 AND scheduled_start_time >= $5 AND scheduled_start_time <= $6 AND last_seen_at >= $7)
-		  )
-		ORDER BY last_seen_at DESC
-	`, uniqueChannelIDs, domain.LiveStatusLive, liveSince, domain.LiveStatusUpcoming, now.UTC(), upcomingUntil, liveSince); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0085_01.sql"), uniqueChannelIDs, domain.LiveStatusLive, liveSince, domain.LiveStatusUpcoming, now.UTC(), upcomingUntil, liveSince); err != nil {
 		return nil, err
 	}
 
@@ -129,14 +119,7 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 	liveSince := now.UTC().Add(-s.effectiveLiveRecentWindow())
 
 	var rows []string
-	if err := pgxscan.Select(ctx, s.pool, &rows, `
-		SELECT DISTINCT channel_id
-		FROM youtube_live_sessions
-		WHERE channel_id = ANY($1)
-		  AND status = $2
-		  AND last_seen_at >= $3
-		ORDER BY channel_id
-	`, uniqueChannelIDs, domain.LiveStatusLive, liveSince); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0132_02.sql"), uniqueChannelIDs, domain.LiveStatusLive, liveSince); err != nil {
 		return nil, err
 	}
 	return UniqueStrings(rows), nil
@@ -172,13 +155,7 @@ func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 	}
 
 	var rows []string
-	if err := pgxscan.Select(ctx, s.pool, &rows, `
-		SELECT DISTINCT stream_id
-		FROM alarm_dispatch_events
-		WHERE alarm_type = $1::alarm_type
-		  AND stream_id = ANY($2)
-		  AND created_at >= $3
-	`, persistedAlarmDispatchEventLiveType, streamIDs, since.UTC()); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0175_03.sql"), persistedAlarmDispatchEventLiveType, streamIDs, since.UTC()); err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
@@ -228,15 +205,7 @@ func (s *PgYouTubeLiveSessionSource) queryRecentlySentLiveStreamRooms(
 	since time.Time,
 ) ([]sentLiveStreamRoomRow, error) {
 	var rows []sentLiveStreamRoomRow
-	if err := pgxscan.Select(ctx, s.pool, &rows, `
-		SELECT e.stream_id, d.room_id
-		FROM alarm_dispatch_events AS e
-		JOIN alarm_dispatch_deliveries AS d ON d.event_id = e.id
-		WHERE e.alarm_type = $1::alarm_type
-		  AND e.stream_id = ANY($2)
-		  AND d.status = $3
-		  AND d.sent_at >= $4
-	`, persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), since.UTC()); err != nil {
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0231_04.sql"), persistedAlarmDispatchEventLiveType, streamIDs, string(dispatchoutbox.StatusSent), since.UTC()); err != nil {
 		return nil, err
 	}
 	return rows, nil

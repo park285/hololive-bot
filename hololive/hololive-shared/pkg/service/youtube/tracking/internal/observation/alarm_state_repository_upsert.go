@@ -81,11 +81,7 @@ func buildAlarmStateUpsertQuery(
 ) (result1 string, result2 []any) {
 	args := make([]any, 0, len(normalized)*11)
 	var sb strings.Builder
-	sb.WriteString(`
-        INSERT INTO youtube_community_shorts_alarm_states
-            (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
-        VALUES
-    `)
+	sb.WriteString(mustSQL("alarm_state_repository_upsert_0084_01.sql"))
 	for i, record := range normalized {
 		if i > 0 {
 			sb.WriteByte(',')
@@ -105,16 +101,7 @@ func buildAlarmStateUpsertQuery(
 			now,
 		)
 	}
-	sb.WriteString(`
-        ON CONFLICT (kind, post_id) DO UPDATE
-        SET content_id = EXCLUDED.content_id,
-            channel_id = EXCLUDED.channel_id,
-            actual_published_at = COALESCE(youtube_community_shorts_alarm_states.actual_published_at, EXCLUDED.actual_published_at),
-            detected_at = CASE
-                WHEN EXCLUDED.detected_at < youtube_community_shorts_alarm_states.detected_at THEN EXCLUDED.detected_at
-                ELSE youtube_community_shorts_alarm_states.detected_at
-            END,
-            authorized_at = `)
+	sb.WriteString(mustSQL("alarm_state_repository_upsert_0108_02.sql"))
 	sb.WriteString(finalAuthorizedExpr)
 	sb.WriteString(`,
             alarm_sent_at = `)

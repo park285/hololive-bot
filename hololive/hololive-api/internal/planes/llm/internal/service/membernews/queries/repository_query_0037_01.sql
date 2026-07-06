@@ -1,0 +1,1 @@
+SELECT EXISTS(SELECT 1 FROM member_news_subscriptions WHERE room_id = $1)

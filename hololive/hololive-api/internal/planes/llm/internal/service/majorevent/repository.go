@@ -37,12 +37,7 @@ type Repository struct {
 	logger *slog.Logger
 }
 
-const majorEventSelectColumns = `
-		SELECT id, external_id, type, title, link, COALESCE(description, '') as description, COALESCE(members, '{}') as members, pub_date,
-			   event_start_date, event_end_date, status, COALESCE(link_status, 'unchecked') as link_status, link_checked_at, notified_at, COALESCE(notified_week, '') as notified_week,
-			   COALESCE(notified_month, '') as notified_month, created_at, updated_at
-		FROM major_events
-	`
+var majorEventSelectColumns = mustSQL("repository_0040_01.sql")
 
 func (r *Repository) requirePool(action string) error {
 	if r == nil || r.pool == nil {
@@ -77,12 +72,7 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 		return err
 	}
 
-	query := `
-		INSERT INTO major_event_subscriptions (room_id, room_name)
-		VALUES ($1, $2)
-		ON CONFLICT (room_id) DO UPDATE
-		SET room_name = COALESCE(EXCLUDED.room_name, major_event_subscriptions.room_name)
-	`
+	query := mustSQL("repository_0080_02.sql")
 
 	_, err := r.pool.Exec(ctx, query, roomID, roomName)
 	if err != nil {
@@ -96,7 +86,7 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 		return err
 	}
 
-	query := `DELETE FROM major_event_subscriptions WHERE room_id = $1`
+	query := mustSQL("repository_0099_03.sql")
 	_, err := r.pool.Exec(ctx, query, roomID)
 	if err != nil {
 		return fmt.Errorf("unsubscribe major event: %w", err)
@@ -109,7 +99,7 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 		return false, err
 	}
 
-	query := `SELECT EXISTS(SELECT 1 FROM major_event_subscriptions WHERE room_id = $1)`
+	query := mustSQL("repository_0112_04.sql")
 
 	var exists bool
 	err := r.pool.QueryRow(ctx, query, roomID).Scan(&exists)
@@ -124,11 +114,7 @@ func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoo
 		return nil, err
 	}
 
-	query := `
-		SELECT id, room_id, COALESCE(room_name, '') as room_name, created_at
-		FROM major_event_subscriptions
-		ORDER BY created_at ASC
-	`
+	query := mustSQL("repository_0127_05.sql")
 
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {

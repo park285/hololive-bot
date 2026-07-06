@@ -104,8 +104,7 @@ func (r *Repository) listPostDeliveryTimelines(
 ) ([]PostDeliveryTimeline, error) {
 	var scanned []postDeliveryTimelineScanRow
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
-	query := `
-		SELECT ` + postDeliveryTimelineSelect() + `
+	query := mustSQL("timelines_query_0107_01.sql") + postDeliveryTimelineSelect() + `
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
 	`

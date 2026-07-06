@@ -92,10 +92,7 @@ func (p *ChannelStatsPoller) Poll(ctx context.Context, channelID string) error {
 	if p.db == nil {
 		return fmt.Errorf("failed to save channel stats snapshot: db is nil")
 	}
-	if _, err := p.db.Exec(ctx, `
-		INSERT INTO youtube_channel_stats_snapshots
-			(channel_id, captured_at, subscriber_count, view_count, video_count, joined_date, description, country, handle)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+	if _, err := p.db.Exec(ctx, mustSQL("channel_stats_poller_0095_01.sql"),
 		snapshot.ChannelID,
 		snapshot.CapturedAt,
 		snapshot.SubscriberCount,
@@ -194,10 +191,7 @@ func (p *ChannelStatsPoller) channelProfileNeedsUpdate(ctx context.Context, chan
 		ChannelID string    `db:"channel_id"`
 		UpdatedAt time.Time `db:"updated_at"`
 	}
-	err := pgxscan.Get(ctx, p.db, &profile, `
-		SELECT channel_id, updated_at
-		FROM youtube_channel_profiles
-		WHERE channel_id = $1`,
+	err := pgxscan.Get(ctx, p.db, &profile, mustSQL("channel_stats_poller_0197_02.sql"),
 		channelID,
 	)
 	if err == nil {
@@ -219,14 +213,7 @@ func (p *ChannelStatsPoller) upsertChannelProfile(ctx context.Context, channelID
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	if _, err := p.db.Exec(ctx, `
-		INSERT INTO youtube_channel_profiles
-			(channel_id, avatar, banner, updated_at)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (channel_id) DO UPDATE SET
-			avatar = excluded.avatar,
-			banner = excluded.banner,
-			updated_at = excluded.updated_at`,
+	if _, err := p.db.Exec(ctx, mustSQL("channel_stats_poller_0222_03.sql"),
 		newProfile.ChannelID,
 		newProfile.Avatar,
 		newProfile.Banner,

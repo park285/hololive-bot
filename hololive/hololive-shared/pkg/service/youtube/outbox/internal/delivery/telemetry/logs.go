@@ -25,8 +25,7 @@ func (r *Repository) ListCommunityShortsDeliveryLogsSince(
 
 	normalizedLimit := normalizeCommunityShortsDeliveryLogLimit(limit)
 	alarmTypes := []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts}
-	query := `
-		SELECT ` + deliveryTelemetrySelectColumns() + `
+	query := mustSQL("logs_0028_01.sql") + deliveryTelemetrySelectColumns() + `
 		FROM youtube_notification_delivery_telemetry
 		WHERE ` + deliverysql.DeliveryInClause("alarm_type", len(alarmTypes)) + `
 		  AND COALESCE(actual_published_at, detected_at, event_at) >= ?

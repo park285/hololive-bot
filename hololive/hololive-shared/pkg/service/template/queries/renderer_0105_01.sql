@@ -1,0 +1,1 @@
+SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id = $2

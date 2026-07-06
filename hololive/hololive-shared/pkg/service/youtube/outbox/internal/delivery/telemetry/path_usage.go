@@ -41,8 +41,7 @@ func (r *Repository) ListPostDeliveryPathUsageSince(ctx context.Context, since t
 
 	var scanned []postDeliveryPathUsageScanRow
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
-	query := `
-		SELECT ` + strings.Join([]string{
+	query := mustSQL("path_usage_0044_01.sql") + strings.Join([]string{
 		"track.kind AS outbox_kind",
 		"CASE track.kind WHEN 'COMMUNITY_POST' THEN 'COMMUNITY' WHEN 'NEW_SHORT' THEN 'SHORTS' ELSE 'LIVE' END AS alarm_type",
 		"track.channel_id AS channel_id",

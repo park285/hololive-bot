@@ -127,20 +127,7 @@ func loadCompletedNotificationTrackingSentAtRows(
 	var rows []completedNotificationSentAtRow
 	if err := dbx.SelectSQL(ctx, tx, &rows, "load completed notification tracking sent state", `
 		WITH input(kind, identity_key, requested_content_id, canonical_content_id, raw_content_id) AS (
-			VALUES `+values.String()+`
-		)
-		SELECT i.identity_key, MIN(t.alarm_sent_at) AS sent_at
-		FROM input i
-		JOIN youtube_content_alarm_tracking t
-		  ON t.kind = i.kind
-		 AND (
-		      t.canonical_content_id = i.canonical_content_id
-		      OR t.content_id = i.requested_content_id
-		      OR t.content_id = i.canonical_content_id
-		      OR (i.raw_content_id <> '' AND t.content_id = i.raw_content_id)
-		 )
-		WHERE t.alarm_sent_at IS NOT NULL
-		GROUP BY i.identity_key`, args...); err != nil {
+			VALUES `+values.String()+mustSQL("repository_batch_completed_state_0130_01.sql"), args...); err != nil {
 		return nil, fmt.Errorf("load completed notification tracking sent state: %w", err)
 	}
 	return rows, nil
@@ -171,14 +158,7 @@ func loadCompletedNotificationAlarmStateSentAtRows(
 	var rows []completedNotificationSentAtRow
 	if err := dbx.SelectSQL(ctx, tx, &rows, "load completed notification alarm state sent state", `
 		WITH input(kind, identity_key, post_id) AS (
-			VALUES `+values.String()+`
-		)
-		SELECT i.identity_key, MIN(s.alarm_sent_at) AS sent_at
-		FROM input i
-		JOIN youtube_community_shorts_alarm_states s
-		  ON s.kind = i.kind AND s.post_id = i.post_id
-		WHERE s.alarm_sent_at IS NOT NULL
-		GROUP BY i.identity_key`, args...); err != nil {
+			VALUES `+values.String()+mustSQL("repository_batch_completed_state_0174_02.sql"), args...); err != nil {
 		return nil, fmt.Errorf("load completed notification alarm state sent state: %w", err)
 	}
 	return rows, nil

@@ -185,16 +185,7 @@ func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID
 	queryCtx, cancel := withoutCancelPreserveDeadline(ctx, channelSubscriberLoadTimeout)
 	defer cancel()
 
-	rows, err := db.Query(queryCtx, `
-		SELECT id, room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at
-		FROM alarms
-		WHERE channel_id = $1
-		  AND (
-		        alarm_types @> ARRAY[$2::alarm_type]
-		     OR cardinality(alarm_types) = 0
-		  )
-		ORDER BY created_at ASC
-	`, channelID, string(alarmType))
+	rows, err := db.Query(queryCtx, mustSQL("targets_0188_01.sql"), channelID, string(alarmType))
 	if err != nil {
 		return nil, fmt.Errorf("load channel subscriber alarms: %w", err)
 	}

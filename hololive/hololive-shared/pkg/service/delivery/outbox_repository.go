@@ -105,12 +105,7 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 		args = append(args, item.Kind, item.PeriodKey, item.RoomID, contentID, string(payload))
 	}
 
-	query := `INSERT INTO notification_delivery_outbox (kind, period_key, room_id, content_id, payload, status, attempt_count, next_attempt_at)
-			VALUES ` + strings.Join(valueExprs, ",") + `
-			ON CONFLICT (kind, content_id) DO UPDATE
-			SET payload = EXCLUDED.payload, status = 'PENDING', attempt_count = 0, next_attempt_at = NOW(),
-			    locked_at = NULL, locked_by = NULL, lock_expires_at = NULL, sending_started_at = NULL, error = NULL
-			WHERE notification_delivery_outbox.status = 'FAILED'`
+	query := mustSQL("outbox_repository_0108_01.sql") + strings.Join(valueExprs, ",") + mustSQL("outbox_repository_0109_02.sql")
 
 	if _, err := r.pool.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("enqueue batch: %w", err)
@@ -126,26 +121,7 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, workerID string, ba
 	lockExpiry := now.Add(-lockTimeout)
 	leaseUntil := now.Add(lease)
 
-	query := `WITH claim AS (
-        SELECT id FROM notification_delivery_outbox
-        WHERE status = 'PENDING'
-          AND next_attempt_at <= $2
-          AND (
-                locked_at IS NULL
-             OR lock_expires_at < $2
-             OR (lock_expires_at IS NULL AND locked_at < $1)
-          )
-        ORDER BY next_attempt_at ASC, created_at ASC, id ASC LIMIT $3
-        FOR UPDATE SKIP LOCKED
-    )
-	    UPDATE notification_delivery_outbox o
-	       SET locked_at = $2,
-	           locked_by = $4,
-	           lock_expires_at = $5
-	    FROM claim WHERE o.id = claim.id
-	    RETURNING o.id, o.kind, o.period_key, o.room_id, o.content_id, o.payload,
-	              o.status, o.attempt_count, o.next_attempt_at, o.created_at,
-	              o.locked_at, o.sent_at, o.error`
+	query := mustSQL("outbox_repository_0129_03.sql")
 
 	rows, err := r.pool.Query(ctx, query, lockExpiry, now, batchSize, workerID, leaseUntil)
 	if err != nil {
@@ -169,9 +145,7 @@ func (r *OutboxRepository) MarkSending(ctx context.Context, id int64, workerID s
 	}
 	now := time.Now()
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE notification_delivery_outbox
-		 SET status = $1, sending_started_at = $2, lock_expires_at = $3
-		 WHERE id = $4 AND status = $5 AND locked_by = $6 AND lock_expires_at > $2`,
+		mustSQL("outbox_repository_0172_04.sql"),
 		deliveryStatusSending, now, now.Add(lease), id, domain.DeliveryStatusPending, workerID,
 	)
 	if err != nil {
@@ -186,13 +160,7 @@ func (r *OutboxRepository) MarkSent(ctx context.Context, id int64, workerID stri
 	}
 	now := time.Now()
 	tag, err := r.pool.Exec(ctx,
-		`UPDATE notification_delivery_outbox
-		 SET status = $1, sent_at = $2, locked_at = NULL, locked_by = NULL, lock_expires_at = NULL, sending_started_at = NULL, error = NULL
-		 WHERE id = $3 AND status IN ($4, $5)
-		   AND (
-		         (locked_by = $6 AND (status = $5 OR lock_expires_at > $2))
-		      OR (locked_by IS NULL AND status = $4 AND locked_at = $7)
-		   )`,
+		mustSQL("outbox_repository_0189_05.sql"),
 		domain.DeliveryStatusSent, now, id, domain.DeliveryStatusPending, deliveryStatusSending, workerID, lockedAt,
 	)
 	if err != nil {
@@ -206,20 +174,7 @@ func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, workerID st
 		return false, err
 	}
 	now := time.Now()
-	query := `UPDATE notification_delivery_outbox
-	            SET attempt_count = attempt_count + 1,
-	                error = $1,
-	                status = CASE WHEN attempt_count + 1 >= $2 THEN 'FAILED' ELSE 'PENDING' END,
-	                next_attempt_at = CASE WHEN attempt_count + 1 >= $2 THEN next_attempt_at ELSE $3 END,
-	                locked_at = NULL,
-	                locked_by = NULL,
-	                lock_expires_at = NULL,
-	                sending_started_at = NULL
-	            WHERE id = $4 AND status IN ($5, $6)
-	              AND (
-	                    (locked_by = $7 AND (status = $6 OR lock_expires_at > $8))
-	                 OR (locked_by IS NULL AND status = $5 AND locked_at = $9)
-	              )`
+	query := mustSQL("outbox_repository_0209_06.sql")
 
 	tag, err := r.pool.Exec(ctx, query, errMsg, maxRetries, now.Add(backoff), id, domain.DeliveryStatusPending, deliveryStatusSending, workerID, now, lockedAt)
 	if err != nil {
@@ -238,9 +193,7 @@ func (r *OutboxRepository) MarkSentBatch(ctx context.Context, ids []int64) error
 
 	now := time.Now()
 	_, err := r.pool.Exec(ctx,
-		`UPDATE notification_delivery_outbox
-		 SET status = $1, sent_at = $2, locked_at = NULL, locked_by = NULL, lock_expires_at = NULL, sending_started_at = NULL, error = NULL
-		 WHERE id = ANY($3) AND status = $4`,
+		mustSQL("outbox_repository_0241_07.sql"),
 		domain.DeliveryStatusSent, now, ids, domain.DeliveryStatusPending,
 	)
 	if err != nil {
@@ -258,9 +211,7 @@ func (r *OutboxRepository) MarkFailedBatch(ctx context.Context, ids []int64, rea
 	}
 
 	_, err := r.pool.Exec(ctx,
-		`UPDATE notification_delivery_outbox
-		 SET status = $1, error = $2, locked_at = NULL, locked_by = NULL, lock_expires_at = NULL, sending_started_at = NULL
-		 WHERE id = ANY($3) AND status = $4`,
+		mustSQL("outbox_repository_0261_08.sql"),
 		domain.DeliveryStatusFailed, reason, ids, domain.DeliveryStatusPending,
 	)
 	if err != nil {
@@ -276,8 +227,7 @@ func (r *OutboxRepository) Cleanup(ctx context.Context, olderThan time.Duration)
 	}
 	cutoff := time.Now().Add(-olderThan)
 	tag, err := r.pool.Exec(ctx,
-		`DELETE FROM notification_delivery_outbox
-		 WHERE status IN ($1, $2) AND COALESCE(sent_at, created_at) < $3`,
+		mustSQL("outbox_repository_0279_09.sql"),
 		domain.DeliveryStatusSent, domain.DeliveryStatusFailed, cutoff,
 	)
 	if err != nil {
@@ -298,22 +248,7 @@ func (r *OutboxRepository) QuarantineStaleSending(ctx context.Context, olderThan
 	}
 	cutoff := time.Now().Add(-olderThan)
 	tag, err := r.pool.Exec(ctx,
-		`WITH picked AS (
-			SELECT id FROM notification_delivery_outbox
-			WHERE status = $1 AND sending_started_at < $2
-			ORDER BY sending_started_at ASC, id ASC
-			LIMIT $3
-			FOR UPDATE SKIP LOCKED
-		)
-		UPDATE notification_delivery_outbox o
-		SET status = $4,
-		    locked_at = NULL,
-		    locked_by = NULL,
-		    lock_expires_at = NULL,
-		    sending_started_at = NULL,
-		    error = $5
-		FROM picked
-		WHERE o.id = picked.id`,
+		mustSQL("outbox_repository_0301_10.sql"),
 		deliveryStatusSending, cutoff, limit, domain.DeliveryStatusFailed, staleSendingFailureReason,
 	)
 	if err != nil {
@@ -327,7 +262,7 @@ func (r *OutboxRepository) CountByStatus(ctx context.Context, status domain.Deli
 		return 0, err
 	}
 	var count int64
-	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM notification_delivery_outbox WHERE status = $1`, status).Scan(&count)
+	err := r.pool.QueryRow(ctx, mustSQL("outbox_repository_0330_11.sql"), status).Scan(&count)
 	return count, err
 }
 

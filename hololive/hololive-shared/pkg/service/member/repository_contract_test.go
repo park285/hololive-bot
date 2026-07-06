@@ -49,7 +49,7 @@ func findRepositoryFunc(t *testing.T, file *ast.File, name string) *ast.FuncDecl
 	return nil
 }
 
-func queryLiteralFromFunc(t *testing.T, fn *ast.FuncDecl) string {
+func queryTextFromFunc(t *testing.T, fn *ast.FuncDecl) string {
 	t.Helper()
 
 	var query string
@@ -64,25 +64,50 @@ func queryLiteralFromFunc(t *testing.T, fn *ast.FuncDecl) string {
 			return true
 		}
 
-		lit, ok := assign.Rhs[0].(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
+		switch rhs := assign.Rhs[0].(type) {
+		case *ast.BasicLit:
+			if rhs.Kind != token.STRING {
+				return true
+			}
+
+			unquoted, err := strconv.Unquote(rhs.Value)
+			if err != nil {
+				t.Fatalf("unquote query literal: %v", err)
+			}
+			query = strings.ToLower(unquoted)
+		case *ast.CallExpr:
+			query = strings.ToLower(queryTextFromMustSQLCall(t, rhs))
+		default:
 			return true
 		}
-
-		unquoted, err := strconv.Unquote(lit.Value)
-		if err != nil {
-			t.Fatalf("unquote query literal: %v", err)
-		}
-
-		query = strings.ToLower(unquoted)
 		return false
 	})
 
 	if query == "" {
-		t.Fatal("query literal not found")
+		t.Fatal("query text not found")
 	}
 
 	return query
+}
+
+func queryTextFromMustSQLCall(t *testing.T, call *ast.CallExpr) string {
+	t.Helper()
+
+	fn, ok := call.Fun.(*ast.Ident)
+	if !ok || fn.Name != "mustSQL" || len(call.Args) != 1 {
+		return ""
+	}
+
+	lit, ok := call.Args[0].(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return ""
+	}
+
+	name, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		t.Fatalf("unquote query asset name: %v", err)
+	}
+	return mustSQL(name)
 }
 
 func paramNames(fn *ast.FuncDecl) []string {
@@ -187,7 +212,7 @@ func TestRepositorySource_GetAllMembersQuerySelectsPhoto(t *testing.T) {
 	t.Parallel()
 
 	file := loadRepositoryAST(t)
-	query := queryLiteralFromFunc(t, findRepositoryFunc(t, file, "GetAllMembers"))
+	query := queryTextFromFunc(t, findRepositoryFunc(t, file, "GetAllMembers"))
 
 	if !strings.Contains(query, "photo") {
 		t.Fatalf("GetAllMembers query must select photo column, query=%q", query)
@@ -208,7 +233,7 @@ func TestRepositorySource_MemberQueriesSelectShortKoreanName(t *testing.T) {
 		"FindAllByName",
 		"FindByNameAndOrg",
 	} {
-		query := queryLiteralFromFunc(t, findRepositoryFunc(t, file, funcName))
+		query := queryTextFromFunc(t, findRepositoryFunc(t, file, funcName))
 		if !strings.Contains(query, "short_korean_name") {
 			t.Fatalf("%s query must select short_korean_name column, query=%q", funcName, query)
 		}

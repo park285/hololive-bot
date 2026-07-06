@@ -57,8 +57,7 @@ func (r *Repository) loadBackfillCandidates(
 	var candidates []deliveryTelemetryBackfillCandidate
 	postKinds := []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
 	retryStatuses := []domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed, domain.OutboxStatus("QUARANTINED")}
-	query := `
-		SELECT ` + strings.Join([]string{
+	query := mustSQL("backfill_0060_01.sql") + strings.Join([]string{
 		"d.id AS delivery_id",
 		"d.outbox_id AS outbox_id",
 		"d.room_id AS room_id",

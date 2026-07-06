@@ -34,20 +34,7 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType, alia
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
 
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE members
-		SET aliases =
-			jsonb_set(
-				COALESCE(aliases, '{}'::jsonb),
-				ARRAY[$2]::text[],
-				CASE
-					WHEN jsonb_exists(COALESCE(aliases -> $2, '[]'::jsonb), $3) THEN COALESCE(aliases -> $2, '[]'::jsonb)
-					ELSE COALESCE(aliases -> $2, '[]'::jsonb) || jsonb_build_array($3::text)
-				END,
-				true
-			)
-		WHERE id = $1
-	`, memberID, aliasType, alias)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0037_01.sql"), memberID, aliasType, alias)
 	if err != nil {
 		return fmt.Errorf("failed to add alias: %w", err)
 	}
@@ -63,24 +50,7 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
 
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE members
-		SET aliases =
-			jsonb_set(
-				COALESCE(aliases, '{}'::jsonb),
-				ARRAY[$2]::text[],
-				COALESCE(
-					(
-						SELECT jsonb_agg(elem)
-						FROM jsonb_array_elements(COALESCE(aliases -> $2, '[]'::jsonb)) AS elem
-						WHERE elem <> to_jsonb($3::text)
-					),
-					'[]'::jsonb
-				),
-				true
-			)
-		WHERE id = $1
-	`, memberID, aliasType, alias)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0066_02.sql"), memberID, aliasType, alias)
 	if err != nil {
 		return fmt.Errorf("failed to remove alias: %w", err)
 	}
@@ -92,12 +62,7 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 }
 
 func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduated bool) error {
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE members
-		SET is_graduated = $2,
-			status = CASE WHEN $2 THEN 'graduated' ELSE 'active' END
-		WHERE id = $1
-	`, memberID, isGraduated)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0095_03.sql"), memberID, isGraduated)
 	if err != nil {
 		return fmt.Errorf("failed to update graduation status: %w", err)
 	}
@@ -108,11 +73,7 @@ func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduate
 }
 
 func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelID string) error {
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE members
-		SET channel_id = $2
-		WHERE id = $1
-	`, memberID, channelID)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0111_04.sql"), memberID, channelID)
 	if err != nil {
 		return fmt.Errorf("failed to update channel ID: %w", err)
 	}
@@ -123,11 +84,7 @@ func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelI
 }
 
 func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name string) error {
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE members
-		SET english_name = $2
-		WHERE id = $1
-	`, memberID, name)
+	tag, err := r.pool.Exec(ctx, mustSQL("repository_mutation_0126_05.sql"), memberID, name)
 	if err != nil {
 		return fmt.Errorf("failed to update member name: %w", err)
 	}
@@ -172,13 +129,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 		status = "graduated"
 	}
 
-	_, err = r.pool.Exec(ctx, `
-		INSERT INTO members (
-			slug, channel_id, english_name, japanese_name, korean_name,
-			status, is_graduated, aliases, org, suborg, sync_source
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, NULL, $10)
-	`, slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, status, member.IsGraduated, string(aliasesJSON), org, syncSource)
+	_, err = r.pool.Exec(ctx, mustSQL("repository_mutation_0175_06.sql"), slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, status, member.IsGraduated, string(aliasesJSON), org, syncSource)
 	if err != nil {
 		return fmt.Errorf("failed to create member: %w", err)
 	}

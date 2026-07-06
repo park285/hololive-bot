@@ -17,7 +17,7 @@ import (
 
 const AdvisoryLockKey int64 = 0x484F4C4F41504901
 
-var createIndexConcurrentlyPattern = regexp.MustCompile(`(?is)\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b`)
+var createIndexConcurrentlyPattern = regexp.MustCompile(mustPattern("create_index_concurrently.re"))
 
 type Config struct {
 	BaselineThrough string
@@ -171,7 +171,7 @@ func containsEntry(entries []string, target string) bool {
 
 func ledgerCount(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 	var count int64
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil {
+	if err := pool.QueryRow(ctx, mustSQL("ledger_count.sql")).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count schema_migrations: %w", err)
 	}
 	return count, nil
@@ -179,7 +179,7 @@ func ledgerCount(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 
 func baseSchemaPresent(ctx context.Context, pool *pgxpool.Pool) (bool, error) {
 	var present bool
-	query := "SELECT to_regclass('public.members') IS NOT NULL AND to_regclass('public.alarms') IS NOT NULL"
+	query := mustSQL("base_schema_present.sql")
 	if err := pool.QueryRow(ctx, query).Scan(&present); err != nil {
 		return false, fmt.Errorf("detect base schema: %w", err)
 	}
@@ -239,7 +239,7 @@ func dropInvalidIndexes(ctx context.Context, pool *pgxpool.Pool) error {
 
 	errs := make([]error, 0, len(indexes))
 	for _, name := range indexes {
-		if _, dropErr := pool.Exec(ctx, "DROP INDEX IF EXISTS "+name); dropErr != nil {
+		if _, dropErr := pool.Exec(ctx, fmt.Sprintf(mustSQL("drop_invalid_index.sql.tpl"), name)); dropErr != nil {
 			errs = append(errs, fmt.Errorf("drop invalid index %s: %w", name, dropErr))
 		}
 	}
@@ -250,13 +250,7 @@ func dropInvalidIndexes(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 func invalidIndexes(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT format('%I.%I', n.nspname, c.relname)
-		FROM pg_index i
-		JOIN pg_class c ON c.oid = i.indexrelid
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE NOT i.indisvalid
-		ORDER BY 1`)
+	rows, err := pool.Query(ctx, mustSQL("invalid_indexes.sql"))
 	if err != nil {
 		return nil, fmt.Errorf("query invalid indexes: %w", err)
 	}
@@ -290,12 +284,12 @@ type pgxAdvisoryLockSession struct {
 
 func (s pgxAdvisoryLockSession) TryAdvisoryLock(ctx context.Context, key int64) (bool, error) {
 	var acquired bool
-	err := s.conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", key).Scan(&acquired)
+	err := s.conn.QueryRow(ctx, mustSQL("try_advisory_lock.sql"), key).Scan(&acquired)
 	return acquired, err
 }
 
 func (s pgxAdvisoryLockSession) AdvisoryUnlock(ctx context.Context, key int64) (bool, error) {
 	var released bool
-	err := s.conn.QueryRow(ctx, "SELECT pg_advisory_unlock($1)", key).Scan(&released)
+	err := s.conn.QueryRow(ctx, mustSQL("advisory_unlock.sql"), key).Scan(&released)
 	return released, err
 }

@@ -102,14 +102,7 @@ func (r *Repository) updatePostLatencyClassification(
 	updatedAt time.Time,
 ) error {
 	status, delaySource, internalDelayCause := normalizedPostLatencyClassificationPersistenceValues(row)
-	_, err := r.db.Exec(ctx, `
-		UPDATE youtube_content_alarm_tracking
-		SET latency_classification_status = $1,
-		    delay_source = $2,
-		    internal_delay_cause = $3,
-		    updated_at = $4
-		WHERE kind = $5 AND content_id = $6
-	`, string(status), string(delaySource), string(internalDelayCause), updatedAt, row.OutboxKind, contentID)
+	_, err := r.db.Exec(ctx, mustSQL("timelines_classification_0105_01.sql"), string(status), string(delaySource), string(internalDelayCause), updatedAt, row.OutboxKind, contentID)
 	if err != nil {
 		return fmt.Errorf("update post latency classification: %w", err)
 	}

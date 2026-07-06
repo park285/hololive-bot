@@ -41,25 +41,7 @@ func (r *alarmStateRepository) insertAlarmStateClaim(
 	now := yttimestamp.Normalize(time.Now())
 	var returnedAuthorizedAt time.Time
 	var returnedAlarmSentAt pgtype.Timestamptz
-	err := r.db.QueryRow(ctx, `
-		INSERT INTO youtube_community_shorts_alarm_states
-		    (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		ON CONFLICT (kind, post_id) DO UPDATE
-		SET content_id = EXCLUDED.content_id,
-		    channel_id = EXCLUDED.channel_id,
-		    actual_published_at = COALESCE(youtube_community_shorts_alarm_states.actual_published_at, EXCLUDED.actual_published_at),
-		    detected_at = CASE
-		        WHEN EXCLUDED.detected_at < youtube_community_shorts_alarm_states.detected_at THEN EXCLUDED.detected_at
-		        ELSE youtube_community_shorts_alarm_states.detected_at
-		    END,
-		    authorized_at = EXCLUDED.authorized_at,
-		    delivery_status = EXCLUDED.delivery_status,
-		    updated_at = EXCLUDED.updated_at
-		WHERE youtube_community_shorts_alarm_states.authorized_at IS NULL
-		  AND youtube_community_shorts_alarm_states.alarm_sent_at IS NULL
-		RETURNING authorized_at, alarm_sent_at
-	`,
+	err := r.db.QueryRow(ctx, mustSQL("alarm_state_repository_claim_0044_01.sql"),
 		normalizedRecord.Kind,
 		normalizedRecord.PostID,
 		normalizedRecord.ContentID,
@@ -106,15 +88,7 @@ func (r *alarmStateRepository) ReleaseAlarmStateClaim(ctx context.Context, kind 
 	}
 
 	updatedAt := yttimestamp.Normalize(time.Now())
-	rowsAffected, err := dbx.ExecSQL(ctx, r.db, "release alarm state claim: update row", `
-		UPDATE youtube_community_shorts_alarm_states
-		SET authorized_at = NULL,
-		    delivery_status = ?,
-		    updated_at = ?
-		WHERE kind = ? AND post_id = ?
-		  AND alarm_sent_at IS NULL
-		  AND authorized_at = ?
-	`, domain.YouTubeCommunityShortsAlarmStateStatusDetected, updatedAt, normalizedKind, normalizedPostID, normalizeDatabaseTimestamp(authorizedAt))
+	rowsAffected, err := dbx.ExecSQL(ctx, r.db, "release alarm state claim: update row", mustSQL("alarm_state_repository_claim_0109_02.sql"), domain.YouTubeCommunityShortsAlarmStateStatusDetected, updatedAt, normalizedKind, normalizedPostID, normalizeDatabaseTimestamp(authorizedAt))
 	if err != nil {
 		return false, err
 	}
