@@ -17,12 +17,12 @@ This change adds bot-side features only. It does not add admin dashboard behavio
 YouTube ended/live session rows do not contain a stable first-class "broadcast type" field. The implementation therefore uses the best observed source first:
 
 1. `topic_id` from the live stream payload when available.
-2. Title-based classification when the topic is missing or unknown.
+2. Title-based classification from the embedded rule file when the topic is missing or unknown.
 3. `unknown` when neither source gives enough evidence.
 
-The stored type is not persisted as a separate enum because the classification rules are heuristic and may improve over time. The repository returns both the computed type and the source (`topic`, `title`, or `unknown`) so reviewers can see which evidence drove a result.
+The stored type is not persisted as a separate enum because the classification rules are heuristic and may improve over time. The rule data is versioned in `broadcast_type_rules.json` and embedded at build time so classification is reviewable without adding runtime network/config dependencies. The repository returns both the computed type and the source (`topic`, `title`, or `unknown`) so reviewers can see which evidence drove a result.
 
-Topic classification is preferred for known non-game topics. Strong title signals such as members-only, watchalong, singing, ASMR, event, and news can override `game` or `other` topics because those cases represent access or format information that often matters more than the game category. Generic `talk` does not override a known game topic because game streams often contain talk wording in the title.
+Topic classification is preferred for known non-game topics. Strong title signals such as members-only, watchalong, singing, ASMR, event, horse racing, and news can override `game` or `other` topics because those cases represent access or format information that often matters more than the game category. Generic `talk` does not override a known game topic because game streams often contain talk wording in the title.
 
 The history repository uses keyset pagination over the whole requested date/member window. This is intentional: filtering by computed type after a single SQL `LIMIT` can miss valid broadcasts if the latest page is filled with non-matching rows. The command still limits the final response size to `maxBroadcastHistoryLimit`.
 
@@ -37,12 +37,13 @@ Representative forms:
 - `!방송이력`
 - `!방송이력 페코라`
 - `!방송이력 카테고리:게임 멤버:페코라 7일`
+- `!방송이력 경마 30일`
 - `!방송이력 type:멤버십 14일 10`
 - `!방송이력 topic:Forza all`
 - `!방송이력 썸네일 AqxEw3kXcgU`
 - `!썸네일 AqxEw3kXcgU`
 
-Supported category labels include: `게임`, `잡담`, `노래`, `ASMR`, `멤버십`, `멤버`, `이벤트`, `동시시청`, `뉴스`, `기타`, `미분류` and English aliases.
+Supported category labels include: `게임`, `잡담`, `노래`, `ASMR`, `멤버십`, `멤버`, `이벤트`, `경마`, `동시시청`, `뉴스`, `기타`, `미분류` and English aliases.
 
 ## Implementation files to review
 
@@ -51,6 +52,7 @@ Bot command and parser:
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_broadcast_history.go`
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/broadcast_history_repository.go`
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/broadcast_type.go`
+- `hololive/hololive-api/internal/planes/bot/internal/command/handlers/broadcast_type_rules.json`
 - `hololive/hololive-api/internal/planes/bot/internal/command/handlers/broadcast_thumbnail_downloader.go`
 - `hololive/hololive-api/internal/planes/bot/internal/adapter/messaging/message_parser_broadcast.go`
 - `hololive/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter/formatter_broadcast_history.go`
@@ -98,6 +100,7 @@ Resolution in this working tree:
 - Replaced bounded prefetch with keyset pagination and added `TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTypeFilter`.
 - Added bare `멤버` parser support and `TestParseMessage_BroadcastHistoryMembershipAlias`.
 - Added strong title override policy and source tests for members-only/watchalong while preserving game-topic priority over generic talk.
+- Moved broadcast type rules into embedded `broadcast_type_rules.json`, added `경마`/`horse_racing`, and covered JRA G1/J-G1 race-name classification without matching bare `G1` or `的中` alone.
 - Removed the one-shot backfill migration and kept query-time event fallback for historical rows.
 
 ## Read-only production data evidence
@@ -160,6 +163,7 @@ curl -fsSI --max-time 10 https://i.ytimg.com/vi/AqxEw3kXcgU/maxresdefault.jpg
 ## Known limits
 
 - Type classification is heuristic. It is grounded in observed topics and title markers, not a YouTube-authoritative type taxonomy.
+- Horse-racing classification uses concrete race/project names (`大阪杯`, `有馬記念`, `ホロ的中バトル`, etc.) and the general `競馬` marker; generic `G1` or `的中` alone is intentionally not enough evidence.
 - Historical `topic_id` coverage is limited to rows that have compatible alarm event payloads. Future rows improve because the poller now persists metadata directly.
 - No live deploy, restart, production schema migration, or production data mutation was performed in this task.
 - A thumbnail can still be unavailable at `maxresdefault.jpg`; fallback candidates handle that case.
