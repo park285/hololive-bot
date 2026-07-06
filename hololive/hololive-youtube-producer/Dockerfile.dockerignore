@@ -1,9 +1,5 @@
 *
 
-!go.mod
-!go.work
-!go.work.sum
-
 !scripts/
 !scripts/deploy/
 !scripts/deploy/ap-rsync-files.txt

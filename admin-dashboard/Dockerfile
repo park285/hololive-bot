@@ -17,7 +17,7 @@ ARG GO_VERSION=1.26
 ARG ALPINE_VERSION=3.23
 ARG NODE_VERSION=22
 
-FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS frontend-builder
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e AS frontend-builder
 WORKDIR /app/frontend
 
 COPY admin-dashboard/frontend/package.json admin-dashboard/frontend/package-lock.json ./
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY admin-dashboard/frontend/ .
 RUN npm run build
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:18b460dd17542c2ba43299a633cf6ebfc1115101509531471d7cfce1019af083 AS builder
 
 ARG VERSION=dev
 ARG TARGETOS
@@ -41,7 +41,6 @@ ENV GOWORK=off
 
 WORKDIR /workspace/hololive-bot
 
-COPY go.mod go.work go.work.sum ./
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
 COPY admin-dashboard/backend/go.mod admin-dashboard/backend/go.sum ./admin-dashboard/backend/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/

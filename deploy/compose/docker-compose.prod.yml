@@ -329,6 +329,7 @@ services:
       - hololive-net
 
   hololive-db-migrate:
+    <<: *security-hardening
     image: hololive-api:prod
     build:
       <<: *go-build-base
@@ -360,8 +361,11 @@ services:
       holo-postgres:
         condition: service_healthy
     logging: *default-logging
-    security_opt:
-      - no-new-privileges:true
+    # 마이그레이션 도중 OOM-kill을 피하려 memory 상한은 두지 않고 pids만 제한(fork 방어).
+    deploy:
+      resources:
+        limits:
+          pids: 256
     networks:
       - hololive-net
 
@@ -592,6 +596,8 @@ services:
       args:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
     container_name: admin-dashboard
+    # admin의 내부 graceful shutdown 예산(20s, app.go ShutdownTimeout)이 Docker 기본 10s에 잘리지 않도록 45s로 상향.
+    stop_grace_period: 45s
     # 시크릿(ADMIN_PASS_HASH/SESSION_SECRET/VALKEY_URL/HOLO_BOT_API_KEY)은 다른 앱과 동일하게
     # /run 하위 env_file로 이동 — 호스트 .env와 `compose config` 렌더 결과에서 시크릿을 제거한다.
     # (docker inspect의 Config.Env 노출까지 없애려면 앱의 *_FILE 로딩 지원이 필요 — 후속 과제)

@@ -96,6 +96,23 @@ assert_present "${root_list}" "/ctx/admin-dashboard/backend/config/loader.go" "r
 
 pass "hb03: admin backend secrets excluded from producer + api + root build context, sources retained where required (dd36cc1a, 3559884b)"
 
+alarm_ctx="${TMP_DIR}/alarm"
+build_fixture "${alarm_ctx}" "${ROOT_DIR}/hololive/hololive-alarm-worker/Dockerfile.dockerignore"
+alarm_list="$(context_filelist "${alarm_ctx}")" || fail "hb03: alarm-worker fixture build failed"
+
+assert_admin_backend_sensitive_excluded "${alarm_list}" "alarm-worker"
+assert_excluded "${alarm_list}" "/ctx/admin-dashboard/backend/config/loader.go" "alarm-worker admin source (module-standalone build)"
+
+admin_ctx="${TMP_DIR}/admin"
+build_fixture "${admin_ctx}" "${ROOT_DIR}/admin-dashboard/Dockerfile.dockerignore"
+admin_list="$(context_filelist "${admin_ctx}")" || fail "hb03: admin-dashboard fixture build failed"
+
+assert_admin_backend_sensitive_excluded "${admin_list}" "admin-dashboard"
+assert_present "${admin_list}" "/ctx/admin-dashboard/backend/config/loader.go" "admin-dashboard backend source (own context)"
+assert_excluded "${admin_list}" "/ctx/hololive/hololive-api/internal/source.go" "admin-dashboard non-dependency module (hololive-api)"
+
+pass "hb03: alarm-worker + admin-dashboard Dockerfile.dockerignore exclude admin backend secrets; admin retains its own backend source, drops non-dependency modules"
+
 named_ctx="${TMP_DIR}/named"
 shared_ctx="${TMP_DIR}/shared"
 mkdir -p "${named_ctx}" "${shared_ctx}/pkg" "${shared_ctx}/artifacts"

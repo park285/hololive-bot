@@ -16,7 +16,7 @@
 ARG GO_VERSION=1.26
 ARG ALPINE_VERSION=3.23
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
+FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:18b460dd17542c2ba43299a633cf6ebfc1115101509531471d7cfce1019af083 AS builder
 
 ARG VERSION=dev
 ARG TARGETOS
@@ -36,7 +36,6 @@ ENV GOWORK=off
 
 WORKDIR /workspace/hololive-bot
 
-COPY go.mod go.work go.work.sum ./
 COPY scripts/deploy/ap-rsync-files.txt ./scripts/deploy/ap-rsync-files.txt
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
