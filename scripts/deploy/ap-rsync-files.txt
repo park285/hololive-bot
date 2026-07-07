@@ -60,6 +60,7 @@ hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_com
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registration_spec.go
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/api.go
+hololive/hololive-youtube-producer/internal/runtime/polltarget/sql.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/types.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_target_refresh.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_target_refresh_metrics.go
@@ -73,6 +74,7 @@ hololive/hololive-youtube-producer/internal/runtime/polltarget/youtube_poll_targ
 hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_budget_admission.go
 hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_runtime_readiness.go
 hololive/hololive-youtube-producer/internal/runtime/retention/retention.go
+hololive/hololive-youtube-producer/internal/runtime/retention/sql.go
 hololive/hololive-youtube-producer/internal/runtime/runtime.go
 hololive/hololive-youtube-producer/internal/communityshorts/constants.go
 hololive/hololive-youtube-producer/internal/communityshorts/operational_channels.go
@@ -320,6 +322,7 @@ hololive/hololive-shared/pkg/providers/types.go
 hololive/hololive-shared/pkg/providers/youtube_producer_rate_limiter_provider.go
 hololive/hololive-shared/pkg/providers/youtube_providers.go
 hololive/hololive-shared/pkg/repository/template_repository.go
+hololive/hololive-shared/pkg/repository/sql.go
 hololive/hololive-shared/pkg/server/internal/httpserver/channel_ids.go
 hololive/hololive-shared/pkg/server/internal/httpserver/h2c.go
 hololive/hololive-shared/pkg/server/internal/httpserver/h3.go
@@ -352,6 +355,7 @@ hololive/hololive-shared/pkg/service/acl/service_store.go
 hololive/hololive-shared/pkg/service/acl/service_storage.go
 hololive/hololive-shared/pkg/service/activity/logger.go
 hololive/hololive-shared/pkg/service/alarm/api.go
+hololive/hololive-shared/pkg/service/alarm/sql.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm_data.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm_write.go
@@ -433,6 +437,7 @@ hololive/hololive-shared/pkg/service/delivery/runtime_iris_base_url_resolve.go
 hololive/hololive-shared/pkg/service/delivery/runtime_iris_base_url_validation.go
 hololive/hololive-shared/pkg/service/delivery/runtime_iris_client.go
 hololive/hololive-shared/pkg/service/delivery/runtime_iris_h3_dial_guard.go
+hololive/hololive-shared/pkg/service/delivery/sql.go
 hololive/hololive-shared/pkg/service/fallback/executor.go
 hololive/hololive-shared/pkg/service/fallback/metrics.go
 hololive/hololive-shared/pkg/service/fallback/secondary.go
@@ -481,7 +486,9 @@ hololive/hololive-shared/pkg/service/member/repository_query.go
 hololive/hololive-shared/pkg/service/member/repository_celebration.go
 hololive/hololive-shared/pkg/service/member/repository_scan.go
 hololive/hololive-shared/pkg/service/member/rows_collect.go
+hololive/hololive-shared/pkg/service/member/sql.go
 hololive/hololive-shared/pkg/service/messagestrings/store.go
+hololive/hololive-shared/pkg/service/messagestrings/sql.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_admin.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_cache.go
 hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_cache_next_stream.go
@@ -509,6 +516,7 @@ hololive/hololive-shared/pkg/service/settings/service.go
 hololive/hololive-shared/pkg/service/template/admin_service.go
 hololive/hololive-shared/pkg/service/template/renderer.go
 hololive/hololive-shared/pkg/service/template/renderer_cache.go
+hololive/hololive-shared/pkg/service/template/sql.go
 hololive/hololive-shared/pkg/service/twitch/client.go
 hololive/hololive-shared/pkg/service/twitch/client_streams.go
 hololive/hololive-shared/pkg/service/twitch/types.go
@@ -561,6 +569,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/m
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/metrics_recorder.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/outbox_grouper.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/send_engine.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/sql.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/status_updater.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/telemetry_processor.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate/config.go
@@ -573,6 +582,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/deli
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/delivery_repository.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/delivery_repository_lock.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/delivery_repository_tracking.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/sql.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/alarm_timing.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/backfill.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/channel_post_summaries.go
@@ -587,6 +597,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/post_send_counts.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/repository.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/scan.go
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/sql.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/timeline_aliases.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/timelines_classification.go
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/timelines_query.go
@@ -597,6 +608,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/timeline/t
 hololive/hololive-shared/pkg/service/youtube/outbox/doc.go
 hololive/hololive-shared/pkg/service/youtube/outbox/outbox.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/channel_stats_poller.go
+hololive/hololive-shared/pkg/service/youtube/poller/internal/sql.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/cleaner.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/community_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/community_shorts_detection.go
@@ -611,6 +623,7 @@ hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/pgx_helpers
 hololive/hololive-shared/pkg/service/youtube/poller/internal/metrics.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler/rate_limiter.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repository_batch.go
+hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/sql.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/latency_persister.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repository_batch_alarm_state.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/repository_batch_completed_finalize.go
@@ -635,6 +648,7 @@ hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler/scheduler
 hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler/scheduler_timing.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler/scheduler_worker.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/shorts_poller.go
+hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/sql.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/videos_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/poller.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/browserfetcher/fetcher.go
@@ -701,6 +715,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repository_delivery_state_bulk.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repository_identity.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repository_pgx_helpers.go
+hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/sql.go
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repository_source_posts.go
 hololive/hololive-shared/pkg/service/youtube/tracking/tracking.go
 hololive/hololive-shared/pkg/templateview/major_event.go
