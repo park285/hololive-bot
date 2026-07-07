@@ -185,7 +185,7 @@ func newSignedBotWebhookTestRequest(ctx context.Context, token, messageID, body 
 	return request
 }
 
-func signBotWebhookTestRequest(request *http.Request, secret string, body string) {
+func signBotWebhookTestRequest(request *http.Request, secret, body string) {
 	timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
 	nonce := fmt.Sprintf("hololive-test-%d", time.Now().UnixNano())
 	bodyDigest := sha256.Sum256([]byte(body))
