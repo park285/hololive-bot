@@ -65,7 +65,6 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 			EventKey:        eventKey,
 			RoomID:          input.RoomID,
 			DedupeKey:       dedupeKey,
-			LegacyDedupeKey: BuildLegacyDedupeKeyFromEnvelope(envelope),
 			ClaimKeys:       envelope.ClaimKeys,
 			DeliveryContext: deliveryContext,
 			Status:          status,

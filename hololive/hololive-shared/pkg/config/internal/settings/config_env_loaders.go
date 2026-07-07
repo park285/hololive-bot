@@ -243,7 +243,7 @@ func loadWebhookConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) Webhoo
 		MaxBodyBytes:   profile.Receive.MaxBodyBytes,
 		DedupTTL:       profile.Receive.DedupTTL,
 		DedupTimeout:   profile.Receive.DedupTimeout,
-		RequireHMAC:    sharedenv.Bool("IRIS_WEBHOOK_REQUIRE_HMAC", false),
+		RequireHMAC:    sharedenv.Bool("IRIS_WEBHOOK_REQUIRE_HMAC", true),
 	}
 }
 

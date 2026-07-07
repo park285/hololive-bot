@@ -22,6 +22,10 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -79,12 +83,12 @@ func TestBuildBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *testing.T
 		require.NoError(t, handler.Close())
 	})
 
-	malformedRequest := newBotWebhookTestRequest(t.Context(), token, messageID, "{invalid-json")
+	malformedRequest := newSignedBotWebhookTestRequest(t.Context(), token, messageID, "{invalid-json")
 	malformedResponse := httptest.NewRecorder()
 	handler.ServeHTTP(malformedResponse, malformedRequest)
 	assert.Equal(t, http.StatusBadRequest, malformedResponse.Code)
 
-	validRequest := newBotWebhookTestRequest(
+	validRequest := newSignedBotWebhookTestRequest(
 		t.Context(),
 		token,
 		messageID,
@@ -172,4 +176,26 @@ func newBotWebhookTestRequest(ctx context.Context, token, messageID, body string
 	request.Header.Set(webhook.HeaderIrisMessageID, messageID)
 
 	return request
+}
+
+func newSignedBotWebhookTestRequest(ctx context.Context, token, messageID, body string) *http.Request {
+	request := newBotWebhookTestRequest(ctx, token, messageID, body)
+	signBotWebhookTestRequest(request, token, body)
+
+	return request
+}
+
+func signBotWebhookTestRequest(request *http.Request, secret string, body string) {
+	timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
+	nonce := fmt.Sprintf("hololive-test-%d", time.Now().UnixNano())
+	bodyDigest := sha256.Sum256([]byte(body))
+	bodySHA256 := hex.EncodeToString(bodyDigest[:])
+	canonical := strings.Join([]string{request.Method, request.URL.RequestURI(), timestamp, nonce, bodySHA256}, "\n")
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(canonical))
+
+	request.Header.Set(webhook.HeaderIrisTimestamp, timestamp)
+	request.Header.Set(webhook.HeaderIrisNonce, nonce)
+	request.Header.Set(webhook.HeaderIrisBodySHA256, bodySHA256)
+	request.Header.Set(webhook.HeaderIrisSignature, hex.EncodeToString(mac.Sum(nil)))
 }

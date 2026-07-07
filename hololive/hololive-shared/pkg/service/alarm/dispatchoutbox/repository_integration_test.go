@@ -523,7 +523,7 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 	}
 }
 
-func TestPgxRepositoryInsertBatch_InsertsV2WhenOnlyLegacyDedupeKeyExists(t *testing.T) {
+func TestPgxRepositoryInsertBatch_DoesNotCompareLegacyDedupeKey(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
@@ -577,7 +577,7 @@ func TestPgxRepositoryInsertBatch_InsertsV2WhenOnlyLegacyDedupeKeyExists(t *test
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
 	if result.InsertedDeliveries != 1 || result.DuplicateDeliveries != 0 {
-		t.Fatalf("InsertBatch() result = %+v, want v2 insert despite legacy dedupe row", result)
+		t.Fatalf("InsertBatch() result = %+v, want v2 insert without legacy comparison", result)
 	}
 	var deliveryCount int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {

@@ -23,6 +23,7 @@ const (
 
 type runtimeIrisBaseURLValidationOptions struct {
 	allowUnconfiguredHost bool
+	transport             string
 	warnUnvalidatedHost   func(string)
 }
 
@@ -30,9 +31,10 @@ func validateRuntimeIrisBaseURL(raw string) (string, error) {
 	return validateRuntimeIrisBaseURLWithOptions(raw, runtimeIrisBaseURLValidationOptions{})
 }
 
-func validateRuntimeIrisBaseURLFileOverride(raw string, warnUnvalidatedHost func(string)) (string, error) {
+func validateRuntimeIrisBaseURLFileOverride(raw, transport string, warnUnvalidatedHost func(string)) (string, error) {
 	return validateRuntimeIrisBaseURLWithOptions(raw, runtimeIrisBaseURLValidationOptions{
 		allowUnconfiguredHost: true,
+		transport:             transport,
 		warnUnvalidatedHost:   warnUnvalidatedHost,
 	})
 }
@@ -48,7 +50,7 @@ func validateRuntimeIrisBaseURLWithOptions(raw string, opts runtimeIrisBaseURLVa
 	if err := validateRuntimeIrisBaseURLShape(parsed, opts); err != nil {
 		return "", err
 	}
-	if err := validateRuntimeIrisTransportScheme(normalizeRuntimeIrisTransport(os.Getenv("IRIS_TRANSPORT")), parsed.Scheme); err != nil {
+	if err := validateRuntimeIrisTransportScheme(runtimeIrisValidationTransport(opts.transport), parsed); err != nil {
 		return "", err
 	}
 
@@ -69,8 +71,8 @@ func parseRuntimeIrisBaseURL(raw string) (string, *url.URL, error) {
 }
 
 func validateRuntimeIrisBaseURLScheme(parsed *url.URL) error {
-	if parsed.Scheme != "https" {
-		return fmt.Errorf("IRIS_BASE_URL_FILE requires https URL, got %s", parsed.Scheme)
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("unsupported IRIS_BASE_URL_FILE URL scheme: %q", parsed.Scheme)
 	}
 	return nil
 }
@@ -324,20 +326,45 @@ func validateRuntimeIrisBaseURLParentPathComponent(path string) error {
 	return nil
 }
 
-func validateRuntimeIrisTransportScheme(transport, scheme string) error {
-	requiredScheme, ok := runtimeIrisTransportRequiredSchemes()[transport]
-	if !ok || scheme == requiredScheme {
+func validateRuntimeIrisTransportScheme(transport string, parsed *url.URL) error {
+	if requiredScheme, ok := runtimeIrisTransportRequiredSchemes()[transport]; ok && parsed.Scheme != requiredScheme {
+		return fmt.Errorf("IRIS_TRANSPORT=%s requires %s IRIS_BASE_URL, got %s", transport, requiredScheme, parsed.Scheme)
+	}
+	if transport == "" || transport == "h3" {
 		return nil
 	}
-	return fmt.Errorf("IRIS_TRANSPORT=%s requires %s IRIS_BASE_URL, got %s", transport, requiredScheme, scheme)
+	if transport != "h2c" && transport != "http2" && transport != "http1" {
+		return fmt.Errorf("unsupported IRIS_TRANSPORT: %s", transport)
+	}
+	if isRuntimeIrisLoopbackHost(parsed.Hostname()) {
+		return nil
+	}
+
+	return fmt.Errorf("IRIS_TRANSPORT=%s is supported only for loopback diagnostics; production Iris egress requires h3", transport)
+}
+
+func isRuntimeIrisLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func runtimeIrisTransportRequiredSchemes() map[string]string {
 	return map[string]string{
+		"":      "https",
 		"h3":    "https",
 		"h2c":   "http",
 		"http2": "https",
 	}
+}
+
+func runtimeIrisValidationTransport(explicit string) string {
+	if transport := normalizeRuntimeIrisTransport(explicit); transport != "" {
+		return transport
+	}
+	return normalizeRuntimeIrisTransport(os.Getenv("IRIS_TRANSPORT"))
 }
 
 func normalizeRuntimeIrisTransport(raw string) string {

@@ -124,7 +124,7 @@ GROUP BY status
 ORDER BY status;
 ```
 
-`dedupe_key NOT LIKE 'v2:%'` identifies pre-v2 PG delivery rows written before the stable room/event dedupe key. The publisher checks the corresponding legacy key before inserting a v2 row, so these rows are treated as duplicates instead of creating a second delivery. Before cutover, account for any non-zero legacy PG rows by status and let retention expire terminal rows. Do not backfill or rewrite these keys without a duplicate-risk review, and do not promote legacy `shadowed` rows to `pending`.
+`dedupe_key NOT LIKE 'v2:%'` identifies pre-v2 PG delivery rows written before the stable room/event dedupe key. The current publisher inserts only v2 rows and relies on `ON CONFLICT (dedupe_key) DO NOTHING`; it does not compare pre-v2 delivery keys. Before deploying an image that removes the old comparison path, this read-only query must show zero active pre-v2 rows (`pending`, `leased`, `retry`, `sending`). Terminal residue (`sent`, `dlq`, `quarantined`, `cancelled`) is not an active send path, but final Legacy Fadeout acceptance still requires retention/cleanup to reduce the total pre-v2 count to zero and a repeat read-only check showing no rows. Do not backfill or rewrite these keys without a duplicate-risk review, and do not promote legacy `shadowed` rows to `pending`.
 
 Event payload is stored once in `alarm_dispatch_events`; room state lives in `alarm_dispatch_deliveries`. Do not inspect or replay from a single per-room JSON outbox table.
 

@@ -36,41 +36,6 @@ func BuildDedupeKey(input *DedupeInput) string {
 	return fmt.Sprintf("v2:room:%s:event_sha:%s", input.RoomID, hex.EncodeToString(sum[:]))
 }
 
-func buildLegacyDedupeKey(input *DedupeInput) string {
-	alarmType := input.AlarmType
-	if alarmType == "" {
-		alarmType = domain.AlarmTypeLive
-	}
-	category := strings.TrimSpace(input.Category)
-	if category == "" {
-		category = strconv.Itoa(input.MinutesUntil)
-	}
-	scheduledUnix := int64(0)
-	if !input.StartScheduled.IsZero() {
-		scheduledUnix = input.StartScheduled.UTC().Truncate(time.Minute).Unix()
-	}
-	oldStart := strings.TrimSpace(input.ScheduleChangePreviousStart)
-	if oldStart != "" {
-		return fmt.Sprintf("legacy-schedule:%s:%s:%s:%s:%d:%s:%s",
-			input.RoomID,
-			input.ChannelID,
-			input.StreamID,
-			oldStart,
-			scheduledUnix,
-			category,
-			alarmType,
-		)
-	}
-	return fmt.Sprintf("legacy-live:%s:%s:%s:%d:%s:%s",
-		input.RoomID,
-		input.ChannelID,
-		input.StreamID,
-		scheduledUnix,
-		category,
-		alarmType,
-	)
-}
-
 const eventKeyMaxLength = 512
 
 func BuildEventKey(input *DedupeInput) string {
@@ -103,7 +68,7 @@ func buildRawEventKey(input *DedupeInput) string {
 	}
 	oldStart := strings.TrimSpace(input.ScheduleChangePreviousStart)
 	if oldStart != "" {
-		return fmt.Sprintf("legacy-schedule:%s:%s:%s:%d:%s:%s",
+		return fmt.Sprintf("schedule:%s:%s:%s:%d:%s:%s",
 			input.ChannelID,
 			input.StreamID,
 			oldStart,
@@ -112,7 +77,7 @@ func buildRawEventKey(input *DedupeInput) string {
 			alarmType,
 		)
 	}
-	return fmt.Sprintf("legacy-live:%s:%s:%d:%s:%s",
+	return fmt.Sprintf("live:%s:%s:%d:%s:%s",
 		input.ChannelID,
 		input.StreamID,
 		scheduledUnix,
@@ -182,12 +147,4 @@ func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope *domain.AlarmQu
 func BuildDedupeKeyFromEnvelope(envelope *domain.AlarmQueueEnvelope) string {
 	input := EnvelopeDedupeInput(envelope)
 	return BuildDedupeKey(&input)
-}
-
-func BuildLegacyDedupeKeyFromEnvelope(envelope *domain.AlarmQueueEnvelope) string {
-	input := EnvelopeDedupeInput(envelope)
-	if len(envelope.ClaimKeys) > 0 {
-		input.Category = envelope.ClaimKeys[len(envelope.ClaimKeys)-1]
-	}
-	return buildLegacyDedupeKey(&input)
 }

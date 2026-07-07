@@ -129,7 +129,7 @@ func TestRepositoryMarkAlarmSentBatchRepairsMissingAlarmStateForAlreadySentTrack
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, record.DeliveryStatus)
 }
 
-func TestRepositoryMarkAlarmSentBatchRepairsMissingCanonicalAlarmStateWhenLegacyContentStateExists(t *testing.T) {
+func TestRepositoryMarkAlarmSentBatchRejectsOldContentStateWhenCanonicalStateIsMissing(t *testing.T) {
 	db := newTrackingTestDB(t)
 	repository := NewRepository(db)
 	ctx := context.Background()
@@ -153,20 +153,24 @@ func TestRepositoryMarkAlarmSentBatchRepairsMissingCanonicalAlarmStateWhenLegacy
 	`, domain.OutboxKindCommunityPost, "post-legacy-state-repair", "post-legacy-state-repair", "UC_TEST", actualPublishedAt, detectedAt, firstAlarmSentAt, domain.YouTubeCommunityShortsAlarmStateStatusSent, detectedAt)
 	require.NoError(t, err)
 
-	require.NoError(t, repository.MarkAlarmSentBatch(ctx, []AlarmSentMark{{
+	err = repository.MarkAlarmSentBatch(ctx, []AlarmSentMark{{
 		Kind:        domain.OutboxKindCommunityPost,
 		ContentID:   "post-legacy-state-repair",
 		AlarmSentAt: laterAlarmSentAt,
-	}}))
+	}})
+	require.ErrorContains(t, err, "idx_ycsas_kind_content")
 
 	record, err := repository.FindAlarmStateByPostID(ctx, domain.OutboxKindCommunityPost, "post-legacy-state-repair")
 	require.NoError(t, err)
-	require.NotNil(t, record)
-	require.Equal(t, "community:post-legacy-state-repair", record.PostID)
-	require.Equal(t, "post-legacy-state-repair", record.ContentID)
-	require.NotNil(t, record.AlarmSentAt)
-	require.Equal(t, firstAlarmSentAt, record.AlarmSentAt.UTC())
-	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, record.DeliveryStatus)
+	require.Nil(t, record)
+
+	var oldStateAlarmSentAt time.Time
+	require.NoError(t, db.QueryRow(ctx, `
+		SELECT alarm_sent_at
+		FROM youtube_community_shorts_alarm_states
+		WHERE kind = $1 AND post_id = $2
+	`, domain.OutboxKindCommunityPost, "post-legacy-state-repair").Scan(&oldStateAlarmSentAt))
+	require.Equal(t, firstAlarmSentAt, oldStateAlarmSentAt.UTC())
 }
 
 func TestRepositoryUpsertAndFindAlarmStateByPostID(t *testing.T) {

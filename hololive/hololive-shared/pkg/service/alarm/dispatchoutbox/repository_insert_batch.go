@@ -12,7 +12,7 @@ func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.Alar
 	if err != nil {
 		return nil, "", err
 	}
-	record, err := r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
+	record, err := r.findByDedupeKey(ctx, BuildDedupeKeyFromEnvelope(envelope))
 	if err != nil {
 		return nil, "", err
 	}

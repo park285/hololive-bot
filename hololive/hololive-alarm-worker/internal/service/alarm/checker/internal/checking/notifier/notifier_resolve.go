@@ -15,8 +15,8 @@ func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotificati
 	if payload == nil {
 		return nil, nil, sendOutcomeSkipped, nil
 	}
-	if err := payload.notification.ValidateLegacyRoute(); err != nil {
-		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: validate legacy route: %w", err)
+	if err := payload.notification.ValidateLiveDispatchRoute(); err != nil {
+		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: validate live dispatch route: %w", err)
 	}
 
 	claimKeys, claimed, err := n.claimDedup(ctx, payload)

@@ -111,10 +111,10 @@ func TestNonEgressConfigLoadersSkipWorkerProfileFetchWithAccidentalIrisToken(t *
 				t.Fatalf("%s load error = %v, want nil without Iris worker profile fetch", tt.name, err)
 			}
 			if cfg.WorkerPool.Workers != 10 || cfg.WorkerPool.QueueSize != 100 {
-				t.Fatalf("%s WorkerPool = %#v, want legacy worker profile defaults", tt.name, cfg.WorkerPool)
+				t.Fatalf("%s WorkerPool = %#v, want default worker profile", tt.name, cfg.WorkerPool)
 			}
 			if cfg.Webhook.WorkerCount != 16 || cfg.Webhook.QueueSize != 1000 {
-				t.Fatalf("%s Webhook = %#v, want legacy worker profile defaults", tt.name, cfg.Webhook)
+				t.Fatalf("%s Webhook = %#v, want default worker profile", tt.name, cfg.Webhook)
 			}
 		})
 	}

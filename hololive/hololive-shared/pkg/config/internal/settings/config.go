@@ -116,10 +116,10 @@ func buildConfig(
 		return nil, err
 	}
 	irisConfig := loadIrisConfig(webhookToken, botToken)
-	workerProfile := workerconfig.LegacyIrisBotWebhookWorkerProfile()
+	workerProfile := workerconfig.DefaultIrisBotWebhookWorkerProfile()
 	if options.FetchIrisWorkerProfile {
 		workerProfile, err = fetchIrisBotWebhookWorkerProfile(&irisConfig)
-		if err != nil && !errors.Is(err, workerconfig.ErrWorkerProfileDisabled) {
+		if err != nil {
 			return nil, fmt.Errorf("fetch Iris bot webhook worker profile: %w", err)
 		}
 	}
@@ -202,7 +202,7 @@ func loadIrisConfig(webhookToken, botToken string) IrisConfig {
 
 func fetchIrisBotWebhookWorkerProfile(config *IrisConfig) (profile workerconfig.IrisBotWebhookWorkerProfile, err error) {
 	if strings.TrimSpace(config.BotToken) == "" {
-		return workerconfig.LegacyIrisBotWebhookWorkerProfile(), workerconfig.ErrWorkerProfileDisabled
+		return profile, workerconfig.ErrWorkerProfileDisabled
 	}
 	baseURL, err := resolveIrisBaseURL(config)
 	if err != nil {

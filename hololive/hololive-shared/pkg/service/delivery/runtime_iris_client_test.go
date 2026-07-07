@@ -118,6 +118,8 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 }
 
 func TestRuntimeIrisClient_SendMessageDefaultsToReplyRetry(t *testing.T) {
+	t.Setenv("IRIS_TRANSPORT", "http1")
+
 	ctx := context.Background()
 	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -171,6 +173,15 @@ func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {
 			wantErrContains: "https",
 		},
 		{
+			name:        "accepts h2c loopback diagnostics http override",
+			fileContent: "http://127.0.0.1:3001/",
+			env: map[string]string{
+				"IRIS_TRANSPORT":              "h2c",
+				"IRIS_BASE_URL_ALLOWED_HOSTS": "127.0.0.1",
+			},
+			wantBaseURL: "http://127.0.0.1:3001",
+		},
+		{
 			name:        "accepts https host without explicit port",
 			fileContent: "https://host/",
 			env:         map[string]string{"IRIS_H3_SERVER_NAME": "host"},
@@ -204,7 +215,7 @@ func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {
 			name:            "rejects http attacker URL",
 			fileContent:     "http://attacker.example:3001/",
 			env:             map[string]string{"IRIS_H3_SERVER_NAME": "iris.example"},
-			wantErrContains: "https",
+			wantErrContains: "host",
 		},
 		{
 			name:            "rejects nonnumeric explicit port",
@@ -284,7 +295,7 @@ func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {
 			fileContent:     "https://attacker.example:3001/",
 			disableFilePath: true,
 			env:             map[string]string{"IRIS_H3_SERVER_NAME": "iris.example"},
-			wantBaseURL:     "http://fallback.example",
+			wantBaseURL:     "https://fallback.example",
 		},
 	}
 
@@ -294,7 +305,7 @@ func TestRuntimeIrisClient_ResolveBaseURLFileOverrideValidation(t *testing.T) {
 			baseURLFilePath := writeRuntimeIrisBaseURLFileCase(t, &tc)
 			var logBuffer bytes.Buffer
 			logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
-			client := NewRuntimeIrisClient("http://fallback.example", "bot-token", baseURLFilePath, logger)
+			client := NewRuntimeIrisClient("https://fallback.example", "bot-token", baseURLFilePath, logger)
 			assertRuntimeIrisBaseURLResolve(t, client, &logBuffer, &tc)
 		})
 	}
@@ -641,19 +652,24 @@ func TestValidateRuntimeIrisBaseURL_TransportSchemeAndHTTPS(t *testing.T) {
 		{name: "http3 alias rejects http", transport: "http3", baseURL: "http://iris.example", wantErr: true},
 		{name: "quic alias rejects http", transport: "quic", baseURL: "http://iris.example", wantErr: true},
 		{name: "uppercase h3 alias rejects http", transport: "H3", baseURL: "http://iris.example", wantErr: true},
-		{name: "http2 accepts https", transport: "http2", baseURL: "https://iris.example:3001"},
-		{name: "http2 rejects http", transport: "http2", baseURL: "http://iris.example", wantErr: true},
+		{name: "http2 rejects remote https", transport: "http2", baseURL: "https://iris.example:3001", wantErr: true},
+		{name: "http2 loopback diagnostics accepts https", transport: "http2", baseURL: "https://127.0.0.1:3001"},
+		{name: "http2 rejects remote http", transport: "http2", baseURL: "http://iris.example", wantErr: true},
 		{name: "h2 alias rejects http", transport: "h2", baseURL: "http://iris.example", wantErr: true},
-		{name: "h2c rejects http", transport: "h2c", baseURL: "http://iris.example", wantErr: true},
-		{name: "h2c rejects https", transport: "h2c", baseURL: "https://iris.example:3001", wantErr: true},
-		{name: "http1 accepts https", transport: "http1", baseURL: "https://iris.example:3001"},
-		{name: "unknown accepts https", transport: "custom", baseURL: "https://iris.example:3001"},
+		{name: "h2c rejects remote http", transport: "h2c", baseURL: "http://iris.example", wantErr: true},
+		{name: "h2c loopback diagnostics accepts http", transport: "h2c", baseURL: "http://127.0.0.1:3001"},
+		{name: "h2c loopback diagnostics rejects https", transport: "h2c", baseURL: "https://127.0.0.1:3001", wantErr: true},
+		{name: "h2c rejects remote https", transport: "h2c", baseURL: "https://iris.example:3001", wantErr: true},
+		{name: "http1 rejects remote https", transport: "http1", baseURL: "https://iris.example:3001", wantErr: true},
+		{name: "http1 loopback diagnostics accepts https", transport: "http1", baseURL: "https://127.0.0.1:3001"},
+		{name: "unknown rejects https", transport: "custom", baseURL: "https://iris.example:3001", wantErr: true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("IRIS_TRANSPORT", tc.transport)
 			t.Setenv("IRIS_H3_SERVER_NAME", "iris.example")
+			t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", "iris.example,127.0.0.1")
 			_, err := validateRuntimeIrisBaseURL(tc.baseURL)
 			if tc.wantErr && err == nil {
 				t.Fatal("validateRuntimeIrisBaseURL() error = nil, want error")
@@ -665,8 +681,33 @@ func TestValidateRuntimeIrisBaseURL_TransportSchemeAndHTTPS(t *testing.T) {
 	}
 }
 
+func TestValidateHTTPBaseURL_TransportScheme(t *testing.T) {
+	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", "127.0.0.1")
+
+	t.Run("default h3 rejects http fallback", func(t *testing.T) {
+		t.Setenv("IRIS_TRANSPORT", "")
+		if _, err := validateHTTPBaseURL("http://127.0.0.1:3001"); err == nil {
+			t.Fatal("validateHTTPBaseURL() error = nil, want h3 http fallback rejection")
+		}
+	})
+
+	t.Run("h2c loopback diagnostics accepts http fallback", func(t *testing.T) {
+		t.Setenv("IRIS_TRANSPORT", "h2c")
+		if _, err := validateHTTPBaseURL("http://127.0.0.1:3001"); err != nil {
+			t.Fatalf("validateHTTPBaseURL() error = %v, want nil", err)
+		}
+	})
+
+	t.Run("h2c loopback diagnostics rejects https fallback", func(t *testing.T) {
+		t.Setenv("IRIS_TRANSPORT", "h2c")
+		if _, err := validateHTTPBaseURL("https://127.0.0.1:3001"); err == nil {
+			t.Fatal("validateHTTPBaseURL() error = nil, want h2c https fallback rejection")
+		}
+	})
+}
+
 func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
-	t.Parallel()
+	t.Setenv("IRIS_TRANSPORT", "h2c")
 
 	var gotPath string
 	var gotRequest iris.ReplyRequest
@@ -715,7 +756,7 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 }
 
 func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
-	t.Parallel()
+	t.Setenv("IRIS_TRANSPORT", "http1")
 
 	var gotPath string
 	var gotRequest iris.KaringHololiveRequest
@@ -746,6 +787,7 @@ func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
 		nil,
 		iris.WithBotControlToken("bot-control-secret"),
 		iris.WithHTTPClient(server.Client()),
+		iris.WithTransport("http1"),
 	)
 	resp, err := client.SendKaringHololive(context.Background(), iris.KaringHololiveRequest{
 		Streams: []iris.KaringContentItem{{

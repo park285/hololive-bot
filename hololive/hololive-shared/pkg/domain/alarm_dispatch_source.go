@@ -126,7 +126,7 @@ func (e *AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
 		return fmt.Errorf("canonical alarm dispatch: envelope is nil")
 	}
 	if e.SourceKind == "" {
-		return e.validateLegacyDispatch()
+		return e.validateLiveDispatch()
 	}
 	validate, ok := canonicalDispatchValidators[e.SourceKind]
 	if !ok {
@@ -135,12 +135,12 @@ func (e *AlarmQueueEnvelope) ValidateCanonicalDispatch() error {
 	return validate(e)
 }
 
-func (e *AlarmQueueEnvelope) validateLegacyDispatch() error {
+func (e *AlarmQueueEnvelope) validateLiveDispatch() error {
 	alarmType := e.Notification.AlarmType
 	if alarmType == "" {
 		alarmType = AlarmTypeLive
 	}
-	return validateLegacyRouteAlarmType(alarmType)
+	return validateLiveDispatchAlarmType(alarmType)
 }
 
 func (e *AlarmQueueEnvelope) validateCelebrationDispatch() error {

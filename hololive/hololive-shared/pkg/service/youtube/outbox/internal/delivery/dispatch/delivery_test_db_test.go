@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 )
 
 type deliveryTestSQLResult struct {
@@ -486,7 +487,7 @@ func insertDomainTracking(ctx context.Context, pool *pgxpool.Pool, row *domain.Y
 	row.ActualPublishedAt = normalizeTimePtr(row.ActualPublishedAt)
 	row.AlarmSentAt = normalizeTimePtr(row.AlarmSentAt)
 	if row.CanonicalContentID == "" {
-		row.CanonicalContentID = row.ContentID
+		row.CanonicalContentID = store.CanonicalDeliveryPostID(row.Kind, row.ContentID)
 	}
 	if row.DeliveryStatus == "" {
 		row.DeliveryStatus = domain.YouTubeContentAlarmDeliveryStatusPending
@@ -795,6 +796,11 @@ func deliveryTestApplyIdentityCreateDefaults(v reflect.Value) {
 	if contentID.IsValid() && canonicalContentID.IsValid() &&
 		contentID.Kind() == reflect.String && canonicalContentID.Kind() == reflect.String &&
 		canonicalContentID.CanSet() && canonicalContentID.String() == "" {
+		kind := v.FieldByName("Kind")
+		if kind.IsValid() && kind.Kind() == reflect.String {
+			canonicalContentID.SetString(store.CanonicalDeliveryPostID(domain.OutboxKind(kind.String()), contentID.String()))
+			return
+		}
 		canonicalContentID.SetString(contentID.String())
 	}
 }

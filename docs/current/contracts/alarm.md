@@ -56,7 +56,7 @@ type AlarmQueueEnvelope struct {
 }
 ```
 
-Legacy alarm notifications keep using `Notification` and `ValidateLegacyRoute`.
+Live alarm notifications keep using `Notification` and `ValidateLiveDispatchRoute`.
 Major event/member news rows are produced in `notification_delivery_outbox`; `alarm-worker` claims those rows and sends them through Iris/Kakao. YouTube live/video/community/shorts rows are produced in `youtube_notification_outbox`; `alarm-worker` claims those rows, resolves rooms, renders with the shared YouTube outbox formatter, sends through Iris/Kakao, and writes per-room delivery state.
 
 HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service/alarm/dto.go` and the client-local request structs in `client.go`.

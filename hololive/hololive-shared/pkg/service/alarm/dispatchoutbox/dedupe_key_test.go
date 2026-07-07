@@ -74,6 +74,25 @@ func TestEventKeyIgnoresRoomAndDeliveryDedupeIncludesRoom(t *testing.T) {
 	}
 }
 
+func TestBuildDedupeKeyUsesCanonicalLivePrefix(t *testing.T) {
+	input := DedupeInput{
+		RoomID:       "room-1",
+		ChannelID:    "channel-1",
+		AlarmType:    domain.AlarmTypeLive,
+		StreamID:     "stream-1",
+		MinutesUntil: 10,
+		Category:     "claim:event",
+	}
+
+	got := BuildDedupeKey(&input)
+	if !strings.Contains(got, ":live:") {
+		t.Fatalf("BuildDedupeKey = %q, want canonical live event segment", got)
+	}
+	if strings.Contains(got, "legacy-live") || strings.Contains(got, "legacy-schedule") {
+		t.Fatalf("BuildDedupeKey = %q, must not produce legacy event prefix", got)
+	}
+}
+
 func TestMarshalEventPayloadOmitsRoomSpecificFields(t *testing.T) {
 	payload, err := marshalEventPayload(&domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{

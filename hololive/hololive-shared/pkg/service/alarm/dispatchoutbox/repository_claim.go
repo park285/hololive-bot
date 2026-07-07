@@ -9,24 +9,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (r *PgxRepository) findByDedupeKeyAny(ctx context.Context, dedupeKeys ...string) (*Record, error) {
-	keys := make([]string, 0, len(dedupeKeys))
-	seen := make(map[string]struct{}, len(dedupeKeys))
-	for _, key := range dedupeKeys {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		keys = append(keys, key)
-	}
-	if len(keys) == 0 {
+func (r *PgxRepository) findByDedupeKey(ctx context.Context, dedupeKey string) (*Record, error) {
+	key := strings.TrimSpace(dedupeKey)
+	if key == "" {
 		return nil, fmt.Errorf("find dispatch delivery by dedupe key: dedupe key is empty")
 	}
-	row := r.pool.QueryRow(ctx, mustSQL("repository_claim_0029_01.sql"), keys, keys[0])
+	row := r.pool.QueryRow(ctx, mustSQL("repository_claim_0029_01.sql"), []string{key}, key)
 	record, err := scanDeliveryRecord(row)
 	if err != nil {
 		return nil, fmt.Errorf("find dispatch delivery by dedupe key: %w", err)

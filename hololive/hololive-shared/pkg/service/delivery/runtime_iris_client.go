@@ -37,9 +37,11 @@ func NewRuntimeIrisClient(
 		logger = slog.Default()
 	}
 
+	sdkConfig := iris.ResolveClientSDKConfig(opts)
 	resolver := &runtimeIrisBaseURLResolver{
 		fallbackBaseURL: strings.TrimSpace(fallbackBaseURL),
 		baseURLFilePath: strings.TrimSpace(baseURLFilePath),
+		transport:       strings.TrimSpace(sdkConfig.Transport),
 		logger:          logger,
 	}
 

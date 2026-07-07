@@ -182,11 +182,13 @@ func TestProvideIrisClient_UsesExplicitOptionsOverEnvironment(t *testing.T) {
 	t.Setenv("IRIS_BASE_URL", envServer.URL)
 	t.Setenv("IRIS_BOT_TOKEN", "env-bot-token")
 	t.Setenv("IRIS_BASE_URL_FILE", "")
+	t.Setenv("IRIS_TRANSPORT", "h3")
 
 	client, err := ProvideIrisClient(
 		nil,
 		iris.WithBaseURL(explicit.URL),
 		iris.WithBotToken("explicit-bot-token"),
+		iris.WithTransport("http1"),
 		iris.WithHTTPClient(&http.Client{}),
 	)
 	if err != nil {

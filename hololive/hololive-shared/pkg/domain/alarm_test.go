@@ -223,14 +223,14 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 	}
 }
 
-func TestNewAlarmNotification_UsesExplicitLiveRoute(t *testing.T) {
+func TestNewAlarmNotification_UsesExplicitLiveDispatchRoute(t *testing.T) {
 	t.Parallel()
 
 	notification := domain.NewAlarmNotification("room-live", nil, nil, 5, nil, "")
 	if notification.AlarmType != domain.AlarmTypeLive {
 		t.Fatalf("AlarmType = %q, want %q", notification.AlarmType, domain.AlarmTypeLive)
 	}
-	if err := notification.ValidateLegacyRoute(); err != nil {
-		t.Fatalf("ValidateLegacyRoute() error = %v", err)
+	if err := notification.ValidateLiveDispatchRoute(); err != nil {
+		t.Fatalf("ValidateLiveDispatchRoute() error = %v", err)
 	}
 }

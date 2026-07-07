@@ -27,7 +27,6 @@ type deliveryInsert struct {
 	EventKey        string
 	RoomID          string
 	DedupeKey       string
-	LegacyDedupeKey string
 	ClaimKeys       []string
 	DeliveryContext []byte
 	Status          Status
@@ -47,7 +46,6 @@ type deliveryBatchRow struct {
 	EventID         int64           `json:"event_id"`
 	RoomID          string          `json:"room_id"`
 	DedupeKey       string          `json:"dedupe_key"`
-	LegacyDedupeKey string          `json:"legacy_dedupe_key"`
 	ClaimKeys       []string        `json:"claim_keys"`
 	DeliveryContext json.RawMessage `json:"delivery_context"`
 	Status          string          `json:"status"`
@@ -150,7 +148,6 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 			EventID:         delivery.EventID,
 			RoomID:          delivery.RoomID,
 			DedupeKey:       delivery.DedupeKey,
-			LegacyDedupeKey: delivery.LegacyDedupeKey,
 			ClaimKeys:       delivery.ClaimKeys,
 			DeliveryContext: json.RawMessage(delivery.DeliveryContext),
 			Status:          string(delivery.Status),

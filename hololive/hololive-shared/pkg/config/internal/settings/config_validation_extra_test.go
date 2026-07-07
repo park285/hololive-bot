@@ -214,6 +214,11 @@ func TestLoadAdminAPIRuntime_BootsWithoutIrisEgressTokens(t *testing.T) {
 		t.Fatalf("Iris tokens = %q/%q, want empty", config.Iris.WebhookToken, config.Iris.BotToken)
 	}
 
+	server := newIrisRuntimeDiagnosticsServer(t, loadTestWorkerProfileDiagnosticsJSON())
+	t.Setenv("IRIS_BASE_URL", server.URL)
+	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testURLHostname(t, server.URL))
+	t.Setenv("IRIS_TRANSPORT", "http1")
+	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
 		t.Fatalf("Load() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)
 	}

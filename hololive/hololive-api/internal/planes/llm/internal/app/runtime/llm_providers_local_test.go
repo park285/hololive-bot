@@ -311,7 +311,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
-	t.Setenv("IRIS_BASE_URL", newWorkerProfileDisabledIrisServer(t).URL)
+	t.Setenv("IRIS_BASE_URL", newWorkerProfileEnabledIrisServer(t).URL)
 	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
@@ -342,7 +342,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	}
 }
 
-func newWorkerProfileDisabledIrisServer(t *testing.T) *httptest.Server {
+func newWorkerProfileEnabledIrisServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -354,7 +354,46 @@ func newWorkerProfileDisabledIrisServer(t *testing.T) *httptest.Server {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		if _, err := w.Write([]byte(`{"workers":{"webhook":{"webhookPipeline":{"profileEnabled":false}}}}`)); err != nil {
+		if _, err := w.Write([]byte(`{
+			"workers": {
+				"webhook": {
+					"webhookPipeline": {
+						"profileEnabled": true,
+						"workerProfile": {
+							"version": 1,
+							"profile_id": "llm-runtime-test",
+							"delivery": {
+								"lane_workers": 32,
+								"lane_queue_capacity": 128,
+								"max_global_in_flight": 32,
+								"max_per_endpoint_in_flight": 8,
+								"max_drain_per_tick": 128,
+								"max_attempts": 6,
+								"request_timeout_ms": 30000,
+								"lane_idle_timeout_ms": 750
+							},
+							"receive": {
+								"workers": 16,
+								"queue_size": 1000,
+								"enqueue_timeout_ms": 50,
+								"handler_timeout_ms": 30000,
+								"max_body_bytes": 65536,
+								"dedup_ttl_ms": 60000,
+								"dedup_timeout_ms": 200
+							},
+							"bot_pool": {
+								"workers": 10,
+								"queue_size": 100
+							},
+							"validation": {
+								"min_queue_per_endpoint_multiplier": 4,
+								"require_receive_capacity_for_endpoint_burst": true
+							}
+						}
+					}
+				}
+			}
+		}`)); err != nil {
 			t.Errorf("write response: %v", err)
 		}
 	}))

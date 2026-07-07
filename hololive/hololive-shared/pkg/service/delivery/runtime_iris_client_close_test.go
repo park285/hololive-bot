@@ -11,7 +11,7 @@ import (
 )
 
 func TestRuntimeIrisClientCloseRejectsSendAfterClose(t *testing.T) {
-	t.Parallel()
+	t.Setenv("IRIS_TRANSPORT", "http1")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

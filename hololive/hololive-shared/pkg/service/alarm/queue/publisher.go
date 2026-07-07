@@ -172,8 +172,8 @@ func (p *Publisher) buildPublishBatchEnvelope(
 	if notification == nil {
 		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: notification %d is nil", index)
 	}
-	if err := notification.ValidateLegacyRoute(); err != nil {
-		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: validate legacy route: %w", err)
+	if err := notification.ValidateLiveDispatchRoute(); err != nil {
+		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: validate live dispatch route: %w", err)
 	}
 	if len(claimKeys) == 0 {
 		return p.buildEnvelope(notification, nil), nil

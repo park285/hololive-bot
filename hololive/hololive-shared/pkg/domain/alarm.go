@@ -174,21 +174,21 @@ func (n *AlarmNotification) UserCount() int {
 	return len(n.Users)
 }
 
-func (n *AlarmNotification) ValidateLegacyRoute() error {
+func (n *AlarmNotification) ValidateLiveDispatchRoute() error {
 	if n == nil {
-		return fmt.Errorf("legacy alarm route: notification is nil")
+		return fmt.Errorf("live alarm route: notification is nil")
 	}
-	return validateLegacyRouteAlarmType(n.AlarmType)
+	return validateLiveDispatchAlarmType(n.AlarmType)
 }
 
-func validateLegacyRouteAlarmType(alarmType AlarmType) error {
+func validateLiveDispatchAlarmType(alarmType AlarmType) error {
 	if alarmType == AlarmTypeLive {
 		return nil
 	}
 	if alarmType == "" {
-		return fmt.Errorf("legacy alarm route requires explicit alarm type")
+		return fmt.Errorf("live alarm route requires explicit alarm type")
 	}
-	return fmt.Errorf("legacy alarm route does not support alarm type %q", alarmType)
+	return fmt.Errorf("live alarm route does not support alarm type %q", alarmType)
 }
 
 type AlarmQueueEnvelope struct {
