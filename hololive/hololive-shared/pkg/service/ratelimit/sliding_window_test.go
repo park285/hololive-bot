@@ -136,6 +136,8 @@ func TestAllowAfterWindowExpires(t *testing.T) {
 	limiter := newTestLimiter(t)
 	ctx := context.Background()
 
+	now := time.Unix(1_700_000_001, 0)
+	limiter.now = func() time.Time { return now }
 	window := 60 * time.Millisecond
 
 	first, err := limiter.Allow(ctx, "youtube:videos", 1, window)
@@ -154,7 +156,7 @@ func TestAllowAfterWindowExpires(t *testing.T) {
 		t.Fatalf("second call should be denied")
 	}
 
-	time.Sleep(90 * time.Millisecond)
+	now = now.Add(window + time.Millisecond)
 
 	third, err := limiter.Allow(ctx, "youtube:videos", 1, window)
 	if err != nil {
