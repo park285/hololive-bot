@@ -197,8 +197,8 @@ type guardedExecer struct {
 	pool *pgxpool.Pool
 }
 
-func (e *guardedExecer) Exec(ctx context.Context, query string) error {
-	_, err := e.pool.Exec(ctx, query)
+func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) error {
+	_, err := e.pool.Exec(ctx, query, args...)
 	return err
 }
 

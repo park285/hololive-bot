@@ -1,6 +1,6 @@
 
 		WITH input AS (
-			SELECT *
+			SELECT id, error
 			FROM jsonb_to_recordset($1::jsonb) AS x(id BIGINT, error TEXT)
 		)
 		UPDATE alarm_dispatch_deliveries d

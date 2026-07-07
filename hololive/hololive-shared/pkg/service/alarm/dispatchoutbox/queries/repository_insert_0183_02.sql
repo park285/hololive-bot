@@ -1,6 +1,6 @@
 
 		WITH input AS (
-			SELECT *
+			SELECT event_id, room_id, dedupe_key, legacy_dedupe_key, claim_keys, delivery_context, status
 			FROM jsonb_to_recordset($1::jsonb) AS x(
 				event_id BIGINT,
 				room_id TEXT,

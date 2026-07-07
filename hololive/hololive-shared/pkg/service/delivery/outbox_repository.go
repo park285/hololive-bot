@@ -25,7 +25,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -39,6 +38,14 @@ import (
 // outboxPayload: outbox에 저장되는 메시지 payload
 type outboxPayload struct {
 	Message string `json:"message"`
+}
+
+type outboxBatchRow struct {
+	Kind      domain.DeliveryOutboxKind `json:"kind"`
+	PeriodKey string                    `json:"period_key"`
+	RoomID    string                    `json:"room_id"`
+	ContentID string                    `json:"content_id"`
+	Payload   outboxPayload             `json:"payload"`
 }
 
 type OutboxRepository struct {
@@ -92,22 +99,24 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 		return err
 	}
 
-	valueExprs := make([]string, 0, len(items))
-	args := make([]any, 0, len(items)*5)
-	for i, item := range items {
-		payload, err := json.Marshal(outboxPayload{Message: item.Message})
-		if err != nil {
-			return fmt.Errorf("enqueue batch: marshal payload: %w", err)
-		}
+	rows := make([]outboxBatchRow, 0, len(items))
+	for _, item := range items {
 		contentID := item.PeriodKey + ":" + item.RoomID
-		base := i*5 + 1
-		valueExprs = append(valueExprs, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, 'PENDING', 0, NOW())", base, base+1, base+2, base+3, base+4))
-		args = append(args, item.Kind, item.PeriodKey, item.RoomID, contentID, string(payload))
+		rows = append(rows, outboxBatchRow{
+			Kind:      item.Kind,
+			PeriodKey: item.PeriodKey,
+			RoomID:    item.RoomID,
+			ContentID: contentID,
+			Payload:   outboxPayload{Message: item.Message},
+		})
 	}
 
-	query := mustSQL("outbox_repository_0108_01.sql") + strings.Join(valueExprs, ",") + mustSQL("outbox_repository_0109_02.sql")
+	raw, err := json.Marshal(rows)
+	if err != nil {
+		return fmt.Errorf("enqueue batch: marshal rows: %w", err)
+	}
 
-	if _, err := r.pool.Exec(ctx, query, args...); err != nil {
+	if _, err := r.pool.Exec(ctx, mustSQL("outbox_enqueue_batch_upsert.sql"), string(raw)); err != nil {
 		return fmt.Errorf("enqueue batch: %w", err)
 	}
 	return nil

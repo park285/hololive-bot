@@ -1,6 +1,6 @@
 
 		WITH input AS (
-			SELECT *
+			SELECT id, locked_at, ord
 			FROM unnest($1::bigint[], $2::timestamptz[]) WITH ORDINALITY AS t(id, locked_at, ord)
 		), updated AS (
 			UPDATE youtube_notification_delivery d
@@ -16,4 +16,3 @@
 		       next_attempt_at, created_at, locked_at, sent_at, error
 		FROM updated
 		ORDER BY ord ASC
-	

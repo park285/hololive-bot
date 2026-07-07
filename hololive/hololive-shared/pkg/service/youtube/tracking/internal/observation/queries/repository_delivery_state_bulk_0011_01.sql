@@ -1,6 +1,6 @@
 
 WITH input AS (
-	SELECT *
+	SELECT kind, content_id, canonical_content_id, raw_content_id, alarm_sent_at, authorized_at
 	FROM unnest(
 		$1::text[],
 		$2::text[],

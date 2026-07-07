@@ -1,6 +1,6 @@
 
 		WITH input AS (
-			SELECT *
+			SELECT id, locked_at
 			FROM unnest($1::bigint[], $2::timestamptz[]) AS t(id, locked_at)
 		)
 		UPDATE youtube_notification_delivery d
@@ -13,4 +13,3 @@
 		WHERE d.id = i.id
 		  AND d.status = $8
 		  AND d.locked_at = i.locked_at
-	

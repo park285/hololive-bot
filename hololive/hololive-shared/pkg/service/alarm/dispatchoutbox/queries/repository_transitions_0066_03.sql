@@ -1,6 +1,6 @@
 
 		WITH input AS (
-			SELECT *
+			SELECT id, attempt_count, next_attempt_at, error
 			FROM jsonb_to_recordset($1::jsonb) AS x(
 				id BIGINT,
 				attempt_count INT,

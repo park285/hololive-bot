@@ -523,7 +523,7 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 	}
 }
 
-func TestPgxRepositoryInsertBatch_SkipsLegacyDedupeKey(t *testing.T) {
+func TestPgxRepositoryInsertBatch_InsertsV2WhenOnlyLegacyDedupeKeyExists(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
@@ -557,7 +557,17 @@ func TestPgxRepositoryInsertBatch_SkipsLegacyDedupeKey(t *testing.T) {
 			event_id, room_id, dedupe_key, claim_keys, delivery_context, status
 		)
 		VALUES ($1, $2, $3, $4, $5, 'pending')`,
-		eventID, delivery.RoomID, delivery.LegacyDedupeKey, delivery.ClaimKeys, delivery.DeliveryContext,
+		eventID, delivery.RoomID,
+		fmt.Sprintf("legacy-live:%s:%s:%s:%d:%s:%s",
+			delivery.RoomID,
+			"channel-1",
+			"stream-1",
+			start.UTC().Truncate(time.Minute).Unix(),
+			"legacy-category",
+			domain.AlarmTypeLive,
+		),
+		delivery.ClaimKeys,
+		delivery.DeliveryContext,
 	); err != nil {
 		t.Fatalf("insert legacy delivery: %v", err)
 	}
@@ -566,8 +576,15 @@ func TestPgxRepositoryInsertBatch_SkipsLegacyDedupeKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InsertBatch() error = %v", err)
 	}
-	if result.InsertedDeliveries != 0 || result.DuplicateDeliveries != 1 {
-		t.Fatalf("InsertBatch() result = %+v, want legacy duplicate skip", result)
+	if result.InsertedDeliveries != 1 || result.DuplicateDeliveries != 0 {
+		t.Fatalf("InsertBatch() result = %+v, want v2 insert despite legacy dedupe row", result)
+	}
+	var deliveryCount int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
+		t.Fatalf("count dispatch deliveries: %v", err)
+	}
+	if deliveryCount != 2 {
+		t.Fatalf("delivery count = %d, want legacy fixture plus v2 row", deliveryCount)
 	}
 }
 

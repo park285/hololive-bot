@@ -1,6 +1,7 @@
 
 			WITH input AS (
-				SELECT *
+				SELECT existing_event_id, event_key, existing_payload_hash, incoming_payload_hash,
+					alarm_type, channel_id, stream_id, category, payload
 				FROM jsonb_to_recordset($1::jsonb) AS x(
 					existing_event_id BIGINT,
 					event_key TEXT,

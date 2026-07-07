@@ -1,6 +1,10 @@
 package delivery
 
-import "embed"
+import (
+	"embed"
+	"fmt"
+	"strings"
+)
 
 //go:embed queries/*
 var sqlAssets embed.FS
@@ -10,5 +14,9 @@ func mustSQL(name string) string {
 	if err != nil {
 		panic(err)
 	}
-	return string(query)
+	text := strings.TrimSpace(string(query))
+	if text == "" {
+		panic(fmt.Sprintf("empty SQL asset %s", name))
+	}
+	return text
 }

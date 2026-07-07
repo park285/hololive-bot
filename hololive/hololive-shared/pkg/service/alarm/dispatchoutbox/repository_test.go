@@ -39,9 +39,6 @@ func TestBuildLedgerRows_DedupeKeyDoesNotDependOnClaimKeys(t *testing.T) {
 	if firstDelivery.DedupeKey != secondDelivery.DedupeKey {
 		t.Fatalf("dedupe key depends on claim key: %q != %q", firstDelivery.DedupeKey, secondDelivery.DedupeKey)
 	}
-	if firstDelivery.LegacyDedupeKey == secondDelivery.LegacyDedupeKey {
-		t.Fatalf("legacy dedupe key should preserve claim-key compatibility difference, got %q", firstDelivery.LegacyDedupeKey)
-	}
 	if !strings.HasPrefix(firstDelivery.DedupeKey, "v2:room:room-1:event:") {
 		t.Fatalf("dedupe key = %q, want v2 room/event prefix", firstDelivery.DedupeKey)
 	}

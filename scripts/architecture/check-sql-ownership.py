@@ -41,6 +41,9 @@ DDL_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+SELECT_STAR_RE = re.compile(r"\bSELECT\s+\*\b", re.IGNORECASE)
+LEADING_SQL_FRAGMENT_RE = re.compile(r"^(?:ON\s+CONFLICT|VALUES|AND|OR|WHERE|SET|RETURNING)\b", re.IGNORECASE)
+TRAILING_SQL_FRAGMENT_RE = re.compile(r"\b(?:VALUES|WHERE|AND|OR|SET|FROM|JOIN|ON)\s*$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -171,6 +174,10 @@ def migration_command_asset(path: Path) -> bool:
     )
 
 
+def complete_query_required(path: Path) -> bool:
+    return rel(path).startswith("hololive/hololive-shared/pkg/service/delivery/queries/")
+
+
 def excerpt(value: str) -> str:
     return " ".join(value.strip().split())[:140]
 
@@ -206,8 +213,28 @@ def check_sql_asset_locations() -> list[Finding]:
     return findings
 
 
+def check_sql_asset_shape() -> list[Finding]:
+    findings: list[Finding] = []
+    for path in sql_asset_files():
+        text = path.read_text(encoding="utf-8")
+        if SELECT_STAR_RE.search(text):
+            findings.append(Finding(path, 1, "SQL asset must project explicit columns instead of SELECT *", excerpt(text)))
+
+        stripped = text.strip().rstrip(";").strip()
+        if not stripped:
+            findings.append(Finding(path, 1, "SQL asset is empty", ""))
+            continue
+        if not complete_query_required(path):
+            continue
+        if LEADING_SQL_FRAGMENT_RE.search(stripped):
+            findings.append(Finding(path, 1, "SQL asset starts with a continuation fragment", excerpt(stripped)))
+        if TRAILING_SQL_FRAGMENT_RE.search(stripped):
+            findings.append(Finding(path, 1, "SQL asset ends with a continuation fragment", excerpt(stripped)))
+    return findings
+
+
 def main() -> int:
-    findings = check_source_literals() + check_sql_asset_locations()
+    findings = check_source_literals() + check_sql_asset_locations() + check_sql_asset_shape()
     if not findings:
         print("SQL ownership check passed")
         return 0
