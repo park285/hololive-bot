@@ -128,6 +128,9 @@ func (c *Config) validateRequiredConfig() error {
 	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
 		return fmt.Errorf("IRIS_WEBHOOK_TOKEN is required")
 	}
+	if !c.Webhook.RequireHMAC {
+		return fmt.Errorf("IRIS_WEBHOOK_REQUIRE_HMAC=false is unsupported; Iris webhook HMAC is mandatory")
+	}
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
 		return fmt.Errorf("IRIS_BOT_TOKEN is required")
 	}

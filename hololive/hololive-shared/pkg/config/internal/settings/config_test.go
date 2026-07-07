@@ -1663,6 +1663,19 @@ func TestLoad_WebhookRequireHMACEnvOverride(t *testing.T) {
 	}
 }
 
+func TestLoad_WebhookRequireHMACFalseFailsClosed(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("IRIS_WEBHOOK_REQUIRE_HMAC", "false")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want HMAC false rejection")
+	}
+	if !strings.Contains(err.Error(), "IRIS_WEBHOOK_REQUIRE_HMAC=false is unsupported") {
+		t.Fatalf("Load() error = %v, want HMAC false rejection", err)
+	}
+}
+
 func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")

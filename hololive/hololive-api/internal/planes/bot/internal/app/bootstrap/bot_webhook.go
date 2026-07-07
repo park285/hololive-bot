@@ -17,6 +17,7 @@ func BuildBotWebhookHandler(
 	logger *slog.Logger,
 ) (*webhook.Handler, error) {
 	return iris.NewWebhookHandler(messageHandler,
+		webhook.WithWebhookToken(appConfig.Iris.WebhookToken),
 		webhook.WithWebhookLogger(logger),
 		valkeydedup.Option(deps.Cache.GetClient()),
 		webhook.WithDedupMode(webhook.DedupModeAfterDecode),
@@ -28,6 +29,5 @@ func BuildBotWebhookHandler(
 		webhook.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
 		webhook.WithDedupTTL(appConfig.Webhook.DedupTTL),
 		webhook.WithDedupTimeout(appConfig.Webhook.DedupTimeout),
-		webhook.WithRequireHMAC(appConfig.Webhook.RequireHMAC),
 	)
 }

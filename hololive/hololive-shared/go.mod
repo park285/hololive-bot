@@ -13,7 +13,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.3 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/park285/shared-go v1.28.3
+	github.com/park285/shared-go v1.28.5-0.20260707055932-230c5c8a025c
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
@@ -29,7 +29,7 @@ require (
 require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v0.28.0
+	github.com/park285/iris-client-go v0.28.1-0.20260707082521-58a1a5f102c0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.60.0

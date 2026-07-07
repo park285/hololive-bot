@@ -49,7 +49,7 @@ func TestBuildBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *testing.T
 		messageID = "message-id-malformed-first"
 	)
 
-	t.Setenv("IRIS_WEBHOOK_TOKEN", token)
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "env-token-must-not-win")
 
 	valkeyClient, _ := sharedtestutil.NewTestValkeyClient(t)
 	cacheClient := cachemocks.NewLenientClient()

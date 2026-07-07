@@ -40,6 +40,7 @@ func validRuntimeRoleConfig() *Config {
 			WebhookToken: "x",
 			BotToken:     "x",
 		},
+		Webhook: WebhookConfig{RequireHMAC: true},
 		Holodex: HolodexConfig{
 			APIKey: "x",
 			LiveStatusFallback: HolodexLiveStatusFallbackConfig{
