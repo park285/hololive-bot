@@ -62,6 +62,10 @@ echo "[M1] SQL ownership check"
 "${SCRIPT_DIR}/check-sql-ownership.sh"
 echo
 
+echo "[M1] DB access policy check"
+"${SCRIPT_DIR}/check-db-access-policy.sh"
+echo
+
 echo "[CI] Run M2 document contract gate"
 echo "[M2] current docs historical body check"
 "${SCRIPT_DIR}/check-current-docs-no-historical-body.sh"
