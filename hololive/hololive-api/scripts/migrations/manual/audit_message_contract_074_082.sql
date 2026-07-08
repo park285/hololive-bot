@@ -56,5 +56,5 @@ END $$;
 SELECT migration, ledger_applied, artifact_present, verdict
 FROM _msg_contract_audit ORDER BY ord;
 
-SELECT verdict, count(*) AS n
+SELECT verdict, count(ord) AS n
 FROM _msg_contract_audit GROUP BY verdict ORDER BY verdict;

@@ -26,4 +26,4 @@
 				ON CONFLICT (dedupe_key) DO NOTHING
 				RETURNING dedupe_key
 		)
-		SELECT (SELECT count(*) FROM normalized), (SELECT count(*) FROM inserted)
+		SELECT (SELECT count(dedupe_key) FROM normalized), (SELECT count(dedupe_key) FROM inserted)

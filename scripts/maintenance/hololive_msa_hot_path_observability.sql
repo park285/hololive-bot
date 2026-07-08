@@ -5,7 +5,7 @@
 \echo 'alarm_dispatch_deliveries terminal rows'
 SELECT
     status,
-    count(*) AS terminal_rows,
+    count(id) AS terminal_rows,
     min(coalesce(sent_at, dlq_at, cancelled_at, quarantined_at, updated_at, created_at)) AS oldest_terminal_at,
     max(coalesce(sent_at, dlq_at, cancelled_at, quarantined_at, updated_at, created_at)) AS newest_terminal_at
 FROM alarm_dispatch_deliveries
@@ -16,7 +16,7 @@ ORDER BY terminal_rows DESC;
 \echo 'alarm dispatch active backlog'
 SELECT
     status,
-    count(*) AS rows,
+    count(id) AS rows,
     min(next_attempt_at) AS oldest_next_attempt_at,
     max(updated_at) AS newest_updated_at
 FROM alarm_dispatch_deliveries
@@ -28,7 +28,7 @@ ORDER BY rows DESC;
 SELECT
     kind,
     delivery_status,
-    count(*) AS rows,
+    count(post_id) AS rows,
     min(authorized_at) AS oldest_authorized_at,
     max(updated_at) AS newest_updated_at
 FROM youtube_community_shorts_alarm_states
@@ -41,20 +41,20 @@ ORDER BY rows DESC;
 SELECT
     kind,
     post_id,
-    count(*) AS rows,
+    count(post_id) AS rows,
     min(alarm_sent_at) AS first_alarm_sent_at,
     max(alarm_sent_at) AS last_alarm_sent_at
 FROM youtube_community_shorts_alarm_states
 WHERE alarm_sent_at IS NOT NULL
 GROUP BY kind, post_id
-HAVING count(*) > 1
+HAVING count(post_id) > 1
 ORDER BY rows DESC, last_alarm_sent_at DESC
 LIMIT 50;
 
 \echo 'sent tracking rows missing canonical alarm state'
 SELECT
     t.kind,
-    count(*) AS sent_tracking_without_state
+    count(t.canonical_content_id) AS sent_tracking_without_state
 FROM youtube_content_alarm_tracking AS t
 LEFT JOIN youtube_community_shorts_alarm_states AS s
   ON s.kind = t.kind

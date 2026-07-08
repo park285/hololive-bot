@@ -1,1 +1,1 @@
-SELECT count(*) FROM notification_delivery_outbox WHERE status = $1
+SELECT count(id) FROM notification_delivery_outbox WHERE status = $1

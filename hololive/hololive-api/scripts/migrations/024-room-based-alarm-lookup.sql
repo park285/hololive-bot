@@ -8,7 +8,7 @@ USING (
     SELECT room_id, channel_id, MAX(id) AS keep_id
     FROM alarms
     GROUP BY room_id, channel_id
-    HAVING COUNT(*) > 1
+    HAVING COUNT(id) > 1
 ) dup
 WHERE a.room_id = dup.room_id
   AND a.channel_id = dup.channel_id

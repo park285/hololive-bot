@@ -43,6 +43,6 @@ WITH target AS (
     FROM updated
     RETURNING id
 )
-SELECT count(*) AS requeued_rows
+SELECT count(id) AS requeued_rows
 FROM audit;
 SQL

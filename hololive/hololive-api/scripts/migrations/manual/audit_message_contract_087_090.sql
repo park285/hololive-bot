@@ -21,8 +21,8 @@ BEGIN
 
   IF has_ms THEN
     SELECT EXISTS (SELECT 1 FROM message_strings WHERE namespace = 'error' AND key = 'unknown_command' AND value LIKE '❌ 알 수 없는 명령입니다.%') INTO a089;
-    SELECT (SELECT count(*) FROM message_strings WHERE namespace = 'timefmt') = 6
-       AND (SELECT count(*) FROM message_strings WHERE namespace = 'karing')  = 20 INTO a090;
+    SELECT (SELECT count(key) FROM message_strings WHERE namespace = 'timefmt') = 6
+       AND (SELECT count(key) FROM message_strings WHERE namespace = 'karing')  = 20 INTO a090;
   END IF;
 
   INSERT INTO _msg_tone_audit(ord, migration, artifact_present) VALUES
@@ -47,7 +47,7 @@ END $$;
 SELECT migration, ledger_applied, artifact_present, verdict
 FROM _msg_tone_audit ORDER BY ord;
 
-SELECT verdict, count(*) AS n
+SELECT verdict, count(ord) AS n
 FROM _msg_tone_audit GROUP BY verdict ORDER BY verdict;
 
 -- channel override 행은 재시드가 덮지 않아 새 톤이 적용되지 않는다(보존 정책) — 대상 방 가시화용.

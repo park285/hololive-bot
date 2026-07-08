@@ -10,7 +10,7 @@ DECLARE dup_slugs TEXT;
 BEGIN
     SELECT string_agg(slug || ' x' || cnt, ', ')
     INTO dup_slugs
-    FROM (SELECT slug, count(*) AS cnt FROM members GROUP BY slug HAVING count(*) > 1) d;
+    FROM (SELECT slug, count(id) AS cnt FROM members GROUP BY slug HAVING count(id) > 1) d;
     IF dup_slugs IS NOT NULL THEN
         RAISE EXCEPTION 'members.slug 중복 존재 — 수동 병합 후 재적용 필요: %', dup_slugs;
     END IF;

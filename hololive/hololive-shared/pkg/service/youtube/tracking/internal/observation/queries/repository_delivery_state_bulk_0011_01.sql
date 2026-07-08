@@ -182,8 +182,8 @@ WITH input AS (
 	RETURNING kind, post_id
 )
 SELECT
-	(SELECT COUNT(*) FROM tracking_updated) AS tracking_updated_count,
-	(SELECT COUNT(*) FROM claimed_state_finalized) AS claimed_state_finalized_count,
-	(SELECT COUNT(*) FROM authorization_mismatches) AS authorization_mismatch_count,
-	(SELECT COUNT(*) FROM existing_state_updated) AS existing_state_updated_count,
-	(SELECT COUNT(*) FROM missing_state_inserted) AS missing_state_inserted_count
+	(SELECT COUNT(post_id) FROM tracking_updated) AS tracking_updated_count,
+	(SELECT COUNT(post_id) FROM claimed_state_finalized) AS claimed_state_finalized_count,
+	(SELECT COUNT(post_id) FROM authorization_mismatches) AS authorization_mismatch_count,
+	(SELECT COUNT(post_id) FROM existing_state_updated) AS existing_state_updated_count,
+	(SELECT COUNT(post_id) FROM missing_state_inserted) AS missing_state_inserted_count

@@ -87,7 +87,9 @@ WITH base_rows AS (
     WHERE t.canonical_content_id IS NOT NULL
 ), ranked_rows AS (
     SELECT
-        b.*,
+        b.ctid,
+        b.kind,
+        b.canonical_content_id,
         ROW_NUMBER() OVER (
             PARTITION BY b.kind, b.canonical_content_id
             ORDER BY

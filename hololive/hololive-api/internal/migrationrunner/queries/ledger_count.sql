@@ -1,1 +1,1 @@
-SELECT count(*) FROM schema_migrations
+SELECT count(filename) FROM schema_migrations

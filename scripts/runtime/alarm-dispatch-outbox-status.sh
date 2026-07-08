@@ -2,7 +2,7 @@
 set -euo pipefail
 
 psql "${DATABASE_URL:?set DATABASE_URL}" -v ON_ERROR_STOP=1 <<'SQL'
-SELECT status, count(*) AS rows
+SELECT status, count(id) AS rows
 FROM alarm_dispatch_deliveries
 GROUP BY status
 ORDER BY status;

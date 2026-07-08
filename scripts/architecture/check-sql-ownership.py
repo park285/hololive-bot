@@ -41,7 +41,10 @@ DDL_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
-SELECT_STAR_RE = re.compile(r"\bSELECT\s+\*\b", re.IGNORECASE)
+SQL_WILDCARD_PATTERNS = (
+    ("COUNT wildcard aggregate", re.compile(r"\bCOUNT\s*\(\s*\*\s*\)", re.IGNORECASE)),
+)
+SELECT_RE = re.compile(r"\bSELECT\b", re.IGNORECASE)
 LEADING_SQL_FRAGMENT_RE = re.compile(r"^(?:ON\s+CONFLICT|VALUES|AND|OR|WHERE|SET|RETURNING)\b", re.IGNORECASE)
 TRAILING_SQL_FRAGMENT_RE = re.compile(r"\b(?:VALUES|WHERE|AND|OR|SET|FROM|JOIN|ON)\s*$", re.IGNORECASE)
 
@@ -182,6 +185,156 @@ def excerpt(value: str) -> str:
     return " ".join(value.strip().split())[:140]
 
 
+def keyword_at(sql: str, offset: int, keyword: str) -> bool:
+    end = offset + len(keyword)
+    return (
+        sql[offset:end].upper() == keyword
+        and (offset == 0 or not (sql[offset - 1].isalnum() or sql[offset - 1] == "_"))
+        and (end >= len(sql) or not (sql[end].isalnum() or sql[end] == "_"))
+    )
+
+
+def skip_space_and_comments(sql: str, offset: int) -> int:
+    n = len(sql)
+    while offset < n:
+        if sql[offset].isspace():
+            offset += 1
+            continue
+        if sql.startswith("--", offset):
+            newline = sql.find("\n", offset + 2)
+            if newline < 0:
+                return n
+            offset = newline + 1
+            continue
+        if sql.startswith("/*", offset):
+            end = sql.find("*/", offset + 2)
+            if end < 0:
+                return n
+            offset = end + 2
+            continue
+        break
+    return offset
+
+
+def skip_balanced_parentheses(sql: str, offset: int) -> int:
+    if offset >= len(sql) or sql[offset] != "(":
+        return offset
+    depth = 0
+    i = offset
+    quote: str | None = None
+    while i < len(sql):
+        ch = sql[i]
+        if quote:
+            if ch == quote:
+                quote = None
+            elif ch == "\\" and quote in {"'", '"'}:
+                i += 1
+            i += 1
+            continue
+        if ch in {"'", '"'}:
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return i
+
+
+def select_projection_start(sql: str, offset: int) -> int:
+    i = skip_space_and_comments(sql, offset)
+    if keyword_at(sql, i, "ALL"):
+        return skip_space_and_comments(sql, i + len("ALL"))
+    if not keyword_at(sql, i, "DISTINCT"):
+        return i
+    i = skip_space_and_comments(sql, i + len("DISTINCT"))
+    if keyword_at(sql, i, "ON"):
+        i = skip_space_and_comments(sql, i + len("ON"))
+        i = skip_space_and_comments(sql, skip_balanced_parentheses(sql, i))
+    return i
+
+
+def iter_select_wildcard_offsets(sql: str):
+    for select in SELECT_RE.finditer(sql):
+        i = select_projection_start(sql, select.end())
+        depth = 0
+        quote: str | None = None
+        line_comment = False
+        block_comment = False
+        last_top_level_significant: str | None = None
+        while i < len(sql):
+            ch = sql[i]
+            if line_comment:
+                if ch == "\n":
+                    line_comment = False
+                i += 1
+                continue
+            if block_comment:
+                if sql.startswith("*/", i):
+                    block_comment = False
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if quote:
+                if ch == quote:
+                    quote = None
+                elif ch == "\\" and quote in {"'", '"'}:
+                    i += 1
+                i += 1
+                continue
+            if sql.startswith("--", i):
+                line_comment = True
+                i += 2
+                continue
+            if sql.startswith("/*", i):
+                block_comment = True
+                i += 2
+                continue
+            if ch in {"'", '"'}:
+                quote = ch
+                i += 1
+                continue
+            if depth == 0 and keyword_at(sql, i, "FROM"):
+                break
+            if ch == "(":
+                depth += 1
+            elif ch == ")" and depth > 0:
+                depth -= 1
+            elif depth == 0 and ch == "*":
+                if last_top_level_significant in {None, ",", "."}:
+                    yield i
+            if depth == 0 and not ch.isspace():
+                last_top_level_significant = ch
+            i += 1
+
+
+def check_sql_wildcards(path: Path, base_line: int, sql: str) -> list[Finding]:
+    findings: list[Finding] = []
+    for offset in iter_select_wildcard_offsets(sql):
+        findings.append(
+            Finding(
+                path=path,
+                line=base_line + line_number(sql, offset) - 1,
+                reason="SELECT wildcard projection is not allowed; name the required column(s)",
+                excerpt=excerpt(sql[max(0, offset - 80) : offset + 80]),
+            )
+        )
+    for reason, pattern in SQL_WILDCARD_PATTERNS:
+        for match in pattern.finditer(sql):
+            findings.append(
+                Finding(
+                    path=path,
+                    line=base_line + line_number(sql, match.start()) - 1,
+                    reason=f"{reason} is not allowed; name the required column(s)",
+                    excerpt=excerpt(sql[max(0, match.start() - 80) : match.end() + 80]),
+                )
+            )
+    return findings
+
+
 def check_source_literals() -> list[Finding]:
     findings: list[Finding] = []
     for path in source_files():
@@ -190,14 +343,16 @@ def check_source_literals() -> list[Finding]:
             match = SQL_KEYWORD_RE.search(value)
             if not match:
                 continue
+            base_line = line_number(source, start)
             findings.append(
                 Finding(
                     path=path,
-                    line=line_number(source, start),
+                    line=base_line,
                     reason=f"SQL string literal contains {match.group(1).strip()}",
                     excerpt=excerpt(value),
                 )
             )
+            findings.extend(check_sql_wildcards(path, base_line, value))
     return findings
 
 
@@ -217,8 +372,7 @@ def check_sql_asset_shape() -> list[Finding]:
     findings: list[Finding] = []
     for path in sql_asset_files():
         text = path.read_text(encoding="utf-8")
-        if SELECT_STAR_RE.search(text):
-            findings.append(Finding(path, 1, "SQL asset must project explicit columns instead of SELECT *", excerpt(text)))
+        findings.extend(check_sql_wildcards(path, 1, text))
 
         stripped = text.strip().rstrip(";").strip()
         if not stripped:

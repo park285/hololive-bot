@@ -143,7 +143,7 @@ fi
 echo "==> ensuring schema_migrations ledger"
 run_psql -q -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());"
 
-ledger_count="$(run_psql -tAc "SELECT count(*) FROM schema_migrations;" | tr -d '[:space:]')"
+ledger_count="$(run_psql -tAc "SELECT count(filename) FROM schema_migrations;" | tr -d '[:space:]')"
 if [ "${ledger_count}" = "0" ]; then
   existing_schema="$(run_psql -tAc "SELECT (to_regclass('public.members') IS NOT NULL AND to_regclass('public.alarms') IS NOT NULL);" | tr -d '[:space:]')"
   if [ "${existing_schema}" = "t" ]; then

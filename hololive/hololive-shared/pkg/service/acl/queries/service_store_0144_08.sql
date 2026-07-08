@@ -1,1 +1,1 @@
-SELECT count(*) FROM acl_rooms WHERE room_id = $1 AND list_type = $2
+SELECT count(id) FROM acl_rooms WHERE room_id = $1 AND list_type = $2
