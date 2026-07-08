@@ -29,7 +29,10 @@ func TestClientGetRoomsSuccess(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := NewClient(server.URL, "secret", nil)
+	client, err := NewClient(server.URL, "secret", nil)
+	if err != nil {
+		t.Fatalf("NewClient(%q) error = %v", server.URL, err)
+	}
 	got, err := client.GetRooms(t.Context())
 	if err != nil {
 		t.Fatalf("GetRooms() error = %v", err)
@@ -54,12 +57,64 @@ func TestClientGetRoomsNon2xx(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := NewClient(server.URL, "", nil)
-	_, err := client.GetRooms(t.Context())
+	client, err := NewClient(server.URL, "", nil)
+	if err != nil {
+		t.Fatalf("NewClient(%q) error = %v", server.URL, err)
+	}
+	_, err = client.GetRooms(t.Context())
 	if err == nil {
 		t.Fatal("GetRooms() error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "status 502") {
 		t.Fatalf("error = %q, want status 502", err.Error())
+	}
+}
+
+func TestNewClientRejectsUnsafeBaseURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []string{
+		"http://169.254.169.254",
+		"https://example.com",
+		"ftp://127.0.0.1:30001",
+		"https://127.0.0.1:30001/internal",
+		"https://127.0.0.1:30001?x=1",
+		"https://user:pass@127.0.0.1:30001",
+	}
+
+	for _, raw := range tests {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			client, err := NewClient(raw, "", nil)
+			if err == nil {
+				t.Fatalf("NewClient(%q) error = nil, want rejection", raw)
+			}
+			if client != nil {
+				t.Fatalf("NewClient(%q) client = %#v, want nil", raw, client)
+			}
+		})
+	}
+}
+
+func TestNewClientAllowsConfiguredInternalHosts(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"http://localhost:30001",
+		"https://127.0.0.1:30001",
+		"https://[::1]:30001",
+		"https://hololive-api:30001",
+		"https://bot.internal:3443",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			client, err := NewClient(raw, "", nil)
+			if err != nil {
+				t.Fatalf("NewClient(%q) error = %v", raw, err)
+			}
+			if client == nil {
+				t.Fatalf("NewClient(%q) client = nil", raw)
+			}
+		})
 	}
 }

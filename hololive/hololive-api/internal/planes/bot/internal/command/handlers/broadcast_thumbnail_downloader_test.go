@@ -90,6 +90,15 @@ func TestYouTubeThumbnailDownloaderRejectsNilEntry(t *testing.T) {
 	}
 }
 
+func TestYouTubeThumbnailDownloaderRejectsLooseVideoID(t *testing.T) {
+	downloader := NewYouTubeThumbnailDownloader(&http.Client{})
+
+	_, _, err := downloader.Download(t.Context(), &handlercore.BroadcastHistoryEntry{VideoID: "short1"})
+	if err == nil || !strings.Contains(err.Error(), "invalid youtube video id") {
+		t.Fatalf("Download() error = %v, want invalid video id", err)
+	}
+}
+
 func TestValidateThumbnailResponseRejectsNil(t *testing.T) {
 	_, err := validateThumbnailResponse(nil)
 	if err == nil || !strings.Contains(err.Error(), "response is nil") {

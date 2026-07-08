@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.26.5
 ARG ALPINE_VERSION=3.23
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:18b460dd17542c2ba43299a633cf6ebfc1115101509531471d7cfce1019af083 AS builder
+FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:5e9acfbe29a783d9e2295bc88d30b7c3556e31c8bd21de10a887c4572f58dbd9 AS builder
 
 ARG VERSION=dev
 ARG TARGETOS

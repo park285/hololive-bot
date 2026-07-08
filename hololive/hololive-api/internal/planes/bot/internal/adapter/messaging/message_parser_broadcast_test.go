@@ -327,6 +327,7 @@ func TestParseMessage_StandaloneBroadcastThumbnailYouTubeURL(t *testing.T) {
 		{name: "watch url", msg: "!썸네일 https://www.youtube.com/watch?v=eBWV8nEbHBo", want: "eBWV8nEbHBo"},
 		{name: "short url", msg: "!썸네일 https://youtu.be/eBWV8nEbHBo", want: "eBWV8nEbHBo"},
 		{name: "nested watch url", msg: "!방송이력 썸네일 https://www.youtube.com/watch?v=eBWV8nEbHBo", want: "eBWV8nEbHBo"},
+		{name: "live url", msg: "!썸네일 https://www.youtube.com/live/eBWV8nEbHBo?feature=share", want: "eBWV8nEbHBo"},
 	}
 
 	for _, tt := range tests {
@@ -345,5 +346,16 @@ func TestParseMessage_StandaloneBroadcastThumbnailYouTubeURL(t *testing.T) {
 				t.Fatalf("video_id = %v, want %s", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseMessage_StandaloneBroadcastThumbnailRejectsLooseYouTubeID(t *testing.T) {
+	t.Parallel()
+
+	if got, ok := cleanYouTubeVideoID("short1"); ok || got != "" {
+		t.Fatalf("cleanYouTubeVideoID(short1) = %q, %v; want rejected", got, ok)
+	}
+	if got, ok := cleanYouTubeVideoID("tooLongYouTubeVideoIDCandidate"); ok || got != "" {
+		t.Fatalf("cleanYouTubeVideoID(long candidate) = %q, %v; want rejected", got, ok)
 	}
 }

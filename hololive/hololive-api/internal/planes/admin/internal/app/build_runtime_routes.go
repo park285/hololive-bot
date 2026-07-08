@@ -91,7 +91,12 @@ func buildAdminAPIBotRoomLister(appConfig *config.Config, logger *slog.Logger) s
 		return nil
 	}
 
-	return botroomsclient.NewClient(botURL, appConfig.Server.APIKey, logger)
+	client, err := botroomsclient.NewClient(botURL, appConfig.Server.APIKey, logger)
+	if err != nil {
+		logger.Warn("admin api bot room client unavailable; invalid bot internal url", slog.Any("error", err))
+		return nil
+	}
+	return client
 }
 
 func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.Logger) *template.AdminService {

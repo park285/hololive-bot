@@ -43,6 +43,7 @@ type BroadcastHistoryFilter struct {
 type BroadcastHistoryEntry struct {
 	VideoID      string
 	MemberName   string
+	Type         string
 	TypeLabel    string
 	TopicID      string
 	Title        string
@@ -77,22 +78,22 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 
 func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, entry *BroadcastHistoryEntry) {
 	fmt.Fprintf(b, "%d. [%s] %s\n", index, entry.TypeLabel, entry.MemberName)
-	writeBroadcastHistoryTitle(b, entry.TypeLabel, entry.Title)
+	writeBroadcastHistoryTitle(b, entry.Type, entry.Title)
 	writeBroadcastHistoryTime(ctx, f, b, entry)
 	writeBroadcastHistoryURL(b, entry.URL)
 	writeBroadcastHistoryThumbnail(b, f.Prefix(), entry)
 }
 
-func writeBroadcastHistoryTitle(b *strings.Builder, typeLabel, title string) {
-	title = broadcastHistoryDisplayTitle(typeLabel, title)
+func writeBroadcastHistoryTitle(b *strings.Builder, broadcastType, title string) {
+	title = broadcastHistoryDisplayTitle(broadcastType, title)
 	if title != "" {
 		fmt.Fprintf(b, "   %s\n", title)
 	}
 }
 
-func broadcastHistoryDisplayTitle(typeLabel, title string) string {
+func broadcastHistoryDisplayTitle(broadcastType, title string) string {
 	title = strings.TrimSpace(title)
-	if typeLabel != "멤버십" {
+	if broadcastType != "membership" {
 		return title
 	}
 	return trimBroadcastHistoryMembershipTitleTag(title)

@@ -63,6 +63,7 @@ func TestBroadcastHistoryOmitsRedundantMembershipTitleTag(t *testing.T) {
 		{
 			VideoID:    "wrzJxt3KyNI",
 			MemberName: "미코",
+			Type:       "membership",
 			TypeLabel:  "멤버십",
 			Title:      "【メンバー限定】ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】",
 			Time:       time.Date(2026, 7, 5, 15, 32, 44, 0, time.UTC),
@@ -80,9 +81,19 @@ func TestBroadcastHistoryOmitsRedundantMembershipTitleTag(t *testing.T) {
 func TestBroadcastHistoryKeepsNonMembershipPartOfCompoundMembershipTitleTag(t *testing.T) {
 	t.Parallel()
 
-	got := broadcastHistoryDisplayTitle("멤버십", "【メン限同時視聴】映画ワイルドスピード")
+	got := broadcastHistoryDisplayTitle("membership", "【メン限同時視聴】映画ワイルドスピード")
 
 	if want := "【同時視聴】映画ワイルドスピード"; got != want {
+		t.Fatalf("broadcastHistoryDisplayTitle() = %q, want %q", got, want)
+	}
+}
+
+func TestBroadcastHistoryUsesTypeNotDisplayLabelForMembershipTitleCleanup(t *testing.T) {
+	t.Parallel()
+
+	got := broadcastHistoryDisplayTitle("membership", "【Members Only】yuru camp")
+
+	if want := "yuru camp"; got != want {
 		t.Fatalf("broadcastHistoryDisplayTitle() = %q, want %q", got, want)
 	}
 }
@@ -91,7 +102,7 @@ func TestBroadcastHistoryKeepsMembershipLikeTitleForOtherTypes(t *testing.T) {
 	t.Parallel()
 
 	title := "【メンバー限定】ちょこっとカラオケするよ~~ん"
-	if got := broadcastHistoryDisplayTitle("노래", title); got != title {
+	if got := broadcastHistoryDisplayTitle("singing", title); got != title {
 		t.Fatalf("broadcastHistoryDisplayTitle() = %q, want %q", got, title)
 	}
 }

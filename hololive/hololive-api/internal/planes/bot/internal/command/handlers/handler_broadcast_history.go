@@ -245,12 +245,13 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 		result = append(result, adapter.BroadcastHistoryEntry{
 			VideoID:      entry.VideoID,
 			MemberName:   entry.MemberName,
+			Type:         entry.BroadcastType,
 			TypeLabel:    BroadcastType(entry.BroadcastType).Label(),
 			TopicID:      entry.TopicID,
 			Title:        entry.Title,
 			Time:         broadcastHistoryEntryTime(entry),
 			URL:          "https://www.youtube.com/watch?v=" + entry.VideoID,
-			HasThumbnail: entry.VideoID != "",
+			HasThumbnail: validYouTubeVideoID(entry.VideoID),
 		})
 	}
 	return result

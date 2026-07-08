@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
+	"net/url"
+	"strings"
 	"time"
 
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
@@ -18,8 +21,12 @@ type Client struct {
 	httpClient *httputil.JSONClient
 }
 
-func NewClient(baseURL, apiKey string, logger *slog.Logger) *Client {
-	return &Client{httpClient: internalhttp.NewJSONClient(baseURL, apiKey, 30*time.Second, logger)}
+func NewClient(baseURL, apiKey string, logger *slog.Logger) (*Client, error) {
+	validatedBaseURL, err := validateInternalBotRoomsBaseURL(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{httpClient: internalhttp.NewJSONClient(validatedBaseURL, apiKey, 30*time.Second, logger)}, nil
 }
 
 func (c *Client) GetRooms(ctx context.Context) (*iris.RoomListResponse, error) {
@@ -62,4 +69,56 @@ func (c *Client) validate() error {
 		return errors.New("list bot iris rooms: http client is not configured")
 	}
 	return nil
+}
+
+var allowedInternalBotRoomsHosts = map[string]struct{}{
+	"localhost":    {},
+	"hololive-api": {},
+	"bot.internal": {},
+}
+
+func validateInternalBotRoomsBaseURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("invalid bot internal URL: %w", err)
+	}
+	if err := validateInternalBotRoomsURLShape(parsed); err != nil {
+		return "", err
+	}
+	if !allowedInternalBotRoomsHost(parsed.Hostname()) {
+		return "", fmt.Errorf("invalid bot internal URL host %q", parsed.Hostname())
+	}
+	parsed.Path = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func validateInternalBotRoomsURLShape(parsed *url.URL) error {
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("invalid bot internal URL scheme %q", parsed.Scheme)
+	}
+	if parsed.User != nil {
+		return errors.New("invalid bot internal URL: credentials are not allowed")
+	}
+	if parsed.Hostname() == "" {
+		return errors.New("invalid bot internal URL: host is required")
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return errors.New("invalid bot internal URL: path must be empty")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return errors.New("invalid bot internal URL: query and fragment are not allowed")
+	}
+	return nil
+}
+
+func allowedInternalBotRoomsHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return addr.IsLoopback()
+	}
+	_, ok := allowedInternalBotRoomsHosts[host]
+	return ok
 }

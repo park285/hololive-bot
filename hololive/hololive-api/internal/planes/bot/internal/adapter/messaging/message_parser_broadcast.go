@@ -126,7 +126,7 @@ func cleanYouTubeVideoID(raw string) (string, bool) {
 const youtubeVideoIDChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
 
 func looksLikeYouTubeVideoID(videoID string) bool {
-	if len(videoID) < 6 || len(videoID) > 32 {
+	if len(videoID) != 11 {
 		return false
 	}
 	for _, r := range videoID {

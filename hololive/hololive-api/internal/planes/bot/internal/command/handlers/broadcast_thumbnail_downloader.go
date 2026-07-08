@@ -44,7 +44,7 @@ type youTubeThumbnailDownloader struct {
 
 const maxBroadcastThumbnailBytes = 12 << 20
 
-var youtubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{6,32}$`)
+var youtubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 func NewYouTubeThumbnailDownloader(client *http.Client) BroadcastThumbnailDownloader {
 	if client == nil {
