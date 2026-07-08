@@ -33,6 +33,69 @@ func TestBroadcastHistoryShowsLimitFilter(t *testing.T) {
 	}
 }
 
+func TestBroadcastHistoryShowsThumbnailShortcut(t *testing.T) {
+	t.Parallel()
+
+	formatter := NewResponseFormatter("!", nil)
+	got := formatter.BroadcastHistory(t.Context(), BroadcastHistoryFilter{}, []BroadcastHistoryEntry{
+		{
+			VideoID:      "MKjXgiJSB_o",
+			MemberName:   "테스트",
+			TypeLabel:    "게임",
+			Time:         time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
+			HasThumbnail: true,
+		},
+	})
+
+	if want := "   !썸네일 MKjXgiJSB_o"; !strings.Contains(got, want) {
+		t.Fatalf("BroadcastHistory() missing %q in:\n%s", want, got)
+	}
+	if notWant := "썸네일 다운로드:"; strings.Contains(got, notWant) {
+		t.Fatalf("BroadcastHistory() still contains redundant thumbnail label %q in:\n%s", notWant, got)
+	}
+}
+
+func TestBroadcastHistoryOmitsRedundantMembershipTitleTag(t *testing.T) {
+	t.Parallel()
+
+	formatter := NewResponseFormatter("!", nil)
+	got := formatter.BroadcastHistory(t.Context(), BroadcastHistoryFilter{}, []BroadcastHistoryEntry{
+		{
+			VideoID:    "wrzJxt3KyNI",
+			MemberName: "미코",
+			TypeLabel:  "멤버십",
+			Title:      "【メンバー限定】ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】",
+			Time:       time.Date(2026, 7, 5, 15, 32, 44, 0, time.UTC),
+		},
+	})
+
+	if want := "   ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】"; !strings.Contains(got, want) {
+		t.Fatalf("BroadcastHistory() missing cleaned membership title %q in:\n%s", want, got)
+	}
+	if notWant := "【メンバー限定】"; strings.Contains(got, notWant) {
+		t.Fatalf("BroadcastHistory() still contains redundant membership tag %q in:\n%s", notWant, got)
+	}
+}
+
+func TestBroadcastHistoryKeepsNonMembershipPartOfCompoundMembershipTitleTag(t *testing.T) {
+	t.Parallel()
+
+	got := broadcastHistoryDisplayTitle("멤버십", "【メン限同時視聴】映画ワイルドスピード")
+
+	if want := "【同時視聴】映画ワイルドスピード"; got != want {
+		t.Fatalf("broadcastHistoryDisplayTitle() = %q, want %q", got, want)
+	}
+}
+
+func TestBroadcastHistoryKeepsMembershipLikeTitleForOtherTypes(t *testing.T) {
+	t.Parallel()
+
+	title := "【メンバー限定】ちょこっとカラオケするよ~~ん"
+	if got := broadcastHistoryDisplayTitle("노래", title); got != title {
+		t.Fatalf("broadcastHistoryDisplayTitle() = %q, want %q", got, title)
+	}
+}
+
 func TestBroadcastHistoryEmptyShowsLimitFilter(t *testing.T) {
 	t.Parallel()
 

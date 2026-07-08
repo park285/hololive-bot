@@ -23,6 +23,7 @@ package formatter
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -50,6 +51,8 @@ type BroadcastHistoryEntry struct {
 	HasThumbnail bool
 }
 
+var broadcastHistoryMembershipTagPattern = regexp.MustCompile(`(?i)(メンバーシップ限定|メンバー限定配信|メンバー限定|メン限|members[\s_-]*only|member[\s_-]*only|membership)`)
+
 func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter BroadcastHistoryFilter, entries []BroadcastHistoryEntry) string {
 	if len(entries) == 0 {
 		return f.BroadcastHistoryEmpty(ctx, filter)
@@ -74,16 +77,54 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 
 func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, entry *BroadcastHistoryEntry) {
 	fmt.Fprintf(b, "%d. [%s] %s\n", index, entry.TypeLabel, entry.MemberName)
-	writeBroadcastHistoryTitle(b, entry.Title)
+	writeBroadcastHistoryTitle(b, entry.TypeLabel, entry.Title)
 	writeBroadcastHistoryTime(ctx, f, b, entry)
 	writeBroadcastHistoryURL(b, entry.URL)
 	writeBroadcastHistoryThumbnail(b, f.Prefix(), entry)
 }
 
-func writeBroadcastHistoryTitle(b *strings.Builder, title string) {
+func writeBroadcastHistoryTitle(b *strings.Builder, typeLabel, title string) {
+	title = broadcastHistoryDisplayTitle(typeLabel, title)
 	if title != "" {
 		fmt.Fprintf(b, "   %s\n", title)
 	}
+}
+
+func broadcastHistoryDisplayTitle(typeLabel, title string) string {
+	title = strings.TrimSpace(title)
+	if typeLabel != "멤버십" {
+		return title
+	}
+	return trimBroadcastHistoryMembershipTitleTag(title)
+}
+
+func trimBroadcastHistoryMembershipTitleTag(title string) string {
+	tag, rest, ok := splitLeadingBroadcastHistoryTitleTag(title)
+	if !ok {
+		return title
+	}
+	cleanedTag := cleanBroadcastHistoryMembershipTag(tag)
+	rest = strings.TrimSpace(rest)
+	if cleanedTag == "" {
+		return rest
+	}
+	return strings.TrimSpace("【" + cleanedTag + "】" + rest)
+}
+
+func splitLeadingBroadcastHistoryTitleTag(title string) (tag, rest string, ok bool) {
+	if !strings.HasPrefix(title, "【") {
+		return "", "", false
+	}
+	tagEnd := strings.Index(title, "】")
+	if tagEnd < 0 {
+		return "", "", false
+	}
+	return title[len("【"):tagEnd], title[tagEnd+len("】"):], true
+}
+
+func cleanBroadcastHistoryMembershipTag(tag string) string {
+	cleaned := broadcastHistoryMembershipTagPattern.ReplaceAllString(tag, "")
+	return strings.Trim(cleaned, " \t\n\r　-_/|:：・,，、")
 }
 
 func writeBroadcastHistoryTime(ctx context.Context, f *ResponseFormatter, b *strings.Builder, entry *BroadcastHistoryEntry) {
@@ -102,7 +143,7 @@ func writeBroadcastHistoryURL(b *strings.Builder, url string) {
 
 func writeBroadcastHistoryThumbnail(b *strings.Builder, prefix string, entry *BroadcastHistoryEntry) {
 	if entry.HasThumbnail && entry.VideoID != "" {
-		fmt.Fprintf(b, "   썸네일: %s방송이력 썸네일 %s\n", prefix, entry.VideoID)
+		fmt.Fprintf(b, "   %s썸네일 %s\n", prefix, entry.VideoID)
 	}
 }
 

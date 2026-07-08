@@ -315,3 +315,35 @@ func TestParseMessage_StandaloneBroadcastThumbnail(t *testing.T) {
 		t.Fatalf("video_id = %v, want AqxEw3kXcgU", got)
 	}
 }
+
+func TestParseMessage_StandaloneBroadcastThumbnailYouTubeURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		msg  string
+		want string
+	}{
+		{name: "watch url", msg: "!썸네일 https://www.youtube.com/watch?v=eBWV8nEbHBo", want: "eBWV8nEbHBo"},
+		{name: "short url", msg: "!썸네일 https://youtu.be/eBWV8nEbHBo", want: "eBWV8nEbHBo"},
+		{name: "nested watch url", msg: "!방송이력 썸네일 https://www.youtube.com/watch?v=eBWV8nEbHBo", want: "eBWV8nEbHBo"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			adapter := NewMessageAdapter("!", "")
+			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
+			if result == nil {
+				t.Fatal("expected parsed command, got nil")
+			}
+			if result.Type != domain.CommandBroadcastThumbnail {
+				t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
+			}
+			if got := result.Params["video_id"]; got != tt.want {
+				t.Fatalf("video_id = %v, want %s", got, tt.want)
+			}
+		})
+	}
+}

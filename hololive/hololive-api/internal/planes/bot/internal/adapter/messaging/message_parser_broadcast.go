@@ -21,6 +21,7 @@
 package messaging
 
 import (
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -53,9 +54,87 @@ func (ma *MessageAdapter) isBroadcastThumbnailCommand(cmd string) bool {
 func broadcastThumbnailCommand(args []string, raw string) *ParsedCommand {
 	params := make(map[string]any)
 	if len(args) > 0 {
-		params["video_id"] = strings.TrimSpace(args[0])
+		params["video_id"] = parseBroadcastThumbnailVideoID(args[0])
 	}
 	return &ParsedCommand{Type: domain.CommandBroadcastThumbnail, Params: params, RawMessage: raw}
+}
+
+func parseBroadcastThumbnailVideoID(raw string) string {
+	value := strings.TrimSpace(raw)
+	if videoID, ok := youtubeVideoIDFromURL(value); ok {
+		return videoID
+	}
+	return value
+}
+
+func youtubeVideoIDFromURL(raw string) (string, bool) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", false
+	}
+
+	host := strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
+	switch host {
+	case "youtube.com", "m.youtube.com", "music.youtube.com":
+		return youtubeVideoIDFromYouTubeURL(parsed)
+	case "youtu.be":
+		return firstYouTubePathVideoID(parsed)
+	default:
+		return "", false
+	}
+}
+
+func youtubeVideoIDFromYouTubeURL(parsed *url.URL) (string, bool) {
+	if parsed == nil {
+		return "", false
+	}
+	if strings.Trim(parsed.Path, "/") == "watch" {
+		return cleanYouTubeVideoID(parsed.Query().Get("v"))
+	}
+
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) < 2 {
+		return "", false
+	}
+	switch parts[0] {
+	case "shorts", "live", "embed", "v":
+		return cleanYouTubeVideoID(parts[1])
+	default:
+		return "", false
+	}
+}
+
+func firstYouTubePathVideoID(parsed *url.URL) (string, bool) {
+	if parsed == nil {
+		return "", false
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) == 0 {
+		return "", false
+	}
+	return cleanYouTubeVideoID(parts[0])
+}
+
+func cleanYouTubeVideoID(raw string) (string, bool) {
+	videoID := strings.TrimSpace(raw)
+	if !looksLikeYouTubeVideoID(videoID) {
+		return "", false
+	}
+	return videoID, true
+}
+
+const youtubeVideoIDChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+
+func looksLikeYouTubeVideoID(videoID string) bool {
+	if len(videoID) < 6 || len(videoID) > 32 {
+		return false
+	}
+	for _, r := range videoID {
+		if !strings.ContainsRune(youtubeVideoIDChars, r) {
+			return false
+		}
+	}
+	return true
 }
 
 func parseBroadcastHistoryArgs(args []string) map[string]any {
