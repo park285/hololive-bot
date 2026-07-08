@@ -140,7 +140,7 @@ for script in "${scripts[@]}"; do
   printf 'FROM golang:1.26-alpine AS builder\n' >"${workdir}/admin-dashboard/Dockerfile"
   commit_all "${workdir}" "base"
   base_ref="$(git -C "${workdir}" rev-parse HEAD)"
-  printf 'FROM golang:1.26.4-alpine AS builder\n' >"${workdir}/admin-dashboard/Dockerfile"
+  printf 'FROM golang:1.26.5-alpine AS builder\n' >"${workdir}/admin-dashboard/Dockerfile"
   commit_all "${workdir}" "dashboard dockerfile change"
   expect_pass "$(basename "${script}")-admin-dashboard-dockerfile-change" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
   expect_gate_invoked "$(basename "${script}")-admin-dashboard-dockerfile-change" "${workdir}"

@@ -24,7 +24,7 @@ write_meta() {
   local generated_at="$2"
   local workload="$3"
   local expires="${4:-45}"
-  local go_version="${5:-go1.26.4}"
+  local go_version="${5:-go1.26.5}"
   local sha="${6:-de9cee40612cc671430e813bfbf89b1114506458}"
   mkdir -p "$(dirname "${path}")"
   cat >"${path}" <<EOF

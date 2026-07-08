@@ -1,6 +1,6 @@
 module github.com/kapu/hololive-bot-workspace/scripts/perf/benchgate
 
-go 1.26
+go 1.26.5
 
 require gopkg.in/yaml.v3 v3.0.1
 

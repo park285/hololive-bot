@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.5+auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
 cd "${ROOT_DIR}"
@@ -59,11 +59,10 @@ check_go_toolchain() {
 }
 
 ensure_go_mod_toolchains() {
-    # go.mod/go.work의 toolchain을 go1.26.4로 고정한다(1.26.4 하한 명시).
-    # GOTOOLCHAIN=auto가 더 새로운 1.26.x patch가 설치되면 그것을 선택하므로
-    # 버전 하강 없이 최신 추종은 그대로 유지된다.
+    # go.mod/go.work의 toolchain 하한을 현재 보안 patch로 고정한다.
+    # GOTOOLCHAIN=go1.26.5+auto가 필요한 patch toolchain을 확보한다.
     local module
-    local pin="${GO_TOOLCHAIN_PIN:-go1.26.4}"
+    local pin="${GO_TOOLCHAIN_PIN:-go1.26.5}"
     local pin_version="${pin#go}"
 
     # go directive가 핀 이상이면 directive 자체가 하한이고, 그때의 toolchain 라인은
