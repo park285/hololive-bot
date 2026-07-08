@@ -22,7 +22,7 @@ patterns=(
 
 for pattern in "${patterns[@]}"; do
   if rg -n "$pattern" --glob '*.go' --glob 'go.mod' go.mod hololive admin-dashboard scripts; then
-    echo "ERROR: disallowed DB framework or auto-migration surface detected: $pattern" >&2
+    echo "ERROR: disallowed DB framework or auto-migration token detected in active Go/module surface: $pattern" >&2
     fail=1
   fi
 done

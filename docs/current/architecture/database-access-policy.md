@@ -5,7 +5,7 @@
 On 2026-07-08, the active-code inventory command returned no matches:
 
 ```bash
-rg -n 'gorm\.io|gorm\.DB|gorm\.Open|GetGormDB|AutoMigrate\(' --glob '*.go' --glob 'go.mod' hololive admin-dashboard scripts
+rg -n 'gorm\.io|gorm\.DB|gorm\.Open|GetGormDB|AutoMigrate\(' --glob '*.go' --glob 'go.mod' go.mod hololive admin-dashboard scripts
 ```
 
 That means current active code has no `gorm.io`, `gorm.DB`, `gorm.Open`,
@@ -14,6 +14,13 @@ covered by this policy. The current work is therefore a verification and
 guardrail task, not a fake migration task.
 The guard also scans the root `go.mod` module manifest so dependency
 reintroduction cannot bypass the active source-tree scan.
+
+## Workspace Scope Note
+
+This repository-local guard covers the root `go.mod` and owned in-repo Go
+surfaces under `hololive`, `admin-dashboard`, and `scripts`. Sibling modules
+referenced by `go.work`, such as `../shared-go` and `../iris-client-go`, are
+covered by the meta-repository stack guard, not by this repository-local script.
 
 ## Policy
 
