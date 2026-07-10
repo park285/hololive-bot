@@ -1,6 +1,7 @@
-WITH picked AS (
+		WITH picked AS (
 			SELECT id FROM notification_delivery_outbox
-			WHERE status = $1 AND sending_started_at < $2
+			WHERE status = $1
+			  AND sending_started_at < clock_timestamp() - ($2::double precision * INTERVAL '1 millisecond')
 			ORDER BY sending_started_at ASC, id ASC
 			LIMIT $3
 			FOR UPDATE SKIP LOCKED

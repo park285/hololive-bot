@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -23,8 +22,6 @@ const (
 	sessionLockTimeout      = 10 * time.Second
 	sessionStatementTimeout = 4 * time.Minute
 )
-
-var createIndexConcurrentlyPattern = regexp.MustCompile(mustPattern("create_index_concurrently.re"))
 
 type Config struct {
 	BaselineThrough string
@@ -86,6 +83,9 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 	if err := ledger.Ensure(ctx, exec.Exec); err != nil {
 		return Result{}, err
 	}
+	if err := ensureChecksumTable(ctx, exec.Exec); err != nil {
+		return Result{}, err
+	}
 
 	entries, err := dbmigrate.Manifest(fsys)
 	if err != nil {
@@ -105,40 +105,6 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 		return Result{}, err
 	}
 	return result, nil
-}
-
-func applyManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
-	querier := pgxRowQuerier{conn: conn}
-	result := Result{Total: len(entries)}
-	for _, name := range entries {
-		alreadyApplied, appliedErr := ledger.Applied(ctx, querier, name)
-		if appliedErr != nil {
-			return Result{}, appliedErr
-		}
-		if alreadyApplied {
-			cfg.logf("skip %s (already applied)", name)
-			result.Skipped++
-			continue
-		}
-
-		cfg.logf("apply %s", name)
-		if err := applyEntry(ctx, fsys, exec, ledger, name); err != nil {
-			return Result{}, err
-		}
-		result.Applied++
-	}
-	return result, nil
-}
-
-func applyEntry(ctx context.Context, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, name string) error {
-	content, err := fs.ReadFile(fsys, name)
-	if err != nil {
-		return fmt.Errorf("read migration %s: %w", name, err)
-	}
-	if err := exec.execFile(ctx, name, string(content)); err != nil {
-		return err
-	}
-	return ledger.Record(ctx, exec.Exec, name)
 }
 
 // reconcileBaseline은 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
@@ -219,24 +185,7 @@ func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) err
 }
 
 // CONCURRENTLY 실패가 남긴 invalid index는 이름을 점유해 다음 실행의 IF NOT EXISTS를
-// no-op으로 만들고, 그 no-op이 ledger에 applied로 굳으면 재빌드 경로가 사라진다. 따라서
-// ledger 기록(호출자) 전에 감지·DROP하고 에러로 실패시켜 재실행이 같은 파일을 다시 적용하게 한다.
-func (e *guardedExecer) execFile(ctx context.Context, name, content string) error {
-	segments, err := sqlsplit.Segments(content)
-	if err != nil {
-		return fmt.Errorf("exec %s: %w", name, err)
-	}
-	for _, segment := range segments {
-		if err := e.execSegment(ctx, name, segment); err != nil {
-			return err
-		}
-	}
-	if createIndexConcurrentlyPattern.MatchString(content) {
-		return dropInvalidIndexes(ctx, e.conn)
-	}
-	return nil
-}
-
+// no-op으로 만들 수 있다. 다른 운영 작업의 index를 건드리지 않도록 현재 파일의 대상만 정리한다.
 func (e *guardedExecer) execSegment(ctx context.Context, name string, segment sqlsplit.Segment) error {
 	if segment.Transactional {
 		return e.execTxSegment(ctx, name, segment.Statements)
@@ -280,7 +229,7 @@ func rollbackTxSegmentOnError(ctx context.Context, tx pgx.Tx, err error) error {
 }
 
 func assertNoInvalidIndexes(ctx context.Context, conn *pgxpool.Conn) error {
-	indexes, err := invalidIndexes(ctx, conn)
+	indexes, err := invalidIndexes(ctx, conn, nil)
 	if err != nil {
 		return err
 	}
@@ -290,8 +239,11 @@ func assertNoInvalidIndexes(ctx context.Context, conn *pgxpool.Conn) error {
 	return nil
 }
 
-func dropInvalidIndexes(ctx context.Context, conn *pgxpool.Conn) error {
-	indexes, err := invalidIndexes(ctx, conn)
+func dropInvalidIndexes(ctx context.Context, conn *pgxpool.Conn, targets []concurrentIndexTarget) error {
+	if len(targets) == 0 {
+		return nil
+	}
+	indexes, err := invalidIndexes(ctx, conn, targets)
 	if err != nil {
 		return err
 	}
@@ -311,8 +263,20 @@ func dropInvalidIndexes(ctx context.Context, conn *pgxpool.Conn) error {
 	return fmt.Errorf("invalid PostgreSQL indexes dropped: %s", strings.Join(indexes, ", "))
 }
 
-func invalidIndexes(ctx context.Context, conn *pgxpool.Conn) ([]string, error) {
-	rows, err := conn.Query(ctx, mustSQL("invalid_indexes.sql"))
+func invalidIndexes(ctx context.Context, conn *pgxpool.Conn, targets []concurrentIndexTarget) ([]string, error) {
+	query := mustSQL("invalid_indexes.sql")
+	var args []any
+	if len(targets) > 0 {
+		query = mustSQL("invalid_named_indexes.sql")
+		indexNames := make([]string, 0, len(targets))
+		tableRelations := make([]string, 0, len(targets))
+		for _, target := range targets {
+			indexNames = append(indexNames, target.indexName)
+			tableRelations = append(tableRelations, target.tableRelation)
+		}
+		args = append(args, indexNames, tableRelations)
+	}
+	rows, err := conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query invalid indexes: %w", err)
 	}

@@ -135,13 +135,13 @@ func (r *OutboxRepository) FetchAndLock(ctx context.Context, workerID string, ba
 	if err := r.ensurePool(); err != nil {
 		return nil, err
 	}
-	now := time.Now()
-	lockExpiry := now.Add(-lockTimeout)
-	leaseUntil := now.Add(lease)
-
 	query := mustSQL("outbox_repository_0129_03.sql")
-
-	rows, err := r.pool.Query(ctx, query, lockExpiry, now, batchSize, workerID, leaseUntil)
+	rows, err := r.pool.Query(ctx, query,
+		positiveDurationMilliseconds(lockTimeout),
+		batchSize,
+		workerID,
+		positiveDurationMilliseconds(lease),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock: %w", err)
 	}
@@ -158,13 +158,10 @@ func (r *OutboxRepository) MarkSending(ctx context.Context, id int64, workerID s
 	if err := r.ensurePool(); err != nil {
 		return false, err
 	}
-	if lease <= 0 {
-		lease = deliveryLease
-	}
-	now := time.Now()
 	tag, err := r.pool.Exec(ctx,
 		mustSQL("outbox_repository_0172_04.sql"),
-		deliveryStatusSending, now, now.Add(lease), id, domain.DeliveryStatusPending, workerID,
+		deliveryStatusSending, positiveDurationMilliseconds(lease),
+		id, domain.DeliveryStatusPending, workerID,
 	)
 	if err != nil {
 		return false, err
@@ -176,10 +173,9 @@ func (r *OutboxRepository) MarkSent(ctx context.Context, id int64, workerID stri
 	if err := r.ensurePool(); err != nil {
 		return false, err
 	}
-	now := time.Now()
 	tag, err := r.pool.Exec(ctx,
 		mustSQL("outbox_repository_0189_05.sql"),
-		domain.DeliveryStatusSent, now, id, domain.DeliveryStatusPending, deliveryStatusSending, workerID, lockedAt,
+		domain.DeliveryStatusSent, id, domain.DeliveryStatusPending, deliveryStatusSending, workerID, lockedAt,
 	)
 	if err != nil {
 		return false, err
@@ -191,10 +187,12 @@ func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, workerID st
 	if err := r.ensurePool(); err != nil {
 		return false, err
 	}
-	now := time.Now()
 	query := mustSQL("outbox_repository_0209_06.sql")
 
-	tag, err := r.pool.Exec(ctx, query, errMsg, maxRetries, now.Add(backoff), id, domain.DeliveryStatusPending, deliveryStatusSending, workerID, now, lockedAt)
+	tag, err := r.pool.Exec(ctx, query,
+		errMsg, maxRetries, durationMilliseconds(backoff), id,
+		domain.DeliveryStatusPending, deliveryStatusSending, workerID, lockedAt,
+	)
 	if err != nil {
 		return false, err
 	}
@@ -209,10 +207,9 @@ func (r *OutboxRepository) MarkSentBatch(ctx context.Context, ids []int64) error
 		return err
 	}
 
-	now := time.Now()
 	_, err := r.pool.Exec(ctx,
 		mustSQL("outbox_repository_0241_07.sql"),
-		domain.DeliveryStatusSent, now, ids, domain.DeliveryStatusPending,
+		domain.DeliveryStatusSent, ids, domain.DeliveryStatusPending,
 	)
 	if err != nil {
 		return fmt.Errorf("mark sent batch: %w", err)
@@ -287,10 +284,10 @@ func (r *OutboxRepository) QuarantineStaleSending(ctx context.Context, olderThan
 	if olderThan <= 0 {
 		olderThan = deliveryLease
 	}
-	cutoff := time.Now().Add(-olderThan)
 	tag, err := r.pool.Exec(ctx,
 		mustSQL("outbox_repository_0301_10.sql"),
-		deliveryStatusSending, cutoff, limit, deliveryStatusQuarantined, staleSendingFailureReason,
+		deliveryStatusSending, positiveDurationMilliseconds(olderThan),
+		limit, deliveryStatusQuarantined, staleSendingFailureReason,
 	)
 	if err != nil {
 		return 0, err
@@ -305,6 +302,26 @@ func (r *OutboxRepository) CountByStatus(ctx context.Context, status domain.Deli
 	var count int64
 	err := r.pool.QueryRow(ctx, mustSQL("outbox_repository_0330_11.sql"), status).Scan(&count)
 	return count, err
+}
+
+func durationMilliseconds(value time.Duration) int64 {
+	if value <= 0 {
+		return 0
+	}
+	if milliseconds := value.Milliseconds(); milliseconds > 0 {
+		return milliseconds
+	}
+	return 1
+}
+
+func positiveDurationMilliseconds(value time.Duration) int64 {
+	if value <= 0 {
+		value = deliveryLease
+	}
+	if milliseconds := durationMilliseconds(value); milliseconds > 0 {
+		return milliseconds
+	}
+	return 1
 }
 
 func (r *OutboxRepository) ensurePool() error {

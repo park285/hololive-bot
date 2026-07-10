@@ -59,19 +59,6 @@ func buildOutboxBatchItems(count int) []OutboxItem {
 	return items
 }
 
-func fetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx context.Context, batchSize int) []int64 {
-	t.Helper()
-	locked, err := repository.FetchAndLock(ctx, testWorkerA, batchSize, testLockTTL, testLease)
-	if err != nil {
-		t.Fatalf("fetch and lock: %v", err)
-	}
-	ids := make([]int64, 0, len(locked))
-	for i := range locked {
-		ids = append(ids, locked[i].ID)
-	}
-	return ids
-}
-
 func fetchAndLockItems(t *testing.T, repository *OutboxRepository, ctx context.Context) []domain.NotificationDeliveryOutbox {
 	t.Helper()
 	items, err := repository.FetchAndLock(ctx, testWorkerA, 1, testLockTTL, testLease)
@@ -453,7 +440,7 @@ func TestMarkSentBatch(t *testing.T) {
 			repository := testRepository(t)
 			ctx := context.Background()
 
-			ids := enqueueAndFetchLockedIDs(t, repository, ctx, tc.count)
+			ids := enqueuePendingIDs(t, repository, ctx, tc.count)
 
 			if err := repository.MarkSentBatch(ctx, ids); err != nil {
 				t.Fatalf("mark sent batch: %v", err)
@@ -480,7 +467,7 @@ func TestMarkFailedBatch(t *testing.T) {
 			ctx := context.Background()
 			reason := "batch send failed"
 
-			ids := enqueueAndFetchLockedIDs(t, repository, ctx, tc.count)
+			ids := enqueuePendingIDs(t, repository, ctx, tc.count)
 
 			if err := repository.MarkFailedBatch(ctx, ids, reason); err != nil {
 				t.Fatalf("mark failed batch: %v", err)
@@ -491,7 +478,7 @@ func TestMarkFailedBatch(t *testing.T) {
 	}
 }
 
-func enqueueAndFetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx context.Context, count int) []int64 {
+func enqueuePendingIDs(t *testing.T, repository *OutboxRepository, ctx context.Context, count int) []int64 {
 	t.Helper()
 
 	if count == 0 {
@@ -500,9 +487,29 @@ func enqueueAndFetchLockedIDs(t *testing.T, repository *OutboxRepository, ctx co
 	if err := repository.EnqueueBatch(ctx, buildOutboxBatchItems(count)); err != nil {
 		t.Fatalf("enqueue batch: %v", err)
 	}
-	ids := fetchLockedIDs(t, repository, ctx, count+1)
+	rows, err := repository.pool.Query(ctx, `
+		SELECT id
+		FROM notification_delivery_outbox
+		ORDER BY id
+	`)
+	if err != nil {
+		t.Fatalf("load pending ids: %v", err)
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0, count)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan pending id: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read pending ids: %v", err)
+	}
 	if len(ids) != count {
-		t.Fatalf("locked ids = %d, want %d", len(ids), count)
+		t.Fatalf("pending ids = %d, want %d", len(ids), count)
 	}
 	return ids
 }

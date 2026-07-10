@@ -87,6 +87,81 @@ func TestBeginWrappedFileFailureRollsBackWholeTxBlock(t *testing.T) {
 	assertTableAbsent(t, pool, "tx_atomic_probe")
 }
 
+func TestAppliedMigrationChecksumMismatchFails(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	first := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 immutable.sql\n")},
+		"immutable.sql":        {Data: []byte("CREATE TABLE immutable_v1(id integer)")},
+	}
+	if _, err := Run(t.Context(), pool, first, Config{}); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+
+	modified := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 immutable.sql\n")},
+		"immutable.sql":        {Data: []byte("CREATE TABLE immutable_v2(id integer)")},
+	}
+	_, err := Run(t.Context(), pool, modified, Config{})
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("second Run() error = %v, want checksum mismatch", err)
+	}
+}
+
+func TestFailedMigrationDoesNotPinBadChecksum(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	broken := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 repairable.sql\n")},
+		"repairable.sql":       {Data: []byte("SELECT 1/0")},
+	}
+	if _, err := Run(t.Context(), pool, broken, Config{}); err == nil {
+		t.Fatal("broken migration error = nil")
+	}
+
+	fixed := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 repairable.sql\n")},
+		"repairable.sql":       {Data: []byte("CREATE TABLE repaired_after_failure(id integer)")},
+	}
+	if _, err := Run(t.Context(), pool, fixed, Config{}); err != nil {
+		t.Fatalf("fixed migration error = %v", err)
+	}
+	assertTablePresent(t, pool, "repaired_after_failure")
+}
+
+func TestAppliedLedgerEntryBackfillsMissingChecksum(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	ctx := t.Context()
+	if _, err := pool.Exec(ctx, `
+		CREATE TABLE schema_migrations (
+			filename text PRIMARY KEY,
+			applied_at timestamptz NOT NULL DEFAULT now()
+		);
+		INSERT INTO schema_migrations(filename) VALUES ('legacy.sql')
+	`); err != nil {
+		t.Fatalf("seed legacy ledger: %v", err)
+	}
+
+	content := []byte("SELECT 1")
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 legacy.sql\n")},
+		"legacy.sql":           {Data: content},
+	}
+	result, err := Run(ctx, pool, fsys, Config{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Skipped != 1 {
+		t.Fatalf("result = %+v, want one skipped migration", result)
+	}
+
+	var checksum string
+	if err := pool.QueryRow(ctx, "SELECT checksum_sha256 FROM schema_migration_checksums WHERE filename = 'legacy.sql'").Scan(&checksum); err != nil {
+		t.Fatalf("load backfilled checksum: %v", err)
+	}
+	if want := migrationChecksum(content); checksum != want {
+		t.Fatalf("checksum = %q, want %q", checksum, want)
+	}
+}
+
 func TestBeginWrappedFileAppliesTxBlockAndTrailingAutocommit(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 
