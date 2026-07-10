@@ -29,3 +29,37 @@ if [[ -n "${matches}" ]]; then
 fi
 
 echo "OK: no removed runtime directory paths in active build/deploy files"
+
+stale_main_matches="$(
+  rg -n --fixed-strings './cmd/bot' \
+    hololive/hololive-api/scripts \
+    -g '*.sh' \
+    -g '!test-*.sh' \
+    || true
+)"
+
+if [[ -n "${stale_main_matches}" ]]; then
+  echo "FAIL: removed hololive-api ./cmd/bot main package referenced by active helper" >&2
+  echo "${stale_main_matches}" >&2
+  exit 1
+fi
+
+echo "OK: hololive-api helpers use the unified main package"
+
+stale_log_matches="$(
+  rg -n --fixed-strings 'bot.log' \
+    hololive/hololive-api/scripts \
+    docs/current/runbooks \
+    -g '*.sh' \
+    -g '*.md' \
+    -g '!test-*.sh' \
+    || true
+)"
+
+if [[ -n "${stale_log_matches}" ]]; then
+  echo "FAIL: removed bot.log filename referenced by active hololive-api helper or current runbook" >&2
+  echo "${stale_log_matches}" >&2
+  exit 1
+fi
+
+echo "OK: hololive-api helpers and current runbooks use the unified file logging contract"

@@ -10,6 +10,7 @@ source "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
 
 PID_FILE=".bot.pid"
 LOG_DIR="logs"
+APP_LOG_NAME="hololive-api.log"
 NOHUP_LOG="${LOG_DIR}/nohup.log"
 
 usage() {
@@ -148,7 +149,7 @@ cmd_start() {
 
   if [[ ! -f "bin/bot" ]]; then
     echo "[BUILD] Binary not found, building..."
-    CGO_ENABLED=0 go build -tags go_json -o bin/bot ./cmd/bot || {
+    CGO_ENABLED=0 go build -tags go_json -o bin/bot ./cmd/hololive-api || {
       echo "[ERROR] Build failed"
       exit 1
     }
@@ -205,7 +206,7 @@ cmd_start() {
     echo "[OK] Bot started successfully"
     echo "   PID: ${bot_pid}"
     echo "   Logs:"
-    echo "     - Application: ${LOG_DIR}/bot.log (zap)"
+    echo "     - Application: ${LOG_DIR}/${APP_LOG_NAME} (slog)"
     echo "     - Process: ${NOHUP_LOG} (stdout/stderr)"
     echo ""
     echo "   Commands:"
@@ -215,7 +216,7 @@ cmd_start() {
   else
     echo "[ERROR] Bot failed to start, check logs:"
     echo "   - ${NOHUP_LOG}"
-    echo "   - ${LOG_DIR}/bot.log"
+    echo "   - ${LOG_DIR}/${APP_LOG_NAME}"
     tail -30 "${NOHUP_LOG}" 2>/dev/null || true
     rm -f "${PID_FILE}"
     exit 1
@@ -352,7 +353,7 @@ cmd_restart() {
 
   if [[ "${build}" == "true" ]]; then
     echo "[BUILD] Building..."
-    CGO_ENABLED=0 go build -tags go_json -o bin/bot ./cmd/bot
+    CGO_ENABLED=0 go build -tags go_json -o bin/bot ./cmd/hololive-api
   fi
 
   cmd_start "${start_args[@]}"
@@ -385,7 +386,7 @@ cmd_rebuild() {
   go clean -cache
 
   echo "[BUILD] Building optimized binary (static + stripped + netgo)..."
-  time CGO_ENABLED=0 go build -tags netgo,go_json -ldflags="-s -w" -o bin/bot ./cmd/bot
+  time CGO_ENABLED=0 go build -tags netgo,go_json -ldflags="-s -w" -o bin/bot ./cmd/hololive-api
 
   if [[ -f "bin/bot" ]]; then
     size="$(du -h bin/bot | cut -f1)"
@@ -482,10 +483,10 @@ cmd_status() {
   echo ""
   echo "Logs:"
   echo "-----"
-  if [[ -f "logs/bot.log" ]]; then
-    log_size="$(du -h logs/bot.log 2>/dev/null | cut -f1)"
-    log_lines="$(wc -l < logs/bot.log 2>/dev/null)"
-    echo "Application: logs/bot.log (${log_size}, ${log_lines} lines)"
+  if [[ -f "${LOG_DIR}/${APP_LOG_NAME}" ]]; then
+    log_size="$(du -h "${LOG_DIR}/${APP_LOG_NAME}" 2>/dev/null | cut -f1)"
+    log_lines="$(wc -l < "${LOG_DIR}/${APP_LOG_NAME}" 2>/dev/null)"
+    echo "Application: ${LOG_DIR}/${APP_LOG_NAME} (${log_size}, ${log_lines} lines)"
   fi
   if [[ -f "${NOHUP_LOG}" ]]; then
     nohup_size="$(du -h "${NOHUP_LOG}" 2>/dev/null | cut -f1)"

@@ -62,7 +62,7 @@ SQL
 legacy 경로 차단 흔적은 운영 로그에서 별도로 확인합니다. compose 로그 파일 미러링 기준 예시는 다음과 같습니다.
 
 ```bash
-rg 'YouTube community/shorts legacy route audit' logs/bot.log
+rg 'YouTube community/shorts legacy route audit' logs/hololive-api.log
 ```
 
 ## Readout
@@ -71,4 +71,4 @@ rg 'YouTube community/shorts legacy route audit' logs/bot.log
 - 동일 `channel_id + post_id` 조합에서 `delivery_path` 가 2개 이상 나오면 게시물이 복수 경로 흔적을 남긴 것입니다. 정상 상태가 아닙니다.
 - `delivery_path` 가 빈 문자열이고 `success_send_count = 0`: 최근 24시간 창에서 실제 발송 경로가 아직 관측되지 않았습니다. 미발송 또는 미시도 후보입니다.
 - `delivery_path` 가 `youtube_outbox_dispatcher` 외 다른 값이면 예상 밖 경로 흔적입니다. legacy 또는 비정상 fan-out 의심 건으로 봅니다.
-- `logs/bot.log` 에서 `YouTube community/shorts legacy route audit` 가 0건이면 legacy 알람 큐 진입 시도가 관측되지 않은 것입니다. 한 건이라도 나오면 `delivery_path=legacy_alarm_queue` 차단 흔적입니다.
+- `logs/hololive-api.log` 에서 `YouTube community/shorts legacy route audit` 가 0건이면 legacy 알람 큐 진입 시도가 관측되지 않은 것입니다. 한 건이라도 나오면 `delivery_path=legacy_alarm_queue` 차단 흔적입니다.
