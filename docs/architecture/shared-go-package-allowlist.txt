@@ -11,6 +11,7 @@ httputil/ginauth
 json
 jsonutil
 llm
+llm/internal/openaidiag
 llm/openaipreset
 logging
 logging/internal/archive
