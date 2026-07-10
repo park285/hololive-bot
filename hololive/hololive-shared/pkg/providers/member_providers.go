@@ -96,7 +96,7 @@ func memberAdapterContext(ctx context.Context) context.Context {
 	if ctx == nil {
 		return context.Background()
 	}
-	return context.Background()
+	return context.WithoutCancel(ctx)
 }
 
 // ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함)
