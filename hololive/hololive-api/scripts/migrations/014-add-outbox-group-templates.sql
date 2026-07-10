@@ -16,4 +16,5 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 ('OUTBOX_COMMUNITY_GROUP', NULL, '{{range $idx, $item := .Items}}{{if gt $idx 0}}
 
 {{end}}{{add $idx 1}}. {{$item.ContentText | truncate 40}}
-   {{$item.URL}}{{end}}');
+   {{$item.URL}}{{end}}')
+ON CONFLICT (template_key) WHERE channel_id IS NULL DO NOTHING;

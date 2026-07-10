@@ -120,6 +120,7 @@ func assertRetryNextVisibleDelay(t *testing.T, retry *domain.AlarmQueueRetryMeta
 
 type alarmDispatchRunnerSendingRetryTestConsumer struct {
 	batches               [][]domain.AlarmQueueEnvelope
+	markSendingErr        error
 	markSending           []domain.AlarmQueueEnvelope
 	markDispatched        []domain.AlarmQueueEnvelope
 	quarantined           []domain.AlarmQueueEnvelope
@@ -142,7 +143,7 @@ func (c *alarmDispatchRunnerSendingRetryTestConsumer) DrainBatch(_ context.Conte
 
 func (c *alarmDispatchRunnerSendingRetryTestConsumer) MarkSending(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	c.markSending = append(c.markSending, envelopes...)
-	return nil
+	return c.markSendingErr
 }
 
 func (c *alarmDispatchRunnerSendingRetryTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {

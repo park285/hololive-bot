@@ -330,16 +330,42 @@ func (r *Repository) refreshLockedRows(
 	return nil
 }
 
+const retentionDeleteBatchSize = 1000
+
 func (r *Repository) DeleteLoggedBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	return r.deleteLoggedBeforeInBatches(ctx, cutoff, retentionDeleteBatchSize)
+}
+
+func (r *Repository) deleteLoggedBeforeInBatches(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
 	if r == nil || r.db == nil || cutoff.IsZero() {
 		return 0, nil
 	}
 
-	tag, err := r.db.Exec(ctx, mustSQL("repository_0364_09.sql"), cutoff.UTC())
-	if err != nil {
-		return 0, fmt.Errorf("delete delivery telemetry before cutoff: %w", err)
+	var total int64
+	for {
+		deleted, done, err := r.deleteLoggedBeforeBatch(ctx, cutoff, batchSize)
+		total += deleted
+		if done || err != nil {
+			return total, err
+		}
 	}
-	return tag.RowsAffected(), nil
+}
+
+func (r *Repository) deleteLoggedBeforeBatch(ctx context.Context, cutoff time.Time, batchSize int) (deleted int64, done bool, err error) {
+	tag, err := r.db.Exec(ctx, mustSQL("repository_0364_09.sql"), cutoff.UTC(), batchSize)
+	if err != nil {
+		return 0, true, fmt.Errorf("delete delivery telemetry before cutoff: %w", err)
+	}
+
+	deleted = tag.RowsAffected()
+	if deleted < int64(batchSize) {
+		return deleted, true, nil
+	}
+	if err := deliverysql.YieldBetweenDeleteBatches(ctx); err != nil {
+		return deleted, true, err
+	}
+
+	return deleted, false, nil
 }
 
 func CollectTelemetryOutboxIDs(rows []domain.YouTubeNotificationDeliveryTelemetry) []int64 {

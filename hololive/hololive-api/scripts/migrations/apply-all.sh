@@ -51,7 +51,7 @@ run_psql() {
 }
 
 list_invalid_indexes() {
-  run_psql -tAc "SELECT format('%I.%I', n.nspname, c.relname) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE NOT i.indisvalid ORDER BY 1;"
+  run_psql -tAc "SELECT format('%I.%I', n.nspname, c.relname) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE NOT i.indisvalid AND NOT EXISTS (SELECT 1 FROM pg_stat_progress_create_index p WHERE p.index_relid = i.indexrelid) ORDER BY 1;"
 }
 
 if [ -z "${PGPASSWORD}" ]; then
@@ -197,7 +197,7 @@ while IFS= read -r filename || [ -n "${filename}" ]; do
       printf '%s\n' "${invalid_after_file}" >&2
       printf '%s\n' "${invalid_after_file}" | while IFS= read -r bad_index; do
         [ -n "${bad_index}" ] || continue
-        run_psql -q -c "DROP INDEX IF EXISTS ${bad_index};"
+        run_psql -q -c "DROP INDEX CONCURRENTLY IF EXISTS ${bad_index};"
       done
       echo "${filename} was NOT recorded in schema_migrations; rerun apply-all.sh to rebuild." >&2
       exit 1

@@ -110,7 +110,7 @@ func (r *alarmDispatchRunner) dispatchMessageGroup(ctx context.Context, group al
 		return r.persistPreSendFailure(ctx, group.envelopes, err)
 	}
 	if err := r.consumer.MarkSending(ctx, group.envelopes); err != nil {
-		return fmt.Errorf("mark alarm dispatch sending: %w", err)
+		return r.persistMarkSendingFailure(ctx, group.envelopes, err)
 	}
 	if err := sendAlarmDispatchMessage(ctx, r.sender, group, message); err != nil {
 		return r.persistPostSendingFailure(ctx, group.envelopes, err)
@@ -134,7 +134,7 @@ func (r *alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context
 		return r.persistPreSendFailure(ctx, group.envelopes, err)
 	}
 	if err := r.consumer.MarkSending(ctx, group.envelopes); err != nil {
-		return fmt.Errorf("mark alarm dispatch sending: %w", err)
+		return r.persistMarkSendingFailure(ctx, group.envelopes, err)
 	}
 	for i := range requests {
 		if err := r.sender.SendKaringContentList(ctx, group.roomID, &requests[i]); err != nil {
@@ -173,6 +173,15 @@ func (r *alarmDispatchRunner) finalizeDispatchFailure(
 		return fmt.Errorf("release alarm dispatch dlq claim keys: %w", err)
 	}
 	return nil
+}
+
+// MarkSending 에러 시 UPDATE는 이미 커밋된 뒤라 'sending' 잔류 행은 leased 전용 ScheduleRetry로
+// 복원 불가 — status IN ('leased','sending')을 덮는 ScheduleSendingRetry로 보상한다(발송 전이라 중복 없음).
+func (r *alarmDispatchRunner) persistMarkSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	if _, ok := r.consumer.(alarmDispatchSendingRetryConsumer); !ok {
+		return fmt.Errorf("mark alarm dispatch sending: %w", cause)
+	}
+	return r.persistSendingRetry(ctx, envelopes, cause)
 }
 
 func (r *alarmDispatchRunner) persistPostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {

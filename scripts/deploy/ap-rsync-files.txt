@@ -911,8 +911,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/quer
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_0231_05.sql
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_0258_06.sql
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_0282_07.sql
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_0307_08.sql
-hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_0334_09.sql
+hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_aggregate_sync.sql
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_0373_10.sql
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_lock_0065_01.sql
 hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store/queries/delivery_repository_lock_0142_02.sql

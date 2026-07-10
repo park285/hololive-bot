@@ -101,3 +101,9 @@
 101 105_reseed_broadcast_history_help.sql
 102 106_seed_member_search_aliases.sql
 103 107_seed_notification_birthday_stream_template.sql
+104 108_expand_ndo_status_vocab_quarantined.sql
+105 109_add_ndo_terminal_cleanup_index.sql
+106 110_drop_ndo_sent_cleanup_index.sql
+107 111_telemetry_hot_autovacuum.sql
+108 112_major_events_status_not_null.sql
+109 113_add_vocab_checks_acl_watermarks.sql

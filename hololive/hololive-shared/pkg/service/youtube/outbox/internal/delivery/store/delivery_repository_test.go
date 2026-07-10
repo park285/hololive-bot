@@ -23,8 +23,6 @@ package store
 import (
 	"reflect"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestUniqueStrings(t *testing.T) {
@@ -39,71 +37,5 @@ func TestUniqueStrings(t *testing.T) {
 
 	if out := UniqueStrings(nil); out != nil {
 		t.Fatalf("UniqueStrings(nil) = %#v, want nil", out)
-	}
-}
-
-func TestResolveOutboxStatus(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		pending int64
-		sent    int64
-		failed  int64
-		want    domain.OutboxStatus
-	}{
-		{name: "pending has priority", pending: 1, sent: 10, failed: 10, want: domain.OutboxStatusPending},
-		{name: "failed when mixed sent and failed", pending: 0, sent: 1, failed: 9, want: domain.OutboxStatusFailed},
-		{name: "sent when only sent", pending: 0, sent: 1, failed: 0, want: domain.OutboxStatusSent},
-		{name: "failed when only failed", pending: 0, sent: 0, failed: 2, want: domain.OutboxStatusFailed},
-		{name: "empty fallback pending", pending: 0, sent: 0, failed: 0, want: domain.OutboxStatusPending},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := resolveOutboxStatus(tt.pending, tt.sent, tt.failed)
-			if got != tt.want {
-				t.Fatalf("resolveOutboxStatus() = %s, want %s", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestParseStatusCounts(t *testing.T) {
-	t.Parallel()
-
-	counts := []deliveryStatusCount{
-		{Status: domain.OutboxStatusPending, Count: 3},
-		{Status: DeliveryStatusSending, Count: 2},
-		{Status: domain.OutboxStatusSent, Count: 5},
-		{Status: domain.OutboxStatusFailed, Count: 1},
-		{Status: DeliveryStatusQuarantined, Count: 4},
-	}
-
-	pending, sent, failed := parseStatusCounts(counts)
-	if pending != 5 || sent != 5 || failed != 5 {
-		t.Fatalf("parseStatusCounts() = (%d,%d,%d), want (5,5,5)", pending, sent, failed)
-	}
-}
-
-func TestGroupOutboxIDsByAggregateStatus(t *testing.T) {
-	t.Parallel()
-
-	grouped := groupOutboxIDsByAggregateStatus([]int64{1, 2, 3}, []deliveryStatusCount{
-		{OutboxID: 1, Status: domain.OutboxStatusSent, Count: 2},
-		{OutboxID: 2, Status: DeliveryStatusSending, Count: 1},
-		{OutboxID: 2, Status: domain.OutboxStatusSent, Count: 1},
-		{OutboxID: 3, Status: DeliveryStatusQuarantined, Count: 1},
-	})
-
-	if !reflect.DeepEqual(grouped[domain.OutboxStatusSent], []int64{1}) {
-		t.Fatalf("sent group = %#v, want [1]", grouped[domain.OutboxStatusSent])
-	}
-	if !reflect.DeepEqual(grouped[domain.OutboxStatusPending], []int64{2}) {
-		t.Fatalf("pending group = %#v, want [2]", grouped[domain.OutboxStatusPending])
-	}
-	if !reflect.DeepEqual(grouped[domain.OutboxStatusFailed], []int64{3}) {
-		t.Fatalf("failed group = %#v, want [3]", grouped[domain.OutboxStatusFailed])
 	}
 }

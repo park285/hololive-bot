@@ -2,7 +2,6 @@ package pollers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 
@@ -85,43 +84,4 @@ func loadContentWatermark(
 		return domain.YouTubeContentWatermark{}, false, fmt.Errorf("load %s watermark: %w", watermarkType, err)
 	}
 	return watermark, watermark.Initialized, nil
-}
-
-func inPollerTx(ctx context.Context, db pollerDB, fn func(tx dbx.Querier) error) error {
-	if db == nil {
-		return fmt.Errorf("pgx db is nil")
-	}
-	if fn == nil {
-		return nil
-	}
-
-	tx, err := db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("begin pgx transaction: %w", err)
-	}
-
-	defer func() {
-		if p := recover(); p != nil {
-			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-				panic(fmt.Errorf("panic during pgx transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
-			}
-			panic(p)
-		}
-	}()
-
-	return finishPollerTx(ctx, tx, fn(tx))
-}
-
-func finishPollerTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
-	if fnErr != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
-		}
-		return fmt.Errorf("pgx transaction failed: %w", fnErr)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit pgx transaction: %w", err)
-	}
-	return nil
 }

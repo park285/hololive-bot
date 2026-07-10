@@ -29,13 +29,15 @@ func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64, lockedAt
 	}
 }
 
+const outboxCleanupBatchSize = 1000
+
 func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	if d == nil || d.db == nil {
 		return
 	}
 
 	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
-	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup old outbox items", mustSQL("dispatcher_claim_release_0042_02.sql"), domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff)
+	deleted, err := d.deleteTerminalOutboxBatches(ctx, outboxCutoff, outboxCleanupBatchSize)
 	if err != nil {
 		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", err))
 		return
@@ -46,6 +48,25 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 
 	d.cleanupOrphanPendingOutbox(ctx)
+}
+
+// 무제한 단문 DELETE는 youtube_notification_delivery ON DELETE CASCADE 증폭으로
+// 락 보유 시간이 길어진다 — picked LIMIT 배치 루프(retention.go 패턴)를 유지할 것.
+func (d *ClaimManager) deleteTerminalOutboxBatches(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	var total int64
+	for {
+		deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup old outbox items", mustSQL("dispatcher_claim_release_0042_02.sql"), domain.OutboxStatusSent, domain.OutboxStatusFailed, cutoff, batchSize)
+		if err != nil {
+			return total, err
+		}
+		total += deleted
+		if deleted < int64(batchSize) {
+			return total, nil
+		}
+		if err := deliverysql.YieldBetweenDeleteBatches(ctx); err != nil {
+			return total, err
+		}
+	}
 }
 
 // cutoff가 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가

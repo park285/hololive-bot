@@ -35,22 +35,26 @@ type alarmDispatchKaringImagePayload struct {
 	Height int    `json:"height,omitempty"`
 }
 
-func buildAlarmDispatchYouTubeOutboxKaringContentItems(ctx context.Context, messageStrings *messagestrings.Store, envelope *domain.AlarmQueueEnvelope) ([]iris.KaringContentItem, error) {
+func buildAlarmDispatchYouTubeOutboxKaringItems(ctx context.Context, messageStrings *messagestrings.Store, envelope *domain.AlarmQueueEnvelope) ([]alarmDispatchKaringItem, error) {
 	if envelope == nil || envelope.YouTubeOutbox == nil {
 		return nil, fmt.Errorf("build youtube outbox karing content list request: payload is nil")
 	}
 	if err := envelope.YouTubeOutbox.Validate(); err != nil {
 		return nil, fmt.Errorf("build youtube outbox karing content list request: %w", err)
 	}
-	items := make([]iris.KaringContentItem, 0, len(envelope.YouTubeOutbox.Items))
-	for _, item := range envelope.YouTubeOutbox.Items {
+	entries := make([]alarmDispatchKaringItem, 0, len(envelope.YouTubeOutbox.Items))
+	for i := range envelope.YouTubeOutbox.Items {
+		item := envelope.YouTubeOutbox.Items[i]
 		contentItem, err := buildAlarmDispatchYouTubeOutboxKaringContentItem(ctx, messageStrings, envelope.YouTubeOutbox, item)
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, contentItem)
+		entries = append(entries, alarmDispatchKaringItem{
+			identity: alarmDispatchOutboxKaringItemIdentity(&envelope.YouTubeOutbox.Items[i]),
+			item:     contentItem,
+		})
 	}
-	return items, nil
+	return entries, nil
 }
 
 func buildAlarmDispatchYouTubeOutboxKaringContentItem(

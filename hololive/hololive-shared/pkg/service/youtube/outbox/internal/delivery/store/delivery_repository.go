@@ -43,12 +43,6 @@ type DeliveryRepository struct {
 	logger *slog.Logger
 }
 
-type deliveryStatusCount struct {
-	OutboxID int64               `db:"outbox_id"`
-	Status   domain.OutboxStatus `db:"status"`
-	Count    int64               `db:"count"`
-}
-
 type deliveryAlarmSentTarget struct {
 	Kind      domain.OutboxKind `db:"kind"`
 	ContentID string            `db:"content_id"`
@@ -252,62 +246,30 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, ou
 	return r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID})
 }
 
+const outboxAggregateFailedErrorText = "per-room delivery failed"
+
+// count-후-update 2단계는 reconcile vs aggregate-sync 경합에서 stale 집계로 되돌리는
+// lost update가 있었다 — 집계와 갱신을 단문으로 원자화했으니 다시 쪼개지 말 것.
 func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, outboxIDs []int64) error {
 	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
 	if len(uniqueIDs) == 0 {
 		return nil
 	}
 
-	var counts []deliveryStatusCount
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &counts, "count delivery statuses", mustSQL("delivery_repository_0307_08.sql")+deliverysql.DeliveryInClause("outbox_id", len(uniqueIDs))+`
-		GROUP BY outbox_id, status
-	`, deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)...); err != nil {
-		return fmt.Errorf("update outbox aggregate statuses: count delivery statuses: %w", err)
-	}
-
-	statusGroups := groupOutboxIDsByAggregateStatus(uniqueIDs, counts)
-	for status, ids := range statusGroups {
-		if err := r.updateOutboxStatusBatch(ctx, ids, status); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outboxIDs []int64, status domain.OutboxStatus) error {
-	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
-	if len(uniqueIDs) == 0 {
-		return nil
-	}
-
-	args := outboxAggregateStatusUpdateArgs(status)
-	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "update outbox aggregate statuses: apply update", mustSQL("delivery_repository_0334_09.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
-	`, args...); err != nil {
-		return fmt.Errorf("update outbox aggregate statuses: apply update: %w", err)
+	if _, err := r.db.Exec(ctx, mustSQL("delivery_repository_aggregate_sync.sql"),
+		uniqueIDs,
+		domain.OutboxStatusPending,
+		DeliveryStatusSending,
+		domain.OutboxStatusFailed,
+		DeliveryStatusQuarantined,
+		domain.OutboxStatusSent,
+		dispatchstate.CanonicalSentAtNow(),
+		outboxAggregateFailedErrorText,
+	); err != nil {
+		return fmt.Errorf("update outbox aggregate statuses: %w", err)
 	}
 
 	return nil
-}
-
-func outboxAggregateStatusUpdateArgs(status domain.OutboxStatus) []any {
-	return []any{
-		status,
-		status, domain.OutboxStatusSent, dispatchstate.CanonicalSentAtNow(),
-		status, domain.OutboxStatusFailed, outboxAggregateStatusErrorText(status),
-	}
-}
-
-func outboxAggregateStatusErrorText(status domain.OutboxStatus) string {
-	switch status {
-	case domain.OutboxStatusFailed:
-		return "per-room delivery failed"
-	case domain.OutboxStatusPending, domain.OutboxStatusSent:
-		return ""
-	default:
-		return ""
-	}
 }
 
 func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Context, batchSize int) ([]int64, error) {

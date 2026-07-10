@@ -55,9 +55,18 @@ type OutboxRepository struct {
 
 const deliveryStatusSending domain.DeliveryOutboxStatus = "SENDING"
 
+// 결과 불명(stale SENDING)을 FAILED로 회수하면 rearm(outbox_enqueue_batch_upsert.sql의
+// WHERE status='FAILED')이 재발송해 중복 노출 위험이 있어 별도 terminal 상태로 격리한다.
+const deliveryStatusQuarantined domain.DeliveryOutboxStatus = "QUARANTINED"
+
 const staleSendingFailureReason = "stale sending; external send outcome unknown"
 
 const defaultStaleSendingSweepLimit = 100
+
+const (
+	cleanupBatchSize  = 1000
+	cleanupBatchYield = 10 * time.Millisecond
+)
 
 type OutboxItem struct {
 	Kind      domain.DeliveryOutboxKind
@@ -229,20 +238,43 @@ func (r *OutboxRepository) MarkFailedBatch(ctx context.Context, ids []int64, rea
 	return nil
 }
 
-// FAILED 항목은 sent_at이 NULL이므로 created_at을 fallback으로 사용
+// FAILED/QUARANTINED 항목은 sent_at이 NULL이므로 created_at을 fallback으로 사용
 func (r *OutboxRepository) Cleanup(ctx context.Context, olderThan time.Duration) (int64, error) {
+	return r.cleanupInBatches(ctx, time.Now().Add(-olderThan), cleanupBatchSize)
+}
+
+func (r *OutboxRepository) cleanupInBatches(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
 	if err := r.ensurePool(); err != nil {
 		return 0, err
 	}
-	cutoff := time.Now().Add(-olderThan)
-	tag, err := r.pool.Exec(ctx,
-		mustSQL("outbox_repository_0279_09.sql"),
-		domain.DeliveryStatusSent, domain.DeliveryStatusFailed, cutoff,
-	)
-	if err != nil {
-		return 0, err
+	var total int64
+	for {
+		tag, err := r.pool.Exec(ctx,
+			mustSQL("outbox_repository_0279_09.sql"),
+			domain.DeliveryStatusSent, domain.DeliveryStatusFailed, deliveryStatusQuarantined, cutoff, batchSize,
+		)
+		if err != nil {
+			return total, err
+		}
+		total += tag.RowsAffected()
+		if tag.RowsAffected() < int64(batchSize) {
+			return total, nil
+		}
+		if err := yieldBetweenCleanupBatches(ctx); err != nil {
+			return total, err
+		}
 	}
-	return tag.RowsAffected(), nil
+}
+
+func yieldBetweenCleanupBatches(ctx context.Context) error {
+	timer := time.NewTimer(cleanupBatchYield)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (r *OutboxRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error) {
@@ -258,7 +290,7 @@ func (r *OutboxRepository) QuarantineStaleSending(ctx context.Context, olderThan
 	cutoff := time.Now().Add(-olderThan)
 	tag, err := r.pool.Exec(ctx,
 		mustSQL("outbox_repository_0301_10.sql"),
-		deliveryStatusSending, cutoff, limit, domain.DeliveryStatusFailed, staleSendingFailureReason,
+		deliveryStatusSending, cutoff, limit, deliveryStatusQuarantined, staleSendingFailureReason,
 	)
 	if err != nil {
 		return 0, err

@@ -142,53 +142,6 @@ func CanonicalDeliveryPostID(kind domain.OutboxKind, contentID string) string {
 	return canonicalContentID
 }
 
-func groupOutboxIDsByAggregateStatus(outboxIDs []int64, counts []deliveryStatusCount) map[domain.OutboxStatus][]int64 {
-	perOutboxCounts := make(map[int64][]deliveryStatusCount, len(outboxIDs))
-	for _, item := range counts {
-		perOutboxCounts[item.OutboxID] = append(perOutboxCounts[item.OutboxID], item)
-	}
-
-	grouped := make(map[domain.OutboxStatus][]int64, 3)
-	for _, outboxID := range outboxIDs {
-		pendingCount, sentCount, failedCount := parseStatusCounts(perOutboxCounts[outboxID])
-		status := resolveOutboxStatus(pendingCount, sentCount, failedCount)
-		grouped[status] = append(grouped[status], outboxID)
-	}
-
-	return grouped
-}
-
-func parseStatusCounts(counts []deliveryStatusCount) (pending, sent, failed int64) {
-	for _, item := range counts {
-		applyStatusCount(item, &pending, &sent, &failed)
-	}
-	return pending, sent, failed
-}
-
-func applyStatusCount(item deliveryStatusCount, pending, sent, failed *int64) {
-	switch item.Status {
-	case domain.OutboxStatusPending, DeliveryStatusSending:
-		*pending += item.Count
-	case domain.OutboxStatusSent:
-		*sent += item.Count
-	case domain.OutboxStatusFailed, DeliveryStatusQuarantined:
-		*failed += item.Count
-	}
-}
-
-func resolveOutboxStatus(pending, sent, failed int64) domain.OutboxStatus {
-	switch {
-	case pending > 0:
-		return domain.OutboxStatusPending
-	case failed > 0:
-		return domain.OutboxStatusFailed
-	case sent > 0:
-		return domain.OutboxStatusSent
-	default:
-		return domain.OutboxStatusPending
-	}
-}
-
 func UniqueStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil

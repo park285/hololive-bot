@@ -963,6 +963,7 @@ func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetr
 
 type alarmDispatchRunnerLegacyTestConsumer struct {
 	batches           [][]domain.AlarmQueueEnvelope
+	markSendingErr    error
 	markSending       []domain.AlarmQueueEnvelope
 	markDispatched    []domain.AlarmQueueEnvelope
 	scheduledRetry    []domain.AlarmQueueEnvelope
@@ -985,7 +986,7 @@ func (c *alarmDispatchRunnerLegacyTestConsumer) DrainBatch(context.Context, int)
 
 func (c *alarmDispatchRunnerLegacyTestConsumer) MarkSending(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	c.markSending = append(c.markSending, envelopes...)
-	return nil
+	return c.markSendingErr
 }
 
 func (c *alarmDispatchRunnerLegacyTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {

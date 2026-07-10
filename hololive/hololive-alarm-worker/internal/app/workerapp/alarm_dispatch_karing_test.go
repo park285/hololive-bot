@@ -145,12 +145,12 @@ func TestBuildAlarmDispatchKaringContentItems(t *testing.T) {
 	second.Stream.ChannelName = "Channel B"
 	second.Stream.StartScheduled = new(start.Add(time.Hour))
 
-	items, err := buildAlarmDispatchKaringContentItems(t.Context(), nil, alarmDispatchGroup{
+	entries, err := buildAlarmDispatchKaringItems(t.Context(), nil, alarmDispatchGroup{
 		notifications: []domain.AlarmNotification{first, second},
 	})
 
 	require.NoError(t, err)
-	require.Len(t, items, 2)
+	require.Len(t, entries, 2)
 	assert.Equal(t, iris.KaringContentItem{
 		Title:        "Stream A",
 		URL:          "https://youtube.com/watch?v=stream-a",
@@ -160,11 +160,11 @@ func TestBuildAlarmDispatchKaringContentItems(t *testing.T) {
 		StartAt:      "05/16 21:00",
 		ThumbnailURL: thumbnail,
 		Platform:     "youtube",
-	}, items[0])
-	assert.Equal(t, "Stream B", items[1].Title)
-	assert.Equal(t, "Member B", items[1].MemberName)
-	assert.Equal(t, "Channel B", items[1].ChannelName)
-	assert.Equal(t, "05/16 22:00", items[1].StartAt)
+	}, entries[0].item)
+	assert.Equal(t, "Stream B", entries[1].item.Title)
+	assert.Equal(t, "Member B", entries[1].item.MemberName)
+	assert.Equal(t, "Channel B", entries[1].item.ChannelName)
+	assert.Equal(t, "05/16 22:00", entries[1].item.StartAt)
 }
 
 func TestBuildAlarmDispatchKaringContentListRequestsLiveCatchupUsesLiveLabels(t *testing.T) {

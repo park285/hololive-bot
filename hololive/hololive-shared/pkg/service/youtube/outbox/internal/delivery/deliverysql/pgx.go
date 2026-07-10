@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
@@ -211,4 +212,17 @@ func ScanDeliveryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDelivery
 		return item, fmt.Errorf("scan delivery row: %w", err)
 	}
 	return item, nil
+}
+
+const deleteBatchYield = 10 * time.Millisecond
+
+func YieldBetweenDeleteBatches(ctx context.Context) error {
+	timer := time.NewTimer(deleteBatchYield)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

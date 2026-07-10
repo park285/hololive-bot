@@ -26,7 +26,7 @@ func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalU
 
 func terminalStatusSQL(status Status) (statusColumn, timestampColumn string) {
 	overrides := map[Status][2]string{
-		StatusDLQ:         {"dlq_at", "status = 'leased'"},
+		StatusDLQ:         {"dlq_at", "status IN ('leased','sending')"},
 		StatusQuarantined: {"quarantined_at", "status = 'sending'"},
 		StatusCancelled:   {"cancelled_at", terminalNonFinalStatusFilter},
 	}

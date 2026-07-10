@@ -95,15 +95,16 @@ func (p *LivePoller) endStaleSession(ctx context.Context, channelID, videoID str
 }
 
 func (p *LivePoller) markSessionEnded(ctx context.Context, videoID string, now time.Time) bool {
-	if _, err := p.db.Exec(ctx, mustSQL("live_poller_stats_0102_02.sql"),
+	tag, err := p.db.Exec(ctx, mustSQL("live_poller_stats_0102_02.sql"),
 		domain.LiveStatusEnded,
 		now,
 		videoID,
-	); err != nil {
+	)
+	if err != nil {
 		slog.Warn("Failed to mark live session ended", "video_id", videoID, "error", err)
 		return false
 	}
-	return true
+	return tag.RowsAffected() > 0
 }
 
 func activeLiveStreamIDs(currentStreams []*domain.Stream) map[string]bool {

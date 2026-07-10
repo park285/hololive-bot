@@ -13,6 +13,7 @@ TABLE acl_rooms
   COLUMN id integer NOT NULL DEFAULT nextval('acl_rooms_id_seq'::regclass)
   COLUMN room_id character varying(100) NOT NULL
   COLUMN list_type character varying(16) NOT NULL DEFAULT 'whitelist'::character varying
+  CONSTRAINT chk_acl_rooms_list_type_vocab CHECK (((list_type)::text = ANY ((ARRAY['whitelist'::character varying, 'blacklist'::character varying])::text[])))
   CONSTRAINT acl_rooms_pkey PRIMARY KEY (id)
   INDEX CREATE UNIQUE INDEX idx_room_list ON public.acl_rooms USING btree (room_id, list_type)
 
@@ -185,7 +186,7 @@ TABLE major_events
   COLUMN pub_date timestamp with time zone
   COLUMN event_start_date date
   COLUMN event_end_date date
-  COLUMN status text DEFAULT 'active'::character varying
+  COLUMN status text NOT NULL DEFAULT 'active'::character varying
   COLUMN notified_at timestamp with time zone
   COLUMN notified_week character varying(10)
   COLUMN created_at timestamp with time zone DEFAULT now()
@@ -273,13 +274,13 @@ TABLE notification_delivery_outbox
   COLUMN lock_expires_at timestamp with time zone
   COLUMN sending_started_at timestamp with time zone
   CONSTRAINT chk_notification_delivery_outbox_kind_vocab CHECK ((kind = ANY (ARRAY['MAJOR_EVENT_WEEKLY'::text, 'MAJOR_EVENT_MONTHLY'::text, 'MEMBER_NEWS_WEEKLY'::text, 'MEMBER_NEWS_MONTHLY'::text])))
-  CONSTRAINT chk_notification_delivery_outbox_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text])))
+  CONSTRAINT chk_notification_delivery_outbox_status_vocab CHECK ((status = ANY (ARRAY['PENDING'::text, 'SENDING'::text, 'SENT'::text, 'FAILED'::text, 'QUARANTINED'::text])))
   CONSTRAINT notification_delivery_outbox_pkey PRIMARY KEY (id)
   INDEX CREATE UNIQUE INDEX idx_ndo_kind_content ON public.notification_delivery_outbox USING btree (kind, content_id)
   INDEX CREATE INDEX idx_ndo_lease_expired ON public.notification_delivery_outbox USING btree (lock_expires_at) WHERE ((status = 'PENDING'::text) AND (lock_expires_at IS NOT NULL))
   INDEX CREATE INDEX idx_ndo_pending_due_created_id ON public.notification_delivery_outbox USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_ndo_sending_stale ON public.notification_delivery_outbox USING btree (sending_started_at, id) WHERE (status = 'SENDING'::text)
-  INDEX CREATE INDEX idx_ndo_sent_cleanup ON public.notification_delivery_outbox USING btree (COALESCE(sent_at, created_at)) WHERE (status = ANY (ARRAY[('SENT'::character varying)::text, ('FAILED'::character varying)::text]))
+  INDEX CREATE INDEX idx_ndo_terminal_cleanup ON public.notification_delivery_outbox USING btree (COALESCE(sent_at, created_at)) WHERE (status = ANY (ARRAY['SENT'::text, 'FAILED'::text, 'QUARANTINED'::text]))
 
 TABLE notification_template_revisions
   COLUMN id bigint NOT NULL DEFAULT nextval('notification_template_revisions_id_seq'::regclass)
@@ -414,6 +415,7 @@ TABLE youtube_content_watermarks
   COLUMN initialized boolean NOT NULL DEFAULT false
   COLUMN last_content_id character varying(50)
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_content_watermarks_watermark_type_vocab CHECK (((watermark_type)::text = ANY ((ARRAY['VIDEO'::character varying, 'SHORT'::character varying, 'COMMUNITY_POST'::character varying])::text[])))
   CONSTRAINT youtube_content_watermarks_pkey PRIMARY KEY (channel_id, watermark_type)
 
 TABLE youtube_live_sessions

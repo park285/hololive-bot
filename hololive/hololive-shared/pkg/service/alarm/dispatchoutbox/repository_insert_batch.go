@@ -2,7 +2,10 @@ package dispatchoutbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -61,5 +64,32 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 	if err != nil {
 		return result, err
 	}
-	return r.insertPreparedBatch(ctx, eventRows, deliveries, preflightCollisions, &result)
+	return runPublishBatchWithDeadlockRetry(&result, func() (PublishBatchResult, error) {
+		return r.insertPreparedBatch(ctx, eventRows, deliveries, preflightCollisions, &result)
+	})
+}
+
+const pgErrCodeDeadlockDetected = "40P01"
+
+// 40P01은 tx 전체가 롤백되므로 재시도 단위도 tx 전체여야 한다 — preflight의 ORDER BY로
+// publisher 교차 잠금은 제거했지만 후속 INSERT ... ON CONFLICT 경합의 40P01은 남는다.
+func runPublishBatchWithDeadlockRetry(
+	result *PublishBatchResult,
+	attempt func() (PublishBatchResult, error),
+) (PublishBatchResult, error) {
+	snapshot := *result
+	publishResult, err := attempt()
+	if !isDeadlockDetected(err) {
+		return publishResult, err
+	}
+	*result = snapshot
+	return attempt()
+}
+
+func isDeadlockDetected(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == pgErrCodeDeadlockDetected
+	}
+	return false
 }

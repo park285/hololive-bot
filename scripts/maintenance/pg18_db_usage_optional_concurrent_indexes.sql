@@ -15,18 +15,19 @@
 -- 이미 idx_alarm_dispatch_deliveries_{sent,dlq,quarantined,cancelled}_retention로 동일 정의를 제공하므로
 -- 여기서 재생성하지 않습니다. (CREATE INDEX ... IF NOT EXISTS는 이름만 비교 → 다른 이름이면 중복 인덱스가 생김)
 
--- youtube_notification_delivery_telemetry retention candidate.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ydt_logged_retention
-    ON youtube_notification_delivery_telemetry(logged_at ASC, id ASC)
-    WHERE logged_at IS NOT NULL;
+-- youtube_notification_delivery_telemetry retention 인덱스는 migration
+-- 096_sql_integrity_retention_followups.sql이 실제 삭제 술어(logged_at IS NOT NULL AND event_at < cutoff)와
+-- 일치하는 idx_ydt_logged_event_retention (event_at, id) WHERE logged_at IS NOT NULL로 제공하므로
+-- 여기서 수동 생성하지 않습니다. (과거 안내였던 idx_ydt_logged_retention(logged_at ASC, id ASC)은
+-- 술어 컬럼이 달라 retention DELETE에 쓰이지 않는 잘못된 권고였음)
 
 -- telemetry retention 예시. 실제 보관 기간은 운영 정책에 맞춰 조정하세요.
 -- WITH picked AS (
 --     SELECT id
 --     FROM youtube_notification_delivery_telemetry
 --     WHERE logged_at IS NOT NULL
---       AND logged_at < NOW() - INTERVAL '90 days'
---     ORDER BY logged_at ASC, id ASC
+--       AND event_at < NOW() - INTERVAL '90 days'
+--     ORDER BY event_at ASC, id ASC
 --     LIMIT 1000
 -- )
 -- DELETE FROM youtube_notification_delivery_telemetry t

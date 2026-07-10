@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,21 +26,35 @@ var alarmDispatchKaringTemplateIDByItemCount = map[int]int64{
 	4: 133267,
 }
 
+type alarmDispatchKaringItem struct {
+	identity string
+	item     iris.KaringContentItem
+}
+
 func buildAlarmDispatchKaringContentListRequests(ctx context.Context, messageStrings *messagestrings.Store, group alarmDispatchGroup) ([]iris.KaringContentListRequest, error) {
-	items, err := buildAlarmDispatchKaringContentItems(ctx, messageStrings, group)
+	entries, err := buildAlarmDispatchKaringItems(ctx, messageStrings, group)
 	if err != nil {
 		return nil, err
 	}
-	if len(items) == 0 {
+	if len(entries) == 0 {
 		return nil, fmt.Errorf("build alarm dispatch karing content list request: items are empty")
 	}
-	requests := make([]iris.KaringContentListRequest, 0, (len(items)+alarmDispatchKaringMaxItemsPerRequest-1)/alarmDispatchKaringMaxItemsPerRequest)
-	for start := 0; start < len(items); start += alarmDispatchKaringMaxItemsPerRequest {
-		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(items))
-		chunk := items[start:end]
+	// 재스케줄로 그룹 구성이 바뀌어도 동일 item 조합이면 동일 ClientRequestID가 재생산되어야
+	// admission dedup이 기전송 chunk를 걸러낸다 — identity 정렬로 chunk 경계를 고정한다.
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].identity < entries[j].identity })
+	requests := make([]iris.KaringContentListRequest, 0, (len(entries)+alarmDispatchKaringMaxItemsPerRequest-1)/alarmDispatchKaringMaxItemsPerRequest)
+	for start := 0; start < len(entries); start += alarmDispatchKaringMaxItemsPerRequest {
+		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(entries))
+		chunk := entries[start:end]
+		items := make([]iris.KaringContentItem, 0, len(chunk))
+		identities := make([]string, 0, len(chunk))
+		for i := range chunk {
+			items = append(items, chunk[i].item)
+			identities = append(identities, chunk[i].identity)
+		}
 		req := iris.KaringContentListRequest{
-			ClientRequestID: new(alarmDispatchClientRequestID(group, start, end)),
-			Items:           chunk,
+			ClientRequestID: new(alarmDispatchKaringChunkClientRequestID(group.roomID, identities)),
+			Items:           items,
 			ExtraArgs:       buildAlarmDispatchKaringExtraArgs(ctx, messageStrings, group, len(chunk)),
 			TemplateID:      alarmDispatchKaringTemplateID(len(chunk)),
 		}
@@ -47,6 +62,14 @@ func buildAlarmDispatchKaringContentListRequests(ctx context.Context, messageStr
 		requests = append(requests, req)
 	}
 	return requests, nil
+}
+
+func alarmDispatchKaringChunkClientRequestID(roomID string, identities []string) string {
+	parts := make([]string, 0, 2+len(identities))
+	parts = append(parts, "alarm-dispatch-karing-v2", strings.TrimSpace(roomID))
+	parts = append(parts, identities...)
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return "hololive-alarm:" + hex.EncodeToString(sum[:16])
 }
 
 func alarmDispatchClientRequestID(group alarmDispatchGroup, start, end int) string {
@@ -101,15 +124,34 @@ func alarmDispatchKaringTemplateID(itemCount int) int64 {
 	return alarmDispatchKaringTemplateIDByItemCount[itemCount]
 }
 
-func buildAlarmDispatchKaringContentItems(ctx context.Context, messageStrings *messagestrings.Store, group alarmDispatchGroup) ([]iris.KaringContentItem, error) {
+func buildAlarmDispatchKaringItems(ctx context.Context, messageStrings *messagestrings.Store, group alarmDispatchGroup) ([]alarmDispatchKaringItem, error) {
 	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return buildAlarmDispatchYouTubeOutboxKaringContentItems(ctx, messageStrings, &group.envelopes[0])
+		return buildAlarmDispatchYouTubeOutboxKaringItems(ctx, messageStrings, &group.envelopes[0])
 	}
-	items := make([]iris.KaringContentItem, 0, len(group.notifications))
+	entries := make([]alarmDispatchKaringItem, 0, len(group.notifications))
 	for i := range group.notifications {
-		items = append(items, buildAlarmDispatchNotificationKaringContentItem(ctx, messageStrings, &group.notifications[i]))
+		entries = append(entries, alarmDispatchKaringItem{
+			identity: alarmDispatchNotificationKaringItemIdentity(group, i),
+			item:     buildAlarmDispatchNotificationKaringContentItem(ctx, messageStrings, &group.notifications[i]),
+		})
 	}
-	return items, nil
+	return entries, nil
+}
+
+func alarmDispatchNotificationKaringItemIdentity(group alarmDispatchGroup, index int) string {
+	var dispatchOutboxID int64
+	if index < len(group.envelopes) {
+		dispatchOutboxID = group.envelopes[index].DispatchOutboxID
+	}
+	streamID := ""
+	if group.notifications[index].Stream != nil {
+		streamID = group.notifications[index].Stream.ID
+	}
+	return fmt.Sprintf("%020d|%s", dispatchOutboxID, streamID)
+}
+
+func alarmDispatchOutboxKaringItemIdentity(item *domain.YouTubeOutboxItem) string {
+	return fmt.Sprintf("%020d|%s", item.OutboxID, item.ContentID)
 }
 
 func buildAlarmDispatchNotificationKaringContentItem(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) iris.KaringContentItem {

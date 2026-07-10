@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 	"testing"
 	"time"
 
@@ -926,61 +925,6 @@ func TestFetchAndLock_DoesNotReclaimSendingAfterLeaseExpiry(t *testing.T) {
 	}
 	if sending := countByStatus(t, repository, ctx, deliveryStatusSending); sending != 1 {
 		t.Fatalf("row must remain SENDING, sending=%d", sending)
-	}
-}
-
-func TestQuarantineStaleSending(t *testing.T) {
-	repository := testRepository(t)
-	ctx := context.Background()
-
-	if err := repository.Enqueue(ctx, domain.DeliveryKindMemberNewsWeekly, "2026-W08", "room1", "msg"); err != nil {
-		t.Fatalf("enqueue: %v", err)
-	}
-
-	items := fetchAndLockItems(t, repository, ctx)
-	if len(items) == 0 {
-		t.Fatal("no items fetched")
-	}
-	markOutboxSending(t, repository, ctx, &items[0])
-
-	if _, err := repository.pool.Exec(ctx,
-		"UPDATE notification_delivery_outbox SET sending_started_at = $1 WHERE id = $2",
-		time.Now().Add(-2*time.Minute), items[0].ID,
-	); err != nil {
-		t.Fatalf("backdate sending_started_at: %v", err)
-	}
-
-	quarantined, err := repository.QuarantineStaleSending(ctx, time.Minute, 10)
-	if err != nil {
-		t.Fatalf("quarantine stale sending: %v", err)
-	}
-	if quarantined != 1 {
-		t.Fatalf("quarantined = %d, want 1", quarantined)
-	}
-	if failed := countByStatus(t, repository, ctx, domain.DeliveryStatusFailed); failed != 1 {
-		t.Fatalf("stale SENDING must move to FAILED, failed=%d", failed)
-	}
-	if pending := countByStatus(t, repository, ctx, domain.DeliveryStatusPending); pending != 0 {
-		t.Fatalf("stale SENDING must not be rescheduled as PENDING, pending=%d", pending)
-	}
-
-	var status string
-	var errText string
-	var locksCleared bool
-	if err := repository.pool.QueryRow(ctx,
-		`SELECT status, error, locked_at IS NULL AND locked_by IS NULL AND lock_expires_at IS NULL
-		 FROM notification_delivery_outbox WHERE id = $1`, items[0].ID,
-	).Scan(&status, &errText, &locksCleared); err != nil {
-		t.Fatalf("query quarantined row: %v", err)
-	}
-	if status != string(domain.DeliveryStatusFailed) {
-		t.Fatalf("status = %s, want FAILED", status)
-	}
-	if !strings.Contains(errText, "stale sending") {
-		t.Fatalf("error = %q, want stale sending marker", errText)
-	}
-	if !locksCleared {
-		t.Fatal("stale SENDING quarantine must clear locks")
 	}
 }
 
