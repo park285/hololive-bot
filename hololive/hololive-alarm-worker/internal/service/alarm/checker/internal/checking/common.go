@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -316,7 +317,7 @@ func LoadSubscriberRoomsByChannelSequential(
 	eg.SetLimit(DefaultLookupConcurrency)
 
 	for _, channelID := range uniqueChannelIDs {
-		eg.Go(func() error {
+		panicguard.GoE(eg, nil, "subscriber-room-lookup", func() error {
 			rooms, err := cacheClient.SMembers(egCtx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID)
 			if err != nil {
 				return fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)

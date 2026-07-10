@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 	"golang.org/x/sync/errgroup"
 )
@@ -22,14 +23,14 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
+	panicguard.GoE(eg, s.logger, "alarm-scheduler-youtube", func() error {
 		return s.runLoop(egCtx, "youtube", s.youtubeInterval, s.youtubeTimeout, false, s.runYouTubeIteration)
 	})
-	eg.Go(func() error {
+	panicguard.GoE(eg, s.logger, "alarm-scheduler-chzzk", func() error {
 		return s.runLoop(egCtx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
 	})
 	s.startTwitchLoop(eg, egCtx)
-	eg.Go(func() error {
+	panicguard.GoE(eg, s.logger, "alarm-scheduler-cache-recovery", func() error {
 		return s.runAlarmCacheRecoveryLoop(egCtx)
 	})
 

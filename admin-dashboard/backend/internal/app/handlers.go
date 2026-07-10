@@ -12,6 +12,7 @@ import (
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
 	"github.com/kapu/admin-dashboard/internal/status"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 func (r *Runtime) handleHealth(c *gin.Context) {
@@ -156,14 +157,14 @@ func watchPeer(conn *websocket.Conn, pongWait time.Duration) <-chan struct{} {
 	conn.SetPongHandler(func(string) error {
 		return conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
-	go func() {
+	panicguard.Go(nil, "admin-dashboard-websocket-peer", func() {
 		defer close(gone)
 		for {
 			if _, _, err := conn.ReadMessage(); err != nil {
 				return
 			}
 		}
-	}()
+	})
 	return gone
 }
 

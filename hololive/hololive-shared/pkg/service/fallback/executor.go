@@ -24,6 +24,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -111,36 +112,57 @@ func executeSequential[K, V any](ctx context.Context, plan FetchPlan[K, V], fail
 	return successCount
 }
 
+type parallelResult struct {
+	mu           sync.Mutex
+	failed       []bool
+	successCount int
+}
+
+func (r *parallelResult) markFailed(index int) {
+	r.mu.Lock()
+	r.failed[index] = true
+	r.mu.Unlock()
+}
+
+func (r *parallelResult) markSuccess() {
+	r.mu.Lock()
+	r.successCount++
+	r.mu.Unlock()
+}
+
+func executeParallelTarget[K, V any](ctx context.Context, plan FetchPlan[K, V], index int, key K, result *parallelResult) {
+	if err := panicguard.RunE(nil, "fallback-fetch", func() error {
+		value, err := plan.Fetch(ctx, key)
+		if err != nil {
+			return err
+		}
+		if plan.OnSuccess != nil {
+			plan.OnSuccess(key, value)
+		}
+		result.markSuccess()
+		return nil
+	}); err != nil {
+		result.markFailed(index)
+	}
+}
+
 func executeParallel[K, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(plan.Parallelism)
 
-	var mu sync.Mutex
-	successCount := 0
+	result := parallelResult{failed: failed}
 	for i := range plan.Targets {
 		index := i
 		key := plan.Targets[i]
-		eg.Go(func() error {
-			value, err := plan.Fetch(egCtx, key)
-			if err != nil {
-				mu.Lock()
-				failed[index] = true
-				mu.Unlock()
-				return nil
-			}
-			if plan.OnSuccess != nil {
-				plan.OnSuccess(key, value)
-			}
-			mu.Lock()
-			successCount++
-			mu.Unlock()
+		panicguard.GoE(eg, nil, "fallback-fetch-worker", func() error {
+			executeParallelTarget(egCtx, plan, index, key, &result)
 			return nil
 		})
 	}
 	if err := eg.Wait(); err != nil {
-		return successCount
+		return result.successCount
 	}
-	return successCount
+	return result.successCount
 }
 
 func summarizeFailures[K any](targets []K, failed []bool, successCount int) Summary[K] {

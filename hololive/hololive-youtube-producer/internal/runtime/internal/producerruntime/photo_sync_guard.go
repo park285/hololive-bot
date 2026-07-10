@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 )
 
@@ -71,10 +72,10 @@ func (s *leasedPhotoSyncService) tryAcquire(ctx context.Context) (*ingestionleas
 func (s *leasedPhotoSyncService) runOwned(ctx context.Context, claim *ingestionlease.JobRunClaim) {
 	childCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
-	go func() {
+	panicguard.Go(s.logger, "photo-sync-leased-service", func() {
 		defer close(done)
 		s.inner.Start(childCtx)
-	}()
+	})
 	s.renewUntilStopped(ctx, claim, cancel, done)
 	cancel()
 	if _, err := claim.Release(context.WithoutCancel(ctx)); err != nil {

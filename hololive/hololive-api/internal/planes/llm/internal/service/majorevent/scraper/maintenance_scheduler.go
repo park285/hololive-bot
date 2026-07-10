@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type maintenanceRepository interface {
@@ -99,7 +100,9 @@ func (s *MaintenanceScheduler) Start(ctx context.Context) {
 		return
 	}
 	s.wg.Add(1)
-	go s.run(ctx)
+	panicguard.Go(s.logger, "major-event-maintenance-scheduler", func() {
+		s.run(ctx)
+	})
 }
 
 // Stop은 유지보수 스케줄러를 종료한다.

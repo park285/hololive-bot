@@ -33,6 +33,7 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -133,7 +134,9 @@ func positiveOr[T ~int | ~int64](value, fallback T) T {
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
-	go d.run(ctx)
+	panicguard.Go(d.logger, "delivery-dispatcher", func() {
+		d.run(ctx)
+	})
 }
 
 func (d *Dispatcher) run(ctx context.Context) {
@@ -265,11 +268,11 @@ func (d *Dispatcher) acquireBatchSlot(ctx context.Context, sem chan<- struct{}, 
 }
 
 func (d *Dispatcher) processBatchItemAsync(ctx context.Context, item *domain.NotificationDeliveryOutbox, sem <-chan struct{}, wg *sync.WaitGroup) {
-	go func() {
+	panicguard.Go(d.logger, "delivery-dispatch-item", func() {
 		defer wg.Done()
 		defer func() { <-sem }()
 		d.processItem(ctx, item)
-	}()
+	})
 }
 
 func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationDeliveryOutbox) {

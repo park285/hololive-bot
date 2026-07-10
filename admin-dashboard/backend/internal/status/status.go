@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
@@ -79,8 +80,17 @@ func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	for _, endpoint := range c.endpoints {
-		wg.Go(func() {
-			status := c.collectEndpoint(ctx, endpoint)
+		wg.Add(1)
+		panicguard.Go(nil, "admin-dashboard-status-endpoint", func() {
+			defer wg.Done()
+			var status ServiceStatus
+			if err := panicguard.RunE(nil, "admin-dashboard-status-endpoint", func() error {
+				status = c.collectEndpoint(ctx, endpoint)
+				return nil
+			}); err != nil {
+				errText := err.Error()
+				status = ServiceStatus{Name: endpoint.Name, Available: false, Error: &errText}
+			}
 			mu.Lock()
 			services = append(services, status)
 			mu.Unlock()

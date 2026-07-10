@@ -24,31 +24,42 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 )
 
 func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, errCh chan<- error) {
 	if r.ConfigSubscriber != nil {
-		go r.ConfigSubscriber.Run(ctx)
+		panicguard.Go(r.Logger, "youtube-producer-config-subscriber", func() {
+			r.ConfigSubscriber.Run(ctx)
+		})
 		r.Logger.Info("Config subscriber started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.ingestionLease != nil {
-		go r.ingestionLease.StartRenewLoop(ctx, errCh)
+		panicguard.Go(r.Logger, "youtube-producer-ingestion-lease", func() {
+			r.ingestionLease.StartRenewLoop(ctx, errCh)
+		})
 	}
 	if r.ScraperScheduler != nil {
 		r.ScraperScheduler.Start(ctx)
 		r.Logger.Info("Scraper scheduler started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.PollTargetRefresher != nil {
-		go r.PollTargetRefresher.Start(ctx)
+		panicguard.Go(r.Logger, "youtube-producer-poll-target-refresh", func() {
+			r.PollTargetRefresher.Start(ctx)
+		})
 		r.Logger.Info("YouTube poll target refresher started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.PhotoSync != nil {
-		go r.PhotoSync.Start(ctx)
+		panicguard.Go(r.Logger, "youtube-producer-photo-sync", func() {
+			r.PhotoSync.Start(ctx)
+		})
 		r.Logger.Info("Photo sync service started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.RetentionCleaner != nil {
-		go r.RetentionCleaner.Start(ctx)
+		panicguard.Go(r.Logger, "youtube-producer-retention-cleaner", func() {
+			r.RetentionCleaner.Start(ctx)
+		})
 		r.Logger.Info("YouTube retention cleaner started", slog.String("runtime", r.runtimeName()))
 	}
 }

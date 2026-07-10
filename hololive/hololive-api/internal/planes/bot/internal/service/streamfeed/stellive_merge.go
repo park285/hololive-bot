@@ -7,6 +7,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -52,7 +53,7 @@ func (s *Service) mergeStelliveUpcomingStreams(ctx context.Context, org string, 
 
 	g.SetLimit(config.DefaultChzzkOperationalConfig().MaxConcurrentStatusChecks)
 	for _, member := range members {
-		g.Go(func() error {
+		panicguard.GoE(&g, s.logger, "stellive-upcoming-stream", func() error {
 			streams := s.fetchStelliveUpcomingStreams(ctx, member, hours)
 			appendStelliveUpcomingStreams(&mu, &chzzkStreams, streams)
 			return nil

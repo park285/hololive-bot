@@ -32,6 +32,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type eventRepository interface {
@@ -153,7 +154,7 @@ func (s *Service) scrapeSources(ctx context.Context) []sourceScrapeResult {
 	eg.SetLimit(s.config.FeedConcurrency)
 
 	for _, source := range s.config.Sources {
-		eg.Go(func() error {
+		panicguard.GoE(eg, s.logger, "major-event-source-scrape", func() error {
 			result := s.scrapeSingleSource(egCtx, source)
 			mu.Lock()
 			results = append(results, result)

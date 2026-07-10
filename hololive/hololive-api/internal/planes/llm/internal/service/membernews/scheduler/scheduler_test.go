@@ -29,6 +29,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type mockDigestService struct {
@@ -298,5 +299,27 @@ func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 	}
 	if len(outbox.enqueuedItems) != 1 {
 		t.Errorf("expected 1 enqueued item, got %d", len(outbox.enqueuedItems))
+	}
+}
+
+func TestDispatchDigestRoomsCountsRecoveredPanicAsFailure(t *testing.T) {
+	t.Parallel()
+
+	rooms := []model.SubscribedRoom{{RoomID: "room-panic"}, {RoomID: "room-ok"}}
+	result := dispatchDigestRooms(context.Background(), rooms, &digestDispatchConfig{
+		periodKey: "2026-W28",
+		processRoom: func(_ context.Context, _, roomID string) delivery.SendResult {
+			if roomID == "room-panic" {
+				panic("digest panic")
+			}
+			return delivery.SendResult{Attempted: 1, Sent: 1}
+		},
+	})
+
+	if result.Attempted != 2 || result.Sent != 1 || result.Failed != 1 {
+		t.Fatalf("dispatch result = %+v, want attempted=2 sent=1 failed=1", result)
+	}
+	if len(result.FailedRooms) != 1 || result.FailedRooms[0] != "room-panic" {
+		t.Fatalf("FailedRooms = %#v, want [room-panic]", result.FailedRooms)
 	}
 }

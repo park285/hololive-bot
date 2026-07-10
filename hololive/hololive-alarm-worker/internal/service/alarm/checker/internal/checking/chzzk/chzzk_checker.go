@@ -32,6 +32,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/internal/checking"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"golang.org/x/sync/errgroup"
@@ -114,7 +115,7 @@ func (c *ChzzkChecker) collectChzzkNotifications(
 			continue
 		}
 
-		eg.Go(func() error {
+		panicguard.GoE(eg, c.logger, "chzzk-channel-check", func() error {
 			channelNotifications := c.lookupChzzkNotifications(egCtx, job, memberNames, now)
 			if len(channelNotifications) == 0 {
 				return nil

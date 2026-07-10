@@ -30,6 +30,7 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -120,25 +121,33 @@ func (d *Dispatcher) Start(ctx context.Context) {
 		return
 	}
 
-	go func() {
+	panicguard.Go(d.logger, "youtube-outbox-dispatcher", func() {
 		defer d.started.Store(false)
 		d.run(ctx)
-	}()
+	})
 	d.startBackgroundLoops(ctx)
 }
 
 func (d *Dispatcher) startBackgroundLoops(ctx context.Context) {
 	if d.claim != nil && d.claim.delivery != nil {
-		go d.aggregateSyncLoop(ctx)
+		panicguard.Go(d.logger, "youtube-outbox-aggregate-sync", func() {
+			d.aggregateSyncLoop(ctx)
+		})
 	}
 	if d.telemetry != nil {
-		go d.telemetry.telemetryLoop(ctx)
+		panicguard.Go(d.logger, "youtube-outbox-telemetry", func() {
+			d.telemetry.telemetryLoop(ctx)
+		})
 	}
 	if d.config.CleanupEnabled {
-		go d.cleanupLoop(ctx)
+		panicguard.Go(d.logger, "youtube-outbox-cleanup", func() {
+			d.cleanupLoop(ctx)
+		})
 	}
 	if d.config.ReviveEnabled && d.claim != nil && d.claim.db != nil {
-		go d.reviveLoop(ctx)
+		panicguard.Go(d.logger, "youtube-outbox-revive", func() {
+			d.reviveLoop(ctx)
+		})
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/park285/shared-go/pkg/json"
 )
 
@@ -40,7 +41,9 @@ func (h *Hub) Start() {
 }
 
 func (h *Hub) StartContext(ctx context.Context) {
-	go h.run(ctx)
+	panicguard.Go(nil, "admin-dashboard-status-hub", func() {
+		h.run(ctx)
+	})
 }
 
 func (h *Hub) run(ctx context.Context) {
@@ -177,8 +180,17 @@ func (h *Hub) externalRuntimeStats(ctx context.Context) []ServiceRuntimeStats {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	for _, endpoint := range h.endpoints {
-		wg.Go(func() {
-			stat := h.fetchRuntime(ctx, endpoint)
+		wg.Add(1)
+		panicguard.Go(nil, "admin-dashboard-runtime-status", func() {
+			defer wg.Done()
+			var stat ServiceRuntimeStats
+			if err := panicguard.RunE(nil, "admin-dashboard-runtime-status", func() error {
+				stat = h.fetchRuntime(ctx, endpoint)
+				return nil
+			}); err != nil {
+				errText := err.Error()
+				stat = ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &errText}
+			}
 			mu.Lock()
 			results = append(results, stat)
 			mu.Unlock()

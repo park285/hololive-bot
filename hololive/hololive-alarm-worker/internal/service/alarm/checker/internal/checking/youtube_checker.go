@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
@@ -181,7 +182,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 	mu *sync.Mutex,
 	notifications *[]*domain.AlarmNotification,
 ) {
-	eg.Go(func() error {
+	panicguard.GoE(eg, c.logger, "youtube-channel-check", func() error {
 		channelNotifications, err := c.buildChannelNotifications(
 			ctx,
 			work.channelID,

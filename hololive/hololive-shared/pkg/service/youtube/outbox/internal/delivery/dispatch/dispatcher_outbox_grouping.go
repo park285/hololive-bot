@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
@@ -144,7 +145,7 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(g.subscriberLookupParallelism())
 	for idx := range entries {
-		eg.Go(func() error {
+		panicguard.GoE(eg, g.logger, "youtube-outbox-subscriber-lookup", func() error {
 			e := entries[idx]
 			rooms, ok := g.resolveSubscriberRooms(egCtx, e)
 			results[idx] = subscriberLookupResult{

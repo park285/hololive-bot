@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"golang.org/x/net/proxy"
 )
 
@@ -27,9 +28,15 @@ func dialSOCKS5WithContextFallback(ctx context.Context, dialer proxy.Dialer, net
 }
 
 func startSOCKS5Dial(ctx context.Context, dialer proxy.Dialer, network, addr string, done chan<- dialResult) {
-	go func() {
-		runSOCKS5Dial(ctx, dialer, network, addr, done)
-	}()
+	panicguard.Go(nil, "socks5-dial", func() {
+		err := panicguard.RunE(nil, "socks5-dial", func() error {
+			runSOCKS5Dial(ctx, dialer, network, addr, done)
+			return nil
+		})
+		if err != nil {
+			sendSOCKS5DialResult(done, dialResult{err: err})
+		}
+	})
 }
 
 func runSOCKS5Dial(ctx context.Context, dialer proxy.Dialer, network, addr string, done chan<- dialResult) {

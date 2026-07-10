@@ -26,6 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"golang.org/x/sync/errgroup"
@@ -52,7 +53,7 @@ func (s *RuntimeScheduler) startTwitchLoop(eg *errgroup.Group, ctx context.Conte
 	if s.twitchChecker == nil {
 		return
 	}
-	eg.Go(func() error {
+	panicguard.GoE(eg, s.logger, "alarm-scheduler-twitch", func() error {
 		return s.runLoop(ctx, runtimeSchedulerLoopNameTwitch, s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
 	})
 }

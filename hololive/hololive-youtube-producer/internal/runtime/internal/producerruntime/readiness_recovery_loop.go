@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
 )
@@ -39,10 +40,10 @@ func startRecoveryLoop(
 		}
 	}
 
-	go func() {
+	panicguard.Go(logger, "youtube-producer-readiness-recovery", func() {
 		defer close(done)
 		runRecoveryLoop(loopCtx, claimer, state, baseInterval, maxInterval, logger, onResume)
-	}()
+	})
 
 	return func() {
 		stopOnce.Do(cancel)
@@ -165,6 +166,7 @@ func sleepRecoveryLoop(ctx context.Context, duration time.Duration) bool {
 	if duration <= 0 {
 		duration = 5 * time.Second
 	}
+	// crosscutting:allow readiness lease 복구는 성공 시 초기화되는 상태 기반 backoff가 필요하다.
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 	select {

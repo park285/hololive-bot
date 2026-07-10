@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/park285/shared-go/pkg/ginjson"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
@@ -50,6 +51,31 @@ type statsResponse struct {
 	Uptime  string `json:"uptime"`
 }
 
+func (h *StatsHandler) collectStats(ctx context.Context) (members []*domain.Member, alarmKeys []*domain.AlarmEntry, memberErr, alarmErr error) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	panicguard.Go(h.safeLogger(), "admin-stats-members", func() {
+		defer wg.Done()
+		memberErr = panicguard.RunE(h.safeLogger(), "admin-stats-members", func() error {
+			var err error
+			members, err = h.repository.GetAllMembers(ctx)
+			return err
+		})
+	})
+	panicguard.Go(h.safeLogger(), "admin-stats-alarms", func() {
+		defer wg.Done()
+		alarmErr = panicguard.RunE(h.safeLogger(), "admin-stats-alarms", func() error {
+			var err error
+			alarmKeys, err = h.alarm.GetAllAlarmKeys(ctx)
+			return err
+		})
+	})
+
+	wg.Wait()
+	return members, alarmKeys, memberErr, alarmErr
+}
+
 func (h *StatsHandler) GetStats(c *gin.Context) {
 	if !h.requireStatsDeps(c) {
 		return
@@ -58,30 +84,7 @@ func (h *StatsHandler) GetStats(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	var (
-		members   []*domain.Member
-		alarmKeys []*domain.AlarmEntry
-		memberErr error
-		alarmErr  error
-		wg        sync.WaitGroup
-	)
-
-	// 병렬로 데이터 조회
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-
-		members, memberErr = h.repository.GetAllMembers(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-
-		alarmKeys, alarmErr = h.alarm.GetAllAlarmKeys(ctx)
-	}()
-
-	wg.Wait()
-
+	members, alarmKeys, memberErr, alarmErr := h.collectStats(ctx)
 	if memberErr != nil || alarmErr != nil {
 		h.safeLogger().Error("failed to collect stats",
 			slog.Any("member_error", memberErr),

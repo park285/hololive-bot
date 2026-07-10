@@ -121,6 +121,31 @@ func TestExecuteCollectsSuccessesAndFailures(t *testing.T) {
 	}
 }
 
+func TestExecuteCountsRecoveredPanicAsFailure(t *testing.T) {
+	t.Parallel()
+
+	summary := Execute(context.Background(), FetchPlan[int, string]{
+		Targets:     []int{1, 2},
+		Parallelism: 2,
+		Fetch: func(_ context.Context, target int) (string, error) {
+			if target == 2 {
+				panic("fetch panic")
+			}
+			return "ok", nil
+		},
+	})
+
+	if summary.SuccessCount != 1 {
+		t.Fatalf("SuccessCount = %d, want 1", summary.SuccessCount)
+	}
+	if summary.FailedCount != 1 {
+		t.Fatalf("FailedCount = %d, want 1", summary.FailedCount)
+	}
+	if !reflect.DeepEqual(summary.FailedTargets, []int{2}) {
+		t.Fatalf("FailedTargets = %#v, want [2]", summary.FailedTargets)
+	}
+}
+
 func TestExecuteRespectsParallelismLimit(t *testing.T) {
 	t.Parallel()
 

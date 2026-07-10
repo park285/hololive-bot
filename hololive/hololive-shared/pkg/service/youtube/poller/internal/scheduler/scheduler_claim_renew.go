@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
@@ -56,9 +57,16 @@ func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName strin
 
 	metrics := s.metrics
 	logger := s.logger
-	go func() {
-		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, interval, errCh, metrics, logger)
-	}()
+	panicguard.Go(logger, "youtube-poller-claim-renew", func() {
+		err := panicguard.RunE(logger, "youtube-poller-claim-renew", func() error {
+			runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, interval, errCh, metrics, logger)
+			return nil
+		})
+		if err != nil {
+			errCh <- err
+			pollCancel()
+		}
+	})
 
 	cancel := func() {
 		renewCancel()

@@ -33,6 +33,7 @@ import (
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 const summaryCacheTTL = 24 * time.Hour
@@ -274,7 +275,9 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 	)
 
 	runSearch := func(query string, warnMessage string, dst *[]sharedmodel.SearchResult) {
-		wg.Go(func() {
+		wg.Add(1)
+		panicguard.Go(s.logger, "major-event-summary-search", func() {
+			defer wg.Done()
 			found, ok := s.searchWithTimeout(ctx, query, warnMessage)
 			if !ok {
 				return

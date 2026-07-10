@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/park285/shared-go/pkg/jsonutil"
 	"github.com/tech-engine/goscrapy/pkg/core"
 	"github.com/tech-engine/goscrapy/pkg/engine"
@@ -165,11 +166,13 @@ type goscrapyEngineSignals struct {
 func startGoScrapyEngineSignals(ctx, appCtx context.Context, start func(context.Context) error) goscrapyEngineSignals {
 	errCh := make(chan error, 1)
 	eventCh := make(chan goscrapyWaitEvent, 2)
-	go func() {
-		err := start(appCtx)
+	panicguard.Go(nil, "goscrapy-engine", func() {
+		err := panicguard.RunE(nil, "goscrapy-engine", func() error {
+			return start(appCtx)
+		})
 		errCh <- err
 		eventCh <- goscrapyWaitEvent{kind: goscrapyWaitEngine, err: err}
-	}()
+	})
 	stopContextWatch := context.AfterFunc(ctx, func() {
 		eventCh <- goscrapyWaitEvent{kind: goscrapyWaitCanceled}
 	})

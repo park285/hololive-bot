@@ -172,6 +172,7 @@ func (w *alarmDispatchWakeupWaiter) effectiveSleep() func(context.Context, time.
 }
 
 func sleepContext(ctx context.Context, d time.Duration) bool {
+	// crosscutting:allow backoff 계산은 shared helper가 소유하며 여기서는 취소 가능한 대기만 수행한다.
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {

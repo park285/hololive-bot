@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -222,17 +223,20 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 
 		wg.Add(1)
 
-		go func(idx int, endpoint ServiceEndpoint) {
+		panicguard.Go(nil, "system-stats-service-goroutines", func() {
 			defer wg.Done()
-
-			goroutines, ok := c.fetchGoroutineCount(ctx, endpoint.URL)
-
-			results[idx] = ServiceGoroutines{
-				Name:       endpoint.Name,
-				Goroutines: goroutines,
-				Available:  ok,
+			if err := panicguard.RunE(nil, "system-stats-service-goroutines", func() error {
+				goroutines, ok := c.fetchGoroutineCount(ctx, ep.URL)
+				results[i] = ServiceGoroutines{
+					Name:       ep.Name,
+					Goroutines: goroutines,
+					Available:  ok,
+				}
+				return nil
+			}); err != nil {
+				results[i] = ServiceGoroutines{Name: ep.Name, Available: false}
 			}
-		}(i, ep)
+		})
 	}
 
 	wg.Wait()

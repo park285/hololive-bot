@@ -26,6 +26,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type scrapeTriggerType string
@@ -83,7 +85,9 @@ func (s *FeedScheduler) Start(ctx context.Context) {
 		return
 	}
 	s.wg.Add(1)
-	go s.run(ctx)
+	panicguard.Go(s.logger, "major-event-feed-scheduler", func() {
+		s.run(ctx)
+	})
 }
 
 // Stop은 스케줄러를 종료한다.

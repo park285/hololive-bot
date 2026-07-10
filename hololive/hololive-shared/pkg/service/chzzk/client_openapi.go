@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	json "github.com/park285/shared-go/pkg/json"
 	"golang.org/x/sync/errgroup"
 )
@@ -170,7 +171,7 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 	g.SetLimit(c.maxConcurrentStatusChecks)
 
 	for _, channelID := range channelIDs {
-		g.Go(func() error {
+		panicguard.GoE(&g, c.logger, "chzzk-live-status", func() error {
 			live, ok, err := c.liveDataFromStatus(ctx, channelID)
 			if err != nil {
 				return err

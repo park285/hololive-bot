@@ -12,6 +12,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 func (h *Service) fetchHololiveChannelList(ctx context.Context) ([]*domain.Channel, error) {
@@ -93,14 +94,14 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 	resultChan := make(chan channelFetchResult, len(missedIDs))
 	workerWG := h.startChannelFetchWorkers(ctx, workerCount, jobs, resultChan)
 
-	go func() {
+	panicguard.Go(h.logger, "holodex-channel-fetch-enqueue", func() {
 		enqueueChannelFetchJobs(ctx, jobs, missedIDs)
-	}()
+	})
 
-	go func() {
+	panicguard.Go(h.logger, "holodex-channel-fetch-close", func() {
 		workerWG.Wait()
 		close(resultChan)
-	}()
+	})
 
 	return h.collectIndividualChannelFetchResults(ctx, channelIDs, result, resultChan)
 }
@@ -109,7 +110,9 @@ func (h *Service) startChannelFetchWorkers(ctx context.Context, workerCount int,
 	workerWG := &sync.WaitGroup{}
 	workerWG.Add(workerCount)
 	for range workerCount {
-		go h.runChannelFetchWorker(ctx, jobs, resultChan, workerWG)
+		panicguard.Go(h.logger, "holodex-channel-fetch-worker", func() {
+			h.runChannelFetchWorker(ctx, jobs, resultChan, workerWG)
+		})
 	}
 	return workerWG
 }
