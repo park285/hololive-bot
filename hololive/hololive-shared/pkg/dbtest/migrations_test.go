@@ -21,78 +21,112 @@
 package dbtest
 
 import (
-	"reflect"
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestSplitSQLStatements(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want []string
-	}{
-		{
-			name: "single statement no trailing semicolon",
-			in:   "CREATE INDEX CONCURRENTLY foo ON t (c)",
-			want: []string{"CREATE INDEX CONCURRENTLY foo ON t (c)"},
-		},
-		{
-			name: "two statements split on top-level semicolon",
-			in:   "CREATE INDEX CONCURRENTLY foo ON t (c);\nCOMMENT ON INDEX foo IS 'x';",
-			want: []string{"CREATE INDEX CONCURRENTLY foo ON t (c)", "COMMENT ON INDEX foo IS 'x'"},
-		},
-		{
-			name: "semicolon inside single-quoted literal is not a separator",
-			in:   "INSERT INTO t(b) VALUES ('a; b; c'); SELECT 1;",
-			want: []string{"INSERT INTO t(b) VALUES ('a; b; c')", "SELECT 1"},
-		},
-		{
-			name: "escaped single quote inside literal",
-			in:   "INSERT INTO t(b) VALUES ('it''s; fine'); SELECT 2;",
-			want: []string{"INSERT INTO t(b) VALUES ('it''s; fine')", "SELECT 2"},
-		},
-		{
-			name: "dollar-quoted DO block keeps inner semicolons",
-			in: `DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'x') THEN
-        CREATE TYPE x AS ENUM ('A', 'B');
-    END IF;
-END $$;
-SELECT 3;`,
-			want: []string{
-				"DO $$\nBEGIN\n    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'x') THEN\n        CREATE TYPE x AS ENUM ('A', 'B');\n    END IF;\nEND $$",
-				"SELECT 3",
-			},
-		},
-		{
-			name: "line comment with semicolon is preserved and ignored as separator",
-			in:   "SELECT 1; -- trailing; comment\nSELECT 2;",
-			want: []string{"SELECT 1", "-- trailing; comment\nSELECT 2"},
-		},
-		{
-			name: "block comment with semicolon is preserved",
-			in:   "SELECT 1 /* a; b */ ; SELECT 2;",
-			want: []string{"SELECT 1 /* a; b */", "SELECT 2"},
-		},
-		{
-			name: "trailing whitespace and empty fragments dropped",
-			in:   "SELECT 1;;  \n ; SELECT 2; \n",
-			want: []string{"SELECT 1", "SELECT 2"},
-		},
-		{
-			name: "double-quoted identifier with semicolon",
-			in:   `CREATE TABLE "weird;name" (id int); SELECT 4;`,
-			want: []string{`CREATE TABLE "weird;name" (id int)`, "SELECT 4"},
-		},
+func TestApplyMigrationsRollsBackBeginWrappedFileOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeMigrationFixture(t, dir, manifestFileName, "001 001_tx.sql\n")
+	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE tx_atomic_probe(id integer);\nSELECT 1/0;\nCOMMIT;\n")
+	t.Setenv(migrationsDirEnv, dir)
+
+	pool := NewBlankPool(t)
+	ctx := context.Background()
+
+	if err := ApplyMigrations(ctx, pool); err == nil {
+		t.Fatal("ApplyMigrations() error = nil, want failure from statement inside BEGIN block")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := splitSQLStatements(tt.in)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("splitSQLStatements mismatch\n in:   %q\n got:  %#v\n want: %#v", tt.in, got, tt.want)
-			}
-		})
+	var exists bool
+	if err := pool.QueryRow(ctx, "SELECT to_regclass('tx_atomic_probe') IS NOT NULL").Scan(&exists); err != nil {
+		t.Fatalf("check tx_atomic_probe: %v", err)
+	}
+	if exists {
+		t.Fatal("tx_atomic_probe present: BEGIN-wrapped migration failure must roll back the whole block")
+	}
+}
+
+func TestApplyMigrationsAppliesBeginWrappedFileWithTrailingAutocommit(t *testing.T) {
+	dir := t.TempDir()
+	writeMigrationFixture(t, dir, manifestFileName, "001 001_tx.sql\n")
+	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE tx_inside_ran(id integer);\nCOMMIT;\nCREATE TABLE tx_after_ran(id integer);\n")
+	t.Setenv(migrationsDirEnv, dir)
+
+	pool := NewBlankPool(t)
+	ctx := context.Background()
+
+	if err := ApplyMigrations(ctx, pool); err != nil {
+		t.Fatalf("ApplyMigrations() error = %v", err)
+	}
+	for _, table := range []string{"tx_inside_ran", "tx_after_ran"} {
+		var exists bool
+		if err := pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
+			t.Fatalf("check %s: %v", table, err)
+		}
+		if !exists {
+			t.Fatalf("table %s not present after BEGIN-wrapped migration", table)
+		}
+	}
+}
+
+func TestApplyMigrationsCanRerunAfterTrailingAutocommitFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeMigrationFixture(t, dir, manifestFileName, "001 001_tx.sql\n")
+	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE dbtest_committed_probe(id integer);\nCOMMIT;\nSELECT * FROM dbtest_missing_probe;\n")
+	t.Setenv(migrationsDirEnv, dir)
+
+	pool := NewBlankPool(t)
+	ctx := context.Background()
+
+	if err := ApplyMigrations(ctx, pool); err == nil {
+		t.Fatal("ApplyMigrations() error = nil, want trailing autocommit failure")
+	}
+	assertMigrationTablePresent(t, ctx, pool, "dbtest_committed_probe")
+	assertMigrationTableAbsent(t, ctx, pool, "dbtest_tail_ran")
+
+	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE IF NOT EXISTS dbtest_committed_probe(id integer);\nCOMMIT;\nCREATE TABLE dbtest_tail_ran(id integer);\n")
+	if err := ApplyMigrations(ctx, pool); err != nil {
+		t.Fatalf("ApplyMigrations() rerun error = %v", err)
+	}
+	assertMigrationTablePresent(t, ctx, pool, "dbtest_committed_probe")
+	assertMigrationTablePresent(t, ctx, pool, "dbtest_tail_ran")
+}
+
+func assertMigrationTablePresent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name string) {
+	t.Helper()
+
+	if !migrationTableExists(t, ctx, pool, name) {
+		t.Fatalf("table %s missing", name)
+	}
+}
+
+func assertMigrationTableAbsent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name string) {
+	t.Helper()
+
+	if migrationTableExists(t, ctx, pool, name) {
+		t.Fatalf("table %s present", name)
+	}
+}
+
+func migrationTableExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name string) bool {
+	t.Helper()
+
+	var exists bool
+	if err := pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", name).Scan(&exists); err != nil {
+		t.Fatalf("check table %s: %v", name, err)
+	}
+	return exists
+}
+
+func writeMigrationFixture(t *testing.T, dir, name, content string) {
+	t.Helper()
+
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+		t.Fatalf("write fixture %s: %v", name, err)
 	}
 }

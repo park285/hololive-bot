@@ -9,12 +9,15 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-api/internal/migrationrunner"
 	"github.com/kapu/hololive-api/scripts/migrations"
 )
+
+const commandTimeout = 15 * time.Minute
 
 func main() {
 	log.SetFlags(0)
@@ -30,6 +33,9 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
+	defer cancel()
 
 	if err := bootstrapScraperRole(ctx); err != nil {
 		return err

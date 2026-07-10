@@ -182,6 +182,22 @@ for file in "${sql_files[@]}"; do
   fi
 done
 
+# sqlsplit.Segments가 적용 시점에 거부하는 규칙의 보수적 초과 차단(superset)이다 — 한쪽만 고치면 안 된다.
+for file in "${sql_files[@]}"; do
+  path="${MIGRATIONS_DIR}/${file}"
+  if ! grep -qiE '^[[:space:]]*(BEGIN([[:space:]]+(WORK|TRANSACTION))?|START[[:space:]]+TRANSACTION)[[:space:]]*;' "${path}"; then
+    continue
+  fi
+  if sed 's/--.*$//' "${path}" | grep -qiE '\bCONCURRENTLY\b'; then
+    echo "FAIL: ${file} wraps CONCURRENTLY in a top-level BEGIN;/COMMIT; block (mutually exclusive — runner runs the block as a real transaction)" >&2
+    exit 1
+  fi
+  if ! grep -qiE '^[[:space:]]*(COMMIT|END)([[:space:]]+(WORK|TRANSACTION))?[[:space:]]*;' "${path}"; then
+    echo "FAIL: ${file} has a top-level BEGIN; without a matching COMMIT;" >&2
+    exit 1
+  fi
+done
+
 grandfathered_concurrently_multi="060_add_alarm_dispatch_events_live_stream_index.sql 061_add_youtube_live_first_seen_guardrail.sql 067_align_claim_index_due_first.sql 086_add_sending_stale_indexes.sql 095_cleanup_redundant_indexes.sql 096_sql_integrity_retention_followups.sql 097_integrity_and_type_unification.sql"
 for file in "${sql_files[@]}"; do
   path="${MIGRATIONS_DIR}/${file}"

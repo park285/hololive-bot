@@ -8,7 +8,9 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/dbmigrate"
 
@@ -16,6 +18,11 @@ import (
 )
 
 const AdvisoryLockKey int64 = 0x484F4C4F41504901
+
+const (
+	sessionLockTimeout      = 10 * time.Second
+	sessionStatementTimeout = 4 * time.Minute
+)
 
 var createIndexConcurrentlyPattern = regexp.MustCompile(mustPattern("create_index_concurrently.re"))
 
@@ -45,19 +52,26 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 		return Result{}, fmt.Errorf("migration fs is nil")
 	}
 
-	exec := &guardedExecer{pool: pool}
-
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
-		return Result{}, fmt.Errorf("acquire lock connection: %w", err)
+		return Result{}, fmt.Errorf("acquire migration connection: %w", err)
 	}
 	defer conn.Release()
+
+	exec := &guardedExecer{conn: conn}
+	sessionCfg := dbmigrate.SessionConfig{
+		LockTimeout:      sessionLockTimeout,
+		StatementTimeout: sessionStatementTimeout,
+	}
+	if err := sessionCfg.Configure(ctx, exec.Exec); err != nil {
+		return Result{}, fmt.Errorf("configure migration session: %w", err)
+	}
 
 	lockSession := pgxAdvisoryLockSession{conn: conn}
 	var result Result
 	err = dbmigrate.WithAdvisoryLock(ctx, lockSession, dbmigrate.LockConfig{Key: lockKey(cfg)}, func(lockCtx context.Context) error {
 		var applyErr error
-		result, applyErr = applyLocked(lockCtx, pool, fsys, exec, cfg)
+		result, applyErr = applyLocked(lockCtx, conn, fsys, exec, cfg)
 		return applyErr
 	})
 	if err != nil {
@@ -67,7 +81,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 	return result, nil
 }
 
-func applyLocked(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guardedExecer, cfg Config) (Result, error) {
+func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, cfg Config) (Result, error) {
 	ledger := dbmigrate.Ledger{}
 	if err := ledger.Ensure(ctx, exec.Exec); err != nil {
 		return Result{}, err
@@ -78,23 +92,23 @@ func applyLocked(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guar
 		return Result{}, fmt.Errorf("dbmigrate: %w", err)
 	}
 
-	if err := reconcileBaseline(ctx, pool, fsys, exec, ledger, entries, cfg); err != nil {
+	if err := reconcileBaseline(ctx, conn, fsys, exec, ledger, entries, cfg); err != nil {
 		return Result{}, err
 	}
 
-	result, err := applyManifest(ctx, pool, fsys, exec, ledger, entries, cfg)
+	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
 	if err != nil {
 		return Result{}, err
 	}
 
-	if err := assertNoInvalidIndexes(ctx, pool); err != nil {
+	if err := assertNoInvalidIndexes(ctx, conn); err != nil {
 		return Result{}, err
 	}
 	return result, nil
 }
 
-func applyManifest(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
-	querier := pgxRowQuerier{pool: pool}
+func applyManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
+	querier := pgxRowQuerier{conn: conn}
 	result := Result{Total: len(entries)}
 	for _, name := range entries {
 		alreadyApplied, appliedErr := ledger.Applied(ctx, querier, name)
@@ -130,8 +144,8 @@ func applyEntry(ctx context.Context, fsys fs.FS, exec *guardedExecer, ledger dbm
 // reconcileBaseline은 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
 // 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직
 // 미적용인 마이그레이션이 조용히 skip되는 사고(073 DB에 074-082 유실)가 나므로 거부한다.
-func reconcileBaseline(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) error {
-	count, err := ledgerCount(ctx, pool)
+func reconcileBaseline(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) error {
+	count, err := ledgerCount(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -139,7 +153,7 @@ func reconcileBaseline(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, exec
 		return nil
 	}
 
-	baseSchema, err := baseSchemaPresent(ctx, pool)
+	baseSchema, err := baseSchemaPresent(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -169,18 +183,18 @@ func containsEntry(entries []string, target string) bool {
 	return slices.Contains(entries, target)
 }
 
-func ledgerCount(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func ledgerCount(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
 	var count int64
-	if err := pool.QueryRow(ctx, mustSQL("ledger_count.sql")).Scan(&count); err != nil {
+	if err := conn.QueryRow(ctx, mustSQL("ledger_count.sql")).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count schema_migrations: %w", err)
 	}
 	return count, nil
 }
 
-func baseSchemaPresent(ctx context.Context, pool *pgxpool.Pool) (bool, error) {
+func baseSchemaPresent(ctx context.Context, conn *pgxpool.Conn) (bool, error) {
 	var present bool
 	query := mustSQL("base_schema_present.sql")
-	if err := pool.QueryRow(ctx, query).Scan(&present); err != nil {
+	if err := conn.QueryRow(ctx, query).Scan(&present); err != nil {
 		return false, fmt.Errorf("detect base schema: %w", err)
 	}
 	return present, nil
@@ -193,12 +207,14 @@ func lockKey(cfg Config) int64 {
 	return AdvisoryLockKey
 }
 
+// session timeout(set_config)이 conn scope라 pool 실행으로 되돌리면 무효화된다 —
+// 모든 실행은 advisory lock을 쥔 pinned conn 하나에서 돌아야 한다.
 type guardedExecer struct {
-	pool *pgxpool.Pool
+	conn *pgxpool.Conn
 }
 
 func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) error {
-	_, err := e.pool.Exec(ctx, query, args...)
+	_, err := e.conn.Exec(ctx, query, args...)
 	return err
 }
 
@@ -206,19 +222,65 @@ func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) err
 // no-op으로 만들고, 그 no-op이 ledger에 applied로 굳으면 재빌드 경로가 사라진다. 따라서
 // ledger 기록(호출자) 전에 감지·DROP하고 에러로 실패시켜 재실행이 같은 파일을 다시 적용하게 한다.
 func (e *guardedExecer) execFile(ctx context.Context, name, content string) error {
-	for _, stmt := range sqlsplit.Statements(content) {
-		if _, err := e.pool.Exec(ctx, stmt); err != nil {
-			return fmt.Errorf("exec %s: %w", name, err)
+	segments, err := sqlsplit.Segments(content)
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", name, err)
+	}
+	for _, segment := range segments {
+		if err := e.execSegment(ctx, name, segment); err != nil {
+			return err
 		}
 	}
 	if createIndexConcurrentlyPattern.MatchString(content) {
-		return dropInvalidIndexes(ctx, e.pool)
+		return dropInvalidIndexes(ctx, e.conn)
 	}
 	return nil
 }
 
-func assertNoInvalidIndexes(ctx context.Context, pool *pgxpool.Pool) error {
-	indexes, err := invalidIndexes(ctx, pool)
+func (e *guardedExecer) execSegment(ctx context.Context, name string, segment sqlsplit.Segment) error {
+	if segment.Transactional {
+		return e.execTxSegment(ctx, name, segment.Statements)
+	}
+	for _, stmt := range segment.Statements {
+		if _, err := e.conn.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("exec %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (e *guardedExecer) execTxSegment(ctx context.Context, name string, statements []string) error {
+	tx, err := e.conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("exec %s: begin: %w", name, err)
+	}
+	if err := execTxStatements(ctx, tx, name, statements); err != nil {
+		return rollbackTxSegmentOnError(ctx, tx, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("exec %s: commit: %w", name, err)
+	}
+	return nil
+}
+
+func execTxStatements(ctx context.Context, tx pgx.Tx, name string, statements []string) error {
+	for _, stmt := range statements {
+		if _, err := tx.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("exec %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func rollbackTxSegmentOnError(ctx context.Context, tx pgx.Tx, err error) error {
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		return errors.Join(err, fmt.Errorf("rollback tx segment: %w", rollbackErr))
+	}
+	return err
+}
+
+func assertNoInvalidIndexes(ctx context.Context, conn *pgxpool.Conn) error {
+	indexes, err := invalidIndexes(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -228,8 +290,8 @@ func assertNoInvalidIndexes(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-func dropInvalidIndexes(ctx context.Context, pool *pgxpool.Pool) error {
-	indexes, err := invalidIndexes(ctx, pool)
+func dropInvalidIndexes(ctx context.Context, conn *pgxpool.Conn) error {
+	indexes, err := invalidIndexes(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -239,7 +301,7 @@ func dropInvalidIndexes(ctx context.Context, pool *pgxpool.Pool) error {
 
 	errs := make([]error, 0, len(indexes))
 	for _, name := range indexes {
-		if _, dropErr := pool.Exec(ctx, fmt.Sprintf(mustSQL("drop_invalid_index.sql.tpl"), name)); dropErr != nil {
+		if _, dropErr := conn.Exec(ctx, fmt.Sprintf(mustSQL("drop_invalid_index.sql.tpl"), name)); dropErr != nil {
 			errs = append(errs, fmt.Errorf("drop invalid index %s: %w", name, dropErr))
 		}
 	}
@@ -249,8 +311,8 @@ func dropInvalidIndexes(ctx context.Context, pool *pgxpool.Pool) error {
 	return fmt.Errorf("invalid PostgreSQL indexes dropped: %s", strings.Join(indexes, ", "))
 }
 
-func invalidIndexes(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
-	rows, err := pool.Query(ctx, mustSQL("invalid_indexes.sql"))
+func invalidIndexes(ctx context.Context, conn *pgxpool.Conn) ([]string, error) {
+	rows, err := conn.Query(ctx, mustSQL("invalid_indexes.sql"))
 	if err != nil {
 		return nil, fmt.Errorf("query invalid indexes: %w", err)
 	}
@@ -271,11 +333,11 @@ func invalidIndexes(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 }
 
 type pgxRowQuerier struct {
-	pool *pgxpool.Pool
+	conn *pgxpool.Conn
 }
 
 func (q pgxRowQuerier) QueryRow(ctx context.Context, query string, args ...any) dbmigrate.Row {
-	return q.pool.QueryRow(ctx, query, args...)
+	return q.conn.QueryRow(ctx, query, args...)
 }
 
 type pgxAdvisoryLockSession struct {

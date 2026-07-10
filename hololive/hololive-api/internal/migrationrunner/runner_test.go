@@ -73,6 +73,141 @@ func TestPopulatedDBEmptyLedgerBaselineStampsThenApplies(t *testing.T) {
 	assertTablePresent(t, pool, "baseline_tail_ran")
 }
 
+func TestBeginWrappedFileFailureRollsBackWholeTxBlock(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
+		"tx.sql":               {Data: []byte("BEGIN;\nCREATE TABLE tx_atomic_probe(id integer);\nSELECT 1/0;\nCOMMIT;\n")},
+	}
+
+	if _, err := Run(t.Context(), pool, fsys, Config{}); err == nil {
+		t.Fatal("Run() error = nil, want failure from statement inside BEGIN block")
+	}
+	assertTableAbsent(t, pool, "tx_atomic_probe")
+}
+
+func TestBeginWrappedFileAppliesTxBlockAndTrailingAutocommit(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
+		"tx.sql":               {Data: []byte("-- header comment\nBEGIN;\nCREATE TABLE tx_inside_ran(id integer);\nCOMMIT;\nCREATE TABLE tx_after_ran(id integer);\n")},
+	}
+
+	result, err := Run(t.Context(), pool, fsys, Config{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Applied != 1 {
+		t.Fatalf("result = %+v, want applied=1", result)
+	}
+	assertLedger(t, pool, []string{"tx.sql"})
+	assertTablePresent(t, pool, "tx_inside_ran")
+	assertTablePresent(t, pool, "tx_after_ran")
+}
+
+func TestBeginWrappedFileTrailingAutocommitFailureCanBeRerun(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
+		"tx.sql":               {Data: []byte("BEGIN;\nCREATE TABLE tx_committed_probe(id integer);\nCOMMIT;\nSELECT * FROM tx_missing_probe;\n")},
+	}
+
+	if _, err := Run(t.Context(), pool, fsys, Config{}); err == nil {
+		t.Fatal("Run() error = nil, want trailing autocommit failure")
+	}
+	assertTablePresent(t, pool, "tx_committed_probe")
+	assertTableAbsent(t, pool, "tx_tail_ran")
+	assertLedger(t, pool, nil)
+
+	fsys["tx.sql"] = &fstest.MapFile{Data: []byte("BEGIN;\nCREATE TABLE IF NOT EXISTS tx_committed_probe(id integer);\nCOMMIT;\nCREATE TABLE tx_tail_ran(id integer);\n")}
+	result, err := Run(t.Context(), pool, fsys, Config{})
+	if err != nil {
+		t.Fatalf("Run() rerun error = %v", err)
+	}
+	if result.Applied != 1 || result.Skipped != 0 || result.Total != 1 {
+		t.Fatalf("rerun result = %+v, want applied=1 skipped=0 total=1", result)
+	}
+	assertTablePresent(t, pool, "tx_committed_probe")
+	assertTablePresent(t, pool, "tx_tail_ran")
+	assertLedger(t, pool, []string{"tx.sql"})
+}
+
+func TestBeginWrappedFileWithConcurrentlyIsRejected(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
+		"tx.sql":               {Data: []byte("BEGIN;\nCREATE TABLE tx_conc_probe(id integer);\nCREATE INDEX CONCURRENTLY tx_conc_idx ON tx_conc_probe(id);\nCOMMIT;\n")},
+	}
+
+	_, err := Run(t.Context(), pool, fsys, Config{})
+	if err == nil {
+		t.Fatal("Run() error = nil, want explicit CONCURRENTLY-inside-BEGIN rejection")
+	}
+	if !strings.Contains(err.Error(), "CONCURRENTLY") {
+		t.Fatalf("Run() error = %v, want CONCURRENTLY rejection", err)
+	}
+	assertTableAbsent(t, pool, "tx_conc_probe")
+}
+
+func TestBeginWrappedFileMissingCommitIsRejected(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
+		"tx.sql":               {Data: []byte("BEGIN;\nCREATE TABLE tx_unclosed_probe(id integer);\n")},
+	}
+
+	_, err := Run(t.Context(), pool, fsys, Config{})
+	if err == nil {
+		t.Fatal("Run() error = nil, want missing-COMMIT rejection")
+	}
+	assertTableAbsent(t, pool, "tx_unclosed_probe")
+}
+
+func TestRunAppliesSessionTimeoutsToAllSegments(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 probe.sql\n")},
+		"probe.sql": {Data: []byte(`BEGIN;
+CREATE TABLE session_probe_tx AS
+SELECT setting::bigint AS lock_timeout_ms FROM pg_settings WHERE name = 'lock_timeout';
+COMMIT;
+CREATE TABLE session_probe AS
+SELECT
+  (SELECT setting::bigint FROM pg_settings WHERE name = 'lock_timeout') AS lock_timeout_ms,
+  (SELECT setting::bigint FROM pg_settings WHERE name = 'statement_timeout') AS statement_timeout_ms;
+`)},
+	}
+
+	if _, err := Run(t.Context(), pool, fsys, Config{}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	var lockMs, stmtMs int64
+	if err := pool.QueryRow(t.Context(), "SELECT lock_timeout_ms, statement_timeout_ms FROM session_probe").Scan(&lockMs, &stmtMs); err != nil {
+		t.Fatalf("read session probe: %v", err)
+	}
+	if lockMs != 10_000 {
+		t.Errorf("autocommit segment lock_timeout = %dms, want 10000ms", lockMs)
+	}
+	if stmtMs != 240_000 {
+		t.Errorf("autocommit segment statement_timeout = %dms, want 240000ms", stmtMs)
+	}
+
+	var txLockMs int64
+	if err := pool.QueryRow(t.Context(), "SELECT lock_timeout_ms FROM session_probe_tx").Scan(&txLockMs); err != nil {
+		t.Fatalf("read tx session probe: %v", err)
+	}
+	if txLockMs != 10_000 {
+		t.Errorf("tx segment lock_timeout = %dms, want 10000ms", txLockMs)
+	}
+}
+
 func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 

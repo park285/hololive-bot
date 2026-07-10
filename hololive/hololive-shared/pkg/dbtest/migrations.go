@@ -25,13 +25,17 @@ package dbtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
 
 const (
@@ -79,19 +83,78 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 // simple query protocol이 암묵 트랜잭션 블록으로 감싸 CREATE INDEX CONCURRENTLY가
 // "cannot run inside a transaction block"으로 실패한다(019/060/061). statement
 // 단위로 보내면 각 statement가 autocommit으로 실행되어 CONCURRENTLY가 동작한다.
+// top-level BEGIN;/COMMIT; 블록은 prod Go 러너(hololive-api migrationrunner)와
+// 동일하게 단일 커넥션의 실제 트랜잭션으로 감싼다 — pool.Exec로 BEGIN을 보내면
+// pgxpool이 tx 상태 커넥션을 release 시 파기해 블록이 침묵 해체된다.
 func applyMigrationFile(ctx context.Context, pool *pgxpool.Pool, dir, filename string) error {
 	sql, readErr := fs.ReadFile(os.DirFS(dir), filename)
 	if readErr != nil {
 		return fmt.Errorf("apply migrations: read %s: %w", filename, readErr)
 	}
 
-	for _, stmt := range splitSQLStatements(string(sql)) {
+	segments, splitErr := sqlsplit.Segments(string(sql))
+	if splitErr != nil {
+		return fmt.Errorf("apply migrations: split %s: %w", filename, splitErr)
+	}
+
+	for _, segment := range segments {
+		if err := applyMigrationSegment(ctx, pool, filename, segment); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func applyMigrationSegment(ctx context.Context, pool *pgxpool.Pool, filename string, segment sqlsplit.Segment) error {
+	if segment.Transactional {
+		return applyMigrationTxSegment(ctx, pool, filename, segment.Statements)
+	}
+
+	for _, stmt := range segment.Statements {
 		if _, execErr := pool.Exec(ctx, stmt); execErr != nil {
 			return fmt.Errorf("apply migrations: exec %s: %w", filename, execErr)
 		}
 	}
 
 	return nil
+}
+
+func applyMigrationTxSegment(ctx context.Context, pool *pgxpool.Pool, filename string, statements []string) error {
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("apply migrations: acquire tx connection for %s: %w", filename, err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("apply migrations: begin %s: %w", filename, err)
+	}
+	if err := applyTxStatements(ctx, tx, filename, statements); err != nil {
+		return rollbackMigrationTxOnError(ctx, tx, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("apply migrations: commit %s: %w", filename, err)
+	}
+
+	return nil
+}
+
+func applyTxStatements(ctx context.Context, tx pgx.Tx, filename string, statements []string) error {
+	for _, stmt := range statements {
+		if _, execErr := tx.Exec(ctx, stmt); execErr != nil {
+			return fmt.Errorf("apply migrations: exec %s: %w", filename, execErr)
+		}
+	}
+	return nil
+}
+
+func rollbackMigrationTxOnError(ctx context.Context, tx pgx.Tx, err error) error {
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		return errors.Join(err, fmt.Errorf("rollback migration tx: %w", rollbackErr))
+	}
+	return err
 }
 
 // resolveMigrationsDir는 migration 디렉터리 절대 경로를 결정한다.

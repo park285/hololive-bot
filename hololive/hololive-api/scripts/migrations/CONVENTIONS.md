@@ -5,13 +5,20 @@
 
 ## 러너 의미론 (모든 규칙의 전제)
 
-- `apply-all.sh`는 파일 단위 `psql -f`(statement별 autocommit, `-1` 미사용) + `schema_migrations` ledger.
-  적용 완료 파일은 skip, **파일 중간 실패 시 ledger 미기록 → 재실행 때 그 파일 전체가 재적용**된다.
+- 프로덕션 적용은 Go 러너(`hololive-api/internal/migrationrunner`, `cmd/db-migrate` → compose `hololive-db-migrate`)가
+  수행하고, dbtest 재생(`hololive-shared/pkg/dbtest`)도 같은 의미론이다. 파일을 statement 단위로 분할
+  (`hololive-shared/pkg/sqlsplit`)해 개별 autocommit Exec로 보내고, `schema_migrations` ledger로 적용 완료
+  파일을 skip한다. **파일 중간 실패 시 ledger 미기록 → 재실행 때 그 파일 전체가 재적용**된다.
+- top-level `BEGIN;`/`COMMIT;` 블록은 단일 커넥션의 실제 트랜잭션으로 실행된다(`sqlsplit.Segments`).
+  블록 안 문장이 실패하면 블록 전체가 롤백되고, `COMMIT;` 이후 문장은 autocommit으로 이어진다(017 선례).
+  `ROLLBACK`/`SAVEPOINT`/isolation 지정 `BEGIN` 등 그 외 트랜잭션 제어문은 러너가 명시적 에러로 거부한다.
 - 따라서: ① 모든 문장은 멱등이어야 한다(`IF [NOT] EXISTS`, `NOT VALID` 재적용 가드, 조건부 DO 블록).
-  ② `CREATE/DROP INDEX CONCURRENTLY` 사용 가능(트랜잭션 래핑 없음). ③ `BEGIN;/COMMIT;`으로 묶인 파일에는
-  CONCURRENTLY를 넣을 수 없다.
+  ② `CREATE/DROP INDEX CONCURRENTLY` 사용 가능(autocommit 문장). ③ `BEGIN;/COMMIT;` 블록 안에는
+  CONCURRENTLY를 넣을 수 없다 — 러너와 `check-migration-manifest.sh`가 명시적 에러로 거부한다.
 - 과거에 적용된 파일의 수정은 프로덕션에 영향이 없고(ledger skip) fresh bootstrap/dbtest 경로만 바꾼다.
   프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다.
+- 레거시 수동 경로 `apply-all.sh`(파일 단위 `psql -f`, `-1` 미사용)는 psql 세션이 `BEGIN;/COMMIT;`을
+  그대로 실행하므로 위와 동일 의미론이다.
 
 ## 번호
 
