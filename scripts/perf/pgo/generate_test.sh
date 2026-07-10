@@ -6,9 +6,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 GENERATOR="${SCRIPT_DIR}/generate.sh"
 
 cd "${REPO_ROOT}"
+source scripts/perf/pgo/generate_meta_cases.sh
+source scripts/perf/pgo/generate_nfr_cases.sh
 
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "${TMP_ROOT}"' EXIT
+MAIN_PACKAGE="${TMP_ROOT}/profile-app"
 
 LAST_STATUS=0
 LAST_OUTPUT=""
@@ -18,6 +21,12 @@ if [[ ! -f "${GENERATOR}" ]]; then
   echo "not ok - generator missing: ${GENERATOR}" >&2
   exit 1
 fi
+
+materialize_profile_app() {
+  mkdir -p "${MAIN_PACKAGE}"
+  cp scripts/perf/pgo/testdata/profile-app/main.go.txt "${MAIN_PACKAGE}/main.go"
+  cp scripts/perf/pgo/testdata/profile-app/go.mod.txt "${MAIN_PACKAGE}/go.mod"
+}
 
 write_workload() {
   local path="$1"
@@ -84,6 +93,7 @@ write_collector() {
 set -euo pipefail
 
 : "${PGO_CANDIDATE_PROFILE:?}"
+: "${PGO_PROFILE_BINARY:?}"
 : "${PGO_COMPARISON_JSON:?}"
 : "${PGO_ARTIFACT_DIR:?}"
 : "${PGO_TEST_CPU_DELTA:?}"
@@ -94,7 +104,16 @@ set -euo pipefail
 : "${PGO_TEST_HOT_BENCH_DELTA:?}"
 
 mkdir -p "$(dirname "${PGO_CANDIDATE_PROFILE}")" "${PGO_ARTIFACT_DIR}"
-printf 'candidate-profile\n' >"${PGO_CANDIDATE_PROFILE}"
+(cd "${PGO_MAIN}" && CGO_ENABLED=0 go build -trimpath -buildvcs=false -o "${PGO_PROFILE_BINARY}" .)
+"${PGO_PROFILE_BINARY}" 2s 3>"${PGO_CANDIDATE_PROFILE}"
+duration="$(go tool pprof -raw "${PGO_CANDIDATE_PROFILE}" 2>/dev/null | awk '$1 == "Duration:" {print $2; exit}')"
+repeat_count="$(python3 -c 'import math,sys; print(math.ceil(601 / float(sys.argv[1])))' "${duration}")"
+inputs=()
+for ((i = 0; i < repeat_count; i++)); do
+  inputs+=("${PGO_CANDIDATE_PROFILE}")
+done
+go tool pprof -proto -output="${PGO_CANDIDATE_PROFILE}.merged" "${inputs[@]}" >/dev/null 2>&1
+mv "${PGO_CANDIDATE_PROFILE}.merged" "${PGO_CANDIDATE_PROFILE}"
 printf 'before-pprof\n' >"${PGO_ARTIFACT_DIR}/pprof-before.pb.gz"
 printf 'after-pprof\n' >"${PGO_ARTIFACT_DIR}/pprof-after.pb.gz"
 printf 'before-bench\n' >"${PGO_ARTIFACT_DIR}/bench-before.txt"
@@ -160,6 +179,13 @@ run_validate_meta() {
   set -e
 }
 
+run_validate_profile() {
+  set +e
+  LAST_OUTPUT="$(bash "${GENERATOR}" validate-profile "$1" "$2" 2>&1)"
+  LAST_STATUS=$?
+  set -e
+}
+
 assert_success() {
   local name="$1"
   if [[ "${LAST_STATUS}" -ne 0 ]]; then
@@ -204,7 +230,7 @@ case_duration_below_600_errors() {
   write_workload "${workload}"
   run_generator "${dir}/artifacts/perf/pgo" "2026-06-12" \
     --service hololive-bot \
-    --main ./cmd/bot \
+    --main "${MAIN_PACKAGE}" \
     --duration 599s \
     --workload "${workload}" \
     --output "${dir}/default.pgo"
@@ -218,7 +244,7 @@ case_traffic_sum_errors() {
   write_bad_traffic_workload "${workload}"
   run_generator "${dir}/artifacts/perf/pgo" "2026-06-12" \
     --service hololive-bot \
-    --main ./cmd/bot \
+    --main "${MAIN_PACKAGE}" \
     --duration 600s \
     --workload "${workload}" \
     --output "${dir}/default.pgo"
@@ -232,7 +258,7 @@ case_missing_driver_errors() {
   write_missing_driver_workload "${workload}"
   run_generator "${dir}/artifacts/perf/pgo" "2026-06-12" \
     --service hololive-bot \
-    --main ./cmd/bot \
+    --main "${MAIN_PACKAGE}" \
     --duration 600s \
     --workload "${workload}" \
     --output "${dir}/default.pgo"
@@ -246,7 +272,7 @@ case_unknown_workload_field_errors() {
   write_workload "${workload}" "unexpected: true"
   run_generator "${dir}/artifacts/perf/pgo" "2026-06-12" \
     --service hololive-bot \
-    --main ./cmd/bot \
+    --main "${MAIN_PACKAGE}" \
     --duration 600s \
     --workload "${workload}" \
     --output "${dir}/default.pgo"
@@ -266,7 +292,7 @@ case_rejection_preserves_default_pgo() {
   run_generator_with_metrics "${dir}/artifacts/perf/pgo" "2026-06-12" \
     -3 0 1 1 2 0 \
     --service hololive-bot \
-    --main ./cmd/bot \
+    --main "${MAIN_PACKAGE}" \
     --duration 600s \
     --workload "${workload}" \
     --output "${output}" \
@@ -292,7 +318,7 @@ case_acceptance_writes_output_contract() {
   run_generator_with_metrics "${dir}/artifacts/perf/pgo" "2026-06-12" \
     -3 0 0 1 2 0 \
     --service hololive-bot \
-    --main ./cmd/bot \
+    --main "${MAIN_PACKAGE}" \
     --duration 600s \
     --workload "${workload}" \
     --output "${output}" \
@@ -306,43 +332,62 @@ case_acceptance_writes_output_contract() {
   assert_file_exists "acceptance pprof after" "${artifact_dir}/pprof-after.pb.gz"
   assert_file_exists "acceptance bench before" "${artifact_dir}/bench-before.txt"
   assert_file_exists "acceptance bench after" "${artifact_dir}/bench-after.txt"
+  python3 - "${output}.meta.json" <<'PY'
+import json, re, sys
+
+data = json.load(open(sys.argv[1]))
+for field in ("profileSha256", "collectionBinarySha256"):
+    assert re.fullmatch(r"[0-9a-f]{64}", data[field]), field
+for field in ("profileExecutable", "profileBuildId", "profileMainPackage"):
+    assert data[field], field
+PY
+  PASSED=$((PASSED + 1))
+  printf 'ok - acceptance metadata records bound profile provenance\n'
 }
 
-case_validate_meta_rejects_missing_required() {
-  local dir="${TMP_ROOT}/meta-invalid"
-  mkdir -p "${dir}"
-  cat >"${dir}/default.pgo.meta.json" <<'EOF'
-{
-  "schemaVersion": 1,
-  "service": "hololive-bot"
-}
-EOF
-  run_validate_meta "${dir}/default.pgo.meta.json"
-  assert_failure "validate-meta rejects missing required"
-  assert_contains "validate-meta rejects missing required" "missing field"
-}
-
-case_validate_meta_accepts_retro_meta() {
-  local metas=(
-    "hololive/hololive-api/cmd/hololive-api/default.pgo.meta.json"
-    "hololive/hololive-alarm-worker/cmd/alarm-worker/default.pgo.meta.json"
-    "../chat-bot-go-kakao/cmd/bot/default.pgo.meta.json"
-  )
-  local meta
-  for meta in "${metas[@]}"; do
-    run_validate_meta "${meta}"
-    assert_success "validate-meta accepts ${meta}"
-    assert_contains "validate-meta accepts ${meta}" "ok:"
-  done
+case_hot_benchmark_regression_rejects() {
+  local dir="${TMP_ROOT}/hot-bench-reject"
+  local workload="${dir}/workload.yaml"
+  local collector="${dir}/collector.sh"
+  local output="${dir}/default.pgo"
+  write_workload "${workload}"
+  write_collector "${collector}"
+  run_generator_with_metrics "${dir}/artifacts/perf/pgo" "2026-06-12" \
+    -5 -2 0 1 2 -3.1 \
+    --service hololive-bot \
+    --main "${MAIN_PACKAGE}" \
+    --duration 600s \
+    --workload "${workload}" \
+    --output "${output}" \
+    --collect-cmd "${collector}"
+  assert_failure "hot benchmark regression rejects candidate"
+  assert_contains "hot benchmark regression rejection reason" "hot benchmark regression > 3%"
+  if [[ -e "${output}" ]]; then
+    printf 'not ok - rejected hot benchmark candidate must not be installed\n' >&2
+    exit 1
+  fi
+  PASSED=$((PASSED + 1))
+  printf 'ok - rejected hot benchmark candidate was not installed\n'
 }
 
+materialize_profile_app
 case_duration_below_600_errors
 case_traffic_sum_errors
 case_missing_driver_errors
+case_extra_driver_errors
 case_unknown_workload_field_errors
 case_rejection_preserves_default_pgo
 case_acceptance_writes_output_contract
+case_hot_benchmark_regression_rejects
+case_cpu_regression_rejects
+case_p95_regression_rejects
+case_profile_collection_time_is_bound
 case_validate_meta_rejects_missing_required
-case_validate_meta_accepts_retro_meta
+case_validate_meta_rejects_replayed_bad_verdict
+case_validate_meta_rejects_nonfinite_delta
+case_validate_meta_rejects_naive_generated_at
+case_validate_meta_rejects_future_generated_at
+case_validate_meta_rejects_untrusted_acceptor
+case_validate_meta_rejects_excessive_expiry
 
 printf 'ok - %s pgo generator fixture checks passed\n' "${PASSED}"

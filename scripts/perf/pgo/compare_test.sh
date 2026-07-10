@@ -6,6 +6,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 COMPARE="${SCRIPT_DIR}/compare-pgo.sh"
 
 cd "${REPO_ROOT}"
+source scripts/perf/pgo/compare_numeric_cases.sh
+source scripts/perf/pgo/compare_nfr_cases.sh
 
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "${TMP_ROOT}"' EXIT
@@ -269,20 +271,6 @@ case_measured_p99_regression_reject() {
 # --- I4+M8: mean parsing and env value validation ---
 
 # Bench parsing uses mean across repetitions, not min.
-case_bench_mean_parsing() {
-  local dir="${TMP_ROOT}/mean"
-  setup_case "${dir}"
-  # off mean = (1000+1100)/2 = 1050 ; on mean = (900+950)/2 = 925
-  # improvement = (1050-925)/1050*100 = 11.9048%. min() would give (1000-900)/1000=10%.
-  run_compare \
-    PGO_TEST_OFF_BYTES=100000 PGO_TEST_ON_BYTES=101000 \
-    PGO_TEST_BENCH_OFF_NS_LIST="1000,1100" PGO_TEST_BENCH_ON_NS_LIST="900,950"
-  # verdict HELD (no live metrics) but hot bench delta must reflect mean.
-  local hb
-  hb="$(json_field "${OUTPUT_DIR}/comparison.json" hotBenchmarkPercentDelta)"
-  assert_close "hot bench delta uses mean (11.9048)" "${hb}" "11.904761904761905"
-}
-
 # PGO_BENCHCOUNT must be a pure value ("2"); a flag form ("-count=2") is an error.
 case_env_value_form_rejects_flag() {
   local dir="${TMP_ROOT}/envflag"
@@ -477,6 +465,12 @@ case_binary_boundary_pass
 case_binary_boundary_reject
 case_measured_metrics_accept
 case_measured_p99_regression_reject
+case_measured_cpu_regression_reject
+case_measured_p95_regression_reject
+case_nonfinite_live_metric_rejects
+case_overflowing_live_metric_rejects
+case_400_digit_benchmark_rejects
+case_benchmark_mean_overflow_rejects
 case_bench_mean_parsing
 case_env_value_form_rejects_flag
 case_env_value_form_rejects_benchtime_flag

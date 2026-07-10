@@ -1,0 +1,3 @@
+# mode|module|main package|Compose services
+off|hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate
+off|hololive/hololive-alarm-worker|./cmd/alarm-worker|hololive-alarm-worker

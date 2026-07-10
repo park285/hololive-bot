@@ -5,10 +5,7 @@
 ## 1. 로컬 단일 프로세스 보조
 - `bot.sh` (`start|stop|restart|rebuild|status`)
 
-## 2. 선택적 빌드 실험
-- `build-with-pgo.sh`
-
-## 3. DB 초기화 / 마이그레이션
+## 2. DB 초기화 / 마이그레이션
 - `init-db/`
 - `migrations/`
 
@@ -16,3 +13,4 @@
 
 - 전체 스택: `./build-all.sh --no-bump`
 - 단일 서비스 재배포: `./scripts/deploy/compose-redeploy-service.sh <service>`
+- PGO 수집·채택: `docs/current/runbooks/pgo.md`

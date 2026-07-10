@@ -6,10 +6,11 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 export PGO_REPO_ROOT="${REPO_ROOT}"
 cd "${REPO_ROOT}"
 
-python3 - "$@" <<'PY'
+python3 -B - "$@" <<'PY'
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import re
 import shutil
@@ -18,6 +19,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(os.environ["PGO_REPO_ROOT"]) / "scripts/perf/pgo"))
+from compare_numeric import CompareNumericError, collect_live_metrics, parse_bench_ns
 
 LIVE_FIELDS = ("cpuPercentDelta", "p95LatencyDelta", "p99LatencyDelta", "rssDelta")
 COLLECT_FIELDS = (
@@ -35,15 +38,16 @@ COLLECTOR_NOTE = (
 )
 DEFAULT_BENCHTIME = "100ms"
 DEFAULT_MIN_COUNT = 6
+HOT_BENCH_MAX_REGRESSION_PERCENT = 3.0
+CPU_MAX_REGRESSION_PERCENT = 3.0
+P95_MAX_REGRESSION_PERCENT = 3.0
 
 EXIT_ADOPT = 0
 EXIT_REJECT = 2
 EXIT_HELD = 3
 
-
 class CompareError(Exception):
     pass
-
 
 def run(cmd, *, cwd=None, env=None):
     return subprocess.run(
@@ -174,19 +178,6 @@ def run_build(args, repo_root: Path, mode: str, profile: Path, output: Path) -> 
     return output.stat().st_size
 
 
-def parse_bench_ns(text: str, name: str) -> float | None:
-    values = []
-    for line in text.splitlines():
-        if not line.startswith(name):
-            continue
-        match = re.search(r"\s(\d+(?:\.\d+)?)\s+ns/op", line)
-        if match:
-            values.append(float(match.group(1)))
-    if not values:
-        return None
-    return sum(values) / len(values)
-
-
 def bench_settings(min_count: int) -> tuple[str, str]:
     benchtime = os.environ.get("PGO_BENCHTIME", DEFAULT_BENCHTIME)
     if benchtime.startswith("-"):
@@ -269,11 +260,13 @@ def collect_hot_bench(args, repo_root: Path, benches: list[dict], profile: Path,
             rows.append({"name": name, "offNs": off_ns, "onNs": on_ns, "improvementPercent": None})
             continue
         improvement = (off_ns - on_ns) / off_ns * 100.0
+        if not math.isfinite(improvement):
+            raise CompareError(f"benchmark {name} improvement delta overflowed")
         deltas.append(improvement)
         rows.append({"name": name, "offNs": off_ns, "onNs": on_ns, "improvementPercent": improvement})
     (artifact_dir / "bench-before.txt").write_text("\n\n".join(bench_before) + "\n", encoding="utf-8")
     (artifact_dir / "bench-after.txt").write_text("\n\n".join(bench_after) + "\n", encoding="utf-8")
-    overall = max(deltas) if deltas else None
+    overall = min(deltas) if deltas else None
     return overall, rows
 
 
@@ -292,8 +285,14 @@ def verdict(comparison: dict) -> tuple[str, list[str], int]:
 
     if binary > 5.0:
         reasons.append("binary size delta > +5%")
+    if hot_bench is not None and hot_bench < -HOT_BENCH_MAX_REGRESSION_PERCENT:
+        reasons.append("hot benchmark regression > 3%")
     if p99 is not None and p99 > 0:
         reasons.append("p99 latency regression > 0%")
+    if p95 is not None and p95 > P95_MAX_REGRESSION_PERCENT:
+        reasons.append("p95 latency regression > 3%")
+    if cpu is not None and cpu > CPU_MAX_REGRESSION_PERCENT:
+        reasons.append("CPU delta > +3%")
     if rss is not None and rss > 3.0:
         reasons.append("RSS delta > +3%")
     if reasons:
@@ -371,7 +370,7 @@ def write_report(path: Path, args, benches: list[dict], bench_rows: list[dict],
             on_s = "N/A" if on_ns is None else f"{on_ns:g} ns/op"
             imp_s = "N/A" if imp is None else f"{imp:+.3f}%"
             lines.append(f"- {row['name']}: off={off_s} on={on_s} improvement={imp_s}")
-        lines.append(f"- hotBenchmarkPercentDelta (best): {fmt_delta(comparison['hotBenchmarkPercentDelta'])}")
+        lines.append(f"- hotBenchmarkPercentDelta (worst): {fmt_delta(comparison['hotBenchmarkPercentDelta'])}")
     lines.extend(
         [
             "",
@@ -411,36 +410,10 @@ def write_json(path: Path, comparison: dict, result: str, reasons: list[str], be
     payload["liveMetricsNote"] = LOAD_TOOL_NOTE
     payload["collectorCompatibility"] = COLLECTOR_NOTE
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def collect_live_metrics(args, repo_root: Path) -> dict:
-    metrics = {field: None for field in LIVE_FIELDS}
-    if not args.live_cmd:
-        return metrics
-    with tempfile.NamedTemporaryFile("w+", suffix=".json", delete=False) as handle:
-        live_path = Path(handle.name)
-    try:
-        env = os.environ.copy()
-        env["PGO_LIVE_OUTPUT"] = str(live_path)
-        run(["bash", "-c", args.live_cmd], cwd=repo_root, env=env)
-        try:
-            data = json.loads(live_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            raise CompareError(f"live metrics json invalid: {exc}") from exc
-    finally:
-        live_path.unlink(missing_ok=True)
-    if not isinstance(data, dict):
-        raise CompareError("live metrics must be a JSON object")
-    for field in LIVE_FIELDS:
-        value = data.get(field)
-        if value is None:
-            metrics[field] = None
-            continue
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise CompareError(f"live metric {field} must be a number or null")
-        metrics[field] = float(value)
-    return metrics
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def parse_args(argv: list[str]):
@@ -501,7 +474,7 @@ def main(argv: list[str]) -> int:
             args, repo_root, benches, profile, output_dir, benchtime, count
         )
 
-    live = collect_live_metrics(args, repo_root)
+    live = collect_live_metrics(args.live_cmd, repo_root, LIVE_FIELDS)
     comparison = {
         "cpuPercentDelta": live["cpuPercentDelta"],
         "p95LatencyDelta": live["p95LatencyDelta"],
@@ -527,7 +500,7 @@ def main(argv: list[str]) -> int:
 
 try:
     raise SystemExit(main(sys.argv[1:]))
-except CompareError as exc:
+except (CompareError, CompareNumericError) as exc:
     print(f"ERROR: {exc}", file=sys.stderr)
     raise SystemExit(1)
 except subprocess.CalledProcessError as exc:

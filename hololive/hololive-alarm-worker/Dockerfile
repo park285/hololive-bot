@@ -25,9 +25,7 @@ ARG TARGETARCH
 # --build-arg GOAMD64=v3, 이미지 축소가 필요하면 --build-arg UPX_ENABLE=1 로 활성. 빼면 즉시 비활성.
 ARG GOAMD64=v1
 ARG UPX_ENABLE=
-# PGO opt-in: 빈 값이면 -pgo 미적용(현 빌드와 동일). 모듈 기준 상대경로 프로파일을 주면
-# --build-arg GO_PGO_FILE=cmd/alarm-worker/default.pgo 처럼 활성. 빼면 즉시 비활성.
-ARG GO_PGO_FILE=
+# Release images are PGO-off until a verifiable adoption design is implemented.
 RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
@@ -68,9 +66,9 @@ RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build ${GO_PGO_FILE:+-pgo=${GO_PGO_FILE}} -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/alarm-worker ./cmd/alarm-worker && \
+    go build -pgo=off -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/alarm-worker ./cmd/alarm-worker && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
     if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/alarm-worker /dist/bin/healthcheck; fi && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/

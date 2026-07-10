@@ -336,7 +336,6 @@ services:
       dockerfile: hololive/hololive-api/Dockerfile
       args:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
-        GO_PGO_FILE: ${HOLOLIVE_API_GO_PGO_FILE:-cmd/hololive-api/default.pgo}
     container_name: hololive-db-migrate
     restart: "no"
     environment:
@@ -377,7 +376,6 @@ services:
       dockerfile: hololive/hololive-alarm-worker/Dockerfile
       args:
         VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_API_VERSION:-2.0.0}}
-        GO_PGO_FILE: ${HOLOLIVE_ALARM_WORKER_GO_PGO_FILE:-cmd/alarm-worker/default.pgo}
     container_name: hololive-alarm-worker
     # 배치 디스패치/전송 도중 SIGKILL을 피하기 위한 우아한 종료 여유(api와 동일 기준).
     stop_grace_period: 45s
@@ -454,7 +452,6 @@ services:
       dockerfile: hololive/hololive-api/Dockerfile
       args:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
-        GO_PGO_FILE: ${HOLOLIVE_API_GO_PGO_FILE:-cmd/hololive-api/default.pgo}
     container_name: hololive-api
     stop_grace_period: 45s
     env_file:

@@ -110,5 +110,6 @@ COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-co
 ## Related documents
 
 - `../DEPLOYMENT_BASELINE.md`
+- `pgo.md`
 - `rollback.md`
 - `../../runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`

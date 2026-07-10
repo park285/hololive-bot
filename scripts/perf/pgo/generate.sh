@@ -6,11 +6,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 export PGO_REPO_ROOT="${REPO_ROOT}"
 cd "${REPO_ROOT}"
 
-python3 - "$@" <<'PY'
+python3 -B - "$@" <<'PY'
 import argparse
 import copy
 import datetime as dt
 import json
+import math
 import os
 import re
 import shlex
@@ -20,36 +21,21 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(os.environ["PGO_REPO_ROOT"]) / "scripts/perf/pgo"))
+from profile_contract import (
+    ACCEPTED_BY,
+    COMPARISON_FIELDS,
+    MAX_EXPIRES_AFTER_DAYS,
+    PGOError,
+    collection_provenance,
+    load_json_strict,
+    validate_meta,
+    validate_profile,
+    verdict,
+)
 
 TOP_FIELDS = {"schemaVersion", "name", "service", "duration", "traffic", "drivers"}
-COMPARISON_FIELDS = (
-    "cpuPercentDelta",
-    "p95LatencyDelta",
-    "p99LatencyDelta",
-    "rssDelta",
-    "binarySizeDelta",
-)
-COLLECT_COMPARISON_FIELDS = COMPARISON_FIELDS + ("hotBenchmarkPercentDelta",)
-META_FIELDS = {
-    "schemaVersion",
-    "service",
-    "mainPackage",
-    "generatedAt",
-    "sourceGitSha",
-    "goVersion",
-    "profileDurationSeconds",
-    "workloadName",
-    "workloadDescription",
-    "trafficMix",
-    "comparison",
-    "acceptedBy",
-    "expiresAfterDays",
-}
-
-
-class PGOError(Exception):
-    pass
-
+COLLECT_COMPARISON_FIELDS = COMPARISON_FIELDS
 
 def strip_comment(line: str) -> str:
     in_single = False
@@ -62,7 +48,6 @@ def strip_comment(line: str) -> str:
         elif char == "#" and not in_single and not in_double:
             return line[:idx]
     return line
-
 
 def parse_scalar(value: str):
     value = value.strip()
@@ -79,7 +64,6 @@ def parse_scalar(value: str):
     if re.fullmatch(r"-?\d+\.\d+", value):
         return float(value)
     return value
-
 
 def split_inline_items(inner: str) -> list[str]:
     items: list[str] = []
@@ -103,7 +87,6 @@ def split_inline_items(inner: str) -> list[str]:
         items.append(item)
     return items
 
-
 def parse_inline_map(value: str) -> dict:
     inner = value.strip()[1:-1].strip()
     result = {}
@@ -116,7 +99,6 @@ def parse_inline_map(value: str) -> dict:
         result[key.strip()] = parse_scalar(raw_value)
     return result
 
-
 def parse_value(value: str, anchors: dict[str, object]):
     value = value.strip()
     if value.startswith("*"):
@@ -127,7 +109,6 @@ def parse_value(value: str, anchors: dict[str, object]):
     if value.startswith("{") and value.endswith("}"):
         return parse_inline_map(value)
     return parse_scalar(value)
-
 
 def parse_yaml(path: Path) -> dict:
     root: dict = {}
@@ -166,7 +147,6 @@ def parse_yaml(path: Path) -> dict:
         parent[key] = parse_value(raw_value, anchors)
     return root
 
-
 def require_mapping(value, path: str) -> dict:
     if not isinstance(value, dict):
         raise PGOError(f"{path} must be a mapping")
@@ -176,7 +156,13 @@ def require_mapping(value, path: str) -> dict:
 def require_number(value, path: str) -> float:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise PGOError(f"{path} must be a number")
-    return float(value)
+    try:
+        numeric = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise PGOError(f"{path} must be a finite number") from exc
+    if not math.isfinite(numeric):
+        raise PGOError(f"{path} must be a finite number")
+    return numeric
 
 
 def require_string(value, path: str) -> str:
@@ -226,6 +212,9 @@ def validate_workload(path: Path, service: str) -> dict:
         raise PGOError(f"traffic ratios sum must be 100, got {total:g}")
 
     drivers = require_mapping(workload["drivers"], "workload.drivers")
+    extra_drivers = [key for key in drivers if key not in traffic]
+    if extra_drivers:
+        raise PGOError(f"driver without traffic key: {extra_drivers[0]}")
     for key in traffic:
         if key not in drivers:
             raise PGOError(f"missing driver for traffic key: {key}")
@@ -262,12 +251,7 @@ def git_sha(repo_root: Path) -> str:
 
 
 def comparison_from_json(path: Path) -> dict:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise PGOError(f"read comparison json: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise PGOError(f"comparison json invalid: {exc}") from exc
+    data = load_json_strict(path, "comparison")
     if not isinstance(data, dict):
         raise PGOError("comparison json must be an object")
     result = {}
@@ -276,27 +260,6 @@ def comparison_from_json(path: Path) -> dict:
             raise PGOError(f"comparison json missing {field}")
         result[field] = require_number(data[field], f"comparison.{field}")
     return result
-
-
-def verdict(comparison: dict) -> tuple[str, list[str]]:
-    reasons: list[str] = []
-    cpu_improvement = max(0.0, -comparison["cpuPercentDelta"])
-    latency_improved = comparison["p95LatencyDelta"] < 0 or comparison["p99LatencyDelta"] < 0
-    hot_bench_improved = comparison["hotBenchmarkPercentDelta"] >= 3.0
-    if comparison["p99LatencyDelta"] > 0:
-        reasons.append("p99 latency regression > 0%")
-    if comparison["rssDelta"] > 3.0:
-        reasons.append("RSS delta > +3%")
-    if comparison["binarySizeDelta"] > 5.0:
-        reasons.append("binary size delta > +5%")
-    if cpu_improvement < 2.0 and not latency_improved and not hot_bench_improved:
-        reasons.append("CPU improvement < 2%, no p95/p99 improvement, hot bench improvement < 3%")
-    if reasons:
-        return "REJECTED", reasons
-    accepted = cpu_improvement >= 2.0 or latency_improved or hot_bench_improved
-    if not accepted:
-        return "REJECTED", ["no adoption criterion met"]
-    return "ACCEPTED", []
 
 
 def traffic_mix(workload: dict) -> dict:
@@ -329,7 +292,7 @@ def write_report(path: Path, service: str, main: str, workload: dict, comparison
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def build_meta(args, repo_root: Path, workload: dict, comparison: dict, generated_at: str) -> dict:
+def build_meta(args, repo_root: Path, workload: dict, comparison: dict, generated_at: str, provenance: dict) -> dict:
     return {
         "schemaVersion": 1,
         "service": args.service,
@@ -338,18 +301,22 @@ def build_meta(args, repo_root: Path, workload: dict, comparison: dict, generate
         "sourceGitSha": git_sha(repo_root),
         "goVersion": go_version(repo_root),
         "profileDurationSeconds": parse_duration_seconds(args.duration, "--duration"),
+        **provenance,
         "workloadName": workload["name"],
         "workloadDescription": f"{workload['name']} workload generated from {args.source} source",
         "trafficMix": traffic_mix(workload),
         "comparison": comparison_for_meta(comparison),
-        "acceptedBy": "scripts/perf/pgo/generate.sh",
-        "expiresAfterDays": 45,
+        "acceptedBy": ACCEPTED_BY,
+        "expiresAfterDays": MAX_EXPIRES_AFTER_DAYS,
     }
 
 
 def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def validate_output_contract(output: Path, meta_path: Path, artifact_dir: Path) -> None:
@@ -400,7 +367,15 @@ def invoke_driver(repo_root: Path, key: str, driver: dict, env: dict[str, str]) 
     subprocess.run(command, cwd=repo_root, env=env, check=True)
 
 
-def run_collection(args, repo_root: Path, workload: dict, candidate_profile: Path, comparison_json: Path, artifact_dir: Path) -> None:
+def run_collection(
+    args,
+    repo_root: Path,
+    workload: dict,
+    candidate_profile: Path,
+    collection_binary: Path,
+    comparison_json: Path,
+    artifact_dir: Path,
+) -> None:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.update(
@@ -412,6 +387,7 @@ def run_collection(args, repo_root: Path, workload: dict, candidate_profile: Pat
             "PGO_WORKLOAD": str(Path(args.workload).resolve()),
             "PGO_OUTPUT_PATH": str(Path(args.output).resolve()),
             "PGO_CANDIDATE_PROFILE": str(candidate_profile),
+            "PGO_PROFILE_BINARY": str(collection_binary),
             "PGO_COMPARISON_JSON": str(comparison_json),
             "PGO_ARTIFACT_DIR": str(artifact_dir),
         }
@@ -419,54 +395,13 @@ def run_collection(args, repo_root: Path, workload: dict, candidate_profile: Pat
     if args.collect_cmd:
         subprocess.run(shlex.split(args.collect_cmd), cwd=repo_root, env=env, check=True)
         return
-    for key, driver in workload["drivers"].items():
-        invoke_driver(repo_root, key, driver, env)
+    for key in workload["traffic"]:
+        invoke_driver(repo_root, key, workload["drivers"][key], env)
     if not candidate_profile.is_file() or not comparison_json.is_file():
         raise PGOError(
             "real collection did not produce candidate profile and comparison json; "
             "wire workload drivers or pass --collect-cmd"
         )
-
-
-def validate_meta(path: Path) -> None:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise PGOError(f"read meta: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise PGOError(f"meta json invalid: {exc}") from exc
-    if not isinstance(data, dict):
-        raise PGOError("meta must be an object")
-    for field in META_FIELDS:
-        if field not in data:
-            raise PGOError(f"missing field: {field}")
-    if data["schemaVersion"] != 1:
-        raise PGOError("schemaVersion must be 1")
-    for field in ("service", "mainPackage", "generatedAt", "sourceGitSha", "goVersion", "workloadName", "workloadDescription", "acceptedBy"):
-        require_string(data[field], field)
-    if not isinstance(data["profileDurationSeconds"], int) or isinstance(data["profileDurationSeconds"], bool):
-        raise PGOError("profileDurationSeconds must be an integer")
-    if data["profileDurationSeconds"] < 0:
-        raise PGOError("profileDurationSeconds must be non-negative")
-    if not isinstance(data["expiresAfterDays"], int) or isinstance(data["expiresAfterDays"], bool):
-        raise PGOError("expiresAfterDays must be an integer")
-    if data["expiresAfterDays"] <= 0:
-        raise PGOError("expiresAfterDays must be positive")
-    traffic = require_mapping(data["trafficMix"], "trafficMix")
-    for key, value in traffic.items():
-        require_string(key, f"trafficMix key {key}")
-        require_number(value, f"trafficMix.{key}")
-    comparison = require_mapping(data["comparison"], "comparison")
-    for field in COMPARISON_FIELDS:
-        if field not in comparison:
-            raise PGOError(f"missing field: comparison.{field}")
-        value = comparison[field]
-        if value is not None:
-            require_number(value, f"comparison.{field}")
-    try:
-        dt.datetime.fromisoformat(data["generatedAt"])
-    except ValueError as exc:
-        raise PGOError("generatedAt must be an ISO-8601 timestamp") from exc
 
 
 def parse_args(argv: list[str]):
@@ -487,6 +422,11 @@ def generate(argv: list[str]) -> int:
     duration_seconds = parse_duration_seconds(args.duration, "--duration")
     if duration_seconds < 600:
         raise PGOError("대표성 미달: --duration must be at least 600s")
+    main_path = Path(args.main)
+    if not main_path.is_absolute():
+        main_path = repo_root / main_path
+    if not main_path.is_dir() or not any(main_path.glob("*.go")):
+        raise PGOError(f"main package does not exist: {args.main}")
     workload = validate_workload(Path(args.workload), args.service)
     generated_at = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     artifact_date = os.environ.get("PGO_ARTIFACT_DATE") or generated_at[:10]
@@ -502,8 +442,17 @@ def generate(argv: list[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="pgo-generate-") as tmp:
         tmp_dir = Path(tmp)
         candidate_profile = tmp_dir / "candidate.pgo"
+        collection_binary = tmp_dir / Path(args.main).name
         comparison_json = tmp_dir / "comparison.json"
-        run_collection(args, repo_root, workload, candidate_profile, comparison_json, artifact_dir)
+        run_collection(
+            args,
+            repo_root,
+            workload,
+            candidate_profile,
+            collection_binary,
+            comparison_json,
+            artifact_dir,
+        )
         if not candidate_profile.is_file():
             raise PGOError(f"collector did not create candidate profile: {candidate_profile}")
         comparison = comparison_from_json(comparison_json)
@@ -525,10 +474,11 @@ def generate(argv: list[str]) -> int:
         if missing_artifacts:
             raise PGOError("output contract missing: " + ", ".join(missing_artifacts))
 
-        meta = build_meta(args, repo_root, workload, comparison, generated_at)
+        provenance = collection_provenance(repo_root, args.main, candidate_profile, collection_binary)
+        meta = build_meta(args, repo_root, workload, comparison, generated_at, provenance)
         tmp_meta = tmp_dir / "default.pgo.meta.json"
         write_json(tmp_meta, meta)
-        validate_meta(tmp_meta)
+        validate_profile(candidate_profile, tmp_meta)
         output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(candidate_profile, output)
         shutil.copyfile(tmp_meta, meta_path)
@@ -545,6 +495,12 @@ def main(argv: list[str]) -> int:
         return 0
     if argv and argv[0] == "validate-meta":
         raise PGOError("usage: generate.sh validate-meta <file>")
+    if len(argv) == 3 and argv[0] == "validate-profile":
+        validate_profile(Path(argv[1]), Path(argv[2]))
+        print(f"ok: {argv[1]}")
+        return 0
+    if argv and argv[0] == "validate-profile":
+        raise PGOError("usage: generate.sh validate-profile <profile> <meta>")
     return generate(argv)
 
 

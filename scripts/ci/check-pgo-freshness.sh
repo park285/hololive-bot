@@ -5,14 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
 
-DEFAULT_PROFILES=(
-  "hololive/hololive-api/cmd/hololive-api/default.pgo"
-  "hololive/hololive-alarm-worker/cmd/alarm-worker/default.pgo"
-)
 APPROVED_DEFAULT="${ROOT_DIR}/scripts/perf/pgo/approved-workloads"
+POLICY_DEFAULT="${ROOT_DIR}/scripts/perf/pgo/default-policy.tsv"
 
 PROFILES=()
 APPROVED_FILE="${APPROVED_DEFAULT}"
+POLICY_FILE="${POLICY_DEFAULT}"
 STRICT=0
 
 while [[ $# -gt 0 ]]; do
@@ -23,6 +21,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --approved-workloads)
       APPROVED_FILE="$2"
+      shift 2
+      ;;
+    --policy)
+      POLICY_FILE="$2"
       shift 2
       ;;
     --strict)
@@ -37,7 +39,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#PROFILES[@]} -eq 0 ]]; then
-  PROFILES=("${DEFAULT_PROFILES[@]}")
+  while IFS='|' read -r mode _module _pkg _services extra; do
+    [[ -z "${mode}" || "${mode}" == \#* ]] && continue
+    if [[ "${mode}" != "off" || -n "${extra}" ]]; then
+      echo "invalid off-only PGO policy row" >&2
+      exit 2
+    fi
+  done <"${POLICY_FILE}"
 fi
 
 GLOB_THRESHOLD="${PGO_FRESHNESS_GLOB_THRESHOLD:-20}"
@@ -71,26 +79,36 @@ current_toolchain() {
 }
 
 meta_expired() {
-  local generated_at="$1"
+  local collected_at="$1"
   local expires_days="$2"
-  python3 - "$generated_at" "$expires_days" <<'PY'
+  python3 - "$collected_at" "$expires_days" "${PGO_FRESHNESS_NOW:-}" <<'PY'
 import datetime as dt
 import sys
-generated_at, expires = sys.argv[1], sys.argv[2]
+collected_at, expires, now_override = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
-    gen = dt.datetime.fromisoformat(generated_at)
+    collected = dt.datetime.fromisoformat(collected_at)
 except ValueError:
     print("PARSE_ERROR")
     sys.exit(0)
-if gen.tzinfo is None:
+if now_override:
+    try:
+        now = dt.datetime.fromisoformat(now_override)
+    except ValueError:
+        print("NOW_PARSE_ERROR")
+        sys.exit(0)
+elif collected.tzinfo is None:
     now = dt.datetime.now()
 else:
-    now = dt.datetime.now(gen.tzinfo)
+    now = dt.datetime.now(collected.tzinfo)
 try:
     days = int(expires)
 except ValueError:
     days = 45
-age = (now - gen).days
+if collected.tzinfo is not None and now.tzinfo is None:
+    now = now.replace(tzinfo=collected.tzinfo)
+elif collected.tzinfo is None and now.tzinfo is not None:
+    collected = collected.replace(tzinfo=now.tzinfo)
+age = (now - collected).days
 print("EXPIRED" if age > days else "FRESH", age, days)
 PY
 }
@@ -119,6 +137,15 @@ glob_change_count() {
   git log --oneline "${meta_sha}..HEAD" -- "${paths[@]}" 2>/dev/null | wc -l | tr -d ' '
 }
 
+source_sha_is_ancestor() {
+  local sha="$1"
+  if [[ -n "${PGO_FRESHNESS_ANCESTOR_CMD:-}" ]]; then
+    PGO_FRESHNESS_SOURCE_SHA="${sha}" bash -c "${PGO_FRESHNESS_ANCESTOR_CMD}"
+    return
+  fi
+  git merge-base --is-ancestor "${sha}" HEAD >/dev/null 2>&1
+}
+
 check_profile() {
   local profile="$1"
   local meta="${profile}.meta.json"
@@ -134,25 +161,43 @@ check_profile() {
     warn "${profile}: meta sibling missing (${meta})"
     return
   fi
+  if ! "${ROOT_DIR}/scripts/perf/pgo/generate.sh" validate-profile "${profile}" "${meta}" >/dev/null 2>&1; then
+    warn "${profile}: profile or metadata contract invalid (${meta})"
+    return
+  fi
 
-  local generated_at expires workload go_version sha
-  generated_at="$(read_meta_field "${meta}" generatedAt || true)"
+  local collected_at expires workload go_version sha
+  collected_at="$(read_meta_field "${meta}" profileCollectedAt || true)"
   expires="$(read_meta_field "${meta}" expiresAfterDays || true)"
   workload="$(read_meta_field "${meta}" workloadName || true)"
   go_version="$(read_meta_field "${meta}" goVersion || true)"
   sha="$(read_meta_field "${meta}" sourceGitSha || true)"
 
-  if [[ -z "${generated_at}" || -z "${expires}" ]]; then
-    warn "${profile}: meta missing generatedAt/expiresAfterDays"
+  local source_sha_valid=0
+  if [[ -z "${sha}" ]]; then
+    warn "${profile}: meta missing sourceGitSha"
+  elif ! git rev-parse "${sha}^{commit}" >/dev/null 2>&1; then
+    warn "${profile}: sourceGitSha ${sha} not in history"
+  elif ! source_sha_is_ancestor "${sha}"; then
+    warn "${profile}: sourceGitSha ${sha} is not an ancestor of HEAD"
+  else
+    source_sha_valid=1
+  fi
+
+  if [[ -z "${collected_at}" || -z "${expires}" ]]; then
+    warn "${profile}: meta missing profileCollectedAt/expiresAfterDays"
   else
     local expiry_result
-    expiry_result="$(meta_expired "${generated_at}" "${expires}")"
+    expiry_result="$(meta_expired "${collected_at}" "${expires}")"
     case "${expiry_result}" in
       EXPIRED*)
         warn "${profile}: profile expired (${expiry_result})"
         ;;
       PARSE_ERROR)
-        warn "${profile}: generatedAt unparseable: ${generated_at}"
+        warn "${profile}: profileCollectedAt unparseable: ${collected_at}"
+        ;;
+      NOW_PARSE_ERROR)
+        warn "${profile}: PGO_FRESHNESS_NOW unparseable"
         ;;
     esac
   fi
@@ -174,12 +219,10 @@ check_profile() {
   if [[ "${PGO_FRESHNESS_SKIP_GLOB:-0}" != "1" ]]; then
     if [[ ! -f "${globs}" ]]; then
       warn "${profile}: hot-path glob file missing (${globs})"
-    elif [[ -n "${sha}" ]]; then
+    elif [[ "${source_sha_valid}" -eq 1 ]]; then
       local count
       count="$(glob_change_count "${sha}" "${globs}")"
-      if [[ "${count}" == "UNKNOWN_SHA" ]]; then
-        warn "${profile}: sourceGitSha ${sha} not in history — cannot count hot path changes"
-      elif [[ "${count}" =~ ^[0-9]+$ ]] && (( count > GLOB_THRESHOLD )); then
+      if [[ "${count}" =~ ^[0-9]+$ ]] && (( count > GLOB_THRESHOLD )); then
         warn "${profile}: ${count} commits touched hot path globs since profile (threshold ${GLOB_THRESHOLD})"
       fi
     fi
@@ -202,14 +245,17 @@ check_stamp() {
 for profile in "${PROFILES[@]}"; do
   check_profile "${profile}"
 done
+if [[ ${#PROFILES[@]} -eq 0 ]]; then
+  info "no default PGO profiles are adopted; validating PGO-off policy"
+fi
 check_stamp
 
 if [[ "${WARN_COUNT}" -eq 0 ]]; then
-  info "OK: all PGO profiles fresh, approved, and stamped"
+  info "OK: default policy and active PGO profiles are valid"
   exit 0
 fi
 
-info "${WARN_COUNT} warning(s) (warning mode: not a hard failure until PR-P2-01 completes)"
+info "${WARN_COUNT} warning(s)"
 if [[ "${STRICT}" -eq 1 ]]; then
   info "strict mode: promoting warnings to failure"
   exit 1
