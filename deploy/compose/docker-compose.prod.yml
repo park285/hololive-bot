@@ -246,6 +246,8 @@ services:
       - "-c"
       - "work_mem=4MB"
       - "-c"
+      - "max_connections=60"
+      - "-c"
       - "io_method=worker"
       - "-c"
       - "io_workers=3"

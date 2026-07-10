@@ -47,13 +47,19 @@ if origins in ("", "${CORS_ALLOWED_ORIGINS:-}"):
     print("[FAIL] hololive-api CORS_ALLOWED_ORIGINS default must be explicit")
     sys.exit(1)
 
+postgres = services.get("holo-postgres", {})
+command = postgres.get("command", []) or []
+if "max_connections=60" not in [str(item) for item in command]:
+    print("[FAIL] holo-postgres command must pin max_connections=60 with the PG18 memory GUCs")
+    sys.exit(1)
+
 dashboard = services.get("admin-dashboard", {})
 ports = dashboard.get("ports", []) or []
 if not any("127.0.0.1" in str(port) and "30190" in str(port) for port in ports):
     print("[FAIL] admin-dashboard prod default must bind 30190 to loopback")
     sys.exit(1)
 PY
-pass "prod compose security defaults are explicit"
+pass "prod compose security and PostgreSQL budget defaults are explicit"
 
 merged_live="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml docker compose config --no-interpolate --format json 2>/dev/null)" \
   || fail "prod+live-compat compose failed to render"

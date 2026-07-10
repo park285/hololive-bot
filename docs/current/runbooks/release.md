@@ -75,6 +75,36 @@ For contract/document changes:
 ./scripts/architecture/check-release-governance-assets.sh
 ```
 
+## PostgreSQL Hot-Path Plan Gate
+
+Before releasing PostgreSQL GUC, migration, alarm dispatch, or YouTube outbox claim changes, capture fresh plan snapshots from the target environment:
+
+```bash
+DATABASE_URL=... ./scripts/runtime/pg-hotpath-explain-snapshot.sh \
+  --stats-window-seconds 60 \
+  --output-dir artifacts/pg-hotpath-explain/$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+The script accepts `DATABASE_URL` or standard `PG*` variables and does not embed secrets. The YouTube claim snapshot mirrors the current runtime defaults (`LockTimeout=5m`, `ClaimFreshnessWindow=2h`). It writes:
+
+- `invalid-indexes.txt`
+- `target-indexes.txt`
+- `dead-tuples-autovacuum.txt`
+- `claim-statement-window.txt`
+- `alarm-dispatch-claim-explain.txt`
+- `youtube-outbox-claim-explain.txt`
+
+Required index contracts:
+
+- `alarm_dispatch_deliveries` claim: `idx_alarm_dispatch_deliveries_due`
+- `youtube_notification_outbox` claim: `idx_yno_pending_due_created_id`
+
+The script requires the PostgreSQL 18 `pg_stat_statements` schema. It verifies that both indexes exist, are ready and valid, and match the required table, key order, and partial predicate. PostgreSQL may choose another valid index for a small relation, so plan selection is recorded separately from the catalog contract. `claim-statement-window.txt` takes ordered `pg_stat_statements` snapshots around a bounded observation interval (60 seconds by default), joins exact `(dbid, userid, queryid, toplevel)` identities, and evaluates only the interval deltas for `calls` and `total_exec_time`. Claim classification fingerprints the runtime CTE, `UPDATE`, and `RETURNING` structure from `repository_claim_0053_02.sql` and `dispatcher_claim_0050_01.sql`; alarm maintenance claims and the YouTube revive query are not performance evidence. Ambiguous fingerprints are ignored. The observer SQL excludes its own `hololive-pg-hotpath-stats-observer` marker explicitly. Lifetime means do not affect the gate.
+
+The artifact retains the complete whitespace-normalized `pg_stat_statements` representative SQL for those two static runtime claims so the fingerprint can be revalidated; it does not truncate the query text. Bind values remain parameter placeholders and the owned claim SQL contains no dynamic comments or identifiers, so application values and credentials are not expected in this artifact. It still exposes internal table and column names: keep it as internal operational evidence, review it before external sharing, and never place secrets in SQL comments or identifiers.
+
+The stats window is fresh only when at least one `alarm_dispatch_deliveries` claim and one `youtube_notification_outbox` claim complete during the interval. No matching call for either required hot path, a global `pg_stat_statements` reset, entry deallocation, a per-statement `stats_since` change, or a decreasing counter makes the result inconclusive and fails the gate. This also rejects a statement reset whose counters recover past the starting values before the second snapshot. Rerun during a representative active window instead of treating missing evidence as a pass. The script also fails when the fresh delta mean exceeds 5ms, any index contract is broken, any invalid index exists, or `Rows Removed by Filter` exceeds 1000. The dead-tuple snapshot remains review evidence rather than a fixed threshold. The EXPLAIN statements run in a transaction and end with `ROLLBACK`, but they still use `ANALYZE`; run them during a low-risk verification window.
+
 ## Contract Change Release Rules
 
 - Keep provider and consumer compatible during rollout.

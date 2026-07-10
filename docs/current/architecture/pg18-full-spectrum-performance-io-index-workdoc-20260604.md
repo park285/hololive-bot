@@ -135,7 +135,7 @@ command:
 
 변경하지 않는 항목:
 
-- `max_connections`: 현재는 기본 100 유지. 아래 pool cap 적용 후 이론상 동시 커넥션이 100을 넘지 않게 되므로 낮출 필요가 없다.
+- `max_connections`: pool cap 적용 후 compose에서 60으로 명시한다. 일반 운영 목표는 40 이하이며 admin/migration 여유를 60 안에 둔다.
 - `cache_statement`: 운영 기본은 계속 `exec`. 지금은 top query 평균 지연이 sub-ms라 statement cache의 이득보다 per-connection cache 메모리 비용이 더 중요하다.
 - `io_method=io_uring`: 공식 Docker image와 호스트 liburing 조건이 명확히 검증되기 전까지 사용하지 않는다. 정본은 `worker`이다.
 
@@ -180,7 +180,7 @@ hololive-alarm-worker:
 결과:
 
 - 앱 서비스 이론상 합: 4 + 4 + 4 + 8 + 8 = 28
-- migration/admin 접속 여유 포함해도 `max_connections=100` 내에서 충분하다.
+- migration/admin 접속 여유 포함해도 `max_connections=60` 내에서 충분하다.
 - `work_mem=4MB`의 worst-case 동시 사용 리스크가 크게 줄어든다.
 
 ### 결정 H4 — `pg_stat_statements` extension 생성 경로는 현재 유지한다
@@ -291,12 +291,14 @@ CREATE INDEX IF NOT EXISTS idx_ynd_pending_next
 
 ```sql
 CREATE INDEX IF NOT EXISTS idx_yno_status_created ON youtube_notification_outbox(status, created_at);
-CREATE INDEX IF NOT EXISTS idx_yno_status_next_attempt ON youtube_notification_outbox(status, next_attempt_at) WHERE status = 'PENDING';
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_yno_pending_due_created_id
+    ON youtube_notification_outbox (next_attempt_at, created_at, id)
+    WHERE status = 'PENDING';
 ```
 
-현재 EXPLAIN 재캡처에서는 `idx_yno_status_created` 또는 `idx_yno_status_next_attempt` 계열로 충분하다. 즉시 새 인덱스를 추가하지 않는다.
+현재 EXPLAIN 재캡처에서는 `idx_yno_pending_due_created_id`를 기대한다. 즉시 새 인덱스를 추가하지 않는다.
 
-단, 다음 조건 중 하나가 충족되면 별도 maintenance로 아래 인덱스를 추가한다.
+단, 다음 조건 중 하나가 충족되면 별도 maintenance로 추가 인덱스 또는 쿼리 구조 변경을 검토한다.
 
 조건:
 
@@ -305,15 +307,7 @@ CREATE INDEX IF NOT EXISTS idx_yno_status_next_attempt ON youtube_notification_o
 - pending outbox가 10,000 rows 이상 유지
 - `pg_stat_io`에서 relation read가 급증하고 shared buffer hit만으로 처리되지 않음
 
-추가 후보:
-
-```sql
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_yno_pending_due_created
-    ON youtube_notification_outbox (next_attempt_at ASC, created_at ASC, id ASC)
-    WHERE status = 'PENDING';
-```
-
-이 인덱스는 manifest migration에 넣지 않는다. 운영 중 추가 시에는 별도 maintenance command로 실행한다.
+추가 인덱스는 manifest migration에 바로 넣지 않는다. 운영 중 추가 시에는 별도 maintenance command로 실행한다.
 
 ### 결정 H7 — skip scan을 위한 인덱스 재설계는 하지 않는다
 
@@ -369,6 +363,7 @@ SHOW shared_buffers;
 SHOW effective_cache_size;
 SHOW work_mem;
 SHOW maintenance_work_mem;
+SHOW max_connections;
 SHOW io_method;
 SHOW io_workers;
 SELECT extname, extversion FROM pg_extension WHERE extname = 'pg_stat_statements';

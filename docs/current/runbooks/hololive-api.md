@@ -89,7 +89,7 @@ docker exec holo-postgres psql -U postgres_admin -d hololive -c \
 ```
 
 - **중요**: pgx DSN에 `application_name`을 설정하지 않으므로, `hololive-api`의 bot/admin/llm 3 plane은 같은 process·같은 usename(`hololive_runtime`)·같은 `client_addr`(컨테이너 IP 1개)로 보입니다 → **plane 단위 구분은 pg_stat_activity로 불가능**합니다. 구분 가능한 경계는 `client_addr`(hololive-api vs alarm-worker vs migrate) 수준입니다. plane별 budget은 정의값(bot/admin/llm 각 max 4, 합 최대 12)으로 추적합니다.
-- 전체 budget 점검: `hololive-api`(≤12) + `alarm-worker`(max 8) + youtube-producer/migration. PostgreSQL은 단일 컨테이너이므로 `max_connections` 대비 합산을 본다.
+- 전체 budget 점검: `hololive-api`(≤12) + `alarm-worker`(max 8) + youtube-producer/migration. PostgreSQL은 단일 컨테이너이며 compose에서 `max_connections=60`을 명시하므로 합산 pool과 admin/migration 여유를 함께 본다.
 
 ### Valkey latency / slowlog
 
