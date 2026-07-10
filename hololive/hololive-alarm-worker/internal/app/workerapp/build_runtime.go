@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -22,7 +21,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -354,78 +352,5 @@ func rejectRemovedAlarmDispatchModeEnv() error {
 		return nil
 	default:
 		return fmt.Errorf("ALARM_DISPATCH_CONSUMER_MODE=%q is no longer supported; the PG dispatch outbox is the only consumer path (unset the variable)", consumerMode)
-	}
-}
-
-func buildCelebrationRunnerScheduler(
-	infra *sharedmodules.InfraModule,
-	foundation *alarmFoundation,
-	publishConfig queue.PublishConfig,
-	logger *slog.Logger,
-) runtimeAlarmScheduler {
-	if !parseBoolEnv("CELEBRATION_RUNNER_ENABLED", false) {
-		if logger != nil {
-			logger.Info("Celebration runner disabled")
-		}
-		return nil
-	}
-	if infra == nil || infra.Postgres == nil {
-		return nil
-	}
-
-	memberRepo := member.NewMemberRepository(infra.Postgres, logger)
-	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
-	publisher := queue.NewPublisher(
-		infra.Cache,
-		logger,
-		queue.WithOutbox(foundation.Outbox),
-		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
-		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
-	)
-
-	return &celebrationRunner{
-		memberRepo:   memberRepo,
-		alarmRepo:    alarmRepo,
-		publisher:    publisher,
-		logger:       logger,
-		checkHourKST: parseNonNegativeIntEnv("CELEBRATION_CHECK_HOUR_KST", 0),
-		runInterval:  parsePositiveDurationMSEnv("CELEBRATION_RUN_INTERVAL_MS", time.Hour),
-	}
-}
-
-func buildBirthdayStreamRunnerScheduler(
-	infra *sharedmodules.InfraModule,
-	foundation *alarmFoundation,
-	publishConfig queue.PublishConfig,
-	logger *slog.Logger,
-) runtimeAlarmScheduler {
-	if !parseBoolEnv("BIRTHDAY_STREAM_RUNNER_ENABLED", false) {
-		if logger != nil {
-			logger.Info("Birthday stream runner disabled")
-		}
-		return nil
-	}
-	if infra == nil || infra.Postgres == nil {
-		return nil
-	}
-
-	memberRepo := member.NewMemberRepository(infra.Postgres, logger)
-	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
-	publisher := queue.NewPublisher(
-		infra.Cache,
-		logger,
-		queue.WithOutbox(foundation.Outbox),
-		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
-		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
-	)
-
-	return &birthdayStreamRunner{
-		memberRepo:       memberRepo,
-		alarmRepo:        alarmRepo,
-		sessions:         &birthdayStreamPgxStore{db: infra.Postgres.GetPool()},
-		publisher:        publisher,
-		logger:           logger,
-		runInterval:      parsePositiveDurationMSEnv("BIRTHDAY_STREAM_POLL_INTERVAL_MS", 30*time.Minute),
-		sessionFreshness: parsePositiveDurationMSEnv("BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", 30*time.Minute),
 	}
 }

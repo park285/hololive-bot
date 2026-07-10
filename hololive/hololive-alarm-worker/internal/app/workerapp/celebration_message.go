@@ -13,17 +13,32 @@ func renderCelebrationMessage(ctx context.Context, renderer *template.Renderer, 
 		return "", fmt.Errorf("render celebration: payload is nil")
 	}
 	p := envelope.Celebration
-	switch p.Kind {
-	case domain.CelebrationKindBirthday:
-		return renderer.Render(ctx, domain.TemplateKeyCelebrationBirthday, "", p)
-	case domain.CelebrationKindAnniversary:
-		if p.Years <= 0 {
-			return "", fmt.Errorf("render celebration: anniversary years must be positive, got %d", p.Years)
-		}
-		return renderer.Render(ctx, domain.TemplateKeyCelebrationAnniversary, "", p)
-	case domain.CelebrationKindBirthdayStream:
-		return renderer.Render(ctx, domain.TemplateKeyCelebrationBirthdayStream, "", p)
-	default:
+	if err := validateCelebrationPayload(p); err != nil {
+		return "", err
+	}
+	templateKey, ok := celebrationTemplateKey(p.Kind)
+	if !ok {
 		return "", fmt.Errorf("render celebration: unknown kind %q", p.Kind)
+	}
+	return renderer.Render(ctx, templateKey, "", p)
+}
+
+func validateCelebrationPayload(payload *domain.CelebrationDispatchPayload) error {
+	if payload.Kind == domain.CelebrationKindAnniversary && payload.Years <= 0 {
+		return fmt.Errorf("render celebration: anniversary years must be positive, got %d", payload.Years)
+	}
+	return nil
+}
+
+func celebrationTemplateKey(kind domain.CelebrationKind) (domain.TemplateKey, bool) {
+	switch kind {
+	case domain.CelebrationKindBirthday:
+		return domain.TemplateKeyCelebrationBirthday, true
+	case domain.CelebrationKindAnniversary:
+		return domain.TemplateKeyCelebrationAnniversary, true
+	case domain.CelebrationKindBirthdayStream:
+		return domain.TemplateKeyCelebrationBirthdayStream, true
+	default:
+		return "", false
 	}
 }

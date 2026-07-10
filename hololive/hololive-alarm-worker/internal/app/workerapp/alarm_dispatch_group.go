@@ -69,16 +69,15 @@ func alarmDispatchGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 	if envelope == nil {
 		return ""
 	}
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
-		key := fmt.Sprintf("%s|celebration|%s|%s",
-			envelope.Notification.RoomID,
-			envelope.Celebration.Kind,
-			envelope.Celebration.ChannelID,
-		)
-		if envelope.Celebration.VideoID != "" {
-			key += "|" + envelope.Celebration.VideoID
-		}
+	if key, ok := alarmDispatchSourceGroupKey(envelope); ok {
 		return key
+	}
+	return alarmDispatchTimeGroupKey(envelope)
+}
+
+func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, bool) {
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
+		return alarmDispatchCelebrationGroupKey(envelope), true
 	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		return fmt.Sprintf("%s|source|%s|%s|%s|%s",
@@ -87,8 +86,24 @@ func alarmDispatchGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 			envelope.YouTubeOutbox.ChannelID,
 			envelope.YouTubeOutbox.Kind,
 			envelope.YouTubeOutbox.Identity(),
-		)
+		), true
 	}
+	return "", false
+}
+
+func alarmDispatchCelebrationGroupKey(envelope *domain.AlarmQueueEnvelope) string {
+	key := fmt.Sprintf("%s|celebration|%s|%s",
+		envelope.Notification.RoomID,
+		envelope.Celebration.Kind,
+		envelope.Celebration.ChannelID,
+	)
+	if envelope.Celebration.VideoID != "" {
+		key += "|" + envelope.Celebration.VideoID
+	}
+	return key
+}
+
+func alarmDispatchTimeGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 	if envelope.Notification.Stream != nil && envelope.Notification.Stream.StartScheduled != nil {
 		minuteBucket := envelope.Notification.Stream.StartScheduled.UTC().Unix() / 60
 		return fmt.Sprintf("%s|scheduled|%d", envelope.Notification.RoomID, minuteBucket)

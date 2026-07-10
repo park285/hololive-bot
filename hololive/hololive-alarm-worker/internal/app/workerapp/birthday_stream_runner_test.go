@@ -104,10 +104,6 @@ func newBirthdayStreamTestRunner(
 	}
 }
 
-func timePtr(t time.Time) *time.Time {
-	return &t
-}
-
 func TestBirthdayStreamEvaluationDates(t *testing.T) {
 	t.Parallel()
 
@@ -187,7 +183,7 @@ func TestBirthdayStreamRunOnceMidnightCatchesLateFrameWithYesterdayDate(t *testi
 			ChannelID:      "UC_a",
 			Title:          "late frame",
 			Status:         "UPCOMING",
-			ScheduledStart: timePtr(time.Date(2026, 7, 10, 14, 30, 0, 0, time.UTC)),
+			ScheduledStart: new(time.Date(2026, 7, 10, 14, 30, 0, 0, time.UTC)),
 		}},
 	}
 	publisher := &birthdayStreamTestPublisher{}
@@ -222,7 +218,7 @@ func TestBirthdayStreamRunOnceYesterdayFailureStillEvaluatesToday(t *testing.T) 
 			ChannelID:      "UC_b",
 			Title:          "today stream",
 			Status:         "UPCOMING",
-			ScheduledStart: timePtr(time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)),
+			ScheduledStart: new(time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)),
 		}},
 	}
 	publisher := &birthdayStreamTestPublisher{}
@@ -268,7 +264,7 @@ func TestBirthdayStreamRunOnceLiveSessionIncluded(t *testing.T) {
 			ChannelID: "UC_a",
 			Title:     "guerrilla live",
 			Status:    "LIVE",
-			StartedAt: timePtr(time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)),
+			StartedAt: new(time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)),
 		}},
 	}
 	publisher := &birthdayStreamTestPublisher{}
@@ -298,7 +294,7 @@ func TestBirthdayStreamRunOnceCapAlreadyPublishedThree(t *testing.T) {
 			VideoID:        "vid-new",
 			ChannelID:      "UC_a",
 			Status:         "UPCOMING",
-			ScheduledStart: timePtr(time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC)),
+			ScheduledStart: new(time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC)),
 		}},
 		publishedKeys: map[string][]string{
 			prefix: {prefix + "vid-1", prefix + "vid-2", prefix + "vid-3"},
@@ -318,7 +314,7 @@ func TestBirthdayStreamRunOnceCapPublishesRemainingDeterministically(t *testing.
 
 	now := time.Date(2026, 7, 10, 12, 0, 0, 0, testKST)
 	prefix := "celebration:birthday_stream:UC_a:2026-07-10:"
-	sameStart := timePtr(time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC))
+	sameStart := new(time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC))
 	memberRepo := &birthdayStreamTestMemberRepo{membersByDay: map[[2]int][]*domain.Member{
 		{7, 10}: {{ChannelID: "UC_a", Name: "Test"}},
 	}}
@@ -359,7 +355,7 @@ func TestBirthdayStreamRunOnceEmptyChannelIDSkipped(t *testing.T) {
 			VideoID:        "vid-1",
 			ChannelID:      "UC_a",
 			Status:         "UPCOMING",
-			ScheduledStart: timePtr(time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC)),
+			ScheduledStart: new(time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC)),
 		}},
 	}
 	publisher := &birthdayStreamTestPublisher{}
@@ -410,7 +406,7 @@ func TestBirthdayStreamRunOnceEnvelopeFields(t *testing.T) {
 			ChannelID:      "UC_a",
 			Title:          "생일 방송",
 			Status:         "UPCOMING",
-			ScheduledStart: timePtr(time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)),
+			ScheduledStart: new(time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)),
 		}},
 	}
 	publisher := &birthdayStreamTestPublisher{}
