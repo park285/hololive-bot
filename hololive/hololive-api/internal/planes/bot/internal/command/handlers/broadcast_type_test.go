@@ -1,6 +1,48 @@
 package handlers
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+func TestBroadcastRuleOrderPinned(t *testing.T) {
+	t.Parallel()
+
+	wantStrong := []BroadcastType{
+		BroadcastTypeMembership,
+		BroadcastTypeWatchalong,
+		BroadcastTypeSinging,
+		BroadcastTypeNews,
+		BroadcastTypeASMR,
+		BroadcastTypeHorseRacing,
+		BroadcastTypeEvent,
+		BroadcastTypeEvent,
+		BroadcastTypeNews,
+	}
+	gotStrong := make([]BroadcastType, 0, len(broadcastRules.TitleRules))
+	for _, rule := range broadcastRules.TitleRules {
+		gotStrong = append(gotStrong, rule.Type)
+	}
+	if !slices.Equal(gotStrong, wantStrong) {
+		t.Fatalf("title_rules order = %v, want %v", gotStrong, wantStrong)
+	}
+
+	wantGeneric := []BroadcastType{
+		BroadcastTypeGame,
+		BroadcastTypeEvent,
+		BroadcastTypeSinging,
+		BroadcastTypeTalk,
+		BroadcastTypeOther,
+		BroadcastTypeNews,
+	}
+	gotGeneric := make([]BroadcastType, 0, len(broadcastRules.Generic))
+	for _, rule := range broadcastRules.Generic {
+		gotGeneric = append(gotGeneric, rule.Type)
+	}
+	if !slices.Equal(gotGeneric, wantGeneric) {
+		t.Fatalf("generic_title_rules order = %v, want %v", gotGeneric, wantGeneric)
+	}
+}
 
 func TestClassifyBroadcastObservedTopics(t *testing.T) {
 	t.Parallel()
@@ -15,9 +57,13 @@ func TestClassifyBroadcastObservedTopics(t *testing.T) {
 		{name: "observed news topic", topic: "News_Show", want: BroadcastTypeNews},
 		{name: "observed membership topic", topic: "membersonly", want: BroadcastTypeMembership},
 		{name: "observed other topic", topic: "Vlog", want: BroadcastTypeOther},
-		{name: "unknown topic falls through to title", topic: "drawing", title: "【めっちゃカメレオン】参加型", want: BroadcastTypeGame},
+		{name: "observed outfit reveal topic", topic: "Outfit_Reveal", want: BroadcastTypeEvent},
+		{name: "observed instrument topic", topic: "Musical_Instrument", want: BroadcastTypeSinging},
+		{name: "ambiguous announce topic falls through to title", topic: "announce", title: "【緊急ゲリラ】ガチャガチャ屋さんの店長になりました【Gacha Capsule Shop Simulator - Akihabara】", want: BroadcastTypeGame},
+		{name: "ambiguous drawing topic falls through to title", topic: "drawing", title: "【めっちゃカメレオン】自分を塗って景色に溶け込むお絵描きかくれんぼゲーム!", want: BroadcastTypeGame},
+		{name: "unknown topic falls through to title", topic: "endurance", title: "【めっちゃカメレオン】参加型", want: BroadcastTypeGame},
 		{name: "ambiguous observed topic falls through to title", topic: "morning", title: "【雑談】朝のんびり話す", want: BroadcastTypeTalk},
-		{name: "ambiguous observed topic remains unknown without title evidence", topic: "Outfit_Reveal", title: "【緊急ゲリラ】ありがとう", want: BroadcastTypeUnknown},
+		{name: "ambiguous observed topic remains unknown without title evidence", topic: "morning", title: "【緊急ゲリラ】ありがとう", want: BroadcastTypeUnknown},
 	}
 
 	for _, tt := range tests {
@@ -90,7 +136,33 @@ func TestClassifyBroadcastTitleFallback(t *testing.T) {
 		{name: "member tag is not game", title: "新しいマイクに変えた(テスト配信)【ぶいすぽ / 猫汰つな】", want: BroadcastTypeUnknown},
 		{name: "generic emergency tag is not game", title: "【緊急ゲリラ】ガチャガチャ屋さんの店長になりました", want: BroadcastTypeUnknown},
 		{name: "chat substring does not overmatch", title: "【Chatterbox】new mic test", want: BroadcastTypeUnknown},
-		{name: "radio substring does not overmatch", title: "【Radioactive】science talk", want: BroadcastTypeUnknown},
+		{name: "radio substring does not overmatch", title: "【Radioactive】science stuff", want: BroadcastTypeUnknown},
+		{name: "sequel digit keeps game keyword", title: "【Portal2】協力するぞ！ #ポルーナ のポータル2！", want: BroadcastTypeGame},
+		{name: "gta with digit keeps game keyword", title: "【GTA5│NEW TOWN】Day2 街ブラ散歩", want: BroadcastTypeGame},
+		{name: "ascii keyword adjacent to kana matches", title: "【PUBGモバイル】PUBGモバイルに余が参戦・・・！？", want: BroadcastTypeGame},
+		{name: "ascii keyword after kana matches", title: "おひさしR.E.P.O", want: BroadcastTypeGame},
+		{name: "zatsudan suffix matches talk", title: "【zatsudan】good morning, おはよ", want: BroadcastTypeTalk},
+		{name: "hollow bracket lead tag matches exact game tag", title: "〖 OW 〗低気圧なのでチル。の巻", want: BroadcastTypeGame},
+		{name: "corner bracket watch party is watchalong", title: "◤ #VSPO_SHOWDOWN　ウォチパ ◢　Day1 LOL 先輩たちと見ます！", want: BroadcastTypeWatchalong},
+		{name: "double angle bracket game marker", title: "≪Devil May Cry 3≫ I'm ready.... First Playthrough! #1", want: BroadcastTypeGame},
+		{name: "watch party compound tag is watchalong", title: "【#WatchPartyLCP】DCG vs GZ | LCP 2026 Split 1 Knockout Stage Day 4", want: BroadcastTypeWatchalong},
+		{name: "fes support room is watchalong", title: "【応援枠】hololive SUPER EXPO 2026＆hololive 7th fes.お疲れ様でした！", want: BroadcastTypeWatchalong},
+		{name: "membership katakana long form", title: "【メンバーシップ限定】ASMRささやき✨️最初だけ全体公開🎧️", want: BroadcastTypeMembership},
+		{name: "birthday countdown is event", title: "【 #桃鈴ねね誕生日ライブ2026 】今年もみんなと迎えたい！お誕生日！！！", want: BroadcastTypeEvent},
+		{name: "uma musume birthday title stays game", title: "【ウマ娘】誕生日ミッションを走る", want: BroadcastTypeGame},
+		{name: "major report is news", title: "【重大報告】一日小豆警察署長 に就任しました！", want: BroadcastTypeNews},
+		{name: "generic horror game evidence", title: "【悪意】誰かに見られてる?間違いなく今年一怖いと噂のホラーゲームらしい――。", want: BroadcastTypeGame},
+		{name: "generic game word last resort", title: "超話題ゲーム『ゼットンの1兆度ホームラン競争』、遊ぶぞ！", want: BroadcastTypeGame},
+		{name: "fes aftertalk is talk", title: "7th fesお疲れ様でした!! アフタートーク🎤✨", want: BroadcastTypeTalk},
+		{name: "instrument performance is singing", title: "ウクレレを弾くだけの配信", want: BroadcastTypeSinging},
+		{name: "sponsored tag last resort is other", title: "【DISM】肌のキャラ対してる！？メディスキンケア！ #ad", want: BroadcastTypeOther},
+		{name: "announcement last resort is news", title: "【告知】あのグッズ、復刻します！！！", want: BroadcastTypeNews},
+		{name: "appended notice keeps event classification", title: "【告知あり】ドキドキ凸待ちしてみる…！", want: BroadcastTypeEvent},
+		{name: "appended notice in body is not news", title: "【ぐだぐだ】今後について、告知ありです", want: BroadcastTypeUnknown},
+		{name: "big announcement aside stays talk", title: "【雑談】今後の活動について、重大発表あり！", want: BroadcastTypeTalk},
+		{name: "participation zatsudan stays talk", title: "【参加型雑談】みんなでお話", want: BroadcastTypeTalk},
+		{name: "birthday radio episode stays talk", title: "『 #誕生日にもらってスゴかったもの  💕』 アキちょこナイトパレット第26回 ～ホロライブ深夜ラジオ～", want: BroadcastTypeTalk},
+		{name: "news show about asmr unlock stays news", title: "【昇天】ダニィ！？ヴィヴィさんがASMR解禁だと！？【昼ホロ/井月みちる】", want: BroadcastTypeNews},
 	}
 
 	for _, tt := range tests {
@@ -115,7 +187,7 @@ func TestClassifyBroadcastSource(t *testing.T) {
 		wantSource string
 	}{
 		{name: "topic source", topic: "singing", title: "【雑談】", wantType: BroadcastTypeSinging, wantSource: "topic"},
-		{name: "title source", topic: "drawing", title: "【雑談】", wantType: BroadcastTypeTalk, wantSource: "title"},
+		{name: "title source", topic: "endurance", title: "【雑談】", wantType: BroadcastTypeTalk, wantSource: "title"},
 		{name: "membership title overrides game topic", topic: "minecraft", title: "【Members Only】 yuru camp △ s1 ep.7-12 ゆるキャン", wantType: BroadcastTypeMembership, wantSource: "title"},
 		{name: "watchalong title overrides game topic", topic: "forza", title: "【同時視聴】映画をみんなで観よ", wantType: BroadcastTypeWatchalong, wantSource: "title"},
 		{name: "horse racing title overrides game topic", topic: "minecraft", title: "【競馬/大阪杯】阪神 芝2000！！！今日こそ勝！！！！！！！！！", wantType: BroadcastTypeHorseRacing, wantSource: "title"},
@@ -124,7 +196,9 @@ func TestClassifyBroadcastSource(t *testing.T) {
 		{name: "game topic keeps priority over talk title", topic: "minecraft", title: "【Minecraft】雑談しながら整地", wantType: BroadcastTypeGame, wantSource: "topic"},
 		{name: "game topic keeps priority over generic event title", topic: "minecraft", title: "【Minecraft】ウォーデン100体もたおした!!大会もみた!次はおまえだ", wantType: BroadcastTypeGame, wantSource: "topic"},
 		{name: "non-game topic keeps priority over game title", topic: "singing", title: "【Minecraft】歌いながら整地", wantType: BroadcastTypeSinging, wantSource: "topic"},
-		{name: "unknown source", topic: "announce", title: "【緊急ゲリラ】", wantType: BroadcastTypeUnknown, wantSource: "unknown"},
+		{name: "unknown source", topic: "endurance", title: "【緊急ゲリラ】", wantType: BroadcastTypeUnknown, wantSource: "unknown"},
+		{name: "instrument title does not override game topic", topic: "minecraft", title: "【マイクラ】ピアノ作ってみた！", wantType: BroadcastTypeGame, wantSource: "topic"},
+		{name: "generic news does not override game topic", topic: "valorant", title: "大事な告知があります！ランク行く", wantType: BroadcastTypeGame, wantSource: "topic"},
 	}
 
 	for _, tt := range tests {

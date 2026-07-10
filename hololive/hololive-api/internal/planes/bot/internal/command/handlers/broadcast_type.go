@@ -128,13 +128,14 @@ func broadcastTopicAcceptsTitleOverride(topicType BroadcastType) bool {
 
 func broadcastTitleClassOverridesTopic(titleClass broadcastTitleClassification) bool {
 	switch titleClass.Type {
-	case BroadcastTypeSinging,
-		BroadcastTypeASMR,
+	case BroadcastTypeASMR,
 		BroadcastTypeMembership,
 		BroadcastTypeHorseRacing,
-		BroadcastTypeWatchalong,
-		BroadcastTypeNews:
+		BroadcastTypeWatchalong:
 		return true
+	case BroadcastTypeSinging,
+		BroadcastTypeNews:
+		return titleClass.Strength == broadcastTitleStrengthStrong
 	case BroadcastTypeEvent:
 		return titleClass.Strength == broadcastTitleStrengthStrong || titleClass.Strength == broadcastTitleStrengthLead
 	default:
@@ -174,7 +175,7 @@ func classifyBroadcastTitle(title string) broadcastTitleClassification {
 	if titleLooksLikeGameBroadcast(normalized, leadTag) {
 		return broadcastTitleClassification{Type: BroadcastTypeGame, Strength: broadcastTitleStrengthStrong}
 	}
-	if typ, ok := classifyBroadcastTitleByKeyword(normalized, rejectScope, broadcastRules.Generic); ok {
+	if typ, ok := classifyBroadcastTitleByKeyword(normalized, normalized, broadcastRules.Generic); ok {
 		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthGeneric}
 	}
 	return broadcastTitleClassification{Type: BroadcastTypeUnknown, Strength: broadcastTitleStrengthUnknown}
@@ -214,17 +215,29 @@ func titleLooksLikeGameBroadcast(normalized, leadTag string) bool {
 	return containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.Contains)
 }
 
+var broadcastTitleTagDelims = [][2]string{
+	{"【", "】"},
+	{"〖", "〗"},
+	{"≪", "≫"},
+	{"◤", "◢"},
+}
+
 func firstBroadcastTitleTag(title string) string {
-	_, after, ok := strings.Cut(title, "【")
-	if !ok {
-		return ""
+	tag := ""
+	tagIdx := -1
+	for _, delim := range broadcastTitleTagDelims {
+		open := strings.Index(title, delim[0])
+		if open < 0 || (tagIdx >= 0 && open >= tagIdx) {
+			continue
+		}
+		body, _, ok := strings.Cut(title[open+len(delim[0]):], delim[1])
+		if !ok {
+			continue
+		}
+		tagIdx = open
+		tag = strings.TrimSpace(body)
 	}
-	rest := after
-	before, _, ok := strings.Cut(rest, "】")
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(before)
+	return tag
 }
 
 func containsExactBroadcastKeyword(value string, keywords []string) bool {
@@ -272,6 +285,9 @@ func isASCIIBroadcastKeyword(value string) bool {
 	return true
 }
 
+// 일본어 제목은 영문 게임명 앞뒤에 공백 없이 가나·한자가 붙고(«APEXやる»),
+// 속편 번호가 바로 이어진다(«Portal2»). 비ASCII 인접과 뒤따르는 숫자는 경계로 인정해야
+// 실제 매치가 살아남고, ASCII 문자 인접만 오탐(«off»의 ff, «content»의 nte)으로 거른다.
 func hasBroadcastKeywordBoundary(value string, start, end int) bool {
 	if start > 0 {
 		r, _ := utf8.DecodeLastRuneInString(value[:start])
@@ -281,7 +297,7 @@ func hasBroadcastKeywordBoundary(value string, start, end int) bool {
 	}
 	if end < len(value) {
 		r, _ := utf8.DecodeRuneInString(value[end:])
-		if isBroadcastWordRune(r) {
+		if isBroadcastWordRune(r) && !unicode.IsDigit(r) {
 			return false
 		}
 	}
@@ -289,7 +305,7 @@ func hasBroadcastKeywordBoundary(value string, start, end int) bool {
 }
 
 func isBroadcastWordRune(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r)
+	return r <= unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r))
 }
 
 func broadcastTopics(topicID string) []string {
