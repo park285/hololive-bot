@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/park285/iris-client-go/iris"
 )
@@ -91,6 +92,11 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testBaseURLHost(t, first.URL)+","+testBaseURLHost(t, second.URL))
 
 	client := NewRuntimeIrisClient(second.URL, botToken, baseURLFilePath, nil, iris.WithHTTPClient(tlsClientForServers(t, first, second)))
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	}()
 
 	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
 		t.Fatalf("send via first override: %v", err)
@@ -106,6 +112,21 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 		t.Fatalf("write second base url file: %v", err)
 	}
 
+	if err := client.SendMessage(ctx, "room-1", "cached"); err != nil {
+		t.Fatalf("send before resolve interval expiry: %v", err)
+	}
+	firstMu.Lock()
+	if firstCalls != 2 {
+		t.Fatalf("first calls before resolve interval expiry = %d, want 2", firstCalls)
+	}
+	firstMu.Unlock()
+	secondMu.Lock()
+	if secondCalls != 0 {
+		t.Fatalf("second calls before resolve interval expiry = %d, want 0", secondCalls)
+	}
+	secondMu.Unlock()
+
+	time.Sleep(runtimeIrisBaseURLResolveInterval + 100*time.Millisecond)
 	if err := client.SendMessage(ctx, "room-1", "world"); err != nil {
 		t.Fatalf("send via reloaded override: %v", err)
 	}

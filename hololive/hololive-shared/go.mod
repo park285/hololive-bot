@@ -29,7 +29,7 @@ require (
 require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v0.28.1-0.20260707082521-58a1a5f102c0
+	github.com/park285/iris-client-go v0.28.1-0.20260710052428-67c4d3c92e56
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.60.0

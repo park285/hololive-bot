@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	runtimeIrisReplyRetryMax = 3
+	runtimeIrisReplyRetryMax          = 3
+	runtimeIrisBaseURLResolveInterval = time.Second
 	// runtimeIrisReplyAttemptTimeout은 SDK 기본 per-attempt timeout(http.Client.Timeout)이며,
 	// hololive는 reply 경로에서 이를 override하지 않으므로 grace 산정의 기준값이다.
 	runtimeIrisReplyAttemptTimeout = 10 * time.Second
@@ -56,6 +57,7 @@ func NewRuntimeIrisClient(
 	rc := iris.NewRebindingClient(iris.RebindingClientConfig{
 		ResolveBaseURL:  resolver.resolve,
 		BotToken:        strings.TrimSpace(botToken),
+		ResolveInterval: runtimeIrisBaseURLResolveInterval,
 		StaleCloseGrace: defaultStaleClientCloseGrace,
 		Logger:          logger,
 		ClientOptions:   clientOpts,
