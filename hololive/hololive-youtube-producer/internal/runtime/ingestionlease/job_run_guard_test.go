@@ -21,18 +21,18 @@ func TestJobRunGuardClaimBlocksSameJobAndAllowsDifferentChannels(t *testing.T) {
 	})
 
 	identity := JobIdentity{PollerName: "videos", ChannelID: "UC_A", Interval: time.Minute}
-	first, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	first, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAcquired, first.Result)
 	require.NotNil(t, claim)
 
-	second, peerClaim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	second, peerClaim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimPeerOwned, second.Result)
 	require.Nil(t, peerClaim)
 	require.Greater(t, second.RetryAfter, time.Duration(0))
 
-	other, otherClaim, err := guard.TryClaim(ctx, JobIdentity{PollerName: "videos", ChannelID: "UC_B", Interval: time.Minute}, time.Minute, time.Minute)
+	other, otherClaim, err := guard.TryLease(ctx, JobIdentity{PollerName: "videos", ChannelID: "UC_B", Interval: time.Minute}, time.Minute, time.Minute)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAcquired, other.Result)
 	require.NotNil(t, otherClaim)
@@ -49,7 +49,7 @@ func TestJobRunGuardMarkCompletedCreatesCooldown(t *testing.T) {
 	})
 	identity := JobIdentity{PollerName: "community", ChannelID: "UC_A", Interval: 2 * time.Minute}
 
-	status, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	status, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAcquired, status.Result)
 
@@ -57,7 +57,7 @@ func TestJobRunGuardMarkCompletedCreatesCooldown(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, completed)
 
-	next, nextClaim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	next, nextClaim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAlreadyCompleted, next.Result)
 	require.Nil(t, nextClaim)
@@ -75,7 +75,7 @@ func TestJobRunGuardDeferCreatesCooldown(t *testing.T) {
 	})
 	identity := JobIdentity{PollerName: "community", ChannelID: "UC_DEFER", Interval: time.Minute}
 
-	status, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	status, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAcquired, status.Result)
 
@@ -83,7 +83,7 @@ func TestJobRunGuardDeferCreatesCooldown(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, deferred)
 
-	next, nextClaim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	next, nextClaim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAlreadyCompleted, next.Result)
 	require.Nil(t, nextClaim)
@@ -100,11 +100,11 @@ func TestJobRunGuardWinnerCompleteMakesPeerAlreadyCompleted(t *testing.T) {
 	peer := NewJobRunGuard(cache, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-b"})
 	identity := JobIdentity{PollerName: "videos", ChannelID: "UC_RACE", Interval: 250 * time.Millisecond}
 
-	status, claim, err := winner.TryClaim(ctx, identity, time.Second, identity.Interval)
+	status, claim, err := winner.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAcquired, status.Result)
 
-	status, peerClaim, err := peer.TryClaim(ctx, identity, time.Second, identity.Interval)
+	status, peerClaim, err := peer.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimPeerOwned, status.Result)
 	require.Nil(t, peerClaim)
@@ -113,7 +113,7 @@ func TestJobRunGuardWinnerCompleteMakesPeerAlreadyCompleted(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, completed)
 
-	status, peerClaim, err = peer.TryClaim(ctx, identity, time.Second, identity.Interval)
+	status, peerClaim, err = peer.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAlreadyCompleted, status.Result)
 	require.Nil(t, peerClaim)
@@ -128,13 +128,13 @@ func TestJobRunGuardExpiredLeaseCanFailOverToPeer(t *testing.T) {
 	second := NewJobRunGuard(cache, JobRunGuardConfig{Namespace: "test", InstanceID: "ap-b"})
 	identity := JobIdentity{PollerName: "live", ChannelID: "UC_FAILOVER", Interval: time.Second}
 
-	status, claim, err := first.TryClaim(ctx, identity, 20*time.Millisecond, identity.Interval)
+	status, claim, err := first.TryLease(ctx, identity, 20*time.Millisecond, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAcquired, status.Result)
 	require.NotNil(t, claim)
 
 	mini.FastForward(21 * time.Millisecond)
-	status, claim, err = second.TryClaim(ctx, identity, time.Second, identity.Interval)
+	status, claim, err = second.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAcquired, status.Result)
 	require.NotNil(t, claim)
@@ -151,7 +151,7 @@ func TestJobRunGuardMarkCompletedUsesOwnerCAS(t *testing.T) {
 	})
 	identity := JobIdentity{PollerName: "shorts", ChannelID: "UC_CAS", Interval: time.Minute}
 
-	_, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	_, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 	require.NoError(t, cache.GetClient().Do(ctx, cache.B().Set().Key(claim.LeaseKey()).Value("peer-owner").Build()).Error())
 
@@ -175,7 +175,7 @@ func TestJobRunGuardDeferUsesOwnerCAS(t *testing.T) {
 	})
 	identity := JobIdentity{PollerName: "shorts", ChannelID: "UC_DEFER_CAS", Interval: time.Minute}
 
-	_, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	_, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 	require.NoError(t, cache.GetClient().Do(ctx, cache.B().Set().Key(claim.LeaseKey()).Value("peer-owner").Build()).Error())
 
@@ -199,7 +199,7 @@ func TestJobRunGuardDeferRejectsNonPositiveTTL(t *testing.T) {
 	})
 	identity := JobIdentity{PollerName: "shorts", ChannelID: "UC_DEFER_TTL", Interval: time.Minute}
 
-	_, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	_, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 
 	deferred, err := claim.Defer(ctx, 0)
@@ -218,7 +218,7 @@ func TestJobRunGuardRenewAndReleaseUseOwnerCAS(t *testing.T) {
 	})
 	identity := JobIdentity{PollerName: "shorts", ChannelID: "UC_A", Interval: time.Minute}
 
-	_, claim, err := guard.TryClaim(ctx, identity, time.Minute, identity.Interval)
+	_, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
 
 	renewed, err := claim.Renew(ctx, time.Minute)

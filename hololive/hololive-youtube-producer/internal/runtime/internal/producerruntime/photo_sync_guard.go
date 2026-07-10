@@ -51,7 +51,7 @@ func (s *leasedPhotoSyncService) Start(ctx context.Context) {
 }
 
 func (s *leasedPhotoSyncService) tryAcquire(ctx context.Context) (*ingestionlease.JobRunClaim, bool) {
-	status, claim, err := s.guard.TryClaim(ctx, ingestionlease.JobIdentity{
+	status, claim, err := s.guard.TryLease(ctx, ingestionlease.JobIdentity{
 		PollerName: photoSyncLeasePollerName,
 		ChannelID:  photoSyncLeaseChannelID,
 	}, s.leaseTTL, s.retryInterval)

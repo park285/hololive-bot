@@ -41,12 +41,12 @@ func TestJobRunGuardRealValkeyIntegration(t *testing.T) {
 	peer := NewJobRunGuard(cacheClient, JobRunGuardConfig{Namespace: namespace, InstanceID: "ap-b"})
 	identity := JobIdentity{PollerName: "videos", ChannelID: "UC_REAL", Interval: 250 * time.Millisecond}
 
-	status, claim, err := winner.TryClaim(ctx, identity, time.Second, identity.Interval)
+	status, claim, err := winner.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAcquired, status.Result)
 	require.NotNil(t, claim)
 
-	status, peerClaim, err := peer.TryClaim(ctx, identity, time.Second, identity.Interval)
+	status, peerClaim, err := peer.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimPeerOwned, status.Result)
 	require.Nil(t, peerClaim)
@@ -55,7 +55,7 @@ func TestJobRunGuardRealValkeyIntegration(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, completed)
 
-	status, peerClaim, err = peer.TryClaim(ctx, identity, time.Second, identity.Interval)
+	status, peerClaim, err = peer.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
 	require.Equal(t, JobClaimAlreadyCompleted, status.Result)
 	require.Nil(t, peerClaim)

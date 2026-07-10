@@ -8,8 +8,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 	"github.com/stretchr/testify/require"
 )
+
+var _ poller.JobClaimer = (*ingestionlease.JobRunGuard)(nil)
 
 func TestBuildJobRunGuardClaimerRequiresCacheWhenActiveActiveEnabled(t *testing.T) {
 	claimer, err := BuildJobRunGuardClaimer(nil, config.ScraperActiveActiveConfig{Enabled: true})
@@ -25,7 +28,7 @@ func TestBuildJobRunGuardClaimerDisabledAllowsNilCache(t *testing.T) {
 	require.Nil(t, claimer)
 }
 
-func TestBuildJobRunGuardClaimerMapsClaims(t *testing.T) {
+func TestBuildJobRunGuardClaimerReturnsPollerClaims(t *testing.T) {
 	ctx := context.Background()
 	cache := sharedtestutil.NewTestCacheService(t, ctx)
 	claimer, err := BuildJobRunGuardClaimer(cache, config.ScraperActiveActiveConfig{
@@ -43,7 +46,7 @@ func TestBuildJobRunGuardClaimerMapsClaims(t *testing.T) {
 	require.NotNil(t, claim)
 }
 
-func TestBuildJobRunGuardClaimerMapsDefer(t *testing.T) {
+func TestBuildJobRunGuardClaimerPreservesDeferCapability(t *testing.T) {
 	ctx := context.Background()
 	cache := sharedtestutil.NewTestCacheService(t, ctx)
 	claimer, err := BuildJobRunGuardClaimer(cache, config.ScraperActiveActiveConfig{

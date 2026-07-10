@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -20,21 +21,16 @@ type JobIdentity struct {
 	Interval   time.Duration
 }
 
-type JobClaimResult string
+type JobClaimResult = poller.JobClaimResult
 
 const (
-	JobClaimAcquired         JobClaimResult = "acquired"
-	JobClaimPeerOwned        JobClaimResult = "peer_owned"
-	JobClaimAlreadyCompleted JobClaimResult = "already_completed"
-	JobClaimUnavailable      JobClaimResult = "unavailable"
+	JobClaimAcquired         = poller.JobClaimAcquired
+	JobClaimPeerOwned        = poller.JobClaimPeerOwned
+	JobClaimAlreadyCompleted = poller.JobClaimAlreadyCompleted
+	JobClaimUnavailable      = poller.JobClaimUnavailable
 )
 
-type JobClaimStatus struct {
-	Result     JobClaimResult
-	RetryAfter time.Duration
-	LeaseTTL   time.Duration
-	OwnerToken string
-}
+type JobClaimStatus = poller.JobClaimStatus
 
 type JobRunGuardConfig struct {
 	Namespace  string
@@ -135,6 +131,21 @@ func BuildJobLeaseKeys(namespace string, identity JobIdentity) (JobLeaseKeys, er
 }
 
 func (g *JobRunGuard) TryClaim(
+	ctx context.Context,
+	pollerName string,
+	channelID string,
+	leaseTTL time.Duration,
+	cooldownTTL time.Duration,
+) (status poller.JobClaimStatus, claim poller.JobClaim, err error) {
+	status, jobClaim, err := g.TryLease(ctx, JobIdentity{
+		PollerName: pollerName,
+		ChannelID:  channelID,
+		Interval:   cooldownTTL,
+	}, leaseTTL, cooldownTTL)
+	return status, jobClaim, err
+}
+
+func (g *JobRunGuard) TryLease(
 	ctx context.Context,
 	identity JobIdentity,
 	leaseTTL time.Duration,
