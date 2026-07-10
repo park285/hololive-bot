@@ -22,11 +22,14 @@ package dbtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -161,12 +164,18 @@ func acquireBaseDSN(t testing.TB) string {
 
 // provisionBaseDSN은 외부 DB(TEST_DATABASE_URL) 또는 testcontainers ephemeral PG의 DSN을 만든다.
 // 컨테이너는 프로세스 종료 시 testcontainers reaper(Ryuk)가 회수하므로 명시적 종료를 등록하지 않는다.
-func provisionBaseDSN() (string, error) {
+func provisionBaseDSN() (_ string, err error) {
 	if dsn := os.Getenv(testDatabaseURLEnv); dsn != "" {
 		return dsn, nil
 	}
 
 	ctx := context.Background()
+
+	unlock, err := lockSessionProvisioning()
+	if err != nil {
+		return "", fmt.Errorf("lock session provisioning: %w", err)
+	}
+	defer func() { err = errors.Join(err, unlock()) }()
 
 	container, err := startPostgresContainer(ctx, primaryImage)
 	if err != nil {
@@ -182,7 +191,38 @@ func provisionBaseDSN() (string, error) {
 		return "", fmt.Errorf("connection string: %w", err)
 	}
 
+	if err := ensureVerifiedReaperClient(ctx); err != nil {
+		return "", fmt.Errorf("verify reaper client registration: %w", err)
+	}
+
 	return dsn, nil
+}
+
+// 같은 go test 호출의 테스트 바이너리들은 testcontainers 세션(parent pid 기반)을 공유해
+// reaper(Ryuk) 컨테이너 1개를 같이 쓴다. 여러 바이너리가 첫 컨테이너 생성을 동시에 시작하면
+// reaper 기동과 재사용 조회가 경합해 늦게 진입한 프로세스의 reaper 연결이 소리 없이 유실되고,
+// Ryuk이 클라이언트 0으로 오판해 reconnection timeout(10s) 뒤 실행 중인 다른 바이너리의
+// PG 컨테이너까지 세션 라벨로 일괄 회수한다. 첫 프로비저닝을 세션 단위 flock으로 직렬화해
+// reaper가 완전히 기동한 뒤에만 후속 프로세스가 진입하게 한다.
+func lockSessionProvisioning() (func() error, error) {
+	path := filepath.Join(os.TempDir(), "dbtest-provision-"+testcontainers.SessionID()+".lock")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // TempDir와 내부 session ID로만 구성되는 test lock path입니다.
+	if err != nil {
+		return nil, fmt.Errorf("open lock file %s: %w", path, err)
+	}
+	if flockErr := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); flockErr != nil {
+		err := fmt.Errorf("flock %s: %w", path, flockErr)
+		if closeErr := file.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close lock file: %w", closeErr))
+		}
+		return nil, err
+	}
+	return func() error {
+		if closeErr := file.Close(); closeErr != nil {
+			return fmt.Errorf("close lock file %s: %w", path, closeErr)
+		}
+		return nil
+	}, nil
 }
 
 func startPostgresContainer(ctx context.Context, image string) (*postgres.PostgresContainer, error) {
