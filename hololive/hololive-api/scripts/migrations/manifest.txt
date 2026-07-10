@@ -100,3 +100,4 @@
 100 104_update_broadcast_history_help.sql
 101 105_reseed_broadcast_history_help.sql
 102 106_seed_member_search_aliases.sql
+103 107_seed_notification_birthday_stream_template.sql

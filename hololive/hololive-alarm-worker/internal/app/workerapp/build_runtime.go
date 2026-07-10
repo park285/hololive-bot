@@ -86,22 +86,28 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		return failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
-	servers, celebRunner, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
+	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
 	if err != nil {
 		return failAlarmWorkerBuild(infra, stage, err)
 	}
 
 	return &AlarmWorkerRuntime{
-		Config:             appConfig,
-		Logger:             logger,
-		Scheduler:          scheduler,
-		NotificationEgress: notificationEgress,
-		CelebrationRunner:  celebRunner,
-		ConfigSubscriber:   BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmCRUD, logger),
-		ServerAddr:         servers.Addr(),
-		HTTPServers:        servers,
-		Managed:            lifecycle.NewManaged(infra.Cleanup),
+		Config:               appConfig,
+		Logger:               logger,
+		Scheduler:            scheduler,
+		NotificationEgress:   notificationEgress,
+		CelebrationRunner:    backgroundRunners.celebration,
+		BirthdayStreamRunner: backgroundRunners.birthdayStream,
+		ConfigSubscriber:     BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmCRUD, logger),
+		ServerAddr:           servers.Addr(),
+		HTTPServers:          servers,
+		Managed:              lifecycle.NewManaged(infra.Cleanup),
 	}, nil
+}
+
+type alarmWorkerBackgroundRunners struct {
+	celebration    runtimeAlarmScheduler
+	birthdayStream runtimeAlarmScheduler
 }
 
 func buildAlarmWorkerHTTPRuntime(
@@ -110,7 +116,7 @@ func buildAlarmWorkerHTTPRuntime(
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
-) (servers *sharedserver.RuntimeHTTPServers, scheduler runtimeAlarmScheduler, stage string, err error) {
+) (servers *sharedserver.RuntimeHTTPServers, runners alarmWorkerBackgroundRunners, stage string, err error) {
 	readyProbe := newAlarmWorkerReadyProbe(infra)
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:                 appConfig.Server.APIKey,
@@ -123,21 +129,24 @@ func buildAlarmWorkerHTTPRuntime(
 		),
 	})
 	if err != nil {
-		return nil, nil, "router", err
+		return nil, alarmWorkerBackgroundRunners{}, "router", err
 	}
 
 	publishConfig, err := loadAlarmDispatchPublishConfig()
 	if err != nil {
-		return nil, nil, "celebration publish config", err
+		return nil, alarmWorkerBackgroundRunners{}, "celebration publish config", err
 	}
-	celebRunner := buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger)
+	runners = alarmWorkerBackgroundRunners{
+		celebration:    buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger),
+		birthdayStream: buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger),
+	}
 
 	servers, err = sharedserver.NewRuntimeHTTPServers(&appConfig.Server, router, "hololive-alarm-worker.http")
 	if err != nil {
-		return nil, nil, "http servers", err
+		return nil, alarmWorkerBackgroundRunners{}, "http servers", err
 	}
 
-	return servers, celebRunner, "", nil
+	return servers, runners, "", nil
 }
 
 func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *readiness.Probe {
@@ -381,5 +390,42 @@ func buildCelebrationRunnerScheduler(
 		logger:       logger,
 		checkHourKST: parseNonNegativeIntEnv("CELEBRATION_CHECK_HOUR_KST", 0),
 		runInterval:  parsePositiveDurationMSEnv("CELEBRATION_RUN_INTERVAL_MS", time.Hour),
+	}
+}
+
+func buildBirthdayStreamRunnerScheduler(
+	infra *sharedmodules.InfraModule,
+	foundation *alarmFoundation,
+	publishConfig queue.PublishConfig,
+	logger *slog.Logger,
+) runtimeAlarmScheduler {
+	if !parseBoolEnv("BIRTHDAY_STREAM_RUNNER_ENABLED", false) {
+		if logger != nil {
+			logger.Info("Birthday stream runner disabled")
+		}
+		return nil
+	}
+	if infra == nil || infra.Postgres == nil {
+		return nil
+	}
+
+	memberRepo := member.NewMemberRepository(infra.Postgres, logger)
+	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
+	publisher := queue.NewPublisher(
+		infra.Cache,
+		logger,
+		queue.WithOutbox(foundation.Outbox),
+		queue.WithWakeupEnabled(publishConfig.WakeupEnabled),
+		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
+	)
+
+	return &birthdayStreamRunner{
+		memberRepo:       memberRepo,
+		alarmRepo:        alarmRepo,
+		sessions:         &birthdayStreamPgxStore{db: infra.Postgres.GetPool()},
+		publisher:        publisher,
+		logger:           logger,
+		runInterval:      parsePositiveDurationMSEnv("BIRTHDAY_STREAM_POLL_INTERVAL_MS", 30*time.Minute),
+		sessionFreshness: parsePositiveDurationMSEnv("BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", 30*time.Minute),
 	}
 }

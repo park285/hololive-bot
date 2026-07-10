@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
@@ -47,12 +48,13 @@ type AlarmWorkerRuntime struct {
 	Config *config.Config
 	Logger *slog.Logger
 
-	Scheduler          runtimeAlarmScheduler
-	NotificationEgress runtimeAlarmScheduler
-	CelebrationRunner  runtimeAlarmScheduler
-	ConfigSubscriber   *configsub.Subscriber
-	ServerAddr         string
-	HTTPServers        *sharedserver.RuntimeHTTPServers
+	Scheduler            runtimeAlarmScheduler
+	NotificationEgress   runtimeAlarmScheduler
+	CelebrationRunner    runtimeAlarmScheduler
+	BirthdayStreamRunner runtimeAlarmScheduler
+	ConfigSubscriber     *configsub.Subscriber
+	ServerAddr           string
+	HTTPServers          *sharedserver.RuntimeHTTPServers
 
 	schedulerMu     sync.Mutex
 	schedulerCancel context.CancelFunc
@@ -188,23 +190,27 @@ func (r notificationEgressRunner) handleLeaseRenewLoopResult(err error) error {
 
 func (r notificationEgressRunner) startRunnerGroup(ctx context.Context, runners []namedRuntimeScheduler) <-chan error {
 	ch := make(chan error, 1)
-	go func() {
-		eg, egCtx := errgroup.WithContext(ctx)
-		for _, runner := range runners {
-			eg.Go(func() error {
-				return runner.scheduler.Start(egCtx)
-			})
-		}
-		ch <- eg.Wait()
-	}()
+	panicguard.Go(r.logger, "notification-egress-runner-group", func() {
+		ch <- panicguard.RunE(r.logger, "notification-egress-runner-group", func() error {
+			eg, egCtx := errgroup.WithContext(ctx)
+			for _, runner := range runners {
+				panicguard.GoE(eg, r.logger, "notification-egress-"+runner.name, func() error {
+					return runner.scheduler.Start(egCtx)
+				})
+			}
+			return eg.Wait()
+		})
+	})
 	return ch
 }
 
 func (r notificationEgressRunner) startLeaseRenewLoop(ctx context.Context, lease *egress.NotificationEgressLease) <-chan error {
 	ch := make(chan error, 1)
-	go func() {
-		ch <- lease.RenewLoop(ctx)
-	}()
+	panicguard.Go(r.logger, "notification-egress-lease-renew", func() {
+		ch <- panicguard.RunE(r.logger, "notification-egress-lease-renew", func() error {
+			return lease.RenewLoop(ctx)
+		})
+	})
 	return ch
 }
 

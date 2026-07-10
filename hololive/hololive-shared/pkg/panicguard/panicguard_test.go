@@ -5,11 +5,23 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type testErrorGroup struct {
+	err chan error
+	wg  sync.WaitGroup
+}
+
+func (g *testErrorGroup) Go(fn func() error) {
+	g.wg.Go(func() {
+		g.err <- fn()
+	})
+}
 
 func bufferLogger() (*slog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
@@ -108,4 +120,33 @@ func TestRun_StackIncludesGoroutineFrame(t *testing.T) {
 
 	assert.True(t, strings.Contains(buf.String(), "panicguard.Run"),
 		"stack should reference the guard frame, got: %s", buf.String())
+}
+
+func TestGo_StartsGuardedGoroutine(t *testing.T) {
+	t.Parallel()
+
+	logger, buf := bufferLogger()
+	done := make(chan struct{})
+	Go(logger, "async", func() {
+		close(done)
+	})
+	<-done
+
+	assert.Empty(t, buf.String())
+}
+
+func TestGoE_ReportsRecoveredPanicToGroup(t *testing.T) {
+	t.Parallel()
+
+	logger, buf := bufferLogger()
+	group := &testErrorGroup{err: make(chan error, 1)}
+	GoE(group, logger, "grouped", func() error {
+		panic("group panic")
+	})
+
+	err := <-group.err
+	group.wg.Wait()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "group panic")
+	assert.Contains(t, buf.String(), "guard=grouped")
 }

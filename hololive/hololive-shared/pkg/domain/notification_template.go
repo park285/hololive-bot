@@ -73,8 +73,9 @@ const (
 	TemplateKeyCmdMajorEventStatus         TemplateKey = "CMD_MAJOR_EVENT_STATUS"
 	TemplateKeyCmdMajorEventUsage          TemplateKey = "CMD_MAJOR_EVENT_USAGE"
 
-	TemplateKeyCelebrationBirthday    TemplateKey = "CELEBRATION_BIRTHDAY"
-	TemplateKeyCelebrationAnniversary TemplateKey = "CELEBRATION_ANNIVERSARY"
+	TemplateKeyCelebrationBirthday       TemplateKey = "CELEBRATION_BIRTHDAY"
+	TemplateKeyCelebrationAnniversary    TemplateKey = "CELEBRATION_ANNIVERSARY"
+	TemplateKeyCelebrationBirthdayStream TemplateKey = "CELEBRATION_BIRTHDAY_STREAM"
 
 	// CMD_MEMBER_NEWS_* : 구독 멤버 뉴스
 	TemplateKeyCmdMemberNewsDigest       TemplateKey = "CMD_MEMBER_NEWS_DIGEST"

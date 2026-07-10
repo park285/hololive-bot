@@ -76,6 +76,7 @@ func GetAllTemplateKeys() []TemplateKey {
 		TemplateKeyCmdAmbiguousMember,
 		TemplateKeyCelebrationBirthday,
 		TemplateKeyCelebrationAnniversary,
+		TemplateKeyCelebrationBirthdayStream,
 		TemplateKeyAlarmDispatchNotification,
 		TemplateKeyAlarmDispatchNotificationGroup,
 		TemplateKeyCmdMajorEventWeeklySummary,

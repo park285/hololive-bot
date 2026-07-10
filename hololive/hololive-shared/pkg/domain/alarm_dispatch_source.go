@@ -157,6 +157,9 @@ func (e *AlarmQueueEnvelope) validateCelebrationDispatch() error {
 	if e.Celebration.Date == "" {
 		return fmt.Errorf("canonical alarm dispatch: celebration date is empty")
 	}
+	if e.Celebration.Kind == CelebrationKindBirthdayStream && strings.TrimSpace(e.Celebration.VideoID) == "" {
+		return fmt.Errorf("canonical alarm dispatch: celebration birthday stream video id is empty")
+	}
 	return nil
 }
 

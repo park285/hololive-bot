@@ -70,11 +70,15 @@ func alarmDispatchGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 		return ""
 	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
-		return fmt.Sprintf("%s|celebration|%s|%s",
+		key := fmt.Sprintf("%s|celebration|%s|%s",
 			envelope.Notification.RoomID,
 			envelope.Celebration.Kind,
 			envelope.Celebration.ChannelID,
 		)
+		if envelope.Celebration.VideoID != "" {
+			key += "|" + envelope.Celebration.VideoID
+		}
+		return key
 	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		return fmt.Sprintf("%s|source|%s|%s|%s|%s",

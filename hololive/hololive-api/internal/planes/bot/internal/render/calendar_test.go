@@ -484,6 +484,27 @@ func TestEntryDisplayName(t *testing.T) {
 	}
 }
 
+func TestBirthdayStreamKindIsInertInCalendar(t *testing.T) {
+	t.Parallel()
+
+	birthday, anniversary := countByKind([]domain.CalendarEntry{
+		{Kind: domain.CelebrationKindBirthday},
+		{Kind: domain.CelebrationKindBirthdayStream},
+	})
+	if birthday != 1 || anniversary != 0 {
+		t.Fatalf("countByKind() = (%d, %d), want (1, 0)", birthday, anniversary)
+	}
+
+	m := newCalendarMetrics(1)
+	style := resolveEntryStyle(&m, domain.CalendarEntry{Kind: domain.CelebrationKindBirthdayStream})
+	if style.badgeText != "" {
+		t.Fatalf("badgeText = %q, want empty for dispatch-only kind", style.badgeText)
+	}
+	if style.accent == colAmber600 {
+		t.Fatal("birthday_stream must not reuse the birthday style")
+	}
+}
+
 func assertValidPNG(t *testing.T, data []byte) {
 	t.Helper()
 

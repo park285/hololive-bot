@@ -26,6 +26,21 @@ import (
 	"runtime/debug"
 )
 
+type ErrorGroup interface {
+	Go(func() error)
+}
+
+func Go(logger *slog.Logger, name string, fn func()) {
+	go Run(logger, name, fn)
+}
+
+func GoE(group ErrorGroup, logger *slog.Logger, name string, fn func() error) {
+	// crosscutting:allow 모든 errgroup 작업을 아래 RunE recovery 경계로 위임한다.
+	group.Go(func() error {
+		return RunE(logger, name, fn)
+	})
+}
+
 func Run(logger *slog.Logger, name string, fn func()) {
 	defer func() {
 		if r := recover(); r != nil {

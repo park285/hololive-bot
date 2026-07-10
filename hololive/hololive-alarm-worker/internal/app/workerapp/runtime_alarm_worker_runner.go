@@ -24,6 +24,7 @@ import (
 	"context"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -59,18 +60,23 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) error {
 	eg, egCtx := errgroup.WithContext(ctx)
 	if r.Scheduler != nil {
-		eg.Go(func() error {
+		panicguard.GoE(eg, r.Logger, "alarm-worker-scheduler", func() error {
 			return r.Scheduler.Start(egCtx)
 		})
 	}
 	if r.NotificationEgress != nil {
-		eg.Go(func() error {
+		panicguard.GoE(eg, r.Logger, "alarm-worker-notification-egress", func() error {
 			return r.NotificationEgress.Start(egCtx)
 		})
 	}
 	if r.CelebrationRunner != nil {
-		eg.Go(func() error {
+		panicguard.GoE(eg, r.Logger, "alarm-worker-celebration", func() error {
 			return r.CelebrationRunner.Start(egCtx)
+		})
+	}
+	if r.BirthdayStreamRunner != nil {
+		panicguard.GoE(eg, r.Logger, "alarm-worker-birthday-stream", func() error {
+			return r.BirthdayStreamRunner.Start(egCtx)
 		})
 	}
 	return eg.Wait()

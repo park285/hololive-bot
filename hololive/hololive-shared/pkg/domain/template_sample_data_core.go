@@ -47,6 +47,15 @@ func addTemplateCelebrationSamples(data map[TemplateKey]any) {
 		ChannelID:  "UCp6993wxpyDPHUpavwDFqgg",
 		Years:      7,
 	}
+	data[TemplateKeyCelebrationBirthdayStream] = &CelebrationDispatchPayload{
+		Kind:              CelebrationKindBirthdayStream,
+		MemberName:        "시라카미 후부키",
+		ChannelID:         "UCdn5BQ06XqgXoAxIhbqw5Rg",
+		VideoID:           "birthday-stream-1",
+		StreamTitle:       "【생일 방송】후부키 생일 기념 라이브!",
+		StreamURL:         "https://www.youtube.com/watch?v=birthday-stream-1",
+		ScheduledStartKST: "21:00",
+	}
 }
 
 func addTemplateMemberLookupSamples(data map[TemplateKey]any) {

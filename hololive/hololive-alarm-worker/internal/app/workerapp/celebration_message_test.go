@@ -69,6 +69,45 @@ func TestRenderCelebrationMessageAnniversary(t *testing.T) {
 	assert.Equal(t, "🎉 토키노 소라 데뷔 7주년 축하합니다!\nhttps://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg", msg)
 }
 
+func TestRenderCelebrationMessageBirthdayStream(t *testing.T) {
+	t.Parallel()
+
+	renderer := newCelebrationTestRenderer(t)
+	envelope := domain.AlarmQueueEnvelope{
+		Celebration: &domain.CelebrationDispatchPayload{
+			Kind:              domain.CelebrationKindBirthdayStream,
+			MemberName:        "시라카미 후부키",
+			ChannelID:         "UCdn5BQ06XqgXoAxIhbqw5Rg",
+			VideoID:           "video-1",
+			StreamTitle:       "【생일 방송】후부키 생일 기념 라이브!",
+			StreamURL:         "https://www.youtube.com/watch?v=video-1",
+			ScheduledStartKST: "21:00",
+		},
+	}
+
+	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
+	require.NoError(t, err)
+	assert.Equal(t, "🎂 시라카미 후부키 생일 방송 일정이 잡혔습니다!\n【생일 방송】후부키 생일 기념 라이브!\n⏰ 21:00\nhttps://www.youtube.com/watch?v=video-1", msg)
+}
+
+func TestRenderCelebrationMessageBirthdayStreamWithoutOptionalFields(t *testing.T) {
+	t.Parallel()
+
+	renderer := newCelebrationTestRenderer(t)
+	envelope := domain.AlarmQueueEnvelope{
+		Celebration: &domain.CelebrationDispatchPayload{
+			Kind:       domain.CelebrationKindBirthdayStream,
+			MemberName: "시라카미 후부키",
+			ChannelID:  "UCdn5BQ06XqgXoAxIhbqw5Rg",
+			VideoID:    "video-1",
+		},
+	}
+
+	msg, err := renderCelebrationMessage(t.Context(), renderer, &envelope)
+	require.NoError(t, err)
+	assert.Equal(t, "🎂 시라카미 후부키 생일 방송 일정이 잡혔습니다!", msg)
+}
+
 func TestRenderCelebrationMessageNilPayload(t *testing.T) {
 	t.Parallel()
 
@@ -141,6 +180,44 @@ func TestAlarmDispatchGroupKeyCelebrationPerMember(t *testing.T) {
 	assert.Len(t, groups, 2)
 }
 
+func TestAlarmDispatchGroupKeyCelebrationBirthdayStreamVideoID(t *testing.T) {
+	t.Parallel()
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeBirthday},
+		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
+		Celebration: &domain.CelebrationDispatchPayload{
+			Kind:      domain.CelebrationKindBirthdayStream,
+			ChannelID: "UC_test",
+			VideoID:   "video-1",
+		},
+	}
+
+	got := alarmDispatchGroupKey(&envelope)
+	assert.Equal(t, "room-1|celebration|birthday_stream|UC_test|video-1", got)
+}
+
+func TestAlarmDispatchGroupKeyCelebrationPerVideo(t *testing.T) {
+	t.Parallel()
+
+	frame := func(videoID string) domain.AlarmQueueEnvelope {
+		return domain.AlarmQueueEnvelope{
+			Notification: domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeBirthday},
+			SourceKind:   domain.AlarmDispatchSourceKindCelebration,
+			Celebration: &domain.CelebrationDispatchPayload{
+				Kind:      domain.CelebrationKindBirthdayStream,
+				ChannelID: "UC_a",
+				VideoID:   videoID,
+			},
+		}
+	}
+
+	groups := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{frame("video-1"), frame("video-2"), frame("video-1")})
+	require.Len(t, groups, 2)
+	assert.Len(t, groups[0].envelopes, 2)
+	assert.Len(t, groups[1].envelopes, 1)
+}
+
 func TestAlarmDispatchKaringGroupKeyCelebrationDelegates(t *testing.T) {
 	t.Parallel()
 
@@ -148,6 +225,14 @@ func TestAlarmDispatchKaringGroupKeyCelebrationDelegates(t *testing.T) {
 		Notification: domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeBirthday},
 		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
 		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: "UC_test"},
+	}
+
+	assert.Equal(t, alarmDispatchGroupKey(&envelope), alarmDispatchKaringGroupKey(&envelope))
+
+	envelope.Celebration = &domain.CelebrationDispatchPayload{
+		Kind:      domain.CelebrationKindBirthdayStream,
+		ChannelID: "UC_test",
+		VideoID:   "video-1",
 	}
 
 	assert.Equal(t, alarmDispatchGroupKey(&envelope), alarmDispatchKaringGroupKey(&envelope))

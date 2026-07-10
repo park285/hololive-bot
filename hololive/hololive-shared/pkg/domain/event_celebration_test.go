@@ -35,6 +35,65 @@ func TestCelebrationDispatchPayload_IdentityAnniversary(t *testing.T) {
 	}
 }
 
+func TestCelebrationDispatchPayload_IdentityBirthdayStream(t *testing.T) {
+	t.Parallel()
+
+	p := &domain.CelebrationDispatchPayload{
+		Kind:      domain.CelebrationKindBirthdayStream,
+		ChannelID: "UC_test",
+		Date:      "2026-07-10",
+		VideoID:   "vid123",
+	}
+	want := "birthday_stream:UC_test:2026-07-10:vid123"
+	if got := p.Identity(); got != want {
+		t.Fatalf("Identity() = %q, want %q", got, want)
+	}
+}
+
+func TestCelebrationDispatchPayload_IdentityBirthdayIgnoresVideoID(t *testing.T) {
+	t.Parallel()
+
+	p := &domain.CelebrationDispatchPayload{
+		Kind:      domain.CelebrationKindBirthday,
+		ChannelID: "UC_test",
+		Date:      "2026-05-26",
+		VideoID:   "vid123",
+	}
+	want := "birthday:UC_test:2026-05-26"
+	if got := p.Identity(); got != want {
+		t.Fatalf("Identity() = %q, want %q", got, want)
+	}
+}
+
+func TestCelebrationDispatchPayload_IdentityBirthdayStreamTrimsVideoID(t *testing.T) {
+	t.Parallel()
+
+	p := &domain.CelebrationDispatchPayload{
+		Kind:      domain.CelebrationKindBirthdayStream,
+		ChannelID: "UC_test",
+		Date:      "2026-07-10",
+		VideoID:   " vid123 ",
+	}
+	want := "birthday_stream:UC_test:2026-07-10:vid123"
+	if got := p.Identity(); got != want {
+		t.Fatalf("Identity() = %q, want %q", got, want)
+	}
+}
+
+func TestCelebrationDispatchPayload_IdentityBirthdayStreamEmptyVideoID(t *testing.T) {
+	t.Parallel()
+
+	p := &domain.CelebrationDispatchPayload{
+		Kind:      domain.CelebrationKindBirthdayStream,
+		ChannelID: "UC_test",
+		Date:      "2026-07-10",
+	}
+	want := "birthday_stream:UC_test:2026-07-10"
+	if got := p.Identity(); got != want {
+		t.Fatalf("Identity() = %q, want %q", got, want)
+	}
+}
+
 func TestAlarmTypeBirthday_IsValid(t *testing.T) {
 	t.Parallel()
 
@@ -185,5 +244,43 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_Celebration(t *testing.T) 
 	}
 	if err := noDate.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for empty date")
+	}
+}
+
+func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_BirthdayStream(t *testing.T) {
+	t.Parallel()
+
+	valid := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeBirthday,
+			RoomID:    "room-1",
+		},
+		SourceKind: domain.AlarmDispatchSourceKindCelebration,
+		Celebration: &domain.CelebrationDispatchPayload{
+			Kind:       domain.CelebrationKindBirthdayStream,
+			MemberName: "Test",
+			ChannelID:  "UC_test",
+			Date:       "2026-07-10",
+			VideoID:    "vid123",
+		},
+	}
+	if err := valid.ValidateCanonicalDispatch(); err != nil {
+		t.Fatalf("ValidateCanonicalDispatch() = %v, want nil", err)
+	}
+
+	noVideoID := valid
+	payload := *valid.Celebration
+	payload.VideoID = ""
+	noVideoID.Celebration = &payload
+	if err := noVideoID.ValidateCanonicalDispatch(); err == nil {
+		t.Fatal("ValidateCanonicalDispatch() = nil, want error for empty birthday stream video id")
+	}
+
+	blankVideoID := valid
+	blankPayload := *valid.Celebration
+	blankPayload.VideoID = "   "
+	blankVideoID.Celebration = &blankPayload
+	if err := blankVideoID.ValidateCanonicalDispatch(); err == nil {
+		t.Fatal("ValidateCanonicalDispatch() = nil, want error for whitespace birthday stream video id")
 	}
 }

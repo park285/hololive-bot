@@ -21,6 +21,8 @@ func renderCelebrationMessage(ctx context.Context, renderer *template.Renderer, 
 			return "", fmt.Errorf("render celebration: anniversary years must be positive, got %d", p.Years)
 		}
 		return renderer.Render(ctx, domain.TemplateKeyCelebrationAnniversary, "", p)
+	case domain.CelebrationKindBirthdayStream:
+		return renderer.Render(ctx, domain.TemplateKeyCelebrationBirthdayStream, "", p)
 	default:
 		return "", fmt.Errorf("render celebration: unknown kind %q", p.Kind)
 	}
