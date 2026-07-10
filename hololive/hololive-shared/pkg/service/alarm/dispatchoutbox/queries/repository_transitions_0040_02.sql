@@ -9,4 +9,3 @@
 		WHERE id = ANY($1)
 		  AND status = 'sending'
 		  AND locked_by = $2
-		  AND lock_expires_at > NOW()

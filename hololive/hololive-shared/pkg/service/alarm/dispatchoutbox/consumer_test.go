@@ -30,8 +30,55 @@ func TestConsumerDrainBatch_QuarantinesStaleSendingBeforeClaiming(t *testing.T) 
 	if repository.quarantineStaleSendingCalls != 1 {
 		t.Fatalf("QuarantineStaleSending calls = %d, want 1", repository.quarantineStaleSendingCalls)
 	}
-	if repository.quarantineOlderThan != 30*time.Second {
-		t.Fatalf("QuarantineStaleSending olderThan = %v, want 30s", repository.quarantineOlderThan)
+	if repository.quarantineOlderThan != 90*time.Second {
+		t.Fatalf("QuarantineStaleSending olderThan = %v, want 90s (3x lease default)", repository.quarantineOlderThan)
+	}
+}
+
+func TestConsumerQuarantineThresholdSeparatedFromLease(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		opts []ConsumerOption
+		want time.Duration
+	}{
+		{
+			name: "default is 3x lease",
+			opts: []ConsumerOption{WithLease(45 * time.Second)},
+			want: 135 * time.Second,
+		},
+		{
+			name: "explicit threshold overrides default",
+			opts: []ConsumerOption{WithLease(60 * time.Second), WithQuarantineThreshold(5 * time.Minute)},
+			want: 5 * time.Minute,
+		},
+		{
+			name: "threshold below lease is clamped to lease",
+			opts: []ConsumerOption{WithLease(60 * time.Second), WithQuarantineThreshold(10 * time.Second)},
+			want: 60 * time.Second,
+		},
+		{
+			name: "option order does not matter",
+			opts: []ConsumerOption{WithQuarantineThreshold(4 * time.Minute), WithLease(30 * time.Second)},
+			want: 4 * time.Minute,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repository := &consumerTestRepository{}
+			opts := append([]ConsumerOption{WithWorkerID("worker-1")}, tc.opts...)
+			consumer := NewConsumer(repository, slog.Default(), opts...)
+
+			if _, err := consumer.DrainBatch(context.Background(), 10); err != nil {
+				t.Fatalf("DrainBatch() error = %v", err)
+			}
+			if repository.quarantineOlderThan != tc.want {
+				t.Fatalf("QuarantineStaleSending olderThan = %v, want %v", repository.quarantineOlderThan, tc.want)
+			}
+		})
 	}
 }
 
@@ -101,8 +148,8 @@ func TestConsumerDrainBatch_RecoveryRowsUseLeasedAndSendingMetricLabels(t *testi
 			return 2, nil
 		},
 		quarantineStaleSendingFunc: func(ctx context.Context, olderThan time.Duration, limit int) (int, error) {
-			if olderThan != 45*time.Second {
-				t.Fatalf("QuarantineStaleSending olderThan = %v, want 45s", olderThan)
+			if olderThan != 135*time.Second {
+				t.Fatalf("QuarantineStaleSending olderThan = %v, want 135s (3x lease default)", olderThan)
 			}
 			if limit != 7 {
 				t.Fatalf("QuarantineStaleSending limit = %d, want 7", limit)
@@ -200,6 +247,23 @@ func TestConsumerMarkDispatchedPassesWorkerID(t *testing.T) {
 
 	if repository.markSentWorkerID != "worker-1" {
 		t.Fatalf("MarkSent workerID = %q, want worker-1", repository.markSentWorkerID)
+	}
+}
+
+func TestConsumerMarkDispatchedPropagatesPostSendOwnershipChange(t *testing.T) {
+	t.Parallel()
+
+	partialErr := &PartialTransitionError{Action: "mark sent", Updated: 0, Expected: 1}
+	repository := &consumerTestRepository{
+		markSentFunc: func(context.Context, []int64, string) error {
+			return partialErr
+		},
+	}
+	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+
+	err := consumer.MarkDispatched(context.Background(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}})
+	if !errors.Is(err, partialErr) {
+		t.Fatalf("MarkDispatched() error = %v, want %v", err, partialErr)
 	}
 }
 
@@ -320,6 +384,7 @@ func mustMarshalTestEnvelope(t *testing.T, envelope *domain.AlarmQueueEnvelope) 
 type consumerTestRepository struct {
 	claimDueFunc                func(ctx context.Context, workerID string, limit int, lease time.Duration) ([]*Record, error)
 	markSendingFunc             func(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error
+	markSentFunc                func(ctx context.Context, ids []int64, workerID string) error
 	recoverExpiredLeasedFunc    func(context.Context, int) (int, error)
 	quarantineStaleSendingFunc  func(context.Context, time.Duration, int) (int, error)
 	events                      map[int64]EventRecord
@@ -365,6 +430,9 @@ func (r *consumerTestRepository) MarkSending(ctx context.Context, ids []int64, w
 
 func (r *consumerTestRepository) MarkSent(ctx context.Context, ids []int64, workerID string) error {
 	r.markSentWorkerID = workerID
+	if r.markSentFunc != nil {
+		return r.markSentFunc(ctx, ids, workerID)
+	}
 	return nil
 }
 

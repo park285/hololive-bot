@@ -1,12 +1,13 @@
 package dispatchoutbox
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-func TestWarnRowsAffected_PartialBatchReturnsNilForPostSendTransitions(t *testing.T) {
+func TestValidatePostSendRowsAffected_ReturnsTypedPartialError(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -28,25 +29,34 @@ func TestWarnRowsAffected_PartialBatchReturnsNilForPostSendTransitions(t *testin
 			wantErr: false,
 		},
 		{
-			name:    "partial match returns nil for post-send transition",
+			name:    "partial match returns observable post-send error",
 			got:     1,
 			want:    3,
-			wantErr: false,
+			wantErr: true,
 		},
 		{
-			name:    "zero rows out of many returns nil for post-send transition",
+			name:    "zero rows out of many returns observable post-send error",
 			got:     0,
 			want:    5,
-			wantErr: false,
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := warnRowsAffected(tc.got, tc.want, "test action", nil)
+			err := validatePostSendRowsAffected(tc.got, tc.want, "test action", nil)
 			if (err != nil) != tc.wantErr {
-				t.Errorf("warnRowsAffected(%d, %d) error = %v, wantErr %v", tc.got, tc.want, err, tc.wantErr)
+				t.Errorf("validatePostSendRowsAffected(%d, %d) error = %v, wantErr %v", tc.got, tc.want, err, tc.wantErr)
+			}
+			if tc.wantErr {
+				var partialErr *PartialTransitionError
+				if !errors.As(err, &partialErr) {
+					t.Fatalf("error = %T %v, want *PartialTransitionError", err, err)
+				}
+				if partialErr.Updated != tc.got || partialErr.Expected != int64(tc.want) {
+					t.Fatalf("PartialTransitionError = %+v, want updated=%d expected=%d", partialErr, tc.got, tc.want)
+				}
 			}
 		})
 	}
@@ -64,29 +74,33 @@ func TestExpectRowsAffected_BlocksPartialMarkSending_140eb6c4(t *testing.T) {
 	requireNoError(t, expectRowsAffected(3, 3, "mark dispatch deliveries sending"))
 }
 
-func TestWarnRowsAffected_EmitsMetricOnPartial(t *testing.T) {
+func TestValidatePostSendRowsAffected_EmitsMetricOnPartial(t *testing.T) {
 	before := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal)
 
 	// exact match — metric 증가 없음
-	requireNoError(t, warnRowsAffected(3, 3, "mark sent", nil))
+	requireNoError(t, validatePostSendRowsAffected(3, 3, "mark sent", nil))
 	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before {
 		t.Errorf("exact match incremented metric: got %v, want %v", got, before)
 	}
 
 	// zero-of-zero — metric 증가 없음
-	requireNoError(t, warnRowsAffected(0, 0, "mark sending", nil))
+	requireNoError(t, validatePostSendRowsAffected(0, 0, "mark sending", nil))
 	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before {
 		t.Errorf("zero-of-zero incremented metric: got %v, want %v", got, before)
 	}
 
 	// partial — metric 1 증가
-	requireNoError(t, warnRowsAffected(1, 3, "mark sent", nil))
+	if err := validatePostSendRowsAffected(1, 3, "mark sent", nil); err == nil {
+		t.Fatal("partial update error = nil")
+	}
 	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before+1 {
 		t.Errorf("partial did not increment metric: got %v, want %v", got, before+1)
 	}
 
 	// 0-of-many — metric 또 1 증가
-	requireNoError(t, warnRowsAffected(0, 5, "mark sending", nil))
+	if err := validatePostSendRowsAffected(0, 5, "mark sending", nil); err == nil {
+		t.Fatal("zero-of-many update error = nil")
+	}
 	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before+2 {
 		t.Errorf("zero-of-many did not increment metric: got %v, want %v", got, before+2)
 	}

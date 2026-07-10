@@ -20,6 +20,17 @@ type PgxRepository struct {
 	logger *slog.Logger
 }
 
+// PartialTransitionError는 외부 발송 뒤 ownership fence가 일부 행과 일치하지 않았음을 나타낸다.
+type PartialTransitionError struct {
+	Action   string
+	Updated  int64
+	Expected int64
+}
+
+func (e *PartialTransitionError) Error() string {
+	return fmt.Sprintf("%s: ownership changed after external send: updated %d of %d rows", e.Action, e.Updated, e.Expected)
+}
+
 func NewPgxRepository(postgres database.Client, logger *slog.Logger) *PgxRepository {
 	if logger == nil {
 		logger = slog.Default()

@@ -13,15 +13,16 @@ import (
 )
 
 type Consumer struct {
-	repository        Repository
-	claimReleaser     ClaimKeyReleaser
-	workerID          string
-	lease             time.Duration
-	recoveryBatchSize int
-	recoveryInterval  time.Duration
-	lastRecoveryAt    time.Time
-	logger            *slog.Logger
-	now               func() time.Time
+	repository          Repository
+	claimReleaser       ClaimKeyReleaser
+	workerID            string
+	lease               time.Duration
+	quarantineThreshold time.Duration
+	recoveryBatchSize   int
+	recoveryInterval    time.Duration
+	lastRecoveryAt      time.Time
+	logger              *slog.Logger
+	now                 func() time.Time
 }
 
 type ConsumerOption func(*Consumer)
@@ -38,6 +39,14 @@ func WithLease(lease time.Duration) ConsumerOption {
 	return func(c *Consumer) {
 		if lease > 0 {
 			c.lease = lease
+		}
+	}
+}
+
+func WithQuarantineThreshold(threshold time.Duration) ConsumerOption {
+	return func(c *Consumer) {
+		if threshold > 0 {
+			c.quarantineThreshold = threshold
 		}
 	}
 }
@@ -73,6 +82,14 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 	}
 	for _, opt := range opts {
 		opt(consumer)
+	}
+	// 그룹 발송(karing 최대 13회 순차 HTTP)이 lease를 초과할 수 있어, threshold가
+	// lease와 같으면 진행 중인 발송을 quarantine으로 회수해 버린다.
+	if consumer.quarantineThreshold <= 0 {
+		consumer.quarantineThreshold = 3 * consumer.lease
+	}
+	if consumer.quarantineThreshold < consumer.lease {
+		consumer.quarantineThreshold = consumer.lease
 	}
 	return consumer
 }
@@ -201,7 +218,7 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 	} else {
 		observeRecoveryRows(recoveryTypeLeased, recoveredLeased)
 	}
-	recoveredSending, sendingErr := c.repository.QuarantineStaleSending(ctx, c.lease, c.recoveryBatchSize)
+	recoveredSending, sendingErr := c.repository.QuarantineStaleSending(ctx, c.quarantineThreshold, c.recoveryBatchSize)
 	if sendingErr != nil {
 		observeRecoveryFailure(recoveryTypeSending)
 		c.logger.Warn("Quarantine stale sending dispatch rows failed", slog.Any("error", sendingErr))

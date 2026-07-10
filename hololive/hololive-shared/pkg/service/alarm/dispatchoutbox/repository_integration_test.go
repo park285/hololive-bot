@@ -4,6 +4,7 @@ package dispatchoutbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,9 +62,9 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 		t.Fatalf("create alarm_type: %v", err)
 	}
 	for _, migration := range []string{
-		"hololive/hololive-kakao-bot-go/scripts/migrations/058_create_alarm_dispatch_outbox.sql",
-		"hololive/hololive-kakao-bot-go/scripts/migrations/059_harden_alarm_dispatch_outbox.sql",
-		"hololive/hololive-kakao-bot-go/scripts/migrations/065_record_alarm_dispatch_event_collisions.sql",
+		"hololive/hololive-api/scripts/migrations/058_create_alarm_dispatch_outbox.sql",
+		"hololive/hololive-api/scripts/migrations/059_harden_alarm_dispatch_outbox.sql",
+		"hololive/hololive-api/scripts/migrations/065_record_alarm_dispatch_event_collisions.sql",
 	} {
 		sql := readRepoMigration(t, migration)
 		if _, err := pool.Exec(ctx, sql); err != nil {
@@ -1007,6 +1008,135 @@ func TestPgxRepositoryScheduleSendingRetry_ExpiredLeaseStillTransitions(t *testi
 	).Scan(&finalStatus, &lockedBy))
 	require.Equal(t, string(StatusRetry), finalStatus, "row must transition sending → retry even with expired lease")
 	require.Nil(t, lockedBy, "locked_by must be cleared after retry transition")
+}
+
+func TestPgxRepositoryMarkSent_ExpiredLeaseStillTransitions(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	workerID := "worker-marksent-expired"
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-marksent-expired",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-mse", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		ClaimKeys: []string{"claim-mse"},
+		Version:   1,
+	}
+
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+	require.NoError(t, err)
+
+	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	id := claimed[0].ID
+	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+
+	_, err = pool.Exec(ctx, `
+		UPDATE alarm_dispatch_deliveries
+		SET lock_expires_at = NOW() - INTERVAL '10 seconds'
+		WHERE id = $1`, id)
+	require.NoError(t, err)
+
+	require.NoError(t, repository.MarkSent(ctx, []int64{id}, workerID))
+
+	var status string
+	var lockedBy *string
+	var sentAt *time.Time
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT status, locked_by, sent_at FROM alarm_dispatch_deliveries WHERE id=$1`, id,
+	).Scan(&status, &lockedBy, &sentAt))
+	require.Equal(t, string(StatusSent), status, "row must transition sending → sent even with expired lease")
+	require.Nil(t, lockedBy, "locked_by must be cleared after sent transition")
+	require.NotNil(t, sentAt, "sent_at must be recorded")
+}
+
+func TestPgxRepositoryMarkSent_RequiresOwner(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-marksent-owner",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-mso", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		Version: 1,
+	}
+
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+	require.NoError(t, err)
+
+	claimed, err := repository.ClaimDue(ctx, "worker-owner", 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	id := claimed[0].ID
+	require.NoError(t, repository.MarkSending(ctx, []int64{id}, "worker-owner", time.Minute))
+	err = repository.MarkSent(ctx, []int64{id}, "worker-intruder")
+	var partialErr *PartialTransitionError
+	require.True(t, errors.As(err, &partialErr), "non-owner MarkSent must return PartialTransitionError")
+	require.Equal(t, int64(0), partialErr.Updated)
+	require.Equal(t, int64(1), partialErr.Expected)
+
+	var status string
+	require.NoError(t, pool.QueryRow(ctx, "SELECT status FROM alarm_dispatch_deliveries WHERE id=$1", id).Scan(&status))
+	require.Equal(t, string(StatusSending), status, "non-owner MarkSent must not transition the row")
+}
+
+func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsPartialError(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	workerID := "worker-quarantine-race"
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-quarantine-race",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-qr", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		Version: 1,
+	}
+
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+	require.NoError(t, err)
+	claimed, err := repository.ClaimDue(ctx, workerID, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	id := claimed[0].ID
+	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+
+	_, err = pool.Exec(ctx, `
+		UPDATE alarm_dispatch_deliveries
+		SET sending_started_at = NOW() - INTERVAL '10 seconds'
+		WHERE id = $1`, id)
+	require.NoError(t, err)
+	quarantined, err := repository.QuarantineStaleSending(ctx, time.Second, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, quarantined)
+
+	err = repository.MarkSent(ctx, []int64{id}, workerID)
+	var partialErr *PartialTransitionError
+	require.True(t, errors.As(err, &partialErr), "post-quarantine MarkSent must return PartialTransitionError")
+	require.Equal(t, int64(0), partialErr.Updated)
+	require.Equal(t, int64(1), partialErr.Expected)
+
+	var status string
+	var lockedBy *string
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT status, locked_by FROM alarm_dispatch_deliveries WHERE id=$1", id,
+	).Scan(&status, &lockedBy))
+	require.Equal(t, string(StatusQuarantined), status)
+	require.Nil(t, lockedBy)
 }
 
 func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {

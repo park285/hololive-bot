@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -626,7 +627,9 @@ func TestAlarmDispatchRunnerRetriesRenderFailureBeforeMarkSending(t *testing.T) 
 }
 
 func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testing.T) {
-	markErr := errors.New("mark dispatched failed")
+	markErr := &dispatchoutbox.PartialTransitionError{
+		Action: "mark dispatch deliveries sent", Updated: 0, Expected: 1,
+	}
 	consumer := &alarmDispatchRunnerTestConsumer{
 		batches:           [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}},
 		markDispatchedErr: markErr,
@@ -642,6 +645,8 @@ func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testin
 	assert.Empty(t, consumer.scheduledRetry)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.quarantined)
+	assert.Empty(t, consumer.requeued)
+	require.Len(t, consumer.markDispatched, 1)
 }
 
 func TestAlarmDispatchRunnerUsesLegacyRetryWhenConsumerCannotQuarantine(t *testing.T) {

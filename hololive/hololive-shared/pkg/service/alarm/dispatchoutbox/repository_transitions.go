@@ -24,6 +24,10 @@ func (r *PgxRepository) MarkSending(ctx context.Context, ids []int64, workerID s
 	return expectRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries sending")
 }
 
+// MarkSent의 fence는 status='sending' AND locked_by만 본다. 그룹 발송이 lease를
+// 초과해도 성공 발송은 sent로 확정돼야 하고(P0-2: lease 조건이 있으면 quarantine →
+// replay 중복 발송), QuarantineStaleSending이 'sending' 회수 시 locked_by를 NULL로
+// 지우므로 locked_by 일치만으로 소유권이 보장된다(ScheduleSendingRetry와 동형).
 func (r *PgxRepository) MarkSent(ctx context.Context, ids []int64, workerID string) error {
 	if len(ids) == 0 {
 		return nil
@@ -32,7 +36,7 @@ func (r *PgxRepository) MarkSent(ctx context.Context, ids []int64, workerID stri
 	if err != nil {
 		return fmt.Errorf("mark dispatch deliveries sent: %w", err)
 	}
-	return warnRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries sent", r.logger)
+	return validatePostSendRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries sent", r.logger)
 }
 
 func (r *PgxRepository) ScheduleRetry(ctx context.Context, updates []RetryUpdate, workerID string) error {
@@ -91,10 +95,9 @@ func (r *PgxRepository) ReleaseLeased(ctx context.Context, ids []int64, workerID
 	return expectRowsAffected(tag.RowsAffected(), len(ids), "release dispatch deliveries")
 }
 
-// warnRowsAffected는 MarkSent에서 concurrent workers가 partial update를
-// 일으킬 때 error 대신 warn을 로그하고 metric을 emit한다.
-// MarkSending은 외부 전송 전 소유권 gate라 partial update를 error로 반환해야 한다.
-func warnRowsAffected(got int64, want int, action string, logger *slog.Logger) error {
+// validatePostSendRowsAffected는 외부 발송 뒤 ownership 변경을 관측 가능한 오류로
+// 반환한다. 호출자는 이미 완료된 외부 발송을 retry로 되돌리지 않고 오류만 보고해야 한다.
+func validatePostSendRowsAffected(got int64, want int, action string, logger *slog.Logger) error {
 	if got == int64(want) {
 		return nil
 	}
@@ -106,5 +109,5 @@ func warnRowsAffected(got int64, want int, action string, logger *slog.Logger) e
 			slog.Int("rows_expected", want),
 		)
 	}
-	return nil
+	return &PartialTransitionError{Action: action, Updated: got, Expected: int64(want)}
 }

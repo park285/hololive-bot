@@ -116,11 +116,13 @@ func buildAlarmDispatchRunner(
 
 	maxBatch := parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50)
 	lease := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
+	quarantineThreshold := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_QUARANTINE_THRESHOLD_SECONDS", 3*lease)
 	return &alarmDispatchRunner{
 		consumer: dispatchoutbox.NewConsumer(
 			dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
 			logger,
 			dispatchoutbox.WithLease(lease),
+			dispatchoutbox.WithQuarantineThreshold(quarantineThreshold),
 			dispatchoutbox.WithRecoveryInterval(parsePositiveDurationMSEnv("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", 30*time.Second)),
 			dispatchoutbox.WithRecoveryBatchSize(parsePositiveIntEnv("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", 100)),
 			dispatchoutbox.WithClaimKeyReleaser(infra.Cache),
