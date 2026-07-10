@@ -24,7 +24,7 @@ fi
 SHARED_GO_DIR="$(cd "$ROOT_DIR/../shared-go" 2>/dev/null && pwd || true)"
 build_targets=(./cmd/runtime/youtube-producer ./cmd/runtime/healthcheck)
 missing="$(cd "$ROOT_DIR/hololive/hololive-youtube-producer" &&
-  go list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}" 2>/dev/null |
+  go list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{range .EmbedFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}" 2>/dev/null |
   sed "s#^$ROOT_DIR/##; s#^$SHARED_GO_DIR/#../shared-go/#" |
   grep -E '^(hololive/|\.\./shared-go/)' |
   sort -u |
