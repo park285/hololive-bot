@@ -17,7 +17,6 @@ concurrency:
 
 env:
   GOCACHE: /tmp/go-cache
-  GOPRIVATE: github.com/park285/*
   GOTMPDIR: /tmp
   GOVULNCHECK_VERSION: v1.4.0
   GOSEC_VERSION: v2.27.1
@@ -42,7 +41,6 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: park285/shared-go
-          token: ${{ secrets.MODULES_TOKEN }}
           path: shared-go
           persist-credentials: false
 
@@ -50,7 +48,6 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: park285/iris-client-go
-          token: ${{ secrets.MODULES_TOKEN }}
           path: iris-client-go
           persist-credentials: false
 

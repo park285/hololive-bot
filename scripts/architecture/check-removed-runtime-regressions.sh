@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# The check definitions are resolved through run_check's namerefs.
+# shellcheck disable=SC2034
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

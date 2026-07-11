@@ -29,8 +29,8 @@ PGUSER="${PGUSER:-hololive_migrator}"
 PGPASSWORD="${PGPASSWORD:-}"
 PGDATABASE="${PGDATABASE:-hololive}"
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-MIGRATIONS_DIR="${MIGRATIONS_DIR:-$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)}"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-$(CDPATH='' cd -- "${SCRIPT_DIR}/.." && pwd)}"
 AUDIT_SQL="${SCRIPT_DIR}/audit_message_contract_074_082.sql"
 
 APPLY="${MIGRATION_REPAIR_APPLY:-0}"

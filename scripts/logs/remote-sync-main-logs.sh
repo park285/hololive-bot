@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Target variables are resolved by target_value through controlled indirection.
+# shellcheck disable=SC2034
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"

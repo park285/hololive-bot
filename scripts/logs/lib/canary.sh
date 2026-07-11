@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+
 cmd_prune() {
   local log_root="${REPO_ROOT}/logs"
   local backfill_dir="${log_root}/backfill"
@@ -109,6 +111,18 @@ cmd_canary() {
   local summary=""
   local failure_rate="0.000000"
   local warn=0
+  local enqueue_count=0
+  local enqueue_outbox_claimed=0
+  local enqueue_outbox_enqueued=0
+  local enqueue_no_subscribers=0
+  local enqueue_failures=0
+  local enqueue_target_rooms=0
+  local dispatch_count=0
+  local dispatch_claimed=0
+  local dispatch_sent=0
+  local dispatch_failed=0
+  local dispatch_outbox_touched=0
+  local dispatch_aggregate_failures=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -212,7 +226,30 @@ END {
   printf("dispatch_aggregate_failures=%d\n", dispatch_aggregate_failures)
 }')"
 
-  eval "${summary}"
+  while IFS='=' read -r key value; do
+    if [[ ! "${value}" =~ ^[0-9]+$ ]]; then
+      echo "ERROR: invalid canary summary value: ${key}=${value}" >&2
+      return 1
+    fi
+    case "${key}" in
+      enqueue_count) enqueue_count="${value}" ;;
+      enqueue_outbox_claimed) enqueue_outbox_claimed="${value}" ;;
+      enqueue_outbox_enqueued) enqueue_outbox_enqueued="${value}" ;;
+      enqueue_no_subscribers) enqueue_no_subscribers="${value}" ;;
+      enqueue_failures) enqueue_failures="${value}" ;;
+      enqueue_target_rooms) enqueue_target_rooms="${value}" ;;
+      dispatch_count) dispatch_count="${value}" ;;
+      dispatch_claimed) dispatch_claimed="${value}" ;;
+      dispatch_sent) dispatch_sent="${value}" ;;
+      dispatch_failed) dispatch_failed="${value}" ;;
+      dispatch_outbox_touched) dispatch_outbox_touched="${value}" ;;
+      dispatch_aggregate_failures) dispatch_aggregate_failures="${value}" ;;
+      *)
+        echo "ERROR: unexpected canary summary key: ${key}" >&2
+        return 1
+        ;;
+    esac
+  done <<<"${summary}"
 
   if [[ "${dispatch_claimed}" -gt 0 ]]; then
     failure_rate="$(awk -v f="${dispatch_failed}" -v c="${dispatch_claimed}" 'BEGIN { printf "%.6f", f/c }')"

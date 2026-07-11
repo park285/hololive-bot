@@ -63,19 +63,18 @@ check_forbidden_scoped_go_hits \
   "hololive/hololive-api/internal/planes/admin"
 
 compose="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
-for service in youtube-producer; do
-  block="$(awk -v service="  ${service}:" '
-    $0 == service {in_block=1; print; next}
-    in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}
-    in_block {print}
-  ' "${compose}")"
-  if grep -Eq '\*iris-env|IRIS_BOT_TOKEN|IRIS_BASE_URL|IRIS_TRANSPORT|IRIS_H3_' <<< "${block}"; then
-    echo "[FAIL] ${service} has Iris egress env in docker-compose.prod.yml" >&2
-    fail=1
-  else
-    echo "[PASS] ${service} has no Iris egress env"
-  fi
-done
+service="youtube-producer"
+block="$(awk -v service="  ${service}:" '
+  $0 == service {in_block=1; print; next}
+  in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}
+  in_block {print}
+' "${compose}")"
+if grep -Eq '\*iris-env|IRIS_BOT_TOKEN|IRIS_BASE_URL|IRIS_TRANSPORT|IRIS_H3_' <<< "${block}"; then
+  echo "[FAIL] ${service} has Iris egress env in docker-compose.prod.yml" >&2
+  fail=1
+else
+  echo "[PASS] ${service} has no Iris egress env"
+fi
 
 dispatcher_hits="$(rg -n 'dispatcher-go|hololive-dispatcher-go|legacy-dispatcher-go' "${compose}" || true)"
 if [[ -n "${dispatcher_hits}" ]]; then
