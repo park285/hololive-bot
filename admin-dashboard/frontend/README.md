@@ -5,9 +5,9 @@
 ## 핵심 포인트
 
 - 인증 상태는 브라우저 저장값이 아니라 서버 세션으로 부트스트랩합니다.
-- `/admin/api/*` 호출은 공용 Axios 인스턴스를 통해 CSRF/401 처리와 함께 동작합니다.
-- generated client는 Rust backend OpenAPI에서 재생성합니다.
-- Docker 제어와 상태 집계는 Rust backend 계약을 기준으로 동작합니다.
+- `/admin/api/*` 호출은 공용 Axios 인스턴스로 CSRF/401 처리와 함께 동작합니다.
+- generated client는 Go backend OpenAPI에서 재생성합니다.
+- Docker 제어와 상태 집계는 Go backend 계약을 기준으로 동작합니다.
 
 ## 주요 명령
 
@@ -23,12 +23,12 @@ npm run build
 ## 현재 툴체인 메모
 
 - TypeScript는 `6.0.2` 기준으로 맞춰져 있습니다.
-- `tsconfig.app.json`은 `baseUrl` 없이 `paths`만 사용하도록 정리되어, TS 6/7 deprecation 경고를 피합니다.
+- `tsconfig.app.json`은 `baseUrl` 없이 `paths`만 사용하도록 정리되어 TS 6/7 deprecation 경고를 피합니다.
 - ESLint는 `9.x` 안정판 조합을 사용합니다.
 - `eslint-plugin-react-hooks`는 안정판 `7.0.1`을 사용합니다.
 - `follow-redirects`는 axios transitive advisory 대응을 위해 `overrides`로 상향 고정되어 있습니다.
 - `@tanstack/react-query-devtools`는 개발 환경에서만 lazy-load 됩니다.
-- `msw`는 opt-in 개발 mocking 용도로 셋업되어 있으며, `VITE_ENABLE_MSW=true`일 때만 worker가 시작됩니다.
+- `msw`는 opt-in 개발 mocking 용도로 셋업되어 있으며 `VITE_ENABLE_MSW=true`일 때만 worker가 시작됩니다.
 - 긴 리스트는 `@tanstack/react-virtual` 기반 `VirtualList`로 가상화합니다. `AlarmGroups`, `MembersGrid`, `LiveStreamsSection`, `UpcomingStreamsSection`, Docker/Rooms 목록이 이 경로를 사용합니다.
 - `dist`, `dist-analyze`, `dist-profile` 같은 빌드 산출물은 저장소에 커밋하지 않고 CI artifact로만 보관합니다.
 
