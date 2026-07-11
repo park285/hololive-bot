@@ -490,6 +490,7 @@ func TestPgxBatchRepositoryPersistVideosFinalizesFailedOutboxWhenAlarmStateAlrea
 		CreatedAt:     createdAt,
 		Error:         "old failed",
 	}
+	require.NoError(t, repository.PersistVideos(ctx, []*domain.YouTubeVideo{shortVideo}, nil, nil, nil))
 	require.NoError(t, db.Create(&existingOutbox).Error)
 	require.NoError(t, db.Create(&domain.YouTubeNotificationDelivery{
 		OutboxID:      existingOutbox.ID,

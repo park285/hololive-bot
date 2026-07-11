@@ -129,7 +129,7 @@ func TestShortsPollerDuplicatePollEnqueuesExactlyOnce(t *testing.T) {
 		LastContentID: lastContent,
 	}).Error)
 
-	shortsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Shorts","content":{"richGridRenderer":{"contents":[{"richItemRenderer":{"content":{"shortsLockupViewModel":{"onTap":{"innertubeCommand":{"reelWatchEndpoint":{"videoId":"short-duplicate-poll"}}},"overlayMetadata":{"primaryText":{"content":"Short Duplicate Poll"},"secondaryText":{"content":"1.2K views"}},"thumbnail":{"sources":[{"url":"https://img.test/1.jpg","width":120,"height":200}]}}}}}]}}}}]}}}`
+	shortsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Shorts","content":{"richGridRenderer":{"contents":[{"richItemRenderer":{"content":{"shortsLockupViewModel":{"onTap":{"innertubeCommand":{"reelWatchEndpoint":{"videoId":"short-duplicate-poll"}}},"overlayMetadata":{"primaryText":{"content":"Short Duplicate Poll"},"secondaryText":{"content":"1.2K views"}},"thumbnail":{"sources":[{"url":"https://img.test/1.jpg","width":120,"height":200}]}}}}},{"richItemRenderer":{"content":{"shortsLockupViewModel":{"onTap":{"innertubeCommand":{"reelWatchEndpoint":{"videoId":"old-short"}}},"overlayMetadata":{"primaryText":{"content":"Old Short"},"secondaryText":{"content":"900 views"}},"thumbnail":{"sources":[{"url":"https://img.test/old.jpg","width":120,"height":200}]}}}}}]}}}}]}}}`
 	shortsHTML := "<script>var ytInitialData = " + shortsJSON + ";</script>"
 	rssBody := `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/">
@@ -137,7 +137,7 @@ func TestShortsPollerDuplicatePollEnqueuesExactlyOnce(t *testing.T) {
 	watchHTML := `
 		<html>
 			<head>
-				<meta itemprop="uploadDate" content="2026-04-10T10:11:12+09:00">
+				<meta itemprop="uploadDate" content="` + time.Now().UTC().Add(-time.Hour).Format(time.RFC3339) + `">
 			</head>
 		</html>
 	`
@@ -281,7 +281,11 @@ func requireDuplicatePollSingleEnqueuedState(t *testing.T, db *pollerBatchTestDB
 	require.Equal(t, canonicalPostID, stateRow.PostID)
 	require.Equal(t, canonicalPostID, stateRow.ContentID)
 	require.Nil(t, stateRow.AlarmSentAt)
-	require.Nil(t, stateRow.ActualPublishedAt)
+	if kind == domain.OutboxKindNewShort {
+		require.NotNil(t, stateRow.ActualPublishedAt, "freshness-verified short alarms must carry the resolved published_at")
+	} else {
+		require.Nil(t, stateRow.ActualPublishedAt)
+	}
 	require.Nil(t, stateRow.AuthorizedAt)
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, stateRow.DeliveryStatus)
 }

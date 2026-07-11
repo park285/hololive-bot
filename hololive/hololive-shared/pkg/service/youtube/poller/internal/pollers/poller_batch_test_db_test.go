@@ -238,6 +238,8 @@ func insertPollerTestValue(ctx context.Context, db *pgxpool.Pool, value any) (in
 		return insertPollerTestCommunityPost(ctx, db, row)
 	case *domain.YouTubeNotificationOutbox:
 		return insertPollerTestOutbox(ctx, db, row)
+	case *domain.YouTubeNotificationDelivery:
+		return insertPollerTestDelivery(ctx, db, row)
 	case *domain.YouTubeContentWatermark:
 		return insertPollerTestWatermark(ctx, db, row)
 	case *domain.YouTubeContentAlarmTracking:
@@ -313,6 +315,24 @@ func insertPollerTestOutbox(ctx context.Context, db *pgxpool.Pool, row *domain.Y
 		return 0, err
 	}
 	return 1, nil
+}
+
+func insertPollerTestDelivery(ctx context.Context, db *pgxpool.Pool, row *domain.YouTubeNotificationDelivery) (int64, error) {
+	if row.Status == "" {
+		row.Status = domain.OutboxStatusPending
+	}
+	now := time.Now().UTC()
+	if row.NextAttemptAt.IsZero() {
+		row.NextAttemptAt = now
+	}
+	if row.CreatedAt.IsZero() {
+		row.CreatedAt = now
+	}
+	return execPollerTestInsert(ctx, db, `
+		INSERT INTO youtube_notification_delivery
+			(outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, locked_at, sent_at, error)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		row.OutboxID, row.RoomID, row.Status, row.AttemptCount, row.NextAttemptAt, row.CreatedAt, row.LockedAt, row.SentAt, row.Error)
 }
 
 func insertPollerTestWatermark(ctx context.Context, db *pgxpool.Pool, row *domain.YouTubeContentWatermark) (int64, error) {

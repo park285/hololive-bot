@@ -130,12 +130,15 @@ func (r *PgxBatchRepository) PersistVideos(ctx context.Context, videos []*domain
 		return fmt.Errorf("validate short notifications: %w", err)
 	}
 
+	persistedTrackingRows := trackingRows
 	if err := inBatchTx(ctx, r.DB, func(tx batchDB) error {
-		return r.persistVideosTx(ctx, tx, videos, notifications, trackingRows, watermark)
+		var err error
+		persistedTrackingRows, err = r.persistVideosTx(ctx, tx, videos, notifications, trackingRows, watermark)
+		return err
 	}); err != nil {
 		return fmt.Errorf("persist videos transaction: %w", err)
 	}
-	r.persistLatencyClassificationsAfterCommit(ctx, trackingRows)
+	r.persistLatencyClassificationsAfterCommit(ctx, persistedTrackingRows)
 	return nil
 }
 
@@ -160,22 +163,29 @@ func (r *PgxBatchRepository) persistVideosTx(
 	notifications []*domain.YouTubeNotificationOutbox,
 	trackingRows []*domain.YouTubeContentAlarmTracking,
 	watermark *domain.YouTubeContentWatermark,
-) error {
-	notifications, err := r.dropAlreadyKnownVideoNotifications(ctx, tx, notifications)
+) ([]*domain.YouTubeContentAlarmTracking, error) {
+	notifications, trackingRows, err := r.dropAlreadyKnownShortArtifacts(ctx, tx, notifications, trackingRows)
 	if err != nil {
-		return fmt.Errorf("drop already-known video notifications: %w", err)
+		return nil, fmt.Errorf("drop already-known short artifacts: %w", err)
+	}
+	notifications, err = r.dropAlreadyKnownVideoNotifications(ctx, tx, notifications)
+	if err != nil {
+		return nil, fmt.Errorf("drop already-known video notifications: %w", err)
 	}
 	if err := r.batchUpsertVideos(ctx, tx, videos); err != nil {
-		return fmt.Errorf("batch upsert videos: %w", err)
+		return nil, fmt.Errorf("batch upsert videos: %w", err)
 	}
 	if err := r.resolveShortPersistedContentIDs(ctx, tx, notifications, trackingRows); err != nil {
-		return fmt.Errorf("resolve short persisted content ids: %w", err)
+		return nil, fmt.Errorf("resolve short persisted content ids: %w", err)
 	}
 	sourcePosts := buildShortSourcePosts(videos, trackingRows)
 	if err := trackingrepo.NewRepository(tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
-		return fmt.Errorf("upsert short source posts: %w", err)
+		return nil, fmt.Errorf("upsert short source posts: %w", err)
 	}
-	return r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "video", "short")
+	if err := r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "video", "short"); err != nil {
+		return nil, err
+	}
+	return trackingRows, nil
 }
 
 func (r *PgxBatchRepository) persistCommunityPostsTx(

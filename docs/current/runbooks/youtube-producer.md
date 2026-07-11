@@ -76,6 +76,16 @@ Expected startup and sync markers:
 - `Photo sync service started`
 - `Photo sync completed`
 
+### Shorts 신규 판정 (publication freshness)
+
+쇼츠 페이지 순서는 신뢰하지 않습니다. `SHORT` 워터마크는 후보 범위를 좁히는 용도로만 쓰고, 알림 여부는 검증된 게시 신선도로 판정합니다.
+
+- 후보 = 워터마크 앞 구간(워터마크가 목록에 없으면 전체 목록 — 이때 `Shorts watermark missing from collected page; classifying full page by publication freshness` 경고). 초기 uninitialized poll은 전체를 baseline으로 저장하고 알림·조회를 하지 않습니다.
+- `youtube_videos.is_short=true`로 이미 처리된 후보는 알림을 재제안만 합니다. 기존 outbox dedup 계층이 SENT는 차단하고 FAILED는 delivery와 함께 PENDING으로 재무장하며, outbox가 전혀 없으면 repository 가드(`is_short=true` + outbox 부재)가 제외합니다.
+- 그 외 후보(미관측이거나 `is_short=false` 영상 행)는 게시 시각을 확보해 판정합니다: scrape 제공값 → DB 행 `published_at` → `first_seen_at`이 72h보다 오래되면 과거 확정 → 마지막으로 `/watch` 페이지 1회 조회. 게시 시각이 `[-1h, +72h]` 구간(1h는 clock-skew 허용치)일 때만 NEW_SHORT 알림을 만들고, 72h보다 오래된 항목은 알림 없이 저장합니다(조회한 `published_at`은 행에 채워져 재조회를 막습니다). 그보다 먼 미래 시각은 판별 불가로 취급합니다. top-N 밖으로 워터마크가 밀린 장기 outage도 같은 규칙으로 수렴합니다.
+- 게시 시각을 판별할 수 없으면 해당 후보는 저장·알림 없이 보류하고 워터마크를 유지합니다(`Shorts freshness unresolved; deferring candidate without notification`, `Shorts watermark held while freshness candidates stay deferred`). 보류 항목이 수집 목록에서 사라져도 워터마크는 계속 잡아 두고 사라진 poll도 시도 횟수로 셉니다. 총 3회 실패(사라진 poll 포함)에 도달하면 fail-closed로 알림 없이 흡수하거나(`Shorts freshness unresolved after max attempts; absorbing silently without notification`) 목록에 없는 항목이면 포기합니다(`Shorts deferred candidate left the collected page; dropping without notification after max attempts`). 보류 카운터는 프로세스 메모리라 재시작·다중 producer에서 초기화되거나 더 빨리 소진될 수 있으며, 어느 쪽이든 재시도 증가 또는 조용한 흡수로만 기울고 오알림으로는 기울지 않습니다.
+- `/watch` 조회는 스크래퍼 클라이언트의 rate limit과 전역 transient backoff를 따르되, 실패를 채널 헬스에 기록하지 않아 본 쇼츠 스크랩을 냉각시키지 않습니다. 실패 시 `Shorts published_at resolve failed` 경고가 남습니다.
+
 Photo sync policy: `youtube-producer-c` sets `PHOTO_SYNC_ENABLED=true`; a global Valkey singleton lease keeps it the sole photo sync owner, with TTL-based failover. `youtube-producer-b` is a scraping/polling failover peer only (`PHOTO_SYNC_ENABLED=false`) and does not participate in PhotoSync failover.
 
 PostgreSQL TLS policy: all producer instances use `verify-full`. AP hosts receive

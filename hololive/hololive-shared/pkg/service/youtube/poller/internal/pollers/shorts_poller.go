@@ -26,11 +26,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -41,6 +40,7 @@ type ShortsPoller struct {
 	repository batchrepo.BatchRepository
 	maxResults int
 	metrics    *polling.Metrics
+	deferrals  *shortsFreshnessDeferrals
 }
 
 func NewShortsPoller(scraperClient *scraper.Client, db any, maxResults int) *ShortsPoller {
@@ -53,6 +53,7 @@ func NewShortsPoller(scraperClient *scraper.Client, db any, maxResults int) *Sho
 		db:         querier,
 		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults: maxResults,
+		deferrals:  newShortsFreshnessDeferrals(),
 	}
 }
 
@@ -103,94 +104,180 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	if err != nil {
 		return err
 	}
-	newShorts := collectNewShorts(shorts, &watermark, isInitialized)
 
 	detectedAt := yttimestamp.Normalize(time.Now()).Truncate(time.Microsecond)
-	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt, p.ensureMetrics())
-	batch := p.buildShortBatch(ctx, channelID, newShorts, isInitialized, detectedAt)
-
-	if err := p.repository.PersistVideos(ctx, batch.dbVideos, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{
+	nextWatermark := domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
 		LastContentID: polling.NormalizeContentID(domain.OutboxKindNewShort, shorts[0].VideoID),
-	}); err != nil {
-		return fmt.Errorf("persist short batch: %w", err)
 	}
 
+	if !isInitialized {
+		return p.persistShortBaseline(ctx, channelID, shorts, detectedAt, &nextWatermark)
+	}
+	return p.pollInitializedShorts(ctx, channelID, shorts, &watermark, detectedAt, &nextWatermark)
+}
+
+func (p *ShortsPoller) persistShortBaseline(
+	ctx context.Context,
+	channelID string,
+	shorts []*scraper.Short,
+	detectedAt time.Time,
+	nextWatermark *domain.YouTubeContentWatermark,
+) error {
+	batch := p.buildClassifiedShortBatch(ctx, channelID, baselineShortCandidates(shorts), detectedAt)
+	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, 0, detectedAt, p.ensureMetrics())
+	if err := p.repository.PersistVideos(ctx, batch.dbVideos, batch.notifications, batch.trackingRows, nextWatermark); err != nil {
+		return fmt.Errorf("persist short baseline batch: %w", err)
+	}
+	return nil
+}
+
+func (p *ShortsPoller) pollInitializedShorts(
+	ctx context.Context,
+	channelID string,
+	shorts []*scraper.Short,
+	watermark *domain.YouTubeContentWatermark,
+	detectedAt time.Time,
+	nextWatermark *domain.YouTubeContentWatermark,
+) error {
+	positionalNew, watermarkFound := collectNewShorts(shorts, watermark, true)
+	if !watermarkFound {
+		slog.WarnContext(ctx, "Shorts watermark missing from collected page; classifying full page by publication freshness",
+			logschema.FieldChannelID, channelID,
+			"collected_count", len(shorts),
+		)
+	}
+
+	scrapedIDs := shortRawResourceIDs(shorts)
+	states, err := loadShortVideoStates(ctx, p.db, scrapedIDs)
+	if err != nil {
+		return err
+	}
+
+	classified := p.classifyShortCandidates(ctx, channelID, shorts, shortRawResourceIDSet(positionalNew), states, detectedAt)
+	batch := p.buildClassifiedShortBatch(ctx, channelID, classified, detectedAt)
+	persistWatermark := p.reconcileShortDeferrals(ctx, channelID, shorts, &batch, nextWatermark)
+	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, batch.detectedCount, detectedAt, p.ensureMetrics())
+
+	if err := p.repository.PersistVideos(ctx, batch.dbVideos, batch.notifications, batch.trackingRows, persistWatermark); err != nil {
+		return fmt.Errorf("persist short batch: %w", err)
+	}
+	return nil
+}
+
+func (p *ShortsPoller) reconcileShortDeferrals(
+	ctx context.Context,
+	channelID string,
+	shorts []*scraper.Short,
+	batch *shortsPollBatch,
+	nextWatermark *domain.YouTubeContentWatermark,
+) *domain.YouTubeContentWatermark {
+	holdWatermark, departed := p.deferrals.reconcileChannel(channelID, shortRawResourceIDSet(shorts), batch.deferredVideoIDs)
+	for _, videoID := range departed {
+		slog.WarnContext(ctx, "Shorts deferred candidate left the collected page; dropping without notification after max attempts",
+			logschema.FieldChannelID, channelID,
+			"video_id", videoID,
+		)
+	}
+	if !holdWatermark {
+		return nextWatermark
+	}
+	slog.WarnContext(ctx, "Shorts watermark held while freshness candidates stay deferred",
+		logschema.FieldChannelID, channelID,
+		"deferred_count", len(batch.deferredVideoIDs),
+	)
 	return nil
 }
 
 type shortsPollBatch struct {
-	dbVideos      []*domain.YouTubeVideo
-	notifications []*domain.YouTubeNotificationOutbox
-	trackingRows  []*domain.YouTubeContentAlarmTracking
+	dbVideos         []*domain.YouTubeVideo
+	notifications    []*domain.YouTubeNotificationOutbox
+	trackingRows     []*domain.YouTubeContentAlarmTracking
+	deferredVideoIDs map[string]struct{}
+	detectedCount    int
 }
 
-func (p *ShortsPoller) buildShortBatch(
+func baselineShortCandidates(shorts []*scraper.Short) []classifiedShortCandidate {
+	candidates := make([]classifiedShortCandidate, 0, len(shorts))
+	for _, short := range shorts {
+		if short == nil {
+			continue
+		}
+		candidates = append(candidates, classifiedShortCandidate{
+			short:       short,
+			class:       shortCandidateStoreSilently,
+			publishedAt: yttimestamp.NormalizePtr(short.PublishedAt),
+		})
+	}
+	return candidates
+}
+
+func (p *ShortsPoller) buildClassifiedShortBatch(
 	ctx context.Context,
 	channelID string,
-	shorts []*scraper.Short,
-	isInitialized bool,
+	classified []classifiedShortCandidate,
 	detectedAt time.Time,
 ) shortsPollBatch {
 	batch := shortsPollBatch{
-		dbVideos:      make([]*domain.YouTubeVideo, 0, len(shorts)),
-		notifications: make([]*domain.YouTubeNotificationOutbox, 0, len(shorts)),
-		trackingRows:  make([]*domain.YouTubeContentAlarmTracking, 0, len(shorts)),
+		dbVideos:         make([]*domain.YouTubeVideo, 0, len(classified)),
+		notifications:    make([]*domain.YouTubeNotificationOutbox, 0, len(classified)),
+		trackingRows:     make([]*domain.YouTubeContentAlarmTracking, 0, len(classified)),
+		deferredVideoIDs: make(map[string]struct{}),
 	}
-	for i := range shorts {
-		dbVideo, trackingRow, notification := p.buildShortArtifacts(ctx, channelID, shorts[i], isInitialized, detectedAt)
-		if dbVideo != nil {
-			batch.dbVideos = append(batch.dbVideos, dbVideo)
-		}
-		if trackingRow != nil {
-			batch.trackingRows = append(batch.trackingRows, trackingRow)
-		}
-		if notification != nil {
-			batch.notifications = append(batch.notifications, notification)
-		}
+	for _, candidate := range classified {
+		p.appendShortCandidate(ctx, &batch, channelID, candidate, detectedAt)
 	}
 	return batch
 }
 
-func (p *ShortsPoller) buildShortArtifacts(
+func (p *ShortsPoller) appendShortCandidate(
 	ctx context.Context,
+	batch *shortsPollBatch,
 	channelID string,
-	short *scraper.Short,
-	isInitialized bool,
+	candidate classifiedShortCandidate,
 	detectedAt time.Time,
-) (*domain.YouTubeVideo, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox) {
-	if short == nil {
-		return nil, nil, nil
+) {
+	if candidate.short == nil {
+		return
+	}
+	canonicalPostID := polling.NormalizeContentID(domain.OutboxKindNewShort, candidate.short.VideoID)
+	if candidate.class == shortCandidateDeferred {
+		batch.deferredVideoIDs[polling.NormalizeShortVideoResourceID(candidate.short.VideoID)] = struct{}{}
+		return
 	}
 
-	canonicalPostID := polling.NormalizeContentID(domain.OutboxKindNewShort, short.VideoID)
-	resourceVideoID := polling.NormalizeShortVideoResourceID(short.VideoID)
-	publishedAt := yttimestamp.NormalizePtr(short.PublishedAt)
-	dbVideo := &domain.YouTubeVideo{
-		VideoID:     resourceVideoID,
-		ChannelID:   channelID,
-		Title:       short.Title,
-		Thumbnail:   polling.ConvertThumbnails(short.Thumbnail),
-		PublishedAt: publishedAt,
-		IsShort:     true,
-		ViewCount:   short.ViewCount,
-	}
+	dbVideo := buildShortVideoRecord(channelID, candidate.short, candidate.publishedAt)
+	batch.dbVideos = append(batch.dbVideos, dbVideo)
 	logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
-	if !isInitialized {
-		return dbVideo, nil, nil
+	if candidate.class == shortCandidateStoreSilently {
+		return
 	}
 
-	trackingRow := &domain.YouTubeContentAlarmTracking{
+	batch.trackingRows = append(batch.trackingRows, &domain.YouTubeContentAlarmTracking{
 		Kind:              domain.OutboxKindNewShort,
 		ContentID:         canonicalPostID,
 		ChannelID:         channelID,
 		ActualPublishedAt: dbVideo.PublishedAt,
 		DetectedAt:        detectedAt,
+	})
+	batch.notifications = append(batch.notifications, p.buildShortNotification(channelID, canonicalPostID, dbVideo))
+	if candidate.class == shortCandidateNotifyFresh {
+		batch.detectedCount++
 	}
-	notification := p.buildShortNotification(channelID, canonicalPostID, dbVideo)
-	return dbVideo, trackingRow, notification
+}
+
+func buildShortVideoRecord(channelID string, short *scraper.Short, publishedAt *time.Time) *domain.YouTubeVideo {
+	return &domain.YouTubeVideo{
+		VideoID:     polling.NormalizeShortVideoResourceID(short.VideoID),
+		ChannelID:   channelID,
+		Title:       short.Title,
+		Thumbnail:   polling.ConvertThumbnails(short.Thumbnail),
+		PublishedAt: yttimestamp.NormalizePtr(publishedAt),
+		IsShort:     true,
+		ViewCount:   short.ViewCount,
+	}
 }
 
 func (p *ShortsPoller) buildShortNotification(
@@ -211,16 +298,16 @@ func collectNewShorts(
 	shorts []*scraper.Short,
 	watermark *domain.YouTubeContentWatermark,
 	isInitialized bool,
-) []*scraper.Short {
+) ([]*scraper.Short, bool) {
 	newShorts := make([]*scraper.Short, 0, len(shorts))
 	for _, short := range shorts {
 		canonicalPostID := polling.NormalizeContentID(domain.OutboxKindNewShort, short.VideoID)
 		if isInitialized && canonicalPostID == polling.NormalizeContentID(domain.OutboxKindNewShort, watermark.LastContentID) {
-			break
+			return newShorts, true
 		}
 		newShorts = append(newShorts, short)
 	}
-	return newShorts
+	return newShorts, false
 }
 
 func logShortDetected(ctx context.Context, channelID, postID string, actualPublishedAt *time.Time, detectedAt time.Time) {
