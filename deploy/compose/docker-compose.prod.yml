@@ -274,10 +274,11 @@ services:
       HOLOLIVE_MIGRATOR_PASSWORD: ${HOLOLIVE_MIGRATOR_PASSWORD:-}
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
-      PGDATA: /var/lib/postgresql/data/pgdata
+      # PG18 parent mount를 사용하되 기존 named volume의 pgdata 상대 경로는 유지한다.
+      PGDATA: /var/lib/postgresql/pgdata
       PGPORT: "5432"
     volumes:
-      - holo-pg-data:/var/lib/postgresql/data
+      - holo-pg-data:/var/lib/postgresql
       - ../../backups:/backups
       - ../../hololive/hololive-api/scripts/init-db:/docker-entrypoint-initdb.d:ro
       - /run/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
