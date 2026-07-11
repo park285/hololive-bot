@@ -61,7 +61,7 @@ func (p *LivePoller) saveLiveViewerSample(ctx context.Context, channelID string,
 		"viewers", *stream.ViewerCount)
 }
 
-func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, currentStreams []*domain.Stream) {
+func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, currentStreams []*domain.Stream, pollStartedAt time.Time) {
 	activeIDs := activeLiveStreamIDs(currentStreams)
 
 	var liveSessions []domain.YouTubeLiveSession
@@ -78,27 +78,29 @@ func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, cu
 	}
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
+	fence := pollStartedAt.UTC()
 	for i := range liveSessions {
 		session := &liveSessions[i]
-		p.endStaleSession(ctx, channelID, session.VideoID, activeIDs, now)
+		p.endStaleSession(ctx, channelID, session.VideoID, activeIDs, now, fence)
 	}
 }
 
-func (p *LivePoller) endStaleSession(ctx context.Context, channelID, videoID string, activeIDs map[string]bool, now time.Time) {
+func (p *LivePoller) endStaleSession(ctx context.Context, channelID, videoID string, activeIDs map[string]bool, now, pollStartedAt time.Time) {
 	if activeIDs[videoID] {
 		return
 	}
-	if !p.markSessionEnded(ctx, videoID, now) {
+	if !p.markSessionEnded(ctx, videoID, now, pollStartedAt) {
 		return
 	}
 	p.finalizeStreamStats(ctx, videoID, channelID)
 }
 
-func (p *LivePoller) markSessionEnded(ctx context.Context, videoID string, now time.Time) bool {
+func (p *LivePoller) markSessionEnded(ctx context.Context, videoID string, now, pollStartedAt time.Time) bool {
 	tag, err := p.db.Exec(ctx, mustSQL("live_poller_stats_0102_02.sql"),
 		domain.LiveStatusEnded,
 		now,
 		videoID,
+		pollStartedAt,
 	)
 	if err != nil {
 		slog.Warn("Failed to mark live session ended", "video_id", videoID, "error", err)

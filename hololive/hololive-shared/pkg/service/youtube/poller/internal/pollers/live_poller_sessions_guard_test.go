@@ -147,7 +147,7 @@ func TestLivePollerMarkSessionEndedOnlyEndsLiveSessions(t *testing.T) {
 	}).Error)
 
 	poller := NewLivePollerWithStatusProvider(nil, nil, db)
-	ended := poller.markSessionEnded(context.Background(), "upcoming-not-ended", now)
+	ended := poller.markSessionEnded(context.Background(), "upcoming-not-ended", now, now)
 
 	require.False(t, ended, "LIVE가 아닌 세션은 markSessionEnded 대상이 아니다")
 	var session domain.YouTubeLiveSession

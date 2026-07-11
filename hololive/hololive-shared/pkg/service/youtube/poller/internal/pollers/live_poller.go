@@ -171,7 +171,7 @@ func (p *LivePoller) pollLiveStreams(ctx context.Context, channelID string, stre
 			return err
 		}
 	}
-	p.markEndedSessions(ctx, channelID, streams)
+	p.markEndedSessions(ctx, channelID, streams, now)
 	return nil
 }
 
