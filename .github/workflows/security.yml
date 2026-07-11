@@ -98,6 +98,9 @@ jobs:
           gosec -quiet -fmt text "${owned_pkgs[@]}"
 
       - name: NilAway
+        env:
+          GOMEMLIMIT: 5GiB
+          GOMAXPROCS: "2"
         run: |
           read -ra pkgs <<< "${GO_PKG_PATTERNS}"
           owned_pkgs=()
@@ -110,6 +113,7 @@ jobs:
             owned_pkgs+=("${pkg}")
           done
           for pkg in "${owned_pkgs[@]}"; do
+            echo "nilaway ${pkg}"
             nilaway -pretty-print "${pkg}"
           done
 
