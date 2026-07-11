@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 GO_WORKSPACE_MODULES=(
+    ../iris-client-go
     ../shared-go
     admin-dashboard/backend
     hololive/hololive-shared

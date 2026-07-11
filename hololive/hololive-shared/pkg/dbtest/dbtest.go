@@ -41,13 +41,16 @@ import (
 
 const (
 	// testDatabaseURLEnv가 설정되면 testcontainers 대신 해당 DSN을 base로 쓴다.
-	testDatabaseURLEnv = "TEST_DATABASE_URL"
+	testDatabaseURLEnv        = "TEST_DATABASE_URL"
+	testDatabaseOwnerTokenEnv = "TEST_DATABASE_OWNER_TOKEN"
+	allowExternalTestDBEnv    = "ALLOW_EXTERNAL_TEST_DB"
+	ownershipSentinelQuery    = "SELECT token FROM ci_ephemeral_sentinel LIMIT 1"
 
 	// primaryImage는 ephemeral PG 기동에 우선 사용할 이미지다(호스트에 postgres:18 존재).
-	primaryImage = "postgres:18-alpine"
+	primaryImage = "postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
 
 	// fallbackImage는 primaryImage pull 실패 시 사용할 이미지다.
-	fallbackImage = "postgres:16-alpine"
+	fallbackImage = "postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777"
 )
 
 // baseProvider는 테스트 바이너리당 1개의 base DSN(컨테이너 또는 외부 DB)을 lazily 확보한다.
@@ -166,7 +169,7 @@ func acquireBaseDSN(t testing.TB) string {
 // 컨테이너는 프로세스 종료 시 testcontainers reaper(Ryuk)가 회수하므로 명시적 종료를 등록하지 않는다.
 func provisionBaseDSN() (_ string, err error) {
 	if dsn := os.Getenv(testDatabaseURLEnv); dsn != "" {
-		return dsn, nil
+		return validatedPresetDSN(dsn)
 	}
 
 	ctx := context.Background()
@@ -196,6 +199,54 @@ func provisionBaseDSN() (_ string, err error) {
 	}
 
 	return dsn, nil
+}
+
+func validatedPresetDSN(dsn string) (string, error) {
+	if err := verifyPresetDSNOwnership(dsn); err != nil {
+		return "", err
+	}
+
+	return dsn, nil
+}
+
+func verifyPresetDSNOwnership(dsn string) error {
+	expectedToken := strings.TrimSpace(os.Getenv(testDatabaseOwnerTokenEnv))
+	allowExternal := os.Getenv(allowExternalTestDBEnv) == "true"
+	if expectedToken == "" {
+		return validateOwnershipEvidence("", "", nil, allowExternal)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := poolForDatabase(ctx, dsn, "")
+	if err != nil {
+		return fmt.Errorf("verify preset database ownership: %w", err)
+	}
+	defer pool.Close()
+
+	var gotToken string
+	queryErr := pool.QueryRow(ctx, ownershipSentinelQuery).Scan(&gotToken)
+
+	return validateOwnershipEvidence(expectedToken, gotToken, queryErr, allowExternal)
+}
+
+func validateOwnershipEvidence(expectedToken, gotToken string, queryErr error, allowExternal bool) error {
+	if expectedToken == "" {
+		if allowExternal {
+			return nil
+		}
+
+		return fmt.Errorf("dbtest: unproven database ownership; use testcontainers or opt in to a dedicated disposable server with %s=true", allowExternalTestDBEnv)
+	}
+	if queryErr != nil {
+		return fmt.Errorf("dbtest: read ownership sentinel: %w", queryErr)
+	}
+	if gotToken != expectedToken {
+		return fmt.Errorf("dbtest: ownership sentinel mismatch")
+	}
+
+	return nil
 }
 
 // 같은 go test 호출의 테스트 바이너리들은 testcontainers 세션(parent pid 기반)을 공유해

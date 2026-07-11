@@ -32,7 +32,12 @@ echo "════════════════════════�
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
 
-if git rev-parse --verify origin/main >/dev/null 2>&1; then
+if [[ -n "${BASE_SHA:-}" && -n "${HEAD_SHA:-}" ]]; then
+  if ! changed_files="$(git diff --name-only "${BASE_SHA}..${HEAD_SHA}")"; then
+    echo "failed to resolve exact pushed range ${BASE_SHA}..${HEAD_SHA}" >&2
+    exit 1
+  fi
+elif git rev-parse --verify origin/main >/dev/null 2>&1; then
   changed_files="$(git diff --name-only origin/main...HEAD 2>/dev/null || true)"
 else
   changed_files="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || true)"
@@ -123,6 +128,7 @@ resolved_local_ci_go_scope="${LOCAL_CI_GO_SCOPE:-${local_ci_go_scope}}"
 echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"
 
 LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \
+BASE_REF="${BASE_SHA:-origin/main}" \
 RUN_ADMIN_TOUCH_GUARDRAIL="${admin_touch_guardrail}" \
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-${dependency_hygiene_default}}" \
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}" \

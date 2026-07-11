@@ -16,7 +16,9 @@ for target in "${TARGETS[@]}"; do
   fi
 
   while IFS= read -r line; do
-    if echo "$line" | grep -Eiq 'slog\.(String|Any)\("(raw|payload|body|prompt|response|authorization|cookie|token|api_key|apikey|client_secret|password)"'; then
+    # iris-client-go의 HTTPError.LogValue는 body를 감사된 redactSensitiveTokens로 먼저 마스킹한다.
+    if echo "$line" | grep -Eiq 'slog\.(String|Any)\("(raw|payload|body|prompt|response|authorization|cookie|token|api_key|apikey|client_secret|password)"' \
+      && ! echo "$line" | grep -Fq 'slog.String("Body", redactSensitiveTokens(e.Body))'; then
       echo "suspicious sensitive log: $line" >&2
       bad=1
     fi

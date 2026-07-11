@@ -1,10 +1,13 @@
 name: ci
 
 # GitHub CI 는 secret-free fast gate만 책임진다.
-# private workspace checkout, full local-ci, race, dependency hygiene, frontend full build는
+# full local-ci, race, dependency hygiene, frontend full build는
 # 로컬 pre-push 또는 non-PR security workflow 가 책임진다.
 
 on:
+  pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -19,10 +22,10 @@ env:
   GOTMPDIR: /tmp
 
 jobs:
-  secret-free-gate:
-    name: secret-free-gate
+  fast-gate:
+    name: fast-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     defaults:
       run:
         shell: bash
@@ -52,8 +55,19 @@ jobs:
           done < <(find scripts -type f -name '*.sh' | sort)
 
       - name: Secret-free Go compile smoke
-        working-directory: hololive/hololive-shared
-        run: GOWORK=off go test -run '^$' ./pkg/constants/...
+        env:
+          GOWORK: off
+        run: |
+          for module in \
+            . \
+            hololive/hololive-shared \
+            hololive/hololive-api \
+            hololive/hololive-alarm-worker \
+            hololive/hololive-youtube-producer \
+            admin-dashboard/backend; do
+            echo "compile ${module}"
+            (cd "${module}" && go build ./... && go test -run '^$' ./...)
+          done
 
       - name: gofmt
         run: |

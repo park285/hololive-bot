@@ -82,24 +82,55 @@ ensure_go_mod_toolchains() {
     done
 }
 
-check_go_work_sync() {
-    local before
-    local after
+check_go_work_sync() (
+    set -euo pipefail
+
+    local temp_root
+    local temp_repo
+    local file
+    local candidate
+    local drift=false
     local sync_files=()
 
     mapfile -t sync_files < <(workspace_metadata_files)
+    temp_root="$(mktemp -d)"
+    temp_repo="${temp_root}/hololive-bot"
+    trap 'rm -rf "${temp_root}"' EXIT
 
-    before="$(workspace_metadata_files | snapshot_files)"
+    for file in "${sync_files[@]}"; do
+        candidate="${temp_repo}/${file}"
+        mkdir -p "$(dirname "${candidate}")"
+        if [[ -f "${file}" ]]; then
+            cp -p "${file}" "${candidate}"
+        fi
+    done
+
+    cd "${temp_repo}"
     go work sync
     ensure_go_mod_toolchains
-    after="$(workspace_metadata_files | snapshot_files)"
-    if [[ "${before}" != "${after}" ]]; then
+    cd "${ROOT_DIR}"
+
+    for file in "${sync_files[@]}"; do
+        candidate="${temp_repo}/${file}"
+        if cmp -s "${file}" "${candidate}"; then
+            continue
+        fi
+
+        drift=true
+        if [[ -f "${file}" && -f "${candidate}" ]]; then
+            diff -u --label "${file}" --label "${file} (go work sync)" "${file}" "${candidate}" >&2 || true
+        elif [[ -f "${candidate}" ]]; then
+            echo "go work sync would create ${file}" >&2
+        else
+            echo "go work sync would remove ${file}" >&2
+        fi
+    done
+
+    if [[ "${drift}" == "true" ]]; then
         echo "go work sync changed workspace or module metadata; commit the sync result" >&2
-        git diff -- "${sync_files[@]}" >&2
-        git status --short -- "${sync_files[@]}" >&2
         exit 1
     fi
-}
+)
 
 check_gofmt() {
     local go_files=()
@@ -119,26 +150,11 @@ check_gofmt() {
 
 
 check_go_mod_tidy() {
-    local before
-    local after
     local module
-    local sync_files=()
 
-    mapfile -t sync_files < <(workspace_metadata_files)
-    before="$(workspace_metadata_files | snapshot_files)"
-
-    for module in "${GO_MODULES[@]}"; do
-        run_step "go mod tidy: ${module}" bash -c "cd '$module' && go mod tidy"
+    for module in . "${GO_MODULES[@]}"; do
+        run_step "go mod tidy -diff: ${module}" bash -c "cd '$module' && GOWORK=off go mod tidy -diff"
     done
-
-    ensure_go_mod_toolchains
-    after="$(workspace_metadata_files | snapshot_files)"
-    if [[ "${before}" != "${after}" ]]; then
-        echo "go mod tidy changed workspace or module metadata; commit the tidy result" >&2
-        git diff -- "${sync_files[@]}" >&2
-        git status --short -- "${sync_files[@]}" >&2
-        exit 1
-    fi
 }
 
 check_staticcheck() {
@@ -162,6 +178,15 @@ check_staticcheck() {
 
 go_mod_readonly() {
     GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" "$@"
+}
+
+check_canonical_module_builds() {
+    local module
+
+    for module in . "${GO_MODULES[@]}"; do
+        run_step "Canonical build (GOWORK=off): ${module}" \
+            bash -c "cd '${module}' && GOWORK=off go build ./..."
+    done
 }
 
 run_go_package_step() {
@@ -285,6 +310,7 @@ run_step "go work sync drift" check_go_work_sync
 run_step "gofmt" check_gofmt
 run_step "go fix drift" check_go_fix
 check_go_mod_tidy
+check_canonical_module_builds
 run_go_package_step "Go vet" go_mod_readonly go vet
 check_staticcheck
 check_golangci_lint
@@ -326,9 +352,9 @@ fi
 if [[ "${RUN_DEPENDENCY_HYGIENE}" == "true" ]]; then
     govulncheck_bin="$(ensure_govulncheck)"
 
-    for module in "${GO_MODULES[@]}"; do
+    for module in . "${GO_MODULES[@]}"; do
         run_step "Dependency hygiene: ${module}" \
-            bash -c "cd '$module' && GOWORK=off go list -m -u -mod=readonly all >/dev/null && GOWORK='${ROOT_DIR}/go.work' '${govulncheck_bin}' ./..."
+            bash -c "cd '$module' && GOWORK=off go list -m -u -mod=readonly all >/dev/null && GOWORK=off '${govulncheck_bin}' ./..."
     done
 else
     echo "[LOCAL CI] Skip dependency hygiene: RUN_DEPENDENCY_HYGIENE=${RUN_DEPENDENCY_HYGIENE}"
