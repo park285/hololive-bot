@@ -38,6 +38,7 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/park285/iris-client-go/webhook"
 	"github.com/park285/shared-go/pkg/workerpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -51,37 +52,8 @@ func TestBuildBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *testing.T
 
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "env-token-must-not-win")
 
-	valkeyClient, _ := sharedtestutil.NewTestValkeyClient(t)
-	cacheClient := cachemocks.NewLenientClient()
-	cacheClient.GetClientFunc = func() valkey.Client { return valkeyClient }
-
-	appConfig := &config.Config{
-		Iris: config.IrisConfig{WebhookToken: token},
-		Webhook: config.WebhookConfig{
-			WorkerCount:    1,
-			QueueSize:      8,
-			EnqueueTimeout: 100 * time.Millisecond,
-			HandlerTimeout: time.Second,
-			MaxBodyBytes:   1024,
-			DedupTTL:       time.Minute,
-			DedupTimeout:   500 * time.Millisecond,
-		},
-	}
 	messageHandler := &recordingWebhookMessageHandler{messages: make(chan *webhook.Message, 1)}
-	webhookPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 8})
-	t.Cleanup(webhookPool.StopAndWait)
-
-	handler, err := BuildBotWebhookHandler(
-		appConfig,
-		messageHandler,
-		BotWebhookRuntimeDependencies{Cache: cacheClient},
-		webhookPool,
-		slog.New(slog.DiscardHandler),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, handler.Close())
-	})
+	handler := buildBotWebhookHandlerForTest(t, messageHandler)
 
 	malformedRequest := newSignedBotWebhookTestRequest(t.Context(), token, messageID, "{invalid-json")
 	malformedResponse := httptest.NewRecorder()
@@ -106,6 +78,67 @@ func TestBuildBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *testing.T
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("message handler was not called after valid body reused the malformed request message ID")
 	}
+}
+
+func TestBuildBotWebhookHandlerWiresPrometheusMetrics(t *testing.T) {
+	const token = "test-token"
+
+	t.Setenv("IRIS_WEBHOOK_TOKEN", token)
+	handler := buildBotWebhookHandlerForTest(t, &recordingWebhookMessageHandler{messages: make(chan *webhook.Message, 1)})
+
+	request := newSignedBotWebhookTestRequest(t.Context(), token, "message-id-metrics", "{invalid-json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	assertDefaultWebhookMetricIncrements(t)
+}
+
+func buildBotWebhookHandlerForTest(t *testing.T, messageHandler webhook.MessageHandler) *webhook.Handler {
+	t.Helper()
+	valkeyClient, _ := sharedtestutil.NewTestValkeyClient(t)
+	cacheClient := cachemocks.NewLenientClient()
+	cacheClient.GetClientFunc = func() valkey.Client { return valkeyClient }
+	appConfig := &config.Config{
+		Iris: config.IrisConfig{WebhookToken: "test-token"},
+		Webhook: config.WebhookConfig{
+			WorkerCount:    1,
+			QueueSize:      8,
+			EnqueueTimeout: 100 * time.Millisecond,
+			HandlerTimeout: time.Second,
+			MaxBodyBytes:   1024,
+			DedupTTL:       time.Minute,
+			DedupTimeout:   500 * time.Millisecond,
+		},
+	}
+	webhookPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 8})
+	t.Cleanup(webhookPool.StopAndWait)
+	handler, err := BuildBotWebhookHandler(
+		appConfig,
+		messageHandler,
+		BotWebhookRuntimeDependencies{Cache: cacheClient},
+		webhookPool,
+		slog.New(slog.DiscardHandler),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, handler.Close())
+	})
+	return handler
+}
+
+func assertDefaultWebhookMetricIncrements(t *testing.T) {
+	t.Helper()
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, family := range families {
+		if family.GetName() == "hololive_bot_webhook_bad_request_total" {
+			require.NotEmpty(t, family.Metric)
+			assert.GreaterOrEqual(t, family.Metric[0].GetCounter().GetValue(), float64(1))
+			return
+		}
+	}
+	t.Fatal("hololive_bot_webhook_bad_request_total was not registered")
 }
 
 func TestBuildBotWebhookHandlerRequiresHMACWhenConfigured(t *testing.T) {

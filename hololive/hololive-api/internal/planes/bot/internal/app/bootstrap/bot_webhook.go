@@ -19,6 +19,7 @@ func BuildBotWebhookHandler(
 	return iris.NewWebhookHandler(messageHandler,
 		webhook.WithWebhookToken(appConfig.Iris.WebhookToken),
 		webhook.WithWebhookLogger(logger),
+		webhook.WithMetrics(defaultWebhookMetrics()),
 		valkeydedup.Option(deps.Cache.GetClient()),
 		webhook.WithDedupMode(webhook.DedupModeAfterDecode),
 		webhook.WithTaskPool(webhookPool),
