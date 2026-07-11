@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/testcontainers/testcontainers-go"
 )
@@ -86,6 +87,7 @@ func findSessionReaper(ctx context.Context) (_ sessionReaper, _ bool, err error)
 	}()
 
 	resp, err := provider.Client().ContainerList(ctx, client.ContainerListOptions{
+		All: true,
 		Filters: make(client.Filters).
 			Add("label", "org.testcontainers.ryuk=true").
 			Add("label", "org.testcontainers.sessionId="+testcontainers.SessionID()),
@@ -106,12 +108,16 @@ func sessionReaperFromList(
 		return sessionReaper{}, false, nil
 	}
 
+	item := resp.Items[0]
+	if item.State != container.StateRunning {
+		return sessionReaper{}, false, fmt.Errorf(
+			"session reaper container %.12s is %q, not running", item.ID, item.State)
+	}
+
 	host, err := provider.DaemonHost(ctx)
 	if err != nil {
 		return sessionReaper{}, false, fmt.Errorf("daemon host: %w", err)
 	}
-
-	item := resp.Items[0]
 	for _, port := range item.Ports {
 		if port.PublicPort != 0 {
 			return sessionReaper{
