@@ -89,7 +89,7 @@ jobs:
           owned_pkgs=()
           for pkg in "${pkgs[@]}"; do
             case "${pkg}" in
-              ../shared-go/...)
+              ../shared-go/...|../iris-client-go/...)
                 continue
                 ;;
             esac
@@ -103,7 +103,7 @@ jobs:
           owned_pkgs=()
           for pkg in "${pkgs[@]}"; do
             case "${pkg}" in
-              ../shared-go/...)
+              ../shared-go/...|../iris-client-go/...)
                 continue
                 ;;
             esac
