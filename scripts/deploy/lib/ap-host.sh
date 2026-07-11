@@ -8,6 +8,7 @@ ap_host_usage_names() {
 ap_host_load() {
     local repo_root="$1"
     local host="${2:-}"
+    local service_count container_count port_count
 
     if [[ -z "$host" ]]; then
         echo "AP host name required. Available: $(ap_host_usage_names "$repo_root")" >&2
@@ -57,10 +58,21 @@ ap_host_load() {
         echo "AP_SERVICES/AP_CONTAINERS/AP_PORTS must be non-empty in $conf" >&2
         return 2
     fi
-    if [[ ${#AP_SERVICES[@]} -ne ${#AP_CONTAINERS[@]} || ${#AP_SERVICES[@]} -ne ${#AP_PORTS[@]} ]]; then
+    service_count=${#AP_SERVICES[@]}
+    container_count=${#AP_CONTAINERS[@]}
+    port_count=${#AP_PORTS[@]}
+    if ! (( service_count == container_count && service_count == port_count )); then
         echo "AP_SERVICES/AP_CONTAINERS/AP_PORTS must have matching lengths in $conf" >&2
         return 2
     fi
+    AP_RUNTIME_MODE="${AP_RUNTIME_MODE:-compose}"
+    case "${AP_RUNTIME_MODE}" in
+        compose|native) ;;
+        *)
+            echo "AP_RUNTIME_MODE must be compose or native in $conf" >&2
+            return 2
+            ;;
+    esac
     if [[ ! -r "$repo_root/$AP_COMPOSE_FILE" ]]; then
         echo "AP_COMPOSE_FILE not readable: $repo_root/$AP_COMPOSE_FILE" >&2
         return 2

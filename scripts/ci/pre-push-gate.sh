@@ -101,6 +101,7 @@ fi
 echo "[pre-push] workflow boundary / gate ownership"
 bash scripts/ci/check-workflow-secrets.sh
 bash scripts/ci/check-workflow-secrets_test.sh
+bash scripts/ci/test-go-workspace-modules.sh
 bash scripts/deploy/check-ap-rsync-manifest.sh
 echo "[pre-push] security regression shell tests"
 bash scripts/logs/daily-rollup-logs_test.sh

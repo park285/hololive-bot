@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+
 compose_query_output() {
   local service_key="$1"
   local since="$2"

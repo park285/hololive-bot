@@ -10,7 +10,10 @@ cd "${ROOT_DIR}"
 
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
 source "${SCRIPT_DIR}/local-ci-files.sh"
+# These arrays are the input contract consumed by local-ci-packages.sh.
+# shellcheck disable=SC2034
 mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
+# shellcheck disable=SC2034
 mapfile -t WORKSPACE_GO_PACKAGES < <(go_workspace_package_patterns)
 GO_PACKAGES=()
 source "${SCRIPT_DIR}/local-ci-packages.sh"

@@ -49,23 +49,32 @@ run_scope() {
   (
     cd "${workdir}"
 
+    # These variables are the input contract consumed by the sourced helpers.
+    # shellcheck disable=SC2034
     GO_MODULES=(
       shared-go
       hololive/hololive-shared
       hololive/hololive-api
     )
+    # shellcheck disable=SC1090
     source "${files_helper}"
+    # shellcheck disable=SC2034
     mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
+    # shellcheck disable=SC2034
     WORKSPACE_GO_PACKAGES=(
       ./shared-go/...
       ./hololive/hololive-shared/...
       ./hololive/hololive-api/...
     )
     GO_PACKAGES=()
+    # shellcheck disable=SC2034
     LOCAL_CI_GO_SCOPE="${scope}"
+    # shellcheck disable=SC2034
     BASE_REF="${base_ref}"
+    # shellcheck disable=SC2034
     HEAD_REF=HEAD
 
+    # shellcheck disable=SC1090
     source "${helper}"
     configure_go_packages
     printf '%s\n' "${GO_PACKAGES[@]}"

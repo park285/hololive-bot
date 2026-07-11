@@ -37,7 +37,8 @@ else
   fi
 fi
 
-if [[ "5" =~ ^[0-9]+$ ]]; then
+valid_payload="5"
+if [[ "${valid_payload}" =~ ^[0-9]+$ ]]; then
   pass "integer guard accepts a valid value"
 else
   record_fail "integer guard rejected a valid integer"

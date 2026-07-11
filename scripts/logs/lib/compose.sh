@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+# COMPOSE_CMD and COMPOSE_MODE are output variables consumed by sibling libraries.
+# shellcheck disable=SC2034
+
 resolve_compose_cmd() {
   COMPOSE_FILE="${COMPOSE_FILE:-deploy/compose/docker-compose.prod.yml}"
   CONTAINER_CLI="${CONTAINER_CLI:-docker}"

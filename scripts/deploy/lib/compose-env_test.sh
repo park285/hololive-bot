@@ -71,7 +71,7 @@ else
   record_fail "bridge-networked postgres should be allowed"
 fi
 
-if FAKE_PG_NETWORK= run_guard "${PROD}"; then
+if FAKE_PG_NETWORK='' run_guard "${PROD}"; then
   pass "no running postgres allowed"
 else
   record_fail "no running postgres should be allowed"

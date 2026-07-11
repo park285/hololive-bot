@@ -4,6 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# SCRIPT_PATH is consumed by the sourced stream and canary libraries.
+# shellcheck disable=SC2034
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 
 usage() {

@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+
 ensure_mirror_enabled() {
   local enable_log_mirror="${ENABLE_LOG_MIRROR:-0}"
   if [[ "${enable_log_mirror}" != "1" ]]; then

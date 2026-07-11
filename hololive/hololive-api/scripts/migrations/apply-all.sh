@@ -109,6 +109,8 @@ while IFS= read -r entry || [ -n "${entry}" ]; do
 
   printf '%s\n' "${filename}" >> "${MANIFEST_ALL_ORDERED}"
 
+  # MIGRATION_GLOB is intentionally a case pattern selected by the operator.
+  # shellcheck disable=SC2254
   case "${filename}" in
     ${MIGRATION_GLOB})
       printf '%s\n' "${filename}" >> "${MANIFEST_SELECTED_ORDERED}"

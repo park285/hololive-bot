@@ -68,7 +68,10 @@ pass "valid env passes"
 
 (
     cd "$tmpdir"
-    resolved="$(COMPOSE_ENV_FILE=env compose_env_resolve_file)"
+    resolved="$(
+        export COMPOSE_ENV_FILE=env
+        compose_env_resolve_file
+    )"
     [[ "${resolved}" == "${env_file}" ]] || fail "relative COMPOSE_ENV_FILE resolved to ${resolved}, want ${env_file}"
 )
 pass "relative COMPOSE_ENV_FILE resolves to an absolute path"

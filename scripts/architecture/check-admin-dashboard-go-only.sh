@@ -25,7 +25,8 @@ if ! grep -q './admin-dashboard/backend' go.work; then
   exit 1
 fi
 
-if ! grep -q 'admin-dashboard/backend' scripts/ci/go-workspace-modules.sh; then
+source scripts/ci/go-workspace-modules.sh
+if ! printf '%s\n' "${GO_WORKSPACE_MODULES[@]}" | grep -Fxq 'admin-dashboard/backend'; then
   echo 'Go workspace CI module list must include admin-dashboard/backend' >&2
   exit 1
 fi
