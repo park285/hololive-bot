@@ -75,7 +75,7 @@ youtube-producer
   -> Iris / Kakao egress
 ```
 
-The key ownership split is that `youtube-producer` produces YouTube outbox rows and owns 2-way active-active poll coordination/readiness (Seoul `b` + main `c`), while `alarm-worker` owns final delivery. Duplicate suppression depends on Valkey `JobRunGuard`, database identities such as `(kind, content_id)`, and the dispatch worker's delivery claims.
+The key ownership split is that `youtube-producer` produces YouTube outbox rows and owns 4-way active-active poll coordination/readiness (Seoul `b` + main `c` + Osaka host-native `a` + Osaka2 host-native `d`), while `alarm-worker` owns final delivery. Duplicate suppression depends on Valkey `JobRunGuard`, database identities such as `(kind, content_id)`, and the dispatch worker's delivery claims.
 
 ### LLM Work Flow
 
@@ -115,7 +115,7 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 
 ## Active-Active YouTube Producer Notes
 
-The `youtube-producer` active-active path runs two AP containers — `youtube-producer-b` on the Seoul host (`deploy/compose/docker-compose.seoul.yml`), and `youtube-producer-c` on the main host (`deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`) — while preserving a producer-only contract. Both share the main Valkey lease backend (`production` namespace): Seoul b connects over TCP, c over the local Valkey unix socket. The important invariants are:
+The `youtube-producer` active-active path runs two AP containers — `youtube-producer-b` on the Seoul host (`deploy/compose/docker-compose.seoul.yml`), and `youtube-producer-c` on the main host (`deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`) — while preserving a producer-only contract. Two more APs, `youtube-producer-a` (Osaka) and `youtube-producer-d` (Osaka2), run as host-native `systemd` runtimes rather than containers and join the same lease coordination; their compose overlays are kept for compose-path contract validation only. All four APs share the main Valkey lease backend (`production` namespace): the remote APs (`a`, `b`, `d`) connect over TCP, `c` over the local Valkey unix socket. The important invariants are:
 
 - per-channel polling uses Valkey-backed `JobRunGuard` keyed by `(namespace, poller, channel)`, distributing jobs N-way;
 - successful polls mark a cooldown instead of simply releasing the lease;

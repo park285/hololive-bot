@@ -1,5 +1,7 @@
 # Session Pre-warning Frontend Handoff
 
+> **[superseded]** 이 문서의 "프론트엔드 모달/상태/UI 미구현" 전제는 소비 완료된 handoff 시점 스냅샷입니다. 세션 pre-warning 프론트는 이후 구현 완료되었습니다 — `frontend/src/App.tsx:77-92`(`useSessionWarnings` 훅 호출과 `SessionIdleWarningModal`/`SessionAbsoluteWarningModal` 마운트), `frontend/src/hooks/useSessionWarnings.ts`, `frontend/src/components/auth/SessionIdleWarningModal.tsx`, `frontend/src/components/auth/SessionAbsoluteWarningModal.tsx` 참조. 아래 본문은 당시 handoff 기록으로 보존합니다.
+
 이 문서는 관리자 대시보드 세션 pre-warning UX를 프론트엔드 팀이 **이 문서만 보고 바로 구현**할 수 있도록 정리한 handoff 문서입니다.
 
 범위:

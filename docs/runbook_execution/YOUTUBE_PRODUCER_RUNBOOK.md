@@ -2,12 +2,12 @@
 
 > 실제 tailnet 주소/호스트는 private ops evidence 참조.
 
-> 마지막 업데이트: 2026-06-04
-> 대상 서비스: `youtube-producer` (3-way active-active: osaka `30005`, seoul `30015`, main `30025`)
+> 마지막 업데이트: 2026-07-11
+> 대상 서비스: `youtube-producer` (4-way active-active: osaka `30005`, seoul `30015`, main `30025`, osaka2 `30035`)
 
 ## 1) 목적
 
-현재 Docker Compose 기준 YouTube 수집/스크래핑/아웃박스 런타임을 `youtube-producer` 서비스의 3-way active-active 인스턴스(osaka `a` + seoul `b` + main `c`)로 운영합니다.
+현재 YouTube 수집/스크래핑/아웃박스 런타임을 `youtube-producer` 서비스의 4-way active-active 인스턴스(osaka `a` + seoul `b` + main `c` + osaka2 `d`)로 운영합니다. seoul `b`·main `c`는 Docker Compose 컨테이너로, osaka `a`·osaka2 `d`는 host-native `systemd` 런타임으로 실행됩니다.
 
 포함 책임:
 - YouTube ingestion scheduler
@@ -28,12 +28,12 @@
 - YouTube 커뮤니티/쇼츠 알람 라우팅은 `youtube-producer` outbox row production과 `alarm-worker` final egress로 고정합니다.
 - canary/legacy 선택 플래그 없이 전체 운영 채널에 동일 경로를 적용합니다.
 
-Remote AP split-host 운영 기준 (3-way active-active):
-- 토폴로지: Osaka `youtube-producer-a` (`<osaka-a-host>`, `<tailnet-osaka-a>`, `30005`) + Seoul `youtube-producer-b` (`<tailnet-seoul-b>`, `30015`) + main `youtube-producer-c` (`<tailnet-central>`, `30025`, profile `main-ap`)
+Remote AP split-host 운영 기준 (4-way active-active):
+- 토폴로지: Osaka `youtube-producer-a` (`<osaka-a-host>`, `<tailnet-osaka-a>`, `30005`, host-native `systemd`) + Seoul `youtube-producer-b` (`<tailnet-seoul-b>`, `30015`) + main `youtube-producer-c` (`<tailnet-central>`, `30025`, profile `main-ap`) + Osaka2 `youtube-producer-d` (`<tailnet-osaka2-d>`, `30035`, host-native `systemd`)
 - shared state/control 호스트: `kapu` (`<tailnet-central>`)
 - 원격 AP에서는 `holo-postgres`, `hololive-db-migrate`, `valkey-cache`를 올리지 않고 `<tailnet-central>:5433`, `<tailnet-central>:6379`, `http://<tailnet-central>:8787/v1`을 사용합니다.
-- 원격 AP start는 항상 `docker-compose.prod.yml`에 host overlay(`docker-compose.osaka.yml` / `docker-compose.seoul.yml`)를 겹치고 `--no-deps`를 붙입니다.
-- `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true`는 host overlay(osaka/seoul)와 `main-ap` profile에서만 설정합니다. 중앙 host `kapu`의 base `youtube-producer`는 이 값이 false라서 락 획득 전에 종료되어야 합니다.
+- Seoul `youtube-producer-b`는 `docker-compose.prod.yml`과 `docker-compose.seoul.yml`을 겹친 뒤 `--no-deps`로 시작합니다. Osaka `youtube-producer-a`와 Osaka2 `youtube-producer-d`의 live 배포는 `scripts/deploy/ap-host-native-deploy.sh`를 사용하며, 해당 Compose overlay는 경로·계약 검증과 rollback 대비용으로만 유지합니다.
+- `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true`는 Seoul Compose overlay, Osaka·Osaka2 host-native env, `main-ap` profile에서만 설정합니다. 중앙 host `kapu`의 base `youtube-producer`는 이 값이 false라서 락 획득 전에 종료되어야 합니다.
 - env 정본은 OpenBao KV이며, 원격 AP Compose는 OpenBao Agent가 렌더링한 token-free `/run/hololive-bot/ap-compose.env`와 producer 전용 `/run/hololive-bot/youtube-producer.env`를 사용합니다. 중앙 Valkey는 Tailscale IP에 publish되지만 password 인증을 필수로 사용합니다.
 - `CACHE_PASSWORD`는 admin-dashboard Redis URL에도 들어가므로 URL-safe hex 값을 권장합니다.
 

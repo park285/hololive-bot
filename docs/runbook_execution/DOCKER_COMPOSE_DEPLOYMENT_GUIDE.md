@@ -9,7 +9,7 @@
 대상 서비스:
 - `hololive-api` (통합 런타임 — bot plane `30001`, llm plane `30003`, admin plane `30006`)
 - `hololive-alarm-worker` (`30007`)
-- `youtube-producer` (3-way AP: osaka `30005` / seoul `30015` / main `30025`)
+- `youtube-producer` (4-way AP: osaka `30005` / seoul `30015` / main `30025` / osaka2 `30035`)
 - `holo-postgres` (`5433`)
 - `valkey-cache` (`6379`)
 
@@ -36,7 +36,7 @@ sudo find data logs -type f -exec chmod 660 {} +
 
 ## YouTube producer 런타임
 
-`docker-compose.prod.yml` 기준 현재 YouTube 수집과 photo sync 책임은 `youtube-producer` 서비스가 소유하며, 런타임은 3-way active-active 인스턴스로 실행됩니다 (osaka `youtube-producer-a` `30005`, seoul `youtube-producer-b` `30015`, main `youtube-producer-c` `30025`).
+`docker-compose.prod.yml` 기준 현재 YouTube 수집과 photo sync 책임은 `youtube-producer` 서비스가 소유하며, 런타임은 4-way active-active 인스턴스로 실행됩니다 (osaka `youtube-producer-a` `30005`, seoul `youtube-producer-b` `30015`, main `youtube-producer-c` `30025`, osaka2 `youtube-producer-d` `30035`). seoul `b`·main `c`는 compose 컨테이너로, osaka `a`·osaka2 `d`는 host-native `systemd` 런타임으로 실행됩니다.
 
 - `youtube-producer` (base 정의, 인스턴스 overlay가 포트·instance id·PhotoSync 참여를 override — `youtube-producer-b`는 PhotoSync 미참여): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`
   - YouTube ingestion scheduler
@@ -48,15 +48,16 @@ sudo find data logs -type f -exec chmod 660 {} +
 운영 라우팅 고정:
 - YouTube 커뮤니티/쇼츠 알람은 전체 운영 채널에서 `youtube-producer`가 outbox row를 만들고 `alarm-worker`가 claim/render/final send를 수행합니다.
 - compose 기준 rollout key는 `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED` 하나만 사용하고, canary fallback은 두지 않습니다. 운영 compose에서는 `youtube-producer=true`로 고정합니다.
-- `youtube-producer` 실행 권한은 `YOUTUBE_PRODUCER_RUNTIME_ALLOWED`로 한 번 더 제한합니다. base 기본값은 `false`이고 원격 AP overlay(osaka/seoul)와 `main-ap` profile에서만 `true`입니다.
+- `youtube-producer` 실행 권한은 `YOUTUBE_PRODUCER_RUNTIME_ALLOWED`로 한 번 더 제한합니다. base 기본값은 `false`이고 Seoul Compose overlay, Osaka·Osaka2 host-native env, `main-ap` profile에서만 `true`입니다. Osaka·Osaka2 Compose overlay에도 계약 검증을 위해 같은 값이 유지됩니다.
 
-## Remote AP split-host 운영 (osaka, seoul)
+## Remote AP split-host 운영 (osaka, seoul, osaka2)
 
 > 실제 tailnet 주소/호스트는 private ops evidence 참조.
 
-split-host 구성에서는 producer AP runtime container만 원격 호스트에서 실행하고, shared state/control은 기존 `kapu` (`<tailnet-central>`)에 둡니다. 토폴로지는 3-way active-active입니다.
+split-host 구성에서는 producer AP runtime만 원격 호스트에서 실행하고, shared state/control은 기존 `kapu` (`<tailnet-central>`)에 둡니다. 토폴로지는 4-way active-active입니다. seoul `b`는 원격 compose 컨테이너로, osaka `a`·osaka2 `d`는 host-native `systemd` 런타임으로 실행되며 osaka/osaka2 compose overlay는 compose 경로/계약 검증용으로 유지합니다.
 
-- Osaka runtime: `youtube-producer-a` (`<osaka-a-host>`, `<tailnet-osaka-a>`, overlay `docker-compose.osaka.yml`, port `30005`)
+- Osaka runtime: `youtube-producer-a` (`<osaka-a-host>`, `<tailnet-osaka-a>`, host-native `systemd`, port `30005`, overlay `docker-compose.osaka.yml`은 계약 검증용)
+- Osaka2 runtime: `youtube-producer-d` (`<tailnet-osaka2-d>`, host-native `systemd`, port `30035`, overlay `docker-compose.osaka2.yml`은 계약 검증용)
 - Seoul runtime: `youtube-producer-b` (`<tailnet-seoul-b>`, overlay `docker-compose.seoul.yml`, port `30015`)
 - main-host runtime: `youtube-producer-c` (`docker-compose.main-ap.yml`, profile `main-ap`, port `30025`)
 - 기존 state/control: `holo-postgres` (`<tailnet-central>:5433`), `valkey-cache` (`<tailnet-central>:6379`), CLIProxy (`http://<tailnet-central>:8787/v1`), `hololive-api` (통합 런타임 — bot/llm/admin plane)
