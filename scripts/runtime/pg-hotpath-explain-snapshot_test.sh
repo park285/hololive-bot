@@ -177,6 +177,9 @@ cat >"${fake_psql}" <<'SH'
 set -euo pipefail
 printf '%s\n' "$*" >> "${FAKE_PSQL_ARGV_LOG}"
 printf '%s\n' "${PGDATABASE:-}" >> "${FAKE_PSQL_DSN_LOG}"
+# 실제 psql처럼 stdin을 끝까지 소비한다 — 읽지 않고 종료하면 SQL producer가
+# SIGPIPE(141)를 받아 pipefail로 조용히 죽는 경쟁이 생긴다(죽는 지점 비결정).
+cat > /dev/null
 out_file=""
 stats_window_seconds=""
 while [[ $# -gt 0 ]]; do
