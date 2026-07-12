@@ -174,6 +174,9 @@ func loadTestWorkerProfileDiagnosticsJSON() string {
 			"webhook": {
 				"webhookPipeline": {
 					"profileEnabled": true,
+					"profileVersion": 1,
+					"profileId": "hololive-test",
+					"profileHash": "04d9148810ead976c36a40923375b97117bc39f908116dd20660c065b36eacb8",
 					"workerProfile": {
 						"version": 1,
 						"profile_id": "hololive-test",
@@ -185,7 +188,9 @@ func loadTestWorkerProfileDiagnosticsJSON() string {
 							"max_drain_per_tick": 128,
 							"max_attempts": 6,
 							"request_timeout_ms": 30000,
-							"lane_idle_timeout_ms": 750
+							"lane_idle_timeout_ms": 750,
+							"breaker_failure_threshold": 5,
+							"breaker_cooldown_ms": 30000
 						},
 						"receive": {
 							"workers": 16,
@@ -1577,6 +1582,9 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 			"webhook": {
 				"webhookPipeline": {
 					"profileEnabled": true,
+					"profileVersion": 1,
+					"profileId": "hololive-custom-test",
+					"profileHash": "0f2bc26a3add170e28745b925c7cb0952c4d49f5519358d148157dcb97a4b1ec",
 					"workerProfile": {
 						"version": 1,
 						"profile_id": "hololive-custom-test",
@@ -1588,7 +1596,9 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 							"max_drain_per_tick": 128,
 							"max_attempts": 6,
 							"request_timeout_ms": 30000,
-							"lane_idle_timeout_ms": 750
+							"lane_idle_timeout_ms": 750,
+							"breaker_failure_threshold": 5,
+							"breaker_cooldown_ms": 30000
 						},
 						"receive": {
 							"workers": 20,

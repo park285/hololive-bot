@@ -21,6 +21,7 @@ func TestParseVideosFromRSSFeed_HappyPath(t *testing.T) {
 	assert.Equal(t, "UC_FEED", videos[0].ChannelID)
 	assert.Equal(t, "Feed Channel", videos[0].ChannelTitle)
 	assert.Equal(t, "2026-03-01T09:08:07Z", videos[0].PublishedText)
+	assert.Equal(t, VideoSourceRSS, videos[0].Source)
 	require.Len(t, videos[0].Thumbnail, 1)
 	assert.Equal(t, "https://i.ytimg.com/vi/feed_001/hqdefault.jpg", videos[0].Thumbnail[0].URL)
 	assert.Equal(t, 480, videos[0].Thumbnail[0].Width)

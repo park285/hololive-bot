@@ -574,7 +574,7 @@ func TestShortsPollerReevaluatesDeferredCandidateWhenItReturnsToPage(t *testing.
 }
 
 func TestClassifyShortByFreshnessTreatsFarFuturePublishedAtAsUnresolved(t *testing.T) {
-	poller := &ShortsPoller{deferrals: newShortsFreshnessDeferrals()}
+	poller := &ShortsPoller{deferrals: newFreshnessDeferrals()}
 	now := time.Now().UTC()
 	farFuture := now.Add(48 * time.Hour)
 	nearFuture := now.Add(30 * time.Minute)
@@ -599,4 +599,66 @@ func TestClassifyShortByFreshnessTreatsFarFuturePublishedAtAsUnresolved(t *testi
 		&scraper.Short{VideoID: "near-future-short", PublishedAt: &nearFuture},
 		"near-future-short", shortVideoStateRow{}, false, now)
 	assert.Equal(t, shortCandidateNotifyFresh, nearFresh.class, "clock-skew-level future published_at stays fresh")
+}
+
+func TestShortsPollerReevaluatesDeferredCandidateAfterItMovesBehindWatermark(t *testing.T) {
+	db := shortsFreshnessTestDB(t)
+	seedShortsWatermark(t, db, "UC_SHORT_DEFER_REORDER", "old-short")
+	freshPublishedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	pageIDs := []string{"deferred-reordered", "old-short"}
+	routes := newShortsFreshnessRoutes(func() string {
+		return shortsFreshnessTabHTML(pageIDs...)
+	}, func(videoID string, calls int) *http.Response {
+		if videoID == "new-head" {
+			return watchResponseWithPublishedAt(freshPublishedAt)
+		}
+		require.Equal(t, "deferred-reordered", videoID)
+		if calls == 1 {
+			return watchResponseWithoutPublishedAt()
+		}
+
+		return watchResponseWithPublishedAt(freshPublishedAt)
+	})
+	poller := NewShortsPoller(newShortsFreshnessClient(routes), db, 10)
+
+	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_REORDER"))
+	pageIDs = []string{"new-head", "old-short", "deferred-reordered"}
+	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_REORDER"))
+
+	var outboxRows []domain.YouTubeNotificationOutbox
+	require.NoError(t, db.Order("id ASC").Find(&outboxRows).Error)
+	contentIDs := make([]string, 0, len(outboxRows))
+	for index := range outboxRows {
+		contentIDs = append(contentIDs, outboxRows[index].ContentID)
+	}
+	assert.ElementsMatch(t, []string{"short:new-head", "short:deferred-reordered"}, contentIDs)
+	assert.Equal(t, "short:new-head", loadShortsWatermark(t, db, "UC_SHORT_DEFER_REORDER").LastContentID)
+	assert.Equal(t, 2, routes.watchCalls["deferred-reordered"])
+}
+
+func TestShortsPollerCountsEmptySuccessfulPollsTowardDeferralLimit(t *testing.T) {
+	db := shortsFreshnessTestDB(t)
+	seedShortsWatermark(t, db, "UC_SHORT_DEFER_EMPTY", "old-short")
+	freshPublishedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	pageIDs := []string{"deferred-empty", "old-short"}
+	routes := newShortsFreshnessRoutes(func() string {
+		return shortsFreshnessTabHTML(pageIDs...)
+	}, func(videoID string, _ int) *http.Response {
+		if videoID == "new-after-empty" {
+			return watchResponseWithPublishedAt(freshPublishedAt)
+		}
+		require.Equal(t, "deferred-empty", videoID)
+
+		return watchResponseWithoutPublishedAt()
+	})
+	poller := NewShortsPoller(newShortsFreshnessClient(routes), db, 10)
+
+	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_EMPTY"))
+	pageIDs = nil
+	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_EMPTY"))
+	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_EMPTY"))
+	pageIDs = []string{"new-after-empty", "old-short"}
+	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_EMPTY"))
+
+	assert.Equal(t, "short:new-after-empty", loadShortsWatermark(t, db, "UC_SHORT_DEFER_EMPTY").LastContentID)
 }

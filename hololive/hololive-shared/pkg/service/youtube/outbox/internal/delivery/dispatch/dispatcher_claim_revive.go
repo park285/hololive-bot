@@ -32,7 +32,7 @@ import (
 
 // reviveStaleFailedOutbox는 전송 실패로 한 번도 발송 못 한 채 영구 FAILED된 알람을 PENDING으로 되살려
 // 디스패처가 재전송하도록 한다. poll-persist의 ON CONFLICT rearm은 재발견(re-poll)된 행에만 도달하지만
-// 모든 poller가 watermark를 무조건 전진시켜 재발견이 사실상 없으므로, 폴링과 무관하게 FAILED를 되살리는
+// NEW_VIDEO/LIVE_STREAM은 poll-persist rearm 대상이 아니므로, 폴링과 무관하게 FAILED를 되살리는
 // 경로는 이것뿐이다(community/shorts 포함 전 kind).
 //
 // 대상 선정 predicate:

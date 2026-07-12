@@ -23,11 +23,14 @@ package pollers
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -36,6 +39,7 @@ type VideosPoller struct {
 	db         pollerDB
 	repository batchrepo.BatchRepository
 	maxResults int
+	deferrals  *freshnessDeferrals
 }
 
 func NewVideosPoller(scraperClient *scraper.Client, db any, maxResults int) *VideosPoller {
@@ -48,6 +52,7 @@ func NewVideosPoller(scraperClient *scraper.Client, db any, maxResults int) *Vid
 		db:         querier,
 		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults: maxResults,
+		deferrals:  newFreshnessDeferrals(),
 	}
 }
 
@@ -76,6 +81,8 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	}
 
 	if len(videos) == 0 {
+		p.reconcileVideoDeferrals(ctx, channelID, nil, nil)
+
 		return nil
 	}
 
@@ -83,44 +90,111 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	if err != nil {
 		return err
 	}
-	newVideos := videosAfterWatermark(videos, watermark.LastContentID, isInitialized)
-	dbVideos, notifications := buildVideoPollResults(channelID, newVideos, isInitialized)
+	detectedAt := time.Now().UTC()
+	newVideos, watermarkFound := videosAfterWatermark(videos, watermark.LastContentID, isInitialized)
+	newVideos = appendTrackedVideoCandidates(newVideos, videos, p.deferrals.trackedIDs(channelID))
+	logMissingVideoWatermark(ctx, channelID, len(videos), isInitialized, watermarkFound)
+	knownVideoIDs, err := p.loadKnownVideoIDs(ctx, newVideos, isInitialized)
+	if err != nil {
+		return err
+	}
+	resolutionByID := p.resolveVideoMetadata(ctx, channelID, newVideos, knownVideoIDs, isInitialized, detectedAt)
+	dbVideos, notifications, deferredVideoIDs := p.buildVideoPollResults(ctx, channelID, newVideos, knownVideoIDs, isInitialized, resolutionByID, detectedAt)
+	holdWatermark := p.reconcileVideoDeferrals(ctx, channelID, videos, deferredVideoIDs)
+	var nextWatermark *domain.YouTubeContentWatermark
+	if !holdWatermark {
+		nextWatermark = &domain.YouTubeContentWatermark{
+			ChannelID:     channelID,
+			WatermarkType: domain.WatermarkTypeVideo,
+			Initialized:   true,
+			LastContentID: videos[0].VideoID,
+		}
+	} else {
+		slog.WarnContext(ctx, "Video watermark held while freshness candidates stay deferred",
+			logschema.FieldChannelID, channelID,
+			"deferred_count", len(deferredVideoIDs),
+		)
+	}
 
-	if err := p.persistVideoPollResults(ctx, channelID, videos[0].VideoID, dbVideos, notifications); err != nil {
+	if err := p.persistVideoPollResults(ctx, dbVideos, notifications, nextWatermark); err != nil {
 		return fmt.Errorf("persist video batch: %w", err)
 	}
 
 	return nil
 }
 
-func videosAfterWatermark(videos []*scraper.Video, lastSeenID string, isInitialized bool) []*scraper.Video {
+func (p *VideosPoller) reconcileVideoDeferrals(
+	ctx context.Context,
+	channelID string,
+	videos []*scraper.Video,
+	deferredVideoIDs map[string]struct{},
+) bool {
+	holdWatermark, departed := p.deferrals.reconcileChannel(channelID, collectedVideoIDSet(videos), deferredVideoIDs)
+	for _, videoID := range departed {
+		slog.WarnContext(ctx, "Video deferred candidate left the collected page; dropping without notification after max attempts",
+			logschema.FieldChannelID, channelID,
+			"video_id", videoID,
+		)
+	}
+	return holdWatermark
+}
+
+func logMissingVideoWatermark(ctx context.Context, channelID string, collectedCount int, isInitialized, watermarkFound bool) {
+	if !isInitialized || watermarkFound {
+		return
+	}
+
+	slog.WarnContext(ctx, "Video watermark missing from collected page; classifying full page by publication freshness",
+		logschema.FieldChannelID, channelID,
+		"collected_count", collectedCount,
+	)
+}
+
+func (p *VideosPoller) loadKnownVideoIDs(
+	ctx context.Context,
+	videos []*scraper.Video,
+	isInitialized bool,
+) (map[string]struct{}, error) {
+	if !isInitialized {
+		return nil, nil
+	}
+	return loadKnownVideoIDs(ctx, p.db, collectedVideoIDs(videos))
+}
+
+func videosAfterWatermark(videos []*scraper.Video, lastSeenID string, isInitialized bool) ([]*scraper.Video, bool) {
 	newVideos := make([]*scraper.Video, 0, len(videos))
 	for _, video := range videos {
 		if isInitialized && video.VideoID == lastSeenID {
-			break
+			return newVideos, true
 		}
 		newVideos = append(newVideos, video)
 	}
-	return newVideos
+	return newVideos, false
 }
 
-func buildVideoPollResults(
-	channelID string,
-	newVideos []*scraper.Video,
-	isInitialized bool,
-) ([]*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox) {
-	dbVideos := make([]*domain.YouTubeVideo, 0, len(newVideos))
-	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newVideos))
-	for _, video := range newVideos {
-		isLiveReplay := polling.IsLiveReplayVideo(video.PublishedText)
-		dbVideo := buildYouTubeVideo(channelID, video, isLiveReplay)
-		dbVideos = append(dbVideos, dbVideo)
-
-		if isInitialized && !isLiveReplay {
-			notifications = append(notifications, buildVideoNotification(channelID, dbVideo))
-		}
+func appendTrackedVideoCandidates(
+	candidates []*scraper.Video,
+	videos []*scraper.Video,
+	trackedIDs map[string]struct{},
+) []*scraper.Video {
+	if len(trackedIDs) == 0 {
+		return candidates
 	}
-	return dbVideos, notifications
+	seen := collectedVideoIDSet(candidates)
+	for _, video := range videos {
+		if video == nil {
+			continue
+		}
+		if _, tracked := trackedIDs[video.VideoID]; !tracked {
+			continue
+		}
+		if _, exists := seen[video.VideoID]; exists {
+			continue
+		}
+		seen[video.VideoID] = struct{}{}
+		candidates = append(candidates, video)
+	}
+	return candidates
 }
 
 func buildYouTubeVideo(channelID string, video *scraper.Video, isLiveReplay bool) *domain.YouTubeVideo {
@@ -149,15 +223,9 @@ func buildVideoNotification(channelID string, video *domain.YouTubeVideo) *domai
 
 func (p *VideosPoller) persistVideoPollResults(
 	ctx context.Context,
-	channelID string,
-	lastContentID string,
 	dbVideos []*domain.YouTubeVideo,
 	notifications []*domain.YouTubeNotificationOutbox,
+	watermark *domain.YouTubeContentWatermark,
 ) error {
-	return p.repository.PersistVideos(ctx, dbVideos, notifications, nil, &domain.YouTubeContentWatermark{
-		ChannelID:     channelID,
-		WatermarkType: domain.WatermarkTypeVideo,
-		Initialized:   true,
-		LastContentID: lastContentID,
-	})
+	return p.repository.PersistVideos(ctx, dbVideos, notifications, nil, watermark)
 }

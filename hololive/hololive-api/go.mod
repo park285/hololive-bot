@@ -12,8 +12,8 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/openai/openai-go/v3 v3.41.0
-	github.com/park285/iris-client-go v0.28.1-0.20260710052428-67c4d3c92e56
-	github.com/park285/shared-go v1.28.5-0.20260711044739-7236cbb904ea
+	github.com/park285/iris-client-go v0.29.0
+	github.com/park285/shared-go v1.30.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/quic-go/quic-go v0.60.0
 	github.com/shirou/gopsutil/v4 v4.26.6

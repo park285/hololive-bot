@@ -7,6 +7,7 @@ import (
 var (
 	ErrPublishedAtNotFound              = parser.ErrPublishedAtNotFound
 	ErrCommunityPublishedAtNotFound     = parser.ErrCommunityPublishedAtNotFound
+	ErrReplayStatusNotFound             = parser.ErrReplayStatusNotFound
 	normalizePublishedAtCandidate       = parser.NormalizePublishedAtCandidate
 	extractPublishedAtFromHTML          = parser.ExtractPublishedAtFromHTML
 	extractCommunityPublishedAtFromHTML = parser.ExtractCommunityPublishedAtFromHTML

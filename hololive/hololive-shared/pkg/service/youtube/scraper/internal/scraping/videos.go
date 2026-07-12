@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/tidwall/gjson"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser"
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 var (
@@ -86,7 +88,7 @@ func (c *Client) getRecentVideosFromRSSBackoff(ctx context.Context, channelID st
 		return nil, false
 	}
 
-	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults)
+	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults, RSSFetchPolicy)
 	if rssErr == nil && len(rssVideos) > 0 {
 		return rssVideos, true
 	}
@@ -104,7 +106,7 @@ func (c *Client) getRecentVideosFromRSSBackoff(ctx context.Context, channelID st
 }
 
 func (c *Client) getRecentVideosFromRSSFallback(ctx context.Context, channelID string, maxResults int, pageVideos []*Video) ([]*Video, bool) {
-	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults)
+	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults, RSSFetchPolicy)
 	if rssErr != nil {
 		slog.Debug("recent videos rss fallback failed",
 			"channel_id", channelID,
@@ -143,13 +145,13 @@ func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID
 	return videos, nil
 }
 
-func (c *Client) getRecentVideosFromRSS(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {
+func (c *Client) getRecentVideosFromRSS(ctx context.Context, channelID string, maxResults int, policy ...FetchPolicy) ([]*Video, error) {
 	if maxResults <= 0 {
 		return []*Video{}, nil
 	}
 
 	rssURL := fmt.Sprintf("https://www.youtube.com/feeds/videos.xml?channel_id=%s", channelID)
-	html, err := c.fetchChannelSourcePage(ctx, "recent_videos_rss", channelID, rssURL, FailureSourceRSS)
+	html, err := c.fetchChannelSourcePage(ctx, "recent_videos_rss", channelID, rssURL, FailureSourceRSS, policy...)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +161,67 @@ func (c *Client) getRecentVideosFromRSS(ctx context.Context, channelID string, m
 	}
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceRSS)
 	return videos, nil
+}
+
+func (c *Client) GetRecentVideoPublishedTimes(ctx context.Context, channelID string, maxResults int) (map[string]time.Time, error) {
+	videos, err := c.getRecentVideosFromRSS(ctx, channelID, maxResults, RSSFetchPolicy)
+	if err != nil {
+		return nil, fmt.Errorf("get recent video published times: %w", err)
+	}
+
+	publishedAtByID := make(map[string]time.Time, len(videos))
+	for _, video := range videos {
+		if video == nil {
+			continue
+		}
+		publishedAt, ok := yttimestamp.ParsePublishedAt(video.PublishedText)
+		if !ok {
+			continue
+		}
+		publishedAtByID[video.VideoID] = publishedAt.UTC()
+	}
+	return publishedAtByID, nil
+}
+
+func (c *Client) GetVideoPublishedAt(ctx context.Context, channelID, videoID string) (*time.Time, error) {
+	html, err := c.getVideoWatchHTML(ctx, channelID, videoID)
+	if err != nil {
+		return nil, err
+	}
+
+	publishedAt, err := extractPublishedAtFromHTML(html)
+	if err != nil {
+		return nil, fmt.Errorf("extract video published_at %s: %w", videoID, err)
+	}
+	return publishedAt, nil
+}
+
+func (c *Client) GetVideoMetadata(ctx context.Context, channelID, videoID string) (VideoMetadata, error) {
+	html, err := c.getVideoWatchHTML(ctx, channelID, videoID)
+	if err != nil {
+		return VideoMetadata{}, err
+	}
+
+	metadata := parser.ExtractVideoMetadataFromHTML(html)
+	if metadata.Replay == ReplayStatusUnknown {
+		return metadata, fmt.Errorf("extract video replay status %s: %w", videoID, ErrReplayStatusNotFound)
+	}
+
+	return metadata, nil
+}
+
+func (c *Client) getVideoWatchHTML(ctx context.Context, channelID, videoID string) (string, error) {
+	if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
+		return "", fmt.Errorf("video watch page %s: %w", videoID, err)
+	}
+
+	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+	html, err := c.fetchPage(ctx, url, MetadataResolveFetchPolicy)
+	if err != nil {
+		return "", fmt.Errorf("fetch video watch page %s: %w", videoID, err)
+	}
+
+	return html, nil
 }
 
 func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {
@@ -267,6 +330,7 @@ func (c *Client) parseVideoCommon(video *gjson.Result, channelID, durationPath, 
 		ChannelID:     channelID,
 		ChannelTitle:  video.Get(channelTitlePath).String(),
 		ChannelHandle: video.Get(channelHandlePath).String(),
+		Source:        VideoSourceHTML,
 	}
 }
 

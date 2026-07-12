@@ -2,6 +2,27 @@ package parser
 
 import "time"
 
+type VideoSource string
+
+const (
+	VideoSourceUnknown VideoSource = ""
+	VideoSourceHTML    VideoSource = "html"
+	VideoSourceRSS     VideoSource = "rss"
+)
+
+type ReplayStatus uint8
+
+const (
+	ReplayStatusUnknown ReplayStatus = iota
+	ReplayStatusNotReplay
+	ReplayStatusReplay
+)
+
+type VideoMetadata struct {
+	PublishedAt *time.Time
+	Replay      ReplayStatus
+}
+
 type ChannelStats struct {
 	ChannelID       string `json:"channelId"`
 	SubscriberCount int64  `json:"subscriberCount"`
@@ -44,6 +65,7 @@ type Video struct {
 	ChannelID     string      `json:"channelId"`
 	ChannelTitle  string      `json:"channelTitle"`
 	ChannelHandle string      `json:"channelHandle"`
+	Source        VideoSource `json:"-"`
 }
 
 type CommunityPost struct {

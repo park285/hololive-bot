@@ -233,7 +233,11 @@ func fetchIrisBotWebhookWorkerProfile(config *IrisConfig) (profile workerconfig.
 	if err != nil {
 		return profile, err
 	}
-	return workerconfig.DecodeIrisBotWebhookWorkerProfileFromRuntimeDiagnostics(bytes.NewReader(diagnostics))
+	envelope, err := workerconfig.DecodeRuntimeWorkerProfileEnvelope(bytes.NewReader(diagnostics))
+	if err != nil {
+		return profile, err
+	}
+	return envelope.Profile, nil
 }
 
 func loadKakaoConfig() KakaoConfig {

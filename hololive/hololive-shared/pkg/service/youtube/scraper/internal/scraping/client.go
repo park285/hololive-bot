@@ -66,6 +66,10 @@ var (
 		MaxAttempts:       1,
 		PerAttemptTimeout: 10 * time.Second,
 	}
+	RSSFetchPolicy = FetchPolicy{
+		MaxAttempts:       1,
+		PerAttemptTimeout: 10 * time.Second,
+	}
 	LiveStatusFallbackFetchPolicy = FetchPolicy{
 		MaxAttempts:       1,
 		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
@@ -174,7 +178,7 @@ func isRetryableStatusError(err error) bool {
 }
 
 func isRetryableVideoPageError(err error) bool {
-	return isRetryableFetchPageError(err)
+	return isRetryableFetchPageError(err) || IsParserDriftError(err)
 }
 
 func isRetryableFetchPageError(err error) bool {

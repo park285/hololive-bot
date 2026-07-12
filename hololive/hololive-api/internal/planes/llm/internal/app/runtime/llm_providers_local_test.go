@@ -359,6 +359,9 @@ func newWorkerProfileEnabledIrisServer(t *testing.T) *httptest.Server {
 				"webhook": {
 					"webhookPipeline": {
 						"profileEnabled": true,
+						"profileVersion": 1,
+						"profileId": "llm-runtime-test",
+						"profileHash": "6370ddeae7dab5d64d74c056fa9cf95b42de71b65c3da4a8d45949ba2bc4ed17",
 						"workerProfile": {
 							"version": 1,
 							"profile_id": "llm-runtime-test",
@@ -370,7 +373,9 @@ func newWorkerProfileEnabledIrisServer(t *testing.T) *httptest.Server {
 								"max_drain_per_tick": 128,
 								"max_attempts": 6,
 								"request_timeout_ms": 30000,
-								"lane_idle_timeout_ms": 750
+								"lane_idle_timeout_ms": 750,
+								"breaker_failure_threshold": 5,
+								"breaker_cooldown_ms": 30000
 							},
 							"receive": {
 								"workers": 16,
