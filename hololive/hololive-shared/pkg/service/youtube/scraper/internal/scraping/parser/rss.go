@@ -78,6 +78,7 @@ func parseVideoFromRSSEntry(entry *rssEntry, channelID string, seen map[string]s
 		PublishedText: formatRSSPublishedText(entry.Published),
 		ChannelID:     channelID,
 		ChannelTitle:  strings.TrimSpace(entry.AuthorName),
+		Source:        VideoSourceRSS,
 	}, true
 }
 

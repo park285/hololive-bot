@@ -91,8 +91,8 @@ Expected startup and sync markers:
 `VIDEO` 워터마크도 후보 범위를 좁히는 용도로만 사용하며, 알림 여부는 게시 신선도로 판정합니다. 워터마크가 목록에 없으면 전체 page를 후보로 분류하고 `Video watermark missing from collected page; classifying full page by publication freshness` 경고를 남깁니다.
 
 - 초기 uninitialized poll은 전체를 baseline으로 저장하고 알림·추가 조회를 하지 않습니다. 이미 `youtube_videos`에 있는 후보와 live replay도 조용히 갱신하며, known VIDEO의 기존 `NEW_VIDEO` FAILED outbox는 poller가 재무장하지 않습니다. 미발송 FAILED 복구는 dispatcher revival sweep이 소유합니다.
-- 미관측 후보는 HTML `published_text`의 RFC3339 또는 영어 상대 시각을 먼저 판정합니다. 상대 시각은 72h 경계에서 보수적인 구간으로 해석해 경계가 불명확하면 확정하지 않습니다. 이어 RSS를 poll당 한 번 조회해 ID별 ISO 게시 시각을 보강하고, 남은 후보만 `/watch`에서 게시 시각을 조회합니다.
-- 게시 시각이 `[-1h, +72h]` 구간일 때만 `NEW_VIDEO`를 만들고, 72h보다 오래된 항목과 live replay는 알림 없이 저장합니다. 게시 시각을 판별할 수 없거나 미래 허용 범위를 벗어나면 저장·알림 없이 보류하고 watermark를 유지합니다.
+- 미관측 후보는 HTML `published_text`의 RFC3339 또는 영어 상대 시각을 먼저 판정합니다. 상대 시각은 72h 경계에서 보수적인 구간으로 해석해 경계가 불명확하면 확정하지 않습니다. 이어 RSS를 poll당 최대 한 번 조회해 ID별 ISO 게시 시각을 보강하고, 게시 시각 또는 replay 종류가 남아 있는 후보만 `/watch` metadata를 조회합니다. RSS fallback에서 발견된 fresh 후보는 replay 여부가 없으므로 `/watch`에서 `isLiveContent`/`liveBroadcastDetails`를 확인해야만 일반 영상 알림을 허용합니다.
+- 게시 시각이 `[-1h, +72h]` 구간이고 replay metadata가 필요한 경로에서 일반 업로드로 확인됐을 때만 `NEW_VIDEO`를 만들며, 72h보다 오래된 항목과 live replay는 알림 없이 저장합니다. 게시 시각을 판별할 수 없거나 미래 허용 범위를 벗어나거나 replay 상태가 unknown이면 저장·알림 없이 보류하고 watermark를 유지합니다.
 - 보류는 Shorts와 같은 3회 fail-closed 상태기를 사용합니다. 목록에서 사라진 후보도 상한까지 watermark를 붙잡고, 해결되면 정상 분류하며, 상한을 소진하면 알림 없이 흡수하거나 포기합니다. 카운터는 프로세스 메모리이므로 재시작·producer 전환 시 초기화될 수 있지만 오알림 방향으로는 기울지 않습니다.
 
 Photo sync policy: `youtube-producer-c` sets `PHOTO_SYNC_ENABLED=true`; a global Valkey singleton lease keeps it the sole photo sync owner, with TTL-based failover. `youtube-producer-b` is a scraping/polling failover peer only (`PHOTO_SYNC_ENABLED=false`) and does not participate in PhotoSync failover.

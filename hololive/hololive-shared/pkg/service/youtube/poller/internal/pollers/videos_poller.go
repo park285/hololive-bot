@@ -81,6 +81,8 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	}
 
 	if len(videos) == 0 {
+		p.reconcileVideoDeferrals(ctx, channelID, nil, nil)
+
 		return nil
 	}
 
@@ -90,20 +92,15 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	}
 	detectedAt := time.Now().UTC()
 	newVideos, watermarkFound := videosAfterWatermark(videos, watermark.LastContentID, isInitialized)
+	newVideos = appendTrackedVideoCandidates(newVideos, videos, p.deferrals.trackedIDs(channelID))
 	logMissingVideoWatermark(ctx, channelID, len(videos), isInitialized, watermarkFound)
 	knownVideoIDs, err := p.loadKnownVideoIDs(ctx, newVideos, isInitialized)
 	if err != nil {
 		return err
 	}
-	publishedAtByID := p.resolveVideoPublishedTimes(ctx, channelID, newVideos, knownVideoIDs, isInitialized, detectedAt)
-	dbVideos, notifications, deferredVideoIDs := p.buildVideoPollResults(ctx, channelID, newVideos, knownVideoIDs, isInitialized, publishedAtByID, detectedAt)
-	holdWatermark, departed := p.deferrals.reconcileChannel(channelID, collectedVideoIDSet(videos), deferredVideoIDs)
-	for _, videoID := range departed {
-		slog.WarnContext(ctx, "Video deferred candidate left the collected page; dropping without notification after max attempts",
-			logschema.FieldChannelID, channelID,
-			"video_id", videoID,
-		)
-	}
+	resolutionByID := p.resolveVideoMetadata(ctx, channelID, newVideos, knownVideoIDs, isInitialized, detectedAt)
+	dbVideos, notifications, deferredVideoIDs := p.buildVideoPollResults(ctx, channelID, newVideos, knownVideoIDs, isInitialized, resolutionByID, detectedAt)
+	holdWatermark := p.reconcileVideoDeferrals(ctx, channelID, videos, deferredVideoIDs)
 	var nextWatermark *domain.YouTubeContentWatermark
 	if !holdWatermark {
 		nextWatermark = &domain.YouTubeContentWatermark{
@@ -124,6 +121,22 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	}
 
 	return nil
+}
+
+func (p *VideosPoller) reconcileVideoDeferrals(
+	ctx context.Context,
+	channelID string,
+	videos []*scraper.Video,
+	deferredVideoIDs map[string]struct{},
+) bool {
+	holdWatermark, departed := p.deferrals.reconcileChannel(channelID, collectedVideoIDSet(videos), deferredVideoIDs)
+	for _, videoID := range departed {
+		slog.WarnContext(ctx, "Video deferred candidate left the collected page; dropping without notification after max attempts",
+			logschema.FieldChannelID, channelID,
+			"video_id", videoID,
+		)
+	}
+	return holdWatermark
 }
 
 func logMissingVideoWatermark(ctx context.Context, channelID string, collectedCount int, isInitialized, watermarkFound bool) {
@@ -148,73 +161,6 @@ func (p *VideosPoller) loadKnownVideoIDs(
 	return loadKnownVideoIDs(ctx, p.db, collectedVideoIDs(videos))
 }
 
-func (p *VideosPoller) resolveVideoPublishedTimes(
-	ctx context.Context,
-	channelID string,
-	videos []*scraper.Video,
-	knownVideoIDs map[string]struct{},
-	isInitialized bool,
-	now time.Time,
-) map[string]time.Time {
-	if !isInitialized || !videosNeedPublicationResolve(videos, knownVideoIDs, now) {
-		return nil
-	}
-	publishedAtByID, err := p.client.GetRecentVideoPublishedTimes(ctx, channelID, p.maxResults)
-	if err != nil {
-		slog.WarnContext(ctx, "Video RSS published_at resolve failed",
-			logschema.FieldChannelID, channelID,
-			"error", err.Error(),
-		)
-		publishedAtByID = make(map[string]time.Time)
-	}
-	if publishedAtByID == nil {
-		publishedAtByID = make(map[string]time.Time)
-	}
-
-	for _, video := range videos {
-		if video == nil || polling.IsLiveReplayVideo(video.PublishedText) {
-			continue
-		}
-		if _, known := knownVideoIDs[video.VideoID]; known {
-			continue
-		}
-		if videoPublishedTextEvidence(video.PublishedText, now).freshness != videoFreshnessUnresolved {
-			continue
-		}
-		if publishedAt, ok := publishedAtByID[video.VideoID]; ok && classifyVideoPublishedAt(publishedAt, now) != videoFreshnessUnresolved {
-			continue
-		}
-		publishedAt, resolveErr := p.client.GetVideoPublishedAt(ctx, channelID, video.VideoID)
-		if resolveErr != nil {
-			slog.WarnContext(ctx, "Video watch published_at resolve failed",
-				logschema.FieldChannelID, channelID,
-				"video_id", video.VideoID,
-				"error", resolveErr.Error(),
-			)
-			continue
-		}
-		if publishedAt != nil {
-			publishedAtByID[video.VideoID] = publishedAt.UTC()
-		}
-	}
-	return publishedAtByID
-}
-
-func videosNeedPublicationResolve(videos []*scraper.Video, knownVideoIDs map[string]struct{}, now time.Time) bool {
-	for _, video := range videos {
-		if video == nil || polling.IsLiveReplayVideo(video.PublishedText) {
-			continue
-		}
-		if _, known := knownVideoIDs[video.VideoID]; known {
-			continue
-		}
-		if videoPublishedTextEvidence(video.PublishedText, now).freshness == videoFreshnessUnresolved {
-			return true
-		}
-	}
-	return false
-}
-
 func videosAfterWatermark(videos []*scraper.Video, lastSeenID string, isInitialized bool) ([]*scraper.Video, bool) {
 	newVideos := make([]*scraper.Video, 0, len(videos))
 	for _, video := range videos {
@@ -226,68 +172,29 @@ func videosAfterWatermark(videos []*scraper.Video, lastSeenID string, isInitiali
 	return newVideos, false
 }
 
-func (p *VideosPoller) buildVideoPollResults(
-	ctx context.Context,
-	channelID string,
-	newVideos []*scraper.Video,
-	knownVideoIDs map[string]struct{},
-	isInitialized bool,
-	publishedAtByID map[string]time.Time,
-	now time.Time,
-) ([]*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox, map[string]struct{}) {
-	dbVideos := make([]*domain.YouTubeVideo, 0, len(newVideos))
-	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newVideos))
-	deferredVideoIDs := make(map[string]struct{})
-	for _, video := range newVideos {
-		isLiveReplay := polling.IsLiveReplayVideo(video.PublishedText)
-		dbVideo := buildYouTubeVideo(channelID, video, isLiveReplay)
-		if !isInitialized || isLiveReplay {
-			dbVideos = append(dbVideos, dbVideo)
-			continue
-		}
-		if _, known := knownVideoIDs[video.VideoID]; known {
-			p.deferrals.clear(channelID, video.VideoID)
-			dbVideos = append(dbVideos, dbVideo)
-			continue
-		}
-
-		evidence := videoPublishedTextEvidence(video.PublishedText, now)
-		if evidence.freshness == videoFreshnessUnresolved {
-			if publishedAt, ok := publishedAtByID[video.VideoID]; ok {
-				evidence = videoPublicationEvidence{
-					freshness:   classifyVideoPublishedAt(publishedAt, now),
-					publishedAt: &publishedAt,
-				}
-			}
-		}
-		if evidence.freshness == videoFreshnessUnresolved {
-			attempts := p.deferrals.recordFailure(channelID, video.VideoID)
-			if attempts < publicationFreshnessMaxAttempts {
-				slog.WarnContext(ctx, "Video freshness unresolved; deferring candidate without notification",
-					logschema.FieldChannelID, channelID,
-					"video_id", video.VideoID,
-					"attempts", attempts,
-				)
-				deferredVideoIDs[video.VideoID] = struct{}{}
-				continue
-			}
-			p.deferrals.clear(channelID, video.VideoID)
-			slog.WarnContext(ctx, "Video freshness unresolved after max attempts; absorbing silently without notification",
-				logschema.FieldChannelID, channelID,
-				"video_id", video.VideoID,
-				"attempts", attempts,
-			)
-			dbVideos = append(dbVideos, dbVideo)
-			continue
-		}
-		p.deferrals.clear(channelID, video.VideoID)
-		dbVideo.PublishedAt = evidence.publishedAt
-		dbVideos = append(dbVideos, dbVideo)
-		if evidence.freshness == videoFreshnessFresh {
-			notifications = append(notifications, buildVideoNotification(channelID, dbVideo))
-		}
+func appendTrackedVideoCandidates(
+	candidates []*scraper.Video,
+	videos []*scraper.Video,
+	trackedIDs map[string]struct{},
+) []*scraper.Video {
+	if len(trackedIDs) == 0 {
+		return candidates
 	}
-	return dbVideos, notifications, deferredVideoIDs
+	seen := collectedVideoIDSet(candidates)
+	for _, video := range videos {
+		if video == nil {
+			continue
+		}
+		if _, tracked := trackedIDs[video.VideoID]; !tracked {
+			continue
+		}
+		if _, exists := seen[video.VideoID]; exists {
+			continue
+		}
+		seen[video.VideoID] = struct{}{}
+		candidates = append(candidates, video)
+	}
+	return candidates
 }
 
 func buildYouTubeVideo(channelID string, video *scraper.Video, isLiveReplay bool) *domain.YouTubeVideo {

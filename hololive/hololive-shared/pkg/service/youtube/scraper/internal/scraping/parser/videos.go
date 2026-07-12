@@ -313,6 +313,7 @@ func ParseLockupVideoViewModel(lockup *gjson.Result, channelID string) *Video {
 		PublishedText: publishedText,
 		Duration:      lockup.Get("contentImage.thumbnailViewModel.overlays.0.thumbnailBottomOverlayViewModel.badges.0.thumbnailBadgeViewModel.text").String(),
 		ChannelID:     channelID,
+		Source:        VideoSourceHTML,
 	}
 }
 

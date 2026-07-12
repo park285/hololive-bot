@@ -282,7 +282,7 @@ func TestVideosPollerDefersUnresolvedPublicationAndHoldsWatermark(t *testing.T) 
 	assert.Equal(t, "previous-head", watermark.LastContentID)
 }
 
-func TestVideosPollerResolvesUnclearHTMLPublicationFromRSSBeforeWatch(t *testing.T) {
+func TestVideosPollerResolvesUnclearHTMLPublicationFromRSSAndVerifiesReplayFromWatch(t *testing.T) {
 	db := newPollerBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -306,6 +306,10 @@ func TestVideosPollerResolvesUnclearHTMLPublicationFromRSSBeforeWatch(t *testing
 			videoID:       "rss-fresh",
 			publishedText: freshPublishedAt.Format(time.RFC3339),
 		}),
+		watch: func(videoID string) *http.Response {
+			require.Equal(t, "rss-fresh", videoID)
+			return videoFreshnessResponse(nil, http.StatusOK, `{"videoDetails":{"isLiveContent":false}}`)
+		},
 		watchCalls: make(map[string]int),
 	}
 	poller := NewVideosPoller(newVideosTestClient(t, shortsPollerRoundTripFunc(routes.roundTrip)), db, 10)
@@ -317,7 +321,7 @@ func TestVideosPollerResolvesUnclearHTMLPublicationFromRSSBeforeWatch(t *testing
 	require.Len(t, outboxRows, 1)
 	assert.Equal(t, "rss-fresh", outboxRows[0].ContentID)
 	assert.Equal(t, 1, routes.rssCalls)
-	assert.Zero(t, routes.watchCalls["rss-fresh"])
+	assert.Equal(t, 1, routes.watchCalls["rss-fresh"])
 	var stored domain.YouTubeVideo
 	require.NoError(t, db.Where("video_id = ?", "rss-fresh").First(&stored).Error)
 	require.NotNil(t, stored.PublishedAt)
@@ -348,7 +352,7 @@ func TestVideosPollerFallsBackToWatchWhenRSSHasNoPublication(t *testing.T) {
 		watch: func(videoID string) *http.Response {
 			require.Equal(t, "watch-fresh", videoID)
 			return videoFreshnessResponse(nil, http.StatusOK,
-				`<html><head><meta itemprop="uploadDate" content="`+freshPublishedAt.Format(time.RFC3339)+`"></head></html>`)
+				`<html><head><meta itemprop="uploadDate" content="`+freshPublishedAt.Format(time.RFC3339)+`"></head><body><script>var ytInitialPlayerResponse={"videoDetails":{"isLiveContent":false}};</script></body></html>`)
 		},
 		watchCalls: make(map[string]int),
 	}
@@ -431,7 +435,7 @@ func TestVideosPollerReevaluatesDeferredPublicationOnNextPoll(t *testing.T) {
 			return videoFreshnessResponse(nil, http.StatusOK, `<html><head></head></html>`)
 		}
 		return videoFreshnessResponse(nil, http.StatusOK,
-			`<html><head><meta itemprop="uploadDate" content="`+freshPublishedAt.Format(time.RFC3339)+`"></head></html>`)
+			`<html><head><meta itemprop="uploadDate" content="`+freshPublishedAt.Format(time.RFC3339)+`"></head><body><script>var ytInitialPlayerResponse={"videoDetails":{"isLiveContent":false}};</script></body></html>`)
 	}
 	poller := NewVideosPoller(newVideosTestClient(t, shortsPollerRoundTripFunc(routes.roundTrip)), db, 10)
 
@@ -678,4 +682,136 @@ func TestVideosPollerHoldsWatermarkWhileDeferredVideoIsMissingFromPage(t *testin
 	assert.Equal(t, "other-fresh", watermark.LastContentID)
 	require.NoError(t, db.Order("id ASC").Find(&outboxRows).Error)
 	require.Len(t, outboxRows, 1)
+}
+
+func TestVideosPollerRSSFallbackStoresFreshLiveReplayWithoutNotification(t *testing.T) {
+	db := newPollerBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	channelID := "UC_VIDEO_RSS_REPLAY"
+	require.NoError(t, db.Create(&domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeVideo,
+		Initialized:   true,
+		LastContentID: "previous-head",
+	}).Error)
+	freshPublishedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	routes := &videoFreshnessRoutes{
+		videosHTML: `<html><body>parser drift</body></html>`,
+		rssBody: videosFreshnessRSSFeed(videoFreshnessFixture{
+			videoID:       "rss-live-replay",
+			publishedText: freshPublishedAt.Format(time.RFC3339),
+		}),
+		watch: func(videoID string) *http.Response {
+			require.Equal(t, "rss-live-replay", videoID)
+			return videoFreshnessResponse(nil, http.StatusOK,
+				`<meta itemprop="uploadDate" content="`+freshPublishedAt.Format(time.RFC3339)+`"><script>var ytInitialPlayerResponse={"videoDetails":{"isLiveContent":true},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"startTimestamp":"`+freshPublishedAt.Format(time.RFC3339)+`"}}}};</script>`)
+		},
+		watchCalls: make(map[string]int),
+	}
+	poller := NewVideosPoller(newVideosTestClient(t, shortsPollerRoundTripFunc(routes.roundTrip)), db, 10)
+
+	require.NoError(t, poller.Poll(context.Background(), channelID))
+
+	assert.EqualValues(t, 0, countRows(t, db, &domain.YouTubeNotificationOutbox{}))
+	assert.Equal(t, 1, routes.watchCalls["rss-live-replay"])
+	var stored domain.YouTubeVideo
+	require.NoError(t, db.Where("video_id = ?", "rss-live-replay").First(&stored).Error)
+	assert.True(t, stored.IsLiveReplay)
+}
+
+func TestVideosPollerReevaluatesDeferredVideoAfterItMovesBehindWatermark(t *testing.T) {
+	db := newPollerBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	channelID := "UC_VIDEO_DEFER_REORDER"
+	require.NoError(t, db.Create(&domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeVideo,
+		Initialized:   true,
+		LastContentID: "previous-head",
+	}).Error)
+	freshPublishedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	routes := &videoFreshnessRoutes{
+		videosHTML: videosFreshnessTabHTML(t,
+			videoFreshnessFixture{videoID: "deferred-reordered", publishedText: "publication unavailable"},
+			videoFreshnessFixture{videoID: "previous-head", publishedText: "1 day ago"},
+		),
+		rssBody:    videosFreshnessRSSFeed(),
+		watchCalls: make(map[string]int),
+	}
+	routes.watch = func(videoID string) *http.Response {
+		require.Equal(t, "deferred-reordered", videoID)
+		if routes.watchCalls[videoID] == 1 {
+			return videoFreshnessResponse(nil, http.StatusOK, `<html><head></head></html>`)
+		}
+		return videoFreshnessResponse(nil, http.StatusOK,
+			`<meta itemprop="uploadDate" content="`+freshPublishedAt.Format(time.RFC3339)+`"><script>var ytInitialPlayerResponse={"videoDetails":{"isLiveContent":false}};</script>`)
+	}
+	poller := NewVideosPoller(newVideosTestClient(t, shortsPollerRoundTripFunc(routes.roundTrip)), db, 10)
+
+	require.NoError(t, poller.Poll(context.Background(), channelID))
+	routes.videosHTML = videosFreshnessTabHTML(t,
+		videoFreshnessFixture{videoID: "new-head", publishedText: "30 minutes ago"},
+		videoFreshnessFixture{videoID: "previous-head", publishedText: "1 day ago"},
+		videoFreshnessFixture{videoID: "deferred-reordered", publishedText: "publication unavailable"},
+	)
+	require.NoError(t, poller.Poll(context.Background(), channelID))
+
+	var outboxRows []domain.YouTubeNotificationOutbox
+	require.NoError(t, db.Order("id ASC").Find(&outboxRows).Error)
+	contentIDs := make([]string, 0, len(outboxRows))
+	for index := range outboxRows {
+		contentIDs = append(contentIDs, outboxRows[index].ContentID)
+	}
+	assert.ElementsMatch(t, []string{"new-head", "deferred-reordered"}, contentIDs)
+	var watermark domain.YouTubeContentWatermark
+	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", channelID, domain.WatermarkTypeVideo).First(&watermark).Error)
+	assert.Equal(t, "new-head", watermark.LastContentID)
+	assert.Equal(t, 2, routes.watchCalls["deferred-reordered"])
+}
+
+func TestVideosPollerCountsEmptySuccessfulPollsTowardDeferralLimit(t *testing.T) {
+	db := newPollerBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	channelID := "UC_VIDEO_DEFER_EMPTY"
+	require.NoError(t, db.Create(&domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeVideo,
+		Initialized:   true,
+		LastContentID: "previous-head",
+	}).Error)
+	routes := &videoFreshnessRoutes{
+		videosHTML: videosFreshnessTabHTML(t,
+			videoFreshnessFixture{videoID: "deferred-empty", publishedText: "publication unavailable"},
+			videoFreshnessFixture{videoID: "previous-head", publishedText: "1 day ago"},
+		),
+		rssBody: videosFreshnessRSSFeed(),
+		watch: func(string) *http.Response {
+			return videoFreshnessResponse(nil, http.StatusOK, `<html><head></head></html>`)
+		},
+		watchCalls: make(map[string]int),
+	}
+	poller := NewVideosPoller(newVideosTestClient(t, shortsPollerRoundTripFunc(routes.roundTrip)), db, 10)
+
+	require.NoError(t, poller.Poll(context.Background(), channelID))
+	routes.videosHTML = videosFreshnessTabHTML(t)
+	require.NoError(t, poller.Poll(context.Background(), channelID))
+	require.NoError(t, poller.Poll(context.Background(), channelID))
+	routes.videosHTML = videosFreshnessTabHTML(t,
+		videoFreshnessFixture{videoID: "new-after-empty", publishedText: "1 hour ago"},
+		videoFreshnessFixture{videoID: "previous-head", publishedText: "1 day ago"},
+	)
+	require.NoError(t, poller.Poll(context.Background(), channelID))
+
+	var watermark domain.YouTubeContentWatermark
+	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", channelID, domain.WatermarkTypeVideo).First(&watermark).Error)
+	assert.Equal(t, "new-after-empty", watermark.LastContentID)
 }

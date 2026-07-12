@@ -97,6 +97,8 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 
 	shorts = polling.NormalizeCollectedShortsByCanonicalPostID(shorts)
 	if len(shorts) == 0 {
+		p.reconcileShortDeferrals(ctx, channelID, nil, &shortsPollBatch{deferredVideoIDs: make(map[string]struct{})}, nil)
+
 		return nil
 	}
 
@@ -151,12 +153,19 @@ func (p *ShortsPoller) pollInitializedShorts(
 	}
 
 	scrapedIDs := shortRawResourceIDs(shorts)
+	scrapedIDSet := shortRawResourceIDSet(shorts)
 	states, err := loadShortVideoStates(ctx, p.db, scrapedIDs)
 	if err != nil {
 		return err
 	}
 
-	classified := p.classifyShortCandidates(ctx, channelID, shorts, shortRawResourceIDSet(positionalNew), states, detectedAt)
+	candidateIDs := shortRawResourceIDSet(positionalNew)
+	for videoID := range p.deferrals.trackedIDs(channelID) {
+		if _, scraped := scrapedIDSet[videoID]; scraped {
+			candidateIDs[videoID] = struct{}{}
+		}
+	}
+	classified := p.classifyShortCandidates(ctx, channelID, shorts, candidateIDs, states, detectedAt)
 	batch := p.buildClassifiedShortBatch(ctx, channelID, classified, detectedAt)
 	persistWatermark := p.reconcileShortDeferrals(ctx, channelID, shorts, &batch, nextWatermark)
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, batch.detectedCount, detectedAt, p.ensureMetrics())

@@ -35,6 +35,19 @@ func (d *freshnessDeferrals) clear(channelID, videoID string) {
 	delete(d.attempts, channelID+"|"+videoID)
 }
 
+func (d *freshnessDeferrals) trackedIDs(channelID string) map[string]struct{} {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	tracked := make(map[string]struct{})
+	prefix := channelID + "|"
+	for key := range d.attempts {
+		if strings.HasPrefix(key, prefix) {
+			tracked[strings.TrimPrefix(key, prefix)] = struct{}{}
+		}
+	}
+	return tracked
+}
+
 // 목록에서 사라진 보류 항목도 상한까지 시도 횟수를 올리며 붙잡는다. 바로 지우면
 // watermark가 전진해, 항목이 watermark 아래로 재등장할 때 영구 유실된다.
 func (d *freshnessDeferrals) reconcileChannel(
