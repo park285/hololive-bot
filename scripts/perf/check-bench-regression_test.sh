@@ -423,33 +423,6 @@ case_fail_mode_non_critical_exits_zero() {
   assert_contains "fail mode non_critical prints violation" "violation"
 }
 
-case_missing_baseline_creates_copy() {
-  local dir="${TMP_ROOT}/baseline-created"
-  mkdir -p "${dir}"
-  write_policy "${dir}/policy.yaml" "fail" "critical" "BenchmarkTarget" 50
-  write_bench_file "${dir}/candidate" "BenchmarkTarget" 100 8 1 $'# count: 2\n# benchtime: 100ms'
-  run_checker "${dir}/baseline" "${dir}/candidate" "${dir}/policy.yaml"
-  assert_success "missing baseline creates copy"
-  assert_contains "missing baseline message" "baseline created"
-  [[ -f "${dir}/baseline/go-bench/result.txt" ]]
-  cmp -s "${dir}/candidate/go-bench/result.txt" "${dir}/baseline/go-bench/result.txt"
-}
-
-case_missing_baseline_race_candidate_does_not_create_baseline() {
-  local dir="${TMP_ROOT}/race-baseline-create"
-  mkdir -p "${dir}"
-  write_policy "${dir}/policy.yaml" "fail" "critical" "BenchmarkTarget" 50
-  write_bench_file "${dir}/candidate" "BenchmarkTarget" 100 8 1 $'# command: go test -race\n# count: 6\n# benchtime: 100ms'
-  run_checker "${dir}/baseline" "${dir}/candidate" "${dir}/policy.yaml"
-  assert_failure "race candidate baseline create refused"
-  assert_exit_code "race candidate refusal exit code" 2
-  assert_contains "race candidate refusal message" "refusing to create baseline from race benchmark results"
-  if [[ -e "${dir}/baseline" ]]; then
-    printf 'not ok - race candidate created baseline\n%s\n' "${LAST_OUTPUT}" >&2
-    exit 1
-  fi
-}
-
 case_race_results_skip() {
   local dir="${TMP_ROOT}/race-skip"
   mkdir -p "${dir}"
@@ -639,6 +612,8 @@ case_multifile_baseline_orders_like_pathlib() {
   assert_contains "multifile baseline names pathlib-last file" "sub-extra.txt"
 }
 
+source "${SCRIPT_DIR}/check-bench-regression-baseline_test.sh"
+
 CASES=(
   case_empty_match_errors
   case_unknown_field_errors
@@ -649,6 +624,7 @@ CASES=(
   case_fail_mode_hotpath_exits_one
   case_fail_mode_non_critical_exits_zero
   case_missing_baseline_creates_copy
+  case_required_missing_baseline_fails_without_copy
   case_missing_baseline_race_candidate_does_not_create_baseline
   case_race_results_skip
   case_collect_rejects_unsafe_candidate_paths

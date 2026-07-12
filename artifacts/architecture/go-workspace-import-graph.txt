@@ -1260,6 +1260,10 @@ github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-g
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/llm/openaipreset
 github.com/park285/shared-go/pkg/llm/openaipreset -> github.com/park285/shared-go/pkg/logging
 github.com/park285/shared-go/pkg/logging -> github.com/park285/shared-go/pkg/logging/internal/archive
+github.com/park285/shared-go/pkg/outputguard -> github.com/park285/shared-go/pkg/internal/guardtext
+github.com/park285/shared-go/pkg/outputguard -> github.com/park285/shared-go/pkg/json
+github.com/park285/shared-go/pkg/promptguard -> github.com/park285/shared-go/pkg/internal/guardtext
+github.com/park285/shared-go/pkg/promptguard -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/promptguard -> github.com/park285/shared-go/pkg/promptguard
 github.com/park285/shared-go/pkg/retry -> github.com/park285/shared-go/pkg/backoff
 github.com/park285/shared-go/pkg/runtime/bootstrap -> github.com/park285/shared-go/pkg/logging
