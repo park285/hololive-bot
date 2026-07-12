@@ -129,20 +129,25 @@ func (p *VideosPoller) resolveVideoWatchMetadata(
 
 func videosNeedRSSPublicationResolve(videos []*scraper.Video, knownVideoIDs map[string]struct{}, now time.Time) bool {
 	for _, video := range videos {
-		if video == nil || polling.IsLiveReplayVideo(video.PublishedText) {
-			continue
-		}
-
-		if _, known := knownVideoIDs[video.VideoID]; known {
-			continue
-		}
-
-		if video.Source != scraper.VideoSourceRSS && videoPublishedTextEvidence(video.PublishedText, now).freshness == videoFreshnessUnresolved {
+		if videoNeedsRSSPublicationResolve(video, knownVideoIDs, now) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func videoNeedsRSSPublicationResolve(video *scraper.Video, knownVideoIDs map[string]struct{}, now time.Time) bool {
+	if video == nil || polling.IsLiveReplayVideo(video.PublishedText) {
+		return false
+	}
+
+	if _, known := knownVideoIDs[video.VideoID]; known {
+		return false
+	}
+
+	return video.Source != scraper.VideoSourceRSS &&
+		videoPublishedTextEvidence(video.PublishedText, now).freshness == videoFreshnessUnresolved
 }
 
 func videoNeedsWatchMetadata(video *scraper.Video, pageEvidence videoPublicationEvidence) bool {
