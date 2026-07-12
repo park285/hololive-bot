@@ -41,8 +41,8 @@ func (d *freshnessDeferrals) trackedIDs(channelID string) map[string]struct{} {
 	tracked := make(map[string]struct{})
 	prefix := channelID + "|"
 	for key := range d.attempts {
-		if strings.HasPrefix(key, prefix) {
-			tracked[strings.TrimPrefix(key, prefix)] = struct{}{}
+		if after, ok := strings.CutPrefix(key, prefix); ok {
+			tracked[after] = struct{}{}
 		}
 	}
 	return tracked
