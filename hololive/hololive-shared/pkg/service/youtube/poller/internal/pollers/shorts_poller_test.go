@@ -115,7 +115,7 @@ func TestShortsPollerPollDeduplicatesCollectedShortsByCanonicalPostID(t *testing
 }
 
 func TestClassifyShortByFreshnessUsesScrapeProvidedPublishedAtWithoutRemoteResolve(t *testing.T) {
-	poller := &ShortsPoller{deferrals: newShortsFreshnessDeferrals()}
+	poller := &ShortsPoller{deferrals: newFreshnessDeferrals()}
 	now := time.Now().UTC()
 	fresh := now.Add(-time.Hour)
 
@@ -129,7 +129,7 @@ func TestClassifyShortByFreshnessUsesScrapeProvidedPublishedAtWithoutRemoteResol
 }
 
 func TestClassifyShortByFreshnessUsesKnownRowEvidenceWithoutRemoteResolve(t *testing.T) {
-	poller := &ShortsPoller{deferrals: newShortsFreshnessDeferrals()}
+	poller := &ShortsPoller{deferrals: newFreshnessDeferrals()}
 	now := time.Now().UTC()
 	oldPublishedAt := now.Add(-30 * 24 * time.Hour)
 	oldFirstSeenAt := now.Add(-10 * 24 * time.Hour)

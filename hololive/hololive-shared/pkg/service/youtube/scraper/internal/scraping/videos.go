@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/tidwall/gjson"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser"
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 var (
@@ -159,6 +161,44 @@ func (c *Client) getRecentVideosFromRSS(ctx context.Context, channelID string, m
 	}
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceRSS)
 	return videos, nil
+}
+
+func (c *Client) GetRecentVideoPublishedTimes(ctx context.Context, channelID string, maxResults int) (map[string]time.Time, error) {
+	videos, err := c.getRecentVideosFromRSS(ctx, channelID, maxResults)
+	if err != nil {
+		return nil, fmt.Errorf("get recent video published times: %w", err)
+	}
+
+	publishedAtByID := make(map[string]time.Time, len(videos))
+	for _, video := range videos {
+		if video == nil {
+			continue
+		}
+		publishedAt, ok := yttimestamp.ParsePublishedAt(video.PublishedText)
+		if !ok {
+			continue
+		}
+		publishedAtByID[video.VideoID] = publishedAt.UTC()
+	}
+	return publishedAtByID, nil
+}
+
+func (c *Client) GetVideoPublishedAt(ctx context.Context, channelID, videoID string) (*time.Time, error) {
+	if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
+		return nil, fmt.Errorf("video watch page %s: %w", videoID, err)
+	}
+
+	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+	html, err := c.fetchPage(ctx, url, MetadataResolveFetchPolicy)
+	if err != nil {
+		return nil, fmt.Errorf("fetch video watch page %s: %w", videoID, err)
+	}
+
+	publishedAt, err := extractPublishedAtFromHTML(html)
+	if err != nil {
+		return nil, fmt.Errorf("extract video published_at %s: %w", videoID, err)
+	}
+	return publishedAt, nil
 }
 
 func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {

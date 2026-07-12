@@ -40,7 +40,7 @@ type ShortsPoller struct {
 	repository batchrepo.BatchRepository
 	maxResults int
 	metrics    *polling.Metrics
-	deferrals  *shortsFreshnessDeferrals
+	deferrals  *freshnessDeferrals
 }
 
 func NewShortsPoller(scraperClient *scraper.Client, db any, maxResults int) *ShortsPoller {
@@ -53,7 +53,7 @@ func NewShortsPoller(scraperClient *scraper.Client, db any, maxResults int) *Sho
 		db:         querier,
 		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults: maxResults,
-		deferrals:  newShortsFreshnessDeferrals(),
+		deferrals:  newFreshnessDeferrals(),
 	}
 }
 

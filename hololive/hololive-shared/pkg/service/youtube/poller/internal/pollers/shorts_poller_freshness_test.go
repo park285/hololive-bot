@@ -574,7 +574,7 @@ func TestShortsPollerReevaluatesDeferredCandidateWhenItReturnsToPage(t *testing.
 }
 
 func TestClassifyShortByFreshnessTreatsFarFuturePublishedAtAsUnresolved(t *testing.T) {
-	poller := &ShortsPoller{deferrals: newShortsFreshnessDeferrals()}
+	poller := &ShortsPoller{deferrals: newFreshnessDeferrals()}
 	now := time.Now().UTC()
 	farFuture := now.Add(48 * time.Hour)
 	nearFuture := now.Add(30 * time.Minute)

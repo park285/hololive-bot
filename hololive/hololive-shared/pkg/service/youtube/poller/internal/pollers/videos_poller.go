@@ -23,11 +23,14 @@ package pollers
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -36,6 +39,7 @@ type VideosPoller struct {
 	db         pollerDB
 	repository batchrepo.BatchRepository
 	maxResults int
+	deferrals  *freshnessDeferrals
 }
 
 func NewVideosPoller(scraperClient *scraper.Client, db any, maxResults int) *VideosPoller {
@@ -48,6 +52,7 @@ func NewVideosPoller(scraperClient *scraper.Client, db any, maxResults int) *Vid
 		db:         querier,
 		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults: maxResults,
+		deferrals:  newFreshnessDeferrals(),
 	}
 }
 
@@ -83,44 +88,206 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	if err != nil {
 		return err
 	}
-	newVideos := videosAfterWatermark(videos, watermark.LastContentID, isInitialized)
-	dbVideos, notifications := buildVideoPollResults(channelID, newVideos, isInitialized)
+	detectedAt := time.Now().UTC()
+	newVideos, watermarkFound := videosAfterWatermark(videos, watermark.LastContentID, isInitialized)
+	logMissingVideoWatermark(ctx, channelID, len(videos), isInitialized, watermarkFound)
+	knownVideoIDs, err := p.loadKnownVideoIDs(ctx, newVideos, isInitialized)
+	if err != nil {
+		return err
+	}
+	publishedAtByID := p.resolveVideoPublishedTimes(ctx, channelID, newVideos, knownVideoIDs, isInitialized, detectedAt)
+	dbVideos, notifications, deferredVideoIDs := p.buildVideoPollResults(ctx, channelID, newVideos, knownVideoIDs, isInitialized, publishedAtByID, detectedAt)
+	holdWatermark, departed := p.deferrals.reconcileChannel(channelID, collectedVideoIDSet(videos), deferredVideoIDs)
+	for _, videoID := range departed {
+		slog.WarnContext(ctx, "Video deferred candidate left the collected page; dropping without notification after max attempts",
+			logschema.FieldChannelID, channelID,
+			"video_id", videoID,
+		)
+	}
+	var nextWatermark *domain.YouTubeContentWatermark
+	if !holdWatermark {
+		nextWatermark = &domain.YouTubeContentWatermark{
+			ChannelID:     channelID,
+			WatermarkType: domain.WatermarkTypeVideo,
+			Initialized:   true,
+			LastContentID: videos[0].VideoID,
+		}
+	} else {
+		slog.WarnContext(ctx, "Video watermark held while freshness candidates stay deferred",
+			logschema.FieldChannelID, channelID,
+			"deferred_count", len(deferredVideoIDs),
+		)
+	}
 
-	if err := p.persistVideoPollResults(ctx, channelID, videos[0].VideoID, dbVideos, notifications); err != nil {
+	if err := p.persistVideoPollResults(ctx, dbVideos, notifications, nextWatermark); err != nil {
 		return fmt.Errorf("persist video batch: %w", err)
 	}
 
 	return nil
 }
 
-func videosAfterWatermark(videos []*scraper.Video, lastSeenID string, isInitialized bool) []*scraper.Video {
+func logMissingVideoWatermark(ctx context.Context, channelID string, collectedCount int, isInitialized, watermarkFound bool) {
+	if !isInitialized || watermarkFound {
+		return
+	}
+
+	slog.WarnContext(ctx, "Video watermark missing from collected page; classifying full page by publication freshness",
+		logschema.FieldChannelID, channelID,
+		"collected_count", collectedCount,
+	)
+}
+
+func (p *VideosPoller) loadKnownVideoIDs(
+	ctx context.Context,
+	videos []*scraper.Video,
+	isInitialized bool,
+) (map[string]struct{}, error) {
+	if !isInitialized {
+		return nil, nil
+	}
+	return loadKnownVideoIDs(ctx, p.db, collectedVideoIDs(videos))
+}
+
+func (p *VideosPoller) resolveVideoPublishedTimes(
+	ctx context.Context,
+	channelID string,
+	videos []*scraper.Video,
+	knownVideoIDs map[string]struct{},
+	isInitialized bool,
+	now time.Time,
+) map[string]time.Time {
+	if !isInitialized || !videosNeedPublicationResolve(videos, knownVideoIDs, now) {
+		return nil
+	}
+	publishedAtByID, err := p.client.GetRecentVideoPublishedTimes(ctx, channelID, p.maxResults)
+	if err != nil {
+		slog.WarnContext(ctx, "Video RSS published_at resolve failed",
+			logschema.FieldChannelID, channelID,
+			"error", err.Error(),
+		)
+		publishedAtByID = make(map[string]time.Time)
+	}
+	if publishedAtByID == nil {
+		publishedAtByID = make(map[string]time.Time)
+	}
+
+	for _, video := range videos {
+		if video == nil || polling.IsLiveReplayVideo(video.PublishedText) {
+			continue
+		}
+		if _, known := knownVideoIDs[video.VideoID]; known {
+			continue
+		}
+		if videoPublishedTextEvidence(video.PublishedText, now).freshness != videoFreshnessUnresolved {
+			continue
+		}
+		if publishedAt, ok := publishedAtByID[video.VideoID]; ok && classifyVideoPublishedAt(publishedAt, now) != videoFreshnessUnresolved {
+			continue
+		}
+		publishedAt, resolveErr := p.client.GetVideoPublishedAt(ctx, channelID, video.VideoID)
+		if resolveErr != nil {
+			slog.WarnContext(ctx, "Video watch published_at resolve failed",
+				logschema.FieldChannelID, channelID,
+				"video_id", video.VideoID,
+				"error", resolveErr.Error(),
+			)
+			continue
+		}
+		if publishedAt != nil {
+			publishedAtByID[video.VideoID] = publishedAt.UTC()
+		}
+	}
+	return publishedAtByID
+}
+
+func videosNeedPublicationResolve(videos []*scraper.Video, knownVideoIDs map[string]struct{}, now time.Time) bool {
+	for _, video := range videos {
+		if video == nil || polling.IsLiveReplayVideo(video.PublishedText) {
+			continue
+		}
+		if _, known := knownVideoIDs[video.VideoID]; known {
+			continue
+		}
+		if videoPublishedTextEvidence(video.PublishedText, now).freshness == videoFreshnessUnresolved {
+			return true
+		}
+	}
+	return false
+}
+
+func videosAfterWatermark(videos []*scraper.Video, lastSeenID string, isInitialized bool) ([]*scraper.Video, bool) {
 	newVideos := make([]*scraper.Video, 0, len(videos))
 	for _, video := range videos {
 		if isInitialized && video.VideoID == lastSeenID {
-			break
+			return newVideos, true
 		}
 		newVideos = append(newVideos, video)
 	}
-	return newVideos
+	return newVideos, false
 }
 
-func buildVideoPollResults(
+func (p *VideosPoller) buildVideoPollResults(
+	ctx context.Context,
 	channelID string,
 	newVideos []*scraper.Video,
+	knownVideoIDs map[string]struct{},
 	isInitialized bool,
-) ([]*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox) {
+	publishedAtByID map[string]time.Time,
+	now time.Time,
+) ([]*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox, map[string]struct{}) {
 	dbVideos := make([]*domain.YouTubeVideo, 0, len(newVideos))
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newVideos))
+	deferredVideoIDs := make(map[string]struct{})
 	for _, video := range newVideos {
 		isLiveReplay := polling.IsLiveReplayVideo(video.PublishedText)
 		dbVideo := buildYouTubeVideo(channelID, video, isLiveReplay)
-		dbVideos = append(dbVideos, dbVideo)
+		if !isInitialized || isLiveReplay {
+			dbVideos = append(dbVideos, dbVideo)
+			continue
+		}
+		if _, known := knownVideoIDs[video.VideoID]; known {
+			p.deferrals.clear(channelID, video.VideoID)
+			dbVideos = append(dbVideos, dbVideo)
+			continue
+		}
 
-		if isInitialized && !isLiveReplay {
+		evidence := videoPublishedTextEvidence(video.PublishedText, now)
+		if evidence.freshness == videoFreshnessUnresolved {
+			if publishedAt, ok := publishedAtByID[video.VideoID]; ok {
+				evidence = videoPublicationEvidence{
+					freshness:   classifyVideoPublishedAt(publishedAt, now),
+					publishedAt: &publishedAt,
+				}
+			}
+		}
+		if evidence.freshness == videoFreshnessUnresolved {
+			attempts := p.deferrals.recordFailure(channelID, video.VideoID)
+			if attempts < publicationFreshnessMaxAttempts {
+				slog.WarnContext(ctx, "Video freshness unresolved; deferring candidate without notification",
+					logschema.FieldChannelID, channelID,
+					"video_id", video.VideoID,
+					"attempts", attempts,
+				)
+				deferredVideoIDs[video.VideoID] = struct{}{}
+				continue
+			}
+			p.deferrals.clear(channelID, video.VideoID)
+			slog.WarnContext(ctx, "Video freshness unresolved after max attempts; absorbing silently without notification",
+				logschema.FieldChannelID, channelID,
+				"video_id", video.VideoID,
+				"attempts", attempts,
+			)
+			dbVideos = append(dbVideos, dbVideo)
+			continue
+		}
+		p.deferrals.clear(channelID, video.VideoID)
+		dbVideo.PublishedAt = evidence.publishedAt
+		dbVideos = append(dbVideos, dbVideo)
+		if evidence.freshness == videoFreshnessFresh {
 			notifications = append(notifications, buildVideoNotification(channelID, dbVideo))
 		}
 	}
-	return dbVideos, notifications
+	return dbVideos, notifications, deferredVideoIDs
 }
 
 func buildYouTubeVideo(channelID string, video *scraper.Video, isLiveReplay bool) *domain.YouTubeVideo {
@@ -149,15 +316,9 @@ func buildVideoNotification(channelID string, video *domain.YouTubeVideo) *domai
 
 func (p *VideosPoller) persistVideoPollResults(
 	ctx context.Context,
-	channelID string,
-	lastContentID string,
 	dbVideos []*domain.YouTubeVideo,
 	notifications []*domain.YouTubeNotificationOutbox,
+	watermark *domain.YouTubeContentWatermark,
 ) error {
-	return p.repository.PersistVideos(ctx, dbVideos, notifications, nil, &domain.YouTubeContentWatermark{
-		ChannelID:     channelID,
-		WatermarkType: domain.WatermarkTypeVideo,
-		Initialized:   true,
-		LastContentID: lastContentID,
-	})
+	return p.repository.PersistVideos(ctx, dbVideos, notifications, nil, watermark)
 }
