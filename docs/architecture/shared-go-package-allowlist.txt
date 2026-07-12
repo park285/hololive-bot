@@ -8,6 +8,7 @@ h3
 healthprobe
 httputil
 httputil/ginauth
+internal/guardtext
 json
 jsonutil
 llm
