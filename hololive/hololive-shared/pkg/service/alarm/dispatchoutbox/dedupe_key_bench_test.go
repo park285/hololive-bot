@@ -18,7 +18,7 @@ func benchDedupeInput() DedupeInput {
 		MinutesUntil:   10,
 		Category:       "live",
 		SourceKind:     domain.AlarmDispatchSourceKindYouTubeOutbox,
-		SourceIdentity: "youtube:dQw4w9WgXcQ",
+		SourceIdentity: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	}
 }
 
