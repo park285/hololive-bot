@@ -116,13 +116,23 @@ func (p *Probe) runCheck(ctx context.Context, c Check) error {
 	return c.Probe(probeCtx)
 }
 
-func GinHandler(p *Probe) gin.HandlerFunc {
+func GinHandler(ctx context.Context, p *Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if p == nil {
 			c.JSON(http.StatusOK, map[string]any{"status": "ready", "health": health.Get()})
 			return
 		}
-		statusCode, payload := p.Evaluate(c.Request.Context())
+		statusCode, payload := p.Evaluate(requestContext(ctx, c))
 		c.JSON(statusCode, payload)
 	}
+}
+
+func requestContext(fallback context.Context, c *gin.Context) context.Context {
+	if c != nil && c.Request != nil && c.Request.Context() != nil {
+		return c.Request.Context()
+	}
+	if fallback != nil {
+		return fallback
+	}
+	return context.Background()
 }

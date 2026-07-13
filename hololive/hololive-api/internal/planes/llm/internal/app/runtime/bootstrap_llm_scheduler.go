@@ -316,7 +316,6 @@ func buildLLMSchedulerHTTPServer(
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}
 
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
 	registerMajorEventInternalRoutes(router, apiKey, majorEventRepository)
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
 	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
@@ -347,7 +346,6 @@ func buildLLMSchedulerHTTPServers(
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}
 
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
 	registerMajorEventInternalRoutes(router, apiKey, majorEventRepository)
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
 	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
