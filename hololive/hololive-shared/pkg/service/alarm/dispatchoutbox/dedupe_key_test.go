@@ -231,7 +231,7 @@ func TestBuildLedgerRowsYouTubeOutboxUsesSourceIdentity(t *testing.T) {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}
 
-	wantEventKey := "youtube-outbox:COMMUNITY_POST:post-a,post-b"
+	wantEventKey := "youtube-outbox:COMMUNITY_POST:" + envelope.YouTubeOutbox.Identity()
 	if event.EventKey != wantEventKey {
 		t.Fatalf("event key = %q, want %q", event.EventKey, wantEventKey)
 	}
@@ -246,5 +246,80 @@ func TestBuildLedgerRowsYouTubeOutboxUsesSourceIdentity(t *testing.T) {
 	}
 	if err := validateEventPayloadRoomAgnostic(event.Payload); err != nil {
 		t.Fatalf("validateEventPayloadRoomAgnostic() error = %v", err)
+	}
+}
+
+func TestBuildEventKeyUsesDistinctCanonicalYouTubeIdentities(t *testing.T) {
+	identity := func(contentIDs ...string) string {
+		payload := &domain.YouTubeOutboxDispatchPayload{
+			Kind:      domain.OutboxKindNewVideo,
+			AlarmType: domain.AlarmTypeLive,
+			ChannelID: "UC_test",
+		}
+		for _, contentID := range contentIDs {
+			payload.Items = append(payload.Items, domain.YouTubeOutboxItem{ContentID: contentID, Payload: `{}`})
+		}
+		return payload.Identity()
+	}
+	first := BuildEventKey(&DedupeInput{
+		SourceKind:       domain.AlarmDispatchSourceKindYouTubeOutbox,
+		SourceOutboxKind: domain.OutboxKindNewVideo,
+		SourceIdentity:   identity("a,b", "c"),
+	})
+	second := BuildEventKey(&DedupeInput{
+		SourceKind:       domain.AlarmDispatchSourceKindYouTubeOutbox,
+		SourceOutboxKind: domain.OutboxKindNewVideo,
+		SourceIdentity:   identity("a", "b,c"),
+	})
+	if first == second {
+		t.Fatalf("BuildEventKey collision = %q", first)
+	}
+	for _, key := range []string{first, second} {
+		if len(key) > eventKeyMaxLength {
+			t.Fatalf("BuildEventKey length = %d, want <= %d", len(key), eventKeyMaxLength)
+		}
+	}
+}
+
+func TestBuildEventKeyStaysBoundedForMaximumYouTubeIdentitySet(t *testing.T) {
+	payload := &domain.YouTubeOutboxDispatchPayload{
+		Kind:      domain.OutboxKindNewVideo,
+		AlarmType: domain.AlarmTypeLive,
+		ChannelID: "UC_test",
+		Items:     make([]domain.YouTubeOutboxItem, 1000),
+	}
+	for i := range payload.Items {
+		payload.Items[i] = domain.YouTubeOutboxItem{
+			ContentID: fmt.Sprintf("%0500d-%04d", i, i),
+			Payload:   `{}`,
+		}
+	}
+	if err := payload.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	key := BuildEventKey(&DedupeInput{
+		SourceKind:       domain.AlarmDispatchSourceKindYouTubeOutbox,
+		SourceOutboxKind: payload.Kind,
+		SourceIdentity:   payload.Identity(),
+	})
+	if len(key) > eventKeyMaxLength {
+		t.Fatalf("BuildEventKey length = %d, want <= %d", len(key), eventKeyMaxLength)
+	}
+	if !strings.Contains(key, ":sha256:") {
+		t.Fatalf("BuildEventKey = %q, want canonical hashed identity", key)
+	}
+}
+
+func TestBuildEventKeyBoundsLegacyRawYouTubeSourceIdentity(t *testing.T) {
+	key := BuildEventKey(&DedupeInput{
+		SourceKind:       domain.AlarmDispatchSourceKindYouTubeOutbox,
+		SourceOutboxKind: domain.OutboxKindNewVideo,
+		SourceIdentity:   strings.Repeat("legacy,", 1000),
+	})
+	if len(key) > eventKeyMaxLength {
+		t.Fatalf("BuildEventKey length = %d, want <= %d", len(key), eventKeyMaxLength)
+	}
+	if !strings.Contains(key, ":sha256:") {
+		t.Fatalf("BuildEventKey = %q, want bounded source hash", key)
 	}
 }

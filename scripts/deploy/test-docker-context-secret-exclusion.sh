@@ -48,7 +48,8 @@ assert_present() {
 
 build_fixture() {
   local ctx="$1" dockerignore="$2"
-  mkdir -p "${ctx}/admin-dashboard/backend/config" "${ctx}/admin-dashboard/backend/coverage" "${ctx}/admin-dashboard/backend/artifacts"
+  mkdir -p "${ctx}/admin-dashboard/backend/config" "${ctx}/admin-dashboard/backend/coverage" "${ctx}/admin-dashboard/backend/artifacts" \
+    "${ctx}/admin-dashboard/backend/internal/logs"
   cp "${dockerignore}" "${ctx}/.dockerignore"
   printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/credentials.json"
   printf 'secret\n' > "${ctx}/admin-dashboard/backend/config/service-account.json"
@@ -59,6 +60,15 @@ build_fixture() {
   printf 'coverage\n' > "${ctx}/admin-dashboard/backend/coverage/coverage.out"
   printf 'artifact\n' > "${ctx}/admin-dashboard/backend/artifacts/stale.bin"
   printf 'package config\n' > "${ctx}/admin-dashboard/backend/config/loader.go"
+  printf 'package logs\n' > "${ctx}/admin-dashboard/backend/internal/logs/logger.go"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/internal/logs/.env.production"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/internal/logs/tls.key"
+  printf 'certificate\n' > "${ctx}/admin-dashboard/backend/internal/logs/client.pem"
+  printf 'certificate\n' > "${ctx}/admin-dashboard/backend/internal/logs/client.crt"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/internal/logs/credentials.json"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/internal/logs/service-account.json"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/internal/logs/serviceaccount.json"
+  printf 'secret\n' > "${ctx}/admin-dashboard/backend/internal/logs/mysecret.yaml"
   mkdir -p "${ctx}/hololive/hololive-api/internal"
   printf 'package api\n' > "${ctx}/hololive/hololive-api/internal/source.go"
 }
@@ -70,6 +80,10 @@ assert_admin_backend_sensitive_excluded() {
   done
   assert_excluded "${listing}" "/ctx/admin-dashboard/backend/coverage/coverage.out" "${label}/coverage"
   assert_excluded "${listing}" "/ctx/admin-dashboard/backend/artifacts/stale.bin" "${label}/artifacts"
+
+  for secret in .env.production tls.key client.pem client.crt credentials.json service-account.json serviceaccount.json mysecret.yaml; do
+    assert_excluded "${listing}" "/ctx/admin-dashboard/backend/internal/logs/${secret}" "${label}/internal-logs/${secret}"
+  done
 }
 
 producer_ctx="${TMP_DIR}/producer"
@@ -109,6 +123,7 @@ admin_list="$(context_filelist "${admin_ctx}")" || fail "hb03: admin-dashboard f
 
 assert_admin_backend_sensitive_excluded "${admin_list}" "admin-dashboard"
 assert_present "${admin_list}" "/ctx/admin-dashboard/backend/config/loader.go" "admin-dashboard backend source (own context)"
+assert_present "${admin_list}" "/ctx/admin-dashboard/backend/internal/logs/logger.go" "admin-dashboard internal logs source"
 assert_excluded "${admin_list}" "/ctx/hololive/hololive-api/internal/source.go" "admin-dashboard non-dependency module (hololive-api)"
 
 pass "hb03: alarm-worker + admin-dashboard Dockerfile.dockerignore exclude admin backend secrets; admin retains its own backend source, drops non-dependency modules"

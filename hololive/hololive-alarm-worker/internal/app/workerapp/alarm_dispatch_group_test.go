@@ -164,7 +164,7 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 		{
 			name:     "youtube outbox source kind",
 			envelope: youtubeOutbox,
-			want:     "room-1|source|youtube_outbox|UCtest|NEW_SHORT|short-a,short-b",
+			want:     "room-1|source|youtube_outbox|UCtest|NEW_SHORT|" + youtubeOutbox.YouTubeOutbox.Identity(),
 		},
 		{
 			name:     "scheduled stream with StartScheduled",

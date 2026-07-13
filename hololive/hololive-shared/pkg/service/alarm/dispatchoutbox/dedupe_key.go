@@ -52,7 +52,7 @@ func buildRawEventKey(input *DedupeInput) string {
 		return "celebration:" + input.SourceIdentity
 	}
 	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + input.SourceIdentity
+		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + boundedYouTubeSourceIdentity(input.SourceIdentity)
 	}
 	alarmType := input.AlarmType
 	if alarmType == "" {
@@ -84,6 +84,28 @@ func buildRawEventKey(input *DedupeInput) string {
 		category,
 		alarmType,
 	)
+}
+
+func boundedYouTubeSourceIdentity(identity string) string {
+	identity = strings.TrimSpace(identity)
+	if isCanonicalSHA256Identity(identity) {
+		return identity
+	}
+	sum := sha256.Sum256([]byte(identity))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func isCanonicalSHA256Identity(identity string) bool {
+	const prefix = "sha256:"
+	if len(identity) != len(prefix)+sha256.Size*2 || !strings.HasPrefix(identity, prefix) {
+		return false
+	}
+	for _, char := range identity[len(prefix):] {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {

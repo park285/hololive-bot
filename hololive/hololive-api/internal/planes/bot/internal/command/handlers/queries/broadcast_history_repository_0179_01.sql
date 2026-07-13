@@ -27,3 +27,26 @@
 		ORDER BY e.created_at DESC
 		LIMIT 1
 	) e ON TRUE
+	WHERE s.status = 'ENDED'
+	  AND ($1 = '' OR s.channel_id = $1)
+	  AND ($2::timestamptz IS NULL OR COALESCE(s.ended_at, s.started_at, s.scheduled_start_time, s.last_seen_at) >= $2)
+	  AND ($3::timestamptz IS NULL
+	       OR COALESCE(s.ended_at, s.started_at, s.scheduled_start_time, s.last_seen_at) < $3
+	       OR (
+	           COALESCE(s.ended_at, s.started_at, s.scheduled_start_time, s.last_seen_at) = $3
+	           AND s.video_id < $4
+	       ))
+	  AND ($5 = ''
+	       OR octet_length(COALESCE(NULLIF(s.topic_id, ''), NULLIF(e.topic_id, ''), '')) <>
+	          char_length(COALESCE(NULLIF(s.topic_id, ''), NULLIF(e.topic_id, ''), ''))
+	       OR EXISTS (
+	           SELECT 1
+	           FROM regexp_split_to_table(
+	               COALESCE(NULLIF(s.topic_id, ''), NULLIF(e.topic_id, ''), ''),
+	               ','
+	           ) AS topic_part(value)
+	           WHERE lower(btrim(regexp_replace(topic_part.value, '[[:space:]]+', ' ', 'g'))) = $5
+	       ))
+	ORDER BY COALESCE(s.ended_at, s.started_at, s.scheduled_start_time, s.last_seen_at) DESC,
+	         s.video_id DESC
+	LIMIT $6

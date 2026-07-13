@@ -20,6 +20,7 @@ import (
 
 type RuntimeRouterOptions struct {
 	APIKey                 string
+	DisableMetricsAuth     bool
 	EnableGzip             bool
 	Operation              string
 	SkipLogPaths           []string
@@ -130,7 +131,10 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRou
 	registerRuntimeInternalReadyRoute(router, opts.APIKey, opts.InternalReadyResponder)
 
 	metrics := router.Group("")
-	metrics.Use(middleware.APIKeyAuthMiddleware(opts.APIKey))
+	metrics.Use(middleware.AuthMiddleware(middleware.AuthConfig{
+		APIKey:   opts.APIKey,
+		Disabled: opts.DisableMetricsAuth,
+	}))
 	metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	if opts.RegisterRoutes != nil {

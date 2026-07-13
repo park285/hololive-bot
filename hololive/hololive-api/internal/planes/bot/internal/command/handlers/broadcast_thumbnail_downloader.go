@@ -88,6 +88,10 @@ func (d *youTubeThumbnailDownloader) Download(ctx context.Context, entry *handle
 }
 
 func (d *youTubeThumbnailDownloader) downloadCandidate(ctx context.Context, rawURL string) (image []byte, contentType string, err error) {
+	return d.requestThumbnail(ctx, rawURL)
+}
+
+func (d *youTubeThumbnailDownloader) requestThumbnail(ctx context.Context, rawURL string) (image []byte, contentType string, err error) {
 	if err := imagehost.ThumbnailHosts.ValidateURL(rawURL); err != nil {
 		return nil, "", err
 	}
@@ -104,12 +108,21 @@ func (d *youTubeThumbnailDownloader) downloadCandidate(ctx context.Context, rawU
 	if err != nil {
 		return nil, "", err
 	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close thumbnail body: %w", closeErr)
+		}
+	}()
 
+	return decodeThumbnailResponse(resp, bodyReader)
+}
+
+func decodeThumbnailResponse(resp *http.Response, bodyReader io.Reader) (image []byte, contentType string, err error) {
 	contentType, err = validateThumbnailResponse(resp)
 	if err != nil {
 		return nil, "", err
 	}
-	body, err := readAndCloseBroadcastThumbnailBody(bodyReader)
+	body, err := readBroadcastThumbnailBody(bodyReader)
 	if err != nil {
 		return nil, "", err
 	}
@@ -124,25 +137,6 @@ func thumbnailResponseBody(resp *http.Response) (io.ReadCloser, error) {
 		return nil, errors.New("thumbnail response body is nil")
 	}
 	return resp.Body, nil
-}
-
-func closeThumbnailBody(body io.Closer) error {
-	if body == nil {
-		return nil
-	}
-	if closeErr := body.Close(); closeErr != nil {
-		return fmt.Errorf("close thumbnail body: %w", closeErr)
-	}
-	return nil
-}
-
-func readAndCloseBroadcastThumbnailBody(body io.ReadCloser) (data []byte, err error) {
-	defer func() {
-		if closeErr := closeThumbnailBody(body); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-	return readBroadcastThumbnailBody(body)
 }
 
 func validateThumbnailResponse(resp *http.Response) (string, error) {

@@ -41,10 +41,10 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 		wantStatus int
 	}{
 		{
-			name:       "빈 API 키(개발 모드): 헤더 없어도 통과",
+			name:       "빈 API 키는 인증 미설정으로 차단",
 			apiKey:     "",
 			headerVal:  "",
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:       "유효한 키 설정 시 헤더 미전송 → 401",
@@ -121,6 +121,25 @@ func TestAPIKeyAuthMiddleware_ResponseBodyContract(t *testing.T) {
 	}
 }
 
+func TestAuthMiddlewareExplicitDisabled(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.Use(AuthMiddleware(AuthConfig{Disabled: true}))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", http.NoBody)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
 func TestNoRouteAuthHandler(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -132,10 +151,10 @@ func TestNoRouteAuthHandler(t *testing.T) {
 		wantStatus int
 	}{
 		{
-			name:       "빈 API 키(개발 모드): 등록되지 않은 경로 → 404",
+			name:       "빈 API 키는 NoRoute에서도 인증 미설정으로 차단",
 			apiKey:     "",
 			headerVal:  "",
-			wantStatus: http.StatusNotFound,
+			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:       "유효한 키 설정 시 헤더 미전송 → 401",
@@ -205,5 +224,21 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 	}
 	if got := payload["message"]; got != "invalid API key" {
 		t.Fatalf("message = %v, want %q", got, "invalid API key")
+	}
+}
+
+func TestNoRouteHandlerExplicitDisabled(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.NoRoute(NoRouteHandler(AuthConfig{Disabled: true}))
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }

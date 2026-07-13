@@ -122,3 +122,33 @@ func TestBroadcastHistoryEmptyShowsLimitFilter(t *testing.T) {
 		}
 	}
 }
+
+func TestBroadcastHistoryReportsTruncatedQueryBudget(t *testing.T) {
+	t.Parallel()
+
+	formatter := NewResponseFormatter("!", nil)
+	got := formatter.BroadcastHistory(t.Context(), BroadcastHistoryFilter{
+		Days:      365,
+		Limit:     20,
+		Truncated: true,
+	}, []BroadcastHistoryEntry{{
+		VideoID:    "AqxEw3kXcgU",
+		MemberName: "테스트",
+		TypeLabel:  "게임",
+		Time:       time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
+	}})
+
+	if !strings.Contains(got, "조회 예산") {
+		t.Fatalf("BroadcastHistory() missing truncation notice in:\n%s", got)
+	}
+}
+
+func TestBroadcastHistoryEmptyReportsTruncatedQueryBudget(t *testing.T) {
+	t.Parallel()
+
+	formatter := NewResponseFormatter("!", nil)
+	got := formatter.BroadcastHistoryEmpty(t.Context(), BroadcastHistoryFilter{Truncated: true})
+	if !strings.Contains(got, "조회 예산") {
+		t.Fatalf("BroadcastHistoryEmpty() missing truncation notice in:\n%s", got)
+	}
+}

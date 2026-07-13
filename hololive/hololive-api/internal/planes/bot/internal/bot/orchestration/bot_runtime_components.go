@@ -29,7 +29,7 @@ import (
 
 func (b *Bot) ensureCommandExecutor() *orchcmd.CommandRouter {
 	if b.commandExecutor == nil {
-		b.commandExecutor = orchcmd.NewCommandRouter(b.commandRegistry, b.logger, b.sendMessage, b.messageStrings)
+		b.commandExecutor = orchcmd.NewCommandRouter(b.commandRegistry, b.logger, b.sendMessage, b.messageStrings, b.cache)
 	}
 
 	return b.commandExecutor

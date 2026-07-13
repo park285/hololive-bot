@@ -270,10 +270,10 @@ func TestRegisterInternalRoutesWithAuth(t *testing.T) {
 		wantStatus int
 	}{
 		{
-			name:       "빈 API 키(개발 모드): 인증 없이 통과",
+			name:       "빈 API 키는 인증 미설정으로 차단",
 			apiKey:     "",
 			headerVal:  "",
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:       "API 키 설정 시 헤더 미전송 → 401",

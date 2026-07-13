@@ -100,8 +100,13 @@ type BroadcastHistoryEntry struct {
 	LastSeenAt          time.Time
 }
 
+type BroadcastHistoryResult struct {
+	Entries   []BroadcastHistoryEntry
+	Truncated bool
+}
+
 type BroadcastHistoryRepository interface {
-	ListEndedBroadcasts(ctx context.Context, query *BroadcastHistoryQuery) ([]BroadcastHistoryEntry, error)
+	ListEndedBroadcasts(ctx context.Context, query *BroadcastHistoryQuery) (BroadcastHistoryResult, error)
 	GetEndedBroadcast(ctx context.Context, query BroadcastThumbnailQuery) (*BroadcastHistoryEntry, error)
 }
 

@@ -40,13 +40,13 @@ type memberNewsDigestRequest struct {
 	Period string `json:"period"`
 }
 
-func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, service *membernewssvc.Service) {
+func registerMemberNewsInternalRoutes(router *gin.Engine, authConfig middleware.AuthConfig, service *membernewssvc.Service) {
 	if router == nil || service == nil {
 		return
 	}
 
 	rg := router.Group(membernewscontracts.BasePath)
-	rg.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	rg.Use(middleware.AuthMiddleware(authConfig))
 
 	rg.GET(membernewscontracts.SubscriptionsRoute+"/:roomID", memberNewsSubscriptionStatusHandler(service))
 	rg.POST(membernewscontracts.SubscriptionsRoute, memberNewsSubscribeHandler(service))

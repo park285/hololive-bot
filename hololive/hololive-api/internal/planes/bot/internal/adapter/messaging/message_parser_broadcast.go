@@ -30,6 +30,8 @@ import (
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
+const maxParsedBroadcastHistoryDays = 365
+
 func (ma *MessageAdapter) tryBroadcastHistoryCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
 	if ma.isBroadcastThumbnailCommand(command) {
 		return broadcastThumbnailCommand(args, raw), true
@@ -176,7 +178,7 @@ func applyBroadcastHistorySimpleToken(params map[string]any, _, normalized strin
 		return true
 	}
 	if isAllBroadcastHistoryToken(normalized) {
-		params["all"] = true
+		params["days"] = maxParsedBroadcastHistoryDays
 		return true
 	}
 	return false

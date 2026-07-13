@@ -7,7 +7,9 @@
 - `docker-compose.osaka.yml`: Osaka AP overlay for `youtube-producer-a`.
 - `docker-compose.osaka2.yml`: second Osaka AP overlay for `youtube-producer-d`.
 - `docker-compose.seoul.yml`: Seoul AP overlay for `youtube-producer-b`.
-- `docker-compose.remote-cache.yml`: optional BuildKit remote cache overlay.
+- `docker-compose.remote-cache.yml`: optional BuildKit registry cache overlay. Export is fixed to
+  `mode=min`, so only final-image cache records are published; intermediate build stages and copied
+  source trees must not be exported by this operational overlay.
 
 Prefer repository wrappers over raw `docker compose`:
 

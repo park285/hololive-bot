@@ -177,7 +177,7 @@ func (b *Bot) initializeCommands() {
 		registry.Register(cmd)
 	}
 
-	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage, b.messageStrings)
+	b.commandExecutor = orchcmd.NewCommandRouter(registry, b.logger, b.sendMessage, b.messageStrings, b.cache)
 	b.logger.Info("Commands initialized", slog.Int("count", registry.Count()))
 }
 

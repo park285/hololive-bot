@@ -9,6 +9,7 @@ type MemberNewsService = handlercore.MemberNewsService
 type MajorEventRepository = handlercore.MajorEventRepository
 type Dependencies = handlercore.Dependencies
 type BroadcastHistoryEntry = handlercore.BroadcastHistoryEntry
+type BroadcastHistoryResult = handlercore.BroadcastHistoryResult
 type BroadcastHistoryQuery = handlercore.BroadcastHistoryQuery
 type BroadcastHistoryRepository = handlercore.BroadcastHistoryRepository
 type BroadcastThumbnailDownloader = handlercore.BroadcastThumbnailDownloader

@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 source "${ROOT_DIR}/scripts/ci/go-tooling.sh"
+source "${ROOT_DIR}/scripts/ci/nilaway-inputs.sh"
 
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-true}"
 RUN_NILAWAY="${RUN_NILAWAY:-true}"
@@ -16,6 +17,11 @@ run_step() {
   "$@"
   echo
 }
+
+run_in_admin_backend() (
+  cd admin-dashboard/backend
+  "$@"
+)
 
 check_go_toolchain() {
   actual="$(go env GOVERSION)"
@@ -34,7 +40,10 @@ run_step "go vet" bash -c 'cd admin-dashboard/backend && GOFLAGS=-mod=readonly g
 run_step "staticcheck" bash -c "cd admin-dashboard/backend && GOFLAGS=-mod=readonly '$(ensure_staticcheck)' ./..."
 run_step "golangci-lint" bash -c "cd admin-dashboard/backend && '$(ensure_golangci_lint)' run -c ../../.golangci.yml ./..."
 if [[ "${RUN_NILAWAY}" == "true" ]]; then
-  run_step "NilAway" bash -c "cd admin-dashboard/backend && GOMEMLIMIT=${NILAWAY_GOMEMLIMIT:-10GiB} GOFLAGS=-mod=readonly '$(ensure_nilaway)' -pretty-print ./..."
+  nilaway_gomemlimit="${NILAWAY_GOMEMLIMIT:-10GiB}"
+  validate_nilaway_gomemlimit "${nilaway_gomemlimit}"
+  nilaway_bin="$(ensure_nilaway)"
+  run_step "NilAway" run_in_admin_backend env GOMEMLIMIT="${nilaway_gomemlimit}" GOFLAGS=-mod=readonly "${nilaway_bin}" -pretty-print ./...
 else
   echo "[ADMIN DASHBOARD GO CI] Skip NilAway: RUN_NILAWAY=${RUN_NILAWAY}"
   echo

@@ -40,6 +40,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -317,9 +318,9 @@ func buildLLMSchedulerHTTPServer(
 	}
 
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMajorEventInternalRoutes(router, apiKey, majorEventRepository)
+	registerMajorEventInternalRoutes(router, middleware.AuthConfig{APIKey: apiKey}, majorEventRepository)
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
+	registerMemberNewsInternalRoutes(router, middleware.AuthConfig{APIKey: apiKey}, memberNewsService)
 
 	addr := fmt.Sprintf(":%d", port)
 	return sharedserver.NewH2CServer(addr, router, "hololive-llm-sched.http"), nil
@@ -348,9 +349,9 @@ func buildLLMSchedulerHTTPServers(
 	}
 
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMajorEventInternalRoutes(router, apiKey, majorEventRepository)
+	registerMajorEventInternalRoutes(router, middleware.AuthConfig{APIKey: apiKey}, majorEventRepository)
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
+	registerMemberNewsInternalRoutes(router, middleware.AuthConfig{APIKey: apiKey}, memberNewsService)
 
 	return sharedserver.NewRuntimeHTTPServers(serverConfig, router, "hololive-llm-sched.http")
 }

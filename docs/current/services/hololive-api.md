@@ -78,4 +78,5 @@ bot/admin/llm plane을 한 프로세스에서 호스팅하는 통합 runtime입�
 
 - Project Map: `../PROJECT_MAP.md`
 - Contract Map: `../CONTRACT_MAP.md`
+- Process trust domain: `../architecture/hololive-api-trust-domain.md`
 - Runbook: `../runbooks/hololive-api.md`

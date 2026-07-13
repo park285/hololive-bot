@@ -38,6 +38,7 @@ type BroadcastHistoryFilter struct {
 	Days       int
 	Limit      int
 	IncludeAll bool
+	Truncated  bool
 }
 
 type BroadcastHistoryEntry struct {
@@ -54,6 +55,8 @@ type BroadcastHistoryEntry struct {
 
 var broadcastHistoryMembershipTagPattern = regexp.MustCompile(`(?i)(メンバーシップ限定|メンバー限定配信|メンバー限定|メン限|members[\s_-]*only|member[\s_-]*only|membership)`)
 
+const broadcastHistoryTruncatedNotice = "조회 예산에 도달해 일부 결과만 표시했습니다."
+
 func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter BroadcastHistoryFilter, entries []BroadcastHistoryEntry) string {
 	if len(entries) == 0 {
 		return f.BroadcastHistoryEmpty(ctx, filter)
@@ -63,6 +66,10 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 	fmt.Fprintf(&b, "방송 이력 %d건\n", len(entries))
 	if line := broadcastHistoryFilterLine(filter); line != "" {
 		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	if filter.Truncated {
+		b.WriteString(broadcastHistoryTruncatedNotice)
 		b.WriteByte('\n')
 	}
 
@@ -154,6 +161,10 @@ func (f *ResponseFormatter) BroadcastHistoryEmpty(ctx context.Context, filter Br
 	if line := broadcastHistoryFilterLine(filter); line != "" {
 		b.WriteByte('\n')
 		b.WriteString(line)
+	}
+	if filter.Truncated {
+		b.WriteByte('\n')
+		b.WriteString(broadcastHistoryTruncatedNotice)
 	}
 	return f.foldSeeMore(b.String())
 }

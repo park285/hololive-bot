@@ -76,7 +76,7 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.Co
 		return nil
 	}
 
-	entries, err := c.Deps().BroadcastHistory.ListEndedBroadcasts(ctx, query)
+	result, err := c.Deps().BroadcastHistory.ListEndedBroadcasts(ctx, query)
 	if err != nil {
 		c.Deps().Logger.Error("broadcast history query failed", slog.Any("error", err))
 		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "방송 이력 조회 중 오류가 발생했습니다."); sendErr != nil {
@@ -85,7 +85,8 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.Co
 		return nil
 	}
 
-	message := c.Deps().Formatter.BroadcastHistory(ctx, *filter, broadcastHistoryFormatterEntries(entries))
+	filter.Truncated = result.Truncated
+	message := c.Deps().Formatter.BroadcastHistory(ctx, *filter, broadcastHistoryFormatterEntries(result.Entries))
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
@@ -102,20 +103,19 @@ func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *domain
 
 func newBroadcastHistoryQuery(params map[string]any) (query handlercore.BroadcastHistoryQuery, filter adapter.BroadcastHistoryFilter) {
 	days := normalizeBroadcastHistoryDays(intBroadcastHistoryParam(params, "days", defaultBroadcastHistoryDays))
+	if boolParam(params, "all") {
+		days = maxBroadcastHistoryDays
+	}
 	limit := normalizeBroadcastHistoryLimit(intBroadcastHistoryParam(params, "limit", defaultBroadcastHistoryLimit))
 	query = handlercore.BroadcastHistoryQuery{
-		Limit:      limit,
-		TopicID:    stringParam(params, "topic"),
-		IncludeAll: boolParam(params, "all"),
+		Limit:   limit,
+		TopicID: stringParam(params, "topic"),
 	}
-	if !query.IncludeAll {
-		query.Since = time.Now().AddDate(0, 0, -days)
-	}
+	query.Since = time.Now().AddDate(0, 0, -days)
 	return query, adapter.BroadcastHistoryFilter{
-		TopicID:    query.TopicID,
-		Days:       days,
-		Limit:      limit,
-		IncludeAll: query.IncludeAll,
+		TopicID: query.TopicID,
+		Days:    days,
+		Limit:   limit,
 	}
 }
 

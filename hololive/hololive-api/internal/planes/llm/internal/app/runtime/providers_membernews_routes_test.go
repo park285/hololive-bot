@@ -112,12 +112,12 @@ func TestConvertMemberNewsDigest(t *testing.T) {
 func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 	t.Parallel()
 
-	registerMemberNewsInternalRoutes(nil, "", nil)
+	registerMemberNewsInternalRoutes(nil, middleware.AuthConfig{Disabled: true}, nil)
 
 	service := membernewssvc.NewService(nil, nil, nil, nil, sharedlogging.NewTestLogger())
 
 	t.Run("auth middleware", func(t *testing.T) {
-		router := newMemberNewsRouter(t, "secret", service)
+		router := newMemberNewsRouter(t, middleware.AuthConfig{APIKey: "secret"}, service)
 
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"r1"}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -134,7 +134,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 	})
 
 	t.Run("subscription and digest handlers", func(t *testing.T) {
-		router := newMemberNewsRouter(t, "", service)
+		router := newMemberNewsRouter(t, middleware.AuthConfig{Disabled: true}, service)
 
 		// GET subscription - room_id required
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, membernewscontracts.SubscriptionsPath+"/%20", http.NoBody)
@@ -214,13 +214,13 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 	})
 }
 
-func newMemberNewsRouter(t *testing.T, apiKey string, service *membernewssvc.Service) *http.ServeMux {
+func newMemberNewsRouter(t *testing.T, authConfig middleware.AuthConfig, service *membernewssvc.Service) *http.ServeMux {
 	t.Helper()
 
 	// gin.Engine는 http.Handler를 구현하므로 테스트 편의를 위해 mux에 연결합니다.
-	engine, err := buildHealthOnlyRouter(context.Background(), sharedlogging.NewTestLogger(), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), sharedlogging.NewTestLogger(), middleware.AuthConfig{Disabled: true})
 	require.NoError(t, err)
-	registerMemberNewsInternalRoutes(engine, apiKey, service)
+	registerMemberNewsInternalRoutes(engine, authConfig, service)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", engine)

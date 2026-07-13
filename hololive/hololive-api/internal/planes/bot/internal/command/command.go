@@ -6,6 +6,7 @@ type AlarmCommand = handlers.AlarmCommand
 type BaseCommand = handlers.BaseCommand
 type BroadcastHistoryCommand = handlers.BroadcastHistoryCommand
 type BroadcastHistoryEntry = handlers.BroadcastHistoryEntry
+type BroadcastHistoryResult = handlers.BroadcastHistoryResult
 type BroadcastHistoryQuery = handlers.BroadcastHistoryQuery
 type BroadcastHistoryRepository = handlers.BroadcastHistoryRepository
 type BroadcastThumbnailDownloader = handlers.BroadcastThumbnailDownloader

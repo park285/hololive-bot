@@ -28,13 +28,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 
 	"github.com/kapu/hololive-api/internal/readiness"
 )
 
-func buildHealthOnlyRouter(ctx context.Context, logger *slog.Logger, apiKey string) (*gin.Engine, error) {
+func buildHealthOnlyRouter(ctx context.Context, logger *slog.Logger, authConfig middleware.AuthConfig) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
-		APIKey: apiKey,
+		APIKey:             authConfig.APIKey,
+		DisableMetricsAuth: authConfig.Disabled,
 	})
 }
 
