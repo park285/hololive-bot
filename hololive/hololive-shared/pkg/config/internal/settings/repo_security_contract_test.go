@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +76,218 @@ func TestRepoComposeProdHardenedDefaults(t *testing.T) {
 	assertProdComposeNonEgressIsolation(t, content)
 }
 
+func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
+	content := readRepoFile(t, "deploy/compose/docker-compose.remote-cache.yml")
+
+	if strings.Contains(content, "mode=max") {
+		t.Fatal("remote cache overlay exports intermediate build layers with mode=max")
+	}
+	for _, service := range []string{
+		"hololive-api",
+		"hololive-alarm-worker",
+		"youtube-producer",
+		"admin-dashboard",
+	} {
+		block := composeServiceBlock(t, content, service)
+		if got := strings.Count(block, "mode=min"); got != 1 {
+			t.Fatalf("%s remote cache mode=min count = %d, want 1", service, got)
+		}
+	}
+}
+
+func TestRepoHololiveAPITrustDomainControls(t *testing.T) {
+	cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml")
+	service := composeService(t, cfg, "hololive-api")
+	env := composeEnvironment(t, cfg, "hololive-api")
+
+	for _, port := range []string{"30003", "30006"} {
+		assertRenderedPortOnHost(t, cfg, "hololive-api", "127.0.0.1", port, port, "tcp")
+		assertRenderedPortOnHost(t, cfg, "hololive-api", "127.0.0.1", port, port, "udp")
+	}
+	for key, want := range map[string]string{
+		"HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS":     "h3",
+		"HOLOLIVE_ADMIN_API_H3_ADDR":             ":30006",
+		"HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS": "h3",
+		"HOLOLIVE_LLM_SCHEDULER_H3_ADDR":         ":30003",
+	} {
+		if env[key] != want {
+			t.Fatalf("hololive-api %s = %q, want %q", key, env[key], want)
+		}
+	}
+	if strings.TrimSpace(env["API_SECRET_KEY"]) == "" {
+		t.Fatal("hololive-api must receive API_SECRET_KEY for admin/LLM plane auth")
+	}
+
+	networks, ok := service["networks"].(map[string]any)
+	if !ok {
+		t.Fatalf("hololive-api networks has unexpected type %T", service["networks"])
+	}
+	if _, ok := networks["docker-proxy-net"]; ok {
+		t.Fatal("hololive-api must not join docker-proxy-net")
+	}
+	for _, target := range composeVolumeTargets(t, cfg, "hololive-api") {
+		if target == "/var/run/docker.sock" {
+			t.Fatal("hololive-api must not mount the Docker socket")
+		}
+	}
+	if _, ok := env["DOCKER_HOST"]; ok {
+		t.Fatal("hololive-api must not receive DOCKER_HOST")
+	}
+
+	assertHololiveAPIPlaneAuthRequired(t)
+	assertHololiveAPIHasNoNativeExecutionImports(t)
+	assertHololiveAPITemplateInterpretationContract(t)
+	assertHololiveAPITrustDomainDecisionDocumented(t)
+}
+
+func TestRepoOperationalHistoryRiskDecisionsAreSeparate(t *testing.T) {
+	ignore := readRepoFile(t, ".gitignore")
+	for _, pattern := range []string{"docs/agent-workflows/", "docs/history/plan-kits/"} {
+		if !slices.Contains(strings.Split(ignore, "\n"), pattern) {
+			t.Fatalf(".gitignore missing operational evidence rule %q", pattern)
+		}
+	}
+
+	decision := readRepoFile(t, "docs/current/architecture/non-secret-history-risk-decisions-20260713.md")
+	for _, finding := range []string{"#087", "#088"} {
+		section := markdownDecisionSection(t, decision, "## "+finding)
+		for _, required := range []string{
+			"Decision: accept the non-secret Git-history reconnaissance risk.",
+			"docs/agent-workflows/",
+			"docs/history/plan-kits/",
+			"No history rewrite, credential or endpoint rotation, or remote deletion is authorized by this decision.",
+			"If a real secret is later identified, this acceptance is void",
+		} {
+			if !strings.Contains(section, required) {
+				t.Fatalf("%s decision missing %q", finding, required)
+			}
+		}
+	}
+}
+
+func markdownDecisionSection(t *testing.T, document, heading string) string {
+	t.Helper()
+
+	start := strings.Index(document, heading)
+	if start < 0 {
+		t.Fatalf("decision document missing heading %q", heading)
+	}
+	section := document[start:]
+	if next := strings.Index(section[len(heading):], "\n## "); next >= 0 {
+		section = section[:len(heading)+next]
+	}
+	return section
+}
+
+func assertHololiveAPIPlaneAuthRequired(t *testing.T) {
+	t.Helper()
+
+	for path, marker := range map[string]string{
+		"hololive/hololive-api/internal/planes/admin/internal/app/http/router.go":                   "API_SECRET_KEY required",
+		"hololive/hololive-api/internal/planes/llm/internal/app/runtime/bootstrap_llm_scheduler.go": "API_SECRET_KEY required",
+	} {
+		if content := readRepoFile(t, path); !strings.Contains(content, marker) {
+			t.Fatalf("%s missing plane auth requirement %q", path, marker)
+		}
+	}
+}
+
+func assertHololiveAPIHasNoNativeExecutionImports(t *testing.T) {
+	t.Helper()
+
+	forbidden := map[string]bool{"os/exec": true, "plugin": true}
+	for _, relativeRoot := range []string{
+		"hololive/hololive-api",
+		"hololive/hololive-shared/pkg/service/template",
+	} {
+		root := filepath.Join(repoRootFromConfigTest(t), filepath.FromSlash(relativeRoot))
+		assertNoNativeExecutionImports(t, root, forbidden)
+	}
+}
+
+func assertNoNativeExecutionImports(t *testing.T, root string, forbidden map[string]bool) {
+	t.Helper()
+
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return fmt.Errorf("parse imports from %s: %w", path, err)
+		}
+		for _, imported := range file.Imports {
+			name, err := strconv.Unquote(imported.Path.Value)
+			if err != nil {
+				return fmt.Errorf("unquote import in %s: %w", path, err)
+			}
+			if forbidden[name] {
+				return fmt.Errorf("production trust-domain path imports native execution package %q in %s", name, path)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertHololiveAPITemplateInterpretationContract(t *testing.T) {
+	t.Helper()
+
+	for path, markers := range map[string][]string{
+		"hololive/hololive-api/internal/planes/admin/internal/app/http/registration.go": {
+			"holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))",
+		},
+		"hololive/hololive-api/internal/planes/admin/internal/app/http/routes.go": {
+			`holoAPI.PUT("/templates/:key", handler.UpsertTemplate)`,
+			`holoAPI.POST("/templates/:key/preview", handler.PreviewTemplate)`,
+		},
+		"hololive/hololive-api/internal/planes/admin/internal/server/api/api_template.go": {
+			"h.templateAdmin.Save(ctx, key, channelPtr, req.Body)",
+			"h.templateAdmin.Preview(ctx, key, req.Body)",
+		},
+		"hololive/hololive-shared/pkg/service/template/admin_service.go": {
+			".Parse(body)",
+			"tmpl.Execute(&buf, sampleData)",
+		},
+		"hololive/hololive-shared/pkg/service/template/renderer.go": {
+			"body, err := r.loadTemplateBody(ctx, key, channelID)",
+			".Parse(body)",
+			"tmpl.Execute(&buf, data)",
+		},
+	} {
+		content := readRepoFile(t, path)
+		for _, marker := range markers {
+			if !strings.Contains(content, marker) {
+				t.Fatalf("%s missing template interpretation contract marker %q", path, marker)
+			}
+		}
+	}
+}
+
+func assertHololiveAPITrustDomainDecisionDocumented(t *testing.T) {
+	t.Helper()
+
+	content := readRepoFile(t, "docs/current/architecture/hololive-api-trust-domain.md")
+	for _, statement := range []string{
+		"One process is one trust domain.",
+		"A process-level compromise in any plane exposes credentials available to all three planes, including bot egress credentials.",
+		"No admin or LLM endpoint may load native plugins, spawn processes, invoke shells, or execute",
+		"Admin template update and preview are an explicit, authenticated, capability-bounded interpretation",
+		"user-supplied Go `text/template` body를 parse하고 execute합니다.",
+		"They do not provide native command, plugin, or process",
+		"Split trigger: if admin-plane or LLM-plane compromise must not expose bot egress credentials",
+	} {
+		if !strings.Contains(content, statement) {
+			t.Fatalf("hololive-api trust-domain decision missing %q", statement)
+		}
+	}
+}
+
 func assertProdComposeDisallowedPatterns(t *testing.T, content string) {
 	t.Helper()
 
@@ -88,6 +304,8 @@ func assertProdComposeDisallowedPatterns(t *testing.T, content string) {
 		"IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}",
 		"http://100.100.1.3:30190",
 		"PGSSLMODE: \"require\"",
+		"--unixsocketperm 777",
+		"mode=0777",
 	}
 	for _, pattern := range disallowed {
 		if strings.Contains(content, pattern) {
@@ -121,7 +339,8 @@ func assertProdComposeRequiredPatterns(t *testing.T, content string) {
 		"  POSTGRES_PORT: \"5432\"",
 		"  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}",
 		"  IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-}",
-		"--unixsocketperm 777",
+		"--unixsocketperm 660",
+		"o: size=1m,mode=0770,uid=999,gid=1000",
 	}
 	for _, pattern := range required {
 		if !strings.Contains(content, pattern) {
@@ -200,11 +419,54 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 	cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml")
 
 	assertProdRenderedPostgresIsolation(t, cfg)
+	assertProdRenderedValkeySocketIsolation(t, cfg)
 	assertProdRenderedNonEgressSecretIsolation(t, cfg)
 	assertProdRenderedEgressRuntimeKeys(t, cfg)
 	assertProdRenderedScopedProducerKeys(t, cfg)
 	assertProdRenderedNoRuntimeConfigMount(t, cfg)
 	assertProdRenderedPortAndCertScope(t, cfg)
+}
+
+func assertProdRenderedValkeySocketIsolation(t *testing.T, cfg renderedCompose) {
+	t.Helper()
+
+	if command := composeCommand(t, cfg, "valkey-cache"); !strings.Contains(command, "--unixsocketperm 660") || strings.Contains(command, "--unixsocketperm 777") {
+		t.Fatalf("valkey-cache command = %q, want group-only unix socket permission", command)
+	}
+
+	volume, ok := cfg.Volumes["valkey-cache-socket"]
+	if !ok {
+		t.Fatal("rendered Compose missing valkey-cache-socket volume")
+	}
+	driverOpts, ok := volume["driver_opts"].(map[string]any)
+	if !ok {
+		t.Fatalf("valkey-cache-socket driver_opts has unexpected type %T", volume["driver_opts"])
+	}
+	if got := stringValue(driverOpts["o"]); got != "size=1m,mode=0770,uid=999,gid=1000" {
+		t.Fatalf("valkey-cache-socket tmpfs opts = %q, want private shared-group directory", got)
+	}
+
+	wantConsumers := map[string]bool{
+		"valkey-cache":          true,
+		"hololive-api":          true,
+		"hololive-alarm-worker": true,
+		"youtube-producer":      true,
+	}
+	for service := range cfg.Services {
+		mountsSocket := false
+		for _, volume := range composeVolumes(t, cfg, service) {
+			if volume.Source == "valkey-cache-socket" && volume.Target == "/var/run/valkey" {
+				mountsSocket = true
+			}
+		}
+		hasSharedGroup := slices.Contains(composeGroupAdd(t, cfg, service), "1000")
+		if mountsSocket != wantConsumers[service] {
+			t.Fatalf("%s socket mount = %v, want %v", service, mountsSocket, wantConsumers[service])
+		}
+		if hasSharedGroup != mountsSocket {
+			t.Fatalf("%s shared Valkey group = %v, socket mount = %v", service, hasSharedGroup, mountsSocket)
+		}
+	}
 }
 
 func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
@@ -420,8 +682,8 @@ func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 	assertRenderedPort(t, cfg, "hololive-api", "30001", "30001", "tcp")
 	assertRenderedPort(t, cfg, "hololive-api", "30001", "30001", "udp")
 
-	if command := composeCommand(t, cfg, "valkey-cache"); !strings.Contains(command, "--unixsocketperm 777") {
-		t.Fatalf("live overlay valkey command = %q, want --unixsocketperm 777", command)
+	if command := composeCommand(t, cfg, "valkey-cache"); !strings.Contains(command, "--unixsocketperm 660") {
+		t.Fatalf("live overlay valkey command = %q, want --unixsocketperm 660", command)
 	}
 
 	for _, service := range []string{"holo-postgres", "hololive-db-migrate"} {
@@ -902,6 +1164,7 @@ func isWeakPostgresSSLMode(mode string) bool {
 
 type renderedCompose struct {
 	Services map[string]map[string]any `yaml:"services"`
+	Volumes  map[string]map[string]any `yaml:"volumes"`
 }
 
 type renderedPort struct {
@@ -1423,6 +1686,24 @@ func composeCommand(t *testing.T, cfg renderedCompose, service string) string {
 	default:
 		return stringValue(raw)
 	}
+}
+
+func composeGroupAdd(t *testing.T, cfg renderedCompose, service string) []string {
+	t.Helper()
+
+	raw, ok := composeService(t, cfg, service)["group_add"]
+	if !ok {
+		return nil
+	}
+	values, ok := raw.([]any)
+	if !ok {
+		t.Fatalf("%s group_add has unexpected type %T", service, raw)
+	}
+	groups := make([]string, 0, len(values))
+	for _, value := range values {
+		groups = append(groups, stringValue(value))
+	}
+	return groups
 }
 
 func stringValue(value any) string {

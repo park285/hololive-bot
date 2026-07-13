@@ -35,18 +35,19 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	json "github.com/park285/shared-go/pkg/json"
 )
 
 func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
 	t.Parallel()
 
-	registerMajorEventInternalRoutes(nil, "", nil)
+	registerMajorEventInternalRoutes(nil, middleware.AuthConfig{Disabled: true}, nil)
 
-	engine, err := buildHealthOnlyRouter(context.Background(), slog.New(slog.DiscardHandler), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), slog.New(slog.DiscardHandler), middleware.AuthConfig{Disabled: true})
 	require.NoError(t, err)
 
-	registerMajorEventInternalRoutes(engine, "", nil)
+	registerMajorEventInternalRoutes(engine, middleware.AuthConfig{Disabled: true}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", http.NoBody)
 	rr := httptest.NewRecorder()
@@ -57,7 +58,7 @@ func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
 func TestRegisterMajorEventInternalRoutes_AuthMiddleware(t *testing.T) {
 	t.Parallel()
 
-	router := newMajorEventRouter(t, "secret", &majorevent.Repository{})
+	router := newMajorEventRouter(t, middleware.AuthConfig{APIKey: "secret"}, &majorevent.Repository{})
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", http.NoBody)
 	rr := httptest.NewRecorder()
@@ -74,7 +75,7 @@ func TestRegisterMajorEventInternalRoutes_AuthMiddleware(t *testing.T) {
 func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 	t.Parallel()
 
-	router := newMajorEventRouter(t, "", &majorevent.Repository{})
+	router := newMajorEventRouter(t, middleware.AuthConfig{Disabled: true}, &majorevent.Repository{})
 
 	t.Run("get subscription room_id required", func(t *testing.T) {
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, majoreventcontracts.SubscriptionsPath+"/%20", http.NoBody)
@@ -145,13 +146,13 @@ func assertErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, want strin
 	assert.Len(t, payload, 1)
 }
 
-func newMajorEventRouter(t *testing.T, apiKey string, repository *majorevent.Repository) *http.ServeMux {
+func newMajorEventRouter(t *testing.T, authConfig middleware.AuthConfig, repository *majorevent.Repository) *http.ServeMux {
 	t.Helper()
 
-	engine, err := buildHealthOnlyRouter(context.Background(), slog.New(slog.DiscardHandler), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), slog.New(slog.DiscardHandler), middleware.AuthConfig{Disabled: true})
 	require.NoError(t, err)
 
-	registerMajorEventInternalRoutes(engine, apiKey, repository)
+	registerMajorEventInternalRoutes(engine, authConfig, repository)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", engine)

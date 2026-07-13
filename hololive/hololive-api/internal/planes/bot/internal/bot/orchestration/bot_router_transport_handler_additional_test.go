@@ -196,7 +196,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	cmdCtx := domain.NewCommandContext("room-1", "room", "user-1", "user", "!help", false)
 
 	t.Run("nil registry", func(t *testing.T) {
-		router := orchcmd.NewCommandRouter(nil, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil)
+		router := orchcmd.NewCommandRouter(nil, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "command registry is not initialized")
@@ -210,7 +210,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 			gotMessage = message
 
 			return nil
-		}, nil)
+		}, nil, nil)
 
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	t.Run("unknown command fallback send failure", func(t *testing.T) {
 		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error {
 			return errors.New("send failed")
-		}, nil)
+		}, nil, nil)
 
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
@@ -237,7 +237,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 			},
 		})
 
-		router := orchcmd.NewCommandRouter(registry, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil)
+		router := orchcmd.NewCommandRouter(registry, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
 
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
@@ -245,7 +245,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	})
 
 	t.Run("normalize alarm add command", func(t *testing.T) {
-		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil)
+		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
 		key, params := router.NormalizeCommand(domain.CommandAlarmAdd, map[string]any{"member": "miko"})
 		assert.Equal(t, orchcmd.CommandKeyAlarm, key)
 		assert.Equal(t, "add", params["action"])

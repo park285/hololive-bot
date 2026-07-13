@@ -78,7 +78,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 		gin.SetMode(prevMode)
 	})
 
-	router, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), "")
+	router, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), middleware.AuthConfig{Disabled: true})
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
@@ -108,7 +108,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 
 	t.Run("metrics require api key when configured", func(t *testing.T) {
-		protectedRouter, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), "test-key")
+		protectedRouter, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), middleware.AuthConfig{APIKey: "test-key"})
 		require.NoError(t, err)
 
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)

@@ -314,12 +314,14 @@ services:
     # appendonly no + save "" 순수 캐시 구성이라 /data 영속 볼륨은 실사용이 없어 제거했다.
     volumes:
       - valkey-cache-socket:/var/run/valkey
-    # unixsocketperm 777: 앱(uid 1000)과 valkey 유저의 그룹이 달라 770이면 소켓 접근이 막힌다.
-    # 소켓 볼륨은 신뢰된 앱 컨테이너에만 ro 마운트되고 requirepass가 인증 경계다.
+    group_add:
+      - "1000"
+    # valkey(uid 999, gid 1000)가 private tmpfs에 gid 1000/0660 소켓을 만들고,
+    # 명시적으로 같은 supplementary group을 받은 소켓 소비자만 접근한다. requirepass도 유지한다.
     command:
       - /bin/sh
       - -c
-      - exec valkey-server --unixsocket /var/run/valkey/valkey-cache.sock --unixsocketperm 777 --port 6379 --requirepass "$$CACHE_PASSWORD" --appendonly no --save "" --maxmemory 384mb --maxmemory-policy allkeys-lfu --loglevel notice --io-threads 4 --io-threads-do-reads yes --activedefrag yes --active-defrag-threshold-lower 10 --active-defrag-cycle-min 1 --active-defrag-cycle-max 25
+      - exec valkey-server --unixsocket /var/run/valkey/valkey-cache.sock --unixsocketperm 660 --port 6379 --requirepass "$$CACHE_PASSWORD" --appendonly no --save "" --maxmemory 384mb --maxmemory-policy allkeys-lfu --loglevel notice --io-threads 4 --io-threads-do-reads yes --activedefrag yes --active-defrag-threshold-lower 10 --active-defrag-cycle-min 1 --active-defrag-cycle-max 25
     sysctls:
       - net.core.somaxconn=1024
     healthcheck:
@@ -436,6 +438,8 @@ services:
       - "127.0.0.1:30097:30097"
       - "127.0.0.1:30067:30067"
     volumes: *alarm-worker-volumes
+    group_add:
+      - "1000"
     extra_hosts: *iris-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
@@ -514,6 +518,8 @@ services:
       - "127.0.0.1:30091:30091"
       - "127.0.0.1:30061:30061"
     volumes: *hololive-api-volumes
+    group_add:
+      - "1000"
     extra_hosts: *iris-extra-hosts
     depends_on:
       <<: *db-cache-depends
@@ -577,6 +583,8 @@ services:
       - "127.0.0.1:30005:30005/udp"
       - "127.0.0.1:30095:30095"
     volumes: *go-volumes
+    group_add:
+      - "1000"
     extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
@@ -702,7 +710,7 @@ volumes:
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: size=1m,mode=0777
+      o: size=1m,mode=0770,uid=999,gid=1000
 
 networks:
   hololive-net:

@@ -21,7 +21,7 @@ services:
   valkey-cache:
     ports:
       - "${VALKEY_PORT_BIND_IP:-100.100.1.3}:6379:6379"
-    # command 오버라이드는 prod에서 unixsocketperm 777로 통일되어 tailnet publish만 남긴다.
+    # command 오버라이드는 prod의 gid 1000/0660 소켓 정책을 그대로 상속하고 tailnet publish만 남긴다.
 
   hololive-db-migrate:
     environment:

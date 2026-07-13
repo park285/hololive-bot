@@ -246,6 +246,28 @@ func TestParseMessage_BroadcastHistorySeparatedFilters(t *testing.T) {
 	}
 }
 
+func TestParseMessage_BroadcastHistoryAllIsCappedToOneYear(t *testing.T) {
+	t.Parallel()
+
+	for _, token := range []string{"전체", "전부", "모두", "all"} {
+		t.Run(token, func(t *testing.T) {
+			t.Parallel()
+
+			adapter := NewMessageAdapter("!", "")
+			result := adapter.ParseMessage(&webhook.Message{Msg: "!방송이력 " + token})
+			if result == nil {
+				t.Fatal("expected parsed command, got nil")
+			}
+			if got := result.Params["days"]; got != 365 {
+				t.Fatalf("days = %v, want 365", got)
+			}
+			if got := result.Params["all"]; got != nil {
+				t.Fatalf("all = %v, want nil", got)
+			}
+		})
+	}
+}
+
 func TestParseMessage_BroadcastHistoryAttachedMemberFilterConsumesNameUntilType(t *testing.T) {
 	adapter := NewMessageAdapter("!", "")
 	msg := &webhook.Message{Msg: "!방송기록 멤버:사쿠라 미코 게임"}

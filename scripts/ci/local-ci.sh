@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.5+auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
+source "${SCRIPT_DIR}/nilaway-inputs.sh"
 cd "${ROOT_DIR}"
 
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
@@ -253,6 +254,8 @@ check_nilaway() {
     # NilAway는 패턴당 10~16GB RSS까지 자란다 — 3병렬이 2026-07-04 호스트 global OOM(~40GB 스파이크)을 냈다.
     local nilaway_parallel="${NILAWAY_PARALLEL:-1}"
     local nilaway_gomemlimit="${NILAWAY_GOMEMLIMIT:-10GiB}"
+    validate_nilaway_parallel "${nilaway_parallel}" || return 1
+    validate_nilaway_gomemlimit "${nilaway_gomemlimit}" || return 1
     local nilaway_tmp_parent="${LOCAL_CI_TMPDIR:-${ROOT_DIR}/.tmp/local-ci}"
     mkdir -p "${nilaway_tmp_parent}"
     local nilaway_tmp
@@ -290,6 +293,7 @@ check_nilaway() {
 }
 
 run_step "local-ci package scope tests" ./scripts/ci/test-local-ci-packages.sh
+run_step "NilAway input guard tests" bash ./scripts/ci/nilaway-inputs_test.sh
 configure_go_packages
 echo "[LOCAL CI] Go package scope: ${LOCAL_CI_GO_SCOPE} (${#GO_PACKAGES[@]} packages)"
 if has_go_packages; then
@@ -301,6 +305,7 @@ echo
 
 run_step "Architecture gates" ./scripts/architecture/ci-boundary-gate.sh
 run_step "Sensitive log scan" ./scripts/refactor/grep-sensitive-logs.sh
+run_step "Sensitive log scan tests" bash ./scripts/refactor/grep-sensitive-logs_test.sh
 if [[ "${RUN_ADMIN_TOUCH_GUARDRAIL}" == "true" ]]; then
     run_step "Refactor admin-dashboard guardrail" ./scripts/refactor/validate-no-admin-touch.sh
     run_step "Refactor admin-dashboard guardrail tests" ./scripts/refactor/test-validate-no-admin-touch.sh

@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -23,18 +22,19 @@ type stubBroadcastHistoryRepository struct {
 	listCalls int
 	listErr   error
 	entries   []handlercore.BroadcastHistoryEntry
+	truncated bool
 	getQuery  handlercore.BroadcastThumbnailQuery
 	getEntry  *handlercore.BroadcastHistoryEntry
 	getErr    error
 }
 
-func (s *stubBroadcastHistoryRepository) ListEndedBroadcasts(_ context.Context, query *handlercore.BroadcastHistoryQuery) ([]handlercore.BroadcastHistoryEntry, error) {
+func (s *stubBroadcastHistoryRepository) ListEndedBroadcasts(_ context.Context, query *handlercore.BroadcastHistoryQuery) (handlercore.BroadcastHistoryResult, error) {
 	s.listQuery = *query
 	s.listCalls++
 	if s.listErr != nil {
-		return nil, s.listErr
+		return handlercore.BroadcastHistoryResult{}, s.listErr
 	}
-	return s.entries, nil
+	return handlercore.BroadcastHistoryResult{Entries: s.entries, Truncated: s.truncated}, nil
 }
 
 func (s *stubBroadcastHistoryRepository) GetEndedBroadcast(_ context.Context, query handlercore.BroadcastThumbnailQuery) (*handlercore.BroadcastHistoryEntry, error) {
@@ -88,6 +88,7 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 	}
 
 	cmd := NewBroadcastHistoryCommand(deps)
+	before := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(-2 * time.Second)
 	err := cmd.Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{
 		"type":  "게임",
 		"topic": "Forza",
@@ -100,11 +101,39 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 	if repo.listCalls != 1 {
 		t.Fatalf("ListEndedBroadcasts calls = %d, want 1", repo.listCalls)
 	}
-	if repo.listQuery.Type != string(BroadcastTypeGame) || repo.listQuery.TopicID != "Forza" || repo.listQuery.Limit != 5 || !repo.listQuery.IncludeAll {
+	after := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(2 * time.Second)
+	if repo.listQuery.Type != string(BroadcastTypeGame) || repo.listQuery.TopicID != "Forza" || repo.listQuery.Limit != 5 || repo.listQuery.IncludeAll {
 		t.Fatalf("query = %+v", repo.listQuery)
+	}
+	if repo.listQuery.Since.Before(before) || repo.listQuery.Since.After(after) {
+		t.Fatalf("Since = %s, want capped all range between %s and %s", repo.listQuery.Since, before, after)
 	}
 	if sent == "" {
 		t.Fatal("expected message to be sent")
+	}
+	if !strings.Contains(sent, "기간: 최근 365일") || strings.Contains(sent, "기간: 전체") {
+		t.Fatalf("sent message = %q, want capped 365-day range", sent)
+	}
+}
+
+func TestBroadcastHistoryCommandReportsTruncatedResult(t *testing.T) {
+	repo := &stubBroadcastHistoryRepository{truncated: true}
+	var sent string
+	deps := &Dependencies{
+		BroadcastHistory: repo,
+		Formatter:        adapter.NewResponseFormatter("!", nil),
+		SendMessage: func(_ context.Context, _, message string) error {
+			sent = message
+			return nil
+		},
+		SendError: func(_ context.Context, _, _ string) error { return nil },
+	}
+
+	if err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room"}, nil); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(sent, "조회 예산") {
+		t.Fatalf("sent message = %q, want truncation notice", sent)
 	}
 }
 
@@ -230,7 +259,7 @@ func TestBroadcastHistoryCommandListErrorSendsOneUserMessage(t *testing.T) {
 	}
 }
 
-func TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTypeFilter(t *testing.T) {
+func TestPgBroadcastHistoryRepositoryStopsAtScanBudgetForTypeFilter(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	ctx := t.Context()
 
@@ -239,17 +268,17 @@ func TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTyp
 	}
 
 	base := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
-	for i := range broadcastHistoryPageSize {
-		endedAt := base.Add(-time.Duration(i) * time.Minute)
-		if _, err := pool.Exec(ctx, `
-			INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
-			VALUES ($1, $2, 'ENDED', $3, $4, $4)
-		`, fmt.Sprintf("talk%03d", i), "channel-a", "【雑談】test", endedAt); err != nil {
-			t.Fatalf("insert talk session %d: %v", i, err)
-		}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
+		SELECT 'talk' || lpad(gs::text, 7, '0'), 'channel-a', 'ENDED', '【雑談】test',
+		       $1::timestamptz - (gs * interval '1 minute'),
+		       $1::timestamptz - (gs * interval '1 minute')
+		FROM generate_series(0, $2 - 1) AS gs
+	`, base, maxBroadcastHistoryProcessedRows); err != nil {
+		t.Fatalf("insert talk sessions: %v", err)
 	}
 
-	gameEndedAt := base.Add(-time.Duration(broadcastHistoryPageSize+1) * time.Minute)
+	gameEndedAt := base.Add(-time.Duration(maxBroadcastHistoryProcessedRows+1) * time.Minute)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
 		VALUES ($1, $2, 'ENDED', $3, $4, $4)
@@ -258,7 +287,7 @@ func TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTyp
 	}
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
-	entries, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
+	result, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
 		Type:  string(BroadcastTypeGame),
 		Limit: 1,
 		Since: base.Add(-24 * time.Hour),
@@ -266,11 +295,65 @@ func TestPgBroadcastHistoryRepositoryListEndedBroadcastsScansPastFirstPageForTyp
 	if err != nil {
 		t.Fatalf("ListEndedBroadcasts() error = %v", err)
 	}
-	if len(entries) != 1 {
-		t.Fatalf("len(entries) = %d, want 1", len(entries))
+	if len(result.Entries) != 0 {
+		t.Fatalf("len(entries) = %d, want 0 within scan budget", len(result.Entries))
 	}
-	if entries[0].VideoID != "game001" {
-		t.Fatalf("entry video_id = %q, want game001", entries[0].VideoID)
+	if !result.Truncated {
+		t.Fatal("Truncated = false, want true after scan budget")
+	}
+}
+
+func TestPgBroadcastHistoryRepositoryPushesStableTopicFilterIntoSQL(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, `DELETE FROM youtube_live_sessions`); err != nil {
+		t.Fatalf("clear live sessions: %v", err)
+	}
+	base := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, topic_id, ended_at, last_seen_at)
+		SELECT 'topic' || lpad(gs::text, 6, '0'), 'channel-a', 'ENDED', 'test', 'talking',
+		       $1::timestamptz - (gs * interval '1 minute'),
+		       $1::timestamptz - (gs * interval '1 minute')
+		FROM generate_series(0, $2) AS gs
+	`, base, maxBroadcastHistoryProcessedRows); err != nil {
+		t.Fatalf("insert topic sessions: %v", err)
+	}
+
+	repo := &pgBroadcastHistoryRepository{pool: pool}
+	result, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
+		TopicID: "missing-topic",
+		Limit:   1,
+		Since:   base.Add(-24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("ListEndedBroadcasts() error = %v", err)
+	}
+	if len(result.Entries) != 0 || result.Truncated {
+		t.Fatalf("result = %+v, want exhausted empty result without scan truncation", result)
+	}
+}
+
+func TestPgBroadcastHistoryRepositoryElapsedBudgetReturnsTruncatedResult(t *testing.T) {
+	repo := &pgBroadcastHistoryRepository{
+		queryTimeout: 20 * time.Millisecond,
+		pageLoader: func(ctx context.Context, _ *handlercore.BroadcastHistoryQuery, _ *time.Time, _ *time.Time, _ string, _ int) ([]handlercore.BroadcastHistoryEntry, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+
+	started := time.Now()
+	result, err := repo.ListEndedBroadcasts(t.Context(), &handlercore.BroadcastHistoryQuery{Limit: 1})
+	if err != nil {
+		t.Fatalf("ListEndedBroadcasts() error = %v", err)
+	}
+	if !result.Truncated {
+		t.Fatal("Truncated = false, want true after elapsed budget")
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("elapsed = %s, want bounded query time", elapsed)
 	}
 }
 
@@ -354,7 +437,7 @@ func TestPgBroadcastHistoryRepositoryDeduplicatesSharedChannelMembers(t *testing
 	}
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
-	entries, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
+	result, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
 		ChannelID: channelID,
 		Limit:     10,
 		Since:     endedAt.Add(-time.Hour),
@@ -362,11 +445,11 @@ func TestPgBroadcastHistoryRepositoryDeduplicatesSharedChannelMembers(t *testing
 	if err != nil {
 		t.Fatalf("ListEndedBroadcasts() error = %v", err)
 	}
-	if len(entries) != 1 {
-		t.Fatalf("entries = %d, want 1: %#v", len(entries), entries)
+	if len(result.Entries) != 1 {
+		t.Fatalf("entries = %d, want 1: %#v", len(result.Entries), result.Entries)
 	}
-	if entries[0].MemberName != "후와와 / 모코코" {
-		t.Fatalf("MemberName = %q, want 후와와 / 모코코", entries[0].MemberName)
+	if result.Entries[0].MemberName != "후와와 / 모코코" {
+		t.Fatalf("MemberName = %q, want 후와와 / 모코코", result.Entries[0].MemberName)
 	}
 }
 

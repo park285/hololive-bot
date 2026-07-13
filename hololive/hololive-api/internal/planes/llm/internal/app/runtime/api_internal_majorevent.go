@@ -34,13 +34,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
-func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repository *majorevent.Repository) {
+func registerMajorEventInternalRoutes(router *gin.Engine, authConfig middleware.AuthConfig, repository *majorevent.Repository) {
 	if router == nil || repository == nil {
 		return
 	}
 
 	rg := router.Group(majoreventcontracts.BasePath)
-	rg.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	rg.Use(middleware.AuthMiddleware(authConfig))
 	rg.GET(majoreventcontracts.SubscriptionsRoute+"/:roomID", getMajorEventSubscriptionHandler(repository))
 	rg.POST(majoreventcontracts.SubscriptionsRoute, subscribeMajorEventHandler(repository))
 	rg.DELETE(majoreventcontracts.SubscriptionsRoute+"/:roomID", unsubscribeMajorEventHandler(repository))

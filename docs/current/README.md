@@ -40,6 +40,8 @@
 - `architecture/ci-gates.md`
 - `architecture/llm-work-rules.md`
 - `architecture/app-bootstrap-boundary-guide.md`
+- `architecture/hololive-api-trust-domain.md`
+- `architecture/non-secret-history-risk-decisions-20260713.md`
 - `architecture/review-bundles.md`
 
 ## Compatibility Bridges

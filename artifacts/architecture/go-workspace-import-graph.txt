@@ -452,6 +452,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> g
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/twitch
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/youtube
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/testutil
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/park285/iris-client-go/iris
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/park285/iris-client-go/webhook
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/park285/shared-go/pkg/json
@@ -470,6 +471,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/life
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle -> github.com/park285/shared-go/pkg/workerpool
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/kapu/hololive-api/internal/planes/bot/internal/command
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd -> github.com/park285/shared-go/pkg/stringutil
@@ -743,7 +745,7 @@ github.com/kapu/hololive-shared/pkg/server/internal/httpserver -> github.com/par
 github.com/kapu/hololive-shared/pkg/server/internal/httpserver -> github.com/park285/shared-go/pkg/runtime/httpserver
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/kapu/hololive-shared/pkg/contracts/common
-github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/httputil/ginauth
+github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/stringutil

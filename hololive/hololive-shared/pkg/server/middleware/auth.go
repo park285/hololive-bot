@@ -21,8 +21,11 @@
 package middleware
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/httputil/ginauth"
+	"github.com/park285/shared-go/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
@@ -31,6 +34,8 @@ const (
 	// APIKeyHeader: 하위 호환성을 위한 재수출. 실제 정의는 contracts/common 패키지에 있습니다.
 	APIKeyHeader = common.APIKeyHeader
 )
+
+type AuthConfig = httputil.AdminAuthConfig
 
 func errorPayload(code, message string) gin.H {
 	payload := gin.H{"error": code}
@@ -44,10 +49,70 @@ func abortWithError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, errorPayload(code, message))
 }
 
+func respondWithError(c *gin.Context, status int, code, message string) {
+	c.JSON(status, errorPayload(code, message))
+}
+
+func AuthMiddleware(config AuthConfig) gin.HandlerFunc {
+	expected := strings.TrimSpace(config.APIKey)
+
+	return func(c *gin.Context) {
+		if config.Disabled {
+			c.Next()
+			return
+		}
+		if expected == "" {
+			abortWithError(c, http.StatusServiceUnavailable, "auth_not_configured", "API key not configured")
+			return
+		}
+
+		providedKey := c.GetHeader(APIKeyHeader)
+		if providedKey == "" {
+			abortWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
+			return
+		}
+
+		if !httputil.ConstantTimeStringEqual(providedKey, expected) {
+			abortWithError(c, http.StatusForbidden, "forbidden", "invalid API key")
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
-	return ginauth.APIKeyAuthMiddleware(apiKey)
+	return AuthMiddleware(AuthConfig{APIKey: apiKey})
+}
+
+func NoRouteHandler(config AuthConfig) gin.HandlerFunc {
+	expected := strings.TrimSpace(config.APIKey)
+
+	return func(c *gin.Context) {
+		if config.Disabled {
+			respondWithError(c, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+		if expected == "" {
+			respondWithError(c, http.StatusServiceUnavailable, "auth_not_configured", "API key not configured")
+			return
+		}
+
+		providedKey := c.GetHeader(APIKeyHeader)
+		if providedKey == "" {
+			respondWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
+			return
+		}
+
+		if !httputil.ConstantTimeStringEqual(providedKey, expected) {
+			respondWithError(c, http.StatusForbidden, "forbidden", "invalid API key")
+			return
+		}
+
+		respondWithError(c, http.StatusNotFound, "not_found", "endpoint not found")
+	}
 }
 
 func NoRouteAuthHandler(apiKey string) gin.HandlerFunc {
-	return ginauth.NoRouteAuthHandler(apiKey)
+	return NoRouteHandler(AuthConfig{APIKey: apiKey})
 }

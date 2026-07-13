@@ -66,13 +66,16 @@ func NewTriggerHandler(
 }
 
 func (h *TriggerHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
-	h.RegisterInternalRoutesWithAuth(rg, "")
+	h.registerInternalRoutes(rg, middleware.AuthConfig{Disabled: true})
 }
 
-// apiKey가 설정된 경우 X-API-Key 미들웨어를 강제합니다.
 func (h *TriggerHandler) RegisterInternalRoutesWithAuth(rg *gin.RouterGroup, apiKey string) {
+	h.registerInternalRoutes(rg, middleware.AuthConfig{APIKey: apiKey})
+}
+
+func (h *TriggerHandler) registerInternalRoutes(rg *gin.RouterGroup, authConfig middleware.AuthConfig) {
 	internal := rg.Group(triggercontracts.BasePath)
-	internal.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	internal.Use(middleware.AuthMiddleware(authConfig))
 	internal.POST(triggercontracts.MajorEventWeeklyRoute, h.TriggerWeeklyNotification)
 	internal.POST(triggercontracts.MajorEventMonthlyRoute, h.TriggerMonthlyNotification)
 	internal.POST(triggercontracts.MemberNewsWeeklyRoute, h.TriggerMemberNewsWeekly)

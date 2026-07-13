@@ -121,6 +121,7 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		photoSyncEnabled: false,
 	})
 	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, testLogger(), "", func(opts *sharedserver.RuntimeRouterOptions) {
+		opts.DisableMetricsAuth = true
 		opts.EnableGzip = true
 		opts.ReadyResponder = func(c *gin.Context) {
 			statusCode, payload := readiness.Response()

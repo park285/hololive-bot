@@ -1,6 +1,9 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -11,6 +14,9 @@ type AlarmDispatchSourceKind string
 const (
 	AlarmDispatchSourceKindYouTubeOutbox AlarmDispatchSourceKind = "youtube_outbox"
 	AlarmDispatchSourceKindCelebration   AlarmDispatchSourceKind = "celebration"
+
+	maxYouTubeOutboxIdentityItems  = 1000
+	maxYouTubeOutboxContentIDBytes = 512
 )
 
 var canonicalDispatchValidators = map[AlarmDispatchSourceKind]func(*AlarmQueueEnvelope) error{
@@ -76,45 +82,95 @@ func hasTemplateAndPreRenderedMessage(p *YouTubeOutboxDispatchPayload) bool {
 }
 
 func validateYouTubeOutboxItems(items []YouTubeOutboxItem) error {
-	if len(items) == 0 {
-		return fmt.Errorf("youtube outbox dispatch payload items are empty")
+	if err := validateYouTubeOutboxIdentityItems(items); err != nil {
+		return err
 	}
 	for i := range items {
-		if err := validateYouTubeOutboxItem(items[i], i); err != nil {
-			return err
+		if strings.TrimSpace(items[i].Payload) == "" {
+			return fmt.Errorf("youtube outbox dispatch payload item %d payload is empty", i)
 		}
 	}
 	return nil
 }
 
-func validateYouTubeOutboxItem(item YouTubeOutboxItem, index int) error {
-	switch {
-	case strings.TrimSpace(item.ContentID) == "":
-		return fmt.Errorf("youtube outbox dispatch payload item %d content id is empty", index)
-	case strings.TrimSpace(item.Payload) == "":
-		return fmt.Errorf("youtube outbox dispatch payload item %d payload is empty", index)
-	default:
-		return nil
+func validateYouTubeOutboxIdentityItems(items []YouTubeOutboxItem) error {
+	if len(items) == 0 {
+		return fmt.Errorf("youtube outbox dispatch payload items are empty")
 	}
+	if len(items) > maxYouTubeOutboxIdentityItems {
+		return fmt.Errorf("youtube outbox dispatch payload has too many items: %d > %d", len(items), maxYouTubeOutboxIdentityItems)
+	}
+	for i := range items {
+		contentID := strings.TrimSpace(items[i].ContentID)
+		if contentID == "" {
+			return fmt.Errorf("youtube outbox dispatch payload item %d content id is empty", i)
+		}
+		if len(contentID) > maxYouTubeOutboxContentIDBytes {
+			return fmt.Errorf("youtube outbox dispatch payload item %d content id is too long: %d > %d bytes", i, len(contentID), maxYouTubeOutboxContentIDBytes)
+		}
+	}
+	return nil
 }
 
 func (p *YouTubeOutboxDispatchPayload) IdentityParts() []string {
-	if p == nil {
+	parts, err := p.canonicalIdentityParts()
+	if err != nil {
 		return nil
 	}
-	parts := make([]string, 0, len(p.Items))
-	for i := range p.Items {
-		contentID := strings.TrimSpace(p.Items[i].ContentID)
-		if contentID != "" {
-			parts = append(parts, contentID)
-		}
-	}
-	sort.Strings(parts)
 	return parts
 }
 
 func (p *YouTubeOutboxDispatchPayload) Identity() string {
-	return strings.Join(p.IdentityParts(), ",")
+	identity, err := p.CanonicalIdentity()
+	if err != nil {
+		return ""
+	}
+	return identity
+}
+
+func (p *YouTubeOutboxDispatchPayload) CanonicalIdentity() (string, error) {
+	parts, err := p.canonicalIdentityParts()
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("youtube-outbox-content-identity-v1\x00"))
+	var size [4]byte
+	for _, part := range parts {
+		binary.BigEndian.PutUint32(size[:], boundedContentIDByteLength(part))
+		_, _ = hash.Write(size[:])
+		_, _ = hash.Write([]byte(part))
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func boundedContentIDByteLength(contentID string) uint32 {
+	var length uint32
+	for i := 0; i < len(contentID); i++ {
+		length++
+	}
+	return length
+}
+
+func (p *YouTubeOutboxDispatchPayload) canonicalIdentityParts() ([]string, error) {
+	if p == nil {
+		return nil, fmt.Errorf("youtube outbox dispatch payload is nil")
+	}
+	if err := validateYouTubeOutboxIdentityItems(p.Items); err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(p.Items))
+	parts := make([]string, 0, len(p.Items))
+	for i := range p.Items {
+		contentID := strings.TrimSpace(p.Items[i].ContentID)
+		if _, ok := seen[contentID]; ok {
+			continue
+		}
+		seen[contentID] = struct{}{}
+		parts = append(parts, contentID)
+	}
+	sort.Strings(parts)
+	return parts, nil
 }
 
 func (e *AlarmQueueEnvelope) HasYouTubeOutboxSource() bool {
@@ -193,14 +249,17 @@ func validateCanonicalNotification(notification *AlarmNotification) error {
 }
 
 func validateCanonicalYouTubeOutboxMatch(notification *AlarmNotification, payload *YouTubeOutboxDispatchPayload) error {
-	switch {
-	case notification.AlarmType != payload.AlarmType:
+	if notification.AlarmType != payload.AlarmType {
 		return fmt.Errorf("canonical alarm dispatch: notification alarm type %q does not match source alarm type %q", notification.AlarmType, payload.AlarmType)
-	case payload.Identity() == "":
-		return fmt.Errorf("canonical alarm dispatch: youtube outbox identity is empty")
-	default:
-		return nil
 	}
+	identity, err := payload.CanonicalIdentity()
+	if err != nil {
+		return fmt.Errorf("canonical alarm dispatch: youtube outbox identity: %w", err)
+	}
+	if identity == "" {
+		return fmt.Errorf("canonical alarm dispatch: youtube outbox identity is empty")
+	}
+	return nil
 }
 
 func firstError(errs ...error) error {

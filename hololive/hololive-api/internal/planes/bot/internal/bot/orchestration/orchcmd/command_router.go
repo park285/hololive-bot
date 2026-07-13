@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 
@@ -39,14 +40,16 @@ type CommandRouter struct {
 	logger         *slog.Logger
 	sendMessage    func(ctx context.Context, room, message string) error
 	messageStrings *messagestrings.Store
+	admission      *commandAdmissionPolicy
 }
 
-func NewCommandRouter(registry *command.Registry, logger *slog.Logger, sendMessage func(ctx context.Context, room, message string) error, messageStrings *messagestrings.Store) *CommandRouter {
+func NewCommandRouter(registry *command.Registry, logger *slog.Logger, sendMessage func(ctx context.Context, room, message string) error, messageStrings *messagestrings.Store, cacheClient cache.LowLevelCache) *CommandRouter {
 	return &CommandRouter{
 		registry:       registry,
 		logger:         logger,
 		sendMessage:    sendMessage,
 		messageStrings: messageStrings,
+		admission:      newCommandAdmissionPolicy(cacheClient),
 	}
 }
 
@@ -58,6 +61,9 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 	key, normalizedParams := r.NormalizeCommand(cmdType, params)
 	ctx = sharedlog.WithRuntime(ctx, "bot")
 	ctx = sharedlog.WithComponent(ctx, "command")
+	if err := r.admission.Admit(ctx, cmdCtx, key); err != nil {
+		return r.handleAdmissionError(ctx, cmdCtx, err)
+	}
 
 	started := time.Now()
 	attrs := commandExecutionAttrs(cmdCtx, key, cmdType)
@@ -89,6 +95,19 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 	successAttrs = append(successAttrs, sharedlog.SinceMS(started))
 	sharedlog.Info(ctx, r.logger, EventBotCommandExecuteSucceeded, "command execution succeeded", successAttrs...)
 
+	return nil
+}
+
+func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *domain.CommandContext, err error) error {
+	if !errors.Is(err, errCommandRateLimited) {
+		return fmt.Errorf("admit command: %w", err)
+	}
+	if r.sendMessage == nil || cmdCtx == nil || cmdCtx.Room == "" {
+		return fmt.Errorf("report command rate limit: %w", err)
+	}
+	if sendErr := r.sendMessage(ctx, cmdCtx.Room, expensiveHistoryRateLimitMessage); sendErr != nil {
+		return fmt.Errorf("send command rate limit message: %w", sendErr)
+	}
 	return nil
 }
 
