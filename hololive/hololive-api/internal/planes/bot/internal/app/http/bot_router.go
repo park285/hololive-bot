@@ -56,14 +56,14 @@ func ProvideBotRouter(
 ) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:                 appConfig.Server.APIKey,
-		InternalReadyResponder: botReadyResponder(readiness.Pick(readyProbe...)),                                                   //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
+		InternalReadyResponder: botReadyResponder(ctx, readiness.Pick(readyProbe...)),
 		RegisterRoutes:         botRouteRegistrar(appConfig.Server.APIKey, webhookHandler, triggerHandler, irisRoomLister, logger), //nolint:contextcheck // gin handler는 build ctx가 아니라 요청별 c.Request.Context()를 사용해야 한다.
 	})
 }
 
-func botReadyResponder(probe *readiness.Probe) func(*gin.Context) {
+func botReadyResponder(ctx context.Context, probe *readiness.Probe) func(*gin.Context) {
 	if probe != nil {
-		return readiness.GinHandler(probe)
+		return readiness.GinHandler(ctx, probe)
 	}
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"health": health.Get()})

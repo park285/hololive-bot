@@ -76,7 +76,7 @@ if [[ "${dependency_hygiene_default}" == "false" && -n "${non_doc_changes}" ]]; 
 fi
 
 run_perf_budget_gate() {
-  local collect_args=(--policy perf-budget.yaml --candidate artifacts/perf/pr --gate pr)
+  local collect_args=(--policy perf-budget.yaml --candidate artifacts/perf/pr --gate pr --gate-id hololive-pre-push-perf-gate)
   if [[ -n "${PERF_GATE_COUNT:-}" ]]; then
     collect_args+=(--count "${PERF_GATE_COUNT}")
   fi
@@ -89,7 +89,8 @@ run_perf_budget_gate() {
     --policy perf-budget.yaml \
     --baseline artifacts/perf/baseline/main \
     --candidate artifacts/perf/pr \
-    --gate pr
+    --gate pr \
+    --gate-id hololive-pre-push-perf-gate
 }
 
 if [[ "${PERF_GATE_ONLY:-false}" == "true" ]]; then

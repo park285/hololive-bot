@@ -36,7 +36,7 @@ import (
 func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	rec := serveBotReady(t, botReadyResponder(nil))
+	rec := serveBotReady(t, botReadyResponder(t.Context(), nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusOK)
@@ -66,7 +66,7 @@ func TestBotReadyResponder_DegradedDependencyReturns503(t *testing.T) {
 		Probe: func(context.Context) error { return errors.New("pool exhausted") },
 	})
 
-	rec := serveBotReady(t, botReadyResponder(probe))
+	rec := serveBotReady(t, botReadyResponder(t.Context(), probe))
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
@@ -92,7 +92,7 @@ func TestBotReadyResponder_HealthyDependencyReturns200(t *testing.T) {
 		Probe: func(context.Context) error { return nil },
 	})
 
-	rec := serveBotReady(t, botReadyResponder(probe))
+	rec := serveBotReady(t, botReadyResponder(t.Context(), probe))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", rec.Code, http.StatusOK)

@@ -96,7 +96,7 @@ func TestProbeEvaluate_HangingDependencyBoundedByTimeout(t *testing.T) {
 func TestGinHandler_HealthyReturns200(t *testing.T) {
 	t.Parallel()
 
-	code, payload := serveReady(t, GinHandler(NewProbe("bot", okCheck("postgres"))))
+	code, payload := serveReady(t, GinHandler(t.Context(), NewProbe("bot", okCheck("postgres"))))
 
 	if code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
@@ -112,7 +112,7 @@ func TestGinHandler_HealthyReturns200(t *testing.T) {
 func TestGinHandler_DegradedReturns503(t *testing.T) {
 	t.Parallel()
 
-	code, payload := serveReady(t, GinHandler(NewProbe("bot",
+	code, payload := serveReady(t, GinHandler(t.Context(), NewProbe("bot",
 		okCheck("postgres"),
 		failCheck("valkey", errors.New("ping failed")),
 	)))
@@ -128,7 +128,7 @@ func TestGinHandler_DegradedReturns503(t *testing.T) {
 func TestGinHandler_NilProbeStaticReady(t *testing.T) {
 	t.Parallel()
 
-	code, payload := serveReady(t, GinHandler(nil))
+	code, payload := serveReady(t, GinHandler(t.Context(), nil))
 
 	if code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)

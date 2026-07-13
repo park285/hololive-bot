@@ -59,7 +59,7 @@ func buildTriggerRouter(
 		},
 	}
 	if probe := readiness.Pick(readyProbe...); probe != nil {
-		routerOptions.InternalReadyResponder = readiness.GinHandler(probe) //nolint:contextcheck // gin readiness 핸들러는 c.Request.Context()로 요청 컨텍스트를 전달(표준 HTTP 경계)
+		routerOptions.InternalReadyResponder = readiness.GinHandler(ctx, probe)
 	}
 	return sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)
 }
