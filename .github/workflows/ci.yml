@@ -122,12 +122,8 @@ jobs:
             shared-go/go.sum
             iris-client-go/go.sum
 
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: hololive-bot/admin-dashboard/frontend/package-lock.json
+      - name: Show runner Node version
+        run: node --version
 
       - name: Run canonical server verification
         working-directory: hololive-bot
