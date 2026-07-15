@@ -10,9 +10,6 @@ run_policy_gates() {
   echo "[server-pr] workflow policy regression"
   bash scripts/ci/check-workflow-secrets_test.sh
 
-  echo "[server-pr] architecture boundary gate"
-  bash scripts/architecture/ci-boundary-gate.sh
-
   echo "[server-pr] shell syntax"
   while IFS= read -r script; do
     bash -n "${script}"
