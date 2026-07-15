@@ -15,6 +15,7 @@ func TestInit_SetsVersionAndStartTime(t *testing.T) {
 }
 
 func TestInit_IdempotentViaSyncOnce(t *testing.T) {
+	Init("first-call-wins")
 	first := GetVersion()
 	Init("should-be-ignored")
 	second := GetVersion()
