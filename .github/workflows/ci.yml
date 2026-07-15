@@ -1,8 +1,7 @@
 name: ci
 
 # GitHub CI 는 secret-free fast gate만 책임진다.
-# full local-ci, race, dependency hygiene, frontend full build는
-# 로컬 pre-push 또는 non-PR security workflow 가 책임진다.
+# Full server verification and security analysis run in pr-full-verification.yml.
 
 on:
   pull_request:
@@ -37,6 +36,9 @@ jobs:
 
       - name: Workflow PR boundary and gate ownership
         run: bash scripts/ci/check-workflow-secrets.sh
+
+      - name: Workflow policy regression tests
+        run: bash scripts/ci/check-workflow-secrets_test.sh
 
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
