@@ -56,7 +56,7 @@ jobs:
             iris-client-go/go.sum
 
       - name: Setup Node
-        uses: actions/setup-node@1e60f620b9541d6ff3c94b6c70482e59edcc35e0 # v4.0.4
+        uses: actions/setup-node@363be39a57dfa5801e05c6e0c549d622a376cf15
         with:
           node-version: '24'
           cache: npm
