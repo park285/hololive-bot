@@ -125,9 +125,17 @@ jobs:
       - name: Show runner Node version
         run: node --version
 
-      - name: Run canonical server verification
+      - name: Policy and architecture gates
         working-directory: hololive-bot
-        run: bash scripts/ci/server-pr-verification.sh
+        run: bash scripts/ci/server-pr-verification.sh policy
+
+      - name: Full Go workspace tests and vet
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-verification.sh go
+
+      - name: Admin frontend tests and build
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-verification.sh frontend
 
   static-security:
     name: static-security
