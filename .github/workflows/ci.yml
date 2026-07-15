@@ -139,7 +139,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout hololive-bot
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           path: hololive-bot
           persist-credentials: false
@@ -152,7 +152,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout iris-client-go
-        uses: actions/checkout@9c091bb21b9541d6ff3c94b6c70482e59edcc35e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: park285/iris-client-go
           path: iris-client-go
