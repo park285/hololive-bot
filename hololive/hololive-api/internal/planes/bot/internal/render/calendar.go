@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -58,8 +59,32 @@ func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []do
 	}
 
 	result, err, _ := r.rendering.Do(cacheKey.string(), func() (any, error) {
-		return r.renderCalendarImageOnce(cacheKey, month, year, entries)
+		return r.renderCalendarImageOnce(context.Background(), cacheKey, month, year, entries)
 	})
+	return calendarRenderResult(result, err)
+}
+
+// RenderCalendarImageContext binds remote photo retrieval and cache admission to
+// the caller lifetime. Context-aware calls intentionally do not join the legacy
+// singleflight group: cancelling one request must never cancel or poison another
+// request that happens to render the same calendar key.
+func (r *CalendarCardRenderer) RenderCalendarImageContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("calendar render context is nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	cacheKey := newCalendarCacheKey(month, year, entries)
+	if data, ok := r.cachedImage(cacheKey); ok {
+		return data, nil
+	}
+	result, err := r.renderCalendarImageOnce(ctx, cacheKey, month, year, entries)
+	return calendarRenderResult(result, err)
+}
+
+func calendarRenderResult(result any, err error) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -70,16 +95,25 @@ func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []do
 	return bytes.Clone(data), nil
 }
 
-func (r *CalendarCardRenderer) renderCalendarImageOnce(cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) (any, error) {
+func (r *CalendarCardRenderer) renderCalendarImageOnce(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) (any, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if data, ok := r.cachedImage(cacheKey); ok {
 		return data, nil
 	}
 	if data, ok := r.diskCachedImage(cacheKey); ok {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		r.storeCachedImage(cacheKey, data)
 		return data, nil
 	}
-	data, diskCacheable, err := r.renderCalendarImage(month, year, entries)
+	data, diskCacheable, err := r.renderCalendarImage(ctx, month, year, entries)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	r.storeCachedImage(cacheKey, data)
@@ -89,11 +123,20 @@ func (r *CalendarCardRenderer) renderCalendarImageOnce(cacheKey calendarCacheKey
 	return data, nil
 }
 
-func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []domain.CalendarEntry) (data []byte, diskCacheable bool, err error) {
-	photos, diskCacheable := fetchMemberPhotos(entries)
+func (r *CalendarCardRenderer) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) (data []byte, diskCacheable bool, err error) {
+	photos, diskCacheable, err := fetchMemberPhotos(ctx, entries)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 
 	fontMu.Lock()
 	defer fontMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 
 	grouped := groupEntriesByDay(entries)
 
@@ -107,11 +150,17 @@ func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []do
 
 	img := cardkit.NewCanvas(canvasWidth, min(calculateCanvasHeight(&m, grouped), maxCanvasH), colWhite)
 
-	drawCalendarHeader(img, &m, month, year, entries)
-	drawCalendarBody(img, &m, month, grouped, photos)
+	drawCalendarHeader(ctx, img, &m, month, year, entries)
+	drawCalendarBody(ctx, img, &m, month, grouped, photos)
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 
 	data, err = cardkit.EncodePNG(img, calendarOutputWidth)
 	if err != nil {
+		return nil, false, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
 	return data, diskCacheable, nil
@@ -126,37 +175,37 @@ func calendarCompactRatio(grouped []dayGroup) float64 {
 	return float64(calendarTargetInnerH) / float64(naturalH)
 }
 
-func drawCalendarHeader(img *image.RGBA, m *calendarMetrics, month, year int, entries []domain.CalendarEntry) {
-	cardkit.DrawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, m.headerText(year, month))
+func drawCalendarHeader(ctx context.Context, img *image.RGBA, m *calendarMetrics, month, year int, entries []domain.CalendarEntry) {
+	cardkit.DrawText(img, m.fonts.title, paddingX, int(42*m.sf), colSlate800, m.headerText(ctx, year, month))
 
 	bc, ac := countByKind(entries)
-	statText := m.summaryText(len(entries), bc, ac)
+	statText := m.summaryText(ctx, len(entries), bc, ac)
 	cardkit.DrawText(img, m.fonts.stat, paddingX, int(68*m.sf), colSlate500, statText)
 
 	cardkit.FillRect(img, image.Rect(paddingX, m.headerH, canvasWidth-paddingX, m.headerH+separatorH), colSlate200)
 }
 
-func drawCalendarBody(img *image.RGBA, m *calendarMetrics, month int, grouped []dayGroup, photos map[string]image.Image) int {
+func drawCalendarBody(ctx context.Context, img *image.RGBA, m *calendarMetrics, month int, grouped []dayGroup, photos map[string]image.Image) int {
 	y := m.headerH + separatorH + m.paddingY
 
 	if len(grouped) == 0 {
-		cardkit.DrawText(img, m.fonts.name, paddingX, y+int(24*m.sf), colSlate500, m.emptyText())
+		cardkit.DrawText(img, m.fonts.name, paddingX, y+int(24*m.sf), colSlate500, m.emptyText(ctx))
 		return y + int(60*m.sf)
 	}
 
 	for _, group := range grouped {
-		y = drawDayGroup(img, m, month, group, y, photos)
+		y = drawDayGroup(ctx, img, m, month, group, y, photos)
 	}
 	return y
 }
 
-func drawDayGroup(img *image.RGBA, m *calendarMetrics, month int, group dayGroup, y int, photos map[string]image.Image) int {
-	cardkit.DrawText(img, m.fonts.date, paddingX, y+int(22*m.sf), colSlate500, m.dayText(month, group.day))
+func drawDayGroup(ctx context.Context, img *image.RGBA, m *calendarMetrics, month int, group dayGroup, y int, photos map[string]image.Image) int {
+	cardkit.DrawText(img, m.fonts.date, paddingX, y+int(22*m.sf), colSlate500, m.dayText(ctx, month, group.day))
 	cardkit.FillRect(img, image.Rect(paddingX, y+m.dateHeaderH-separatorH, canvasWidth-paddingX, y+m.dateHeaderH), colSlate200)
 	y += m.dateHeaderH
 
 	for _, entry := range group.entries {
-		drawEntryRow(img, m, paddingX+entryIndent, y, entry, photos)
+		drawEntryRow(ctx, img, m, paddingX+entryIndent, y, entry, photos)
 		y += m.entryRowH
 	}
 	return y + m.dateSectGap
@@ -167,12 +216,12 @@ type entryStyle struct {
 	badgeText       string
 }
 
-func resolveEntryStyle(m *calendarMetrics, entry domain.CalendarEntry) entryStyle {
+func resolveEntryStyle(ctx context.Context, m *calendarMetrics, entry domain.CalendarEntry) entryStyle {
 	switch entry.Kind {
 	case domain.CelebrationKindBirthday:
-		return entryStyle{colAmber600, colAmber50, m.badgeBirthday()}
+		return entryStyle{colAmber600, colAmber50, m.badgeBirthday(ctx)}
 	case domain.CelebrationKindAnniversary:
-		return entryStyle{colEmerald600, colEmerald50, m.anniversaryBadge(entry.Ordinal)}
+		return entryStyle{colEmerald600, colEmerald50, m.anniversaryBadge(ctx, entry.Ordinal)}
 	case domain.CelebrationKindBirthdayStream:
 		return entryStyle{colSlate500, colSlate100, ""}
 	default:
@@ -180,9 +229,9 @@ func resolveEntryStyle(m *calendarMetrics, entry domain.CalendarEntry) entryStyl
 	}
 }
 
-func drawEntryRow(img *image.RGBA, m *calendarMetrics, x, y int, entry domain.CalendarEntry, photos map[string]image.Image) {
-	name := entryDisplayName(m, entry.Member)
-	style := resolveEntryStyle(m, entry)
+func drawEntryRow(ctx context.Context, img *image.RGBA, m *calendarMetrics, x, y int, entry domain.CalendarEntry, photos map[string]image.Image) {
+	name := entryDisplayName(ctx, m, entry.Member)
+	style := resolveEntryStyle(ctx, m, entry)
 
 	var photo image.Image
 	if entry.Member != nil {
@@ -276,9 +325,9 @@ func calculateCanvasHeight(m *calendarMetrics, groups []dayGroup) int {
 	return h + m.paddingY
 }
 
-func entryDisplayName(m *calendarMetrics, member *domain.Member) string {
+func entryDisplayName(ctx context.Context, m *calendarMetrics, member *domain.Member) string {
 	if member == nil {
-		return m.unknownName()
+		return m.unknownName(ctx)
 	}
 	if member.ShortKoreanName != "" {
 		return member.ShortKoreanName
@@ -289,34 +338,34 @@ func entryDisplayName(m *calendarMetrics, member *domain.Member) string {
 	return member.Name
 }
 
-func (m *calendarMetrics) calStr(key, fallback string) string {
-	return m.strings.GetOr(messagestrings.NamespaceCalendar, key, fallback)
+func (m *calendarMetrics) calStr(ctx context.Context, key, fallback string) string {
+	return m.strings.GetOrContext(ctx, messagestrings.NamespaceCalendar, key, fallback)
 }
 
-func (m *calendarMetrics) headerText(year, month int) string {
-	return fmt.Sprintf(m.calStr("header_month", "%d년 %d월 기념일"), year, month)
+func (m *calendarMetrics) headerText(ctx context.Context, year, month int) string {
+	return fmt.Sprintf(m.calStr(ctx, "header_month", "%d년 %d월 기념일"), year, month)
 }
 
-func (m *calendarMetrics) summaryText(total, birthday, anniversary int) string {
-	return fmt.Sprintf(m.calStr("summary", "총 %d건 · 생일 %d · 데뷔주년 %d"), total, birthday, anniversary)
+func (m *calendarMetrics) summaryText(ctx context.Context, total, birthday, anniversary int) string {
+	return fmt.Sprintf(m.calStr(ctx, "summary", "총 %d건 · 생일 %d · 데뷔주년 %d"), total, birthday, anniversary)
 }
 
-func (m *calendarMetrics) emptyText() string {
-	return m.calStr("empty", "등록된 기념일이 없습니다.")
+func (m *calendarMetrics) emptyText(ctx context.Context) string {
+	return m.calStr(ctx, "empty", "등록된 기념일이 없습니다.")
 }
 
-func (m *calendarMetrics) dayText(month, day int) string {
-	return fmt.Sprintf(m.calStr("day", "%d월 %d일"), month, day)
+func (m *calendarMetrics) dayText(ctx context.Context, month, day int) string {
+	return fmt.Sprintf(m.calStr(ctx, "day", "%d월 %d일"), month, day)
 }
 
-func (m *calendarMetrics) badgeBirthday() string {
-	return m.calStr("badge_birthday", "생일")
+func (m *calendarMetrics) badgeBirthday(ctx context.Context) string {
+	return m.calStr(ctx, "badge_birthday", "생일")
 }
 
-func (m *calendarMetrics) anniversaryBadge(ordinal int) string {
-	return fmt.Sprintf(m.calStr("badge_anniversary", "데뷔 %d주년"), ordinal)
+func (m *calendarMetrics) anniversaryBadge(ctx context.Context, ordinal int) string {
+	return fmt.Sprintf(m.calStr(ctx, "badge_anniversary", "데뷔 %d주년"), ordinal)
 }
 
-func (m *calendarMetrics) unknownName() string {
-	return m.calStr("unknown", "알 수 없음")
+func (m *calendarMetrics) unknownName(ctx context.Context) string {
+	return m.calStr(ctx, "unknown", "알 수 없음")
 }

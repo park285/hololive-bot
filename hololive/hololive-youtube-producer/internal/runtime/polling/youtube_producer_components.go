@@ -40,7 +40,8 @@ func buildYouTubeProducerComponents(
 		budgetWiring = &GlobalBudgetWiring{}
 	}
 	pollerRegistrations = wrapYouTubeProducerSourceCooldownPollers(pollerRegistrations, budgetWiring.Limiter, logger)
-	if err := validateYouTubeProducerRegistrationsAndBudgets(pollerRegistrations, scraperConfig, budgetWiring, logger); err != nil {
+	limiterConfigured := scraperClient != nil && scraperClient.RateLimiterConfigured()
+	if err := validateYouTubeProducerRegistrationsAndBudgets(pollerRegistrations, scraperConfig, budgetWiring, limiterConfigured, logger); err != nil {
 		return nil, nil, err
 	}
 
@@ -54,6 +55,7 @@ func validateYouTubeProducerRegistrationsAndBudgets(
 	pollerRegistrations []providers.ChannelPollerRegistration,
 	scraperConfig *config.ScraperConfig,
 	budgetWiring *GlobalBudgetWiring,
+	limiterConfigured bool,
 	logger *slog.Logger,
 ) error {
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
@@ -71,7 +73,7 @@ func validateYouTubeProducerRegistrationsAndBudgets(
 	logYouTubeProducerSourceBudgetEstimate(sourceBudgetEstimate, logger)
 	budgetSummary := summarizeYouTubeProducerBudgetForFleet(pollerRegistrations, budgetWiring.BudgetRPM, activeAPCount)
 	logYouTubeProducerBudgetSummary(budgetSummary, logger)
-	return validateYouTubeProducerPollerBudget(budgetSummary)
+	return validateYouTubeProducerRuntimeBudget(budgetSummary, limiterConfigured)
 }
 
 func buildYouTubeProducerSchedulerOptions(

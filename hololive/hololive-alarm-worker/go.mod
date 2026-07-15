@@ -8,8 +8,8 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.29.0
-	github.com/park285/shared-go v1.30.0
+	github.com/park285/iris-client-go v0.29.1-0.20260715131016-949b9302005e
+	github.com/park285/shared-go v1.30.1-0.20260715131012-47e21606059b
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.76
