@@ -53,7 +53,26 @@ jobs:
 
       - name: Apply security patch
         working-directory: hololive-bot
-        run: python3 scripts/ci/agent_security_runtime_patch.py
+        run: |
+          set +e
+          python3 scripts/ci/agent_security_runtime_patch.py > /tmp/agent-security-runtime-patch.log 2>&1
+          status=$?
+          cat /tmp/agent-security-runtime-patch.log
+          exit "${status}"
+
+      - name: Persist patch failure diagnostics
+        if: failure()
+        working-directory: hololive-bot
+        run: |
+          mkdir -p .agent-diagnostics
+          cp /tmp/agent-security-runtime-patch.log .agent-diagnostics/runtime-patch.log 2>/dev/null || echo 'patch log unavailable' > .agent-diagnostics/runtime-patch.log
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .agent-diagnostics/runtime-patch.log
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: record runtime security patch failure'
+            git push origin HEAD:agent/security-runtime-ci-hardening-20260715
+          fi
 
       - name: Format changed Go files
         working-directory: hololive-bot
@@ -123,7 +142,7 @@ jobs:
         run: |
           git diff --check
           if git diff --quiet; then
-            echo "security patch produced no changes" >&2
+            echo 'security patch produced no changes' >&2
             exit 1
           fi
 
@@ -135,8 +154,9 @@ jobs:
             .github/workflows/ci.yml \
             .github/workflows/security.yml \
             .github/workflows/agent-security-runtime-patch.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf .agent-diagnostics
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m "security: harden runtime and CI boundaries"
+          git commit -m 'security: harden runtime and CI boundaries'
           git push origin HEAD:agent/security-runtime-ci-hardening-20260715
