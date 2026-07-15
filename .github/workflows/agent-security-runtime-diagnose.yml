@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   diagnose:
@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: agent/security-runtime-ci-hardening-20260715
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Capture patch error
         run: |
@@ -25,14 +25,18 @@ jobs:
           python3 scripts/ci/agent_security_runtime_patch.py > /tmp/patch.log 2>&1
           status=$?
           cat /tmp/patch.log
-          if [[ ${status} -eq 0 ]]; then
-            exit 0
-          fi
-          mkdir -p .agent-diagnostics
-          cp /tmp/patch.log .agent-diagnostics/runtime-patch.log
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .agent-diagnostics/runtime-patch.log
-          git commit -m "chore: record runtime patch application failure"
-          git push origin HEAD:agent/security-runtime-ci-hardening-20260715
-          exit "${status}"
+          printf '%s\n' "${status}" > /tmp/patch-status
+          exit 0
+
+      - name: Upload patch diagnostics
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: runtime-patch-diagnostics
+          path: |
+            /tmp/patch.log
+            /tmp/patch-status
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Fail when patch failed
+        run: exit "$(cat /tmp/patch-status)"
