@@ -1,16 +1,24 @@
 # 변경 이력
 
-hololive-bot은 app semantic version tag를 운영하지 않습니다. repository의
-`backup-before-footer-cleanup`은 backup 기준점이고 `shared-go/v0.0.1`,
-`shared-go/v0.0.2`는 과거 nested module tag이므로 app release로 취급하지 않습니다.
-아래 `[날짜-SHA]`는 실제 commit을 가리키는 릴리즈 기준점입니다.
+현재 app 릴리즈 버전은 루트 `VERSION`에서 관리하고 Git tag는 `v<version>` 형식을
+사용합니다. 버전 관리 절차는 [릴리즈 runbook](docs/current/runbooks/release.md)을 따릅니다.
+기존 `backup-before-footer-cleanup`은 backup 기준점이고 `shared-go/v0.0.1`,
+`shared-go/v0.0.2`는 과거 nested module tag입니다. `[날짜-SHA]` 항목은 버전 관리 도입
+전의 실제 commit 기준점이며 app version이나 새 tag를 뜻하지 않습니다.
 
 ## 미출시
+
+## v2.0.45 - 2026-07-15
 
 ### 문서
 
 - 실제 commit history를 기준으로 app의 주요 과거 릴리즈 기준점을 한국어로
   보완했습니다.
+
+### 릴리즈
+
+- 저장소 app `VERSION`과 runtime artifact 버전을 분리해 정의하고 SemVer 검증 절차를
+  도입했습니다.
 
 ## [2026-07-13-a9f89640]
 

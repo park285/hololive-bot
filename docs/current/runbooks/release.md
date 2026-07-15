@@ -1,10 +1,31 @@
-# Runbook: release
+# Runbook: 릴리즈
 
-## Role
+## 역할
 
 Runtime, document, and contract changes의 release checklist입니다.
 
-## Compose Service Redeploy
+## 버전 관리
+
+저장소 전체 app 릴리즈 버전의 단일 기준은 루트 `VERSION`입니다. 안정 SemVer
+`MAJOR.MINOR.PATCH` 형식으로 관리하고 Git tag에는 `v` 접두사를 붙입니다.
+`hololive/hololive-api/VERSION`과 `hololive/hololive-alarm-worker/VERSION`은 각 container
+artifact 버전이며 독립 build가 필요하면 서로 달라질 수 있습니다. 저장소 tag는 root
+`VERSION`이 가리키는 전체 source snapshot에만 붙입니다.
+
+릴리즈할 때는 다음 순서를 지킵니다.
+
+1. 루트 `VERSION`을 변경하고 각 runtime artifact를 함께 릴리즈한다면 해당 runtime의
+   `VERSION`도 변경합니다.
+2. `CHANGELOG.md`의 `미출시` 항목을 `## v<version> - YYYY-MM-DD` 구간으로 옮깁니다.
+3. `bash scripts/check-release-version.sh`와 전체 pre-push gate를 통과시킵니다.
+4. 검증된 commit을 `main`에 반영한 뒤 annotated tag `v<version>`을 별도 승인된 publish
+   절차로 push합니다.
+
+`MAJOR`는 호환되지 않는 공개·운영·데이터 계약 변경, `MINOR`는 하위 호환 기능 추가,
+`PATCH`는 하위 호환 수정과 보안·운영 안정화에 사용합니다. 버전 관리 도입 전 이력은
+`CHANGELOG.md`의 실제 날짜·commit SHA 기준점을 유지하며 추정 버전을 소급하지 않습니다.
+
+## Compose service 재배포
 
 Use the repository deploy script for service-level redeploys:
 
@@ -55,7 +76,7 @@ Current Go runtime services:
 - `hololive-alarm-worker`
 - `youtube-producer-c` on the main host; `youtube-producer-b` uses the AP host wrapper.
 
-## Required Checks
+## 필수 검사
 
 ```bash
 ./scripts/architecture/ci-boundary-gate.sh
@@ -75,7 +96,7 @@ For contract/document changes:
 ./scripts/architecture/check-release-governance-assets.sh
 ```
 
-## PostgreSQL Hot-Path Plan Gate
+## PostgreSQL hot path plan gate
 
 Before releasing PostgreSQL GUC, migration, alarm dispatch, or YouTube outbox claim changes, capture fresh plan snapshots from the target environment:
 
@@ -105,20 +126,20 @@ The artifact retains the complete whitespace-normalized `pg_stat_statements` rep
 
 The stats window is fresh only when at least one `alarm_dispatch_deliveries` claim and one `youtube_notification_outbox` claim complete during the interval. No matching call for either required hot path, a global `pg_stat_statements` reset, entry deallocation, a per-statement `stats_since` change, or a decreasing counter makes the result inconclusive and fails the gate. This also rejects a statement reset whose counters recover past the starting values before the second snapshot. Rerun during a representative active window instead of treating missing evidence as a pass. The script also fails when the fresh delta mean exceeds 5ms, any index contract is broken, any invalid index exists, or `Rows Removed by Filter` exceeds 1000. The dead-tuple snapshot remains review evidence rather than a fixed threshold. The EXPLAIN statements run in a transaction and end with `ROLLBACK`, but they still use `ANALYZE`; run them during a low-risk verification window.
 
-## Contract Change Release Rules
+## 계약 변경 릴리즈 규칙
 
 - Keep provider and consumer compatible during rollout.
 - Use dual-read/dual-write or additive fields for queue/envelope changes.
 - Update `CONTRACT_MAP.md`, matching `contracts/*.md`, and runbook impacts before release.
 - Include rollback notes for old and new contract versions.
 
-## Release Notes
+## 릴리즈 노트
 
 Use:
 
 - `docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`
 
-## Smoke Tests
+## Smoke test
 
 These scripts do not rebuild, redeploy, or recreate Docker Compose services. `smoke-runtime-health.sh` expects local services to already be running.
 
@@ -137,7 +158,7 @@ Equivalent manual checks:
 COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml exec -T youtube-producer-c ./bin/healthcheck https://127.0.0.1:30025/health
 ```
 
-## Related documents
+## 관련 문서
 
 - `../DEPLOYMENT_BASELINE.md`
 - `pgo.md`
