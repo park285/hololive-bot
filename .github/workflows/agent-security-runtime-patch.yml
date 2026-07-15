@@ -1,20 +1,21 @@
-name: agent security runtime patch
+name: agent security runtime verify
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - agent/security-runtime-ci-hardening-20260715
+    paths-ignore:
+      - .agent-diagnostics/**
 
 permissions:
   contents: write
 
 concurrency:
-  group: agent-security-runtime-patch
-  cancel-in-progress: false
+  group: agent-security-runtime-verify
+  cancel-in-progress: true
 
 jobs:
-  apply-and-verify:
-    if: github.head_ref == 'agent/security-runtime-ci-hardening-20260715'
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -23,6 +24,7 @@ jobs:
         with:
           ref: agent/security-runtime-ci-hardening-20260715
           path: hololive-bot
+          fetch-depth: 0
           persist-credentials: true
 
       - name: Checkout shared-go
@@ -51,112 +53,71 @@ jobs:
             shared-go/go.sum
             iris-client-go/go.sum
 
-      - name: Apply security patch
+      - name: Format changed Go files
+        working-directory: hololive-bot
+        run: |
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.go')
+          if (( ${#files[@]} > 0 )); then
+            gofmt -w "${files[@]}"
+          fi
+
+      - name: Verify runtime security changes
         working-directory: hololive-bot
         run: |
           set +e
-          python3 scripts/ci/agent_security_runtime_patch.py > /tmp/agent-security-runtime-patch.log 2>&1
-          status=$?
-          cat /tmp/agent-security-runtime-patch.log
+          set -o pipefail
+          {
+            bash scripts/ci/check-workflow-secrets.sh
+            bash scripts/ci/check-workflow-secrets_test.sh
+            while IFS= read -r script; do
+              bash -n "$script"
+            done < <(find scripts -type f -name '*.sh' | sort)
+            go test -count=1 \
+              ./hololive/hololive-shared/pkg/domain \
+              ./hololive/hololive-shared/pkg/health \
+              ./hololive/hololive-shared/pkg/service/youtube/scraper/... \
+              ./hololive/hololive-api/internal/planes/bot/internal/render \
+              ./hololive/hololive-api/internal/planes/bot/internal/command/handlers \
+              ./hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier \
+              ./hololive/hololive-youtube-producer/internal/runtime/polling
+            source scripts/ci/go-workspace-modules.sh
+            mapfile -t packages < <(
+              {
+                printf './...\n'
+                go_workspace_package_patterns | sed 's#^\./\.\./#../#'
+              } | awk 'NF'
+            )
+            go test -count=1 "${packages[@]}"
+            go vet "${packages[@]}"
+            git diff --check
+          } 2>&1 | tee /tmp/runtime-security-verify.log
+          status=${PIPESTATUS[0]}
+          printf '%s\n' "${status}" > /tmp/runtime-security-verify.status
           exit "${status}"
 
-      - name: Persist patch failure diagnostics
+      - name: Persist verification failure
         if: failure()
         working-directory: hololive-bot
         run: |
           mkdir -p .agent-diagnostics
-          cp /tmp/agent-security-runtime-patch.log .agent-diagnostics/runtime-patch.log 2>/dev/null || echo 'patch log unavailable' > .agent-diagnostics/runtime-patch.log
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .agent-diagnostics/runtime-patch.log
+          cp /tmp/runtime-security-verify.log .agent-diagnostics/runtime-verify.log 2>/dev/null || echo "verification log unavailable" > .agent-diagnostics/runtime-verify.log
+          cp /tmp/runtime-security-verify.status .agent-diagnostics/runtime-verify.status 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .agent-diagnostics
           if ! git diff --cached --quiet; then
-            git commit -m 'chore: record runtime security patch failure'
+            git commit -m "chore: record runtime security verification failure"
             git push origin HEAD:agent/security-runtime-ci-hardening-20260715
           fi
 
-      - name: Format changed Go files
-        working-directory: hololive-bot
-        run: |
-          gofmt -w \
-            hololive/hololive-api/internal/planes/bot/internal/render/calendar.go \
-            hololive/hololive-api/internal/planes/bot/internal/render/calendar_photos.go \
-            hololive/hololive-api/internal/planes/bot/internal/render/calendar_photo_security_test.go \
-            hololive/hololive-api/internal/planes/bot/internal/command/handlers/handlercore/command.go \
-            hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_calendar.go \
-            hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_calendar_test.go \
-            hololive/hololive-shared/pkg/domain/alarm.go \
-            hololive/hololive-shared/pkg/domain/alarm_test.go \
-            hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier/notifier_prepare.go \
-            hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier/notifier_persistence_security_test.go \
-            hololive/hololive-youtube-producer/internal/runtime/polling/budget_validator.go \
-            hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations_test.go \
-            hololive/hololive-shared/pkg/health/health.go \
-            hololive/hololive-shared/pkg/health/health_init_test.go
-
-      - name: Verify workflow policy and shell syntax
-        working-directory: hololive-bot
-        run: |
-          bash scripts/ci/check-workflow-secrets.sh
-          bash scripts/ci/check-workflow-secrets_test.sh
-          while IFS= read -r script; do
-            bash -n "$script"
-          done < <(find scripts -type f -name '*.sh' | sort)
-
-      - name: Run focused security tests
-        working-directory: hololive-bot
-        run: |
-          go test -count=1 \
-            ./hololive/hololive-shared/pkg/domain \
-            ./hololive/hololive-shared/pkg/health \
-            ./hololive/hololive-api/internal/planes/bot/internal/render \
-            ./hololive/hololive-api/internal/planes/bot/internal/command/handlers \
-            ./hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier \
-            ./hololive/hololive-youtube-producer/internal/runtime/polling
-
-      - name: Run full workspace tests
-        working-directory: hololive-bot
-        run: |
-          source scripts/ci/go-workspace-modules.sh
-          mapfile -t packages < <(
-            {
-              printf './...\n'
-              go_workspace_package_patterns | sed 's#^\./\.\./#../#'
-            } | awk 'NF'
-          )
-          go test -count=1 "${packages[@]}"
-
-      - name: Run full workspace vet
-        working-directory: hololive-bot
-        run: |
-          source scripts/ci/go-workspace-modules.sh
-          mapfile -t packages < <(
-            {
-              printf './...\n'
-              go_workspace_package_patterns | sed 's#^\./\.\./#../#'
-            } | awk 'NF'
-          )
-          go vet "${packages[@]}"
-
-      - name: Validate patch
-        working-directory: hololive-bot
-        run: |
-          git diff --check
-          if git diff --quiet; then
-            echo 'security patch produced no changes' >&2
-            exit 1
-          fi
-
-      - name: Commit verified non-workflow patch
+      - name: Commit verified cleanup
         if: success()
         working-directory: hololive-bot
         run: |
-          git checkout HEAD -- \
-            .github/workflows/ci.yml \
-            .github/workflows/security.yml \
-            .github/workflows/agent-security-runtime-patch.yml
+          git rm .github/workflows/agent-security-runtime-patch.yml scripts/ci/agent_security_runtime_patch.py
           rm -rf .agent-diagnostics
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m 'security: harden runtime and CI boundaries'
+          git commit -m "security: finalize runtime boundary hardening"
           git push origin HEAD:agent/security-runtime-ci-hardening-20260715
