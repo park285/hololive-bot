@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -58,8 +59,32 @@ func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []do
 	}
 
 	result, err, _ := r.rendering.Do(cacheKey.string(), func() (any, error) {
-		return r.renderCalendarImageOnce(cacheKey, month, year, entries)
+		return r.renderCalendarImageOnce(context.Background(), cacheKey, month, year, entries)
 	})
+	return calendarRenderResult(result, err)
+}
+
+// RenderCalendarImageContext binds remote photo retrieval and cache admission to
+// the caller lifetime. Context-aware calls intentionally do not join the legacy
+// singleflight group: cancelling one request must never cancel or poison another
+// request that happens to render the same calendar key.
+func (r *CalendarCardRenderer) RenderCalendarImageContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	cacheKey := newCalendarCacheKey(month, year, entries)
+	if data, ok := r.cachedImage(cacheKey); ok {
+		return data, nil
+	}
+	result, err := r.renderCalendarImageOnce(ctx, cacheKey, month, year, entries)
+	return calendarRenderResult(result, err)
+}
+
+func calendarRenderResult(result any, err error) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -70,16 +95,25 @@ func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []do
 	return bytes.Clone(data), nil
 }
 
-func (r *CalendarCardRenderer) renderCalendarImageOnce(cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) (any, error) {
+func (r *CalendarCardRenderer) renderCalendarImageOnce(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) (any, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if data, ok := r.cachedImage(cacheKey); ok {
 		return data, nil
 	}
 	if data, ok := r.diskCachedImage(cacheKey); ok {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		r.storeCachedImage(cacheKey, data)
 		return data, nil
 	}
-	data, diskCacheable, err := r.renderCalendarImage(month, year, entries)
+	data, diskCacheable, err := r.renderCalendarImage(ctx, month, year, entries)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	r.storeCachedImage(cacheKey, data)
@@ -89,11 +123,20 @@ func (r *CalendarCardRenderer) renderCalendarImageOnce(cacheKey calendarCacheKey
 	return data, nil
 }
 
-func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []domain.CalendarEntry) (data []byte, diskCacheable bool, err error) {
-	photos, diskCacheable := fetchMemberPhotos(entries)
+func (r *CalendarCardRenderer) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) (data []byte, diskCacheable bool, err error) {
+	photos, diskCacheable, err := fetchMemberPhotos(ctx, entries)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 
 	fontMu.Lock()
 	defer fontMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 
 	grouped := groupEntriesByDay(entries)
 
@@ -109,9 +152,15 @@ func (r *CalendarCardRenderer) renderCalendarImage(month, year int, entries []do
 
 	drawCalendarHeader(img, &m, month, year, entries)
 	drawCalendarBody(img, &m, month, grouped, photos)
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 
 	data, err = cardkit.EncodePNG(img, calendarOutputWidth)
 	if err != nil {
+		return nil, false, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
 	return data, diskCacheable, nil
