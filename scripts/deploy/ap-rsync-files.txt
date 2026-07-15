@@ -50,6 +50,7 @@ hololive/hololive-youtube-producer/internal/runtime/polling/api.go
 hololive/hololive-youtube-producer/internal/runtime/polling/job_run_guard_claimer.go
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_budget.go
 hololive/hololive-youtube-producer/internal/runtime/polling/budget_validator.go
+hololive/hololive-youtube-producer/internal/runtime/polling/budget_runtime_validation.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter_cooldown.go
 hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter_keys.go
@@ -127,6 +128,7 @@ hololive/hololive-shared/pkg/contracts/trigger/errors.go
 hololive/hololive-shared/pkg/contracts/trigger/routes.go
 hololive/hololive-shared/pkg/domain/alarm.go
 hololive/hololive-shared/pkg/domain/alarm_dispatch_source.go
+hololive/hololive-shared/pkg/domain/alarm_persistence_identity.go
 hololive/hololive-shared/pkg/domain/org_channel.go
 hololive/hololive-shared/pkg/domain/clarification.go
 hololive/hololive-shared/pkg/domain/command.go
@@ -696,6 +698,7 @@ hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/ratelimit
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/ratelimiter/errors.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/ratelimiter/ratelimiter.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/rate_limiter.go
+hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/rate_limiter_contract.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/ratelimiter_errors.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/recent_videos_parser.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/shorts.go
@@ -807,6 +810,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/repos
 ../shared-go/pkg/logging/internal/archive/permissions.go
 ../shared-go/pkg/logging/operation.go
 ../shared-go/pkg/logging/sanitize.go
+../shared-go/pkg/logging/sanitize_handler.go
 ../shared-go/pkg/retry/doc.go
 ../shared-go/pkg/retry/retry.go
 ../shared-go/pkg/runtime/automaxprocs/automaxprocs.go

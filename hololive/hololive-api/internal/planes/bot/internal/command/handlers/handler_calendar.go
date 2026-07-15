@@ -89,7 +89,7 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 		return false
 	}
 
-	data, err := c.imageRenderer.RenderCalendarImage(month, year, entries)
+	data, err := c.renderCalendarImage(ctx, month, year, entries)
 	if err != nil || len(data) == 0 {
 		c.Deps().Logger.Warn("calendar image render failed, falling back to text",
 			slog.Any("error", err),
@@ -105,6 +105,13 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 	}
 
 	return true
+}
+
+func (c *CalendarCommand) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
+	if renderer, ok := c.imageRenderer.(CalendarImageRendererContext); ok {
+		return renderer.RenderCalendarImageContext(ctx, month, year, entries)
+	}
+	return c.imageRenderer.RenderCalendarImage(month, year, entries)
 }
 
 func (c *CalendarCommand) ensureDeps() error {
