@@ -1,0 +1,142 @@
+name: agent security runtime patch
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-security-runtime-patch
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    if: github.head_ref == 'agent/security-runtime-ci-hardening-20260715'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout hololive-bot patch branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: agent/security-runtime-ci-hardening-20260715
+          path: hololive-bot
+          persist-credentials: true
+
+      - name: Checkout shared-go
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: park285/shared-go
+          path: shared-go
+          persist-credentials: false
+
+      - name: Checkout iris-client-go
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: park285/iris-client-go
+          path: iris-client-go
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: hololive-bot/go.mod
+          cache-dependency-path: |
+            hololive-bot/go.work.sum
+            hololive-bot/go.sum
+            hololive-bot/admin-dashboard/backend/go.sum
+            hololive-bot/hololive/*/go.sum
+            shared-go/go.sum
+            iris-client-go/go.sum
+
+      - name: Apply security patch
+        working-directory: hololive-bot
+        run: python3 scripts/ci/agent_security_runtime_patch.py
+
+      - name: Format changed Go files
+        working-directory: hololive-bot
+        run: |
+          gofmt -w \
+            hololive/hololive-api/internal/planes/bot/internal/render/calendar.go \
+            hololive/hololive-api/internal/planes/bot/internal/render/calendar_photos.go \
+            hololive/hololive-api/internal/planes/bot/internal/render/calendar_photo_security_test.go \
+            hololive/hololive-api/internal/planes/bot/internal/command/handlers/handlercore/command.go \
+            hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_calendar.go \
+            hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_calendar_test.go \
+            hololive/hololive-shared/pkg/domain/alarm.go \
+            hololive/hololive-shared/pkg/domain/alarm_test.go \
+            hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier/notifier_prepare.go \
+            hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier/notifier_persistence_security_test.go \
+            hololive/hololive-youtube-producer/internal/runtime/polling/budget_validator.go \
+            hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations_test.go \
+            hololive/hololive-shared/pkg/health/health.go \
+            hololive/hololive-shared/pkg/health/health_init_test.go
+
+      - name: Verify workflow policy and shell syntax
+        working-directory: hololive-bot
+        run: |
+          bash scripts/ci/check-workflow-secrets.sh
+          bash scripts/ci/check-workflow-secrets_test.sh
+          while IFS= read -r script; do
+            bash -n "$script"
+          done < <(find scripts -type f -name '*.sh' | sort)
+
+      - name: Run focused security tests
+        working-directory: hololive-bot
+        run: |
+          go test -count=1 \
+            ./hololive/hololive-shared/pkg/domain \
+            ./hololive/hololive-shared/pkg/health \
+            ./hololive/hololive-api/internal/planes/bot/internal/render \
+            ./hololive/hololive-api/internal/planes/bot/internal/command/handlers \
+            ./hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/notifier \
+            ./hololive/hololive-youtube-producer/internal/runtime/polling
+
+      - name: Run full workspace tests
+        working-directory: hololive-bot
+        run: |
+          source scripts/ci/go-workspace-modules.sh
+          mapfile -t packages < <(
+            {
+              printf './...\n'
+              go_workspace_package_patterns | sed 's#^\./\.\./#../#'
+            } | awk 'NF'
+          )
+          go test -count=1 "${packages[@]}"
+
+      - name: Run full workspace vet
+        working-directory: hololive-bot
+        run: |
+          source scripts/ci/go-workspace-modules.sh
+          mapfile -t packages < <(
+            {
+              printf './...\n'
+              go_workspace_package_patterns | sed 's#^\./\.\./#../#'
+            } | awk 'NF'
+          )
+          go vet "${packages[@]}"
+
+      - name: Validate patch
+        working-directory: hololive-bot
+        run: |
+          git diff --check
+          if git diff --quiet; then
+            echo "security patch produced no changes" >&2
+            exit 1
+          fi
+
+      - name: Commit verified non-workflow patch
+        if: success()
+        working-directory: hololive-bot
+        run: |
+          git checkout HEAD -- \
+            .github/workflows/ci.yml \
+            .github/workflows/security.yml \
+            .github/workflows/agent-security-runtime-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "security: harden runtime and CI boundaries"
+          git push origin HEAD:agent/security-runtime-ci-hardening-20260715
