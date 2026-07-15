@@ -25,6 +25,8 @@ const (
 	calendarPhotoMaxFetches    = 24
 	calendarPhotoThumbnailSize = 1024
 	calendarPhotoMaxBytes      = 2 << 20
+	calendarPhotoMaxDimension  = 4096
+	calendarPhotoMaxPixels     = 8 << 20
 )
 
 type calendarPhotoFetchState struct {
@@ -33,20 +35,29 @@ type calendarPhotoFetchState struct {
 	diskCacheable bool
 }
 
-func fetchMemberPhotos(entries []domain.CalendarEntry) (map[string]image.Image, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), photoFetchBudget)
+func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (map[string]image.Image, bool, error) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, photoFetchBudget)
 	defer cancel()
 
 	photos := make(map[string]image.Image)
 	state := newCalendarPhotoFetchState()
 	for _, e := range entries {
-		if state.shouldStop(ctx) {
+		if err := ctx.Err(); err != nil {
+			return photos, false, err
+		}
+		if state.fetches >= calendarPhotoMaxFetches {
 			state.markDiskUncacheable()
 			break
 		}
 		state.fetch(ctx, e, photos)
 	}
-	return photos, state.diskCacheable
+	if err := ctx.Err(); err != nil {
+		return photos, false, err
+	}
+	return photos, state.diskCacheable, nil
 }
 
 func newCalendarPhotoFetchState() *calendarPhotoFetchState {
@@ -54,10 +65,6 @@ func newCalendarPhotoFetchState() *calendarPhotoFetchState {
 		attempted:     make(map[string]struct{}),
 		diskCacheable: true,
 	}
-}
-
-func (s *calendarPhotoFetchState) shouldStop(ctx context.Context) bool {
-	return ctx.Err() != nil || s.fetches >= calendarPhotoMaxFetches
 }
 
 func (s *calendarPhotoFetchState) fetch(ctx context.Context, e domain.CalendarEntry, photos map[string]image.Image) {
@@ -195,6 +202,14 @@ func closeResponseBody(body io.Closer) {
 }
 
 func decodeCalendarPhoto(data []byte, contentType string) (image.Image, error) {
+	config, err := decodeCalendarPhotoConfig(data, contentType)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCalendarPhotoConfig(config); err != nil {
+		return nil, err
+	}
+
 	switch contentType {
 	case "image/png":
 		return png.Decode(bytes.NewReader(data))
@@ -205,6 +220,34 @@ func decodeCalendarPhoto(data []byte, contentType string) (image.Image, error) {
 	default:
 		return nil, fmt.Errorf("unsupported image format")
 	}
+}
+
+func decodeCalendarPhotoConfig(data []byte, contentType string) (image.Config, error) {
+	reader := bytes.NewReader(data)
+	switch contentType {
+	case "image/png":
+		return png.DecodeConfig(reader)
+	case "image/jpeg":
+		return jpeg.DecodeConfig(reader)
+	case "image/webp":
+		return webp.DecodeConfig(reader)
+	default:
+		return image.Config{}, fmt.Errorf("unsupported image format")
+	}
+}
+
+func validateCalendarPhotoConfig(config image.Config) error {
+	if config.Width <= 0 || config.Height <= 0 {
+		return fmt.Errorf("calendar photo has invalid dimensions %dx%d", config.Width, config.Height)
+	}
+	if config.Width > calendarPhotoMaxDimension || config.Height > calendarPhotoMaxDimension {
+		return fmt.Errorf("calendar photo dimensions %dx%d exceed %d", config.Width, config.Height, calendarPhotoMaxDimension)
+	}
+	pixels := uint64(config.Width) * uint64(config.Height)
+	if pixels > uint64(calendarPhotoMaxPixels) {
+		return fmt.Errorf("calendar photo pixel count %d exceeds %d", pixels, calendarPhotoMaxPixels)
+	}
+	return nil
 }
 
 func thumbnailURL(original string, size int) string {
