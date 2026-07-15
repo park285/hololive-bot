@@ -1,0 +1,108 @@
+name: pr-full-verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOCACHE: /tmp/go-cache
+  GOTMPDIR: /tmp
+
+jobs:
+  full-verification:
+    name: full-verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: hololive-bot
+          persist-credentials: false
+
+      - name: Checkout shared-go
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: park285/shared-go
+          path: shared-go
+          persist-credentials: false
+
+      - name: Checkout iris-client-go
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: park285/iris-client-go
+          path: iris-client-go
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: hololive-bot/go.mod
+          cache-dependency-path: |
+            hololive-bot/go.work.sum
+            hololive-bot/go.sum
+            hololive-bot/admin-dashboard/backend/go.sum
+            hololive-bot/hololive/*/go.sum
+            shared-go/go.sum
+            iris-client-go/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@1e60f620b9541d6ff3c94b6c70482e59edcc35e0 # v4.0.4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: hololive-bot/admin-dashboard/frontend/package-lock.json
+
+      - name: Run canonical server verification
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-verification.sh
+
+  static-security:
+    name: static-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: hololive-bot
+          persist-credentials: false
+
+      - name: Checkout shared-go
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: park285/shared-go
+          path: shared-go
+          persist-credentials: false
+
+      - name: Checkout iris-client-go
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: park285/iris-client-go
+          path: iris-client-go
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: hololive-bot/go.mod
+          cache-dependency-path: |
+            hololive-bot/go.work.sum
+            hololive-bot/go.sum
+            hololive-bot/admin-dashboard/backend/go.sum
+            hololive-bot/hololive/*/go.sum
+            shared-go/go.sum
+            iris-client-go/go.sum
+
+      - name: Run canonical server security analysis
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-security.sh
