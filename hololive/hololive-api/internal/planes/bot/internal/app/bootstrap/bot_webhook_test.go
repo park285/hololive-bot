@@ -223,10 +223,12 @@ func signBotWebhookTestRequest(request *http.Request, secret, body string) {
 	nonce := fmt.Sprintf("hololive-test-%d", time.Now().UnixNano())
 	bodyDigest := sha256.Sum256([]byte(body))
 	bodySHA256 := hex.EncodeToString(bodyDigest[:])
-	canonical := strings.Join([]string{request.Method, request.URL.RequestURI(), timestamp, nonce, bodySHA256}, "\n")
+	messageID := strings.TrimSpace(request.Header.Get(webhook.HeaderIrisMessageID))
+	canonical := strings.Join([]string{webhook.SignatureVersionV2, strings.ToUpper(request.Method), request.URL.RequestURI(), timestamp, nonce, messageID, bodySHA256}, "\n")
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(canonical))
 
+	request.Header.Set(webhook.HeaderIrisSignatureVersion, webhook.SignatureVersionV2)
 	request.Header.Set(webhook.HeaderIrisTimestamp, timestamp)
 	request.Header.Set(webhook.HeaderIrisNonce, nonce)
 	request.Header.Set(webhook.HeaderIrisBodySHA256, bodySHA256)
