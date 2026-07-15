@@ -18,6 +18,9 @@ func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotificati
 	if err := payload.notification.ValidateLiveDispatchRoute(); err != nil {
 		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: validate live dispatch route: %w", err)
 	}
+	if err := payload.notification.ValidateLiveDispatchPersistenceIdentity(); err != nil {
+		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: validate live dispatch persistence identity: %w", err)
+	}
 
 	claimKeys, claimed, err := n.claimDedup(ctx, payload)
 	if err != nil {
