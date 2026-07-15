@@ -125,9 +125,29 @@ jobs:
       - name: Show runner Node version
         run: node --version
 
-      - name: Policy and architecture gates
+      - name: Workflow and shell policy gates
         working-directory: hololive-bot
         run: bash scripts/ci/server-pr-verification.sh policy
+
+      - name: Architecture M0 boundaries
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-architecture.sh m0
+
+      - name: Architecture M1 data contracts
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-architecture.sh m1
+
+      - name: Architecture M2 documentation and ownership
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-architecture.sh m2
+
+      - name: Architecture M4 compose and size budgets
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-architecture.sh m4
+
+      - name: Architecture M6 governance
+        working-directory: hololive-bot
+        run: bash scripts/ci/server-pr-architecture.sh m6
 
       - name: Full Go workspace tests and vet
         working-directory: hololive-bot
