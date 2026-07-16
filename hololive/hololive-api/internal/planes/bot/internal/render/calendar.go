@@ -126,13 +126,17 @@ func (r *CalendarCardRenderer) renderCalendarImageOnce(ctx context.Context, cach
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	r.storeRenderedImage(cacheKey, rendered)
+	return rendered.data, nil
+}
+
+func (r *CalendarCardRenderer) storeRenderedImage(cacheKey calendarCacheKey, rendered renderedCalendarImage) {
 	if rendered.cachePolicy.memoryCacheable {
 		r.storeCachedImage(cacheKey, rendered.data)
 	}
 	if rendered.cachePolicy.diskCacheable {
 		r.storeDiskCachedImage(cacheKey, rendered.data)
 	}
-	return rendered.data, nil
 }
 
 func (r *CalendarCardRenderer) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) (renderedCalendarImage, error) {
