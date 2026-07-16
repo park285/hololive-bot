@@ -6,7 +6,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/park285/shared-go v1.30.1-0.20260715131012-47e21606059b
+	github.com/park285/shared-go v1.30.1-0.20260716085200-af6d83a3e803
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.76
 	golang.org/x/crypto v0.53.0
