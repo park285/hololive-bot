@@ -26,6 +26,16 @@ type CalendarCardRenderer struct {
 	strings      *messagestrings.Store
 }
 
+type calendarCachePolicy struct {
+	memoryCacheable bool
+	diskCacheable   bool
+}
+
+type renderedCalendarImage struct {
+	data        []byte
+	cachePolicy calendarCachePolicy
+}
+
 type CalendarCardRendererOption func(*CalendarCardRenderer)
 
 func WithCalendarDiskCacheDir(dir string) CalendarCardRendererOption {
@@ -109,33 +119,39 @@ func (r *CalendarCardRenderer) renderCalendarImageOnce(ctx context.Context, cach
 		r.storeCachedImage(cacheKey, data)
 		return data, nil
 	}
-	data, diskCacheable, err := r.renderCalendarImage(ctx, month, year, entries)
+	rendered, err := r.renderCalendarImage(ctx, month, year, entries)
 	if err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	r.storeCachedImage(cacheKey, data)
-	if diskCacheable {
-		r.storeDiskCachedImage(cacheKey, data)
-	}
-	return data, nil
+	r.storeRenderedImage(cacheKey, rendered)
+	return rendered.data, nil
 }
 
-func (r *CalendarCardRenderer) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) (data []byte, diskCacheable bool, err error) {
-	photos, diskCacheable, err := fetchMemberPhotos(ctx, entries)
+func (r *CalendarCardRenderer) storeRenderedImage(cacheKey calendarCacheKey, rendered renderedCalendarImage) {
+	if rendered.cachePolicy.memoryCacheable {
+		r.storeCachedImage(cacheKey, rendered.data)
+	}
+	if rendered.cachePolicy.diskCacheable {
+		r.storeDiskCachedImage(cacheKey, rendered.data)
+	}
+}
+
+func (r *CalendarCardRenderer) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) (renderedCalendarImage, error) {
+	photoResult, err := fetchMemberPhotos(ctx, entries)
 	if err != nil {
-		return nil, false, err
+		return renderedCalendarImage{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, false, err
+		return renderedCalendarImage{}, err
 	}
 
 	fontMu.Lock()
 	defer fontMu.Unlock()
 	if err := ctx.Err(); err != nil {
-		return nil, false, err
+		return renderedCalendarImage{}, err
 	}
 
 	grouped := groupEntriesByDay(entries)
@@ -143,7 +159,7 @@ func (r *CalendarCardRenderer) renderCalendarImage(ctx context.Context, month, y
 	m := newCalendarMetrics(calendarCompactRatio(grouped))
 	f, err := loadCalendarFonts(m.sf)
 	if err != nil {
-		return nil, false, err
+		return renderedCalendarImage{}, err
 	}
 	m.fonts = f
 	m.strings = r.strings
@@ -151,19 +167,22 @@ func (r *CalendarCardRenderer) renderCalendarImage(ctx context.Context, month, y
 	img := cardkit.NewCanvas(canvasWidth, min(calculateCanvasHeight(&m, grouped), maxCanvasH), colWhite)
 
 	drawCalendarHeader(ctx, img, &m, month, year, entries)
-	drawCalendarBody(ctx, img, &m, month, grouped, photos)
+	drawCalendarBody(ctx, img, &m, month, grouped, photoResult.photos)
 	if err := ctx.Err(); err != nil {
-		return nil, false, err
+		return renderedCalendarImage{}, err
 	}
 
-	data, err = cardkit.EncodePNG(img, calendarOutputWidth)
+	data, err := cardkit.EncodePNG(img, calendarOutputWidth)
 	if err != nil {
-		return nil, false, err
+		return renderedCalendarImage{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, false, err
+		return renderedCalendarImage{}, err
 	}
-	return data, diskCacheable, nil
+	return renderedCalendarImage{
+		data:        data,
+		cachePolicy: photoResult.cachePolicy,
+	}, nil
 }
 
 func calendarCompactRatio(grouped []dayGroup) float64 {

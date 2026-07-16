@@ -30,44 +30,56 @@ const (
 )
 
 type calendarPhotoFetchState struct {
-	attempted     map[string]struct{}
-	fetches       int
-	diskCacheable bool
+	attempted   map[string]struct{}
+	fetches     int
+	cachePolicy calendarCachePolicy
 }
 
-func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (
-	photos map[string]image.Image,
-	diskCacheable bool,
-	err error,
-) {
-	if parent == nil {
-		return nil, false, errors.New("calendar photo context is nil")
-	}
-	ctx, cancel := context.WithTimeout(parent, photoFetchBudget)
-	defer cancel()
+type calendarPhotoFetchResult struct {
+	photos      map[string]image.Image
+	cachePolicy calendarCachePolicy
+}
 
-	photos = make(map[string]image.Image)
+func fetchMemberPhotos(parent context.Context, entries []domain.CalendarEntry) (calendarPhotoFetchResult, error) {
+	if parent == nil {
+		return calendarPhotoFetchResult{}, errors.New("calendar photo context is nil")
+	}
+	budgetCtx, cancel := context.WithTimeout(parent, photoFetchBudget)
+	defer cancel()
+	return fetchMemberPhotosWithinBudget(parent, budgetCtx, entries)
+}
+
+func fetchMemberPhotosWithinBudget(parent, budgetCtx context.Context, entries []domain.CalendarEntry) (calendarPhotoFetchResult, error) {
+	result := calendarPhotoFetchResult{photos: make(map[string]image.Image)}
 	state := newCalendarPhotoFetchState()
 	for _, e := range entries {
-		if err := ctx.Err(); err != nil {
-			return photos, false, err
+		if err := parent.Err(); err != nil {
+			return result, err
 		}
-		if state.fetches >= calendarPhotoMaxFetches {
-			state.markDiskUncacheable()
+		if budgetCtx.Err() != nil {
+			state.markUncacheable()
 			break
 		}
-		state.fetch(ctx, e, photos)
+		if state.fetches >= calendarPhotoMaxFetches {
+			state.markUncacheable()
+			break
+		}
+		state.fetch(budgetCtx, e, result.photos)
 	}
-	if err := ctx.Err(); err != nil {
-		return photos, false, err
+	if err := parent.Err(); err != nil {
+		return result, err
 	}
-	return photos, state.diskCacheable, nil
+	result.cachePolicy = state.cachePolicy
+	return result, nil
 }
 
 func newCalendarPhotoFetchState() *calendarPhotoFetchState {
 	return &calendarPhotoFetchState{
-		attempted:     make(map[string]struct{}),
-		diskCacheable: true,
+		attempted: make(map[string]struct{}),
+		cachePolicy: calendarCachePolicy{
+			memoryCacheable: true,
+			diskCacheable:   true,
+		},
 	}
 }
 
@@ -80,6 +92,9 @@ func (s *calendarPhotoFetchState) fetch(ctx context.Context, e domain.CalendarEn
 	s.fetches++
 	if !fetchMemberPhotoWithContext(ctx, e, photos) {
 		s.markDiskUncacheable()
+		if ctx.Err() != nil {
+			s.markUncacheable()
+		}
 	}
 }
 
@@ -99,7 +114,12 @@ func (s *calendarPhotoFetchState) alreadyFetchedOrAttempted(photoURL string, pho
 }
 
 func (s *calendarPhotoFetchState) markDiskUncacheable() {
-	s.diskCacheable = false
+	s.cachePolicy.diskCacheable = false
+}
+
+func (s *calendarPhotoFetchState) markUncacheable() {
+	s.cachePolicy.memoryCacheable = false
+	s.cachePolicy.diskCacheable = false
 }
 
 func fetchMemberPhoto(e domain.CalendarEntry, photos map[string]image.Image) {
