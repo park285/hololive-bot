@@ -4,7 +4,6 @@
 
 ## Context
 
-- **Plan**: `/home/kapu/.claude/plans/dazzling-scribbling-tower.md` → P3
 - **Branch**: `refactor/p3-delivery-split` (in `hololive-bot` submodule)
 - **Scope**: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/`
 - **Goal**: 53 source files, 9,120 LOC flat package → cohesive sub-packages

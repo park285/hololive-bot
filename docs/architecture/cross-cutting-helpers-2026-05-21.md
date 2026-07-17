@@ -1,5 +1,7 @@
 # 2026-05-21 — Cross-cutting helper 시그니처 결정 (Phase 2.B 진입 가이드)
 
+> Historical document (퇴역한 5-runtime 모듈 기준 기록). Do not use as the current source of truth. See `docs/current/PROJECT_MAP.md`.
+
 본 문서는 `2026-05-21-monorepo-refactor-master.md` 의 Phase 2.B 진입 전 cross-cutting helper 의 시그니처 / 본거지 / 마이그레이션 경로를 확정한다. 구현은 Phase 2.B.* 의 일이며, 본 문서는 결정만 한다.
 
 ## RunTickerLoop (Phase 2.B.1)

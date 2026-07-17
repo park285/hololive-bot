@@ -1,5 +1,7 @@
 # 2026-05-22 — 테스트 커버리지 백필 후보 식별 (Phase 2.E 진입 전)
 
+> Historical document (퇴역한 5-runtime 모듈 기준 기록). Do not use as the current source of truth. See `docs/current/PROJECT_MAP.md`.
+
 본 문서는 master plan 의 Phase 2.E 진입 전 핵심 미커버 경로를 식별해 후속 테스트 작성 task 들이 막연한 진입이 되지 않도록 sample list 와 우선순위를 제공한다. 본 문서는 식별만, test 작성은 2.E 의 일.
 
 조사 기준:

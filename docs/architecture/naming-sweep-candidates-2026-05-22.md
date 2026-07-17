@@ -1,5 +1,7 @@
 # 2026-05-22 — 네이밍 sweep 후보 식별 (Phase 2.D 진입 전)
 
+> Historical document (퇴역한 5-runtime 모듈 기준 기록). Do not use as the current source of truth. See `docs/current/PROJECT_MAP.md`.
+
 본 문서는 7 Go 모듈 + admin-dashboard 의 약어/케이스 드리프트/패키지-타입 중복 후보를 식별해 Phase 2.D 의 sweep 작업이 막연한 진입이 되지 않도록 sample list 를 제공한다. 본 문서는 식별만, rename 은 2.D 의 일.
 
 조사 기준:
