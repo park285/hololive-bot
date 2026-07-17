@@ -314,6 +314,7 @@ services:
     # appendonly no + save "" 순수 캐시 구성이라 /data 영속 볼륨은 실사용이 없어 제거했다.
     volumes:
       - valkey-cache-socket:/var/run/valkey
+    user: "999:1000"
     group_add:
       - "1000"
     # valkey(uid 999, gid 1000)가 private tmpfs에 gid 1000/0660 소켓을 만들고,

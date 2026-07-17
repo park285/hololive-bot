@@ -53,6 +53,11 @@ if "max_connections=60" not in [str(item) for item in command]:
     print("[FAIL] holo-postgres command must pin max_connections=60 with the PG18 memory GUCs")
     sys.exit(1)
 
+valkey = services.get("valkey-cache", {})
+if valkey.get("user") != "999:1000":
+    print("[FAIL] valkey-cache must run as 999:1000 so the unix socket stays gid-1000/0660")
+    sys.exit(1)
+
 dashboard = services.get("admin-dashboard", {})
 ports = dashboard.get("ports", []) or []
 if not any("127.0.0.1" in str(port) and "30190" in str(port) for port in ports):
