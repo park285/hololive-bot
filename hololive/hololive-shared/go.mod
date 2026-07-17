@@ -31,7 +31,7 @@ require (
 	github.com/gin-contrib/gzip v1.2.6
 	github.com/moby/moby/api v1.54.2
 	github.com/moby/moby/client v0.4.1
-	github.com/park285/iris-client-go v0.29.1-0.20260716085200-d727f1ae9416
+	github.com/park285/iris-client-go v0.30.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.60.0

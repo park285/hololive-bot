@@ -60,7 +60,7 @@ func fetchMemberPhotosWithinBudget(parent, budgetCtx context.Context, entries []
 			state.markUncacheable()
 			break
 		}
-		if state.fetches >= calendarPhotoMaxFetches {
+		if state.wouldTruncate(e, result.photos) {
 			state.markUncacheable()
 			break
 		}
@@ -81,6 +81,15 @@ func newCalendarPhotoFetchState() *calendarPhotoFetchState {
 			diskCacheable:   true,
 		},
 	}
+}
+
+func (s *calendarPhotoFetchState) wouldTruncate(e domain.CalendarEntry, photos map[string]image.Image) bool {
+	return s.needsFetch(e, photos) && s.fetches >= calendarPhotoMaxFetches
+}
+
+func (s *calendarPhotoFetchState) needsFetch(e domain.CalendarEntry, photos map[string]image.Image) bool {
+	photoURL, ok := calendarEntryPhotoURL(e)
+	return ok && !s.alreadyFetchedOrAttempted(photoURL, photos)
 }
 
 func (s *calendarPhotoFetchState) fetch(ctx context.Context, e domain.CalendarEntry, photos map[string]image.Image) {
