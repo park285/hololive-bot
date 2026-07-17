@@ -167,6 +167,51 @@ func TestCalendarCardRendererGlobalPhotoFetchTruncationDoesNotPopulateCaches(t *
 	}
 }
 
+func calendarEntriesWithUniquePhotos(n int) []domain.CalendarEntry {
+	entries := make([]domain.CalendarEntry, 0, n)
+	for i := range n {
+		entries = append(entries, domain.CalendarEntry{
+			Member: &domain.Member{Photo: fmt.Sprintf("https://yt3.googleusercontent.com/avatar-%d=s88-c", i)},
+		})
+	}
+	return entries
+}
+
+func assertCapExhaustedFetchResultCacheable(t *testing.T, trailing ...domain.CalendarEntry) {
+	t.Helper()
+
+	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: "image/png"}
+	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
+
+	entries := append(calendarEntriesWithUniquePhotos(calendarPhotoMaxFetches), trailing...)
+	result, err := fetchMemberPhotos(context.Background(), entries)
+	if err != nil {
+		t.Fatalf("fetchMemberPhotos() error = %v", err)
+	}
+	if got, want := len(result.photos), calendarPhotoMaxFetches; got != want {
+		t.Fatalf("photos = %d, want %d", got, want)
+	}
+	if got, want := recorder.requests.Load(), int32(calendarPhotoMaxFetches); got != want {
+		t.Fatalf("photo requests = %d, want %d", got, want)
+	}
+	if !result.cachePolicy.memoryCacheable || !result.cachePolicy.diskCacheable {
+		t.Fatalf("complete result cachePolicy = %+v, want fully cacheable", result.cachePolicy)
+	}
+}
+
+func TestFetchMemberPhotosDuplicateURLAfterCapRemainsCacheable(t *testing.T) {
+	assertCapExhaustedFetchResultCacheable(t, domain.CalendarEntry{
+		Member: &domain.Member{Photo: "https://yt3.googleusercontent.com/avatar-0=s88-c"},
+	})
+}
+
+func TestFetchMemberPhotosPhotolessEntryAfterCapRemainsCacheable(t *testing.T) {
+	assertCapExhaustedFetchResultCacheable(t,
+		domain.CalendarEntry{Member: &domain.Member{}},
+		domain.CalendarEntry{},
+	)
+}
+
 func TestCalendarCardRendererOrdinaryPhotoFetchFailureStillPopulatesMemoryCache(t *testing.T) {
 	requests := 0
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
