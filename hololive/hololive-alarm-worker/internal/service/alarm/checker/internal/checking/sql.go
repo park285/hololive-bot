@@ -1,14 +1,12 @@
 package checking
 
-import "embed"
+import (
+	"embed"
+
+	"github.com/kapu/hololive-shared/pkg/sqlassets"
+)
 
 //go:embed queries/*
 var sqlAssets embed.FS
 
-func mustSQL(name string) string {
-	query, err := sqlAssets.ReadFile("queries/" + name)
-	if err != nil {
-		panic(err)
-	}
-	return string(query)
-}
+var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
