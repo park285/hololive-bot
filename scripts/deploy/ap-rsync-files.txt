@@ -126,6 +126,7 @@ hololive/hololive-shared/pkg/contracts/settings/contracts.go
 hololive/hololive-shared/pkg/contracts/subscription/types.go
 hololive/hololive-shared/pkg/contracts/trigger/errors.go
 hololive/hololive-shared/pkg/contracts/trigger/routes.go
+hololive/hololive-shared/pkg/ctxutil/sleep.go
 hololive/hololive-shared/pkg/domain/alarm.go
 hololive/hololive-shared/pkg/domain/alarm_dispatch_source.go
 hololive/hololive-shared/pkg/domain/alarm_persistence_identity.go
@@ -321,6 +322,7 @@ hololive/hololive-shared/pkg/providers/scraper_scheduler_options.go
 hololive/hololive-shared/pkg/providers/types.go
 hololive/hololive-shared/pkg/providers/youtube_producer_rate_limiter_provider.go
 hololive/hololive-shared/pkg/providers/youtube_providers.go
+hololive/hololive-shared/pkg/readiness/readiness.go
 hololive/hololive-shared/pkg/repository/template_repository.go
 hololive/hololive-shared/pkg/repository/sql.go
 hololive/hololive-shared/pkg/server/internal/httpserver/channel_ids.go
@@ -991,6 +993,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/queri
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/queries/repository_identity_0195_03.sql
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/queries/repository_source_posts_0063_01.sql
 hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/queries/repository_source_posts_0077_02.sql
+hololive/hololive-shared/pkg/sqlassets/sqlassets.go
 hololive/hololive-youtube-producer/internal/runtime/polltarget/queries/youtube_poll_target_tiering_0097_01.sql
 hololive/hololive-youtube-producer/internal/runtime/polltarget/queries/youtube_poll_target_tiering_0107_02.sql
 hololive/hololive-youtube-producer/internal/runtime/polltarget/queries/youtube_poll_target_tiering_0122_03.sql
