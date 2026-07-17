@@ -97,7 +97,14 @@ func (p *Probe) Evaluate(ctx context.Context) (ready bool, groups map[string]map
 	ready = true
 	for _, check := range p.checks {
 		ok := p.runCheck(ctx, check) == nil
-		groups[check.Group][check.Name] = ok
+		// NewProbe의 normalizeGroup 때문에 nil bucket은 실제로 나오지 않지만,
+		// NilAway는 그 원거리 불변식을 증명하지 못해 이 지역 guard가 필요하다.
+		groupChecks := groups[check.Group]
+		if groupChecks == nil {
+			groupChecks = map[string]bool{}
+			groups[check.Group] = groupChecks
+		}
+		groupChecks[check.Name] = ok
 		if !ok {
 			ready = false
 		}
