@@ -2,92 +2,40 @@ package readiness
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/health"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-const (
-	defaultProbeTimeout = 2 * time.Second
-
-	groupDependencies = "dependencies"
-	groupEgressFlags  = "egress_flags"
+type (
+	Check = sharedreadiness.Check
+	Probe = sharedreadiness.Probe
 )
 
-type Check struct {
-	Name  string
-	Group string
-	Probe func(context.Context) error
-}
-
-type Probe struct {
-	runtimeName string
-	timeout     time.Duration
-	checks      []Check
-}
-
 func NewProbe(runtimeName string, checks ...Check) *Probe {
-	filtered := make([]Check, 0, len(checks))
-	for _, check := range checks {
-		if check.Probe == nil {
-			continue
-		}
-		check.Name = strings.TrimSpace(check.Name)
-		if check.Name == "" {
-			continue
-		}
-		check.Group = normalizeGroup(check.Group)
-		filtered = append(filtered, check)
-	}
-	return &Probe{
-		runtimeName: strings.TrimSpace(runtimeName),
-		timeout:     defaultProbeTimeout,
-		checks:      filtered,
-	}
+	return sharedreadiness.NewProbe(runtimeName, checks...)
 }
 
 func PostgresCheck(db database.Client) Check {
-	return Check{
-		Name:  "postgres",
-		Group: groupDependencies,
-		Probe: func(ctx context.Context) error {
-			if db == nil {
-				return errors.New("postgres client not configured")
-			}
-			return db.Ping(ctx)
-		},
-	}
+	return sharedreadiness.PostgresCheck(db)
 }
 
 func ValkeyCheck(client cache.Client) Check {
-	return Check{
-		Name:  "valkey",
-		Group: groupDependencies,
-		Probe: func(ctx context.Context) error {
-			if client == nil {
-				return errors.New("valkey client not configured")
-			}
-			if !client.IsConnected(ctx) {
-				return errors.New("valkey ping failed")
-			}
-			return nil
-		},
-	}
+	return sharedreadiness.ValkeyCheck(client)
 }
 
 func BoolEnvNotFalseCheck(name, key string, defaultValue bool) Check {
 	return Check{
 		Name:  name,
-		Group: groupEgressFlags,
+		Group: sharedreadiness.GroupEgressFlags,
 		Probe: func(context.Context) error {
 			return checkBoolEnvNotFalse(key, defaultValue)
 		},
@@ -97,7 +45,7 @@ func BoolEnvNotFalseCheck(name, key string, defaultValue bool) Check {
 func ExplicitTrueBoolEnvCheck(name, key string) Check {
 	return Check{
 		Name:  name,
-		Group: groupEgressFlags,
+		Group: sharedreadiness.GroupEgressFlags,
 		Probe: func(context.Context) error {
 			value, explicit, err := lookupBoolEnv(key)
 			if err != nil {
@@ -113,37 +61,27 @@ func ExplicitTrueBoolEnvCheck(name, key string) Check {
 
 func PublicGinHandler(ctx context.Context, probe *Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		statusCode, payload := publicResponse(probe, requestContext(ctx, c))
+		statusCode, payload := publicResponse(probe, sharedreadiness.RequestContext(ctx, c))
 		c.JSON(statusCode, payload)
 	}
 }
 
 func InternalGinHandler(ctx context.Context, probe *Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		statusCode, payload := internalResponse(probe, requestContext(ctx, c))
+		statusCode, payload := internalResponse(probe, sharedreadiness.RequestContext(ctx, c))
 		c.JSON(statusCode, payload)
 	}
-}
-
-func requestContext(fallback context.Context, c *gin.Context) context.Context {
-	if c != nil && c.Request != nil && c.Request.Context() != nil {
-		return c.Request.Context()
-	}
-	if fallback != nil {
-		return fallback
-	}
-	return context.Background()
 }
 
 func internalResponse(probe *Probe, ctx context.Context) (statusCode int, payload map[string]any) {
 	base := health.Get()
 	if probe == nil {
-		return http.StatusServiceUnavailable, basePayload(base, "not_ready", "")
+		return http.StatusServiceUnavailable, runtimePayload(base, "not_ready", "")
 	}
 
-	ready, groups := probe.evaluate(ctx)
-	statusCode, status := readinessHTTPStatus(ready)
-	payload = basePayload(base, status, probe.runtimeName)
+	ready, groups := probe.Evaluate(ctx)
+	statusCode, status := sharedreadiness.HTTPStatus(ready)
+	payload = runtimePayload(base, status, probe.Name())
 	for group, checks := range groups {
 		payload[group] = checks
 	}
@@ -153,63 +91,15 @@ func internalResponse(probe *Probe, ctx context.Context) (statusCode int, payloa
 func publicResponse(probe *Probe, ctx context.Context) (statusCode int, payload map[string]any) {
 	base := health.Get()
 	if probe == nil {
-		return http.StatusServiceUnavailable, basePayload(base, "not_ready", "")
+		return http.StatusServiceUnavailable, runtimePayload(base, "not_ready", "")
 	}
-	ready, _ := probe.evaluate(ctx)
-	statusCode, status := readinessHTTPStatus(ready)
-	return statusCode, basePayload(base, status, probe.runtimeName)
+	ready, _ := probe.Evaluate(ctx)
+	statusCode, status := sharedreadiness.HTTPStatus(ready)
+	return statusCode, runtimePayload(base, status, probe.Name())
 }
 
-func (p *Probe) evaluate(ctx context.Context) (ready bool, groups map[string]map[string]bool) {
-	groups = map[string]map[string]bool{
-		groupDependencies: {},
-		groupEgressFlags:  {},
-	}
-	ready = true
-	for _, check := range p.checks {
-		ok := p.runCheck(ctx, check) == nil
-		groupChecks := groups[check.Group]
-		if groupChecks == nil {
-			groupChecks = map[string]bool{}
-			groups[check.Group] = groupChecks
-		}
-		groupChecks[check.Name] = ok
-		if !ok {
-			ready = false
-		}
-	}
-	return ready, groups
-}
-
-func (p *Probe) runCheck(ctx context.Context, check Check) error {
-	probeCtx, cancel := context.WithTimeout(ctx, p.timeout)
-	defer cancel()
-	return check.Probe(probeCtx)
-}
-
-func normalizeGroup(group string) string {
-	switch strings.TrimSpace(group) {
-	case groupEgressFlags:
-		return groupEgressFlags
-	default:
-		return groupDependencies
-	}
-}
-
-func readinessHTTPStatus(ready bool) (statusCode int, status string) {
-	if ready {
-		return http.StatusOK, "ready"
-	}
-	return http.StatusServiceUnavailable, "not_ready"
-}
-
-func basePayload(base health.Response, status, runtimeName string) map[string]any {
-	payload := map[string]any{
-		"status":     status,
-		"version":    base.Version,
-		"uptime":     base.Uptime,
-		"goroutines": base.Goroutines,
-	}
+func runtimePayload(base health.Response, status, runtimeName string) map[string]any {
+	payload := sharedreadiness.BasePayload(base, status)
 	if strings.TrimSpace(runtimeName) != "" {
 		payload["runtime"] = strings.TrimSpace(runtimeName)
 	}

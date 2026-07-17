@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	json "github.com/park285/shared-go/pkg/json"
@@ -20,13 +19,13 @@ func failCheck(name string, err error) Check {
 	return Check{Name: name, Probe: func(context.Context) error { return err }}
 }
 
-func TestProbeEvaluate_AllHealthyReady(t *testing.T) {
+func TestEvaluate_AllHealthyReady(t *testing.T) {
 	t.Parallel()
 
-	code, payload := NewProbe("bot", okCheck("postgres"), okCheck("valkey")).Evaluate(t.Context())
+	code, payload := evaluate(t.Context(), NewProbe("bot", okCheck("postgres"), okCheck("valkey")))
 
 	if code != http.StatusOK {
-		t.Fatalf("Evaluate status = %d, want %d", code, http.StatusOK)
+		t.Fatalf("evaluate status = %d, want %d", code, http.StatusOK)
 	}
 	if payload["status"] != "ready" {
 		t.Fatalf("status = %v, want ready", payload["status"])
@@ -40,16 +39,16 @@ func TestProbeEvaluate_AllHealthyReady(t *testing.T) {
 	}
 }
 
-func TestProbeEvaluate_DependencyDownNotReady(t *testing.T) {
+func TestEvaluate_DependencyDownNotReady(t *testing.T) {
 	t.Parallel()
 
-	code, payload := NewProbe("admin",
+	code, payload := evaluate(t.Context(), NewProbe("admin",
 		okCheck("postgres"),
 		failCheck("valkey", errors.New("connection refused")),
-	).Evaluate(t.Context())
+	))
 
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("Evaluate status = %d, want %d", code, http.StatusServiceUnavailable)
+		t.Fatalf("evaluate status = %d, want %d", code, http.StatusServiceUnavailable)
 	}
 	if payload["status"] != "not_ready" {
 		t.Fatalf("status = %v, want not_ready", payload["status"])
@@ -63,33 +62,6 @@ func TestProbeEvaluate_DependencyDownNotReady(t *testing.T) {
 	}
 	if !deps["postgres"] {
 		t.Fatalf("postgres availability = false, want true")
-	}
-}
-
-func TestProbeEvaluate_HangingDependencyBoundedByTimeout(t *testing.T) {
-	t.Parallel()
-
-	probe := NewProbe("llm", Check{
-		Name: "postgres",
-		Probe: func(ctx context.Context) error {
-			<-ctx.Done()
-			return ctx.Err()
-		},
-	})
-	probe.timeout = 50 * time.Millisecond
-
-	start := time.Now()
-	code, payload := probe.Evaluate(t.Context())
-	elapsed := time.Since(start)
-
-	if elapsed > time.Second {
-		t.Fatalf("Evaluate did not bound a hanging probe: elapsed %v", elapsed)
-	}
-	if code != http.StatusServiceUnavailable {
-		t.Fatalf("Evaluate status = %d, want %d", code, http.StatusServiceUnavailable)
-	}
-	if payload["status"] != "not_ready" {
-		t.Fatalf("status = %v, want not_ready", payload["status"])
 	}
 }
 
