@@ -83,6 +83,9 @@ services:
 
   youtube-producer-a:
     <<: *osaka-ap-service
+    build:
+      additional_contexts: !override
+        shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-../../../shared-go}
     container_name: hololive-youtube-producer-a
     environment:
       <<: *osaka-ap-env-common
