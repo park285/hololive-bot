@@ -130,7 +130,6 @@ hololive/hololive-shared/pkg/domain/alarm.go
 hololive/hololive-shared/pkg/domain/alarm_dispatch_source.go
 hololive/hololive-shared/pkg/domain/alarm_persistence_identity.go
 hololive/hololive-shared/pkg/domain/org_channel.go
-hololive/hololive-shared/pkg/domain/clarification.go
 hololive/hololive-shared/pkg/domain/command.go
 hololive/hololive-shared/pkg/domain/context.go
 hololive/hololive-shared/pkg/domain/internal/model/data/official_profiles_ko.json
@@ -284,7 +283,6 @@ hololive/hololive-shared/pkg/domain/internal/model/data/official_profiles_raw/wa
 hololive/hololive-shared/pkg/domain/internal/model/data/official_profiles_raw/yukihana-lamy.json
 hololive/hololive-shared/pkg/domain/internal/model/data/official_profiles_raw/yuzuki-choco.json
 hololive/hololive-shared/pkg/domain/internal/model/data/official_talents.json
-hololive/hololive-shared/pkg/domain/intent.go
 hololive/hololive-shared/pkg/domain/alarm_interfaces.go
 hololive/hololive-shared/pkg/domain/event_celebration.go
 hololive/hololive-shared/pkg/domain/event_major.go
