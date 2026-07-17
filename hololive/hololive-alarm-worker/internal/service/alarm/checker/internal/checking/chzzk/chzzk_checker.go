@@ -174,6 +174,8 @@ func buildChzzkLiveDedupKey(chzzkChannelID string, detectedAt time.Time) string 
 	return fmt.Sprintf("%s%s:%s", sharedalarmkeys.ChzzkLiveNotifiedKeyPrefix, chzzkChannelID, bucket.Format("20060102T1504"))
 }
 
+// 이 Stream.ID는 Notifier의 Valkey dedup claim 키 재료(notified:claim:*)라 방송당 값이
+// 고정돼야 한다. streamfeed 쪽 시간 bucket ID와 통일 금지 — 흔들리면 중복 알림이 나간다.
 func buildChzzkLiveStream(
 	youtubeChannelID string,
 	chzzkChannelID string,
