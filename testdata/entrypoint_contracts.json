@@ -8,7 +8,7 @@
   {
     "path": "hololive/hololive-api/cmd/healthcheck/main.go",
     "must_contain": [
-      "healthprobe.CheckURLInternal("
+      "healthcheckcli.Run("
     ]
   },
   {
@@ -20,7 +20,7 @@
   {
     "path": "hololive/hololive-alarm-worker/cmd/healthcheck/main.go",
     "must_contain": [
-      "healthprobe.CheckURLInternal("
+      "healthcheckcli.Run("
     ]
   },
   {
