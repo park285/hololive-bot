@@ -117,9 +117,7 @@ bash scripts/deploy/ap-completion-check_test.sh
 bash scripts/ci/race-parallel-guard_test.sh
 bash hololive/hololive-api/scripts/migrations/manual/repair_message_contract_074_082_test.sh
 echo "[pre-push] shell syntax sweep"
-while IFS= read -r script; do
-  bash -n "${script}"
-done < <(find scripts -type f -name '*.sh' | sort)
+bash scripts/ci/shell-syntax-sweep.sh
 
 admin_touch_guardrail="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
 if echo "$changed_files" | grep -q '^admin-dashboard/' && [[ -z "${RUN_ADMIN_TOUCH_GUARDRAIL+x}" ]]; then

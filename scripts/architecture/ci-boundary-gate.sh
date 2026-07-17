@@ -112,21 +112,7 @@ echo "[M2] error contract coverage check"
 echo
 
 echo "[CI] Run M4 compose env helper gate"
-bash -n "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" \
-    "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh" \
-    "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh" \
-    "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh" \
-    "${ROOT_DIR}/scripts/deploy/lib/health-gate_test.sh" \
-    "${ROOT_DIR}/scripts/deploy/compose.sh" \
-    "${ROOT_DIR}/scripts/deploy/test-compose-env.sh" \
-    "${ROOT_DIR}/scripts/deploy/test-compose-security-defaults.sh" \
-    "${ROOT_DIR}/scripts/deploy/test-compose-services.sh" \
-    "${ROOT_DIR}/scripts/deploy/test-three-runtime-topology.sh" \
-    "${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh" \
-    "${ROOT_DIR}/scripts/deploy/test-live-compat-cert-mount-scope.sh" \
-    "${ROOT_DIR}/scripts/deploy/test-removed-runtimes.sh" \
-    "${ROOT_DIR}/scripts/logs/remote-sync-main-logs.sh" \
-    "${ROOT_DIR}/scripts/logs/test-remote-sync-main-logs.sh"
+bash "${ROOT_DIR}/scripts/ci/shell-syntax-sweep.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-env.sh"
 "${ROOT_DIR}/scripts/deploy/lib/health-gate_test.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-security-defaults.sh"

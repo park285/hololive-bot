@@ -136,23 +136,6 @@ check_go_work_sync() (
     fi
 )
 
-check_gofmt() {
-    local go_files=()
-    local files
-    mapfile -t go_files < <(go_source_files)
-    if (( ${#go_files[@]} == 0 )); then
-        return 0
-    fi
-
-    files="$(gofmt -l "${go_files[@]}")"
-    if [[ -n "${files}" ]]; then
-        echo "gofmt required for:" >&2
-        echo "${files}" >&2
-        exit 1
-    fi
-}
-
-
 check_go_mod_tidy() {
     local module
 
@@ -315,7 +298,7 @@ else
 fi
 run_step "Go toolchain" check_go_toolchain
 run_step "go work sync drift" check_go_work_sync
-run_step "gofmt" check_gofmt
+run_step "gofmt" bash "${SCRIPT_DIR}/check-gofmt.sh"
 run_step "go fix drift" check_go_fix
 check_go_mod_tidy
 check_canonical_module_builds
