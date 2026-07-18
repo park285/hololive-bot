@@ -23,6 +23,7 @@ package alarmservice
 import (
 	"context"
 	stdErrors "errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -61,6 +62,10 @@ func NewAlarmService(
 	logger *slog.Logger,
 	advanceMinutes []int,
 ) (*AlarmService, error) {
+	if cacheClient == nil {
+		return nil, fmt.Errorf("new alarm service: cache client is nil")
+	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}

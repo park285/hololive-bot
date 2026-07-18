@@ -35,7 +35,20 @@ import (
 func TestInitAlarmDependenciesReturnsErrorWhenCacheIsNil(t *testing.T) {
 	t.Parallel()
 
-	t.Skip("InitAlarmDependencies currently accepts nil cache through notification.NewAlarmService; production changes are out of scope for this test-only task")
+	deps, err := InitAlarmDependencies(
+		config.ChzzkConfig{},
+		&config.TwitchConfig{},
+		[]int{10, 5, 1},
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		slog.New(slog.DiscardHandler),
+	)
+
+	require.Nil(t, deps)
+	require.EqualError(t, err, "provide alarm service: failed to create alarm service: new alarm service: cache client is nil")
 }
 
 func TestInitAlarmDependenciesBuildsAlarmDependencies(t *testing.T) {
