@@ -325,10 +325,8 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 }
 
 func TestPerAttemptTimeout(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(500 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-		writeAPIResponse(t, w, `{}`)
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
 	}))
 	defer server.Close()
 
@@ -363,10 +361,9 @@ func TestPerAttemptTimeout(t *testing.T) {
 func TestTimeoutMaxRetries(t *testing.T) {
 	var requestCount atomic.Int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
-		time.Sleep(300 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
+		<-r.Context().Done()
 	}))
 	defer server.Close()
 
@@ -555,9 +552,8 @@ func TestDistributedRateLimitBucket(t *testing.T) {
 }
 
 func TestParentContextCancel(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(2 * time.Second)
-		w.WriteHeader(http.StatusOK)
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
 	}))
 	defer server.Close()
 

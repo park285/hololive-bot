@@ -25,8 +25,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-dbtest"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"

@@ -33,6 +33,7 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -279,7 +280,7 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 		&config.TwitchConfig{},
 		[]int{5},
 		false,
-		nil,
+		cachemocks.NewLenientClient(),
 		nil,
 		memberData,
 		nil,
@@ -304,7 +305,7 @@ func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 			Scraper:      config.ScraperConfig{},
 		},
-		&sharedmodules.InfraModule{},
+		&sharedmodules.InfraModule{Cache: cachemocks.NewLenientClient()},
 		&holodex.Service{},
 		memberData,
 		nil,

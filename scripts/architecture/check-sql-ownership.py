@@ -24,6 +24,7 @@ EXCLUDED_DIRS = {
     "fixtures",
     "testdata",
     "dbtest",
+    "hololive-dbtest",
 }
 SQL_KEYWORD_RE = re.compile(
     r"\b("

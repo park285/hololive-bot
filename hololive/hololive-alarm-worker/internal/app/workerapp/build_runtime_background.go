@@ -8,6 +8,9 @@ import (
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+
+	"github.com/kapu/hololive-alarm-worker/internal/service/celebration"
+	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 )
 
 func buildCelebrationRunnerScheduler(
@@ -16,7 +19,7 @@ func buildCelebrationRunnerScheduler(
 	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
 ) runtimeAlarmScheduler {
-	if !parseBoolEnv("CELEBRATION_RUNNER_ENABLED", false) {
+	if !envconfig.ParseBool("CELEBRATION_RUNNER_ENABLED", false) {
 		if logger != nil {
 			logger.Info("Celebration runner disabled")
 		}
@@ -36,14 +39,10 @@ func buildCelebrationRunnerScheduler(
 		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
 	)
 
-	return &celebrationRunner{
-		memberRepo:   memberRepo,
-		alarmRepo:    alarmRepo,
-		publisher:    publisher,
-		logger:       logger,
-		checkHourKST: parseNonNegativeIntEnv("CELEBRATION_CHECK_HOUR_KST", 0),
-		runInterval:  parsePositiveDurationMSEnv("CELEBRATION_RUN_INTERVAL_MS", time.Hour),
-	}
+	return celebration.NewRunner(memberRepo, alarmRepo, publisher, logger, celebration.RunnerConfig{
+		CheckHourKST: envconfig.ParseNonNegativeInt("CELEBRATION_CHECK_HOUR_KST", 0),
+		RunInterval:  envconfig.ParsePositiveDurationMS("CELEBRATION_RUN_INTERVAL_MS", time.Hour),
+	})
 }
 
 func buildBirthdayStreamRunnerScheduler(
@@ -52,7 +51,7 @@ func buildBirthdayStreamRunnerScheduler(
 	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
 ) runtimeAlarmScheduler {
-	if !parseBoolEnv("BIRTHDAY_STREAM_RUNNER_ENABLED", false) {
+	if !envconfig.ParseBool("BIRTHDAY_STREAM_RUNNER_ENABLED", false) {
 		if logger != nil {
 			logger.Info("Birthday stream runner disabled")
 		}
@@ -72,13 +71,15 @@ func buildBirthdayStreamRunnerScheduler(
 		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
 	)
 
-	return &birthdayStreamRunner{
-		memberRepo:       memberRepo,
-		alarmRepo:        alarmRepo,
-		sessions:         &birthdayStreamPgxStore{db: infra.Postgres.GetPool()},
-		publisher:        publisher,
-		logger:           logger,
-		runInterval:      parsePositiveDurationMSEnv("BIRTHDAY_STREAM_POLL_INTERVAL_MS", 30*time.Minute),
-		sessionFreshness: parsePositiveDurationMSEnv("BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", 30*time.Minute),
-	}
+	return celebration.NewBirthdayStreamRunner(
+		memberRepo,
+		alarmRepo,
+		celebration.NewPgxStore(infra.Postgres.GetPool()),
+		publisher,
+		logger,
+		celebration.BirthdayStreamRunnerConfig{
+			RunInterval:      envconfig.ParsePositiveDurationMS("BIRTHDAY_STREAM_POLL_INTERVAL_MS", 30*time.Minute),
+			SessionFreshness: envconfig.ParsePositiveDurationMS("BIRTHDAY_STREAM_SESSION_FRESHNESS_MS", 30*time.Minute),
+		},
+	)
 }

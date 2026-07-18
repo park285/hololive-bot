@@ -16,6 +16,9 @@ import (
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
+	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
+	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 )
 
 func buildNotificationEgress(
@@ -52,18 +55,18 @@ func buildNotificationEgress(
 		return nil, err
 	}
 
-	runners := []namedRuntimeScheduler{
-		{name: "alarm-dispatch", scheduler: alarmDispatchRunner},
-		{name: "alarm-dispatch-maintenance", scheduler: buildAlarmDispatchMaintenanceRunner(infra, logger)},
-		{name: "youtube-outbox", scheduler: youtubeOutboxDispatcher},
-		{name: "notification-delivery-outbox", scheduler: deliveryOutboxDispatcher},
+	runners := []workerruntime.NamedScheduler{
+		{Name: "alarm-dispatch", Scheduler: alarmDispatchRunner},
+		{Name: "alarm-dispatch-maintenance", Scheduler: dispatchrun.NewMaintenanceRunner(infra, logger)},
+		{Name: "youtube-outbox", Scheduler: youtubeOutboxDispatcher},
+		{Name: "notification-delivery-outbox", Scheduler: deliveryOutboxDispatcher},
 	}
-	return notificationEgressRunner{
-		runners:      runners,
-		leaseCache:   infra.Cache,
-		leaseEnabled: parseBoolEnv("ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
-		logger:       logger,
-	}, nil
+	return workerruntime.NewNotificationEgressRunner(
+		runners,
+		infra.Cache,
+		envconfig.ParseBool("ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
+		logger,
+	), nil
 }
 
 func buildDeliveryOutboxDispatcher(
@@ -71,7 +74,7 @@ func buildDeliveryOutboxDispatcher(
 	sender delivery.MessageSender,
 	logger *slog.Logger,
 ) (runtimeAlarmScheduler, error) {
-	if !parseBoolEnv("DELIVERY_DISPATCHER_ENABLED", true) {
+	if !envconfig.ParseBool("DELIVERY_DISPATCHER_ENABLED", true) {
 		if logger != nil {
 			logger.Info("Notification delivery outbox dispatcher disabled")
 		}
@@ -87,18 +90,15 @@ func buildDeliveryOutboxDispatcher(
 		logger,
 		&dispatcherConfig,
 	)
-	return deliveryOutboxDispatcherRunner{
-		dispatcher: dispatcher,
-		logger:     logger,
-	}, nil
+	return workerruntime.NewDeliveryOutboxDispatcherRunner(dispatcher, logger), nil
 }
 
 func buildAlarmDispatchRunner(
 	infra *sharedmodules.InfraModule,
-	sender alarmDispatchSender,
+	sender dispatchrun.Sender,
 	logger *slog.Logger,
 ) (runtimeAlarmScheduler, error) {
-	if !parseBoolEnv("ALARM_DISPATCH_CONSUMER_ENABLED", true) {
+	if !envconfig.ParseBool("ALARM_DISPATCH_CONSUMER_ENABLED", true) {
 		if logger != nil {
 			logger.Info("Alarm dispatch consumer disabled")
 		}
@@ -114,34 +114,44 @@ func buildAlarmDispatchRunner(
 		return nil, fmt.Errorf("postgres is required")
 	}
 
-	maxBatch := parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50)
-	lease := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
-	quarantineThreshold := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_QUARANTINE_THRESHOLD_SECONDS", 3*lease)
-	return &alarmDispatchRunner{
-		consumer: dispatchoutbox.NewConsumer(
-			dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
-			logger,
-			dispatchoutbox.WithLease(lease),
-			dispatchoutbox.WithQuarantineThreshold(quarantineThreshold),
-			dispatchoutbox.WithRecoveryInterval(parsePositiveDurationMSEnv("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", 30*time.Second)),
-			dispatchoutbox.WithRecoveryBatchSize(parsePositiveIntEnv("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", 100)),
-			dispatchoutbox.WithClaimKeyReleaser(infra.Cache),
-		),
-		sender:             sender,
-		renderer:           template.NewRenderer(infra.Postgres.GetPool(), logger),
-		messageStrings:     alarmDispatchMessageStrings(infra, logger),
-		idleWaiter:         newAlarmDispatchWakeupWaiter(infra.Cache, logger),
-		karingEnabled:      parseAlarmDispatchKaringEnabled(),
-		consumerMode:       "pg",
-		postSendQuarantine: true,
-		maxBatch:           maxBatch,
-		maxBatchesPerWake:  parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", 20),
-		logger:             logger,
-	}, nil
+	consumer := newAlarmDispatchConsumer(infra, logger)
+	return dispatchrun.NewRunner(
+		consumer,
+		sender,
+		template.NewRenderer(infra.Postgres.GetPool(), logger),
+		alarmDispatchMessageStrings(infra, logger),
+		dispatchrun.NewWakeupWaiter(infra.Cache, logger),
+		alarmDispatchRunnerConfig(),
+		logger,
+	), nil
+}
+
+func newAlarmDispatchConsumer(infra *sharedmodules.InfraModule, logger *slog.Logger) *dispatchoutbox.Consumer {
+	lease := envconfig.ParsePositiveDurationSeconds("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
+	quarantineThreshold := envconfig.ParsePositiveDurationSeconds("ALARM_DISPATCH_QUARANTINE_THRESHOLD_SECONDS", 3*lease)
+	return dispatchoutbox.NewConsumer(
+		dispatchoutbox.NewPgxRepository(infra.Postgres, logger),
+		logger,
+		dispatchoutbox.WithLease(lease),
+		dispatchoutbox.WithQuarantineThreshold(quarantineThreshold),
+		dispatchoutbox.WithRecoveryInterval(envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", 30*time.Second)),
+		dispatchoutbox.WithRecoveryBatchSize(envconfig.ParsePositiveInt("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", 100)),
+		dispatchoutbox.WithClaimKeyReleaser(infra.Cache),
+	)
+}
+
+func alarmDispatchRunnerConfig() dispatchrun.RunnerConfig {
+	return dispatchrun.RunnerConfig{
+		KaringEnabled:      parseAlarmDispatchKaringEnabled(),
+		ConsumerMode:       "pg",
+		PostSendQuarantine: true,
+		MaxBatch:           envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_BATCH", 50),
+		MaxBatchesPerWake:  envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", 20),
+	}
 }
 
 func parseAlarmDispatchKaringEnabled() bool {
-	return parseBoolEnv("ALARM_DISPATCH_KARING_ENABLED", false)
+	return envconfig.ParseBool("ALARM_DISPATCH_KARING_ENABLED", false)
 }
 
 func alarmDispatchMessageStrings(infra *sharedmodules.InfraModule, logger *slog.Logger) *messagestrings.Store {
@@ -156,10 +166,10 @@ func alarmDispatchMessageStrings(infra *sharedmodules.InfraModule, logger *slog.
 }
 
 func buildYouTubeOutboxSender(irisSender *egress.IrisMessageSender, messageStrings *messagestrings.Store) delivery.MessageSender {
-	if !parseBoolEnv("YOUTUBE_OUTBOX_KARING_ENABLED", false) {
+	if !envconfig.ParseBool("YOUTUBE_OUTBOX_KARING_ENABLED", false) {
 		return irisSender
 	}
-	return newYouTubeOutboxKaringSender(irisSender, messageStrings)
+	return dispatchrun.NewYouTubeOutboxKaringSender(irisSender, messageStrings)
 }
 
 func buildYouTubeOutboxDispatcher(
@@ -167,7 +177,7 @@ func buildYouTubeOutboxDispatcher(
 	sender delivery.MessageSender,
 	logger *slog.Logger,
 ) (runtimeAlarmScheduler, error) {
-	if !parseBoolEnv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", false) {
+	if !envconfig.ParseBool("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", false) {
 		if logger != nil {
 			logger.Info("YouTube outbox dispatcher disabled")
 		}
@@ -186,8 +196,5 @@ func buildYouTubeOutboxDispatcher(
 		logger,
 		&dispatchConfig,
 	)
-	return youtubeOutboxDispatcherRunner{
-		dispatcher: dispatcher,
-		logger:     logger,
-	}, nil
+	return workerruntime.NewYouTubeOutboxDispatcherRunner(dispatcher, logger), nil
 }

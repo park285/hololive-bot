@@ -8,6 +8,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 |--------|----------|------|------|------|
 | `hololive-alarm-worker` | Go 1.26 | `hololive/hololive-alarm-worker/` | Alarm checker, dispatch queue consumer, and proactive egress worker | 30007 |
 | `hololive-api` | Go 1.26 | `hololive/hololive-api/` | Unified runtime hosting bot/admin/llm planes in one process | 30001/30003/30006 |
+| `hololive-dbtest` | Go 1.26 | `hololive/hololive-dbtest/` | PostgreSQL testcontainers harness and production migration replay support | - |
 | `hololive-youtube-producer` | Go 1.26 | `hololive/hololive-youtube-producer/` | YouTube producer AP runtime: primary/backfill polling, outbox production, active-active coordination (Seoul b + main-host c + Osaka host-native a/d), readiness, and Holodex photo sync | 30005/30015/30025/30035 |
 | `hololive-shared` | Go 1.26 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.26 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |

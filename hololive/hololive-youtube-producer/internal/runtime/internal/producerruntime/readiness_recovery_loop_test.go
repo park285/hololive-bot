@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -116,23 +117,27 @@ func TestRecoveryLoopRespectsCancellation(t *testing.T) {
 }
 
 func TestRecoveryLoopIdleWhenLeaseAvailable(t *testing.T) {
-	state := readiness.New("youtube-producer", readiness.Features{ActiveActiveEnabled: true})
-	state.MarkRunning()
-	state.MarkLeaseAvailable()
-	claimer := &recoveryLoopClaimer{
-		responses: []recoveryLoopClaimResponse{
-			{status: poller.JobClaimStatus{Result: poller.JobClaimAcquired}, claim: &recoveryLoopClaim{}},
-		},
-	}
+	synctest.Test(t, func(t *testing.T) {
+		state := readiness.New("youtube-producer", readiness.Features{ActiveActiveEnabled: true})
+		state.MarkRunning()
+		state.MarkLeaseAvailable()
+		claimer := &recoveryLoopClaimer{
+			responses: []recoveryLoopClaimResponse{
+				{status: poller.JobClaimStatus{Result: poller.JobClaimAcquired}, claim: &recoveryLoopClaim{}},
+			},
+		}
 
-	stop := startRecoveryLoop(t.Context(), claimer, state, 50*time.Millisecond, 200*time.Millisecond, nil, nil)
-	defer stop()
-	time.Sleep(500 * time.Millisecond)
+		stop := startRecoveryLoop(t.Context(), claimer, state, 50*time.Millisecond, 200*time.Millisecond, nil, nil)
+		defer stop()
+		for range 10 {
+			time.Sleep(50 * time.Millisecond)
+		}
 
-	require.LessOrEqual(t, claimer.calls.Load(), int64(1))
-	_, payload := state.Response()
-	require.Equal(t, true, payload["valkey_available"])
-	require.Equal(t, false, payload["scraping_paused"])
+		require.LessOrEqual(t, claimer.calls.Load(), int64(1))
+		_, payload := state.Response()
+		require.Equal(t, true, payload["valkey_available"])
+		require.Equal(t, false, payload["scraping_paused"])
+	})
 }
 
 func TestRecoveryLoopPeerOwnedTreatedAsAvailable(t *testing.T) {
@@ -175,19 +180,23 @@ func TestRecoveryLoopInvokesOnResumeOnTransition(t *testing.T) {
 }
 
 func TestRecoveryLoopDoesNotInvokeOnResumeWhenAlreadyAvailable(t *testing.T) {
-	state := readiness.New("youtube-producer", readiness.Features{ActiveActiveEnabled: true})
-	state.MarkRunning()
-	state.MarkLeaseAvailable()
-	claimer := &recoveryLoopClaimer{
-		responses: []recoveryLoopClaimResponse{
-			{status: poller.JobClaimStatus{Result: poller.JobClaimAcquired}, claim: &recoveryLoopClaim{}},
-		},
-	}
-	var resumeCalls atomic.Int64
-	stop := startRecoveryLoop(t.Context(), claimer, state, 50*time.Millisecond, 200*time.Millisecond, nil, func() {
-		resumeCalls.Add(1)
+	synctest.Test(t, func(t *testing.T) {
+		state := readiness.New("youtube-producer", readiness.Features{ActiveActiveEnabled: true})
+		state.MarkRunning()
+		state.MarkLeaseAvailable()
+		claimer := &recoveryLoopClaimer{
+			responses: []recoveryLoopClaimResponse{
+				{status: poller.JobClaimStatus{Result: poller.JobClaimAcquired}, claim: &recoveryLoopClaim{}},
+			},
+		}
+		var resumeCalls atomic.Int64
+		stop := startRecoveryLoop(t.Context(), claimer, state, 50*time.Millisecond, 200*time.Millisecond, nil, func() {
+			resumeCalls.Add(1)
+		})
+		defer stop()
+		for range 10 {
+			time.Sleep(50 * time.Millisecond)
+		}
+		require.Equal(t, int64(0), resumeCalls.Load())
 	})
-	defer stop()
-	time.Sleep(500 * time.Millisecond)
-	require.Equal(t, int64(0), resumeCalls.Load())
 }

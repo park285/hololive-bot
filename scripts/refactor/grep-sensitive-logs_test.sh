@@ -18,7 +18,7 @@ write_fixture() {
   local name="$1"
   local statement="$2"
   local root="${TMP_ROOT}/${name}/iris-client-go"
-  mkdir -p "${root}/internal/client"
+  mkdir -p "${root}/internal/client/transport"
   {
     printf 'package client\n\n'
     printf 'func (e *HTTPError) LogValue() any {\n'
@@ -26,7 +26,7 @@ write_fixture() {
     printf '\t\t%s\n' "${statement}"
     printf '\t}\n'
     printf '}\n'
-  } >"${root}/internal/client/errors.go"
+  } >"${root}/internal/client/transport/errors.go"
   printf '%s\n' "${root}"
 }
 

@@ -55,3 +55,5 @@ require (
 )
 
 replace github.com/kapu/hololive-shared => ../../hololive/hololive-shared
+
+replace github.com/kapu/hololive-dbtest => ../../hololive/hololive-dbtest

@@ -19,6 +19,7 @@ mapfile -t WORKSPACE_GO_PACKAGES < <(go_workspace_package_patterns)
 GO_PACKAGES=()
 source "${SCRIPT_DIR}/local-ci-packages.sh"
 source "${SCRIPT_DIR}/local-ci-gofix.sh"
+source "${SCRIPT_DIR}/local-ci-integration.sh"
 
 LOCAL_CI_GO_SCOPE="${LOCAL_CI_GO_SCOPE:-all}"
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
@@ -26,6 +27,8 @@ RUN_RACE_TESTS="${RUN_RACE_TESTS:-true}"
 RUN_NILAWAY="${RUN_NILAWAY:-true}"
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}"
 RUN_ADMIN_TOUCH_GUARDRAIL="${RUN_ADMIN_TOUCH_GUARDRAIL:-true}"
+RUN_INTEGRATION_TESTS="${RUN_INTEGRATION_TESTS:-false}"
+
 
 run_step() {
     local name="$1"
@@ -275,6 +278,20 @@ check_nilaway() {
     fi
 }
 
+
+if [[ "${1:-}" == "--integration-tests-only" ]]; then
+    if (( $# != 1 )); then
+        echo "usage: $0 [--integration-tests-only]" >&2
+        exit 2
+    fi
+    check_integration_tests
+    exit 0
+fi
+if (( $# != 0 )); then
+    echo "usage: $0 [--integration-tests-only]" >&2
+    exit 2
+fi
+
 run_step "local-ci package scope tests" ./scripts/ci/test-local-ci-packages.sh
 run_step "NilAway input guard tests" bash ./scripts/ci/nilaway-inputs_test.sh
 configure_go_packages
@@ -303,6 +320,7 @@ run_step "go fix drift" check_go_fix
 check_go_mod_tidy
 check_canonical_module_builds
 run_go_package_step "Go vet" go_mod_readonly go vet
+check_integration_tag_compilation
 check_staticcheck
 check_golangci_lint
 check_nilaway
@@ -332,13 +350,7 @@ else
     echo
 fi
 
-if [[ -n "${TEST_DATABASE_URL:-}" ]]; then
-    run_step "Alarm dispatch PostgreSQL integration test" \
-        go_mod_readonly go test -count=1 -tags=integration ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
-else
-    echo "[LOCAL CI] Skip PostgreSQL integration test: TEST_DATABASE_URL is not set"
-    echo
-fi
+check_integration_tests
 
 if [[ "${RUN_DEPENDENCY_HYGIENE}" == "true" ]]; then
     govulncheck_bin="$(ensure_govulncheck)"

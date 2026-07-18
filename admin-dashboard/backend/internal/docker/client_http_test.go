@@ -203,8 +203,11 @@ func TestListContainersSetsManagedAndStopBlocked(t *testing.T) {
 }
 
 func TestActionBudgetExceedsListBudget(t *testing.T) {
-	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(300 * time.Millisecond)
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/containers/json" {
+			<-r.Context().Done()
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := w.Write([]byte(`[]`)); err != nil {
 			t.Errorf("write docker response: %v", err)
@@ -222,9 +225,8 @@ func TestActionBudgetExceedsListBudget(t *testing.T) {
 }
 
 func TestActionTimesOutOnHungDocker(t *testing.T) {
-	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(300 * time.Millisecond)
-		w.WriteHeader(http.StatusNoContent)
+	client := newTestClient(t, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
 	}))
 	client.actionTimeout = 50 * time.Millisecond
 

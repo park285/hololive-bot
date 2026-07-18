@@ -28,7 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/internal/ctxutil"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/pkg/backoff"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -108,7 +108,7 @@ func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, maxRetries int) {
 		)
 
 		if attempt < maxRetries {
-			delay := retry.ComputeBackoffDelay(attempt-1, 5*time.Second, 2*time.Second)
+			delay := backoff.ComputeExponentialBackoff(attempt-1, 5*time.Second, 0, 2*time.Second)
 			if !ctxutil.SleepWithContext(ctx, delay) {
 				return
 			}

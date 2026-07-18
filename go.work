@@ -7,6 +7,7 @@ use (
 	./admin-dashboard/backend
 	./hololive/hololive-alarm-worker
 	./hololive/hololive-api
+	./hololive/hololive-dbtest
 	./hololive/hololive-shared
 	./hololive/hololive-youtube-producer
 )

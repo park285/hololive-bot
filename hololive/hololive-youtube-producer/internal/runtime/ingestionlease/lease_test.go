@@ -25,7 +25,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -107,20 +109,36 @@ func TestAcquireExclusive(t *testing.T) {
 }
 
 func TestLeaseRenewLoop(t *testing.T) {
-	cacheService := newTestCacheForLock(t)
-	l := acquireTestLease(t, cacheService, time.Second, 200*time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		var renewals atomic.Int64
+		cacheClient := &cachemocks.Client{
+			SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
+				return true, nil
+			},
+			CompareAndExpireFunc: func(context.Context, string, string, time.Duration) (bool, error) {
+				renewals.Add(1)
+				return true, nil
+			},
+		}
+		l := acquireTestLease(t, cacheClient, time.Second, 200*time.Millisecond)
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			l.StartRenewLoop(ctx, nil)
+		}()
 
-	go l.StartRenewLoop(t.Context(), nil)
+		for range 6 {
+			time.Sleep(200 * time.Millisecond)
+		}
+		synctest.Wait()
+		if got := renewals.Load(); got != 6 {
+			t.Fatalf("renewals = %d, want 6", got)
+		}
 
-	time.Sleep(1300 * time.Millisecond)
-
-	exists, err := cacheService.Exists(context.Background(), Key)
-	if err != nil {
-		t.Fatalf("exists check: %v", err)
-	}
-	if !exists {
-		t.Fatalf("lease key should still exist due to renew loop")
-	}
+		cancel()
+		<-done
+	})
 }
 
 func TestLeaseRenewLoopReportsOwnershipLost(t *testing.T) {

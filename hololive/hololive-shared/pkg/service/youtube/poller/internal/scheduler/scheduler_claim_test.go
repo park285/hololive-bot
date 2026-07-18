@@ -39,12 +39,13 @@ func TestRunJobClaimRenewLoop_StopsWhenPollContextCanceledBeforeTick(t *testing.
 	errCh := make(chan error, 1)
 	claim := &schedulerClaimHandleStub{}
 	done := make(chan struct{})
+	metrics := newTestMetrics(t)
 
 	pollCancel()
 
 	go func() {
 		defer close(done)
-		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, "videos", time.Minute, time.Hour, errCh, testMetrics, slog.Default())
+		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, "videos", time.Minute, time.Hour, errCh, metrics, slog.Default())
 	}()
 
 	select {
@@ -72,10 +73,11 @@ func TestRunJobClaimRenewLoop_RenewFailureCancelsPollAndReportsError(t *testing.
 		},
 	}
 	done := make(chan struct{})
+	metrics := newTestMetrics(t)
 
 	go func() {
 		defer close(done)
-		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, "videos", time.Minute, 5*time.Millisecond, errCh, testMetrics, slog.Default())
+		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, "videos", time.Minute, 5*time.Millisecond, errCh, metrics, slog.Default())
 	}()
 
 	select {
