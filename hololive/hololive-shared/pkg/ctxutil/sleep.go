@@ -18,46 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package domain
+package ctxutil
 
-import "github.com/park285/shared-go/pkg/stringutil"
-
-type MemberIntentType string
-
-// MemberIntentType 상수 목록.
-const (
-	// MemberIntentUnknown: 의도를 파악할 수 없음
-	MemberIntentUnknown MemberIntentType = "unknown"
-	// MemberIntentMemberInfo: 멤버 상세 정보 조회 의도
-	MemberIntentMemberInfo MemberIntentType = "member_info"
-	// MemberIntentOther: 그 외 기타 의도
-	MemberIntentOther MemberIntentType = "other"
+import (
+	"context"
+	"time"
 )
 
-type MemberIntent struct {
-	Intent     MemberIntentType `json:"intent"`
-	Confidence float64          `json:"confidence"`
-	Reasoning  string           `json:"reasoning"`
-}
-
-func NormalizeMemberIntent(raw string) MemberIntentType {
-	switch stringutil.Normalize(raw) {
-	case string(MemberIntentMemberInfo):
-		return MemberIntentMemberInfo
-	case string(MemberIntentOther):
-		return MemberIntentOther
-	default:
-		return MemberIntentUnknown
-	}
-}
-
-func (mic *MemberIntent) IsMemberInfoIntent() bool {
-	if mic == nil {
+func SleepWithContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
 		return false
+	case <-timer.C:
+		return true
 	}
-	intent := NormalizeMemberIntent(string(mic.Intent))
-	if intent != MemberIntentMemberInfo {
-		return false
-	}
-	return mic.Confidence >= 0.35
 }

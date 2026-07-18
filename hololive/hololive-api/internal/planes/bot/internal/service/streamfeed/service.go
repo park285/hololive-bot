@@ -331,6 +331,8 @@ func findLiveStreamByChannel(streams []*domain.Stream, channelID string) *domain
 	return nil
 }
 
+// 피드 표시용 임시 ID로, live는 분 단위 bucket이라 값이 매분 바뀐다. dedup/저장 키 사용 금지 —
+// alarm-worker의 stable identity(chzzk_checker.go)와 다른 것이 의도다.
 func buildChzzkStreamID(chzzkChannelID, kind, title string, at time.Time) string {
 	seed := strings.Join([]string{
 		strings.TrimSpace(chzzkChannelID),

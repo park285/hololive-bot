@@ -4,7 +4,6 @@
 
 ## Context
 
-- **Plan**: `/home/kapu/.claude/plans/dazzling-scribbling-tower.md` → P4
 - **Branch**: `refactor/p4-scraping-split` (in `hololive-bot` submodule)
 - **Scope**: `hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/`
 - **Goal**: 35 source files, 5,352 LOC flat package → cohesive sub-packages

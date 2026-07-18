@@ -1,5 +1,7 @@
 # 2026-05-22 — HTTP server lifecycle 5 모듈 차이 분석 (Phase 2.B.3 진입 전)
 
+> Historical document (퇴역한 5-runtime 모듈 기준 기록). Do not use as the current source of truth. See `docs/current/PROJECT_MAP.md`.
+
 본 문서는 5 모듈의 listen+shutdown+signal 패턴을 비교하고 hololive-shared 의 기존 라우터 helper (`httpserver.RuntimeRouterOptions`, `NewHealthOnlyRuntimeRouter`) 를 어디까지 확장하면 단일 helper 로 흡수 가능한지 평가한다. 본 문서는 decision 만, helper 구현은 별도 task.
 
 ## 1. 5 모듈 lifecycle 카탈로그

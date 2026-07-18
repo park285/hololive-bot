@@ -49,10 +49,7 @@ jobs:
             hololive/*/go.sum
 
       - name: Shell syntax
-        run: |
-          while IFS= read -r script; do
-            bash -n "$script"
-          done < <(find scripts -type f -name '*.sh' | sort)
+        run: bash scripts/ci/shell-syntax-sweep.sh
 
       - name: Secret-free Go compile smoke
         env:
@@ -70,15 +67,4 @@ jobs:
           done
 
       - name: gofmt
-        run: |
-          mapfile -t files < <(find . -path './.git' -prune -o -name '*.go' -print)
-          if (( ${#files[@]} == 0 )); then
-            exit 0
-          fi
-
-          unformatted="$(gofmt -l "${files[@]}")"
-          if [[ -n "${unformatted}" ]]; then
-            echo "::error::gofmt required for the following files:"
-            echo "${unformatted}"
-            exit 1
-          fi
+        run: bash scripts/ci/check-gofmt.sh

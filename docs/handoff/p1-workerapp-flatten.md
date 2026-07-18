@@ -4,7 +4,6 @@
 
 ## Context
 
-- **Plan**: `/home/kapu/.claude/plans/dazzling-scribbling-tower.md` → P1 섹션
 - **Branch**: `refactor/p1-workerapp-flatten` (in `hololive/hololive-alarm-worker` submodule)
 - **Commit**: `71554f2d refactor: workerapp double-internal 제거`
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/ctxutil"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -172,13 +173,5 @@ func (w *alarmDispatchWakeupWaiter) effectiveSleep() func(context.Context, time.
 }
 
 func sleepContext(ctx context.Context, d time.Duration) bool {
-	// crosscutting:allow backoff 계산은 shared helper가 소유하며 여기서는 취소 가능한 대기만 수행한다.
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
+	return ctxutil.SleepWithContext(ctx, d)
 }

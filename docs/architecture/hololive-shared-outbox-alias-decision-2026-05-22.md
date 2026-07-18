@@ -1,5 +1,7 @@
 # 2026-05-22 — hololive-shared outbox alias 정책 결정 (Phase 2.A.2)
 
+> Historical document (퇴역한 5-runtime 모듈 기준 기록). Do not use as the current source of truth. See `docs/current/PROJECT_MAP.md`.
+
 본 문서는 `docs/agent-workflows/plans/2026-05-21-monorepo-refactor-master.md` 의 Phase 2.A.2 결정 기록이다. 대상은 `hololive/hololive-shared/pkg/service/youtube/outbox/outbox.go` 의 public re-export surface 이며, `internal/delivery` 구현 타입과 상수, 생성 함수가 `outbox` 패키지에서 외부 API 로 다시 노출되는 현재 정책을 유지할지 축소할지 결정한다.
 
 ## 배경

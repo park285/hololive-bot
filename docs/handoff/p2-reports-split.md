@@ -4,7 +4,6 @@
 
 ## Context
 
-- **Plan**: `/home/kapu/.claude/plans/dazzling-scribbling-tower.md` → P2 섹션
 - **Branch**: `refactor/p2-reports-split` (in `hololive/hololive-youtube-producer` submodule)
 - **Scope**: `hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/`
 - **Goal**: 37파일 flat package를 `shared/` + 8개 report-type sub-package로 분리

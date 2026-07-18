@@ -1,5 +1,7 @@
 # Three Runtime Consolidation Plan
 
+> 완료됨 (2026-06-27 cutover) — `docs/runbook_execution/THREE_RUNTIME_CUTOVER_20260627.md` 참조. 아래 본문은 계획 당시(5-runtime 기준) 기록입니다.
+
 ## 상태
 
 이 문서는 아직 `docs/current` SSOT가 아닙니다. 현재 운영 구조는 5개 Go runtime이며, 본 문서는 3개 runtime으로 줄이기 위한 코드 레벨 목표와 migration guardrail을 고정합니다.

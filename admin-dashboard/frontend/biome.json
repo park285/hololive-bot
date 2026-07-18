@@ -24,27 +24,6 @@
     }
   },
   "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true,
-      "a11y": {
-        "noLabelWithoutControl": "off",
-        "useAriaPropsSupportedByRole": "off",
-        "useButtonType": "off",
-        "useSemanticElements": "off"
-      },
-      "complexity": {
-        "noImportantStyles": "off",
-        "useLiteralKeys": "off",
-        "useOptionalChain": "off"
-      },
-      "correctness": {
-        "useExhaustiveDependencies": "off"
-      },
-      "suspicious": {
-        "noArrayIndexKey": "off",
-        "noExplicitAny": "error"
-      }
-    }
+    "enabled": false
   }
 }

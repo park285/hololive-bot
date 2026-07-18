@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/health"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
 const (
@@ -169,7 +170,7 @@ func (s *State) Response() (statusCode int, payload map[string]any) {
 	budgetEnabled := s.globalBudgetEnabled.Load()
 	budgetBackendAvailable := !budgetEnabled || s.budgetBackendAvailable.Load()
 	budgetExhausted, sourceCooldown, budgetCleanupIncomplete, affectedSources := s.budgetAdmissionPayload(budgetEnabled)
-	statusCode, status := readinessHTTPStatus(s.ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable))
+	statusCode, status := sharedreadiness.HTTPStatus(s.ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable))
 	response := s.responsePayload(base, status, leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable, budgetExhausted, sourceCooldown, budgetCleanupIncomplete, affectedSources)
 	s.addLeaseReason(response, leaseEnabled, leaseAvailable)
 	return statusCode, response
@@ -185,32 +186,23 @@ func (s *State) PublicResponse() (statusCode int, payload map[string]any) {
 	leaseEnabled := s.activeActiveEnabled
 	budgetEnabled := s.globalBudgetEnabled.Load()
 	budgetBackendAvailable := !budgetEnabled || s.budgetBackendAvailable.Load()
-	statusCode, status := readinessHTTPStatus(s.ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable))
+	statusCode, status := sharedreadiness.HTTPStatus(s.ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable))
 	return statusCode, publicReadinessPayload(base, status)
 }
 
 func publicReadinessPayload(base health.Response, status string) map[string]any {
-	return map[string]any{
-		"status":     status,
-		"version":    base.Version,
-		"uptime":     base.Uptime,
-		"goroutines": base.Goroutines,
-	}
+	return sharedreadiness.BasePayload(base, status)
 }
 
 func nilReadinessPayload(base health.Response) map[string]any {
-	return map[string]any{
-		"status":                    "not_ready",
-		"version":                   base.Version,
-		"uptime":                    base.Uptime,
-		"goroutines":                base.Goroutines,
-		"budget_backend_available":  true,
-		"budget_exhausted":          false,
-		"source_cooldown":           false,
-		"budget_cleanup_incomplete": false,
-		"affected_sources":          []string{},
-		"scraper_fetcher_engine":    defaultScraperFetcherEngine,
-	}
+	payload := sharedreadiness.BasePayload(base, "not_ready")
+	payload["budget_backend_available"] = true
+	payload["budget_exhausted"] = false
+	payload["source_cooldown"] = false
+	payload["budget_cleanup_incomplete"] = false
+	payload["affected_sources"] = []string{}
+	payload["scraper_fetcher_engine"] = defaultScraperFetcherEngine
+	return payload
 }
 
 func (s *State) ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackendAvailable bool) bool {
@@ -218,13 +210,6 @@ func (s *State) ready(leaseEnabled, leaseAvailable, budgetEnabled, budgetBackend
 		!s.shuttingDown.Load() &&
 		(!leaseEnabled || leaseAvailable) &&
 		(!budgetEnabled || budgetBackendAvailable)
-}
-
-func readinessHTTPStatus(ready bool) (statusCode int, status string) {
-	if ready {
-		return http.StatusOK, "ready"
-	}
-	return http.StatusServiceUnavailable, "not_ready"
 }
 
 func (s *State) responsePayload(
@@ -239,29 +224,25 @@ func (s *State) responsePayload(
 	budgetCleanupIncomplete bool,
 	affectedSources []string,
 ) map[string]any {
-	return map[string]any{
-		"status":                    status,
-		"version":                   base.Version,
-		"uptime":                    base.Uptime,
-		"goroutines":                base.Goroutines,
-		"runtime":                   s.runtimeName,
-		"http_server_started":       s.httpServerStarted.Load(),
-		"shutting_down":             s.shuttingDown.Load(),
-		"youtube_enabled":           s.youtubeEnabled,
-		"photo_sync_enabled":        s.photoSyncEnabled,
-		"mode":                      readinessMode(s.activeActiveEnabled),
-		"active_active":             s.activeActiveEnabled,
-		"instance_id":               s.instanceID,
-		"job_lease_enabled":         leaseEnabled,
-		"valkey_available":          !leaseEnabled || leaseAvailable,
-		"budget_backend_available":  budgetBackendAvailable,
-		"budget_exhausted":          budgetEnabled && budgetExhausted,
-		"source_cooldown":           budgetEnabled && sourceCooldown,
-		"budget_cleanup_incomplete": budgetEnabled && budgetCleanupIncomplete,
-		"affected_sources":          affectedSources,
-		"scraper_fetcher_engine":    s.currentScraperFetcherEngine(),
-		"scraping_paused":           (leaseEnabled && !leaseAvailable) || (budgetEnabled && !budgetBackendAvailable),
-	}
+	payload := sharedreadiness.BasePayload(base, status)
+	payload["runtime"] = s.runtimeName
+	payload["http_server_started"] = s.httpServerStarted.Load()
+	payload["shutting_down"] = s.shuttingDown.Load()
+	payload["youtube_enabled"] = s.youtubeEnabled
+	payload["photo_sync_enabled"] = s.photoSyncEnabled
+	payload["mode"] = readinessMode(s.activeActiveEnabled)
+	payload["active_active"] = s.activeActiveEnabled
+	payload["instance_id"] = s.instanceID
+	payload["job_lease_enabled"] = leaseEnabled
+	payload["valkey_available"] = !leaseEnabled || leaseAvailable
+	payload["budget_backend_available"] = budgetBackendAvailable
+	payload["budget_exhausted"] = budgetEnabled && budgetExhausted
+	payload["source_cooldown"] = budgetEnabled && sourceCooldown
+	payload["budget_cleanup_incomplete"] = budgetEnabled && budgetCleanupIncomplete
+	payload["affected_sources"] = affectedSources
+	payload["scraper_fetcher_engine"] = s.currentScraperFetcherEngine()
+	payload["scraping_paused"] = (leaseEnabled && !leaseAvailable) || (budgetEnabled && !budgetBackendAvailable)
+	return payload
 }
 
 func (s *State) addLeaseReason(response map[string]any, leaseEnabled, leaseAvailable bool) {
