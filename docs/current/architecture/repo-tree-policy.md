@@ -6,16 +6,25 @@ This document defines where repository-level files, docs, generated artifacts, l
 
 ## Root
 
-Root is reserved for repository entrypoints and workspace-level contracts:
+Root is reserved for repository entrypoints, workspace wiring, and repository-level config. Nothing else is tracked at root.
 
-- `README.md`
-- `AGENTS.md`
-- `go.work`, root `go.mod`, and `go.work.sum`
-- Docker Compose files
-- build, test, deploy, and architecture gate entry scripts
-- repository-level config such as `.gitignore`, `.golangci.yml`, `.go-version`, `.tool-versions`
+Allowed at root:
 
-Root must not accumulate local logs, backups, data dumps, generated review bundles, or unclassified design kits.
+- Entrypoints and readme: `README.md`, `AGENTS.md`, `LICENSE`
+- Go workspace: `go.work`, `go.work.sum`, root `go.mod`/`go.sum`, and `doc.go` (the root `package workspace` anchor)
+- Repository config: `.gitignore`, `.golangci.yml`, `.go-version`, `.tool-versions`, `.dockerignore`
+- Build entry script: `build-all.sh`
+- Canonical env sample: `.env.example` (region- and host-specific `.env.*.example` live beside their compose files under `deploy/compose/`)
+- Reserved local-runtime placeholders: `logs/`, `runtime-config/`, `artifacts/` (see §Local Runtime Data and §Artifacts)
+- Module and content directories: `.github/`, `hololive/`, `admin-dashboard/`, `deploy/`, `docs/`, `scripts/`, `internal/`
+
+Not at root — these were relocated and must not return:
+
+- Perf gate config → `scripts/perf/perf-budget.yaml`
+- Perf workload specs → `scripts/perf/workloads/`
+- Renovate config → `.github/renovate.json`
+- Workspace-level Go contract tests and their fixtures → `internal/workspace/` (with `internal/workspace/testdata/`); only `doc.go` stays at root as the package anchor
+- Local logs, backups, data dumps, generated review bundles, key/pem files, or unclassified design kits (covered by §Local Runtime Data and the artifact gate)
 
 ## Docs
 
