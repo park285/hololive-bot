@@ -24,7 +24,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -136,7 +138,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
@@ -210,7 +212,7 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
@@ -228,16 +230,25 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		t.Errorf("Expected status PENDING (for retry), got %s", updated.Status)
 	}
 
-	if updated.AttemptCount != 1 {
-		t.Errorf("Expected attempt_count 1, got %d", updated.AttemptCount)
-	}
-
-	if updated.NextAttemptAt.Before(time.Now()) {
-		t.Error("Expected next_attempt_at to be in the future")
-	}
-
 	if updated.LockedAt != nil {
 		t.Error("Expected locked_at to be nil after failure")
+	}
+
+	deliveries := fetchDeliveryRows(t, db, item.ID)
+	if len(deliveries) != 1 {
+		t.Fatalf("Expected 1 delivery row, got %d", len(deliveries))
+	}
+	if deliveries[0].Status != domain.OutboxStatusPending {
+		t.Errorf("Expected delivery status PENDING (for retry), got %s", deliveries[0].Status)
+	}
+	if deliveries[0].AttemptCount != 1 {
+		t.Errorf("Expected delivery attempt_count 1, got %d", deliveries[0].AttemptCount)
+	}
+	if deliveries[0].NextAttemptAt.Before(time.Now()) {
+		t.Error("Expected delivery next_attempt_at to be in the future")
+	}
+	if deliveries[0].LockedAt != nil {
+		t.Error("Expected delivery locked_at to be nil after failure")
 	}
 }
 
@@ -279,7 +290,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() {
@@ -343,7 +354,7 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
@@ -415,7 +426,7 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
@@ -491,7 +502,7 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
@@ -558,7 +569,7 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, &item).Error; err != nil {
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
 	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
@@ -795,10 +806,10 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		Error:         "recent failed",
 	}
 
-	if err := insertDeliveryTestRows(db, &oldFailed).Error; err != nil {
+	if err := insertDeliveryTestRows(db, oldFailed).Error; err != nil {
 		t.Fatalf("Failed to create old failed outbox item: %v", err)
 	}
-	if err := insertDeliveryTestRows(db, &recentFailed).Error; err != nil {
+	if err := insertDeliveryTestRows(db, recentFailed).Error; err != nil {
 		t.Fatalf("Failed to create recent failed outbox item: %v", err)
 	}
 
@@ -836,13 +847,21 @@ func setupCacheService(t *testing.T) *cache.Service {
 	t.Helper()
 
 	valkeyHost := os.Getenv("TEST_VALKEY_HOST")
+	valkeyPort := 6379
+	if valkeyAddr := os.Getenv("TEST_VALKEY_ADDR"); valkeyAddr != "" {
+		host, port, err := net.SplitHostPort(valkeyAddr)
+		require.NoError(t, err)
+		valkeyHost = host
+		valkeyPort, err = strconv.Atoi(port)
+		require.NoError(t, err)
+	}
 	if valkeyHost == "" {
 		valkeyHost = "localhost"
 	}
 
 	config := cache.Config{
 		Host:              valkeyHost,
-		Port:              6379,
+		Port:              valkeyPort,
 		DisableCache:      true,
 		ForceSingleClient: true,
 	}

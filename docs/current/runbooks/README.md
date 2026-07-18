@@ -17,6 +17,7 @@
 - `dlq-replay.md` - alarm dispatch DLQ 확인/재처리 기준
 - `release.md` - release checklist
 - `rollback.md` - rollback 기준
+- `integration-tests.md` - opt-in integration 테스트 주기 실행 경로
 - `../../runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md` - release notes template
 - `host-migration-root-to-kapu.md` - root → kapu 호스트 계정 풀 마이그레이션 절차
 
