@@ -32,6 +32,8 @@ echo "════════════════════════�
 echo "  pre-push quality gate"
 echo "════════════════════════════════════════"
 
+bash "${ROOT_DIR}/scripts/check-release-version.sh"
+
 if [[ -n "${BASE_SHA:-}" && -n "${HEAD_SHA:-}" ]]; then
   if ! changed_files="$(git diff --name-only "${BASE_SHA}..${HEAD_SHA}")"; then
     echo "failed to resolve exact pushed range ${BASE_SHA}..${HEAD_SHA}" >&2

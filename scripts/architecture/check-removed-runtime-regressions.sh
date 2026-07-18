@@ -14,6 +14,8 @@ references_flags=(--hidden)
 references_paths=("${ROOT_DIR}")
 references_globs=(
   '!.git/**'
+  # 변경 이력은 제거된 runtime 명칭을 보존하는 역사 문서다.
+  '!CHANGELOG.md'
   '!docs/history/settlement/**'
   '!docs/history/**'
   '!docs/superpowers/**'
