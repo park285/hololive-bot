@@ -27,7 +27,7 @@ func (c *recordingCommand) Execute(_ context.Context, _ *domain.CommandContext, 
 	for key := range params {
 		c.gotKeys = append(c.gotKeys, key)
 	}
-	if c.mutate {
+	if c.mutate && params != nil {
 		params["mutated"] = true
 	}
 	return c.err
