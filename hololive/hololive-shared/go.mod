@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
-	github.com/park285/shared-go v1.30.1
+	github.com/park285/shared-go v1.31.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
@@ -28,7 +28,7 @@ require (
 	github.com/gin-contrib/gzip v1.2.6
 	github.com/moby/moby/api v1.55.0
 	github.com/moby/moby/client v0.5.0
-	github.com/park285/iris-client-go v0.30.0
+	github.com/park285/iris-client-go v0.31.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.60.0
