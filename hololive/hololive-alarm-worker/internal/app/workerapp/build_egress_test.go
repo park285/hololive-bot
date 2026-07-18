@@ -105,11 +105,11 @@ func TestBuildAlarmDispatchRunnerDefaultsToPGWhenConsumerModeUnset(t *testing.T)
 	runner, ok := scheduler.(*dispatchrun.Runner)
 	require.True(t, ok)
 	assert.NotNil(t, runner)
-	config := alarmDispatchRunnerConfig()
-	assert.Equal(t, "pg", config.ConsumerMode)
-	assert.Equal(t, 7, config.MaxBatch)
-	assert.True(t, config.KaringEnabled)
-	assert.True(t, config.PostSendQuarantine)
+	runnerConfig := alarmDispatchRunnerConfig()
+	assert.Equal(t, "pg", runnerConfig.ConsumerMode)
+	assert.Equal(t, 7, runnerConfig.MaxBatch)
+	assert.True(t, runnerConfig.KaringEnabled)
+	assert.True(t, runnerConfig.PostSendQuarantine)
 }
 
 func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
@@ -150,12 +150,12 @@ func TestBuildAlarmDispatchRunnerWiresPGMode(t *testing.T) {
 	runner, ok := scheduler.(*dispatchrun.Runner)
 	require.True(t, ok)
 	assert.NotNil(t, runner)
-	config := alarmDispatchRunnerConfig()
-	assert.Equal(t, "pg", config.ConsumerMode)
-	assert.Equal(t, 9, config.MaxBatch)
-	assert.Equal(t, 3, config.MaxBatchesPerWake)
-	assert.False(t, config.KaringEnabled)
-	assert.True(t, config.PostSendQuarantine)
+	runnerConfig := alarmDispatchRunnerConfig()
+	assert.Equal(t, "pg", runnerConfig.ConsumerMode)
+	assert.Equal(t, 9, runnerConfig.MaxBatch)
+	assert.Equal(t, 3, runnerConfig.MaxBatchesPerWake)
+	assert.False(t, runnerConfig.KaringEnabled)
+	assert.True(t, runnerConfig.PostSendQuarantine)
 }
 
 func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
