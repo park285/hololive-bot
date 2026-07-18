@@ -213,7 +213,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 	})
 
 	t.Run("youtube iteration picks up updated alarm service targets", func(t *testing.T) {
-		alarmService, err := notification.NewAlarmService(nil, nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
+		alarmService, err := notification.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
 		require.NoError(t, err)
 
 		youtubeUpdater := &targetMinutesUpdaterStub{}
