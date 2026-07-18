@@ -20,6 +20,19 @@ if [[ ! -r "$MANIFEST" ]]; then
   exit 1
 fi
 
+# Dockerfile의 로컬 replace는 런타임 import 그래프에 없더라도 go mod download 전에
+# 대상 모듈의 metadata가 원격 build context에 존재해야 한다.
+required_context_files=(
+  hololive/hololive-dbtest/go.mod
+  hololive/hololive-dbtest/go.sum
+)
+for path in "${required_context_files[@]}"; do
+  if ! grep -qxF "$path" "$MANIFEST"; then
+    echo "[FAIL] ap-rsync-files.txt missing Docker build context dependency: $path" >&2
+    exit 1
+  fi
+done
+
 # Dockerfile이 실제 빌드하는 런타임 타겟만 검사한다. 운영 CLI(cmd/ops/...)는
 # 원격 AP 컨테이너에 포함되지 않으므로 매니페스트 대상이 아니다.
 # shared-go는 replace(../../../shared-go)로 로컬 워크스페이스를 쓰므로 그 의존 파일도
