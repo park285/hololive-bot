@@ -48,7 +48,6 @@ const DefaultMaxResponseBodyBytes = settings.DefaultMaxResponseBodyBytes
 
 const (
 	ScraperFetcherEngineNetHTTP         = settings.ScraperFetcherEngineNetHTTP
-	ScraperFetcherEngineGoScrapy        = settings.ScraperFetcherEngineGoScrapy
 	ScraperFetcherEngineBrowserSnapshot = settings.ScraperFetcherEngineBrowserSnapshot
 )
 

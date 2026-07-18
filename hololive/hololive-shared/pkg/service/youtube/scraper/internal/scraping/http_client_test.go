@@ -22,6 +22,7 @@ package scraping
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,4 +88,23 @@ func TestNetHTTPPageFetcherNilResponse(t *testing.T) {
 	_, err := fetcher.FetchPage(t.Context(), pageFetchRequest{URL: "https://youtube.example/@test/videos"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil response")
+}
+
+func TestNetHTTPPageFetcherReturnsFinalURLAfterRedirect(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/final", http.StatusFound)
+	})
+	mux.HandleFunc("/final", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		mustWriteResponse(t, w, "final body")
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := NewClient(WithHTTPClient(server.Client()))
+	resp, err := netHTTPPageFetcher{client: client}.FetchPage(t.Context(), pageFetchRequest{URL: server.URL + "/start"})
+
+	require.NoError(t, err)
+	assert.Equal(t, server.URL+"/final", resp.FinalURL)
 }

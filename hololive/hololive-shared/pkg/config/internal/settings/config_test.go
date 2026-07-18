@@ -879,17 +879,16 @@ func TestLoad_ScraperFetcherEngineDefault(t *testing.T) {
 	}
 }
 
-func TestLoad_ScraperFetcherEngineEnvOverride(t *testing.T) {
+func TestLoad_ScraperFetcherEngineRejectsRemovedGoScrapy(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "goscrapy")
 
-	config, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want removed goscrapy engine error")
 	}
-
-	if config.Scraper.FetcherEngine != ScraperFetcherEngineGoScrapy {
-		t.Fatalf("Scraper.FetcherEngine = %q, want %q", config.Scraper.FetcherEngine, ScraperFetcherEngineGoScrapy)
+	if !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE must be one of: nethttp (goscrapy has been removed)") {
+		t.Fatalf("Load() error = %v, want removed goscrapy engine error", err)
 	}
 }
 
@@ -914,7 +913,7 @@ func TestLoad_ScraperFetcherEngineRejectsBrowserSnapshot(t *testing.T) {
 	if err == nil {
 		t.Fatal("Load() error = nil, want invalid scraper fetcher engine error")
 	}
-	if !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE must be one of: nethttp, goscrapy") {
+	if !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE must be one of: nethttp (goscrapy has been removed)") {
 		t.Fatalf("Load() error = %v, want SCRAPER_FETCHER_ENGINE validation error", err)
 	}
 }

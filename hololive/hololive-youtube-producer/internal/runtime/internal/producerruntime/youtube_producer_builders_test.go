@@ -274,11 +274,11 @@ func TestBuildSharedYouTubeProducerClient_UsesConfiguredFetcherEngine(t *testing
 	t.Parallel()
 
 	client := polling.BuildSharedClient(&config.ScraperConfig{
-		FetcherEngine: config.ScraperFetcherEngineGoScrapy,
+		FetcherEngine: config.ScraperFetcherEngineNetHTTP,
 	}, nil, scraper.NewRateLimiter(time.Second))
 
 	require.NotNil(t, client)
-	assert.Equal(t, scraper.FetcherEngineGoScrapy, extractScraperFetcherEngine(t, client))
+	assert.Equal(t, scraper.FetcherEngineNetHTTP, extractScraperFetcherEngine(t, client))
 }
 
 func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {

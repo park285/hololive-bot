@@ -40,8 +40,8 @@
 | `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true` | must be true only on owning AP hosts | yes |
 | `POSTGRES_SSLMODE=verify-full` | required client verification mode for central and AP PostgreSQL TCP paths | yes |
 | `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem` | CA bundle rendered by OpenBao Agent and mounted read-only into producer containers | yes |
-| `SCRAPER_FETCHER_ENGINE` | container-local page fetch engine; defaults to `nethttp`, use `goscrapy` only for scoped evaluation | no |
-| `YOUTUBE_PRODUCER_A_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_B_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_C_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_D_FETCHER_ENGINE` | compose/OpenBao per-instance source for `SCRAPER_FETCHER_ENGINE`; default is `nethttp` | no |
+| `SCRAPER_FETCHER_ENGINE` | container-local page fetch engine; the only supported value is `nethttp` | no |
+| `YOUTUBE_PRODUCER_A_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_B_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_C_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_D_FETCHER_ENGINE` | compose/OpenBao per-instance source for `SCRAPER_FETCHER_ENGINE`; each value must be `nethttp` | no |
 | `SCRAPER_*` | poller intervals/workers | yes |
 | `SCRAPER_BACKFILL_ENABLED=false` | optional secondary poller identities for coverage; disabled by default | no |
 | `SCRAPER_BACKFILL_*_INTERVAL_SECONDS` | backfill poller intervals for shorts/community/live when enabled | no |
@@ -108,7 +108,7 @@ central host.
 - Startup logs include `scraper_fetcher_engine` on `ingestion_runtime_configured`.
 - `hololive_youtube_scraper_fetch_requests_total{engine,outcome,reason,status_code}`: scraper page fetch success/error outcomes by fetcher engine.
 - `hololive_youtube_scraper_fetch_duration_seconds{engine,outcome,reason}`: scraper page fetch latency by fetcher engine.
-- `hololive_youtube_scraper_fetch_fallback_total{from_engine,to_engine,reason}`: fallback count when `goscrapy` fails before a response and falls back to `nethttp`.
+- `hololive_youtube_scraper_fetch_fallback_total{from_engine,to_engine,reason}`: fallback count when a blocked fetch body triggers the configured browser snapshot fallback.
 - `youtube_poller_job_claim_total{poller,result}`: active-active claim distribution and Valkey fail-closed errors.
 - `youtube_poller_job_lease_renew_total{poller,result}`: lease renew success/error/lost signals.
 - `youtube_poller_job_mark_completed_total{poller,result}` and `youtube_poller_job_release_total{poller,result}`: completion/release ownership outcomes.
@@ -127,19 +127,6 @@ docker exec hololive-youtube-producer-b ./bin/healthcheck --body-api-key-env API
 # Main c host
 docker exec hololive-youtube-producer-c ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30095/metrics
 ```
-
-For `goscrapy` canary, compare `youtube-producer-b` before and after the scoped change:
-
-```text
-/ready: scraper_fetcher_engine=goscrapy, mode=active-active, valkey_available=true, scraping_paused=false
-hololive_youtube_scraper_fetch_requests_total{engine="goscrapy",outcome="success",...}
-hololive_youtube_scraper_fetch_requests_total{engine="goscrapy",outcome="error",...}
-hololive_youtube_scraper_fetch_fallback_total{from_engine="goscrapy",to_engine="nethttp",...}
-```
-
-Use `youtube-producer-c` as the `nethttp` baseline and `youtube-producer-b` as the `goscrapy` canary unless a rollout explicitly changes the per-instance `YOUTUBE_PRODUCER_*_FETCHER_ENGINE` values.
-
-Rollback restores `YOUTUBE_PRODUCER_B_FETCHER_ENGINE=nethttp`, rerenders the AP env, and redeploys only `youtube-producer-b`.
 
 ## Cadence tuning
 

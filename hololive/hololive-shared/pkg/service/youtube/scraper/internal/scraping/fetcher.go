@@ -13,7 +13,6 @@ type FetcherEngine string
 
 const (
 	FetcherEngineNetHTTP         FetcherEngine = "nethttp"
-	FetcherEngineGoScrapy        FetcherEngine = "goscrapy"
 	FetcherEngineBrowserSnapshot FetcherEngine = "browser_snapshot"
 )
 
@@ -41,8 +40,6 @@ func normalizeFetcherEngine(engine FetcherEngine) FetcherEngine {
 	switch engine {
 	case FetcherEngineNetHTTP:
 		return FetcherEngineNetHTTP
-	case FetcherEngineGoScrapy:
-		return FetcherEngineGoScrapy
 	case FetcherEngineBrowserSnapshot:
 		return FetcherEngineBrowserSnapshot
 	default:

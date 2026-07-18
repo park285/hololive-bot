@@ -65,7 +65,6 @@ const (
 	ReplayStatusNotReplay           = scraping.ReplayStatusNotReplay
 	ReplayStatusReplay              = scraping.ReplayStatusReplay
 	FetcherEngineNetHTTP            = scraping.FetcherEngineNetHTTP
-	FetcherEngineGoScrapy           = scraping.FetcherEngineGoScrapy
 	FetcherEngineBrowserSnapshot    = scraping.FetcherEngineBrowserSnapshot
 )
 

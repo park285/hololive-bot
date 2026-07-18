@@ -7,6 +7,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANIFEST="${1:-$ROOT_DIR/scripts/deploy/ap-rsync-files.txt}"
+if [[ "$MANIFEST" != /* ]]; then
+  MANIFEST="$PWD/$MANIFEST"
+fi
 
 if ! command -v go >/dev/null 2>&1; then
   echo "[WARN] go not found; skipping ap-rsync manifest completeness check" >&2
