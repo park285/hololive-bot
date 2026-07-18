@@ -18,10 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package domain
+package sampledata
 
-func templateSampleCoreData() map[TemplateKey]any {
-	data := map[TemplateKey]any{}
+import "github.com/kapu/hololive-shared/pkg/domain"
+
+func templateSampleCoreData() map[domain.TemplateKey]any {
+	data := map[domain.TemplateKey]any{}
 	addTemplateOutboxSingles(data)
 	addTemplateOutboxGroups(data)
 	addTemplateCommandStreamSamples(data)
@@ -34,21 +36,21 @@ func templateSampleCoreData() map[TemplateKey]any {
 	return data
 }
 
-func addTemplateCelebrationSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCelebrationBirthday] = &CelebrationDispatchPayload{
-		Kind:       CelebrationKindBirthday,
+func addTemplateCelebrationSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCelebrationBirthday] = &domain.CelebrationDispatchPayload{
+		Kind:       domain.CelebrationKindBirthday,
 		MemberName: "시라카미 후부키",
 		ChannelID:  "UCdn5BQ06XqgXoAxIhbqw5Rg",
 		Ordinal:    2,
 	}
-	data[TemplateKeyCelebrationAnniversary] = &CelebrationDispatchPayload{
-		Kind:       CelebrationKindAnniversary,
+	data[domain.TemplateKeyCelebrationAnniversary] = &domain.CelebrationDispatchPayload{
+		Kind:       domain.CelebrationKindAnniversary,
 		MemberName: "토키노 소라",
 		ChannelID:  "UCp6993wxpyDPHUpavwDFqgg",
 		Years:      7,
 	}
-	data[TemplateKeyCelebrationBirthdayStream] = &CelebrationDispatchPayload{
-		Kind:              CelebrationKindBirthdayStream,
+	data[domain.TemplateKeyCelebrationBirthdayStream] = &domain.CelebrationDispatchPayload{
+		Kind:              domain.CelebrationKindBirthdayStream,
 		MemberName:        "시라카미 후부키",
 		ChannelID:         "UCdn5BQ06XqgXoAxIhbqw5Rg",
 		VideoID:           "birthday-stream-1",
@@ -58,18 +60,18 @@ func addTemplateCelebrationSamples(data map[TemplateKey]any) {
 	}
 }
 
-func addTemplateMemberLookupSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdMemberNotLive] = map[string]any{
+func addTemplateMemberLookupSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCmdMemberNotLive] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 	}
-	data[TemplateKeyCmdMemberNoUpcoming] = map[string]any{
+	data[domain.TemplateKeyCmdMemberNoUpcoming] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		"Hours":         24,
 	}
-	data[TemplateKeyCmdMemberNotFound] = map[string]any{
+	data[domain.TemplateKeyCmdMemberNotFound] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 	}
-	data[TemplateKeyCmdAmbiguousMember] = map[string]any{
+	data[domain.TemplateKeyCmdAmbiguousMember] = map[string]any{
 		fieldPrefix:      "!",
 		"CommandExample": "알람 추가",
 		"FirstName":      "사쿠라 미코 (Hololive)",
@@ -80,19 +82,19 @@ func addTemplateMemberLookupSamples(data map[TemplateKey]any) {
 	}
 }
 
-func addTemplateStatsCalendarSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdStatsCount] = map[string]any{
+func addTemplateStatsCalendarSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCmdStatsCount] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		"Subscribers":   sampleSubs200Man,
 	}
-	data[TemplateKeyCmdStatsGainers] = map[string]any{
+	data[domain.TemplateKeyCmdStatsGainers] = map[string]any{
 		"Period": "주간",
 		"Gainers": []map[string]any{
 			{"Rank": 1, fieldMemberName: sampleMemberMiko, "Delta": "1만 2345", "Current": sampleSubs200Man},
 			{"Rank": 2, fieldMemberName: "호시마치 스이세이", "Delta": "8500", "Current": "205만"},
 		},
 	}
-	data[TemplateKeyCmdCalendar] = map[string]any{
+	data[domain.TemplateKeyCmdCalendar] = map[string]any{
 		"Year":     2026,
 		"Month":    6,
 		fieldCount: 3,
@@ -108,49 +110,49 @@ func addTemplateStatsCalendarSamples(data map[TemplateKey]any) {
 	}
 }
 
-func addTemplateOutboxSingles(data map[TemplateKey]any) {
-	data[TemplateKeyOutboxShorts] = map[string]any{
+func addTemplateOutboxSingles(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyOutboxShorts] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		fieldKind:       "NEW_SHORT",
 		fieldTitle:      "새 쇼츠 제목 - 귀여운 미코치",
 		fieldURL:        "https://www.youtube.com/shorts/abc123xyz",
 		"VideoID":       "abc123xyz",
 	}
-	data[TemplateKeyOutboxCommunity] = map[string]any{
+	data[domain.TemplateKeyOutboxCommunity] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		fieldKind:       "COMMUNITY_POST",
 		"ContentText":   "오늘 밤 10시에 방송합니다! 많이 놀러오세요~",
 		fieldURL:        "https://www.youtube.com/post/Ugkxyz123",
 		"PostID":        "Ugkxyz123",
 	}
-	data[TemplateKeyOutboxVideo] = map[string]any{
+	data[domain.TemplateKeyOutboxVideo] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		fieldKind:       "NEW_VIDEO",
 		fieldTitle:      "마인크래프트 건축 배틀 #미코라이브",
 		fieldURL:        "https://youtu.be/video123xyz",
 		"VideoID":       "video123xyz",
 	}
-	data[TemplateKeyOutboxMilestone] = map[string]any{
+	data[domain.TemplateKeyOutboxMilestone] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		fieldKind:       "MILESTONE",
 		"Milestone":     sampleSubs200Man,
 	}
 }
 
-func addTemplateOutboxGroups(data map[TemplateKey]any) {
-	data[TemplateKeyOutboxVideoGroup] = map[string]any{
+func addTemplateOutboxGroups(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyOutboxVideoGroup] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		fieldKind:       "NEW_VIDEO",
 		fieldCount:      2,
 		"Items":         templateOutboxVideoGroupItems(),
 	}
-	data[TemplateKeyOutboxShortsGroup] = map[string]any{
+	data[domain.TemplateKeyOutboxShortsGroup] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		fieldKind:       "NEW_SHORT",
 		fieldCount:      2,
 		"Items":         templateOutboxShortsGroupItems(),
 	}
-	data[TemplateKeyOutboxCommunityGroup] = map[string]any{
+	data[domain.TemplateKeyOutboxCommunityGroup] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		fieldKind:       "COMMUNITY_POST",
 		fieldCount:      2,
@@ -179,23 +181,23 @@ func templateOutboxCommunityGroupItems() []map[string]any {
 	}
 }
 
-func addTemplateCommandStreamSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdHelp] = map[string]any{
+func addTemplateCommandStreamSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCmdHelp] = map[string]any{
 		fieldEmoji:  map[string]string{"Mic": "🎙", "Star": "⭐", fieldBell: "🔔", "Clock": "⏰", "Sparkle": "✨"},
 		fieldPrefix: "!",
 	}
-	data[TemplateKeyCmdLiveStreams] = map[string]any{
+	data[domain.TemplateKeyCmdLiveStreams] = map[string]any{
 		fieldEmoji: map[string]string{"Live": "🔴"},
 		fieldCount: 3,
 		"Streams":  templateLiveStreamSamples(),
 	}
-	data[TemplateKeyCmdUpcomingStreams] = map[string]any{
+	data[domain.TemplateKeyCmdUpcomingStreams] = map[string]any{
 		fieldEmoji: map[string]string{"Calendar": "📅"},
 		fieldCount: 2,
 		"Hours":    24,
 		"Streams":  templateUpcomingStreamSamples(),
 	}
-	data[TemplateKeyCmdChannelSchedule] = map[string]any{
+	data[domain.TemplateKeyCmdChannelSchedule] = map[string]any{
 		fieldEmoji:       map[string]string{"Calendar": "📅"},
 		fieldChannelName: sampleMemberMiko,
 		"Days":           7,
@@ -224,36 +226,36 @@ func templateChannelScheduleSamples() []map[string]any {
 	}
 }
 
-func addTemplateCommandAlarmSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdAlarmList] = map[string]any{
+func addTemplateCommandAlarmSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCmdAlarmList] = map[string]any{
 		fieldEmoji:  map[string]string{fieldBell: "🔔"},
 		fieldCount:  3,
 		fieldPrefix: "!",
 		"Alarms":    []map[string]any{templateAlarmListItem()},
 	}
-	data[TemplateKeyCmdAlarmNotification] = templateAlarmNotificationSample(5)
-	data[TemplateKeyCmdAlarmLiveStarted] = templateAlarmNotificationSample(0)
-	data[TemplateKeyCmdAlarmNotificationGroup] = templateAlarmNotificationGroupSample()
-	data[TemplateKeyCmdAlarmAdded] = map[string]any{
+	data[domain.TemplateKeyCmdAlarmNotification] = templateAlarmNotificationSample(5)
+	data[domain.TemplateKeyCmdAlarmLiveStarted] = templateAlarmNotificationSample(0)
+	data[domain.TemplateKeyCmdAlarmNotificationGroup] = templateAlarmNotificationGroupSample()
+	data[domain.TemplateKeyCmdAlarmAdded] = map[string]any{
 		fieldEmoji:      map[string]string{fieldBell: "🔔", "Check": "✅"},
 		fieldMemberName: sampleMemberMiko,
 		"Added":         true,
 		fieldPrefix:     "!",
 		"NextStream":    templateNextStreamSample(),
 	}
-	data[TemplateKeyCmdAlarmRemoved] = map[string]any{
+	data[domain.TemplateKeyCmdAlarmRemoved] = map[string]any{
 		fieldEmoji:      map[string]string{fieldBell: "🔕"},
 		fieldMemberName: sampleMemberMiko,
 		"Removed":       true,
 	}
-	data[TemplateKeyCmdAlarmCleared] = map[string]any{
+	data[domain.TemplateKeyCmdAlarmCleared] = map[string]any{
 		fieldEmoji: map[string]string{fieldBell: "🔕"},
 		fieldCount: 5,
 	}
 }
 
-func addTemplateAlarmDispatchSamples(data map[TemplateKey]any) {
-	data[TemplateKeyAlarmDispatchNotification] = map[string]any{
+func addTemplateAlarmDispatchSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyAlarmDispatchNotification] = map[string]any{
 		"IsStarting":      false,
 		"IsScheduled":     false,
 		fieldMemberName:   sampleMemberMiko,
@@ -262,7 +264,7 @@ func addTemplateAlarmDispatchSamples(data map[TemplateKey]any) {
 		"ScheduleMessage": "",
 		fieldURL:          "https://youtu.be/stream123",
 	}
-	data[TemplateKeyAlarmDispatchNotificationGroup] = map[string]any{
+	data[domain.TemplateKeyAlarmDispatchNotificationGroup] = map[string]any{
 		"IsStarting":   false,
 		"MinutesUntil": 5,
 		"Entries": []map[string]any{
@@ -315,19 +317,19 @@ func templateAlarmNotificationSample(minutesUntil int) map[string]any {
 	}
 }
 
-func addTemplateDirectoryMilestoneSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdMemberDirectory] = map[string]any{
+func addTemplateDirectoryMilestoneSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCmdMemberDirectory] = map[string]any{
 		fieldEmoji: map[string]string{"Star": "⭐"},
 		"Total":    50,
 		"Groups":   []map[string]any{templateMemberDirectoryGroup()},
 	}
-	data[TemplateKeyCmdProfile] = templateProfileSample()
-	data[TemplateKeyCmdMilestoneAchieved] = map[string]any{
+	data[domain.TemplateKeyCmdProfile] = templateProfileSample()
+	data[domain.TemplateKeyCmdMilestoneAchieved] = map[string]any{
 		fieldMemberName: sampleMemberMiko,
 		"Milestone":     sampleSubs200Man,
 		fieldEmoji:      map[string]string{"Trophy": "🏆"},
 	}
-	data[TemplateKeyCmdMilestoneApproach] = map[string]any{
+	data[domain.TemplateKeyCmdMilestoneApproach] = map[string]any{
 		fieldMemberName:   sampleMemberMiko,
 		"CurrentSubs":     1990000,
 		"Milestone":       sampleSubs200Man,

@@ -29,6 +29,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/template/sampledata"
 )
 
 // 런타임 renderer는 missingkey 옵션 없이 파싱해 map 데이터의 키 누락이 `<no value>`로
@@ -56,7 +57,7 @@ func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 		t.Fatalf("iterate seed rows: %v", err)
 	}
 
-	keys := domain.GetAllTemplateKeys()
+	keys := sampledata.GetAllTemplateKeys()
 	keyset := make(map[string]bool, len(keys))
 	for _, key := range keys {
 		keyset[string(key)] = true
@@ -67,7 +68,7 @@ func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 			continue
 		}
 
-		data := domain.GetTemplateSampleData(key)
+		data := sampledata.GetTemplateSampleData(key)
 		if data == nil {
 			t.Errorf("%s: sample data 없음", key)
 			continue

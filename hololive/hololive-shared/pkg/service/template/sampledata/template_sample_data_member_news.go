@@ -18,11 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package domain
+package sampledata
 
-func templateSampleMemberNewsData() map[TemplateKey]any {
-	data := map[TemplateKey]any{
-		TemplateKeyCmdMemberNewsDigest: templateMemberNewsDigestSample(),
+import "github.com/kapu/hololive-shared/pkg/domain"
+
+func templateSampleMemberNewsData() map[domain.TemplateKey]any {
+	data := map[domain.TemplateKey]any{
+		domain.TemplateKeyCmdMemberNewsDigest: templateMemberNewsDigestSample(),
 	}
 	addTemplateMemberNewsSubscriptionSamples(data)
 	return data
@@ -59,16 +61,16 @@ func templateMemberNewsDigestItems() []map[string]any {
 	}
 }
 
-func addTemplateMemberNewsSubscriptionSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdMemberNewsNoMembers] = map[string]any{
+func addTemplateMemberNewsSubscriptionSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCmdMemberNewsNoMembers] = map[string]any{
 		fieldEmoji:  map[string]string{"Brand": "🌸"},
 		fieldPrefix: "!",
 	}
-	data[TemplateKeyCmdMemberNewsSubscribed] = templateMemberNewsAlarmSuccessSample()
-	data[TemplateKeyCmdMemberNewsUnsubscribed] = templateMemberNewsAlarmSuccessSample()
-	data[TemplateKeyCmdMemberNewsAlreadySub] = templateMemberNewsAlarmInfoSample("🔔")
-	data[TemplateKeyCmdMemberNewsNotSub] = templateMemberNewsAlarmInfoSample("🔕")
-	data[TemplateKeyCmdMemberNewsStatus] = map[string]any{
+	data[domain.TemplateKeyCmdMemberNewsSubscribed] = templateMemberNewsAlarmSuccessSample()
+	data[domain.TemplateKeyCmdMemberNewsUnsubscribed] = templateMemberNewsAlarmSuccessSample()
+	data[domain.TemplateKeyCmdMemberNewsAlreadySub] = templateMemberNewsAlarmInfoSample("🔔")
+	data[domain.TemplateKeyCmdMemberNewsNotSub] = templateMemberNewsAlarmInfoSample("🔕")
+	data[domain.TemplateKeyCmdMemberNewsStatus] = map[string]any{
 		fieldEmoji:     map[string]string{fieldAlarm: "🔔"},
 		fieldPrefix:    "!",
 		"IsSubscribed": true,

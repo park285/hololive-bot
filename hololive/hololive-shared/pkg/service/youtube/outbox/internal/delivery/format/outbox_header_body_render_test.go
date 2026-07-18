@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/template/sampledata"
 )
 
 var outboxRenderFuncs = template.FuncMap{
@@ -52,7 +53,7 @@ func renderOutboxBody(t *testing.T, body string, data any) string {
 
 func sampleWithKind(t *testing.T, key domain.TemplateKey, kind string) map[string]any {
 	t.Helper()
-	src, ok := domain.GetTemplateSampleData(key).(map[string]any)
+	src, ok := sampledata.GetTemplateSampleData(key).(map[string]any)
 	if !ok {
 		t.Fatalf("sample data for %s is not map[string]any", key)
 	}

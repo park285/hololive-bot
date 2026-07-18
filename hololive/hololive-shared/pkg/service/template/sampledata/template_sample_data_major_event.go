@@ -18,18 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package domain
+package sampledata
 
-func templateSampleMajorEventData() map[TemplateKey]any {
-	data := map[TemplateKey]any{}
+import "github.com/kapu/hololive-shared/pkg/domain"
+
+func templateSampleMajorEventData() map[domain.TemplateKey]any {
+	data := map[domain.TemplateKey]any{}
 	addTemplateMajorEventSummarySamples(data)
 	addTemplateMajorEventSubscriptionSamples(data)
 	return data
 }
 
-func addTemplateMajorEventSummarySamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdMajorEventWeeklySummary] = templateMajorEventSummarySample()
-	data[TemplateKeyCmdMajorEventMonthlySummary] = templateMajorEventSummarySample()
+func addTemplateMajorEventSummarySamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCmdMajorEventWeeklySummary] = templateMajorEventSummarySample()
+	data[domain.TemplateKeyCmdMajorEventMonthlySummary] = templateMajorEventSummarySample()
 }
 
 func templateMajorEventSummarySample() map[string]any {
@@ -60,17 +62,17 @@ func templateMajorEventItems() []map[string]any {
 	}
 }
 
-func addTemplateMajorEventSubscriptionSamples(data map[TemplateKey]any) {
-	data[TemplateKeyCmdMajorEventSubscribed] = templateMajorEventAlarmSuccessSample()
-	data[TemplateKeyCmdMajorEventUnsubscribed] = templateMajorEventAlarmSuccessSample()
-	data[TemplateKeyCmdMajorEventAlreadySub] = templateMajorEventAlarmInfoSample()
-	data[TemplateKeyCmdMajorEventNotSub] = templateMajorEventAlarmInfoSample()
-	data[TemplateKeyCmdMajorEventStatus] = map[string]any{
+func addTemplateMajorEventSubscriptionSamples(data map[domain.TemplateKey]any) {
+	data[domain.TemplateKeyCmdMajorEventSubscribed] = templateMajorEventAlarmSuccessSample()
+	data[domain.TemplateKeyCmdMajorEventUnsubscribed] = templateMajorEventAlarmSuccessSample()
+	data[domain.TemplateKeyCmdMajorEventAlreadySub] = templateMajorEventAlarmInfoSample()
+	data[domain.TemplateKeyCmdMajorEventNotSub] = templateMajorEventAlarmInfoSample()
+	data[domain.TemplateKeyCmdMajorEventStatus] = map[string]any{
 		fieldEmoji:     map[string]string{fieldAlarm: "🔔", "Info": "ℹ️"},
 		"IsSubscribed": true,
 		fieldPrefix:    "!",
 	}
-	data[TemplateKeyCmdMajorEventUsage] = map[string]any{
+	data[domain.TemplateKeyCmdMajorEventUsage] = map[string]any{
 		fieldEmoji:  map[string]string{fieldAlarm: "🔔", "Hint": "💡"},
 		fieldPrefix: "!",
 	}

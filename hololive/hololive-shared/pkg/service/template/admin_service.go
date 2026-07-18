@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/repository"
+	"github.com/kapu/hololive-shared/pkg/service/template/sampledata"
 )
 
 var (
@@ -65,7 +66,7 @@ func (s *AdminService) List(ctx context.Context, key *domain.TemplateKey, channe
 }
 
 func (s *AdminService) GetByKey(ctx context.Context, key domain.TemplateKey) (result0 *domain.NotificationTemplate, result1 []*domain.NotificationTemplate, err error) {
-	if !domain.IsValidTemplateKey(key) {
+	if !sampledata.IsValidTemplateKey(key) {
 		return nil, nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
 
@@ -82,7 +83,7 @@ func (s *AdminService) GetByKey(ctx context.Context, key domain.TemplateKey) (re
 }
 
 func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channelID *string, body string) (*domain.NotificationTemplate, error) {
-	if !domain.IsValidTemplateKey(key) {
+	if !sampledata.IsValidTemplateKey(key) {
 		return nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
 
@@ -140,11 +141,11 @@ func (s *AdminService) DeleteOverride(ctx context.Context, key domain.TemplateKe
 }
 
 func (s *AdminService) Preview(ctx context.Context, key domain.TemplateKey, body string) (value0 string, result1 any, err error) {
-	if !domain.IsValidTemplateKey(key) {
+	if !sampledata.IsValidTemplateKey(key) {
 		return "", nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
 
-	sampleData := domain.GetTemplateSampleData(key)
+	sampleData := sampledata.GetTemplateSampleData(key)
 	if sampleData == nil {
 		return "", nil, fmt.Errorf("%w: no sample data for %s", ErrTemplateKeyNotFound, key)
 	}
@@ -195,7 +196,7 @@ func (s *AdminService) validateTemplate(key domain.TemplateKey, body string) err
 		return errors.Join(ErrTemplateParseError, fmt.Errorf("parse failed: %w", err))
 	}
 
-	sampleData := domain.GetTemplateSampleData(key)
+	sampleData := sampledata.GetTemplateSampleData(key)
 	if sampleData == nil {
 		return nil
 	}
