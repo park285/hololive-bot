@@ -40,7 +40,7 @@ while IFS= read -r path; do
     exit 1
   }
   case "$path" in
-    hololive/hololive-youtube-producer/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
+    hololive/hololive-youtube-producer/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
     go.sum|*/go.sum)
       echo "files-from list contains unapproved go.sum path: $path" >&2
       exit 1

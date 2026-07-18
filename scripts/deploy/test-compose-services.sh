@@ -155,11 +155,15 @@ for ap_conf in scripts/deploy/lib/ap-host.sh scripts/deploy/ap-hosts/osaka.conf 
     grep -qx "${ap_conf}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_conf}"
 done
 pass "ap active-active syncs host conf and loader"
+for dbtest_module_file in hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum; do
+    grep -qx "${dbtest_module_file}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs Docker build context dependency ${dbtest_module_file}"
+done
+pass "ap active-active syncs dbtest module metadata"
 while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
     [[ -e "${ROOT_DIR}/${path}" ]] || fail "ap active-active files list path exists: ${path}"
     case "${path}" in
-        hololive/hololive-youtube-producer/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
+        hololive/hololive-youtube-producer/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
         go.sum|*/go.sum) fail "ap active-active files list excludes unapproved go.sum path: ${path}" ;;
     esac
     case "${path}" in
