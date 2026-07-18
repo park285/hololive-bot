@@ -2,6 +2,9 @@
 
 !hololive/hololive-shared/
 !hololive/hololive-shared/**
+!hololive/hololive-dbtest/
+!hololive/hololive-dbtest/go.mod
+!hololive/hololive-dbtest/go.sum
 !hololive/hololive-api/
 !hololive/hololive-api/**
 

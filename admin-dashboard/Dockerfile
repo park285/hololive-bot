@@ -43,6 +43,7 @@ WORKDIR /workspace/hololive-bot
 
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
 COPY admin-dashboard/backend/go.mod admin-dashboard/backend/go.sum ./admin-dashboard/backend/
+COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ./hololive/hololive-dbtest/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
 
 WORKDIR /workspace/hololive-bot/admin-dashboard/backend
