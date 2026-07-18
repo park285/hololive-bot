@@ -360,7 +360,7 @@ def write_report(path: Path, args, benches: list[dict], bench_rows: list[dict],
         "",
     ]
     if not benches:
-        lines.append("- (none matched this main package in perf-budget.yaml)")
+        lines.append("- (none matched this main package in scripts/perf/perf-budget.yaml)")
     else:
         for row in bench_rows:
             off_ns = row["offNs"]
@@ -457,7 +457,7 @@ def main(argv: list[str]) -> int:
         if not budget_file.is_absolute():
             budget_file = repo_root / budget_file
     else:
-        budget_file = repo_root / "perf-budget.yaml"
+        budget_file = repo_root / "scripts" / "perf" / "perf-budget.yaml"
     budget, min_count = parse_perf_budget(budget_file)
     glob_prefixes = load_hotpaths(profile)
     benches = select_hot_benches(budget, args.main, glob_prefixes)
