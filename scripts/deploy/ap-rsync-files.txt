@@ -299,11 +299,6 @@ hololive/hololive-shared/pkg/domain/stream.go
 hololive/hololive-shared/pkg/domain/stream_url.go
 hololive/hololive-shared/pkg/domain/stream_interfaces.go
 hololive/hololive-shared/pkg/domain/stream_next.go
-hololive/hololive-shared/pkg/domain/template_sample_data.go
-hololive/hololive-shared/pkg/domain/template_sample_data_core.go
-hololive/hololive-shared/pkg/domain/template_sample_data_fields.go
-hololive/hololive-shared/pkg/domain/template_sample_data_major_event.go
-hololive/hololive-shared/pkg/domain/template_sample_data_member_news.go
 hololive/hololive-shared/pkg/domain/youtube_content.go
 hololive/hololive-shared/pkg/domain/youtube_content_thumbnails.go
 hololive/hololive-shared/pkg/domain/youtube_delivery.go
@@ -519,6 +514,11 @@ hololive/hololive-shared/pkg/service/settings/service.go
 hololive/hololive-shared/pkg/service/template/admin_service.go
 hololive/hololive-shared/pkg/service/template/renderer.go
 hololive/hololive-shared/pkg/service/template/renderer_cache.go
+hololive/hololive-shared/pkg/service/template/sampledata/template_sample_data.go
+hololive/hololive-shared/pkg/service/template/sampledata/template_sample_data_core.go
+hololive/hololive-shared/pkg/service/template/sampledata/template_sample_data_fields.go
+hololive/hololive-shared/pkg/service/template/sampledata/template_sample_data_major_event.go
+hololive/hololive-shared/pkg/service/template/sampledata/template_sample_data_member_news.go
 hololive/hololive-shared/pkg/service/template/sql.go
 hololive/hololive-shared/pkg/service/twitch/client.go
 hololive/hololive-shared/pkg/service/twitch/client_streams.go

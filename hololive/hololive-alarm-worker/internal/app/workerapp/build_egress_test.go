@@ -6,16 +6,35 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type youtubeOutboxKaringCapableSender interface {
 	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
+}
+
+type clientRequestIDRecordingIrisSender struct {
+	roomID  string
+	message string
+	opts    int
+}
+
+func (s *clientRequestIDRecordingIrisSender) SendMessage(_ context.Context, roomID, message string, opts ...iris.SendOption) error {
+	s.roomID = roomID
+	s.message = message
+	s.opts = len(opts)
+	return nil
+}
+
+func (*clientRequestIDRecordingIrisSender) SendKaringContentList(context.Context, *iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
+	return nil, nil
 }
 
 type workerappEgressTestPostgres struct{}
@@ -53,6 +72,17 @@ func TestBuildYouTubeOutboxSenderEnablesKaringWhenConfigured(t *testing.T) {
 	assert.True(t, ok)
 }
 
+func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t *testing.T) {
+	stub := &clientRequestIDRecordingIrisSender{}
+	sender := dispatchrun.NewYouTubeOutboxKaringSender(egress.NewIrisMessageSender(stub), nil)
+
+	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), "room-1", "hello", "req-1"))
+
+	assert.Equal(t, "room-1", stub.roomID)
+	assert.Equal(t, "hello", stub.message)
+	assert.Equal(t, 1, stub.opts)
+}
+
 func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
 	runner, err := buildNotificationEgress(&config.Config{}, &sharedmodules.InfraModule{}, nil)
 
@@ -72,15 +102,25 @@ func TestBuildAlarmDispatchRunnerDefaultsToPGWhenConsumerModeUnset(t *testing.T)
 	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
 	require.NoError(t, err)
 
-	runner, ok := scheduler.(*alarmDispatchRunner)
+	runner, ok := scheduler.(*dispatchrun.Runner)
 	require.True(t, ok)
-	assert.Equal(t, "pg", runner.consumerMode)
-	assert.Equal(t, 7, runner.maxBatch)
-	assert.True(t, runner.karingEnabled)
-	assert.True(t, runner.postSendQuarantine)
-	waiter, ok := runner.idleWaiter.(*alarmDispatchWakeupWaiter)
-	require.True(t, ok)
-	assert.NotNil(t, waiter)
+	assert.NotNil(t, runner)
+	config := alarmDispatchRunnerConfig()
+	assert.Equal(t, "pg", config.ConsumerMode)
+	assert.Equal(t, 7, config.MaxBatch)
+	assert.True(t, config.KaringEnabled)
+	assert.True(t, config.PostSendQuarantine)
+}
+
+func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "")
+	assert.False(t, parseAlarmDispatchKaringEnabled())
+
+	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
+	assert.True(t, parseAlarmDispatchKaringEnabled())
+
+	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
+	assert.False(t, parseAlarmDispatchKaringEnabled())
 }
 
 func TestBuildAlarmDispatchRunnerRejectsRemovedLegacyConsumerMode(t *testing.T) {
@@ -102,22 +142,20 @@ func TestBuildAlarmDispatchRunnerWiresPGMode(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "9")
 	t.Setenv("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", "3")
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
-	t.Setenv("ALARM_DISPATCH_WAKEUP_ENABLED", "false")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
 	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
 	require.NoError(t, err)
 
-	runner, ok := scheduler.(*alarmDispatchRunner)
+	runner, ok := scheduler.(*dispatchrun.Runner)
 	require.True(t, ok)
-	assert.Equal(t, "pg", runner.consumerMode)
-	assert.Equal(t, 9, runner.maxBatch)
-	assert.Equal(t, 3, runner.maxBatchesPerWake)
-	assert.False(t, runner.karingEnabled)
-	assert.True(t, runner.postSendQuarantine)
-	waiter, ok := runner.idleWaiter.(*alarmDispatchWakeupWaiter)
-	require.True(t, ok)
-	assert.False(t, waiter.wakeupEnabled)
+	assert.NotNil(t, runner)
+	config := alarmDispatchRunnerConfig()
+	assert.Equal(t, "pg", config.ConsumerMode)
+	assert.Equal(t, 9, config.MaxBatch)
+	assert.Equal(t, 3, config.MaxBatchesPerWake)
+	assert.False(t, config.KaringEnabled)
+	assert.True(t, config.PostSendQuarantine)
 }
 
 func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
@@ -171,18 +209,12 @@ func (c *claimKeyReleaseRecordingCache) DelMany(_ context.Context, keys []string
 	return int64(len(keys)), nil
 }
 
-func TestBuildAlarmDispatchRunnerWiresPGModeClaimKeyReleaser(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "pg")
+func TestNewAlarmDispatchConsumerWiresPGModeClaimKeyReleaser(t *testing.T) {
 	cacheFake := &claimKeyReleaseRecordingCache{}
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}, Cache: cacheFake}
+	consumer := newAlarmDispatchConsumer(infra, nil)
 
-	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
-	require.NoError(t, err)
-	runner, ok := scheduler.(*alarmDispatchRunner)
-	require.True(t, ok)
-
-	err = runner.consumer.ReleaseClaimKeys(context.Background(), []string{
+	err := consumer.ReleaseClaimKeys(context.Background(), []string{
 		"notified:claim:room-1:stream-1:100:live",
 	})
 	require.NoError(t, err)

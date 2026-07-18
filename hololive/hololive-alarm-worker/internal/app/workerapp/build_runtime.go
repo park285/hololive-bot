@@ -30,7 +30,12 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/readiness"
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
+	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
+	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 )
+
+type AlarmWorkerRuntime = workerruntime.AlarmWorkerRuntime
+type runtimeAlarmScheduler = workerruntime.Scheduler
 
 const (
 	notificationSchedulerRoleEnv = "NOTIFICATION_SCHEDULER_ROLE"
@@ -238,7 +243,7 @@ func buildRuntimeScheduler(
 		appConfig.Notification,
 		foundation.Outbox,
 		publishConfig,
-		parseBoolEnv("ALARM_TWITCH_ENABLED", true),
+		envconfig.ParseBool("ALARM_TWITCH_ENABLED", true),
 		logger,
 	)
 	if err != nil {
@@ -334,8 +339,8 @@ func loadAlarmDispatchPublishConfig() (queue.PublishConfig, error) {
 		return queue.PublishConfig{}, err
 	}
 	return queue.PublishConfig{
-		WakeupEnabled:         parseBoolEnv("ALARM_DISPATCH_WAKEUP_ENABLED", true),
-		MaxDeliveriesPerBatch: parsePositiveIntEnv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000),
+		WakeupEnabled:         envconfig.ParseBool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
+		MaxDeliveriesPerBatch: envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000),
 	}, nil
 }
 
