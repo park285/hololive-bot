@@ -37,7 +37,7 @@ const (
 	schemaGoldenDir  = "testdata"
 	schemaGoldenFile = "schema_snapshot.golden.sql"
 	schemaUpdateEnv  = "SCHEMA_SNAPSHOT_UPDATE"
-	schemaRegenCmd   = "SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-shared/pkg/dbtest"
+	schemaRegenCmd   = "SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest"
 )
 
 // pg_dump가 아닌 catalog 직렬화를 쓰는 이유: 골든이 primary(pg18)/fallback(pg16) 두 이미지에서

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/kapu/hololive-shared/pkg/dbtest"
+	"github.com/kapu/hololive-dbtest"
 )
 
 func TestCaptionFaceCoversSeededMemberNames(t *testing.T) {

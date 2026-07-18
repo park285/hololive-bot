@@ -1,6 +1,6 @@
 -- hololive schema snapshot (deterministic pg_catalog serialization)
 -- objects: enum types, tables, columns, constraints, indexes
--- regenerate: SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-shared/pkg/dbtest
+-- regenerate: SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest
 
 ENUM alarm_type
   LIVE

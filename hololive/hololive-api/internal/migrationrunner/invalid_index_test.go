@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/dbmigrate"
 
-	"github.com/kapu/hololive-shared/pkg/dbtest"
+	"github.com/kapu/hololive-dbtest"
 )
 
 func TestInvalidIndexesDetectsAndDropsLeftoverInvalidIndex(t *testing.T) {

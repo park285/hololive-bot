@@ -89,11 +89,11 @@ members 시드의 arbiter는 `idx_members_slug`(UNIQUE, 097 복원)다.
 
 ## 스키마 문서
 
-통합 스키마 문서는 손으로 쓰지 않는다. `hololive/hololive-shared/pkg/dbtest/testdata/schema_snapshot.golden.sql`
+통합 스키마 문서는 손으로 쓰지 않는다. `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`
 (pg_catalog 직렬화 골든 — enum·table·column·constraint·index)이 문서이며 `TestSchemaSnapshotGolden`이
 manifest 전체 적용 결과와의 드리프트를 차단한다. pg_dump 출력이 아니라 catalog 직렬화인 이유:
 dbtest가 PG18→16 폴백을 갖는데 pg_dump 텍스트는 버전 간 비결정적이다.
-갱신: `SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-shared/pkg/dbtest`.
+갱신: `SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest`.
 
 ## 스키마 표준
 

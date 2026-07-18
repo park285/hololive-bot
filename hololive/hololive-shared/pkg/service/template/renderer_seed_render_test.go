@@ -27,7 +27,7 @@ import (
 	"testing"
 	texttemplate "text/template"
 
-	"github.com/kapu/hololive-shared/pkg/dbtest"
+	"github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template/sampledata"
 )
