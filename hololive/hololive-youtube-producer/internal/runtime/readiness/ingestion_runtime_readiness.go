@@ -32,10 +32,9 @@ import (
 )
 
 const (
-	defaultRuntimeName           = "youtube-producer"
-	defaultScraperFetcherEngine  = "nethttp"
-	scraperFetcherEngineGoScrapy = "goscrapy"
-	scraperFetcherEngineBrowser  = "browser_snapshot"
+	defaultRuntimeName          = "youtube-producer"
+	defaultScraperFetcherEngine = "nethttp"
+	scraperFetcherEngineBrowser = "browser_snapshot"
 )
 
 type Features struct {
@@ -273,8 +272,6 @@ func (s *State) currentScraperFetcherEngine() string {
 
 func normalizeScraperFetcherEngine(engine string) string {
 	switch strings.TrimSpace(engine) {
-	case scraperFetcherEngineGoScrapy:
-		return scraperFetcherEngineGoScrapy
 	case scraperFetcherEngineBrowser:
 		return scraperFetcherEngineBrowser
 	default:

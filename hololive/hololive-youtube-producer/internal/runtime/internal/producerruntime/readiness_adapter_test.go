@@ -5,12 +5,12 @@ import "testing"
 func TestNewReadinessStateWithFetcherEngineIncludesEngine(t *testing.T) {
 	state := newReadinessStateWithFetcherEngine("youtube-producer", ingestionRuntimeFeatures{
 		youtubeEnabled: true,
-	}, "goscrapy")
+	}, "nethttp")
 	state.MarkRunning()
 
 	_, payload := state.Response()
 
-	if payload["scraper_fetcher_engine"] != "goscrapy" {
-		t.Fatalf("scraper_fetcher_engine = %v, want goscrapy", payload["scraper_fetcher_engine"])
+	if payload["scraper_fetcher_engine"] != "nethttp" {
+		t.Fatalf("scraper_fetcher_engine = %v, want nethttp", payload["scraper_fetcher_engine"])
 	}
 }

@@ -46,8 +46,6 @@ func (c *Client) currentPageFetcherWithEngine() (pageFetcher, FetcherEngine) {
 	switch normalizeFetcherEngine(c.fetcherEngine) {
 	case FetcherEngineNetHTTP:
 		return netHTTPFetcher, FetcherEngineNetHTTP
-	case FetcherEngineGoScrapy:
-		return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}, FetcherEngineGoScrapy
 	case FetcherEngineBrowserSnapshot:
 		return c.browserSnapshotPageFetcher(netHTTPFetcher)
 	default:

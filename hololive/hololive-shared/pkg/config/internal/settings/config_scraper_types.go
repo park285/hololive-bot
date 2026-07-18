@@ -19,7 +19,6 @@ func DefaultScraperWorkerCount() int {
 
 const (
 	ScraperFetcherEngineNetHTTP         = "nethttp"
-	ScraperFetcherEngineGoScrapy        = "goscrapy"
 	ScraperFetcherEngineBrowserSnapshot = "browser_snapshot"
 )
 
@@ -32,8 +31,6 @@ func NormalizeScraperFetcherEngine(value string) string {
 	switch normalized {
 	case "", ScraperFetcherEngineNetHTTP:
 		return DefaultScraperFetcherEngine()
-	case ScraperFetcherEngineGoScrapy:
-		return normalized
 	default:
 		return normalized
 	}

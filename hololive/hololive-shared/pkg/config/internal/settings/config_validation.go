@@ -187,10 +187,10 @@ func validateScraperSchedulerConfig(config ScraperSchedulerConfig) error {
 
 func validateScraperFetcherEngine(engine string) error {
 	switch NormalizeScraperFetcherEngine(engine) {
-	case ScraperFetcherEngineNetHTTP, ScraperFetcherEngineGoScrapy:
+	case ScraperFetcherEngineNetHTTP:
 		return nil
 	default:
-		return fmt.Errorf("SCRAPER_FETCHER_ENGINE must be one of: nethttp, goscrapy")
+		return fmt.Errorf("SCRAPER_FETCHER_ENGINE must be one of: nethttp (goscrapy has been removed)")
 	}
 }
 
