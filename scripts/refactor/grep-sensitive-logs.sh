@@ -25,7 +25,7 @@ is_audited_sensitive_log() {
 
   [[ "${line_number}" =~ ^[0-9]+$ ]] || return 1
   case "${file}" in
-    */iris-client-go/internal/client/errors.go) ;;
+    */iris-client-go/internal/client/transport/errors.go) ;;
     *) return 1 ;;
   esac
   [[ "${source}" =~ ${audited_pattern} ]]
