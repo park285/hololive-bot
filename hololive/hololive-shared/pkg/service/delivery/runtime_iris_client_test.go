@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/iris"
+	"github.com/stretchr/testify/require"
 )
 
 func writeRuntimeIrisResponse(t *testing.T, w http.ResponseWriter, body string) {
@@ -126,10 +127,14 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 	}
 	secondMu.Unlock()
 
-	time.Sleep(runtimeIrisBaseURLResolveInterval + 100*time.Millisecond)
-	if err := client.SendMessage(ctx, "room-1", "world"); err != nil {
-		t.Fatalf("send via reloaded override: %v", err)
-	}
+	require.Eventually(t, func() bool {
+		if err := client.SendMessage(ctx, "room-1", "world"); err != nil {
+			return false
+		}
+		secondMu.Lock()
+		defer secondMu.Unlock()
+		return secondCalls == 1
+	}, 2*time.Second, 50*time.Millisecond)
 
 	secondMu.Lock()
 	if secondCalls != 1 {

@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -269,6 +270,9 @@ func TestLinkCheckerCheckLink_BlockedDNSRebindingBetweenValidationAndDial(t *tes
 		}
 		if len(ips) == 0 {
 			return nil, errors.New("host not found")
+		}
+		if os.Getenv("INTEGRATION_TEST") != "true" {
+			return nil, errors.New("real network dial disabled outside integration tests")
 		}
 		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
 	}

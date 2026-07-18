@@ -23,12 +23,23 @@ package scheduler
 import (
 	"context"
 	"sync"
+	"testing"
 	"time"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
-var testMetrics = polling.NewMetrics()
+func newTestMetrics(t *testing.T) *polling.Metrics {
+	t.Helper()
+	registry := prometheus.NewRegistry()
+	jobLeaseRenewTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_test_job_lease_renew_total",
+		Help: "Test-only job lease renewal results.",
+	}, []string{"poller", "result"})
+	registry.MustRegister(jobLeaseRenewTotal)
+	return &polling.Metrics{JobLeaseRenewTotal: jobLeaseRenewTotal}
+}
 
 type togglePollerStub struct {
 	name    string

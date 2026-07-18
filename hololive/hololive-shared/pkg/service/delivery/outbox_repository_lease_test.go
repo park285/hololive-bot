@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMarkSentBatchDoesNotBypassActiveLease(t *testing.T) {
@@ -70,6 +71,10 @@ func TestMarkSendingChecksLeaseAtDatabaseExecutionTime(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("fetch len = %d, want 1", len(items))
 	}
+	var lockExpiresAt time.Time
+	if err := repository.pool.QueryRow(ctx, "SELECT lock_expires_at FROM notification_delivery_outbox WHERE id = $1", items[0].ID).Scan(&lockExpiresAt); err != nil {
+		t.Fatalf("load lock expiry: %v", err)
+	}
 
 	tx, err := repository.pool.Begin(ctx)
 	if err != nil {
@@ -90,7 +95,8 @@ func TestMarkSendingChecksLeaseAtDatabaseExecutionTime(t *testing.T) {
 		resultCh <- result{ok: ok, err: markErr}
 	}()
 
-	time.Sleep(250 * time.Millisecond)
+	waitForOutboxQueryLock(t, repository, ctx, tx)
+	waitForOutboxDatabaseTime(t, repository, ctx, lockExpiresAt)
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("release row lock: %v", err)
 	}
@@ -260,7 +266,7 @@ func TestMarkSentBatchRecordsDatabaseExecutionTime(t *testing.T) {
 		resultCh <- repository.MarkSentBatch(ctx, []int64{id})
 	}()
 
-	time.Sleep(250 * time.Millisecond)
+	waitForOutboxQueryLock(t, repository, ctx, tx)
 	releasedAt := time.Now()
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("release row lock: %v", err)
@@ -290,6 +296,10 @@ func TestQuarantineStaleSendingUsesDatabaseExecutionTime(t *testing.T) {
 		t.Fatalf("fetch len = %d, want 1", len(items))
 	}
 	markOutboxSending(t, repository, ctx, &items[0])
+	var staleAt time.Time
+	if err := repository.pool.QueryRow(ctx, "SELECT sending_started_at + INTERVAL '100 milliseconds' FROM notification_delivery_outbox WHERE id = $1", items[0].ID).Scan(&staleAt); err != nil {
+		t.Fatalf("load stale threshold: %v", err)
+	}
 
 	tx, err := repository.pool.Begin(ctx)
 	if err != nil {
@@ -310,7 +320,8 @@ func TestQuarantineStaleSendingUsesDatabaseExecutionTime(t *testing.T) {
 		resultCh <- result{count: count, err: quarantineErr}
 	}()
 
-	time.Sleep(250 * time.Millisecond)
+	waitForOutboxQueryLock(t, repository, ctx, tx)
+	waitForOutboxDatabaseTime(t, repository, ctx, staleAt)
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("release table lock: %v", err)
 	}
@@ -324,6 +335,38 @@ func TestQuarantineStaleSendingUsesDatabaseExecutionTime(t *testing.T) {
 	if quarantined := countByStatus(t, repository, ctx, deliveryStatusQuarantined); quarantined != 1 {
 		t.Fatalf("quarantined status count = %d, want 1", quarantined)
 	}
+}
+
+func waitForOutboxQueryLock(t *testing.T, repository *OutboxRepository, ctx context.Context, tx pgx.Tx) {
+	t.Helper()
+	var blockerPID int32
+	if err := tx.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&blockerPID); err != nil {
+		t.Fatalf("load blocker pid: %v", err)
+	}
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := repository.pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1
+				FROM pg_stat_activity
+				WHERE datname = current_database()
+					AND pid <> pg_backend_pid()
+					AND $1 = ANY(pg_blocking_pids(pid))
+					AND wait_event_type = 'Lock'
+					AND query LIKE '%notification_delivery_outbox%'
+			)
+		`, blockerPID).Scan(&waiting)
+		return err == nil && waiting
+	}, 2*time.Second, 5*time.Millisecond)
+}
+
+func waitForOutboxDatabaseTime(t *testing.T, repository *OutboxRepository, ctx context.Context, threshold time.Time) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		var reached bool
+		err := repository.pool.QueryRow(ctx, "SELECT clock_timestamp() >= $1", threshold).Scan(&reached)
+		return err == nil && reached
+	}, 2*time.Second, 5*time.Millisecond)
 }
 
 func rollbackTestTx(t *testing.T, ctx context.Context, tx pgx.Tx) {
