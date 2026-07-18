@@ -11,6 +11,9 @@
 !shared-go/pkg/**
 
 !hololive/
+!hololive/hololive-dbtest/
+!hololive/hololive-dbtest/go.mod
+!hololive/hololive-dbtest/go.sum
 !hololive/hololive-youtube-producer/
 !hololive/hololive-youtube-producer/go.mod
 !hololive/hololive-youtube-producer/go.sum

@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"encoding/json"
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -22,7 +21,8 @@ type entrypointContract struct {
 func TestCommandEntrypointsStayAnchoredToOwningHelpers(t *testing.T) {
 	t.Parallel()
 
-	contracts := loadEntrypointContracts(t)
+	root := repoRootFromHelper(t)
+	contracts := loadEntrypointContracts(t, root)
 	if len(contracts) == 0 {
 		t.Fatal("entrypoint contract manifest 가 비어 있습니다")
 	}
@@ -31,10 +31,7 @@ func TestCommandEntrypointsStayAnchoredToOwningHelpers(t *testing.T) {
 		t.Run(contract.Path, func(t *testing.T) {
 			t.Parallel()
 
-			content, err := readWorkspaceFile(contract.Path)
-			if err != nil {
-				t.Fatalf("%s 읽기 실패: %v", contract.Path, err)
-			}
+			content := []byte(readRepoFile(t, root, contract.Path))
 
 			for _, needle := range contract.MustContain {
 				if !fileContainsCallPath(t, contract.Path, content, needle) {
@@ -48,7 +45,8 @@ func TestCommandEntrypointsStayAnchoredToOwningHelpers(t *testing.T) {
 func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 	t.Parallel()
 
-	contracts := loadEntrypointContracts(t)
+	root := repoRootFromHelper(t)
+	contracts := loadEntrypointContracts(t, root)
 	manifestPaths := make([]string, 0, len(contracts))
 	for _, contract := range contracts {
 		manifestPaths = append(manifestPaths, filepath.ToSlash(contract.Path))
@@ -56,7 +54,7 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 	sort.Strings(manifestPaths)
 
 	discoveredPaths := make([]string, 0, len(manifestPaths))
-	if err := fs.WalkDir(os.DirFS("hololive"), ".", func(path string, d fs.DirEntry, err error) error {
+	if err := fs.WalkDir(os.DirFS(filepath.Join(root, "hololive")), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -91,6 +89,7 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 func TestDocsUseConsolidatedYouTubeProducerOpsCommand(t *testing.T) {
 	t.Parallel()
 
+	root := repoRootFromHelper(t)
 	legacyCommandPaths := []string{
 		"hololive/hololive-youtube-producer/cmd/youtube-",
 		"hololive/hololive-youtube-producer/cmd/ops/youtube-community-alarm-sent-history",
@@ -98,7 +97,7 @@ func TestDocsUseConsolidatedYouTubeProducerOpsCommand(t *testing.T) {
 		"hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts-",
 	}
 
-	docsFS := os.DirFS(filepath.Join("docs", "current"))
+	docsFS := os.DirFS(filepath.Join(root, "docs", "current"))
 	if err := fs.WalkDir(docsFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -122,35 +121,16 @@ func TestDocsUseConsolidatedYouTubeProducerOpsCommand(t *testing.T) {
 	}
 }
 
-func loadEntrypointContracts(t *testing.T) []entrypointContract {
+func loadEntrypointContracts(t *testing.T, root string) []entrypointContract {
 	t.Helper()
 
-	data, err := readWorkspaceFile(filepath.Join("testdata", "entrypoint_contracts.json"))
-	if err != nil {
-		t.Fatalf("entrypoint contract manifest 읽기 실패: %v", err)
-	}
+	data := []byte(readRepoFile(t, root, "internal/workspace/testdata/entrypoint_contracts.json"))
 
 	var contracts []entrypointContract
 	if err := json.Unmarshal(data, &contracts); err != nil {
 		t.Fatalf("entrypoint contract manifest 파싱 실패: %v", err)
 	}
 	return contracts
-}
-
-func readWorkspaceFile(path string) ([]byte, error) {
-	cleaned, err := cleanWorkspacePath(path)
-	if err != nil {
-		return nil, err
-	}
-	return fs.ReadFile(os.DirFS("."), cleaned)
-}
-
-func cleanWorkspacePath(path string) (string, error) {
-	cleaned := filepath.ToSlash(filepath.Clean(path))
-	if cleaned == "." || strings.HasPrefix(cleaned, "../") || filepath.IsAbs(cleaned) {
-		return "", fmt.Errorf("invalid workspace-relative path %q", path)
-	}
-	return cleaned, nil
 }
 
 func fileContainsCallPath(t *testing.T, path string, content []byte, want string) bool {

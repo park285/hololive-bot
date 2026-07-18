@@ -10,6 +10,8 @@ import (
 func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 	t.Parallel()
 
+	root := repoRootFromHelper(t)
+
 	mustExist := []string{
 		"hololive/hololive-api/go.mod",
 		"hololive/hololive-api/cmd/hololive-api/main.go",
@@ -20,7 +22,7 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 		"hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service.go",
 	}
 	for _, path := range mustExist {
-		if _, err := os.Stat(path); err != nil {
+		if _, err := os.Stat(filepath.Join(root, path)); err != nil {
 			t.Fatalf("expected %s to exist: %v", path, err)
 		}
 	}
@@ -36,21 +38,21 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 		"hololive/hololive-kakao-bot-go/internal/service/notification",
 	}
 	for _, path := range mustNotExist {
-		if _, err := os.Stat(path); err == nil {
+		if _, err := os.Stat(filepath.Join(root, path)); err == nil {
 			t.Fatalf("expected %s to be removed from hololive-kakao-bot-go ownership", path)
 		} else if !os.IsNotExist(err) {
 			t.Fatalf("stat %s: %v", path, err)
 		}
 	}
 
-	goWork := readContractFile(t, "go.work")
+	goWork := readRepoFile(t, root, "go.work")
 	for _, entry := range []string{"./hololive/hololive-api", "./hololive/hololive-alarm-worker"} {
 		if !strings.Contains(goWork, entry) {
 			t.Fatalf("go.work must include %s", entry)
 		}
 	}
 
-	projectMap := readContractFile(t, filepath.ToSlash("docs/current/PROJECT_MAP.md"))
+	projectMap := readRepoFile(t, root, "docs/current/PROJECT_MAP.md")
 	for _, want := range []string{
 		"| `hololive-api` | Go 1.26 | `hololive/hololive-api/` |",
 		"| `hololive-alarm-worker` | Go 1.26 | `hololive/hololive-alarm-worker/` |",
@@ -59,13 +61,4 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 			t.Fatalf("project map must contain %q", want)
 		}
 	}
-}
-
-func readContractFile(t *testing.T, path string) string {
-	t.Helper()
-	data, err := readWorkspaceFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	return string(data)
 }

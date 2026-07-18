@@ -35,6 +35,7 @@ WORKDIR /workspace/hololive-bot
 
 COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
 COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
+COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ./hololive/hololive-dbtest/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
 COPY hololive/hololive-alarm-worker/go.mod hololive/hololive-alarm-worker/go.sum ./hololive/hololive-alarm-worker/
 
