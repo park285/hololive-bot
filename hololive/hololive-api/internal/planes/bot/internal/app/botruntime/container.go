@@ -28,14 +28,12 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
 	appwiring "github.com/kapu/hololive-api/internal/planes/bot/internal/app/wiring"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
 )
 
 type Container struct {
 	Config *config.Config
 	Logger *slog.Logger
 
-	botDeps *bot.Dependencies
 	lifecycle.Managed
 }
 
@@ -50,7 +48,6 @@ func Build(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (
 	return &Container{
 		Config:  appConfig,
 		Logger:  logger,
-		botDeps: built.BotDependencies,
 		Managed: lifecycle.NewManaged(built.Cleanup),
 	}, nil
 }

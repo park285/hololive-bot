@@ -108,50 +108,67 @@ func TestProvideAPIServer(t *testing.T) {
 	})
 }
 
-func TestProvideHealthOnlyRouter(t *testing.T) {
+func TestBuildYouTubeProducerHTTPRouter(t *testing.T) {
 	prevMode := gin.Mode()
 	t.Cleanup(func() {
 		gin.SetMode(prevMode)
 	})
 
-	ctx := t.Context()
-
+	const apiKey = "test-key"
 	readiness := newReadinessState(ingestionRuntimeFeatures{
 		youtubeEnabled:   true,
 		photoSyncEnabled: false,
 	})
-	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, testLogger(), "", func(opts *sharedserver.RuntimeRouterOptions) {
-		opts.DisableMetricsAuth = true
-		opts.EnableGzip = true
-		opts.ReadyResponder = func(c *gin.Context) {
-			statusCode, payload := readiness.Response()
-			c.JSON(statusCode, payload)
-		}
-	})
+	router, err := buildYouTubeProducerHTTPRouter(
+		t.Context(),
+		&config.Config{Server: config.ServerConfig{APIKey: apiKey}},
+		testLogger(),
+		readiness,
+	)
 	if err != nil {
-		t.Fatalf("NewHealthOnlyRuntimeRouter() error = %v", err)
+		t.Fatalf("buildYouTubeProducerHTTPRouter() error = %v", err)
 	}
 	if router == nil {
-		t.Fatal("NewHealthOnlyRuntimeRouter() returned nil router")
-	}
-	if gin.Mode() != gin.ReleaseMode {
-		t.Fatalf("gin mode = %q, want %q", gin.Mode(), gin.ReleaseMode)
-	}
-	if router.TrustedPlatform != gin.PlatformCloudflare {
-		t.Fatalf("TrustedPlatform = %q, want %q", router.TrustedPlatform, gin.PlatformCloudflare)
+		t.Fatal("buildYouTubeProducerHTTPRouter() returned nil router")
 	}
 
 	t.Run("health endpoint", func(t *testing.T) { assertHealthEndpoint(t, router) })
-	t.Run("metrics endpoint", func(t *testing.T) { assertMetricsEndpoint(t, router) })
-	t.Run("metrics endpoint requires api key when configured", func(t *testing.T) {
-		assertProtectedMetricsEndpoint(t, ctx, readiness)
+	t.Run("metrics endpoint requires api key", func(t *testing.T) {
+		assertProtectedMetricsEndpoint(t, router, apiKey)
 	})
-	t.Run("ready endpoint", func(t *testing.T) { assertReadyEndpointNotStarted(t, router) })
-	t.Run("ready endpoint after runtime start", func(t *testing.T) {
+	t.Run("public ready endpoint", func(t *testing.T) {
+		assertPublicReadyEndpointNotStarted(t, router)
+	})
+	t.Run("public ready endpoint after runtime start", func(t *testing.T) {
 		readiness.MarkRunning()
-		assertReadyEndpointRunning(t, router)
+		assertPublicReadyEndpointRunning(t, router)
 	})
 	t.Run("unknown endpoint", func(t *testing.T) { assertUnknownEndpoint(t, router) })
+}
+
+func TestBuildYouTubeProducerHTTPServersReturnsRouterError(t *testing.T) {
+	originalTrustedProxies := constants.ServerConfig.TrustedProxies
+	constants.ServerConfig.TrustedProxies = []string{"not-a-valid-proxy-entry"}
+	t.Cleanup(func() {
+		constants.ServerConfig.TrustedProxies = originalTrustedProxies
+	})
+
+	servers, err := buildYouTubeProducerHTTPServers(
+		t.Context(),
+		&config.Config{Server: config.ServerConfig{APIKey: "test-key"}},
+		testLogger(),
+		youtubeProducerRuntimeName,
+		newReadinessState(ingestionRuntimeFeatures{}),
+	)
+	if err == nil {
+		t.Fatal("buildYouTubeProducerHTTPServers() error = nil, want trusted proxy error")
+	}
+	if servers != nil {
+		t.Fatal("buildYouTubeProducerHTTPServers() returned non-nil servers on error")
+	}
+	if !strings.Contains(err.Error(), "build youtube producer router: set trusted proxies") {
+		t.Fatalf("buildYouTubeProducerHTTPServers() error = %q", err.Error())
+	}
 }
 
 func assertHealthEndpoint(t *testing.T, router http.Handler) {
@@ -161,72 +178,58 @@ func assertHealthEndpoint(t *testing.T, router http.Handler) {
 		t.Fatalf("/health status = %d, want %d", rr.Code, http.StatusOK)
 	}
 	payload := decodeRuntimeTestPayload(t, rr)
-	requirePayloadString(t, payload, "status", "ok")
+	requirePayloadStatus(t, payload, "ok")
 }
 
-func assertMetricsEndpoint(t *testing.T, router http.Handler) {
+func assertProtectedMetricsEndpoint(t *testing.T, router http.Handler, apiKey string) {
 	t.Helper()
+
 	rr := serveRuntimeTestRequest(t, t.Context(), router, "/metrics", "")
-	if rr.Code != http.StatusOK {
-		t.Fatalf("/metrics status = %d, want %d", rr.Code, http.StatusOK)
-	}
-	if rr.Body.Len() == 0 {
-		t.Fatal("/metrics body is empty")
-	}
-	if !strings.Contains(rr.Header().Get("Content-Type"), "text/plain") {
-		t.Fatalf("Content-Type = %q, want contains text/plain", rr.Header().Get("Content-Type"))
-	}
-}
-
-func assertProtectedMetricsEndpoint(t *testing.T, ctx context.Context, readinessState interface {
-	Response() (int, map[string]any)
-}) {
-	t.Helper()
-	protectedRouter, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, testLogger(), "test-key", func(opts *sharedserver.RuntimeRouterOptions) {
-		opts.EnableGzip = true
-		opts.ReadyResponder = func(c *gin.Context) {
-			statusCode, payload := readinessState.Response()
-			c.JSON(statusCode, payload)
-		}
-	})
-	if err != nil {
-		t.Fatalf("NewHealthOnlyRuntimeRouter() protected error = %v", err)
-	}
-
-	rr := serveRuntimeTestRequest(t, ctx, protectedRouter, "/metrics", "")
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("/metrics status without api key = %d, want %d", rr.Code, http.StatusUnauthorized)
 	}
 
-	rrWithKey := serveRuntimeTestRequest(t, ctx, protectedRouter, "/metrics", "test-key")
+	rrWithKey := serveRuntimeTestRequest(t, t.Context(), router, "/metrics", apiKey)
 	if rrWithKey.Code != http.StatusOK {
 		t.Fatalf("/metrics status with api key = %d, want %d", rrWithKey.Code, http.StatusOK)
 	}
 	if rrWithKey.Body.Len() == 0 {
 		t.Fatal("/metrics body with api key is empty")
 	}
+	if !strings.Contains(rrWithKey.Header().Get("Content-Type"), "text/plain") {
+		t.Fatalf("Content-Type = %q, want contains text/plain", rrWithKey.Header().Get("Content-Type"))
+	}
 }
 
-func assertReadyEndpointNotStarted(t *testing.T, router http.Handler) {
+func assertPublicReadyEndpointNotStarted(t *testing.T, router http.Handler) {
 	t.Helper()
 	rr := serveRuntimeTestRequest(t, t.Context(), router, "/ready", "")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("/ready status = %d, want %d", rr.Code, http.StatusServiceUnavailable)
 	}
 	payload := decodeRuntimeTestPayload(t, rr)
-	requirePayloadString(t, payload, "status", "not_ready")
-	requirePayloadString(t, payload, "runtime", youtubeProducerRuntimeName)
+	requirePayloadStatus(t, payload, "not_ready")
+	requirePublicReadyPayload(t, payload)
 }
 
-func assertReadyEndpointRunning(t *testing.T, router http.Handler) {
+func assertPublicReadyEndpointRunning(t *testing.T, router http.Handler) {
 	t.Helper()
 	rr := serveRuntimeTestRequest(t, t.Context(), router, "/ready", "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", rr.Code, http.StatusOK)
 	}
 	payload := decodeRuntimeTestPayload(t, rr)
-	requirePayloadString(t, payload, "status", "ready")
-	requirePayloadBool(t, payload, "youtube_enabled", true)
+	requirePayloadStatus(t, payload, "ready")
+	requirePublicReadyPayload(t, payload)
+}
+
+func requirePublicReadyPayload(t *testing.T, payload map[string]any) {
+	t.Helper()
+	for _, key := range []string{"runtime", "http_server_started", "youtube_enabled", "photo_sync_enabled", "valkey_available", "budget_backend_available"} {
+		if _, exists := payload[key]; exists {
+			t.Fatalf("public /ready payload must omit %q: %v", key, payload)
+		}
+	}
 }
 
 func assertUnknownEndpoint(t *testing.T, router http.Handler) {
@@ -257,68 +260,13 @@ func decodeRuntimeTestPayload(t *testing.T, rr *httptest.ResponseRecorder) map[s
 	return payload
 }
 
-func requirePayloadString(t *testing.T, payload map[string]any, key, want string) {
+func requirePayloadStatus(t *testing.T, payload map[string]any, want string) {
 	t.Helper()
-	got, ok := payload[key].(string)
+	got, ok := payload["status"].(string)
 	if !ok {
-		t.Fatalf("%s = %#v, want string %q", key, payload[key], want)
+		t.Fatalf("status = %#v, want string %q", payload["status"], want)
 	}
 	if got != want {
-		t.Fatalf("%s = %q, want %q", key, got, want)
-	}
-}
-
-func requirePayloadBool(t *testing.T, payload map[string]any, key string, want bool) {
-	t.Helper()
-	got, ok := payload[key].(bool)
-	if !ok {
-		t.Fatalf("%s = %#v, want bool %v", key, payload[key], want)
-	}
-	if got != want {
-		t.Fatalf("%s = %v, want %v", key, got, want)
-	}
-}
-
-func TestBuildYouTubeProducerHTTPServer(t *testing.T) {
-	prevMode := gin.Mode()
-	t.Cleanup(func() {
-		gin.SetMode(prevMode)
-	})
-
-	ctx := t.Context()
-
-	appConfig := &config.Config{
-		Server: config.ServerConfig{
-			Port: 31004,
-		},
-	}
-
-	readiness := newReadinessState(ingestionRuntimeFeatures{
-		youtubeEnabled:   false,
-		photoSyncEnabled: true,
-	})
-	server, err := buildYouTubeProducerHTTPServer(ctx, appConfig, testLogger(), readiness)
-	if err != nil {
-		t.Fatalf("buildYouTubeProducerHTTPServer() error = %v", err)
-	}
-	if server == nil {
-		t.Fatal("buildYouTubeProducerHTTPServer() returned nil server")
-	}
-	if server.Addr != ":31004" {
-		t.Fatalf("server.Addr = %q, want %q", server.Addr, ":31004")
-	}
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
-	rr := httptest.NewRecorder()
-	server.Handler.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("/health via built server status = %d, want %d", rr.Code, http.StatusOK)
-	}
-
-	readyReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", http.NoBody)
-	readyRR := httptest.NewRecorder()
-	server.Handler.ServeHTTP(readyRR, readyReq)
-	if readyRR.Code != http.StatusServiceUnavailable {
-		t.Fatalf("/ready via built server status = %d, want %d", readyRR.Code, http.StatusServiceUnavailable)
+		t.Fatalf("status = %q, want %q", got, want)
 	}
 }

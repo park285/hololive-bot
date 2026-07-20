@@ -68,8 +68,6 @@ func buildIngestionRuntime(ctx context.Context, appConfig *config.Config, logger
 		return nil, err
 	}
 
-	logFeatureOverride(logger, spec)
-
 	features := spec.features
 	readinessState := newReadinessStateWithFetcherEngine(spec.name, features, appConfig.Scraper.FetcherEngine)
 
@@ -228,23 +226,6 @@ func buildRuntimePhotoSyncService(
 		InstanceID: appConfig.Scraper.ActiveActive.InstanceID,
 	})
 	return newLeasedPhotoSyncService(service, guard, logger)
-}
-
-func buildYouTubeProducerHTTPServer(
-	ctx context.Context,
-	appConfig *config.Config,
-	logger *slog.Logger,
-	readinessState *readiness.State,
-) (*http.Server, error) {
-	router, err := buildYouTubeProducerHTTPRouter(ctx, appConfig, logger, readinessState)
-	if err != nil {
-		return nil, fmt.Errorf("build youtube producer router: %w", err)
-	}
-	return sharedserver.NewH2CServer(
-		fmt.Sprintf(":%d", appConfig.Server.Port),
-		router,
-		readiness.HTTPServerOperationName(youtubeProducerRuntimeName),
-	), nil
 }
 
 func buildYouTubeProducerHTTPServers(

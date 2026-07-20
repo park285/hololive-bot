@@ -21,7 +21,6 @@
 package producerruntime
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -34,7 +33,6 @@ import (
 
 	"github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -50,47 +48,6 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
-
-func TestBuildYouTubeProducerHTTPServer_Success(t *testing.T) {
-	ingestionConfig := &config.Config{
-		Server: config.ServerConfig{
-			Port: 30123,
-		},
-	}
-
-	readiness := newReadinessState(ingestionRuntimeFeatures{
-		youtubeEnabled:   false,
-		photoSyncEnabled: true,
-	})
-	server, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), readiness)
-	require.NoError(t, err)
-	require.NotNil(t, server)
-	assert.Equal(t, ":30123", server.Addr)
-	require.NotNil(t, server.Handler)
-}
-
-func TestBuildYouTubeProducerHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvalid(t *testing.T) {
-	originalTrustedProxies := constants.ServerConfig.TrustedProxies
-	constants.ServerConfig.TrustedProxies = []string{"not-a-valid-proxy-entry"}
-	t.Cleanup(func() {
-		constants.ServerConfig.TrustedProxies = originalTrustedProxies
-	})
-
-	ingestionConfig := &config.Config{
-		Server: config.ServerConfig{
-			Port: 30123,
-		},
-	}
-
-	readiness := newReadinessState(ingestionRuntimeFeatures{
-		youtubeEnabled:   false,
-		photoSyncEnabled: true,
-	})
-	server, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), readiness)
-	require.Error(t, err)
-	assert.Nil(t, server)
-	assert.Contains(t, err.Error(), "build youtube producer router: set trusted proxies")
-}
 
 func TestBuildRuntimePhotoSyncService_ReturnsNilWhenDisabled(t *testing.T) {
 	ingestionConfig := &config.Config{
@@ -124,7 +81,6 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 
 		spec := youtubeProducerSpec(ingestionConfig)
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
-		assert.Equal(t, spec.requestedFeatures, spec.features)
 		assert.True(t, spec.features.youtubeEnabled)
 		assert.True(t, spec.features.photoSyncEnabled)
 	})
@@ -153,8 +109,6 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 
 		spec := youtubeProducerSpec(ingestionConfig)
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
-		assert.False(t, spec.requestedFeatures.youtubeEnabled)
-		assert.True(t, spec.requestedFeatures.photoSyncEnabled)
 		assert.False(t, spec.features.youtubeEnabled)
 		assert.True(t, spec.features.photoSyncEnabled)
 	})
@@ -354,9 +308,6 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 				youtubeEnabled:   true,
 				photoSyncEnabled: true,
 			})
-			httpServer, err := buildYouTubeProducerHTTPServer(context.Background(), ingestionConfig, testLogger(), readiness)
-			require.NoError(t, err)
-			require.NotNil(t, httpServer)
 
 			runtime := &YouTubeProducerRuntime{
 				Config:           ingestionConfig,

@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 
+	apphttp "github.com/kapu/hololive-api/internal/planes/admin/internal/app/http"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 )
 
@@ -71,7 +72,7 @@ func TestFailClosedAuth(t *testing.T) {
 				},
 			}
 
-			router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
+			router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil)
 
 			if tt.wantErr {
 				assertAPIRouterError(t, router, err, tt.expectedErr)
@@ -126,7 +127,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -171,7 +172,7 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil)
 	if err == nil {
 		t.Fatal("ProvideAPIRouter() expected error")
 	}
@@ -199,7 +200,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, appConfig, logger, nil, authHandler, nil, nil, nil)
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, nil, authHandler, nil)
 	if err == nil {
 		t.Fatal("ProvideAPIRouter() expected error for nil domain handlers")
 	}
@@ -229,7 +230,7 @@ func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -278,7 +279,7 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -330,7 +331,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -361,7 +362,7 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil, nil, nil)
+	router, err := apphttp.ProvideAPIRouter(ctx, appConfig, logger, domainHandlers, authHandler, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}

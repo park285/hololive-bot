@@ -25,8 +25,6 @@ func adminAllowlistRouter(t *testing.T, allowedIPs []string) *gin.Engine {
 		(&server.Handler{}).DomainHandlers(),
 		&server.AuthHandler{},
 		nil,
-		nil,
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)

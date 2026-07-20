@@ -126,8 +126,6 @@ func buildAdminAPIRouter(
 		logger,
 		handler.DomainHandlers(),
 		server.NewAuthHandler(authService, logger),
-		nil,
-		nil,
 		infra.Cache,
 		readyProbe,
 	)
