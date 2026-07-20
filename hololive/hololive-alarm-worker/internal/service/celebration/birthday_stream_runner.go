@@ -13,7 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/util"
 
-	"github.com/kapu/hololive-shared/pkg/ctxutil"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 const birthdayStreamMaxPublishedPerMemberDay = 3
@@ -370,5 +370,5 @@ func (r *BirthdayStreamRunner) effectiveSleep() func(context.Context, time.Durat
 	if r.sleep != nil {
 		return r.sleep
 	}
-	return ctxutil.SleepWithContext
+	return retry.Sleep
 }

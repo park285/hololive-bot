@@ -7,13 +7,13 @@ ginjson
 h3
 healthprobe
 httputil
-httputil/ginauth
 internal/guardtext
 json
 jsonutil
 llm
 llm/internal/openaidiag
 llm/openaipreset
+lockutil
 logging
 logging/internal/archive
 netguard
@@ -25,6 +25,7 @@ runtime/automaxprocs
 runtime/bootstrap
 runtime/httpserver
 runtime/lifecycle
+sqlutil
 stringutil
 telemetry
 workerconfig

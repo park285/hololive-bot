@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"log/slog"
+	"net"
 	"strings"
 	"time"
 
@@ -24,7 +25,8 @@ const (
 
 type RuntimeIrisClient struct {
 	*iris.RebindingClient
-	resolver *runtimeIrisBaseURLResolver
+	resolver    *runtimeIrisBaseURLResolver
+	h3DialGuard *runtimeIrisH3DialGuard
 }
 
 func NewRuntimeIrisClient(
@@ -46,11 +48,12 @@ func NewRuntimeIrisClient(
 		logger:          logger,
 	}
 
+	h3DialGuard := newRuntimeIrisH3DialGuard(resolver.resolve, logger)
 	clientOpts := make([]iris.ClientOption, 0, len(opts)+3)
 	clientOpts = append(clientOpts,
 		iris.WithLogger(logger),
 		iris.WithReplyRetry(runtimeIrisReplyRetryMax),
-		iris.WithH3DialGuard(newRuntimeIrisH3DialGuard(resolver.resolve)),
+		iris.WithH3DialGuardContext(h3DialGuard.allow),
 	)
 	clientOpts = append(clientOpts, opts...)
 
@@ -63,12 +66,16 @@ func NewRuntimeIrisClient(
 		ClientOptions:   clientOpts,
 	})
 
-	return &RuntimeIrisClient{RebindingClient: rc, resolver: resolver}
+	return &RuntimeIrisClient{RebindingClient: rc, resolver: resolver, h3DialGuard: h3DialGuard}
 }
 
 func (c *RuntimeIrisClient) ValidateBaseURL() error {
 	_, err := c.resolver.resolve()
 	return err
+}
+
+func (c *RuntimeIrisClient) allowH3Dial(ctx context.Context, ip net.IP) error {
+	return c.h3DialGuard.allow(ctx, ip)
 }
 
 func (c *RuntimeIrisClient) SendMessageWithClientRequestID(ctx context.Context, room, message, clientRequestID string) error {

@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -141,6 +142,49 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 		t.Fatalf("second calls after reload = %d, want 1", secondCalls)
 	}
 	secondMu.Unlock()
+}
+
+func TestRuntimeIrisClientRejectsDialOutsideInitialBaseURLAllowset(t *testing.T) {
+	client := NewRuntimeIrisClient("https://192.0.2.10:3001", "bot-token", "", nil)
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	})
+
+	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
+		t.Fatalf("h3DialGuard(allowed IP) error = %v", err)
+	}
+	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.11")); err == nil {
+		t.Fatal("h3DialGuard(disallowed IP) error = nil")
+	}
+}
+
+func TestRuntimeIrisClientDialGuardFollowsRotatedBaseURL(t *testing.T) {
+	dir := t.TempDir()
+	baseURLFilePath := filepath.Join(dir, "iris_base_url")
+	if err := os.WriteFile(baseURLFilePath, []byte("https://192.0.2.10:3001"), 0o600); err != nil {
+		t.Fatalf("write initial base URL: %v", err)
+	}
+	client := NewRuntimeIrisClient("https://192.0.2.10:3001", "bot-token", baseURLFilePath, nil)
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	})
+
+	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
+		t.Fatalf("allowH3Dial(initial IP) error = %v", err)
+	}
+	if err := os.WriteFile(baseURLFilePath, []byte("https://192.0.2.11:3001"), 0o600); err != nil {
+		t.Fatalf("write rotated base URL: %v", err)
+	}
+	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.11")); err != nil {
+		t.Fatalf("allowH3Dial(rotated IP) error = %v", err)
+	}
+	if err := client.allowH3Dial(t.Context(), net.ParseIP("192.0.2.10")); err == nil {
+		t.Fatal("allowH3Dial(stale IP) error = nil")
+	}
 }
 
 func TestRuntimeIrisClient_SendMessageDefaultsToReplyRetry(t *testing.T) {

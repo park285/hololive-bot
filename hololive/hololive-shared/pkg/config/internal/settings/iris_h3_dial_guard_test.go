@@ -28,41 +28,17 @@ import (
 )
 
 func TestSettingsIrisH3DialGuardAllowsOnlyBaseURLLiteralIP(t *testing.T) {
-	t.Parallel()
-
-	guard := newSettingsIrisH3DialGuard("https://192.0.2.10:3001", time.Second)
-	if err := guard(net.ParseIP("192.0.2.10")); err != nil {
-		t.Fatalf("guard(allowed ip) error = %v", err)
+	guard, err := newSettingsIrisH3DialGuard(context.Background(), "https://192.0.2.10:3001", time.Second)
+	if err != nil {
+		t.Fatalf("newSettingsIrisH3DialGuard() error = %v", err)
 	}
-	if err := guard(net.ParseIP("192.0.2.11")); err == nil {
-		t.Fatal("guard(disallowed ip) error = nil, want denial")
+	if err := guard(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
+		t.Fatalf("guard(allowed IP) error = %v", err)
 	}
-	if err := guard(nil); err == nil {
-		t.Fatal("guard(nil) error = nil, want denial")
+	if err := guard(t.Context(), net.ParseIP("192.0.2.11")); err == nil {
+		t.Fatal("guard(disallowed IP) error = nil")
 	}
-}
-
-type fakeSettingsIrisH3Resolver struct {
-	addrs []net.IPAddr
-	err   error
-}
-
-func (r *fakeSettingsIrisH3Resolver) LookupIPAddr(context.Context, string) ([]net.IPAddr, error) {
-	return r.addrs, r.err
-}
-
-func TestSettingsIrisH3DialGuardResolvesHostnameOnceIntoAllowset(t *testing.T) {
-	previous := settingsIrisH3DialResolver
-	settingsIrisH3DialResolver = &fakeSettingsIrisH3Resolver{
-		addrs: []net.IPAddr{{IP: net.ParseIP("192.0.2.20")}},
-	}
-	t.Cleanup(func() { settingsIrisH3DialResolver = previous })
-
-	guard := newSettingsIrisH3DialGuard("https://iris.example.internal:3001", time.Second)
-	if err := guard(net.ParseIP("192.0.2.20")); err != nil {
-		t.Fatalf("guard(resolved ip) error = %v", err)
-	}
-	if err := guard(net.ParseIP("192.0.2.21")); err == nil {
-		t.Fatal("guard(unresolved ip) error = nil, want denial")
+	if err := guard(t.Context(), nil); err == nil {
+		t.Fatal("guard(nil) error = nil")
 	}
 }

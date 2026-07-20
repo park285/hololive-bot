@@ -22,92 +22,20 @@ package settings
 
 import (
 	"context"
-	"fmt"
 	"net"
-	"net/url"
-	"strings"
 	"time"
+
+	"github.com/park285/iris-client-go/iris"
 )
 
-type settingsIrisH3Resolver interface {
-	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
-}
-
-var settingsIrisH3DialResolver settingsIrisH3Resolver = net.DefaultResolver
-
-func newSettingsIrisH3DialGuard(baseURL string, timeout time.Duration) func(net.IP) error {
-	host, allowed, resolveErr := resolveSettingsIrisH3DialGuardIPs(baseURL, timeout)
-	return func(ip net.IP) error {
-		if ip == nil {
-			return fmt.Errorf("iris h3 egress denied: nil dial ip")
-		}
-		if resolveErr != nil {
-			return resolveErr
-		}
-		if ipInSettingsAllowset(ip, allowed) {
-			return nil
-		}
-		return fmt.Errorf("iris h3 egress denied: dial ip %s not in allowset derived from iris base url host %q", ip, host)
-	}
-}
-
-func ipInSettingsAllowset(ip net.IP, allowed []net.IP) bool {
-	for _, candidate := range allowed {
-		if candidate.Equal(ip) {
-			return true
-		}
-	}
-	return false
-}
-
-func resolveSettingsIrisH3DialGuardIPs(baseURL string, timeout time.Duration) (string, []net.IP, error) {
-	host, err := settingsHostFromIrisBaseURL(baseURL)
-	if err != nil {
-		return "", nil, err
-	}
-	if literal := net.ParseIP(host); literal != nil {
-		return host, []net.IP{literal}, nil
-	}
-	ips, err := settingsLookupIrisBaseURLHostIPs(host, timeout)
-	if err != nil {
-		return "", nil, err
-	}
-	return host, ips, nil
-}
-
-func settingsHostFromIrisBaseURL(baseURL string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return "", fmt.Errorf("parse iris base url for h3 egress guard: %w", err)
-	}
-	host := parsed.Hostname()
-	if host == "" {
-		return "", fmt.Errorf("iris base url has no host for h3 egress guard")
-	}
-	return host, nil
-}
-
-func settingsLookupIrisBaseURLHostIPs(host string, timeout time.Duration) ([]net.IP, error) {
-	if timeout <= 0 {
-		timeout = 5 * time.Second
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	ipAddrs, err := settingsIrisH3DialResolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, fmt.Errorf("resolve iris base url host %q for h3 egress guard: %w", host, err)
-	}
-	if len(ipAddrs) == 0 {
-		return nil, fmt.Errorf("iris base url host %q resolved to no addresses for h3 egress guard", host)
-	}
-	return settingsIPAddrsToIPs(ipAddrs), nil
-}
-
-func settingsIPAddrsToIPs(ipAddrs []net.IPAddr) []net.IP {
-	allowed := make([]net.IP, 0, len(ipAddrs))
-	for _, ipAddr := range ipAddrs {
-		allowed = append(allowed, ipAddr.IP)
-	}
-	return allowed
+func newSettingsIrisH3DialGuard(
+	ctx context.Context,
+	baseURL string,
+	resolveTimeout time.Duration,
+) (func(context.Context, net.IP) error, error) {
+	return iris.NewH3DialGuardForBaseURL(
+		ctx,
+		baseURL,
+		iris.WithH3DialGuardResolveTimeout(resolveTimeout),
+	)
 }

@@ -84,7 +84,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		return failAlarmWorkerBuild(infra, "scheduler", err)
 	}
 
-	notificationEgress, err := buildNotificationEgress(appConfig, infra, logger) //nolint:contextcheck // H3 dial guard 콜백에는 dial ctx가 없고, build ctx를 넘기면 기동 후 DNS allowlist가 만료된다.
+	notificationEgress, err := buildNotificationEgress(appConfig, infra, logger)
 	if err != nil {
 		return failAlarmWorkerBuild(infra, "notification egress", err)
 	}

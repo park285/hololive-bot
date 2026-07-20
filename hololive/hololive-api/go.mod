@@ -13,8 +13,8 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.4.0
 	github.com/openai/openai-go/v3 v3.43.0
-	github.com/park285/iris-client-go v0.31.0
-	github.com/park285/shared-go v1.31.0
+	github.com/park285/iris-client-go v0.33.0
+	github.com/park285/shared-go v1.32.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/quic-go/quic-go v0.60.0
 	github.com/shirou/gopsutil/v4 v4.26.6
@@ -62,7 +62,6 @@ require (
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect

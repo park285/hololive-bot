@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/kapu/hololive-shared/pkg/ctxutil"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 func TestPGIdleWaiterConsumesWakeupAndResetsBackoff(t *testing.T) {
@@ -114,14 +114,14 @@ func TestPGIdleWaiterStopsOnContextCancel(t *testing.T) {
 }
 
 func TestSleepContextReturnsTrueWhenTimerFires(t *testing.T) {
-	assert.True(t, ctxutil.SleepWithContext(t.Context(), time.Millisecond))
+	assert.True(t, retry.Sleep(t.Context(), time.Millisecond))
 }
 
 func TestSleepContextReturnsFalseWhenContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	assert.False(t, ctxutil.SleepWithContext(ctx, time.Hour))
+	assert.False(t, retry.Sleep(ctx, time.Hour))
 }
 
 func TestNewPGIdleWaiterClampsBackoffMaxToMinimum(t *testing.T) {

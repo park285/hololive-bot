@@ -31,10 +31,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/pkg/db/pgxdb"
 	"github.com/park285/shared-go/pkg/stringutil"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -131,7 +131,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	}
 
 	if _, err := s.db.Exec(ctx, mustSQL("service_0133_01.sql"), model.ID, model.Email, model.PasswordHash, model.DisplayName, model.AvatarURL, model.CreatedAt, model.UpdatedAt); err != nil {
-		if dbx.IsDuplicateKey(err) {
+		if pgxdb.IsDuplicateKey(err) {
 			return nil, newError(CodeEmailExists, "email already exists", err)
 		}
 		return nil, newError(CodeInternal, "failed to create user", err)
