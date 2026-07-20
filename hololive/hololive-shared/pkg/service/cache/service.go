@@ -34,6 +34,8 @@ type Service struct {
 	closeOnce sync.Once
 }
 
+var _ Client = (*Service)(nil)
+
 type Config struct {
 	Host       string
 	Port       int

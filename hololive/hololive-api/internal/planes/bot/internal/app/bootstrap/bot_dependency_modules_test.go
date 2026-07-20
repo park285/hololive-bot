@@ -69,25 +69,21 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	modules := BuildBotDependencyModules(
 		appConfig,
 		(&sharedInfraForBootstrapTest{cacheClient: cacheClient, postgres: postgres}).module(),
-		&AlarmModeComponents{
-			AlarmCRUD:        alarmCRUD,
-			MemberDataSource: memberData,
+		&ScraperHolodexProfileFoundation{},
+		&AlarmYouTubeStackComponents{
+			AlarmMode: &AlarmModeComponents{
+				AlarmCRUD:        alarmCRUD,
+				MemberDataSource: memberData,
+			},
+			YouTubeStack:    &sharedproviders.YouTubeStack{Service: youTubeService},
+			ActivityLogger:  activityLogger,
+			SettingsService: settingsService,
 		},
-		nil,
+		&CoreIntegrationServices{CommandBuilders: commandBuilders},
 		messageAdapter,
 		formatter,
 		nil,
 		irisClient,
-		nil,
-		nil,
-		&sharedproviders.YouTubeStack{Service: youTubeService},
-		activityLogger,
-		settingsService,
-		nil,
-		nil,
-		nil,
-		commandBuilders,
-		nil,
 		logger,
 	)
 	commandBuilders[0] = stubCommandBuilderThree

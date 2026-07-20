@@ -8,8 +8,8 @@ import (
 
 	"github.com/tidwall/gjson"
 
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping/parser"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 var (

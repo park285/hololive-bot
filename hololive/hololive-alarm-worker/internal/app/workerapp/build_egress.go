@@ -57,7 +57,7 @@ func buildNotificationEgress(
 
 	runners := []workerruntime.NamedScheduler{
 		{Name: "alarm-dispatch", Scheduler: alarmDispatchRunner},
-		{Name: "alarm-dispatch-maintenance", Scheduler: dispatchrun.NewMaintenanceRunner(infra, logger)},
+		{Name: "alarm-dispatch-maintenance", Scheduler: dispatchrun.NewMaintenanceRunner(infra, appConfig.AlarmDispatchRetention, logger)},
 		{Name: "youtube-outbox", Scheduler: youtubeOutboxDispatcher},
 		{Name: "notification-delivery-outbox", Scheduler: deliveryOutboxDispatcher},
 	}

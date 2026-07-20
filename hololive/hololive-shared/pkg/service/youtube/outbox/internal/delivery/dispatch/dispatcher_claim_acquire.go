@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 

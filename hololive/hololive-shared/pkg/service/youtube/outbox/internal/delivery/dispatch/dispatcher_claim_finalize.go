@@ -8,10 +8,10 @@ import (
 
 	json "github.com/park285/shared-go/pkg/json"
 
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 

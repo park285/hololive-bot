@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"

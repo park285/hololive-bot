@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 )
 
 func TestLivePollerPollBatchUsesSingleProviderCallAndPersistsPerChannel(t *testing.T) {

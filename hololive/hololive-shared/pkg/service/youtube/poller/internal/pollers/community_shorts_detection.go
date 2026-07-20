@@ -25,10 +25,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 const (

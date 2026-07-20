@@ -9,8 +9,8 @@ import (
 
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 )
 

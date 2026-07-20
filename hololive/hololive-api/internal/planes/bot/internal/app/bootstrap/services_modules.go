@@ -6,6 +6,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -17,38 +19,27 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
 )
 
 func BuildBotDependencyModules(
 	appConfig *config.Config,
 	infra *sharedmodules.InfraModule,
-	alarmMode *AlarmModeComponents,
-	holodexService *holodex.Service,
+	foundation *ScraperHolodexProfileFoundation,
+	alarmYouTubeStack *AlarmYouTubeStackComponents,
+	integrationServices *CoreIntegrationServices,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
 	messageStrings *messagestrings.Store,
 	irisClient iris.BotClient,
-	profileService *member.ProfileService,
-	memberMatcher *matcher.Matcher,
-	youTubeStack *providers.YouTubeStack,
-	activityLogger *activity.Logger,
-	settingsService settings.ReadWriter,
-	aclService *acl.Service,
-	majorEventRepository command.MajorEventRepository,
-	memberNewsService command.MemberNewsService,
-	commandBuilders []bot.CommandBuilder,
-	workerPool *workerpool.QueuedPool,
 	logger *slog.Logger,
 ) BotDependencyModules {
 	return BotDependencyModules{
 		Core:      buildBotCoreModule(appConfig, logger),
 		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter, messageStrings),
-		Data:      buildBotDataModule(infra, alarmMode, profileService),
-		Stream:    buildBotStreamModule(alarmMode, holodexService, memberMatcher, youTubeStack),
-		Support:   buildBotSupportModule(activityLogger, settingsService, aclService, workerPool),
-		Feature:   buildBotFeatureModule(majorEventRepository, memberNewsService, commandBuilders),
+		Data:      buildBotDataModule(infra, alarmYouTubeStack.AlarmMode, foundation.ProfileService),
+		Stream:    buildBotStreamModule(alarmYouTubeStack.AlarmMode, foundation.HolodexService, alarmYouTubeStack.Matcher, alarmYouTubeStack.YouTubeStack),
+		Support:   buildBotSupportModule(alarmYouTubeStack.ActivityLogger, alarmYouTubeStack.SettingsService, integrationServices.ACLService, integrationServices.WorkerPool),
+		Feature:   buildBotFeatureModule(integrationServices.MajorEventRepository, integrationServices.MemberNewsService, integrationServices.CommandBuilders),
 	}
 }
 

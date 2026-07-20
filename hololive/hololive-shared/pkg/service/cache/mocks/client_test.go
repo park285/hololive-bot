@@ -113,10 +113,6 @@ func TestClientReadMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
 		t.Fatalf("InitializeMemberDatabase() error = %v, want nil", err)
 	}
 
-	if err := client.AddMember(context.Background(), "mio", "ch"); err != nil {
-		t.Fatalf("AddMember() error = %v, want nil", err)
-	}
-
 	client.SetStreams(context.Background(), "streams", nil, time.Second)
 }
 

@@ -11,8 +11,8 @@ import (
 
 	"github.com/park285/iris-client-go/iris"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 )
 
 type deliverySendRequest struct {

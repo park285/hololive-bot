@@ -27,8 +27,8 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/kapu/hololive-shared/internal/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )

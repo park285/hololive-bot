@@ -36,36 +36,37 @@ import (
 )
 
 type Config struct {
-	Iris                 IrisConfig
-	Server               ServerConfig
-	Kakao                KakaoConfig
-	Holodex              HolodexConfig
-	YouTube              YouTubeConfig
-	Ingestion            IngestionConfig
-	Chzzk                ChzzkConfig
-	Twitch               TwitchConfig
-	Valkey               ValkeyConfig
-	Postgres             PostgresConfig
-	Notification         NotificationConfig
-	Logging              LoggingConfig
-	Bot                  BotConfig
-	Services             ServicesConfig
-	Environment          string
-	Scraper              ScraperConfig
-	Webhook              WebhookConfig
-	WorkerPool           WorkerPoolConfig
-	WorkerProfile        WorkerProfileConfig
-	CORS                 CORSConfig
-	Cliproxy             CliproxyConfig
-	LLM                  LLMConfig
-	Exa                  ExaConfig
-	OfficialSchedule     OfficialScheduleConfig
-	OfficialProfile      OfficialProfileConfig
-	MaxResponseBodyBytes int64
-	LLMSchedulerURL      string
-	AlarmServiceURL      string
-	BotInternalURL       string
-	Version              string
+	Iris                   IrisConfig
+	Server                 ServerConfig
+	Kakao                  KakaoConfig
+	Holodex                HolodexConfig
+	YouTube                YouTubeConfig
+	Ingestion              IngestionConfig
+	Chzzk                  ChzzkConfig
+	Twitch                 TwitchConfig
+	Valkey                 ValkeyConfig
+	Postgres               PostgresConfig
+	Notification           NotificationConfig
+	AlarmDispatchRetention AlarmDispatchRetentionConfig
+	Logging                LoggingConfig
+	Bot                    BotConfig
+	Services               ServicesConfig
+	Environment            string
+	Scraper                ScraperConfig
+	Webhook                WebhookConfig
+	WorkerPool             WorkerPoolConfig
+	WorkerProfile          WorkerProfileConfig
+	CORS                   CORSConfig
+	Cliproxy               CliproxyConfig
+	LLM                    LLMConfig
+	Exa                    ExaConfig
+	OfficialSchedule       OfficialScheduleConfig
+	OfficialProfile        OfficialProfileConfig
+	MaxResponseBodyBytes   int64
+	LLMSchedulerURL        string
+	AlarmServiceURL        string
+	BotInternalURL         string
+	Version                string
 }
 
 type configLoadOptions struct {
@@ -135,16 +136,17 @@ func buildConfig(
 			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
 			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
 		},
-		Valkey:       loadValkeyConfig(),
-		Postgres:     loadPostgresConfig(),
-		Notification: loadNotificationConfig(),
-		Logging:      loadLoggingConfig(),
-		Bot:          loadBotConfig(),
-		Services:     loadServicesConfig(),
-		Environment:  loadAppEnvironment(),
-		Scraper:      loadScraperConfig(),
-		Webhook:      loadWebhookConfig(&workerProfile),
-		WorkerPool:   loadWorkerPoolConfig(&workerProfile),
+		Valkey:                 loadValkeyConfig(),
+		Postgres:               loadPostgresConfig(),
+		Notification:           loadNotificationConfig(),
+		AlarmDispatchRetention: loadAlarmDispatchRetentionConfig(),
+		Logging:                loadLoggingConfig(),
+		Bot:                    loadBotConfig(),
+		Services:               loadServicesConfig(),
+		Environment:            loadAppEnvironment(),
+		Scraper:                loadScraperConfig(),
+		Webhook:                loadWebhookConfig(&workerProfile),
+		WorkerPool:             loadWorkerPoolConfig(&workerProfile),
 		WorkerProfile: WorkerProfileConfig{
 			Version: workerProfile.Version,
 			Hash:    workerProfile.ProfileHash(),

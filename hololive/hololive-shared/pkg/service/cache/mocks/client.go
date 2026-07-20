@@ -35,9 +35,7 @@ type Client struct {
 	Lenient bool
 
 	GetFunc       func(ctx context.Context, key string, dest any) error
-	GetJSONFunc   func(ctx context.Context, key string, dest any) (bool, error)
 	GetStringFunc func(ctx context.Context, key string) (string, bool, error)
-	MGetFunc      func(ctx context.Context, keys []string) (map[string]string, error)
 	SetFunc       func(ctx context.Context, key string, value any, ttl time.Duration) error
 	MSetFunc      func(ctx context.Context, pairs map[string]any, ttl time.Duration) error
 	DelFunc       func(ctx context.Context, key string) error
@@ -77,12 +75,8 @@ type Client struct {
 	GetStreamsFunc func(ctx context.Context, key string) ([]*domain.Stream, bool)
 	SetStreamsFunc func(ctx context.Context, key string, streams []*domain.Stream, ttl time.Duration)
 
-	InitializeMemberDatabaseFunc  func(ctx context.Context, memberData map[string]string) error
-	GetMemberChannelIDFunc        func(ctx context.Context, memberName string) (string, error)
-	GetAllMembersFunc             func(ctx context.Context) (map[string]string, error)
-	GetMemberChannelIDWithOrgFunc func(ctx context.Context, memberName, org string) (string, error)
-	GetMemberChannelIDsFunc       func(ctx context.Context, memberName string) ([]string, error)
-	AddMemberFunc                 func(ctx context.Context, memberName, channelID string) error
+	InitializeMemberDatabaseFunc func(ctx context.Context, memberData map[string]string) error
+	GetAllMembersFunc            func(ctx context.Context) (map[string]string, error)
 }
 
 var _ cache.Client = (*Client)(nil)
@@ -129,28 +123,12 @@ func (m *Client) Get(ctx context.Context, key string, dest any) error {
 	return nil
 }
 
-func (m *Client) GetJSON(ctx context.Context, key string, dest any) (bool, error) {
-	if m.GetJSONFunc != nil {
-		return m.GetJSONFunc(ctx, key, dest)
-	}
-	m.panicIfUnset("GetJSONFunc")
-	return false, nil
-}
-
 func (m *Client) GetString(ctx context.Context, key string) (value0 string, ok1 bool, err error) {
 	if m.GetStringFunc != nil {
 		return m.GetStringFunc(ctx, key)
 	}
 	m.panicIfUnset("GetStringFunc")
 	return "", false, nil
-}
-
-func (m *Client) MGet(ctx context.Context, keys []string) (map[string]string, error) {
-	if m.MGetFunc != nil {
-		return m.MGetFunc(ctx, keys)
-	}
-	m.panicIfUnset("MGetFunc")
-	return nil, nil
 }
 
 func (m *Client) Set(ctx context.Context, key string, value any, ttl time.Duration) error {

@@ -33,9 +33,9 @@ import (
 
 	"github.com/park285/shared-go/pkg/json"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 

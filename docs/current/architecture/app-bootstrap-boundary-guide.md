@@ -17,8 +17,9 @@
   - lifecycle / HTTP server / run loop 구현이 전용 helper seam 으로 분리됐다.
   - `internal/app/runtime*.go` 루트 파일은 façade / thin wrapper 역할만 남긴다.
 - `internal/app/wiring/`
-  - container assembly / accessor / dependency-view build 구현이 전용 helper seam 으로 분리됐다.
-  - `container.go`, `container_accessors.go`, `bootstrap_bot_dependency_views.go` 는 façade / local shape adapter 역할만 남긴다.
+  - container assembly / accessor 구현이 전용 helper seam 으로 분리됐다.
+  - `container.go`, `container_accessors.go` 는 façade / local shape adapter 역할만 남긴다.
+  - runtime dependency-view 구성은 `internal/app/botruntime/bootstrap_bot_dependency_views.go` 로 이동했다.
 - `internal/app/bootstrap/`
   - provider / core / service / bot helper 구현이 전용 디렉터리로 이동했다.
   - 루트 `bootstrap_*.go` 파일은 orchestration / local shape adapter 역할만 남기고, 중복 provider/type wrapper 파일은 제거됐다.
@@ -44,7 +45,6 @@
 ### `internal/app/wiring/`
 - container assembly helper
 - accessor/helper exposure
-- runtime dependency-view construction
 
 ### `internal/app/bootstrap/`
 - provider assembly

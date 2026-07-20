@@ -37,10 +37,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 	ytscraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 

@@ -51,42 +51,10 @@ func (m *Client) InitializeMemberDatabase(ctx context.Context, memberData map[st
 	return nil
 }
 
-func (m *Client) GetMemberChannelID(ctx context.Context, memberName string) (string, error) {
-	if m.GetMemberChannelIDFunc != nil {
-		return m.GetMemberChannelIDFunc(ctx, memberName)
-	}
-	m.panicIfUnset("GetMemberChannelIDFunc")
-	return "", nil
-}
-
 func (m *Client) GetAllMembers(ctx context.Context) (map[string]string, error) {
 	if m.GetAllMembersFunc != nil {
 		return m.GetAllMembersFunc(ctx)
 	}
 	m.panicIfUnset("GetAllMembersFunc")
 	return nil, nil
-}
-
-func (m *Client) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org string) (string, error) {
-	if m.GetMemberChannelIDWithOrgFunc != nil {
-		return m.GetMemberChannelIDWithOrgFunc(ctx, memberName, org)
-	}
-	m.panicIfUnset("GetMemberChannelIDWithOrgFunc")
-	return "", nil
-}
-
-func (m *Client) GetMemberChannelIDs(ctx context.Context, memberName string) ([]string, error) {
-	if m.GetMemberChannelIDsFunc != nil {
-		return m.GetMemberChannelIDsFunc(ctx, memberName)
-	}
-	m.panicIfUnset("GetMemberChannelIDsFunc")
-	return nil, nil
-}
-
-func (m *Client) AddMember(ctx context.Context, memberName, channelID string) error {
-	if m.AddMemberFunc != nil {
-		return m.AddMemberFunc(ctx, memberName, channelID)
-	}
-	m.panicIfUnset("AddMemberFunc")
-	return nil
 }

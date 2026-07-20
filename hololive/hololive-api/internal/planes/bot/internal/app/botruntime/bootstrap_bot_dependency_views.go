@@ -22,7 +22,6 @@ package botruntime
 
 import (
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-	appwiring "github.com/kapu/hololive-api/internal/planes/bot/internal/app/wiring"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
 )
 
@@ -38,31 +37,31 @@ type botRuntimeDependencyViews struct {
 }
 
 func buildBotWebhookRuntimeDependencies(deps *bot.Dependencies) botWebhookRuntimeDependencies {
-	return botWebhookRuntimeDependencies{Cache: appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{BotDependencies: deps}).Webhook.Cache}
+	if deps == nil {
+		return botWebhookRuntimeDependencies{}
+	}
+	return botWebhookRuntimeDependencies{Cache: deps.Cache}
 }
 
 func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubscriberDependencies {
-	views := appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{BotDependencies: deps})
+	if deps == nil {
+		return botConfigSubscriberDependencies{}
+	}
 	return botConfigSubscriberDependencies{
-		Cache:    views.ConfigSubscriber.Cache,
-		Settings: views.ConfigSubscriber.Settings,
+		Cache:    deps.Cache,
+		Settings: deps.Settings,
 	}
 }
 
 func buildBotConfigSubscriberRuntimeDependencies(infra *appbootstrap.BotInfrastructure) botConfigSubscriberRuntimeDependencies {
-	if infra == nil {
+	if infra == nil || infra.Deps == nil {
 		return botConfigSubscriberRuntimeDependencies{}
 	}
 
-	views := appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{
-		BotDependencies: infra.Deps,
-		AlarmCRUD:       infra.AlarmCRUD,
-		HolodexService:  infra.HolodexService,
-	})
 	return botConfigSubscriberRuntimeDependencies{
-		YouTubeService: views.ConfigSubscriberRuntime.YouTubeService,
-		HolodexService: views.ConfigSubscriberRuntime.HolodexService,
-		AlarmCRUD:      views.ConfigSubscriberRuntime.AlarmCRUD,
+		YouTubeService: infra.Deps.Service,
+		HolodexService: infra.HolodexService,
+		AlarmCRUD:      infra.AlarmCRUD,
 	}
 }
 

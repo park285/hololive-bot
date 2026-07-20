@@ -28,8 +28,8 @@ import (
 	texttemplate "text/template"
 
 	"github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/template/sampledata"
 )
 
 // 런타임 renderer는 missingkey 옵션 없이 파싱해 map 데이터의 키 누락이 `<no value>`로

@@ -87,7 +87,6 @@ func newLenientAlarmCacheMock(
 	cacheMock.HMSetFunc = cacheClient.HMSet
 	cacheMock.ExistsFunc = cacheClient.Exists
 	cacheMock.ExpireFunc = cacheClient.Expire
-	cacheMock.MGetFunc = cacheClient.MGet
 	cacheMock.MSetFunc = cacheClient.MSet
 	cacheMock.SetNXFunc = cacheClient.SetNX
 	cacheMock.CompareAndDeleteFunc = cacheClient.CompareAndDelete
@@ -95,11 +94,7 @@ func newLenientAlarmCacheMock(
 	cacheMock.GetStreamsFunc = cacheClient.GetStreams
 	cacheMock.SetStreamsFunc = cacheClient.SetStreams
 	cacheMock.InitializeMemberDatabaseFunc = cacheClient.InitializeMemberDatabase
-	cacheMock.GetMemberChannelIDFunc = cacheClient.GetMemberChannelID
 	cacheMock.GetAllMembersFunc = cacheClient.GetAllMembers
-	cacheMock.GetMemberChannelIDWithOrgFunc = cacheClient.GetMemberChannelIDWithOrg
-	cacheMock.GetMemberChannelIDsFunc = cacheClient.GetMemberChannelIDs
-	cacheMock.AddMemberFunc = cacheClient.AddMember
 	cacheMock.CloseFunc = cacheClient.Close
 	cacheMock.IsConnectedFunc = cacheClient.IsConnected
 	cacheMock.WaitUntilReadyFunc = cacheClient.WaitUntilReady

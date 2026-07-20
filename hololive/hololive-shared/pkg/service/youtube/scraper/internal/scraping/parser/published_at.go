@@ -8,7 +8,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 )
 
 var ErrPublishedAtNotFound = errors.New("published_at not found")

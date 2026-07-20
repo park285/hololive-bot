@@ -2,6 +2,7 @@ package config
 
 import settings "github.com/kapu/hololive-shared/pkg/config/internal/settings"
 
+type AlarmDispatchRetentionConfig = settings.AlarmDispatchRetentionConfig
 type BotConfig = settings.BotConfig
 type CORSConfig = settings.CORSConfig
 type ChzzkConfig = settings.ChzzkConfig

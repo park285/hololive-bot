@@ -28,9 +28,9 @@ import (
 	"log/slog"
 	"text/template"
 
+	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/repository"
-	"github.com/kapu/hololive-shared/pkg/service/template/sampledata"
 )
 
 var (

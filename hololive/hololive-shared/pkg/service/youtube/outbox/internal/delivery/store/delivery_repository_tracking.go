@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/dbx"
+	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
