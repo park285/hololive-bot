@@ -12,7 +12,7 @@ import (
 	"github.com/park285/shared-go/pkg/backoff"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
-	"github.com/kapu/hololive-shared/pkg/ctxutil"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 type alarmDispatchWakeupWaitResult string
@@ -41,7 +41,7 @@ func NewWakeupWaiter(c cache.LowLevelCache, logger *slog.Logger) *alarmDispatchW
 		pollInterval:  envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_POLL_INTERVAL_MS", time.Second),
 		backoffMin:    envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS", 250*time.Millisecond),
 		backoffMax:    envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_IDLE_BACKOFF_MAX_MS", 5*time.Second),
-		sleep:         ctxutil.SleepWithContext,
+		sleep:         retry.Sleep,
 		logger:        logger,
 	}
 	if waiter.backoffMax < waiter.backoffMin {
@@ -171,5 +171,5 @@ func (w *alarmDispatchWakeupWaiter) effectiveSleep() func(context.Context, time.
 	if w.sleep != nil {
 		return w.sleep
 	}
-	return ctxutil.SleepWithContext
+	return retry.Sleep
 }

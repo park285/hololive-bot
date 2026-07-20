@@ -10,7 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/util"
 
-	"github.com/kapu/hololive-shared/pkg/ctxutil"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 type MemberRepository interface {
@@ -210,7 +210,7 @@ func (r *Runner) effectiveSleep() func(context.Context, time.Duration) bool {
 	if r.sleep != nil {
 		return r.sleep
 	}
-	return ctxutil.SleepWithContext
+	return retry.Sleep
 }
 
 func filterValidAnniversaryMembers(members []*domain.Member, currentYear int) []*domain.Member {

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/ctxutil"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 var ErrDistributedLimiterUnavailable = errors.New("distributed rate limiter unavailable")
@@ -158,7 +158,7 @@ func (r *RateLimiter) waitDistributed(ctx context.Context, bucket string) error 
 		if allowed {
 			return nil
 		}
-		if !ctxutil.SleepWithContext(ctx, retryAfter) {
+		if !retry.Sleep(ctx, retryAfter) {
 			return fmt.Errorf("distributed rate limiter wait canceled: %w", ctx.Err())
 		}
 	}

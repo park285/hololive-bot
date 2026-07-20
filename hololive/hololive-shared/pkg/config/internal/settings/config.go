@@ -208,6 +208,10 @@ func fetchIrisBotWebhookWorkerProfile(config *IrisConfig) (profile workerconfig.
 	if err != nil {
 		return profile, err
 	}
+	dialGuard, err := newSettingsIrisH3DialGuard(context.Background(), baseURL, config.HTTPDialTimeout)
+	if err != nil {
+		return profile, fmt.Errorf("configure Iris H3 dial guard: %w", err)
+	}
 	irisClient, err := iris.NewClient(
 		iris.WithBaseURL(baseURL),
 		iris.WithBotToken(config.BotToken),
@@ -215,7 +219,7 @@ func fetchIrisBotWebhookWorkerProfile(config *IrisConfig) (profile workerconfig.
 		iris.WithTimeout(config.HTTPTimeout),
 		iris.WithDialTimeout(config.HTTPDialTimeout),
 		iris.WithResponseHeaderTimeout(config.HTTPResponseHeaderTimeout),
-		iris.WithH3DialGuard(newSettingsIrisH3DialGuard(baseURL, config.HTTPDialTimeout)),
+		iris.WithH3DialGuardContext(dialGuard),
 	)
 	if err != nil {
 		return profile, err

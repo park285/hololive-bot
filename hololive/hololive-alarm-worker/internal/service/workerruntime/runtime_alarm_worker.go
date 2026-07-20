@@ -38,7 +38,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
-	"github.com/kapu/hololive-shared/pkg/ctxutil"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 type Scheduler interface {
@@ -142,7 +142,7 @@ func (r notificationEgressRunner) startWithLease(ctx context.Context, runners []
 		if lease != nil {
 			return r.startLeaseProtectedRunners(ctx, runners, lease)
 		}
-		if !ctxutil.SleepWithContext(ctx, r.effectiveLeaseRetryInterval()) {
+		if !retry.Sleep(ctx, r.effectiveLeaseRetryInterval()) {
 			return nil
 		}
 	}

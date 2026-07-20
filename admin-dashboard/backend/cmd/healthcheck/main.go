@@ -1,19 +1,15 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/park285/shared-go/pkg/healthprobe"
 )
 
 func main() {
-	url := "http://127.0.0.1:30190/health"
-	if len(os.Args) > 1 {
-		url = os.Args[1]
+	args := os.Args
+	if len(args) == 1 {
+		args = append(args, "http://127.0.0.1:30190/health")
 	}
-	if err := healthprobe.CheckURLInternal(url); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	os.Exit(healthprobe.RunMain(args, os.Stdout, os.Stderr))
 }

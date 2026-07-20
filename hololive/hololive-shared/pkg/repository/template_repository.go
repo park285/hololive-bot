@@ -30,6 +30,7 @@ import (
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/pkg/db/pgxdb"
 
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -123,7 +124,7 @@ func (r *TemplateRepository) createTemplate(ctx context.Context, key domain.Temp
 }
 
 func (r *TemplateRepository) handleCreateTemplateError(ctx context.Context, key domain.TemplateKey, channelID *string, body string, err error) (*domain.NotificationTemplate, error) {
-	if !dbx.IsDuplicateKey(err) {
+	if !pgxdb.IsDuplicateKey(err) {
 		return nil, fmt.Errorf("create template: %w", err)
 	}
 

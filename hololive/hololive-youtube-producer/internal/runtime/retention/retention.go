@@ -27,9 +27,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-shared/pkg/ctxutil"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 const (
@@ -129,7 +129,7 @@ func (c *Cleaner) Start(ctx context.Context) {
 		if _, err := c.Cleanup(ctx); err != nil && ctx.Err() == nil {
 			c.logWarn("youtube retention cleanup failed", err)
 		}
-		if !ctxutil.SleepWithContext(ctx, interval) {
+		if !retry.Sleep(ctx, interval) {
 			return
 		}
 	}

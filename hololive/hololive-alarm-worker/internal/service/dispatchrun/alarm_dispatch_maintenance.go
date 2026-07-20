@@ -14,7 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
-	"github.com/kapu/hololive-shared/pkg/ctxutil"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 const (
@@ -107,7 +107,7 @@ func (r *alarmDispatchMaintenanceRunner) Start(ctx context.Context) error {
 				r.logger.Warn("Alarm dispatch maintenance failed", slog.Any("error", err))
 			}
 		}
-		if !ctxutil.SleepWithContext(ctx, r.effectiveInterval()) {
+		if !retry.Sleep(ctx, r.effectiveInterval()) {
 			return nil
 		}
 	}

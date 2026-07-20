@@ -21,7 +21,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 		return nil, err
 	}
 
-	irisClient, err := providers.ProvideIrisClient( //nolint:contextcheck,nolintlint // guard 콜백(func(net.IP) error)에 dial ctx 미전달로 per-dial DNS가 자체 ctx를 root함; 도달 가능한 build ctx는 bounded라 관통 시 프로덕션 장애. workspace-wide 분석 전용 call-graph false positive.
+	irisClient, err := providers.ProvideIrisClient(
 		logger,
 		iris.WithBaseURL(appConfig.Iris.BaseURL),
 		iris.WithBotToken(appConfig.Iris.BotToken),

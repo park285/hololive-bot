@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kapu/hololive-shared/internal/ctxutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/park285/shared-go/pkg/backoff"
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
@@ -67,7 +67,7 @@ func waitDistributedRateLimitDecision(ctx context.Context, bucket string, decisi
 			decision.Limit,
 		)
 	}
-	if !ctxutil.SleepWithContext(ctx, decision.RetryAfter) {
+	if !retry.Sleep(ctx, decision.RetryAfter) {
 		return false, fmt.Errorf("distributed rate limiter wait canceled: %w", ctx.Err())
 	}
 	return false, nil
@@ -84,7 +84,7 @@ func (c *APIClient) distributedRateLimitBucket(path string) string {
 
 func (c *APIClient) waitBackoff(ctx context.Context, attempt int) error {
 	delay := backoff.ComputeExponentialBackoff(attempt, constants.RetryConfig.BaseDelay, 0, constants.RetryConfig.Jitter)
-	if !ctxutil.SleepWithContext(ctx, delay) {
+	if !retry.Sleep(ctx, delay) {
 		return fmt.Errorf("context canceled during backoff: %w", ctx.Err())
 	}
 	return nil

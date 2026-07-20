@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/kapu/hololive-shared/pkg/readiness/healthcheckcli"
+	"github.com/park285/shared-go/pkg/healthprobe"
 )
 
 func main() {
-	os.Exit(healthcheckcli.Run(os.Args[1:], os.Stderr))
+	os.Exit(healthprobe.RunMain(os.Args, os.Stdout, os.Stderr))
 }
