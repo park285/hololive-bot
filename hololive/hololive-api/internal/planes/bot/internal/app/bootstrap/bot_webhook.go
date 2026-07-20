@@ -21,7 +21,6 @@ func BuildBotWebhookHandler(
 		webhook.WithWebhookLogger(logger),
 		webhook.WithMetrics(defaultWebhookMetrics()),
 		valkeydedup.Option(deps.Cache.GetClient()),
-		webhook.WithDedupMode(webhook.DedupModeAfterDecode),
 		webhook.WithTaskPool(webhookPool),
 		webhook.WithWorkerCount(appConfig.Webhook.WorkerCount),
 		webhook.WithQueueSize(appConfig.Webhook.QueueSize),

@@ -21,39 +21,14 @@
 package botruntime
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
 )
-
-type stubStreamProvider struct{}
-
-func (s *stubStreamProvider) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
-	return nil, nil
-}
-func (s *stubStreamProvider) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (s *stubStreamProvider) GetChannelSchedule(context.Context, string, int, bool) ([]*domain.Stream, error) {
-	return nil, nil
-}
-func (s *stubStreamProvider) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return nil, nil
-}
 
 func TestContainerClose_CallsCleanupOnce(t *testing.T) {
 	t.Parallel()
@@ -65,54 +40,6 @@ func TestContainerClose_CallsCleanupOnce(t *testing.T) {
 
 	container.Close()
 	assert.Equal(t, 1, calls)
-}
-
-func TestContainerNewBot_FailsWhenDependenciesMissing(t *testing.T) {
-	t.Parallel()
-
-	container := &Container{}
-	created, err := container.NewBot()
-	require.Error(t, err)
-	assert.Nil(t, created)
-	assert.Contains(t, err.Error(), "bot dependencies not initialized")
-}
-
-func TestContainerGetterMappings(t *testing.T) {
-	t.Parallel()
-
-	cacheService := &cache.Service{}
-	memberRepository := &member.Repository{}
-	memberCache := &member.Cache{}
-	alarmService := testAlarmCRUD{}
-	streamService := &stubStreamProvider{}
-	youtubeService := &trackingYouTubeService{}
-	activityLogger := &activity.Logger{}
-	settingsService := &stubSettingsReadWriter{}
-	aclService := &acl.Service{}
-
-	container := &Container{
-		botDeps: &bot.Dependencies{
-			Cache:            cacheService,
-			MemberRepository: memberRepository,
-			MemberCache:      memberCache,
-			Alarm:            alarmService,
-			Holodex:          streamService,
-			Service:          youtubeService,
-			Activity:         activityLogger,
-			Settings:         settingsService,
-			ACL:              aclService,
-		},
-	}
-
-	assert.Same(t, memberRepository, container.GetMemberRepository())
-	assert.Same(t, memberCache, container.GetMemberCache())
-	assert.Same(t, cacheService, container.GetCache())
-	assert.Equal(t, alarmService, container.GetAlarmService())
-	assert.Same(t, streamService, container.GetHolodexService())
-	assert.Same(t, youtubeService, container.GetYouTubeService())
-	assert.Same(t, activityLogger, container.GetActivityLogger())
-	assert.Same(t, settingsService, container.GetSettingsService())
-	assert.Same(t, aclService, container.GetACLService())
 }
 
 func TestBuild_FailFastOnNilInputs(t *testing.T) {
@@ -130,8 +57,3 @@ func TestBuild_FailFastOnNilInputs(t *testing.T) {
 	assert.Nil(t, created)
 	assert.Equal(t, "logger must not be nil", err.Error())
 }
-
-var (
-	_ domain.StreamProvider = (*stubStreamProvider)(nil)
-	_ settings.ReadWriter   = (*stubSettingsReadWriter)(nil)
-)

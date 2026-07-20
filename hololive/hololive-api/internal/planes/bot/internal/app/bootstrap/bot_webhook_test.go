@@ -205,7 +205,7 @@ func (h *recordingWebhookMessageHandler) HandleMessage(_ context.Context, msg *w
 func newBotWebhookTestRequest(ctx context.Context, token, messageID, body string) *http.Request {
 	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/webhook/iris", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(webhook.HeaderIrisToken, token)
+	request.Header.Set("X-Iris-Token", token)
 	request.Header.Set(webhook.HeaderIrisMessageID, messageID)
 
 	return request

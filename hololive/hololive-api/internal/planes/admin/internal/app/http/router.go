@@ -34,21 +34,17 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/iris-client-go/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server"
 	"github.com/kapu/hololive-api/internal/readiness"
 )
 
-// Admin Dashboard와 Tauri 앱에서 사용됩니다.
 func ProvideAPIRouter(
 	ctx context.Context,
 	appConfig *config.Config,
 	logger *slog.Logger,
 	domainHandlers *server.DomainHandlers,
 	authHandler *server.AuthHandler,
-	webhookHandler *webhook.Handler,
-	triggerHandler *sharedserver.TriggerHandler,
 	cacheClient cache.Client,
 	readyProbe ...*readiness.Probe,
 ) (*gin.Engine, error) {
@@ -62,14 +58,6 @@ func ProvideAPIRouter(
 	router, err := newAPIRouter(ctx, appConfig, logger, readyProbe...)
 	if err != nil {
 		return nil, err
-	}
-
-	if webhookHandler != nil {
-		router.POST("/webhook/iris", gin.WrapH(webhookHandler))
-	}
-
-	if triggerHandler != nil {
-		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), appConfig.Server.APIKey)
 	}
 
 	adminAllowedIPs, err := buildAdminAllowedIPs(appConfig)

@@ -171,7 +171,7 @@ func TestYouTubeProducerRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 	if statusCode != http.StatusServiceUnavailable {
 		t.Fatalf("readiness status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
 	}
-	requirePayloadString(t, payload, "status", "not_ready")
+	requirePayloadStatus(t, payload, "not_ready")
 	if _, exists := payload["last_error"]; exists {
 		t.Fatal("last_error should be hidden from readiness payload")
 	}

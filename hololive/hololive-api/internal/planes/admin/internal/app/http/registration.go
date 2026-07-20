@@ -89,7 +89,6 @@ func registerAPIRoutes(
 	// hololive-bot 도메인 API (Admin Dashboard, Tauri 앱에서 사용)
 	holoAPI := router.Group("/api/holo")
 
-	// API Key 인증 미들웨어 적용 (apiKey가 빈 문자열이면 인증 건너뜀)
 	holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
 	if constants.APIRateLimitConfig.Enabled {

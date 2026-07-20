@@ -25,8 +25,6 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 		(&server.Handler{}).DomainHandlers(),
 		&server.AuthHandler{},
 		nil,
-		nil,
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
@@ -292,8 +290,6 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 		(&server.Handler{}).DomainHandlers(),
 		&server.AuthHandler{},
 		nil,
-		nil,
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
@@ -324,8 +320,6 @@ func provideTestAPIRouter(t *testing.T, cfg *config.Config) (*gin.Engine, error)
 		slog.New(slog.DiscardHandler),
 		(&server.Handler{}).DomainHandlers(),
 		&server.AuthHandler{},
-		nil,
-		nil,
 		nil,
 	)
 }
