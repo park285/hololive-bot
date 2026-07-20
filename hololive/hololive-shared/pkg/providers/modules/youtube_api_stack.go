@@ -4,11 +4,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/youtubefactory"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/youtubefactory"
 )
 
 type YouTubeAPIStackParams struct {

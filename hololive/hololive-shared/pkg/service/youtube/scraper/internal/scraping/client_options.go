@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 )
 
 type Client struct {

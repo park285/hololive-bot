@@ -28,9 +28,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kapu/hololive-shared/internal/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"github.com/kapu/hololive-shared/pkg/service/cache/claim"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 )
 

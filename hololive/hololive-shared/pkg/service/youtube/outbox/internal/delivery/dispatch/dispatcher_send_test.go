@@ -17,11 +17,11 @@ import (
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 )
 
 func newSendTestRenderer(t *testing.T) *template.Renderer {

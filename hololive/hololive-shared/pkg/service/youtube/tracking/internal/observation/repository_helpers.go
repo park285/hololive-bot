@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/alarmtiming"
+	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
-	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 const alarmLatencyExceededThresholdMillis = alarmtiming.LatencyExceededThresholdMillis

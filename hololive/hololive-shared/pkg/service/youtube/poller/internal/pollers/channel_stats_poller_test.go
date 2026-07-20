@@ -11,9 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
 const channelStatsAboutHTML = `<html><body><script>var ytInitialData = ` +

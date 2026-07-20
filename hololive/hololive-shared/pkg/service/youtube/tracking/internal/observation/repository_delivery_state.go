@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 func (r *deliveryStateRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSentMark) error {

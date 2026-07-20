@@ -10,10 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kapu/hololive-shared/pkg/config"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-
-	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/park285/shared-go/pkg/retry"
 )
 
@@ -74,6 +73,7 @@ type alarmDispatchMaintenancePgxStore struct {
 
 func NewMaintenanceRunner(
 	infra *sharedmodules.InfraModule,
+	retentionConfig config.AlarmDispatchRetentionConfig,
 	logger *slog.Logger,
 ) Scheduler {
 	if infra == nil || infra.Postgres == nil {
@@ -85,15 +85,15 @@ func NewMaintenanceRunner(
 	}
 	return &alarmDispatchMaintenanceRunner{
 		store:            alarmDispatchMaintenancePgxStore{db: pool, beginner: pool},
-		retentionEnabled: envconfig.ParseBool("ALARM_DISPATCH_RETENTION_ENABLED", true),
-		interval:         envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_RETENTION_INTERVAL_MS", time.Hour),
-		queryTimeout:     envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS", 30*time.Second),
-		limit:            clampAlarmDispatchRetentionLimit(envconfig.ParsePositiveInt("ALARM_DISPATCH_RETENTION_LIMIT", 1000)),
-		sentDays:         envconfig.ParsePositiveInt("ALARM_DISPATCH_RETENTION_SENT_DAYS", 90),
-		dlqDays:          envconfig.ParsePositiveInt("ALARM_DISPATCH_RETENTION_DLQ_DAYS", 180),
-		quarantinedDays:  envconfig.ParsePositiveInt("ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS", 180),
-		cancelledDays:    envconfig.ParsePositiveInt("ALARM_DISPATCH_RETENTION_CANCELLED_DAYS", 90),
-		eventDays:        envconfig.ParsePositiveInt("ALARM_DISPATCH_RETENTION_EVENT_DAYS", 90),
+		retentionEnabled: retentionConfig.Enabled,
+		interval:         retentionConfig.Interval,
+		queryTimeout:     retentionConfig.QueryTimeout,
+		limit:            clampAlarmDispatchRetentionLimit(retentionConfig.Limit),
+		sentDays:         retentionConfig.SentDays,
+		dlqDays:          retentionConfig.DLQDays,
+		quarantinedDays:  retentionConfig.QuarantinedDays,
+		cancelledDays:    retentionConfig.CancelledDays,
+		eventDays:        retentionConfig.EventDays,
 		retentionLockKey: alarmDispatchRetentionLockKey,
 		logger:           logger,
 	}

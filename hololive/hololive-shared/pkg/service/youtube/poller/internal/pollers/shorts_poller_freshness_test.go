@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 func shortsFreshnessTabHTML(videoIDs ...string) string {

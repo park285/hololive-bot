@@ -9,10 +9,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/store"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/park285/shared-go/pkg/json"
 )
 

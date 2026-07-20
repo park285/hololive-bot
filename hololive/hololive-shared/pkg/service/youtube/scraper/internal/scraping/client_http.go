@@ -33,7 +33,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 )
 
 func (c *Client) currentPageFetcher() pageFetcher {

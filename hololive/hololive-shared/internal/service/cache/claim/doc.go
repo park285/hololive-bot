@@ -8,7 +8,7 @@
 //
 // 주요 사용 패턴
 //
-//	import "github.com/kapu/hololive-shared/pkg/service/cache/claim"
+//	import "github.com/kapu/hololive-shared/internal/service/cache/claim"
 //
 //	func acquire(ctx context.Context, cache claim.ReuseCache, videoID string) (claim.ClaimStatus, error) {
 //		key := claim.ClaimKey{Scope: "youtube_outbox_delivery", Subject: videoID}

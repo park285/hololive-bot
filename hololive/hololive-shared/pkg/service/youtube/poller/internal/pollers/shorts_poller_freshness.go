@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 type shortVideoStateRow struct {

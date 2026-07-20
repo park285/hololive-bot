@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 	"github.com/stretchr/testify/require"
 )
 

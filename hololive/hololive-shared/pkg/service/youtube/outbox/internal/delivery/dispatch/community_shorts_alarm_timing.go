@@ -3,8 +3,8 @@ package dispatch
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/kapu/hololive-shared/internal/service/youtube/alarmtiming"
+	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry"
 )
 

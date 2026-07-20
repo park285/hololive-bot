@@ -12,10 +12,10 @@ import (
 	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/kapu/hololive-shared/internal/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 

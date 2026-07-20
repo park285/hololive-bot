@@ -16,7 +16,7 @@ import (
 	"github.com/park285/shared-go/pkg/jsonutil"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 )
 
 func TestFetchPageRetriesEmptySuccessfulResponse(t *testing.T) {

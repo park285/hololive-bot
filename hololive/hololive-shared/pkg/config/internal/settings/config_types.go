@@ -95,3 +95,15 @@ type WorkerProfileConfig struct {
 	Version int
 	Hash    string
 }
+
+type AlarmDispatchRetentionConfig struct {
+	Enabled         bool
+	Interval        time.Duration
+	QueryTimeout    time.Duration
+	Limit           int
+	SentDays        int
+	DLQDays         int
+	QuarantinedDays int
+	CancelledDays   int
+	EventDays       int
+}

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/dbx"
+	"github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error) {

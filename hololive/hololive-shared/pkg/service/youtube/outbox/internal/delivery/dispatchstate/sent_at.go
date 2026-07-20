@@ -23,7 +23,7 @@ package dispatchstate
 import (
 	"time"
 
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 )
 
 var SentAtNow = time.Now

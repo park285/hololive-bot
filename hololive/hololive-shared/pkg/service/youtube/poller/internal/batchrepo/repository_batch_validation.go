@@ -26,9 +26,9 @@ import (
 
 	"github.com/park285/shared-go/pkg/json"
 
+	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
+	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 type communityNotificationPublishedAtPayload struct {

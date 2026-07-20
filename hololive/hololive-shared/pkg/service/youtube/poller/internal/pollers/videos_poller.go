@@ -29,8 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 

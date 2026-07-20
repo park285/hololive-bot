@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/fallback"
+	"github.com/kapu/hololive-shared/internal/service/fallback"
 	ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )

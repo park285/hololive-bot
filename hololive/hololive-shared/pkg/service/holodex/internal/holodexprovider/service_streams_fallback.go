@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/kapu/hololive-shared/internal/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/fallback"
 )
 
 type streamFetchState struct {

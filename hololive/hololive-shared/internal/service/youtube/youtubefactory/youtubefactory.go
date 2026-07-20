@@ -18,42 +18,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package sampledata_test
+package youtubefactory
 
 import (
-	"testing"
+	"context"
+	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/template/sampledata"
-	"github.com/stretchr/testify/assert"
+	"github.com/kapu/hololive-shared/internal/service/youtube/apiservice"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
-func TestTemplateSampleData_AllKeysPresent(t *testing.T) {
-	for _, key := range sampledata.GetAllTemplateKeys() {
-		t.Run(string(key), func(t *testing.T) {
-			data := sampledata.GetTemplateSampleData(key)
-			assert.NotNil(t, data, "sample data should exist for key %s", key)
-		})
-	}
-}
-
-func TestTemplateSampleData_OutboxTypes(t *testing.T) {
-	tests := []struct {
-		key           domain.TemplateKey
-		requiredField string
-	}{
-		{domain.TemplateKeyOutboxShorts, "MemberName"},
-		{domain.TemplateKeyOutboxCommunity, "ContentText"},
-		{domain.TemplateKeyOutboxVideo, "Title"},
-		{domain.TemplateKeyOutboxMilestone, "Milestone"},
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.key), func(t *testing.T) {
-			data := sampledata.GetTemplateSampleData(tt.key)
-			m, ok := data.(map[string]any)
-			assert.True(t, ok, "outbox data should be map[string]any")
-			assert.Contains(t, m, tt.requiredField)
-		})
-	}
+func NewYouTubeService(
+	ctx context.Context,
+	cacheClient cache.Client,
+	scraperProxyConfig scraper.ProxyConfig,
+	sharedRL *scraper.RateLimiter,
+	logger *slog.Logger,
+) (youtube.Service, error) {
+	return apiservice.New(ctx, cacheClient, scraperProxyConfig, sharedRL, logger)
 }

@@ -24,9 +24,5 @@ import "context"
 
 type MemberCache interface {
 	InitializeMemberDatabase(ctx context.Context, memberData map[string]string) error
-	GetMemberChannelID(ctx context.Context, memberName string) (string, error)
 	GetAllMembers(ctx context.Context) (map[string]string, error)
-	GetMemberChannelIDWithOrg(ctx context.Context, memberName, org string) (string, error)
-	GetMemberChannelIDs(ctx context.Context, memberName string) ([]string, error)
-	AddMember(ctx context.Context, memberName, channelID string) error
 }
