@@ -24,6 +24,9 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/park285/shared-go/pkg/outputguard"
+
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -41,9 +44,29 @@ func enqueueToRooms(
 	kind domain.DeliveryOutboxKind,
 	periodKey string,
 	message string,
+	outputGuard *outputguard.Guard,
 	logger *slog.Logger,
 ) delivery.SendResult {
 	var result delivery.SendResult
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	evaluation, err := guardrail.ValidateGeneratedOutput(outputGuard, message, "majorevent_notification")
+	if err != nil {
+		logger.Error("Major event notification output blocked",
+			slog.String("error", err.Error()),
+			slog.String("decision", string(evaluation.Decision)),
+			slog.Any("reasons", evaluation.ReasonCodes),
+			slog.Any("rules", evaluation.RuleIDs),
+		)
+		result.Attempted = len(rooms)
+		result.Failed = len(rooms)
+		for _, room := range rooms {
+			result.FailedRooms = append(result.FailedRooms, room.roomID)
+		}
+		return result
+	}
 
 	for _, room := range rooms {
 		result.Attempted++

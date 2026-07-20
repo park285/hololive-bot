@@ -31,6 +31,7 @@ import (
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	json "github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/promptguard"
 )
 
 func TestAssembleSummaryText_WithHighlightsAndOngoing(t *testing.T) {
@@ -601,6 +602,16 @@ func TestWriteDiscoveredEvents_HasSourcePrefix(t *testing.T) {
 	}
 }
 
+func newMajorEventPromptGuardForTest(t *testing.T) *promptguard.Guard {
+	t.Helper()
+
+	guard, err := promptguard.NewGuard(promptguard.Config{Enabled: true, UseEmbeddedDefaults: true}, nil)
+	if err != nil {
+		t.Fatalf("promptguard.NewGuard() error = %v", err)
+	}
+	return guard
+}
+
 func assertContains(t *testing.T, s, substr string) {
 	t.Helper()
 	if !containsStr(s, substr) {
@@ -903,7 +914,7 @@ func TestSummarize_KRSearchFailure_GracefulDegradation(t *testing.T) {
 		krErr:   fmt.Errorf("KR search timeout"),
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
-	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger())
+	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Test Event"}}
 	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
@@ -922,7 +933,7 @@ func TestSummarize_PrimarySearchFailure_UsesKRResults(t *testing.T) {
 		krResults: []sharedmodel.SearchResult{{Title: "KR Result", URL: "https://aniplus.co.kr/1"}},
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
-	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger())
+	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Test Event"}}
 	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
@@ -958,7 +969,7 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 		krResults: secondary,
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
-	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger())
+	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Test"}}
 	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
@@ -982,7 +993,10 @@ func TestRunDualSearch_DirectVerification(t *testing.T) {
 
 	t.Run("nil searcher returns empty", func(t *testing.T) {
 		s := NewEventSummarizer(nil, nil, nil, testLogger())
-		result := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+		result, err := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+		if err != nil {
+			t.Fatalf("runDualSearch() error = %v", err)
+		}
 		if result != "" {
 			t.Errorf("expected empty for nil searcher, got %q", result)
 		}
@@ -994,7 +1008,10 @@ func TestRunDualSearch_DirectVerification(t *testing.T) {
 			krErr: fmt.Errorf("kr fail"),
 		}
 		s := NewEventSummarizer(nil, nil, searcher, testLogger())
-		result := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+		result, err := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+		if err != nil {
+			t.Fatalf("runDualSearch() error = %v", err)
+		}
 		if result != "" {
 			t.Errorf("expected empty when both searches fail, got %q", result)
 		}
@@ -1006,9 +1023,16 @@ func testRunDualSearchDeduplicationAndCap(t *testing.T) {
 	secondary := makeDualSearchSecondaryResults()
 
 	searcher := &mockSearcher{results: primary, krResults: secondary}
-	s := NewEventSummarizer(nil, nil, searcher, testLogger())
+	guard, err := promptguard.NewGuard(promptguard.Config{Enabled: true, UseEmbeddedDefaults: true}, nil)
+	if err != nil {
+		t.Fatalf("promptguard.NewGuard() error = %v", err)
+	}
+	s := NewEventSummarizer(nil, nil, searcher, testLogger(), WithPromptGuard(guard))
 
-	result := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+	result, err := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+	if err != nil {
+		t.Fatalf("runDualSearch() error = %v", err)
+	}
 	if result == "" {
 		t.Fatal("expected non-empty search context")
 	}

@@ -213,6 +213,11 @@ func buildLLMSchedulerComponents(
 	cacheService cache.Client,
 	postgresService database.Client,
 ) (*LLMSchedulerRuntime, error) {
+	guards, err := buildLLMGuards(logger)
+	if err != nil {
+		return nil, err
+	}
+
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 	memberCache, err := providers.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
 	if err != nil {
@@ -225,11 +230,11 @@ func buildLLMSchedulerComponents(
 	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger, schedulerConfig.Bot.SeeMoreFold)
 	formatter.store = messagestrings.NewStore(postgresService.GetPool(), logger)
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
-	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, logger)
+	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, guards, logger)
 
 	deliveryModule := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
 
-	summarizer := buildMajorEventSummarizer(schedulerConfig, cacheService, logger)
+	summarizer := buildMajorEventSummarizer(schedulerConfig, cacheService, guards, logger)
 
 	majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler := buildMajorEventComponents(
 		majorEventRepository,
@@ -237,15 +242,13 @@ func buildLLMSchedulerComponents(
 		summarizer,
 		deliveryModule.Locker,
 		deliveryModule.Repository,
+		guards,
 		logger,
 	)
-	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, logger)
+	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, guards.output, logger)
 
 	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
-	readyProbe := readiness.NewProbe("llm",
-		readiness.PostgresCheck(postgresService),
-		readiness.ValkeyCheck(cacheService),
-	)
+	readyProbe := buildLLMSchedulerReadyProbe(postgresService, cacheService)
 	httpServers, err := buildLLMSchedulerHTTPServers(ctx, &schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService, readyProbe)
 	if err != nil {
 		return nil, err
@@ -260,6 +263,13 @@ func buildLLMSchedulerComponents(
 		memberNewsMonthlyScheduler,
 		httpServers,
 	), nil
+}
+
+func buildLLMSchedulerReadyProbe(postgresService database.Client, cacheService cache.Client) *readiness.Probe {
+	return readiness.NewProbe("llm",
+		readiness.PostgresCheck(postgresService),
+		readiness.ValkeyCheck(cacheService),
+	)
 }
 
 func newLLMSchedulerRuntime(

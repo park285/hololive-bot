@@ -29,7 +29,9 @@ import (
 	"time"
 
 	json "github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/promptguard"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -45,10 +47,11 @@ type CacheStore interface {
 }
 
 type EventSummarizer struct {
-	llm      LLMClient // nil이면 비활성
-	cache    CacheStore
-	searcher sharedmodel.WebSearcher // nil 허용
-	reviewer LLMClient               // nil이면 consensus stage2 비활성
+	llm         LLMClient // nil이면 비활성
+	cache       CacheStore
+	searcher    sharedmodel.WebSearcher // nil 허용
+	promptGuard *promptguard.Guard
+	reviewer    LLMClient // nil이면 consensus stage2 비활성
 	// nil이면 stage3(adjudication) 비활성
 	adjudicator LLMClient
 	consensus   SummarizerConsensusConfig
@@ -68,6 +71,12 @@ type SummarizerConsensusConfig struct {
 }
 
 type SummarizerOption func(*EventSummarizer)
+
+func WithPromptGuard(guard *promptguard.Guard) SummarizerOption {
+	return func(summarizer *EventSummarizer) {
+		summarizer.promptGuard = guard
+	}
+}
 
 func WithSummarizerConsensus(reviewer, adjudicator LLMClient, config SummarizerConsensusConfig) SummarizerOption {
 	return func(s *EventSummarizer) {
@@ -123,7 +132,11 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 		return cached
 	}
 
-	searchContext := s.runDualSearch(ctx, summaryType, periodKey)
+	searchContext, err := s.runDualSearch(ctx, summaryType, periodKey)
+	if err != nil {
+		s.logger.Error("Major event external content guard unavailable", slog.String("error", err.Error()))
+		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
+	}
 	resp, err := s.buildSummaryResponse(ctx, events, summaryType, periodKey, searchContext)
 	if err != nil {
 		s.logger.Error("LLM 요약 실패 (fallback 사용)",
@@ -262,9 +275,9 @@ func (s *EventSummarizer) searchWithTimeout(ctx context.Context, query, warnMess
 }
 
 // runDualSearch: 1차 범용 + 2차 KR 파트너 검색을 병렬 실행하고 병합된 결과를 포맷팅합니다.
-func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType SummaryType, periodKey string) string {
+func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType SummaryType, periodKey string) (string, error) {
 	if s.searcher == nil {
-		return ""
+		return "", nil
 	}
 
 	var (
@@ -293,10 +306,13 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 
 	wg.Wait()
 
-	// 병합 파이프라인: append → dedupe → cap
 	combined := make([]sharedmodel.SearchResult, 0, len(results)+len(krResults))
 	combined = append(combined, results...)
 	combined = append(combined, krResults...)
+	combined, err := guardrail.FilterSearchResults(combined, s.promptGuard, s.logger, "majorevent_search")
+	if err != nil {
+		return "", fmt.Errorf("guard major event search results: %w", err)
+	}
 	deduped := dedupeSearchResults(combined)
 	capped := capSearchResults(deduped, maxSearchResults)
 
@@ -305,9 +321,9 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 			slog.Int("primary_count", len(results)),
 			slog.Int("kr_count", len(krResults)),
 			slog.Int("final_count", len(capped)))
-		return formatSearchResults(capped)
+		return formatSearchResults(capped), nil
 	}
-	return ""
+	return "", nil
 }
 
 func (s *EventSummarizer) buildSummaryResponse(
