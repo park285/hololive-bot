@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/pkg/outputguard"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -134,7 +136,7 @@ func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
@@ -151,7 +153,7 @@ func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
@@ -169,7 +171,7 @@ func TestScheduler_AllEnqueueFailureReturnsError(t *testing.T) {
 	outbox.enqueueErr["room-1"] = errors.New("db error")
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendWeeklyDigest(context.Background()); err == nil {
@@ -232,7 +234,7 @@ func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
@@ -254,7 +256,7 @@ func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
@@ -271,7 +273,7 @@ func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
@@ -291,7 +293,7 @@ func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {

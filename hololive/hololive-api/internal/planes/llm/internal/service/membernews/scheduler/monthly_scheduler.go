@@ -26,6 +26,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/pkg/outputguard"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
 
@@ -45,6 +47,15 @@ type MonthlyScheduler struct {
 	service          model.DigestService
 	formatter        model.DigestFormatter
 	outboxRepository outboxEnqueuer
+	outputGuard      *outputguard.Guard
+}
+
+type MonthlySchedulerOption func(*MonthlyScheduler)
+
+func WithMonthlyOutputGuard(guard *outputguard.Guard) MonthlySchedulerOption {
+	return func(scheduler *MonthlyScheduler) {
+		scheduler.outputGuard = guard
+	}
 }
 
 func NewMonthlyScheduler(
@@ -53,13 +64,18 @@ func NewMonthlyScheduler(
 	locker delivery.NotificationLocker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
+	opts ...MonthlySchedulerOption,
 ) *MonthlyScheduler {
-	return &MonthlyScheduler{
+	scheduler := &MonthlyScheduler{
 		digest:           schedulerkit.NewDigestScheduler(locker, logger),
 		service:          service,
 		formatter:        formatter,
 		outboxRepository: outboxRepository,
 	}
+	for _, opt := range opts {
+		opt(scheduler)
+	}
+	return scheduler
 }
 
 func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
@@ -129,7 +145,7 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 }
 
 func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, monthKey, roomID string) delivery.SendResult {
-	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.digest.Logger,
+	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepository, s.digest.Logger, s.outputGuard,
 		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID, "📅 이번달 구독 멤버 뉴스")
 }
 

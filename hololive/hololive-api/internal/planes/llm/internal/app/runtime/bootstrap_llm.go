@@ -23,6 +23,9 @@ package runtime
 import (
 	"log/slog"
 
+	"github.com/park285/shared-go/pkg/outputguard"
+	"github.com/park285/shared-go/pkg/promptguard"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	mescheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scheduler"
 	mescraper "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scraper"
@@ -39,8 +42,16 @@ func buildMajorEventComponents(
 	summarizer *mesummarizer.EventSummarizer,
 	locker delivery.NotificationLocker,
 	outboxRepository *delivery.OutboxRepository,
+	guards *llmGuards,
 	logger *slog.Logger,
 ) (*mescheduler.Scheduler, *mescheduler.MonthlyScheduler, *mescraper.RuntimeScheduler) {
+	var promptGuard *promptguard.Guard
+	var outputGuard *outputguard.Guard
+	if guards != nil {
+		promptGuard = guards.prompt
+		outputGuard = guards.output
+	}
+
 	majorEventScheduler := mescheduler.NewScheduler(
 		majorEventRepository,
 		formatter,
@@ -48,6 +59,7 @@ func buildMajorEventComponents(
 		locker,
 		outboxRepository,
 		logger,
+		mescheduler.WithGuards(promptGuard, outputGuard),
 	)
 
 	majorEventMonthlyScheduler := mescheduler.NewMonthlyScheduler(
@@ -57,6 +69,7 @@ func buildMajorEventComponents(
 		locker,
 		outboxRepository,
 		logger,
+		mescheduler.WithMonthlyGuards(promptGuard, outputGuard),
 	)
 
 	majorEventScraperScheduler, err := mescraper.NewRuntimeScheduler(majorEventRepository, logger)
@@ -73,6 +86,7 @@ func buildMemberNewsComponents(
 	formatter membernews.DigestFormatter,
 	locker delivery.NotificationLocker,
 	outboxRepository *delivery.OutboxRepository,
+	outputGuard *outputguard.Guard,
 	logger *slog.Logger,
 ) (*mnscheduler.Scheduler, *mnscheduler.MonthlyScheduler) {
 	if memberNews == nil {
@@ -86,6 +100,7 @@ func buildMemberNewsComponents(
 		locker,
 		outboxRepository,
 		logger,
+		mnscheduler.WithOutputGuard(outputGuard),
 	)
 	monthlyScheduler := mnscheduler.NewMonthlyScheduler(
 		memberNews,
@@ -93,6 +108,7 @@ func buildMemberNewsComponents(
 		locker,
 		outboxRepository,
 		logger,
+		mnscheduler.WithMonthlyOutputGuard(outputGuard),
 	)
 	return scheduler, monthlyScheduler
 }

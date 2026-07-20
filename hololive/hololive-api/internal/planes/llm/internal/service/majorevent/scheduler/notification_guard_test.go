@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/pkg/outputguard"
 )
 
 type mockOutboxRepository struct {
@@ -92,7 +93,7 @@ func TestEnqueueToRooms_AllSuccess(t *testing.T) {
 	repository := newMockOutboxRepository()
 	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}, {roomID: "room3"}}
 
-	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
+	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
 
 	if result.Sent != 3 {
 		t.Errorf("expected 3 sent, got %d", result.Sent)
@@ -113,7 +114,7 @@ func TestEnqueueToRooms_PartialFailure(t *testing.T) {
 	repository.enqueueErr["room2"] = fmt.Errorf("db error")
 	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}, {roomID: "room3"}}
 
-	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
+	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
 
 	if result.Sent != 2 {
 		t.Errorf("expected 2 sent, got %d", result.Sent)
@@ -132,7 +133,7 @@ func TestEnqueueToRooms_AllFail(t *testing.T) {
 	repository.enqueueErr["room2"] = fmt.Errorf("db error")
 	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}}
 
-	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", testLogger())
+	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
 
 	if result.Failed != 2 {
 		t.Errorf("expected 2 failed, got %d", result.Failed)
@@ -146,7 +147,7 @@ func TestEnqueueToRooms_VerifiesKindAndPeriodKey(t *testing.T) {
 	repository := newMockOutboxRepository()
 	rooms := []roomTarget{{roomID: "room1"}}
 
-	enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventMonthly, "2026-02", "test msg", testLogger())
+	enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventMonthly, "2026-02", "test msg", outputguard.NewGuard(), testLogger())
 
 	if len(repository.enqueuedItems) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(repository.enqueuedItems))

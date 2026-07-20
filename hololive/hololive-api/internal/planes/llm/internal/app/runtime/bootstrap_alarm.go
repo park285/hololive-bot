@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	llmclient "github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	mnsummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
@@ -37,6 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/shared-go/pkg/envutil"
+	"github.com/park285/shared-go/pkg/promptguard"
 )
 
 func initMemberNewsService(
@@ -47,6 +49,7 @@ func initMemberNewsService(
 	postgres database.Client,
 	cacheClient cache.Client,
 	membersData member.DataProvider,
+	guards *llmGuards,
 	logger *slog.Logger,
 ) *membernews.Service {
 	if llmConfig == nil {
@@ -54,15 +57,19 @@ func initMemberNewsService(
 	}
 	repository := membernews.NewRepository(postgres, cacheClient, logger)
 	costTracker := ProvideLLMCostTracker(cacheClient, llmConfig.MonthlyTokenCeiling, logger)
-	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmConfig, costTracker, logger)
-	reviewer := ProvideMemberNewsReviewerClient(cliproxy, llmConfig, costTracker, logger)
-	adjudicator := ProvideMemberNewsAdjudicatorClient(cliproxy, llmConfig, costTracker, logger)
+	llmClient := guardLLMClient(ProvideMemberNewsLLMClient(cliproxy, llmConfig, costTracker, logger), guards)
+	reviewer := guardLLMClient(ProvideMemberNewsReviewerClient(cliproxy, llmConfig, costTracker, logger), guards)
+	adjudicator := guardLLMClient(ProvideMemberNewsAdjudicatorClient(cliproxy, llmConfig, costTracker, logger), guards)
 
 	searcher := provideExaSearcher(exaConfig, logger)
 
 	validator := initMemberNewsSourceValidator(membersData, logger)
+	var promptGuard *promptguard.Guard
+	if guards != nil {
+		promptGuard = guards.prompt
+	}
 
-	baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger)
+	baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger, mnsummarizer.WithPromptGuard(promptGuard))
 
 	var summarizer membernews.Summarizer = baseSummarizer
 	if llmConfig.MemberNews.Enabled && reviewer != nil {
@@ -82,12 +89,22 @@ func initMemberNewsService(
 		)
 	}
 
-	service := membernews.NewService(repository, summarizer, validator, membersData, logger)
+	service := membernews.NewService(repository, summarizer, validator, membersData, logger, membernews.WithPromptGuard(promptGuard))
 	if warmErr := service.WarmupSubscriptionCache(ctx); warmErr != nil {
 		logger.Warn("Member news subscription warmup failed", slog.String("error", warmErr.Error()))
 	}
 
 	return service
+}
+
+func guardLLMClient(client llmclient.Client, guards *llmGuards) llmclient.Client {
+	if client == nil {
+		return nil
+	}
+	if guards == nil {
+		return llmclient.NewGuardedClient(client, nil)
+	}
+	return llmclient.NewGuardedClient(client, guards.output)
 }
 
 func initMemberNewsSourceValidator(membersData member.DataProvider, logger *slog.Logger) *membernews.SourceValidator {

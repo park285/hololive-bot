@@ -72,6 +72,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			&llmGuards{},
 			testRuntimeLogger(),
 		)
 		require.NotNil(t, service)
@@ -106,6 +107,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 			nil,
 			nil,
 			nil,
+			&llmGuards{},
 			testRuntimeLogger(),
 		)
 		require.NotNil(t, service)
@@ -116,14 +118,14 @@ func TestBuildMemberNewsComponents(t *testing.T) {
 	logger := testRuntimeLogger()
 
 	t.Run("nil service disables schedulers", func(t *testing.T) {
-		weekly, monthly := buildMemberNewsComponents(nil, nil, nil, nil, logger)
+		weekly, monthly := buildMemberNewsComponents(nil, nil, nil, nil, nil, logger)
 		assert.Nil(t, weekly)
 		assert.Nil(t, monthly)
 	})
 
 	t.Run("non-nil service builds schedulers", func(t *testing.T) {
 		service := membernews.NewService(nil, nil, nil, nil, logger)
-		weekly, monthly := buildMemberNewsComponents(service, nil, nil, nil, logger)
+		weekly, monthly := buildMemberNewsComponents(service, nil, nil, nil, nil, logger)
 		require.NotNil(t, weekly)
 		require.NotNil(t, monthly)
 	})
@@ -136,6 +138,7 @@ func TestBuildMajorEventComponents_NilRepositoryReturnsNilScraper(t *testing.T) 
 		nil,
 		nil,
 		nil,
+		&llmGuards{},
 		testRuntimeLogger(),
 	)
 

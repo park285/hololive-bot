@@ -84,6 +84,7 @@ func TestProvideEventSummarizer_Default(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		&llmGuards{},
 		searchProviderTestLogger(),
 	)
 	require.NotNil(t, summarizer)
@@ -111,6 +112,7 @@ func TestProvideEventSummarizer_ConsensusEnabled(t *testing.T) {
 		adjudicator,
 		nil,
 		nil,
+		&llmGuards{},
 		searchProviderTestLogger(),
 	)
 	require.NotNil(t, summarizer)

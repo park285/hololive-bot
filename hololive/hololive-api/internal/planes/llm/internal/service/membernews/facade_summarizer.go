@@ -42,12 +42,13 @@ func NewSummarizer(
 	searcher WebSearcher,
 	validator *SourceValidator,
 	logger *slog.Logger,
+	opts ...summarizer.SummarizerOption,
 ) *SummarizerImpl {
 	var v model.SourceURLValidator
 	if validator != nil {
 		v = validator
 	}
-	return summarizer.NewSummarizer(llm, searcher, v, logger)
+	return summarizer.NewSummarizer(llm, searcher, v, logger, opts...)
 }
 
 func NewConsensusSummarizer(

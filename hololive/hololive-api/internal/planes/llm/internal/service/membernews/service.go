@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/pkg/promptguard"
 	"github.com/park285/shared-go/pkg/stringutil"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
@@ -38,9 +39,18 @@ type Service struct {
 	repository      *Repository
 	summarizer      model.Summarizer
 	sourceValidator *SourceValidator
+	promptGuard     *promptguard.Guard
 	membersData     domain.MemberDataProvider
 	logger          *slog.Logger
 	now             func() time.Time
+}
+
+type ServiceOption func(*Service)
+
+func WithPromptGuard(guard *promptguard.Guard) ServiceOption {
+	return func(service *Service) {
+		service.promptGuard = guard
+	}
 }
 
 func NewService(
@@ -49,11 +59,12 @@ func NewService(
 	sourceValidator *SourceValidator,
 	membersData domain.MemberDataProvider,
 	logger *slog.Logger,
+	opts ...ServiceOption,
 ) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Service{
+	service := &Service{
 		repository:      repository,
 		summarizer:      summarizer,
 		sourceValidator: sourceValidator,
@@ -61,6 +72,10 @@ func NewService(
 		logger:          logger,
 		now:             time.Now,
 	}
+	for _, opt := range opts {
+		opt(service)
+	}
+	return service
 }
 
 func (s *Service) SetClock(clockFn func() time.Time) {
@@ -95,6 +110,10 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 	}
 
 	filtered := FilterCandidates(candidates, normalizedPeriod, s.now(), members, memberProvider, s.sourceValidator)
+	filtered, err = filterPromptCandidates(filtered, s.promptGuard, s.logger)
+	if err != nil {
+		return nil, fmt.Errorf("guard member news candidates: %w", err)
+	}
 	if len(filtered) == 0 {
 		return emptyDigest(normalizedPeriod), nil
 	}

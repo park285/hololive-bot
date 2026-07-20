@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/pkg/outputguard"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
 )
 
@@ -88,7 +90,7 @@ func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
 	outbox := newMockOutboxRepository()
 	now := time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendMonthlyDigest(context.Background()); err != nil {
@@ -111,7 +113,7 @@ func TestMonthlyScheduler_PartialEnqueueNoError(t *testing.T) {
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
 	now := time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST)
 
-	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil)
+	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
 	if err := scheduler.SendMonthlyDigest(context.Background()); err != nil {

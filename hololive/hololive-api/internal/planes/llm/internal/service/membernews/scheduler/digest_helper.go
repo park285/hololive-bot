@@ -28,6 +28,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/park285/shared-go/pkg/outputguard"
+
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
 
@@ -53,48 +56,69 @@ func processDigestForRoom(
 	fmtr model.DigestFormatter,
 	outbox outboxEnqueuer,
 	logger *slog.Logger,
+	outputGuard *outputguard.Guard,
 	period model.Period,
 	kind domain.DeliveryOutboxKind,
 	periodKey, roomID, emptyHeader string,
 ) delivery.SendResult {
-	var result delivery.SendResult
+	if logger == nil {
+		logger = slog.Default()
+	}
 
 	digest, err := service.GenerateRoomDigest(ctx, roomID, period)
 	if err != nil {
-		if errors.Is(err, model.ErrNoSubscribedMembers) {
-			logger.Info("Member news skip: room has no alarm members",
-				slog.String("room_id", roomID),
-				slog.String("period", string(period)),
-			)
-			result.Skipped = 1
-			return result
-		}
-
-		logger.Error("Member news digest generation failed",
-			slog.String("room_id", roomID),
-			slog.String("period", string(period)),
-			slog.String("error", err.Error()))
-		result.Attempted = 1
-		result.Failed = 1
-		result.FailedRooms = append(result.FailedRooms, roomID)
-		return result
+		return digestGenerationFailure(logger, roomID, period, err)
 	}
 
-	result.Attempted = 1
 	message := renderDigestMessage(ctx, fmtr, digest, emptyHeader)
-
+	if result, blocked := blockedMemberNewsMessage(outputGuard, logger, roomID, period, message); blocked {
+		return result
+	}
 	if err := outbox.Enqueue(ctx, kind, periodKey, roomID, message); err != nil {
 		logger.Error("Failed to enqueue member news",
 			slog.String("room_id", roomID),
 			slog.String("period", string(period)),
 			slog.String("error", err.Error()))
-		result.Failed = 1
-		result.FailedRooms = append(result.FailedRooms, roomID)
-		return result
+		return failedRoomResult(roomID)
+	}
+	return delivery.SendResult{Attempted: 1, Sent: 1}
+}
+
+func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Period, err error) delivery.SendResult {
+	if errors.Is(err, model.ErrNoSubscribedMembers) {
+		logger.Info("Member news skip: room has no alarm members",
+			slog.String("room_id", roomID),
+			slog.String("period", string(period)),
+		)
+		return delivery.SendResult{Skipped: 1}
 	}
 
-	result.Sent = 1
-	return result
+	logger.Error("Member news digest generation failed",
+		slog.String("room_id", roomID),
+		slog.String("period", string(period)),
+		slog.String("error", err.Error()))
+	return failedRoomResult(roomID)
+}
+
+func blockedMemberNewsMessage(outputGuard *outputguard.Guard, logger *slog.Logger, roomID string, period model.Period, message string) (delivery.SendResult, bool) {
+	evaluation, err := guardrail.ValidateGeneratedOutput(outputGuard, message, "membernews_notification")
+	if err == nil {
+		return delivery.SendResult{}, false
+	}
+
+	logger.Error("Member news notification output blocked",
+		slog.String("room_id", roomID),
+		slog.String("period", string(period)),
+		slog.String("error", err.Error()),
+		slog.String("decision", string(evaluation.Decision)),
+		slog.Any("reasons", evaluation.ReasonCodes),
+		slog.Any("rules", evaluation.RuleIDs),
+	)
+	return failedRoomResult(roomID), true
+}
+
+func failedRoomResult(roomID string) delivery.SendResult {
+	return delivery.SendResult{Attempted: 1, Failed: 1, FailedRooms: []string{roomID}}
 }
 
 func acquireDigestSlot(ctx context.Context, sem chan struct{}) bool {

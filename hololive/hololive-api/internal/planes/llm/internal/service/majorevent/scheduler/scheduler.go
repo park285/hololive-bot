@@ -26,6 +26,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/pkg/outputguard"
+	"github.com/park285/shared-go/pkg/promptguard"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 
@@ -78,6 +81,17 @@ type Scheduler struct {
 	outboxRepository outboxEnqueuer
 	formatter        Formatter
 	summarizer       *mesummarizer.EventSummarizer
+	promptGuard      *promptguard.Guard
+	outputGuard      *outputguard.Guard
+}
+
+type SchedulerOption func(*Scheduler)
+
+func WithGuards(promptGuard *promptguard.Guard, outputGuard *outputguard.Guard) SchedulerOption {
+	return func(scheduler *Scheduler) {
+		scheduler.promptGuard = promptGuard
+		scheduler.outputGuard = outputGuard
+	}
 }
 
 func NewScheduler(
@@ -87,14 +101,19 @@ func NewScheduler(
 	locker delivery.NotificationLocker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
+	opts ...SchedulerOption,
 ) *Scheduler {
-	return &Scheduler{
+	scheduler := &Scheduler{
 		digest:           schedulerkit.NewDigestScheduler(locker, logger),
 		repository:       repository,
 		outboxRepository: outboxRepository,
 		formatter:        formatter,
 		summarizer:       summarizer,
 	}
+	for _, opt := range opts {
+		opt(scheduler)
+	}
+	return scheduler
 }
 
 func (s *Scheduler) SetClock(clockFn func() time.Time) {
@@ -183,6 +202,10 @@ func (s *Scheduler) weeklyNotificationInputs(
 	if err != nil {
 		return weeklyCollected{}, false, fmt.Errorf("get events from db: %w", err)
 	}
+	events, err = filterPromptEvents(events, s.promptGuard, s.digest.Logger)
+	if err != nil {
+		return weeklyCollected{}, false, fmt.Errorf("guard major events: %w", err)
+	}
 	if len(events) == 0 {
 		s.digest.Logger.Info("No events for this week, skipping notification",
 			slog.Time("week_start", weekStart),
@@ -195,7 +218,7 @@ func (s *Scheduler) weeklyNotificationInputs(
 func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) error {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
 	message := s.weeklyNotificationMessage(ctx, domainEvents, weekKey)
-	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(c.rooms), domain.DeliveryKindMajorEventWeekly, weekKey, message, s.digest.Logger)
+	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(c.rooms), domain.DeliveryKindMajorEventWeekly, weekKey, message, s.outputGuard, s.digest.Logger)
 
 	s.digest.Logger.Info("Weekly notification enqueue result",
 		slog.Int("attempted", result.Attempted),

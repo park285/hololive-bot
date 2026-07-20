@@ -26,6 +26,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/pkg/outputguard"
+	"github.com/park285/shared-go/pkg/promptguard"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 
@@ -41,6 +44,17 @@ type MonthlyScheduler struct {
 	outboxRepository outboxEnqueuer
 	formatter        Formatter
 	summarizer       *mesummarizer.EventSummarizer
+	promptGuard      *promptguard.Guard
+	outputGuard      *outputguard.Guard
+}
+
+type MonthlySchedulerOption func(*MonthlyScheduler)
+
+func WithMonthlyGuards(promptGuard *promptguard.Guard, outputGuard *outputguard.Guard) MonthlySchedulerOption {
+	return func(scheduler *MonthlyScheduler) {
+		scheduler.promptGuard = promptGuard
+		scheduler.outputGuard = outputGuard
+	}
 }
 
 func NewMonthlyScheduler(
@@ -50,14 +64,19 @@ func NewMonthlyScheduler(
 	locker delivery.NotificationLocker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
+	opts ...MonthlySchedulerOption,
 ) *MonthlyScheduler {
-	return &MonthlyScheduler{
+	scheduler := &MonthlyScheduler{
 		digest:           schedulerkit.NewDigestScheduler(locker, logger),
 		repository:       repository,
 		outboxRepository: outboxRepository,
 		formatter:        formatter,
 		summarizer:       summarizer,
 	}
+	for _, opt := range opts {
+		opt(scheduler)
+	}
+	return scheduler
 }
 
 func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
@@ -143,6 +162,10 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 	if err != nil {
 		return monthlyCollected{}, false, fmt.Errorf("get events by month: %w", err)
 	}
+	events, err = filterPromptEvents(events, s.promptGuard, s.digest.Logger)
+	if err != nil {
+		return monthlyCollected{}, false, fmt.Errorf("guard monthly major events: %w", err)
+	}
 	if len(events) == 0 {
 		s.digest.Logger.Info("No events for this month, skipping notification",
 			slog.Int("year", year),
@@ -155,7 +178,7 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c monthlyCollected, monthKey string) error {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
 	message := s.monthlyNotificationMessage(ctx, domainEvents, monthKey)
-	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(c.rooms), domain.DeliveryKindMajorEventMonthly, monthKey, message, s.digest.Logger)
+	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(c.rooms), domain.DeliveryKindMajorEventMonthly, monthKey, message, s.outputGuard, s.digest.Logger)
 
 	s.digest.Logger.Info("Monthly notification enqueue result",
 		slog.Int("attempted", result.Attempted),

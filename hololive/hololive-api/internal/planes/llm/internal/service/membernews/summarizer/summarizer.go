@@ -27,7 +27,9 @@ import (
 	"strings"
 
 	json "github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/promptguard"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
 )
@@ -57,10 +59,19 @@ type LLMClient interface {
 }
 
 type SummarizerImpl struct {
-	llm       LLMClient
-	searcher  sharedmodel.WebSearcher
-	validator model.SourceURLValidator
-	logger    *slog.Logger
+	llm         LLMClient
+	searcher    sharedmodel.WebSearcher
+	validator   model.SourceURLValidator
+	promptGuard *promptguard.Guard
+	logger      *slog.Logger
+}
+
+type SummarizerOption func(*SummarizerImpl)
+
+func WithPromptGuard(guard *promptguard.Guard) SummarizerOption {
+	return func(summarizer *SummarizerImpl) {
+		summarizer.promptGuard = guard
+	}
 }
 
 func NewSummarizer(
@@ -68,16 +79,21 @@ func NewSummarizer(
 	searcher sharedmodel.WebSearcher,
 	validator model.SourceURLValidator,
 	logger *slog.Logger,
+	opts ...SummarizerOption,
 ) *SummarizerImpl {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &SummarizerImpl{
+	summarizer := &SummarizerImpl{
 		llm:       llm,
 		searcher:  searcher,
 		validator: validator,
 		logger:    logger,
 	}
+	for _, opt := range opts {
+		opt(summarizer)
+	}
+	return summarizer
 }
 
 func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeInput) (*model.Digest, error) {
@@ -92,7 +108,11 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeIn
 		return BuildDeterministicFallback(input.Period, input.Candidates), nil
 	}
 
-	searchContext := s.searchContext(ctx, input)
+	searchContext, err := s.searchContext(ctx, input)
+	if err != nil {
+		s.logger.Error("MemberNews external content guard unavailable", slog.String("error", err.Error()))
+		return newEmptyDigest(input.Period, len(input.Candidates)), nil
+	}
 
 	raw, err := s.llm.GenerateJSON(ctx, memberNewsSystemPrompt(), buildMemberNewsUserPrompt(input, searchContext), memberNewsSummarySchema())
 	if err != nil {
@@ -115,18 +135,22 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeIn
 	return digest, nil
 }
 
-func (s *SummarizerImpl) searchContext(ctx context.Context, input *model.SummarizeInput) string {
+func (s *SummarizerImpl) searchContext(ctx context.Context, input *model.SummarizeInput) (string, error) {
 	if s.searcher == nil {
-		return ""
+		return "", nil
 	}
 
 	query := buildSearchQuery(input.Period, input.RoomMembers, input.Now)
 	results, err := s.searcher.Search(ctx, query)
 	if err != nil {
 		s.logger.Warn("MemberNews Exa search failed (graceful)", slog.Any("error", err))
-		return ""
+		return "", nil
 	}
-	return formatSearchContext(results)
+	results, err = guardrail.FilterSearchResults(results, s.promptGuard, s.logger, "membernews_search")
+	if err != nil {
+		return "", fmt.Errorf("guard member news search results: %w", err)
+	}
+	return formatSearchContext(results), nil
 }
 
 func newEmptyDigest(period model.Period, totalCount int) *model.Digest {

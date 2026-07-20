@@ -30,6 +30,8 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/park285/shared-go/pkg/outputguard"
+	"github.com/park285/shared-go/pkg/promptguard"
 )
 
 type mockFormatter struct {
@@ -239,6 +241,7 @@ func newTestScheduler(repository EventRepository, outbox outboxEnqueuer, locker 
 		locker,
 		outbox,
 		testLogger(),
+		WithGuards(newMajorEventPromptGuardForSchedulerTest(), outputguard.NewGuard()),
 	)
 }
 
@@ -363,6 +366,7 @@ func newTestMonthlyScheduler(repository EventRepository, outbox outboxEnqueuer, 
 		locker,
 		outbox,
 		testLogger(),
+		WithMonthlyGuards(newMajorEventPromptGuardForSchedulerTest(), outputguard.NewGuard()),
 	)
 }
 
@@ -471,4 +475,12 @@ func TestSendWeeklyNotification_EnqueueMarking_PartialFail_NoMark(t *testing.T) 
 	if repository.markedWeekly {
 		t.Error("partial enqueue failure → should NOT mark events")
 	}
+}
+
+func newMajorEventPromptGuardForSchedulerTest() *promptguard.Guard {
+	guard, err := promptguard.NewGuard(promptguard.Config{Enabled: true, UseEmbeddedDefaults: true}, nil)
+	if err != nil {
+		panic(err)
+	}
+	return guard
 }

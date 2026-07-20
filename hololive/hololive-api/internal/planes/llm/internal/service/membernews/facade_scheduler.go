@@ -55,8 +55,9 @@ func NewScheduler(
 	locker delivery.NotificationLocker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
+	opts ...mnscheduler.SchedulerOption,
 ) *Scheduler {
-	return mnscheduler.NewScheduler(service, formatter, locker, outboxRepository, logger)
+	return mnscheduler.NewScheduler(service, formatter, locker, outboxRepository, logger, opts...)
 }
 
 func NewMonthlyScheduler(
@@ -65,6 +66,7 @@ func NewMonthlyScheduler(
 	locker delivery.NotificationLocker,
 	outboxRepository outboxEnqueuer,
 	logger *slog.Logger,
+	opts ...mnscheduler.MonthlySchedulerOption,
 ) *MonthlyScheduler {
-	return mnscheduler.NewMonthlyScheduler(service, formatter, locker, outboxRepository, logger)
+	return mnscheduler.NewMonthlyScheduler(service, formatter, locker, outboxRepository, logger, opts...)
 }

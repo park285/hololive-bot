@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/promptguard"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
@@ -50,13 +51,13 @@ func provideExaSearcher(exaConfig config.ExaConfig, logger *slog.Logger) sharedm
 	return client
 }
 
-func buildMajorEventSummarizer(exaConfig *config.LLMSchedulerConfig, cacheClient cache.Client, logger *slog.Logger) *mesummarizer.EventSummarizer {
+func buildMajorEventSummarizer(exaConfig *config.LLMSchedulerConfig, cacheClient cache.Client, guards *llmGuards, logger *slog.Logger) *mesummarizer.EventSummarizer {
 	costTracker := ProvideLLMCostTracker(cacheClient, exaConfig.LLM.MonthlyTokenCeiling, logger)
-	majorEventLLMClient := ProvideMajorEventLLMClient(exaConfig.Cliproxy, costTracker, logger)
-	majorEventReviewer := ProvideMajorEventReviewerClient(exaConfig.Cliproxy, &exaConfig.LLM, costTracker, logger)
-	majorEventAdjudicator := ProvideMajorEventAdjudicatorClient(exaConfig.Cliproxy, &exaConfig.LLM, costTracker, logger)
+	majorEventLLMClient := guardLLMClient(ProvideMajorEventLLMClient(exaConfig.Cliproxy, costTracker, logger), guards)
+	majorEventReviewer := guardLLMClient(ProvideMajorEventReviewerClient(exaConfig.Cliproxy, &exaConfig.LLM, costTracker, logger), guards)
+	majorEventAdjudicator := guardLLMClient(ProvideMajorEventAdjudicatorClient(exaConfig.Cliproxy, &exaConfig.LLM, costTracker, logger), guards)
 	exaSearcher := provideExaSearcher(exaConfig.Exa, logger)
-	return provideEventSummarizer(exaConfig.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheClient, exaSearcher, logger)
+	return provideEventSummarizer(exaConfig.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheClient, exaSearcher, guards, logger)
 }
 
 func provideEventSummarizer(
@@ -66,6 +67,7 @@ func provideEventSummarizer(
 	adjudicatorClient mesummarizer.LLMClient,
 	cacheClient cache.Client,
 	searcher sharedmodel.WebSearcher,
+	guards *llmGuards,
 	logger *slog.Logger,
 ) *mesummarizer.EventSummarizer {
 	if logger == nil {
@@ -91,5 +93,10 @@ func provideEventSummarizer(
 		)
 	}
 
+	var promptGuard *promptguard.Guard
+	if guards != nil {
+		promptGuard = guards.prompt
+	}
+	opts = append(opts, mesummarizer.WithPromptGuard(promptGuard))
 	return mesummarizer.NewEventSummarizer(llmClient, cacheClient, searcher, logger, opts...)
 }
