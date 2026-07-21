@@ -21,6 +21,22 @@ func TestParseHeartbeatAllowsEmptyBody(t *testing.T) {
 	require.False(t, hb.Idle)
 }
 
+func TestParseHeartbeatAcceptsEmptyObject(t *testing.T) {
+	hb, err := parseHeartbeat(heartbeatRequestWithBody(`{}`))
+	require.NoError(t, err)
+	require.False(t, hb.Idle)
+}
+
+func TestParseHeartbeatRejectsNullBody(t *testing.T) {
+	_, err := parseHeartbeat(heartbeatRequestWithBody(`null`))
+	require.Error(t, err)
+}
+
+func TestParseHeartbeatRejectsNullIdle(t *testing.T) {
+	_, err := parseHeartbeat(heartbeatRequestWithBody(`{"idle":null}`))
+	require.Error(t, err)
+}
+
 func TestParseHeartbeatAcceptsExactLimit(t *testing.T) {
 	payload := `{"idle":true}`
 	payload += strings.Repeat(" ", int(maxHeartbeatBodyBytes)-len(payload))

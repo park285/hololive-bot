@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -120,6 +121,10 @@ type heartbeatRequest struct {
 	Idle bool `json:"idle"`
 }
 
+type heartbeatPayload struct {
+	Idle json.RawMessage `json:"idle"`
+}
+
 func (r *Runtime) handleHeartbeat(c *gin.Context) {
 	sessionID, ok := sessionIDFrom(c)
 	if !ok {
@@ -156,8 +161,22 @@ func parseHeartbeat(req *http.Request) (heartbeatRequest, error) {
 	if len(bytes.TrimSpace(body)) == 0 {
 		return hb, nil
 	}
-	if err := httpx.DecodeJSONBytes(body, &hb); err != nil {
+
+	var payload *heartbeatPayload
+	if err := httpx.DecodeJSONBytes(body, &payload); err != nil {
 		return hb, err
+	}
+	if payload == nil {
+		return hb, fmt.Errorf("heartbeat body must be a json object")
+	}
+	if len(payload.Idle) == 0 {
+		return hb, nil
+	}
+	if bytes.Equal(bytes.TrimSpace(payload.Idle), []byte("null")) {
+		return hb, fmt.Errorf("heartbeat idle must be a boolean")
+	}
+	if err := json.Unmarshal(payload.Idle, &hb.Idle); err != nil {
+		return hb, fmt.Errorf("decode heartbeat idle: %w", err)
 	}
 	return hb, nil
 }

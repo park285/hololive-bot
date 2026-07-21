@@ -416,6 +416,7 @@
         "type": "object"
       },
       "HeartbeatRequest": {
+        "additionalProperties": false,
         "properties": {
           "idle": {
             "type": "boolean"
@@ -1279,7 +1280,8 @@
               }
             }
           },
-          "required": true
+          "description": "Optional; an absent or whitespace-only body means idle=false. Otherwise, the body must be a single JSON object of at most 1024 bytes with no unknown fields or trailing data.",
+          "required": false
         },
         "responses": {
           "200": {
