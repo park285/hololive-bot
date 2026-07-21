@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -104,11 +105,23 @@ func (c *Client) Available(ctx context.Context) bool {
 }
 
 func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
+	return c.listContainers(ctx, true)
+}
+
+func (c *Client) listContainers(ctx context.Context, retryCanceledRefresh bool) ([]Container, error) {
 	if cached, ok := c.cachedContainers(); ok {
 		return cached, nil
 	}
 
 	refresh, leader := c.beginListRefresh()
+	containers, err := c.resolveListRefresh(ctx, refresh, leader)
+	if retryCanceledRefresh && ctx.Err() == nil && errors.Is(err, context.Canceled) {
+		return c.listContainers(ctx, false)
+	}
+	return containers, err
+}
+
+func (c *Client) resolveListRefresh(ctx context.Context, refresh *containerListRefresh, leader bool) ([]Container, error) {
 	if leader {
 		return c.runListRefresh(ctx, refresh)
 	}
