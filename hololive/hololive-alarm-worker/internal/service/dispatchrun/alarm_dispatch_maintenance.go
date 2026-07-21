@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/park285/shared-go/pkg/retry"
@@ -279,14 +280,14 @@ func acquireAlarmDispatchLock(ctx context.Context, tx pgx.Tx, key int64) (bool, 
 	if err == nil {
 		return locked, nil
 	}
-	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 		return false, fmt.Errorf("acquire alarm dispatch retention transaction lock and rollback failed: %w", errors.Join(err, rollbackErr))
 	}
 	return false, fmt.Errorf("acquire alarm dispatch retention transaction lock: %w", err)
 }
 
 func rollbackAlarmDispatchTx(ctx context.Context, tx pgx.Tx, cause error, joinFmt string) error {
-	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 		return fmt.Errorf(joinFmt, errors.Join(cause, rollbackErr))
 	}
 	return cause

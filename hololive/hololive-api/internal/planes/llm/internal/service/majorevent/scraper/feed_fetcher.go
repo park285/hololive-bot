@@ -85,13 +85,25 @@ func (f *FeedFetcher) readResponseBody(resp *http.Response) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("fetch feed: unexpected status %d", resp.StatusCode)
 	}
+	if resp.ContentLength > f.maxBodyLen {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return nil, fmt.Errorf("fetch feed: body exceeds %d bytes; close response body: %w", f.maxBodyLen, closeErr)
+		}
+		return nil, fmt.Errorf("fetch feed: body exceeds %d bytes", f.maxBodyLen)
+	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, f.maxBodyLen))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, f.maxBodyLen+1))
 	if err != nil {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			err = fmt.Errorf("%w; close response body: %w", err, closeErr)
 		}
 		return nil, fmt.Errorf("fetch feed: read body: %w", err)
+	}
+	if int64(len(body)) > f.maxBodyLen {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return nil, fmt.Errorf("fetch feed: body exceeds %d bytes; close response body: %w", f.maxBodyLen, closeErr)
+		}
+		return nil, fmt.Errorf("fetch feed: body exceeds %d bytes", f.maxBodyLen)
 	}
 	if closeErr := resp.Body.Close(); closeErr != nil {
 		return nil, fmt.Errorf("fetch feed: close response body: %w", closeErr)

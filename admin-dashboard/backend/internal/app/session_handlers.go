@@ -1,15 +1,16 @@
 package app
 
 import (
+	"bytes"
+	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/pkg/ginjson"
-	"github.com/park285/shared-go/pkg/json"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/admin-dashboard/internal/auth"
@@ -40,7 +41,9 @@ func (r *Runtime) handleLogin(c *gin.Context) {
 	if !(usernameOK && passwordOK) {
 		count := r.rateLimiter.RecordFailure(ip)
 		delay := time.Duration(min(count*500, 3000)) * time.Millisecond
-		time.Sleep(delay)
+		if !waitForLoginBackoff(c.Request.Context(), delay) {
+			return
+		}
 		httpx.Abort(c, httpx.Unauthorized())
 		return
 	}
@@ -111,6 +114,8 @@ func (r *Runtime) handleLogout(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, statusResponse{Status: "ok"})
 }
 
+const maxHeartbeatBodyBytes int64 = 1024
+
 type heartbeatRequest struct {
 	Idle bool `json:"idle"`
 }
@@ -136,21 +141,42 @@ func (r *Runtime) handleHeartbeat(c *gin.Context) {
 }
 
 func parseHeartbeat(req *http.Request) (heartbeatRequest, error) {
-	body, err := io.ReadAll(io.LimitReader(req.Body, 1024))
+	body, err := io.ReadAll(io.LimitReader(req.Body, maxHeartbeatBodyBytes+1))
 	if closeErr := req.Body.Close(); closeErr != nil && err == nil {
 		err = closeErr
 	}
 	if err != nil {
 		return heartbeatRequest{}, err
 	}
+	if int64(len(body)) > maxHeartbeatBodyBytes {
+		return heartbeatRequest{}, fmt.Errorf("heartbeat body exceeds %d bytes", maxHeartbeatBodyBytes)
+	}
+
 	hb := heartbeatRequest{}
-	if strings.TrimSpace(string(body)) == "" {
+	if len(bytes.TrimSpace(body)) == 0 {
 		return hb, nil
 	}
-	if err := json.Unmarshal(body, &hb); err != nil {
+	if err := httpx.DecodeJSONBytes(body, &hb); err != nil {
 		return hb, err
 	}
 	return hb, nil
+}
+
+func waitForLoginBackoff(ctx context.Context, delay time.Duration) bool {
+	if err := ctx.Err(); err != nil {
+		return false
+	}
+	if delay <= 0 {
+		return true
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return ctx.Err() == nil
+	}
 }
 
 func (r *Runtime) writeHeartbeatResult(c *gin.Context, sessionID string, result session.RefreshResult) {

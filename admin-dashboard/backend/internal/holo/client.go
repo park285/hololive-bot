@@ -28,9 +28,9 @@ type ProxyResponse struct {
 }
 
 func NewClient(baseURL, apiKey string) (*Client, error) {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if _, err := url.ParseRequestURI(baseURL); err != nil {
-		return nil, fmt.Errorf("invalid holo admin api url: %w", err)
+	baseURL, err := normalizeHoloBaseURL(baseURL)
+	if err != nil {
+		return nil, err
 	}
 	httpClient, err := newHoloHTTPClient(baseURL)
 	if err != nil {
@@ -41,6 +41,31 @@ func NewClient(baseURL, apiKey string) (*Client, error) {
 		apiKey:  strings.TrimSpace(apiKey),
 		http:    httpClient,
 	}, nil
+}
+
+func normalizeHoloBaseURL(rawURL string) (string, error) {
+	trimmed := strings.TrimRight(strings.TrimSpace(rawURL), "/")
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("invalid holo admin api url: %w", err)
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("invalid holo admin api url: scheme must be http or https")
+	}
+	if parsed.Hostname() == "" || parsed.Opaque != "" {
+		return "", fmt.Errorf("invalid holo admin api url: host is required")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("invalid holo admin api url: user info is not allowed")
+	}
+	if parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return "", fmt.Errorf("invalid holo admin api url: query and fragment are not allowed")
+	}
+
+	parsed.Scheme = scheme
+	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
 const holoClientTimeout = 10 * time.Second

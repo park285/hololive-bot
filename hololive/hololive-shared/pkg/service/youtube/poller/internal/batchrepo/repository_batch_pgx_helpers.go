@@ -7,6 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 type batchDB interface {
@@ -30,7 +32,7 @@ func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) erro
 
 	defer func() {
 		if p := recover(); p != nil {
-			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 				panic(fmt.Errorf("panic during pgx transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
 			}
 			panic(p)
@@ -42,7 +44,7 @@ func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) erro
 
 func finishBatchTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
 	if fnErr != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
 		return fmt.Errorf("pgx transaction failed: %w", fnErr)

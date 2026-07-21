@@ -93,15 +93,28 @@ export function useWebSocket<T = unknown>(
 		}
 	}, []);
 
+	const clearReconnectTimer = useCallback(() => {
+		if (reconnectTimerRef.current) {
+			clearTimeout(reconnectTimerRef.current);
+			reconnectTimerRef.current = null;
+		}
+	}, []);
+
 	const connect = useCallback(() => {
 		if (!url) return;
 
-		if (wsRef.current?.readyState === WebSocket.OPEN) {
+		clearReconnectTimer();
+		if (
+			wsRef.current?.readyState === WebSocket.OPEN ||
+			wsRef.current?.readyState === WebSocket.CONNECTING
+		) {
 			return;
 		}
 
 		if (wsRef.current) {
-			wsRef.current.close();
+			const previous = wsRef.current;
+			wsRef.current = null;
+			previous.close();
 		}
 
 		setState((prev) => ({ ...prev, isConnecting: true, error: null }));
@@ -111,7 +124,7 @@ export function useWebSocket<T = unknown>(
 			wsRef.current = ws;
 
 			ws.onopen = () => {
-				if (!isMountedRef.current) return;
+				if (!isMountedRef.current || wsRef.current !== ws) return;
 				setState((prev) => ({
 					...prev,
 					isConnected: true,
@@ -123,7 +136,7 @@ export function useWebSocket<T = unknown>(
 			};
 
 			ws.onmessage = (event) => {
-				if (!isMountedRef.current) return;
+				if (!isMountedRef.current || wsRef.current !== ws) return;
 				try {
 					const rawData = event.data as unknown;
 					const decodedData =
@@ -151,7 +164,8 @@ export function useWebSocket<T = unknown>(
 			};
 
 			ws.onclose = () => {
-				if (!isMountedRef.current) return;
+				if (!isMountedRef.current || wsRef.current !== ws) return;
+				wsRef.current = null;
 				stopPingTimer();
 				setState((prev) => ({
 					...prev,
@@ -166,14 +180,16 @@ export function useWebSocket<T = unknown>(
 						CONFIG.websocket.maxBackoffMs,
 					);
 					reconnectTimerRef.current = setTimeout(() => {
+						reconnectTimerRef.current = null;
+						if (!isMountedRef.current || wsRef.current !== null) return;
 						reconnectCountRef.current += 1;
-						if (isMountedRef.current) connect();
+						connect();
 					}, backoffDelay);
 				}
 			};
 
 			ws.onerror = (event) => {
-				if (!isMountedRef.current) return;
+				if (!isMountedRef.current || wsRef.current !== ws) return;
 				setState((prev) => ({ ...prev, error: event }));
 				onErrorRef.current?.(event);
 			};
@@ -186,6 +202,7 @@ export function useWebSocket<T = unknown>(
 	}, [
 		url,
 		autoConnect,
+		clearReconnectTimer,
 		reconnectAttempts,
 		reconnectInterval,
 		startPingTimer,
@@ -194,16 +211,20 @@ export function useWebSocket<T = unknown>(
 
 	const disconnect = useCallback(() => {
 		stopPingTimer();
-		if (reconnectTimerRef.current) {
-			clearTimeout(reconnectTimerRef.current);
-			reconnectTimerRef.current = null;
-		}
+		clearReconnectTimer();
 		reconnectCountRef.current = 0;
-		if (wsRef.current) {
-			wsRef.current.close();
-			wsRef.current = null;
+		const ws = wsRef.current;
+		wsRef.current = null;
+		ws?.close();
+		if (isMountedRef.current) {
+			setState((prev) => ({
+				...prev,
+				isConnected: false,
+				isConnecting: false,
+			}));
+			if (ws) onCloseRef.current?.();
 		}
-	}, [stopPingTimer]);
+	}, [clearReconnectTimer, stopPingTimer]);
 
 	useEffect(() => {
 		isMountedRef.current = true;

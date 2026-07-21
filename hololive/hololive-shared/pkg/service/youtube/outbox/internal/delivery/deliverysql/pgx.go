@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 type DeliveryDB interface {
@@ -136,7 +137,7 @@ func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) er
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 				panic(fmt.Errorf("panic during transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
 			}
 			panic(p)
@@ -147,7 +148,7 @@ func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) er
 
 func finishDeliveryTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
 	if fnErr != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 			return fmt.Errorf("transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
 		return fnErr
