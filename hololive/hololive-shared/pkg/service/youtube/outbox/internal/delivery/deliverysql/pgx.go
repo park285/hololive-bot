@@ -136,16 +136,18 @@ func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) er
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer func() {
-		if p := recover(); p != nil {
-			rollbackErr := pgxutil.Rollback(ctx, tx)
-			if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-				slog.Default().Warn("delivery transaction rollback after panic failed", slog.Any("error", rollbackErr))
-			}
-			panic(p)
-		}
-	}()
+	defer rollbackDeliveryTxOnPanic(ctx, tx)
 	return finishDeliveryTx(ctx, tx, fn(tx))
+}
+
+func rollbackDeliveryTxOnPanic(ctx context.Context, tx pgx.Tx) {
+	if p := recover(); p != nil {
+		rollbackErr := pgxutil.Rollback(ctx, tx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("delivery transaction rollback after panic failed", slog.Any("error", rollbackErr))
+		}
+		panic(p)
+	}
 }
 
 func finishDeliveryTx(ctx context.Context, tx pgx.Tx, fnErr error) error {

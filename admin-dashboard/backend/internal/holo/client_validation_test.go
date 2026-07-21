@@ -20,6 +20,7 @@ func TestNormalizeHoloBaseURLRejectsNonOriginURLs(t *testing.T) {
 		{name: "unsupported scheme", url: "ftp://hololive-api"},
 		{name: "embedded credentials", url: "https://admin:secret@hololive-api"},
 		{name: "query", url: "https://hololive-api?mode=debug"},
+		{name: "empty query", url: "https://hololive-api?"},
 		{name: "fragment", url: "https://hololive-api#internal"},
 	}
 

@@ -31,17 +31,19 @@ func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) erro
 		return fmt.Errorf("begin pgx transaction: %w", err)
 	}
 
-	defer func() {
-		if p := recover(); p != nil {
-			rollbackErr := pgxutil.Rollback(ctx, tx)
-			if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-				slog.Default().Warn("pgx batch transaction rollback after panic failed", slog.Any("error", rollbackErr))
-			}
-			panic(p)
-		}
-	}()
+	defer rollbackBatchTxOnPanic(ctx, tx)
 
 	return finishBatchTx(ctx, tx, fn(tx))
+}
+
+func rollbackBatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
+	if p := recover(); p != nil {
+		rollbackErr := pgxutil.Rollback(ctx, tx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("pgx batch transaction rollback after panic failed", slog.Any("error", rollbackErr))
+		}
+		panic(p)
+	}
 }
 
 func finishBatchTx(ctx context.Context, tx pgx.Tx, fnErr error) error {

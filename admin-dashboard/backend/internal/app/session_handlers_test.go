@@ -2,14 +2,28 @@ package app
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+type heartbeatBody struct {
+	io.Reader
+	closeErr error
+	closed   bool
+}
+
+func (b *heartbeatBody) Close() error {
+	b.closed = true
+	return b.closeErr
+}
 
 func heartbeatRequestWithBody(body string) *http.Request {
 	return httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(body))
@@ -62,6 +76,28 @@ func TestParseHeartbeatRejectsUnknownFields(t *testing.T) {
 func TestParseHeartbeatRejectsMultipleValues(t *testing.T) {
 	_, err := parseHeartbeat(heartbeatRequestWithBody(`{"idle":false}{"idle":true}`))
 	require.ErrorContains(t, err, "multiple json values")
+}
+
+func TestParseHeartbeatReturnsBodyCloseError(t *testing.T) {
+	closeErr := errors.New("close heartbeat body")
+	body := &heartbeatBody{Reader: strings.NewReader(`{}`), closeErr: closeErr}
+
+	_, err := parseHeartbeat(&http.Request{Body: body})
+
+	require.ErrorIs(t, err, closeErr)
+	require.True(t, body.closed)
+}
+
+func TestParseHeartbeatPrefersReadErrorOverCloseError(t *testing.T) {
+	readErr := errors.New("read heartbeat body")
+	closeErr := errors.New("close heartbeat body")
+	body := &heartbeatBody{Reader: iotest.ErrReader(readErr), closeErr: closeErr}
+
+	_, err := parseHeartbeat(&http.Request{Body: body})
+
+	require.ErrorIs(t, err, readErr)
+	require.NotErrorIs(t, err, closeErr)
+	require.True(t, body.closed)
 }
 
 func TestWaitForLoginBackoffStopsWhenRequestIsCanceled(t *testing.T) {

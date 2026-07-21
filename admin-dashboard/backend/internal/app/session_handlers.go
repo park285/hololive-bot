@@ -146,15 +146,9 @@ func (r *Runtime) handleHeartbeat(c *gin.Context) {
 }
 
 func parseHeartbeat(req *http.Request) (heartbeatRequest, error) {
-	body, err := io.ReadAll(io.LimitReader(req.Body, maxHeartbeatBodyBytes+1))
-	if closeErr := req.Body.Close(); closeErr != nil && err == nil {
-		err = closeErr
-	}
+	body, err := readHeartbeatBody(req)
 	if err != nil {
 		return heartbeatRequest{}, err
-	}
-	if int64(len(body)) > maxHeartbeatBodyBytes {
-		return heartbeatRequest{}, fmt.Errorf("heartbeat body exceeds %d bytes", maxHeartbeatBodyBytes)
 	}
 
 	hb := heartbeatRequest{}
@@ -179,6 +173,20 @@ func parseHeartbeat(req *http.Request) (heartbeatRequest, error) {
 		return hb, fmt.Errorf("decode heartbeat idle: %w", err)
 	}
 	return hb, nil
+}
+
+func readHeartbeatBody(req *http.Request) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(req.Body, maxHeartbeatBodyBytes+1))
+	if closeErr := req.Body.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxHeartbeatBodyBytes {
+		return nil, fmt.Errorf("heartbeat body exceeds %d bytes", maxHeartbeatBodyBytes)
+	}
+	return body, nil
 }
 
 func waitForLoginBackoff(ctx context.Context, delay time.Duration) bool {

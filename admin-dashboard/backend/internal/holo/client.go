@@ -50,22 +50,27 @@ func normalizeHoloBaseURL(rawURL string) (string, error) {
 		return "", fmt.Errorf("invalid holo admin api url: %w", err)
 	}
 
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return "", fmt.Errorf("invalid holo admin api url: scheme must be http or https")
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	if err := validateHoloBaseURL(parsed); err != nil {
+		return "", err
+	}
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func validateHoloBaseURL(parsed *url.URL) error {
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("invalid holo admin api url: scheme must be http or https")
 	}
 	if parsed.Hostname() == "" || parsed.Opaque != "" {
-		return "", fmt.Errorf("invalid holo admin api url: host is required")
+		return fmt.Errorf("invalid holo admin api url: host is required")
 	}
 	if parsed.User != nil {
-		return "", fmt.Errorf("invalid holo admin api url: user info is not allowed")
+		return fmt.Errorf("invalid holo admin api url: user info is not allowed")
 	}
 	if parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
-		return "", fmt.Errorf("invalid holo admin api url: query and fragment are not allowed")
+		return fmt.Errorf("invalid holo admin api url: query and fragment are not allowed")
 	}
-
-	parsed.Scheme = scheme
-	return strings.TrimRight(parsed.String(), "/"), nil
+	return nil
 }
 
 const holoClientTimeout = 10 * time.Second
