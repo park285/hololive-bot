@@ -1,6 +1,7 @@
 package status
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -86,6 +87,72 @@ func TestSubscribeIsolatesSubscribers(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatalf("subscriber %s did not receive sample", name)
 		}
+	}
+}
+
+func TestUnsubscribeIsIdempotent(t *testing.T) {
+	hub := NewHub(nil)
+	_, updates, unsubscribe := hub.Subscribe()
+
+	unsubscribe()
+	unsubscribe()
+
+	if _, ok := <-updates; ok {
+		t.Fatal("updates channel still open after unsubscribe")
+	}
+	if hub.hasSubscribers() {
+		t.Fatal("double unsubscribe left a registered subscriber")
+	}
+}
+
+func TestStopBeforeStartReturnsAndDoesNotDisableLaterStart(t *testing.T) {
+	hub := NewHub(nil)
+
+	stopped := make(chan struct{})
+	go func() {
+		hub.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("Stop before Start blocked")
+	}
+
+	hub.Start()
+	hub.Stop()
+}
+
+func TestConcurrentStartAndStopAreIdempotent(t *testing.T) {
+	hub := NewHub(nil)
+
+	var startWG sync.WaitGroup
+	for range 8 {
+		startWG.Add(1)
+		go func() {
+			defer startWG.Done()
+			hub.Start()
+		}()
+	}
+	startWG.Wait()
+
+	var stopWG sync.WaitGroup
+	for range 8 {
+		stopWG.Add(1)
+		go func() {
+			defer stopWG.Done()
+			hub.Stop()
+		}()
+	}
+	done := make(chan struct{})
+	go func() {
+		stopWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("concurrent Stop calls did not return")
 	}
 }
 
