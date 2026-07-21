@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -77,6 +78,75 @@ func TestContainerActionFencesOlderListRefreshFromCache(t *testing.T) {
 	}
 	if len(second) != 1 || second[0].Name != "hololive-after-action" {
 		t.Fatalf("second containers = %+v, want post-action refresh", second)
+	}
+}
+
+func TestListContainersWaiterRetriesCanceledLeader(t *testing.T) {
+	var requests atomic.Int32
+	firstStarted := make(chan struct{})
+	client := &Client{
+		baseURL: "http://docker",
+		http: &http.Client{Transport: dockerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch requests.Add(1) {
+			case 1:
+				close(firstStarted)
+				<-req.Context().Done()
+				return nil, req.Context().Err()
+			case 2:
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`[{"Id":"1","Names":["/hololive-api"],"Image":"img","Status":"Up","State":"running","Created":1}]`)),
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected Docker list request")
+			}
+		})},
+		managedPrefixes: []string{"hololive"},
+		listTimeout:     time.Second,
+		cacheTTL:        time.Second,
+	}
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	leaderErr := make(chan error, 1)
+	go func() {
+		_, err := client.ListContainers(leaderCtx)
+		leaderErr <- err
+	}()
+	select {
+	case <-firstStarted:
+	case <-time.After(time.Second):
+		t.Fatal("leader Docker list request did not start")
+	}
+
+	waiterCtx := &doneObservedContext{Context: context.Background(), observed: make(chan struct{})}
+	waiterResult := make(chan []Container, 1)
+	waiterErr := make(chan error, 1)
+	go func() {
+		containers, err := client.ListContainers(waiterCtx)
+		waiterResult <- containers
+		waiterErr <- err
+	}()
+	select {
+	case <-waiterCtx.observed:
+	case <-time.After(time.Second):
+		t.Fatal("waiter did not attach to the in-flight refresh")
+	}
+
+	cancelLeader()
+	if err := <-leaderErr; !errors.Is(err, context.Canceled) {
+		t.Fatalf("leader ListContainers() error = %v, want context.Canceled", err)
+	}
+	if err := <-waiterErr; err != nil {
+		t.Fatalf("waiter ListContainers() error = %v", err)
+	}
+	containers := <-waiterResult
+	if len(containers) != 1 || containers[0].Name != "hololive-api" {
+		t.Fatalf("waiter containers = %+v", containers)
+	}
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("Docker list requests = %d, want one canceled leader plus one bounded retry", got)
 	}
 }
 
@@ -163,6 +233,17 @@ func TestUnsupportedDockerHostErrorDoesNotEchoInput(t *testing.T) {
 	if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), host) {
 		t.Fatalf("dockerHTTPTransport() error leaks host input: %v", err)
 	}
+}
+
+type doneObservedContext struct {
+	context.Context
+	once     sync.Once
+	observed chan struct{}
+}
+
+func (c *doneObservedContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.observed) })
+	return c.Context.Done()
 }
 
 type dockerRoundTripFunc func(*http.Request) (*http.Response, error)
