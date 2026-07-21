@@ -97,7 +97,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	return &Runtime{
 		cfg:             *cfg,
 		logger:          logger,
-		sessions:        store,
+		sessions:        newCleanupSessionStore(store),
 		rateLimiter:     rateLimiter,
 		docker:          dockerClient,
 		holo:            holoClient,

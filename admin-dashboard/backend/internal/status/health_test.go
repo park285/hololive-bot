@@ -1,9 +1,12 @@
 package status
 
 import (
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -183,5 +186,79 @@ func TestFetchRuntimeInvalidPayload(t *testing.T) {
 	}
 	if got := *stat.Error; !strings.HasPrefix(got, "invalid health payload: ") {
 		t.Fatalf("Error = %q, want prefix \"invalid health payload: \"", got)
+	}
+}
+
+func TestDoHealthGETBoundsAndReplaysSuccessfulBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"status":"ok","goroutines":12}`)
+	}))
+	defer server.Close()
+
+	result := doHealthGET(t.Context(), endpointClient{client: server.Client()}, ServiceEndpoint{
+		Name:       "service",
+		URL:        server.URL,
+		HealthPath: "/health",
+	})
+	if result.errMsg != "" {
+		t.Fatalf("doHealthGET() error = %q", result.errMsg)
+	}
+	body, err := io.ReadAll(result.resp.Body)
+	if err != nil {
+		t.Fatalf("read replayed body: %v", err)
+	}
+	if got := string(body); got != `{"status":"ok","goroutines":12}` {
+		t.Fatalf("replayed body = %q", got)
+	}
+	if err := result.resp.Body.Close(); err != nil {
+		t.Fatalf("close replayed body: %v", err)
+	}
+}
+
+func TestDoHealthGETRejectsOversizedBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, strings.Repeat("x", int(maxHealthResponseBodyBytes)+1))
+	}))
+	defer server.Close()
+
+	result := doHealthGET(t.Context(), endpointClient{client: server.Client()}, ServiceEndpoint{
+		Name:       "service",
+		URL:        server.URL,
+		HealthPath: "/health",
+	})
+	if !strings.Contains(result.errMsg, "exceeds limit") {
+		t.Fatalf("error = %q, want oversized-body error", result.errMsg)
+	}
+	if !result.measured {
+		t.Fatal("oversized response should retain measured latency")
+	}
+}
+
+func TestDoHealthGETDrainsErrorBodyForKeepAliveReuse(t *testing.T) {
+	var newConnections atomic.Int32
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, "temporarily unavailable")
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			newConnections.Add(1)
+		}
+	}
+	server.Start()
+	defer server.Close()
+
+	client := server.Client()
+	endpoint := ServiceEndpoint{Name: "service", URL: server.URL, HealthPath: "/health"}
+	for range 2 {
+		result := doHealthGET(t.Context(), endpointClient{client: client}, endpoint)
+		if !strings.Contains(result.errMsg, "503") {
+			t.Fatalf("error = %q, want 503 status", result.errMsg)
+		}
+	}
+	client.CloseIdleConnections()
+	if got := newConnections.Load(); got != 1 {
+		t.Fatalf("new connections = %d, want 1 after draining sequential error responses", got)
 	}
 }

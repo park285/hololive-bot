@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/park285/shared-go/pkg/json"
 )
 
@@ -34,7 +35,10 @@ type PortMapping struct {
 	PortType    string  `json:"port_type"`
 }
 
-const stopGraceSeconds = 30
+const (
+	stopGraceSeconds           = 30
+	maxDockerListResponseBytes = 8 << 20
+)
 
 type Client struct {
 	baseURL             string
@@ -44,10 +48,20 @@ type Client struct {
 	excludeSuffixes     []string
 	listTimeout         time.Duration
 	actionTimeout       time.Duration
-	mu                  sync.RWMutex
-	cachedAt            time.Time
-	cached              []Container
-	cacheTTL            time.Duration
+
+	mu       sync.RWMutex
+	cachedAt time.Time
+	cached   []Container
+	cacheTTL time.Duration
+
+	refreshMu sync.Mutex
+	refresh   *containerListRefresh
+}
+
+type containerListRefresh struct {
+	done       chan struct{}
+	containers []Container
+	err        error
 }
 
 func NewClient(dockerHost string) (*Client, error) {
@@ -77,24 +91,56 @@ func (c *Client) Available(ctx context.Context) bool {
 		return false
 	}
 	resp, err := c.http.Do(req)
-	if err != nil {
+	if err != nil || resp == nil {
 		return false
 	}
-	if resp == nil {
+	available := resp.StatusCode >= 200 && resp.StatusCode < 300
+	if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
 		return false
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			return
-		}
-	}()
-	return resp.StatusCode >= 200 && resp.StatusCode < 300
+	return available
 }
 
 func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 	if cached, ok := c.cachedContainers(); ok {
 		return cached, nil
 	}
+
+	refresh, leader := c.beginListRefresh()
+	if leader {
+		if cached, ok := c.cachedContainers(); ok {
+			c.finishListRefresh(refresh, cached, nil)
+			return cached, nil
+		}
+		containers, err := c.fetchAndMapContainers(ctx)
+		c.finishListRefresh(refresh, containers, err)
+		return cloneContainers(containers), err
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, &httpx.AppError{
+			Status: http.StatusServiceUnavailable,
+			Body:   httpx.ErrorResponse{Error: "Docker service not available"},
+			Cause:  ctx.Err(),
+		}
+	case <-refresh.done:
+		return cloneContainers(refresh.containers), refresh.err
+	}
+}
+
+func (c *Client) beginListRefresh() (*containerListRefresh, bool) {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	if c.refresh != nil {
+		return c.refresh, false
+	}
+	refresh := &containerListRefresh{done: make(chan struct{})}
+	c.refresh = refresh
+	return refresh, true
+}
+
+func (c *Client) fetchAndMapContainers(ctx context.Context) ([]Container, error) {
 	summaries, err := c.fetchContainerSummaries(ctx)
 	if err != nil {
 		return nil, err
@@ -110,11 +156,23 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 	return containers, nil
 }
 
+func (c *Client) finishListRefresh(refresh *containerListRefresh, containers []Container, err error) {
+	refresh.containers = cloneContainers(containers)
+	refresh.err = err
+
+	c.refreshMu.Lock()
+	if c.refresh == refresh {
+		c.refresh = nil
+	}
+	close(refresh.done)
+	c.refreshMu.Unlock()
+}
+
 func (c *Client) cachedContainers() ([]Container, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if time.Since(c.cachedAt) < c.cacheTTL && c.cached != nil {
-		return append([]Container(nil), c.cached...), true
+		return cloneContainers(c.cached), true
 	}
 	return nil, false
 }
@@ -127,22 +185,18 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 		return nil, httpx.Internal(err)
 	}
 	resp, err := c.http.Do(req)
+	if err != nil || resp == nil {
+		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+	}
+	body, err := httpbody.ReadAllAndClose(resp.Body, maxDockerListResponseBytes)
 	if err != nil {
-		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+		return nil, httpx.Internal(fmt.Errorf("read docker list containers response: %w", err))
 	}
-	if resp == nil {
-		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			return
-		}
-	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, httpx.Internal(fmt.Errorf("docker list containers returned %s", resp.Status))
 	}
 	var summaries []containerSummary
-	if err := json.NewDecoder(resp.Body).Decode(&summaries); err != nil {
+	if err := json.Unmarshal(body, &summaries); err != nil {
 		return nil, httpx.Internal(err)
 	}
 	return summaries, nil
@@ -152,7 +206,38 @@ func (c *Client) storeCache(containers []Container) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cachedAt = time.Now()
-	c.cached = append([]Container(nil), containers...)
+	c.cached = cloneContainers(containers)
+}
+
+func cloneContainers(containers []Container) []Container {
+	if containers == nil {
+		return nil
+	}
+	cloned := make([]Container, len(containers))
+	for i := range containers {
+		cloned[i] = containers[i]
+		if containers[i].Health != nil {
+			health := *containers[i].Health
+			cloned[i].Health = &health
+		}
+		cloned[i].Ports = clonePortMappings(containers[i].Ports)
+	}
+	return cloned
+}
+
+func clonePortMappings(ports []PortMapping) []PortMapping {
+	if ports == nil {
+		return nil
+	}
+	cloned := make([]PortMapping, len(ports))
+	for i := range ports {
+		cloned[i] = ports[i]
+		if ports[i].PublicPort != nil {
+			publicPort := *ports[i].PublicPort
+			cloned[i].PublicPort = &publicPort
+		}
+	}
+	return cloned
 }
 
 func (c *Client) RestartContainer(ctx context.Context, name string) error {
@@ -214,11 +299,9 @@ func (c *Client) action(ctx context.Context, name, action string, timeout time.D
 	if resp == nil {
 		return httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			return
-		}
-	}()
+	if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
+		return httpx.Internal(fmt.Errorf("close docker %s response: %w", action, err))
+	}
 	if resp.StatusCode == http.StatusNotFound {
 		return httpx.NewError(http.StatusNotFound, "container not found")
 	}

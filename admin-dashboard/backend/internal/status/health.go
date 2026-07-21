@@ -1,11 +1,17 @@
 package status
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 )
+
+const maxHealthResponseBodyBytes int64 = 64 << 10
 
 type healthResult struct {
 	resp      *http.Response
@@ -32,13 +38,19 @@ func doHealthGET(ctx context.Context, ec endpointClient, endpoint ServiceEndpoin
 		return healthResult{errMsg: "empty response"}
 	}
 	latency := elapsedMillis(start)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := "status: " + resp.Status
-		if err := resp.Body.Close(); err != nil {
-			return healthResult{latencyMS: latency, measured: true, errMsg: err.Error()}
-		}
-		return healthResult{latencyMS: latency, measured: true, errMsg: msg}
+	body, err := httpbody.ReadAllAndClose(resp.Body, maxHealthResponseBodyBytes)
+	if err != nil {
+		return healthResult{latencyMS: latency, measured: true, errMsg: "read health response body: " + err.Error()}
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return healthResult{latencyMS: latency, measured: true, errMsg: "status: " + resp.Status}
+	}
+
+	// Callers have different needs: Collector only checks availability while Hub
+	// decodes goroutine data. Replaying the already-bounded in-memory body keeps
+	// both paths on one size/drain policy without leaving a network body open.
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	resp.ContentLength = int64(len(body))
 	return healthResult{resp: resp, latencyMS: latency, measured: true}
 }
 
