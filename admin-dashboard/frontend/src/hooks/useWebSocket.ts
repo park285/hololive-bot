@@ -117,7 +117,12 @@ export function useWebSocket<T = unknown>(
 			previous.close();
 		}
 
-		setState((prev) => ({ ...prev, isConnecting: true, error: null }));
+		setState((prev) => ({
+			...prev,
+			isConnected: false,
+			isConnecting: true,
+			error: null,
+		}));
 
 		try {
 			const ws = new WebSocket(url);
@@ -228,11 +233,16 @@ export function useWebSocket<T = unknown>(
 
 	useEffect(() => {
 		isMountedRef.current = true;
+		return () => {
+			isMountedRef.current = false;
+		};
+	}, []);
+
+	useEffect(() => {
 		if (autoConnect && url) {
 			connect();
 		}
 		return () => {
-			isMountedRef.current = false;
 			disconnect();
 		};
 	}, [connect, disconnect, autoConnect, url]);
