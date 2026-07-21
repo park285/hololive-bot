@@ -8,6 +8,33 @@
 
 ## 미출시
 
+### 수정
+
+- heartbeat request는 빈 body를 `idle=false`로 허용하되 JSON body는 1,024 bytes 이하의 단일
+  object만 수용하고 `null`, unknown field, 복수 JSON 값과 trailing data를 거부하도록
+  OpenAPI·generated client·backend 계약을 일치시켰습니다.
+- JSON 및 RSS 응답 크기 상한을 실제 초과 byte까지 읽어 판정하여 limit에서 잘린 유효 prefix를
+  정상 응답으로 오인하지 않도록 했습니다.
+- 로그인 실패 backoff를 request context가 취소되면 즉시 중단되는 timer로 바꾸고, 내부 Holo API
+  base URL은 canonical absolute `http`/`https` origin만 허용하도록 제한했습니다.
+- 취소된 request와 분리된 5초 cleanup context로 pgx rollback을 수행하여 오류·panic 경로에서
+  transaction을 회수하면서 원래 오류와 panic identity를 보존합니다.
+- 관리자 대시보드 heartbeat/WebSocket의 stale callback, reconnect timer와 in-flight ownership
+  경합을 차단했습니다.
+
+### 문서·운영
+
+- `youtube-producer`의 현행 4-way Active-Active 토폴로지를 Seoul `b`, main `c`, Osaka `a`,
+  Osaka2 `d`와 포트 `30005/30015/30025/30035` 기준으로 README·Project Map·운영 문서에
+  정렬했습니다. `b`·`c`는 Docker Compose, `a`·`d`는 host-native systemd가 소유합니다.
+- heartbeat OpenAPI SSOT, generated client, backend contract 문서, AP rsync manifest와 Go workspace
+  import graph를 최종 코드 경로와 동기화했습니다.
+
+### 의존성
+
+- `iris-client-go v1.0.0`을 채택했습니다. 제거된 공개 facade 심볼은 Hololive가 소비하지 않아
+  Iris transport·webhook·Karing 계약과 runtime 동작은 유지됩니다.
+
 ## v2.0.45 - 2026-07-15
 
 ### 문서
