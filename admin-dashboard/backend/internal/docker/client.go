@@ -54,14 +54,16 @@ type Client struct {
 	cached   []Container
 	cacheTTL time.Duration
 
-	refreshMu sync.Mutex
-	refresh   *containerListRefresh
+	refreshMu       sync.Mutex
+	refresh         *containerListRefresh
+	cacheGeneration uint64
 }
 
 type containerListRefresh struct {
 	done       chan struct{}
 	containers []Container
 	err        error
+	generation uint64
 }
 
 func NewClient(dockerHost string) (*Client, error) {
@@ -74,9 +76,9 @@ func NewClient(dockerHost string) (*Client, error) {
 		http: &http.Client{
 			Transport: transport,
 		},
-		managedPrefixes:     []string{"hololive", "valkey", "postgres", "deunhealth", "admin"},
-		stopBlockedPrefixes: []string{"valkey", "postgres", "deunhealth", "admin"},
-		excludeSuffixes:     []string{"-init"},
+		managedPrefixes:     []string{"hololive", "holo-postgres", "valkey", "postgres", "deunhealth", "admin"},
+		stopBlockedPrefixes: []string{"holo-postgres", "valkey", "postgres", "deunhealth", "admin"},
+		excludeSuffixes:     []string{"-init", "-migrate"},
 		listTimeout:         10 * time.Second,
 		actionTimeout:       (stopGraceSeconds + 10) * time.Second,
 		cacheTTL:            5 * time.Second,
@@ -108,15 +110,22 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 
 	refresh, leader := c.beginListRefresh()
 	if leader {
-		if cached, ok := c.cachedContainers(); ok {
-			c.finishListRefresh(refresh, cached, nil)
-			return cached, nil
-		}
-		containers, err := c.fetchAndMapContainers(ctx)
-		c.finishListRefresh(refresh, containers, err)
-		return cloneContainers(containers), err
+		return c.runListRefresh(ctx, refresh)
 	}
+	return waitForListRefresh(ctx, refresh)
+}
 
+func (c *Client) runListRefresh(ctx context.Context, refresh *containerListRefresh) ([]Container, error) {
+	if cached, ok := c.cachedContainers(); ok {
+		c.finishListRefresh(refresh, cached, nil, false)
+		return cached, nil
+	}
+	containers, err := c.fetchAndMapContainers(ctx)
+	c.finishListRefresh(refresh, containers, err, true)
+	return cloneContainers(containers), err
+}
+
+func waitForListRefresh(ctx context.Context, refresh *containerListRefresh) ([]Container, error) {
 	select {
 	case <-ctx.Done():
 		return nil, &httpx.AppError{
@@ -135,7 +144,10 @@ func (c *Client) beginListRefresh() (*containerListRefresh, bool) {
 	if c.refresh != nil {
 		return c.refresh, false
 	}
-	refresh := &containerListRefresh{done: make(chan struct{})}
+	refresh := &containerListRefresh{
+		done:       make(chan struct{}),
+		generation: c.cacheGeneration,
+	}
 	c.refresh = refresh
 	return refresh, true
 }
@@ -152,20 +164,22 @@ func (c *Client) fetchAndMapContainers(ctx context.Context) ([]Container, error)
 		}
 	}
 	sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
-	c.storeCache(containers)
 	return containers, nil
 }
 
-func (c *Client) finishListRefresh(refresh *containerListRefresh, containers []Container, err error) {
+func (c *Client) finishListRefresh(refresh *containerListRefresh, containers []Container, err error, cacheResult bool) {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
 	refresh.containers = cloneContainers(containers)
 	refresh.err = err
-
-	c.refreshMu.Lock()
+	if cacheResult && err == nil && refresh.generation == c.cacheGeneration {
+		c.storeCache(containers)
+	}
 	if c.refresh == refresh {
 		c.refresh = nil
 	}
 	close(refresh.done)
-	c.refreshMu.Unlock()
 }
 
 func (c *Client) cachedContainers() ([]Container, bool) {
@@ -182,11 +196,14 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/containers/json?all=true", http.NoBody)
 	if err != nil {
-		return nil, httpx.Internal(err)
+		return nil, httpx.Internal(fmt.Errorf("create docker list containers request: %w", err))
 	}
 	resp, err := c.http.Do(req)
-	if err != nil || resp == nil {
-		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+	if err != nil {
+		return nil, dockerUnavailableError("list containers", err)
+	}
+	if resp == nil {
+		return nil, dockerUnavailableError("list containers", nil)
 	}
 	body, err := httpbody.ReadAllAndClose(resp.Body, maxDockerListResponseBytes)
 	if err != nil {
@@ -197,9 +214,17 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 	}
 	var summaries []containerSummary
 	if err := json.Unmarshal(body, &summaries); err != nil {
-		return nil, httpx.Internal(err)
+		return nil, httpx.Internal(fmt.Errorf("decode docker list containers response: %w", err))
 	}
 	return summaries, nil
+}
+
+func dockerUnavailableError(operation string, cause error) *httpx.AppError {
+	err := httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+	if cause != nil {
+		err.Cause = fmt.Errorf("docker %s: %w", operation, cause)
+	}
+	return err
 }
 
 func (c *Client) storeCache(containers []Container) {
@@ -260,7 +285,7 @@ func (c *Client) StartContainer(ctx context.Context, name string) error {
 
 func (c *Client) stopBlocked(name string) bool {
 	for _, prefix := range c.stopBlockedPrefixes {
-		if strings.HasPrefix(name, prefix) {
+		if matchesContainerPrefix(name, prefix) {
 			return true
 		}
 	}
@@ -270,7 +295,7 @@ func (c *Client) stopBlocked(name string) bool {
 func (c *Client) IsManaged(name string) bool {
 	managed := false
 	for _, prefix := range c.managedPrefixes {
-		if strings.HasPrefix(name, prefix) {
+		if matchesContainerPrefix(name, prefix) {
 			managed = true
 			break
 		}
@@ -286,6 +311,21 @@ func (c *Client) IsManaged(name string) bool {
 	return true
 }
 
+func matchesContainerPrefix(name, prefix string) bool {
+	if name == prefix {
+		return true
+	}
+	if len(name) <= len(prefix) || !strings.HasPrefix(name, prefix) {
+		return false
+	}
+	switch name[len(prefix)] {
+	case '-', '_', '.':
+		return true
+	default:
+		return false
+	}
+}
+
 func (c *Client) action(ctx context.Context, name, action string, timeout time.Duration) error {
 	if !c.IsManaged(name) {
 		return httpx.NewError(http.StatusNotFound, "container not found")
@@ -297,7 +337,7 @@ func (c *Client) action(ctx context.Context, name, action string, timeout time.D
 		return err
 	}
 	if resp == nil {
-		return httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+		return dockerUnavailableError(action+" "+name, nil)
 	}
 	if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
 		return httpx.Internal(fmt.Errorf("close docker %s response: %w", action, err))
@@ -315,20 +355,24 @@ func (c *Client) action(ctx context.Context, name, action string, timeout time.D
 func (c *Client) doAction(ctx context.Context, name, action string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/containers/"+url.PathEscape(name)+"/"+action, http.NoBody)
 	if err != nil {
-		return nil, httpx.Internal(err)
+		return nil, httpx.Internal(fmt.Errorf("create docker %s request: %w", action, err))
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+		return nil, dockerUnavailableError(action+" "+name, err)
 	}
 	return resp, nil
 }
 
 func (c *Client) clearCache() {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
+	c.cacheGeneration++
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.cached = nil
 	c.cachedAt = time.Time{}
+	c.mu.Unlock()
 }
 
 func (c *Client) mapContainer(summary *containerSummary) (Container, bool) {
@@ -376,12 +420,28 @@ func dockerHTTPTransport(dockerHost string) (string, http.RoundTripper, error) {
 		}}, nil
 	}
 	if after, ok := strings.CutPrefix(dockerHost, "tcp://"); ok {
-		return "http://" + after, http.DefaultTransport, nil
+		transport, err := cloneDefaultHTTPTransport()
+		if err != nil {
+			return "", nil, err
+		}
+		return "http://" + after, transport, nil
 	}
 	if strings.HasPrefix(dockerHost, "http://") || strings.HasPrefix(dockerHost, "https://") {
-		return strings.TrimRight(dockerHost, "/"), http.DefaultTransport, nil
+		transport, err := cloneDefaultHTTPTransport()
+		if err != nil {
+			return "", nil, err
+		}
+		return strings.TrimRight(dockerHost, "/"), transport, nil
 	}
-	return "", nil, fmt.Errorf("unsupported DOCKER_HOST: %s", dockerHost)
+	return "", nil, fmt.Errorf("unsupported DOCKER_HOST scheme")
+}
+
+func cloneDefaultHTTPTransport() (*http.Transport, error) {
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("clone default HTTP transport: unexpected transport type %T", http.DefaultTransport)
+	}
+	return transport.Clone(), nil
 }
 
 func parseHealth(status string) *string {
