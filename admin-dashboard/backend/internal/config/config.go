@@ -105,6 +105,11 @@ func Load() (*Config, error) {
 		return nil, errors.New("config: TRUST_FORWARDED_HEADERS is enabled but TRUSTED_PROXY_CIDRS is empty")
 	}
 
+	securityCfg := LoadSecurityConfig(env, allowLocalhostInProd)
+	if err := validateAllowedOrigins(env, securityCfg.AllowedOrigins); err != nil {
+		return nil, err
+	}
+
 	return &Config{
 		Port:              port,
 		Env:               env,
@@ -118,7 +123,7 @@ func Load() (*Config, error) {
 		EnableOpenAPI:     enableOpenAPI,
 		EnableSwaggerUI:   enableSwagger,
 		Logging:           LoadLoggingConfig(),
-		Security:          LoadSecurityConfig(env, allowLocalhostInProd),
+		Security:          securityCfg,
 		Session:           sessionCfg,
 		RuntimeVersion:    envutil.String("ADMIN_DASHBOARD_VERSION", "0.1.0-go"),
 		TrustedForwarders: trustedForwarders,
@@ -276,6 +281,13 @@ func parseAllowedOrigins(env string, allowLocalhostInProd bool) []string {
 	return origins
 }
 
+func validateAllowedOrigins(env string, origins []string) error {
+	if strings.EqualFold(env, "production") && len(origins) == 0 {
+		return errors.New("config: ALLOWED_ORIGINS must contain at least one permitted origin in production")
+	}
+	return nil
+}
+
 func configuredOrigins() []string {
 	raw := envutil.String("ALLOWED_ORIGINS", "")
 	if raw == "" {
@@ -303,7 +315,6 @@ func dropLocalhostOrigins(origins []string) []string {
 
 func fallbackOrigins() []string {
 	return []string{
-		"https://admin.capu.blog",
 		"http://localhost:5173",
 		"http://localhost:30190",
 		"http://127.0.0.1:5173",
