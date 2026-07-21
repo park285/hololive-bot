@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -32,8 +33,9 @@ func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) erro
 
 	defer func() {
 		if p := recover(); p != nil {
-			if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
-				panic(fmt.Errorf("panic during pgx transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
+			rollbackErr := pgxutil.Rollback(ctx, tx)
+			if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				slog.Default().Warn("pgx batch transaction rollback after panic failed", slog.Any("error", rollbackErr))
 			}
 			panic(p)
 		}

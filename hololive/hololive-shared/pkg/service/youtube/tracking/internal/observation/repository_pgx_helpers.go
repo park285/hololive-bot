@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 
@@ -26,8 +27,9 @@ func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) e
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
-				panic(fmt.Errorf("panic during transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
+			rollbackErr := pgxutil.Rollback(ctx, tx)
+			if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				slog.Default().Warn("pgx tracking transaction rollback after panic failed", slog.Any("error", rollbackErr))
 			}
 			panic(p)
 		}

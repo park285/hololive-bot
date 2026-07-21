@@ -236,7 +236,7 @@ func finishDispatchBatch(ctx context.Context, tx pgx.Tx, err *error) {
 	if p := recover(); p != nil {
 		rollbackErr := pgxutil.Rollback(ctx, tx)
 		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			panic(fmt.Errorf("panic during dispatch batch and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
+			slog.Default().Warn("dispatch batch rollback after panic failed", slog.Any("error", rollbackErr))
 		}
 		panic(p)
 	}

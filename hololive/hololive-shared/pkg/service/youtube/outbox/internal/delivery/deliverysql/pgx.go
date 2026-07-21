@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
 	"time"
@@ -137,8 +138,9 @@ func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) er
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
-				panic(fmt.Errorf("panic during transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
+			rollbackErr := pgxutil.Rollback(ctx, tx)
+			if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				slog.Default().Warn("delivery transaction rollback after panic failed", slog.Any("error", rollbackErr))
 			}
 			panic(p)
 		}

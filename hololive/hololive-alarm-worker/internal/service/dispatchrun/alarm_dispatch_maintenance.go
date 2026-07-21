@@ -267,8 +267,9 @@ func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 
 func rollbackAlarmDispatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
 	if p := recover(); p != nil {
-		if err := rollbackAlarmDispatchTx(ctx, tx, nil, "alarm dispatch retention transaction panic rollback failed: %w"); err != nil {
-			panic(fmt.Errorf("alarm dispatch retention transaction panic: %v: %w", p, err))
+		rollbackErr := pgxutil.Rollback(ctx, tx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("alarm dispatch retention transaction rollback after panic failed", slog.Any("error", rollbackErr))
 		}
 		panic(p)
 	}

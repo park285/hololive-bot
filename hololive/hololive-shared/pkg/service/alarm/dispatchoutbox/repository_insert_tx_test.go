@@ -43,6 +43,24 @@ func TestFinishDispatchBatchRollsBackCanceledRequestOnPanic(t *testing.T) {
 	require.True(t, tx.rollbackHasDeadline)
 }
 
+func TestFinishDispatchBatchPreservesPanicWhenRollbackFails(t *testing.T) {
+	tx := &recordingDispatchTx{rollbackErr: errors.New("rollback failed")}
+	panicValue := errors.New("dispatch panic")
+
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		var err error
+		defer finishDispatchBatch(context.Background(), tx, &err)
+		panic(panicValue)
+	}()
+
+	require.Same(t, panicValue, recovered)
+	require.True(t, tx.rollbackHasDeadline)
+}
+
 func TestFinishDispatchBatchRollsBackCanceledRequestOnError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
