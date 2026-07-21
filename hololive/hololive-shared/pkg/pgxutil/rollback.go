@@ -41,10 +41,7 @@ func Rollback(ctx context.Context, tx Rollbacker) error {
 		return nil
 	}
 
-	base := context.Background()
-	if ctx != nil {
-		base = context.WithoutCancel(ctx)
-	}
+	base := context.WithoutCancel(ctx)
 	rollbackCtx, cancel := context.WithTimeout(base, rollbackTimeout)
 	defer cancel()
 	return tx.Rollback(rollbackCtx)

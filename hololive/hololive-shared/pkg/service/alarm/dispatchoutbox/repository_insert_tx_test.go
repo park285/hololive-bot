@@ -34,7 +34,9 @@ func TestFinishDispatchBatchRollsBackCanceledRequestOnPanic(t *testing.T) {
 			recovered = recover()
 		}()
 		var err error
-		defer finishDispatchBatch(ctx, tx, &err)
+		defer func() {
+			err = finishDispatchBatch(ctx, tx, err, recover())
+		}()
 		panic(panicValue)
 	}()
 
@@ -53,7 +55,9 @@ func TestFinishDispatchBatchPreservesPanicWhenRollbackFails(t *testing.T) {
 			recovered = recover()
 		}()
 		var err error
-		defer finishDispatchBatch(context.Background(), tx, &err)
+		defer func() {
+			err = finishDispatchBatch(context.Background(), tx, err, recover())
+		}()
 		panic(panicValue)
 	}()
 
@@ -68,12 +72,29 @@ func TestFinishDispatchBatchRollsBackCanceledRequestOnError(t *testing.T) {
 	want := errors.New("insert failed")
 
 	got := func() (err error) {
-		err = want
-		defer finishDispatchBatch(ctx, tx, &err)
-		return err
+		defer func() {
+			err = finishDispatchBatch(ctx, tx, err, recover())
+		}()
+		return want
 	}()
 
 	require.ErrorIs(t, got, want)
 	require.NoError(t, tx.rollbackCtxErr)
 	require.True(t, tx.rollbackHasDeadline)
+}
+
+func TestFinishDispatchBatchJoinsRollbackError(t *testing.T) {
+	want := errors.New("insert failed")
+	rollbackErr := errors.New("rollback failed")
+	tx := &recordingDispatchTx{rollbackErr: rollbackErr}
+
+	got := func() (err error) {
+		defer func() {
+			err = finishDispatchBatch(context.Background(), tx, err, recover())
+		}()
+		return want
+	}()
+
+	require.ErrorIs(t, got, want)
+	require.ErrorIs(t, got, rollbackErr)
 }

@@ -45,9 +45,9 @@ func TestInDeliveryTxPreservesPanicWhenRollbackFails(t *testing.T) {
 		defer func() {
 			recovered = recover()
 		}()
-		_ = InDeliveryTx(ctx, db, func(dbx.Querier) error {
+		require.NoError(t, InDeliveryTx(ctx, db, func(dbx.Querier) error {
 			panic(panicValue)
-		})
+		}))
 	}()
 
 	require.Same(t, panicValue, recovered)

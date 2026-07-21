@@ -66,7 +66,7 @@ func (f *FeedFetcher) Fetch(ctx context.Context, feedURL string) ([]byte, error)
 		return nil, fmt.Errorf("fetch feed: fetcher is nil")
 	}
 
-	resp, err := f.fetchResponse(ctx, feedURL)
+	resp, err := f.fetchResponse(ctx, feedURL) //nolint:bodyclose // readResponseBody가 모든 반환 경로에서 resp.Body를 닫고 close 오류도 보존한다.
 	if err != nil {
 		return nil, err
 	}

@@ -43,9 +43,9 @@ func TestInPgxTxPreservesPanicWhenRollbackFails(t *testing.T) {
 		defer func() {
 			recovered = recover()
 		}()
-		_ = inPgxTx(ctx, db, func(trackingDB) error {
+		require.NoError(t, inPgxTx(ctx, db, func(trackingDB) error {
 			panic(panicValue)
-		})
+		}))
 	}()
 
 	require.Same(t, panicValue, recovered)

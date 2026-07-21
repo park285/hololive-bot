@@ -43,9 +43,9 @@ func TestInBatchTxPreservesPanicWhenRollbackFails(t *testing.T) {
 		defer func() {
 			recovered = recover()
 		}()
-		_ = inBatchTx(ctx, db, func(batchDB) error {
+		require.NoError(t, inBatchTx(ctx, db, func(batchDB) error {
 			panic(panicValue)
-		})
+		}))
 	}()
 
 	require.Same(t, panicValue, recovered)

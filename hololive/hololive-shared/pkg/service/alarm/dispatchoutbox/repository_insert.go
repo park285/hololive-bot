@@ -209,7 +209,9 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 	if err != nil {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)
 	}
-	defer finishDispatchBatch(ctx, tx, &err)
+	defer func() {
+		err = finishDispatchBatch(ctx, tx, err, recover())
+	}()
 
 	collisions, deliveries, err := prepareBatchDeliveriesForInsert(ctx, tx, eventRows, deliveries, preflightCollisions, result, r.logger)
 	if err != nil {
@@ -232,15 +234,15 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 	return processedPublishBatchResult(result), nil
 }
 
-func finishDispatchBatch(ctx context.Context, tx pgx.Tx, err *error) {
-	if p := recover(); p != nil {
+func finishDispatchBatch(ctx context.Context, tx pgx.Tx, err error, panicValue any) error {
+	if panicValue != nil {
 		rollbackErr := pgxutil.Rollback(ctx, tx)
 		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 			slog.Default().Warn("dispatch batch rollback after panic failed", slog.Any("error", rollbackErr))
 		}
-		panic(p)
+		panic(panicValue)
 	}
-	*err = rollbackDispatchBatchOnError(ctx, tx, *err)
+	return rollbackDispatchBatchOnError(ctx, tx, err)
 }
 
 func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err error) error {
