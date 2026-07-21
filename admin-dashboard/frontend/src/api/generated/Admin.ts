@@ -58,7 +58,7 @@ export class Admin<
    * @name HandleHeartbeat
    * @request POST:/admin/api/auth/heartbeat
    */
-  handleHeartbeat = (data: HeartbeatRequest, params: RequestParams = {}) =>
+  handleHeartbeat = (data?: HeartbeatRequest, params: RequestParams = {}) =>
     this.request<HeartbeatResponse, ErrorResponse | void>({
       path: `/admin/api/auth/heartbeat`,
       method: "POST",

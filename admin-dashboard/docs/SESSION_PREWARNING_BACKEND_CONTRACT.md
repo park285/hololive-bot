@@ -99,6 +99,12 @@ type SessionStatusResponse = {
 
 ## 2-2. `POST /admin/api/auth/heartbeat`
 
+### 요청 본문
+
+- 본문은 생략하거나 공백만 보낼 수 있으며, 이 경우 `idle=false`로 처리합니다.
+- 본문이 있으면 최대 1024 bytes인 JSON object 하나만 허용하며, 허용 필드는 boolean `idle`뿐입니다.
+- unknown field, JSON value 여러 개, trailing data, 1024 bytes 초과 본문은 HTTP `400`으로 거절합니다.
+
 ### 활성 상태 응답
 
 세션이 회전되지 않은 일반 heartbeat도 절대 만료 시각을 반환합니다.
@@ -125,7 +131,7 @@ type SessionStatusResponse = {
 
 - `rotated=true`면 새 세션 기준 세션 쿠키와 CSRF 토큰이 내려옵니다.
 - `absolute_expires_at`는 절대 만료 시각입니다.
-- malformed heartbeat body는 세션 연장으로 간주하지 않고 HTTP `400`으로 거절합니다.
+- 유효하지 않은 heartbeat body는 세션 연장으로 간주하지 않고 HTTP `400`으로 거절합니다.
 
 ### idle 확정 응답
 
@@ -539,6 +545,7 @@ useSessionWarnings(isIdle)
 - `go test ./internal/app/ -run TestPlainHeartbeatReissuesSessionCookie` — 회전이 없는 일반 heartbeat도 세션 쿠키를 재발급하고 `absolute_expires_at`를 반환하며 `csrf_token`은 내리지 않음
 - `go test ./internal/app/ -run TestRotatedSessionOnlyAllowsHeartbeat` — 회전된 구 세션은 heartbeat만 허용하고 새 CSRF 토큰을 발급
 - `go test ./internal/app/ -run TestHeartbeatInvalidPayload` — malformed heartbeat body는 HTTP 400
+- `go test ./internal/app/ -run '^TestParseHeartbeat'` — 빈/공백 본문의 `idle=false` 처리, 1024-byte 경계, unknown field, JSON value 여러 개 거절
 - `go test ./internal/app/ -run TestLoginSuccessSetsCookies` — 로그인 성공 시 session/CSRF 쿠키 설정
 
 세션 store 동작 (`backend/internal/session/store_integration_test.go`, Valkey 컨테이너 필요):

@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) error {
@@ -22,20 +25,23 @@ func inPgxTx(ctx context.Context, db trackingDB, fn func(tx trackingDB) error) e
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer func() {
-		if p := recover(); p != nil {
-			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-				panic(fmt.Errorf("panic during transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
-			}
-			panic(p)
-		}
-	}()
+	defer rollbackPgxTxOnPanic(ctx, tx)
 	return finishPgxTx(ctx, tx, fn(tx))
+}
+
+func rollbackPgxTxOnPanic(ctx context.Context, tx pgx.Tx) {
+	if p := recover(); p != nil {
+		rollbackErr := pgxutil.Rollback(ctx, tx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("pgx tracking transaction rollback after panic failed", slog.Any("error", rollbackErr))
+		}
+		panic(p)
+	}
 }
 
 func finishPgxTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
 	if fnErr != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 			return fmt.Errorf("transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
 		return fnErr

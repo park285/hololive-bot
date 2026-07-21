@@ -35,6 +35,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
 
@@ -151,7 +152,7 @@ func applyTxStatements(ctx context.Context, tx pgx.Tx, filename string, statemen
 }
 
 func rollbackMigrationTxOnError(ctx context.Context, tx pgx.Tx, err error) error {
-	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 		return errors.Join(err, fmt.Errorf("rollback migration tx: %w", rollbackErr))
 	}
 	return err

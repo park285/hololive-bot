@@ -104,8 +104,8 @@ export const useHeartbeat = (isIdle: boolean) => {
 			} finally {
 				if (abortControllerRef.current === controller) {
 					abortControllerRef.current = null;
+					inFlightRef.current = false;
 				}
-				inFlightRef.current = false;
 			}
 		},
 		[expireSession, isAuthenticated, setAbsoluteExpiresAt],

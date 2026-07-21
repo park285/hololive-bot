@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/park285/shared-go/pkg/retry"
@@ -266,8 +267,9 @@ func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 
 func rollbackAlarmDispatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
 	if p := recover(); p != nil {
-		if err := rollbackAlarmDispatchTx(ctx, tx, nil, "alarm dispatch retention transaction panic rollback failed: %w"); err != nil {
-			panic(fmt.Errorf("alarm dispatch retention transaction panic: %v: %w", p, err))
+		rollbackErr := pgxutil.Rollback(ctx, tx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("alarm dispatch retention transaction rollback after panic failed", slog.Any("error", rollbackErr))
 		}
 		panic(p)
 	}
@@ -279,14 +281,14 @@ func acquireAlarmDispatchLock(ctx context.Context, tx pgx.Tx, key int64) (bool, 
 	if err == nil {
 		return locked, nil
 	}
-	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 		return false, fmt.Errorf("acquire alarm dispatch retention transaction lock and rollback failed: %w", errors.Join(err, rollbackErr))
 	}
 	return false, fmt.Errorf("acquire alarm dispatch retention transaction lock: %w", err)
 }
 
 func rollbackAlarmDispatchTx(ctx context.Context, tx pgx.Tx, cause error, joinFmt string) error {
-	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 		return fmt.Errorf(joinFmt, errors.Join(cause, rollbackErr))
 	}
 	return cause

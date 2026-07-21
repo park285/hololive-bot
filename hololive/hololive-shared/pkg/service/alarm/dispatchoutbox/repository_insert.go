@@ -10,6 +10,7 @@ import (
 	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 type eventInsert struct {
@@ -209,7 +210,7 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)
 	}
 	defer func() {
-		err = rollbackDispatchBatchOnError(ctx, tx, err)
+		err = finishDispatchBatch(ctx, tx, err, recover())
 	}()
 
 	collisions, deliveries, err := prepareBatchDeliveriesForInsert(ctx, tx, eventRows, deliveries, preflightCollisions, result, r.logger)
@@ -233,11 +234,22 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 	return processedPublishBatchResult(result), nil
 }
 
+func finishDispatchBatch(ctx context.Context, tx pgx.Tx, err error, panicValue any) error {
+	if panicValue != nil {
+		rollbackErr := pgxutil.Rollback(ctx, tx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("dispatch batch rollback after panic failed", slog.Any("error", rollbackErr))
+		}
+		panic(panicValue)
+	}
+	return rollbackDispatchBatchOnError(ctx, tx, err)
+}
+
 func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err error) error {
 	if err == nil {
 		return nil
 	}
-	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 		return errors.Join(err, fmt.Errorf("rollback dispatch batch: %w", rollbackErr))
 	}
 	return err
