@@ -40,7 +40,8 @@
 | `HOLO_BOT_API_KEY` (alias `API_SECRET_KEY`) | relay 인증 키 | partial |
 | `FORCE_HTTPS` | HSTS + Secure cookie | no |
 | `CSRF_MODE` / `WS_ORIGIN_MODE` | `enforce`/`monitor`/`off` | no |
-| `ALLOWED_ORIGINS` | WS origin 허용 목록 (콤마 구분) | no |
+| `ALLOWED_ORIGINS` | WS origin 허용 목록 (콤마 구분) | production yes |
+| `ALLOW_LOCALHOST_IN_PROD` | production localhost origin 명시적 허용 | no |
 | `SESSION_TOKEN_ROTATION` | 세션 토큰 회전 활성화 | no |
 | `LOG_LEVEL` / `LOG_DIR` | 로그 레벨, 파일 로깅 디렉터리 (`/app/logs`) | no |
 | `ENABLE_OPENAPI` / `ENABLE_SWAGGER_UI` | 스펙/문서 노출 (production 기본 off) | no |
@@ -157,7 +158,7 @@ Mitigation:
 ### 4. 시작 직후 즉시 종료 (config 검증 실패)
 
 Symptoms:
-- 컨테이너 restart loop, 로그에 `required environment variable missing` 또는 bcrypt/세션 검증 에러.
+- 컨테이너 restart loop, 로그에 `required environment variable missing`, `ALLOWED_ORIGINS`, 또는 bcrypt/세션 검증 에러.
 
 Diagnosis:
 ```bash
@@ -166,6 +167,7 @@ Diagnosis:
 
 Mitigation:
 - `/run/hololive-bot/admin-dashboard.env`의 `ADMIN_PASS_HASH`/`SESSION_SECRET` 주입과 해시 형식(`$2b$...`, env_file은 이스케이프 없는 원문) 확인.
+- production에서는 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`가 실제 접속 Origin을 포함하는지 확인합니다.
 
 ### 5. 시스템 리소스(인프라) 패널 미동작
 
@@ -174,7 +176,7 @@ Symptoms:
 
 Diagnosis:
 - 접속 origin이 allowlist에 있는지 확인. `WS_ORIGIN_MODE=enforce`(기본)에서 미등록 origin은 조용히 403 (로그 없음).
-- fallback allowlist는 `https://admin.capu.blog` 하나뿐이며 production에서는 localhost 계열이 제거됨.
+- production에는 코드 fallback이 없으므로 실제 접속 Origin이 `ALLOWED_ORIGINS`에 명시되어야 합니다. 기본 compose는 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`를 통해 값을 주입합니다.
 
 Mitigation:
 - 기본 compose/live-compat bind는 loopback입니다. Tailscale 직접 접속이 필요하면 먼저 tailnet ACL 또는 host firewall로 source peer를 제한한 뒤 `ADMIN_DASHBOARD_PORT_BIND_IP`와 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`를 명시 override하고 `up -d --no-deps admin-dashboard`를 실행합니다.
