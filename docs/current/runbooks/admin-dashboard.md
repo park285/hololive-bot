@@ -198,6 +198,5 @@ curl -sI http://127.0.0.1:30190/health | grep -i x-content-type-options         
 
 ## Related
 
-- `admin-dashboard/AGENTS.md` — 모듈 규칙
 - `admin-dashboard/docs/openapi-pipeline.md` — OpenAPI 계약 파이프라인
 - `docs/current/PROJECT_MAP.md` — 포트/소유 경계
