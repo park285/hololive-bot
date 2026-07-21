@@ -167,7 +167,7 @@ Diagnosis:
 
 Mitigation:
 - `/run/hololive-bot/admin-dashboard.env`의 `ADMIN_PASS_HASH`/`SESSION_SECRET` 주입과 해시 형식(`$2b$...`, env_file은 이스케이프 없는 원문) 확인.
-- production에서는 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`가 실제 접속 Origin을 포함하는지 확인합니다.
+- production에서는 기본 compose의 `ALLOWED_ORIGINS` 또는 live-compat의 `ADMIN_DASHBOARD_ALLOWED_ORIGINS` override가 실제 접속 Origin을 포함하는지 확인합니다.
 
 ### 5. 시스템 리소스(인프라) 패널 미동작
 
@@ -176,7 +176,7 @@ Symptoms:
 
 Diagnosis:
 - 접속 origin이 allowlist에 있는지 확인. `WS_ORIGIN_MODE=enforce`(기본)에서 미등록 origin은 조용히 403 (로그 없음).
-- production에는 코드 fallback이 없으므로 실제 접속 Origin이 `ALLOWED_ORIGINS`에 명시되어야 합니다. 기본 compose는 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`를 통해 값을 주입합니다.
+- production에는 코드 fallback이 없습니다. 기본 compose가 `ALLOWED_ORIGINS`를 명시하며, live-compat overlay에서는 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`로 override할 수 있습니다.
 
 Mitigation:
 - 기본 compose/live-compat bind는 loopback입니다. Tailscale 직접 접속이 필요하면 먼저 tailnet ACL 또는 host firewall로 source peer를 제한한 뒤 `ADMIN_DASHBOARD_PORT_BIND_IP`와 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`를 명시 override하고 `up -d --no-deps admin-dashboard`를 실행합니다.
