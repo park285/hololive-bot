@@ -24,11 +24,15 @@ type DedupeInput struct {
 	SourceKind                  domain.AlarmDispatchSourceKind
 	SourceIdentity              string
 	SourceOutboxKind            domain.OutboxKind
-	preparedYouTubeIdentity     string
+}
+
+type preparedDedupeInput struct {
+	input                    DedupeInput
+	canonicalYouTubeIdentity string
 }
 
 func BuildDedupeKey(input *DedupeInput) string {
-	return buildDedupeKey(input.RoomID, BuildEventKey(input))
+	return buildDedupeKey(input.RoomID, buildEventKey(input, ""))
 }
 
 func buildDedupeKey(roomID, eventKey string) string {
@@ -43,7 +47,11 @@ func buildDedupeKey(roomID, eventKey string) string {
 const eventKeyMaxLength = 512
 
 func BuildEventKey(input *DedupeInput) string {
-	raw := buildRawEventKey(input)
+	return buildEventKey(input, "")
+}
+
+func buildEventKey(input *DedupeInput, canonicalYouTubeIdentity string) string {
+	raw := buildRawEventKey(input, canonicalYouTubeIdentity)
 	if len(raw) <= eventKeyMaxLength {
 		return raw
 	}
@@ -51,12 +59,13 @@ func BuildEventKey(input *DedupeInput) string {
 	return fmt.Sprintf("event_sha:%s", hex.EncodeToString(sum[:]))
 }
 
-func buildRawEventKey(input *DedupeInput) string {
+func buildRawEventKey(input *DedupeInput, canonicalYouTubeIdentity string) string {
 	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
 		return "celebration:" + input.SourceIdentity
 	}
 	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return buildYouTubeEventKey(input)
+		identity := resolveYouTubeSourceIdentity(input.SourceIdentity, canonicalYouTubeIdentity)
+		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + identity
 	}
 	alarmType := input.AlarmType
 	if alarmType == "" {
@@ -90,12 +99,11 @@ func buildRawEventKey(input *DedupeInput) string {
 	)
 }
 
-func buildYouTubeEventKey(input *DedupeInput) string {
-	sourceIdentity := input.SourceIdentity
-	if sourceIdentity == "" || sourceIdentity != input.preparedYouTubeIdentity {
-		sourceIdentity = boundedYouTubeSourceIdentity(sourceIdentity)
+func resolveYouTubeSourceIdentity(identity, canonicalIdentity string) string {
+	if canonicalIdentity != "" && identity == canonicalIdentity {
+		return identity
 	}
-	return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + sourceIdentity
+	return boundedYouTubeSourceIdentity(identity)
 }
 
 func boundedYouTubeSourceIdentity(identity string) string {
@@ -122,10 +130,18 @@ func isCanonicalSHA256Identity(identity string) bool {
 }
 
 func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {
+	return prepareEnvelopeDedupeInput(envelope).input
+}
+
+func prepareEnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) preparedDedupeInput {
 	input := envelopeNotificationDedupeInput(&envelope.Notification)
 	applyCelebrationDedupeSource(&input, envelope)
-	applyYouTubeOutboxDedupeSource(&input, envelope)
-	return input
+	canonicalYouTubeIdentity := applyYouTubeOutboxDedupeSource(&input, envelope)
+	return preparedDedupeInput{input: input, canonicalYouTubeIdentity: canonicalYouTubeIdentity}
+}
+
+func (input *preparedDedupeInput) eventKey() string {
+	return buildEventKey(&input.input, input.canonicalYouTubeIdentity)
 }
 
 func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) DedupeInput {
@@ -168,7 +184,7 @@ func applyCelebrationDedupeSource(input *DedupeInput, envelope *domain.AlarmQueu
 	}
 }
 
-func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) {
+func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) string {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		identity := envelope.YouTubeOutbox.Identity()
 		input.SourceKind = envelope.SourceKind
@@ -177,11 +193,12 @@ func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope *domain.AlarmQu
 		input.ChannelID = strings.TrimSpace(envelope.YouTubeOutbox.ChannelID)
 		input.AlarmType = envelope.YouTubeOutbox.AlarmType
 		input.Category = string(envelope.SourceKind)
-		input.preparedYouTubeIdentity = identity
+		return identity
 	}
+	return ""
 }
 
 func BuildDedupeKeyFromEnvelope(envelope *domain.AlarmQueueEnvelope) string {
-	input := EnvelopeDedupeInput(envelope)
-	return BuildDedupeKey(&input)
+	input := prepareEnvelopeDedupeInput(envelope)
+	return buildDedupeKey(input.input.RoomID, input.eventKey())
 }

@@ -144,14 +144,14 @@ func assertAuthorityKeyPair(t *testing.T, input *DedupeInput, wantEvent string) 
 
 func TestEnvelopePreparedYouTubeIdentityMatchesUntrustedFallback(t *testing.T) {
 	envelope := authorityYouTubeEnvelope()
-	prepared := EnvelopeDedupeInput(&envelope)
-	untrusted := prepared
-	untrusted.preparedYouTubeIdentity = ""
+	prepared := prepareEnvelopeDedupeInput(&envelope)
+	untrusted := prepared.input
+	preparedEventKey := prepared.eventKey()
 
-	if got, want := BuildEventKey(&prepared), BuildEventKey(&untrusted); got != want {
+	if got, want := preparedEventKey, BuildEventKey(&untrusted); got != want {
 		t.Fatalf("prepared event key = %q, untrusted event key = %q", got, want)
 	}
-	if got, want := BuildDedupeKey(&prepared), BuildDedupeKey(&untrusted); got != want {
+	if got, want := buildDedupeKey(prepared.input.RoomID, preparedEventKey), BuildDedupeKey(&untrusted); got != want {
 		t.Fatalf("prepared dedupe key = %q, untrusted dedupe key = %q", got, want)
 	}
 }
@@ -182,11 +182,23 @@ func TestEnvelopePreparedYouTubeIdentityMutationFallsBack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			envelope := authorityYouTubeEnvelope()
-			prepared := EnvelopeDedupeInput(&envelope)
-			prepared.SourceIdentity = tt.identity
+			prepared := prepareEnvelopeDedupeInput(&envelope)
+			prepared.input.SourceIdentity = tt.identity
 			wantEvent := "youtube-outbox:COMMUNITY_POST:" + tt.wantIdentity
-			assertAuthorityKeyPair(t, &prepared, wantEvent)
+			assertPreparedAuthorityKeyPair(t, &prepared, wantEvent)
 		})
+	}
+}
+
+func assertPreparedAuthorityKeyPair(t *testing.T, input *preparedDedupeInput, wantEvent string) {
+	t.Helper()
+	eventKey := input.eventKey()
+	if eventKey != wantEvent {
+		t.Fatalf("prepared event key = %q, want %q", eventKey, wantEvent)
+	}
+	wantDedupe := "v2:room:" + input.input.RoomID + ":event:" + wantEvent
+	if got := buildDedupeKey(input.input.RoomID, eventKey); got != wantDedupe {
+		t.Fatalf("prepared dedupe key = %q, want %q", got, wantDedupe)
 	}
 }
 
@@ -207,6 +219,9 @@ func TestBuildLedgerRowsYouTubeOutboxPersistsLiteralKeys(t *testing.T) {
 	}
 	if delivery.DedupeKey != wantDedupe {
 		t.Fatalf("delivery dedupe key = %q, want %q", delivery.DedupeKey, wantDedupe)
+	}
+	if got := BuildDedupeKeyFromEnvelope(&envelope); got != wantDedupe {
+		t.Fatalf("envelope dedupe key = %q, want %q", got, wantDedupe)
 	}
 }
 
