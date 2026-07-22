@@ -51,7 +51,8 @@ make build
 | `ADMIN_USER` | 관리자 계정명 | `admin` |
 | `ADMIN_PASS_HASH` | bcrypt 비밀번호 해시 | 필수 |
 | `SESSION_SECRET` | 세션/HMAC/CSRF 시크릿 | 필수 |
-| `ALLOWED_ORIGINS` | 허용 Origin 목록 | fallback 사용 |
+| `ALLOWED_ORIGINS` | 허용 Origin 목록 | development는 localhost fallback, production은 non-localhost 값 명시 필요 |
+| `ALLOW_LOCALHOST_IN_PROD` | production에서 localhost Origin을 명시적으로 허용 | `false` |
 | `CSRF_MODE` | `enforce`/`monitor`/`off` | `enforce` |
 | `WS_ORIGIN_MODE` | WebSocket Origin 검증 모드 | `enforce` |
 | `FORCE_HTTPS` | Secure cookie/HSTS 강제 | `true` |
