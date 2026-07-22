@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 APPROVED_DEFAULT="${ROOT_DIR}/scripts/perf/pgo/approved-workloads"
-POLICY_DEFAULT="${ROOT_DIR}/scripts/perf/pgo/default-policy.tsv"
+POLICY_DEFAULT="${ROOT_DIR}/scripts/ci/pgo-off-policy.tsv"
 
 PROFILES=()
 APPROVED_FILE="${APPROVED_DEFAULT}"

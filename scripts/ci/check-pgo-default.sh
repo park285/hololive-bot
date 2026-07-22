@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-DEFAULT_POLICY_FILE="${ROOT_DIR}/scripts/perf/pgo/default-policy.tsv"
+DEFAULT_POLICY_FILE="${ROOT_DIR}/scripts/ci/pgo-off-policy.tsv"
 DEFAULT_COMPOSE_FILE="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
 POLICY_FILE="${DEFAULT_POLICY_FILE}"
 COMPOSE_FILE="${DEFAULT_COMPOSE_FILE}"

@@ -3,7 +3,7 @@
 ## 현재 정책
 
 `hololive-api`와 `hololive-alarm-worker`의 기본 빌드는 PGO를 사용하지 않습니다.
-`scripts/perf/pgo/default-policy.tsv`는 `off` 행만 허용하고
+`scripts/ci/pgo-off-policy.tsv`는 production PGO 정책의 정본이며 `off` 행만 허용하고
 `scripts/ci/check-pgo-default.sh`는 `on` 행을 즉시 거부합니다.
 
 `hololive-api`와 `hololive-alarm-worker` Dockerfile의 모든 Go build는 `-pgo=off`를
@@ -26,7 +26,7 @@
 
 `scripts/perf/pgo/generate.sh`와 `compare-pgo.sh`는 연구 candidate와 비교 자료를 만드는
 도구입니다. 이 도구의 `ACCEPTED` verdict나 metadata는 default PGO 채택 권한을 부여하지
-않으며 `default-policy.tsv`를 `on`으로 바꿀 수 없습니다.
+않으며 `pgo-off-policy.tsv`를 `on`으로 바꿀 수 없습니다.
 
 `generate.sh validate-meta`는 연구 자료의 최소 무결성만 확인합니다.
 
