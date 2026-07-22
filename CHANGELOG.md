@@ -32,8 +32,9 @@
 
 ### 의존성
 
-- `iris-client-go v1.0.0`을 채택했습니다. 제거된 공개 facade 심볼은 Hololive가 소비하지 않아
-  Iris transport·webhook·Karing 계약과 runtime 동작은 유지됩니다.
+- `iris-client-go v1.1.1`을 채택했습니다. 제거된 공개 facade 심볼은 Hololive가 소비하지 않아
+  Iris transport·webhook·Karing 계약을 유지하면서 최초 rebinding의 stale client cleanup에서
+  발생할 수 있던 nil panic 수정도 반영했습니다.
 
 ## v2.0.45 - 2026-07-15
 
