@@ -8,18 +8,34 @@ import (
 )
 
 func benchDedupeInput() DedupeInput {
-	return DedupeInput{
-		RoomID:         "1234567890123456789",
-		ChannelID:      "UC1DCedRgGHBdm81E1llLhOQ",
-		AlarmType:      domain.AlarmTypeLive,
-		StreamID:       "dQw4w9WgXcQ",
-		Title:          "【歌枠】こんやも うたう よ～！ SINGING STREAM",
-		StartScheduled: time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC),
-		MinutesUntil:   10,
-		Category:       "live",
-		SourceKind:     domain.AlarmDispatchSourceKindYouTubeOutbox,
-		SourceIdentity: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	startScheduled := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			RoomID:    "1234567890123456789",
+			AlarmType: domain.AlarmTypeLive,
+			Channel:   &domain.Channel{ID: "UC1DCedRgGHBdm81E1llLhOQ"},
+			Stream: &domain.Stream{
+				ID:             "dQw4w9WgXcQ",
+				ChannelID:      "UC1DCedRgGHBdm81E1llLhOQ",
+				Title:          "【歌枠】こんやも うたう よ～！ SINGING STREAM",
+				StartScheduled: &startScheduled,
+			},
+			MinutesUntil: 10,
+		},
+		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
+		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+			Kind:      domain.OutboxKindNewVideo,
+			AlarmType: domain.AlarmTypeLive,
+			ChannelID: "UC1DCedRgGHBdm81E1llLhOQ",
+			Items: []domain.YouTubeOutboxItem{{
+				ContentID: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				Payload:   `{}`,
+			}},
+		},
 	}
+	input := EnvelopeDedupeInput(&envelope)
+	input.SourceOutboxKind = ""
+	return input
 }
 
 func TestBuildDedupeKeyAllocationBudget(t *testing.T) {
