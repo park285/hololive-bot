@@ -3,7 +3,26 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/crypto/bcrypt"
 )
+
+func TestLoadRejectsMissingProductionOrigins(t *testing.T) {
+	adminHash, err := bcrypt.GenerateFromPassword([]byte("test-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("GenerateFromPassword() error = %v", err)
+	}
+	t.Setenv("ENV", "production")
+	t.Setenv("ADMIN_PASS_HASH", string(adminHash))
+	t.Setenv("SESSION_SECRET", "0123456789abcdef")
+	t.Setenv("ALLOWED_ORIGINS", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want missing production ALLOWED_ORIGINS error")
+	} else if !strings.Contains(err.Error(), "ALLOWED_ORIGINS") {
+		t.Fatalf("Load() error = %q, want ALLOWED_ORIGINS context", err)
+	}
+}
 
 func TestProductionOriginsRequireExplicitNonLocalhost(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "")

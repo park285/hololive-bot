@@ -96,13 +96,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	trustedForwarders := envutil.Bool("TRUST_FORWARDED_HEADERS", false)
-	trustedProxyCIDRs, err := parseTrustedProxyCIDRs(envutil.String("TRUSTED_PROXY_CIDRS", ""))
+	trustedForwarders, trustedProxyCIDRs, err := loadTrustedProxyConfig()
 	if err != nil {
 		return nil, err
-	}
-	if trustedForwarders && len(trustedProxyCIDRs) == 0 {
-		return nil, errors.New("config: TRUST_FORWARDED_HEADERS is enabled but TRUSTED_PROXY_CIDRS is empty")
 	}
 
 	securityCfg := LoadSecurityConfig(env, allowLocalhostInProd)
@@ -129,6 +125,18 @@ func Load() (*Config, error) {
 		TrustedForwarders: trustedForwarders,
 		TrustedProxyCIDRs: trustedProxyCIDRs,
 	}, nil
+}
+
+func loadTrustedProxyConfig() (bool, []netip.Prefix, error) {
+	trustedForwarders := envutil.Bool("TRUST_FORWARDED_HEADERS", false)
+	trustedProxyCIDRs, err := parseTrustedProxyCIDRs(envutil.String("TRUSTED_PROXY_CIDRS", ""))
+	if err != nil {
+		return false, nil, err
+	}
+	if trustedForwarders && len(trustedProxyCIDRs) == 0 {
+		return false, nil, errors.New("config: TRUST_FORWARDED_HEADERS is enabled but TRUSTED_PROXY_CIDRS is empty")
+	}
+	return trustedForwarders, trustedProxyCIDRs, nil
 }
 
 func parseTrustedProxyCIDRs(raw string) ([]netip.Prefix, error) {
