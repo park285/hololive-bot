@@ -40,7 +40,7 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 		envelope.Notification.AlarmType = alarmType
 	}
 	eventKey := BuildEventKey(&input)
-	dedupeKey := BuildDedupeKey(&input)
+	dedupeKey := buildDedupeKey(input.RoomID, eventKey)
 	payload, err := marshalEventPayload(envelope)
 	if err != nil {
 		return eventInsert{}, deliveryInsert{}, err
