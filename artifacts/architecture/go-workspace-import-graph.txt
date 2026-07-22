@@ -14,6 +14,7 @@ github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/internal/session
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/internal/static
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/admin-dashboard/internal/status
+github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/hololive-shared/pkg/cleanupctx
 github.com/kapu/admin-dashboard/internal/app -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/ginjson
 github.com/kapu/admin-dashboard/internal/app -> github.com/park285/shared-go/pkg/httputil
@@ -26,6 +27,7 @@ github.com/kapu/admin-dashboard/internal/auth -> github.com/park285/shared-go/pk
 github.com/kapu/admin-dashboard/internal/config -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/admin-dashboard/internal/config -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/admin-dashboard/internal/docker -> github.com/kapu/admin-dashboard/internal/httpx
+github.com/kapu/admin-dashboard/internal/docker -> github.com/kapu/hololive-shared/pkg/httpbody
 github.com/kapu/admin-dashboard/internal/docker -> github.com/park285/shared-go/pkg/json
 github.com/kapu/admin-dashboard/internal/holo -> github.com/kapu/admin-dashboard/internal/httpx
 github.com/kapu/admin-dashboard/internal/holo -> github.com/kapu/hololive-shared/pkg/service/internalhttp
@@ -37,6 +39,7 @@ github.com/kapu/admin-dashboard/internal/session -> github.com/kapu/admin-dashbo
 github.com/kapu/admin-dashboard/internal/session -> github.com/kapu/admin-dashboard/internal/config
 github.com/kapu/admin-dashboard/internal/session -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/admin-dashboard/internal/session -> github.com/park285/shared-go/pkg/json
+github.com/kapu/admin-dashboard/internal/status -> github.com/kapu/hololive-shared/pkg/httpbody
 github.com/kapu/admin-dashboard/internal/status -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/admin-dashboard/internal/status -> github.com/kapu/hololive-shared/pkg/service/internalhttp
 github.com/kapu/admin-dashboard/internal/status -> github.com/park285/shared-go/pkg/json
@@ -1142,6 +1145,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> g
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/batchrepo
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/pollers -> github.com/kapu/hololive-shared/pkg/sqlassets
+github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/scheduler -> github.com/kapu/hololive-shared/pkg/cleanupctx
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/scheduler -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/scheduler -> github.com/kapu/hololive-shared/pkg/service/youtube/internal/admission
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal/scheduler -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal

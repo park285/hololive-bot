@@ -79,7 +79,12 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	claimStartedAt := time.Now()
 	renew := s.maybeStartJobClaimRenewLoop(ctx, job.Poller.Name(), decision)
 	defer func() {
-		_ = renew.StopAndWait(ctx, s.claimCompletionTimeout)
+		if err := renew.StopAndWait(ctx, s.claimCompletionTimeout); err != nil {
+			s.logger.Warn("Poll job claim renew cleanup failed",
+				slog.String("poller", job.Poller.Name()),
+				slog.Any("error", err),
+			)
+		}
 	}()
 
 	s.runClaimedJobPoll(ctx, renew.pollCtx, job, workerID, decision, renew, claimStartedAt)
@@ -93,28 +98,8 @@ func (s *Scheduler) runClaimedJobPoll(
 	renew *jobClaimRenewController,
 	claimStartedAt time.Time,
 ) {
-	if err := s.waitForJobRunSlot(claimCtx); err != nil {
-		err = s.stopRenewAndReleaseClaim(ctx, job, decision, renew, err)
-		s.rescheduleJobAfterPoll(job, err)
-		return
-	}
-
-	reservation, budgetDecision, err := s.reserveJobBudget(claimCtx, job)
-	if err != nil {
-		err = s.stopRenewAndReleaseClaim(ctx, job, decision, renew, err)
-		s.rescheduleJobAfterPoll(job, err)
-		return
-	}
-	if !budgetDecision.Allowed {
-		stopErr := renew.StopAndWait(ctx, s.claimCompletionTimeout)
-		if stopErr != nil {
-			s.rescheduleJobAfterPoll(job, fmt.Errorf("stop poll job claim renew loop before budget skip: %w", stopErr))
-			return
-		}
-		if decision.claimed {
-			s.releaseJobClaimWithCleanup(ctx, job, decision.claim)
-		}
-		s.rescheduleJobAfterBudgetSkip(job, budgetDecision.RetryAfter)
+	reservation, proceed := s.passClaimedJobGates(ctx, claimCtx, job, decision, renew)
+	if !proceed {
 		return
 	}
 
@@ -125,7 +110,7 @@ func (s *Scheduler) runClaimedJobPoll(
 	defer cancel()
 
 	start := time.Now()
-	err = job.Poller.Poll(pollCtx, job.ChannelID)
+	err := job.Poller.Poll(pollCtx, job.ChannelID)
 	elapsed := time.Since(start)
 
 	renewStopErr := renew.StopAndWait(ctx, s.claimCompletionTimeout)
@@ -146,6 +131,40 @@ func (s *Scheduler) runClaimedJobPoll(
 	s.metrics.SchedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
 
 	s.rescheduleJobAfterPoll(job, err)
+}
+
+func (s *Scheduler) passClaimedJobGates(
+	ctx, claimCtx context.Context,
+	job *Job,
+	decision jobClaimDecision,
+	renew *jobClaimRenewController,
+) (polling.BudgetReservation, bool) {
+	if err := s.waitForJobRunSlot(claimCtx); err != nil {
+		err = s.stopRenewAndReleaseClaim(ctx, job, decision, renew, err)
+		s.rescheduleJobAfterPoll(job, err)
+		return nil, false
+	}
+
+	reservation, budgetDecision, err := s.reserveJobBudget(claimCtx, job)
+	if err != nil {
+		err = s.stopRenewAndReleaseClaim(ctx, job, decision, renew, err)
+		s.rescheduleJobAfterPoll(job, err)
+		return nil, false
+	}
+	if budgetDecision.Allowed {
+		return reservation, true
+	}
+
+	stopErr := renew.StopAndWait(ctx, s.claimCompletionTimeout)
+	if stopErr != nil {
+		s.rescheduleJobAfterPoll(job, fmt.Errorf("stop poll job claim renew loop before budget skip: %w", stopErr))
+		return nil, false
+	}
+	if decision.claimed {
+		s.releaseJobClaimWithCleanup(ctx, job, decision.claim)
+	}
+	s.rescheduleJobAfterBudgetSkip(job, budgetDecision.RetryAfter)
+	return nil, false
 }
 
 func (s *Scheduler) stopRenewAndReleaseClaim(

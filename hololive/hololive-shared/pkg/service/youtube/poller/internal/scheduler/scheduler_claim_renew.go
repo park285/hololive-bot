@@ -48,9 +48,6 @@ type jobClaimRenewController struct {
 }
 
 func inactiveJobClaimRenewController(ctx context.Context) *jobClaimRenewController {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	return &jobClaimRenewController{pollCtx: ctx, cancel: func() {}}
 }
 
@@ -86,9 +83,6 @@ func (s *Scheduler) maybeStartJobClaimRenewLoop(
 }
 
 func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName string, claim polling.JobClaim) *jobClaimRenewController {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	pollCtx, pollCancel := context.WithCancel(ctx)
 	renewCtx, renewCancel := context.WithCancel(context.WithoutCancel(ctx))
 	errCh := make(chan error, 1)

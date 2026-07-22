@@ -34,7 +34,7 @@ func TestWithTimeoutDetachesCancellationAndPreservesValues(t *testing.T) {
 }
 
 func TestWithTimeoutUsesDefaultForNonPositiveTimeout(t *testing.T) {
-	ctx, cancel := WithTimeout(nil, 0)
+	ctx, cancel := WithTimeout(context.Background(), 0)
 	defer cancel()
 	deadline, ok := ctx.Deadline()
 	if !ok {

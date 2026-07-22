@@ -192,7 +192,9 @@ func TestFetchRuntimeInvalidPayload(t *testing.T) {
 func TestDoHealthGETBoundsAndReplaysSuccessfulBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"status":"ok","goroutines":12}`)
+		if _, err := io.WriteString(w, `{"status":"ok","goroutines":12}`); err != nil {
+			t.Errorf("write health response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -218,7 +220,9 @@ func TestDoHealthGETBoundsAndReplaysSuccessfulBody(t *testing.T) {
 
 func TestDoHealthGETRejectsOversizedBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, strings.Repeat("x", int(maxHealthResponseBodyBytes)+1))
+		if _, err := io.WriteString(w, strings.Repeat("x", int(maxHealthResponseBodyBytes)+1)); err != nil {
+			t.Errorf("write oversized health response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -239,7 +243,9 @@ func TestDoHealthGETDrainsErrorBodyForKeepAliveReuse(t *testing.T) {
 	var newConnections atomic.Int32
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = io.WriteString(w, "temporarily unavailable")
+		if _, err := io.WriteString(w, "temporarily unavailable"); err != nil {
+			t.Errorf("write health error response: %v", err)
+		}
 	}))
 	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
 		if state == http.StateNew {

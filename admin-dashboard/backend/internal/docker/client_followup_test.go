@@ -34,7 +34,9 @@ func TestContainerActionFencesOlderListRefreshFromCache(t *testing.T) {
 				name = "hololive-before-action"
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(w, `[{"Id":"%d","Names":["/%s"],"Image":"img","Status":"Up","State":"running","Created":1}]`, requestNumber, name)
+			if _, err := fmt.Fprintf(w, `[{"Id":"%d","Names":["/%s"],"Image":"img","Status":"Up","State":"running","Created":1}]`, requestNumber, name); err != nil {
+				t.Errorf("write Docker list response: %v", err)
+			}
 		case r.Method == http.MethodPost && r.URL.Path == "/containers/hololive-api/restart":
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -225,12 +227,13 @@ func TestDockerListPreservesCancellationCause(t *testing.T) {
 }
 
 func TestUnsupportedDockerHostErrorDoesNotEchoInput(t *testing.T) {
-	const host = "ssh://operator:secret@docker.example"
+	sensitiveValue := t.Name()
+	host := fmt.Sprintf("ssh://operator:%s@docker.example", sensitiveValue)
 	_, _, err := dockerHTTPTransport(host)
 	if err == nil {
 		t.Fatal("dockerHTTPTransport() error = nil")
 	}
-	if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), host) {
+	if strings.Contains(err.Error(), sensitiveValue) || strings.Contains(err.Error(), host) {
 		t.Fatalf("dockerHTTPTransport() error leaks host input: %v", err)
 	}
 }
