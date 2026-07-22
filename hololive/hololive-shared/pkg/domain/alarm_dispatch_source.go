@@ -252,13 +252,6 @@ func validateCanonicalYouTubeOutboxMatch(notification *AlarmNotification, payloa
 	if notification.AlarmType != payload.AlarmType {
 		return fmt.Errorf("canonical alarm dispatch: notification alarm type %q does not match source alarm type %q", notification.AlarmType, payload.AlarmType)
 	}
-	identity, err := payload.CanonicalIdentity()
-	if err != nil {
-		return fmt.Errorf("canonical alarm dispatch: youtube outbox identity: %w", err)
-	}
-	if identity == "" {
-		return fmt.Errorf("canonical alarm dispatch: youtube outbox identity is empty")
-	}
 	return nil
 }
 
