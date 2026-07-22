@@ -25,8 +25,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/cleanupctx"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/internal"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
@@ -34,21 +36,57 @@ import (
 
 var errJobClaimRenewLoopStopped = errors.New("job claim renew loop stopped")
 
+type jobClaimRenewController struct {
+	pollCtx context.Context
+	cancel  context.CancelFunc
+	errCh   <-chan error
+	done    <-chan struct{}
+	active  bool
+
+	stopOnce sync.Once
+	stopErr  error
+}
+
+func inactiveJobClaimRenewController(ctx context.Context) *jobClaimRenewController {
+	return &jobClaimRenewController{pollCtx: ctx, cancel: func() {}}
+}
+
+func (c *jobClaimRenewController) StopAndWait(parent context.Context, timeout time.Duration) error {
+	if c == nil || !c.active {
+		return nil
+	}
+	c.stopOnce.Do(func() {
+		if c.cancel != nil {
+			c.cancel()
+		}
+		c.stopErr = cleanupctx.Wait(parent, timeout, c.done)
+	})
+	return c.stopErr
+}
+
+func (c *jobClaimRenewController) Err() error {
+	if c == nil {
+		return nil
+	}
+	return drainJobClaimRenewError(c.errCh)
+}
+
 func (s *Scheduler) maybeStartJobClaimRenewLoop(
 	ctx context.Context,
 	pollerName string,
 	decision jobClaimDecision,
-) (context.Context, context.CancelFunc, <-chan error) {
+) *jobClaimRenewController {
 	if !decision.claimed {
-		return ctx, func() {}, nil
+		return inactiveJobClaimRenewController(ctx)
 	}
 	return s.startJobClaimRenewLoop(ctx, pollerName, decision.claim)
 }
 
-func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName string, claim polling.JobClaim) (context.Context, context.CancelFunc, <-chan error) {
+func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName string, claim polling.JobClaim) *jobClaimRenewController {
 	pollCtx, pollCancel := context.WithCancel(ctx)
-	renewCtx, renewCancel := context.WithCancel(context.Background())
+	renewCtx, renewCancel := context.WithCancel(context.WithoutCancel(ctx))
 	errCh := make(chan error, 1)
+	done := make(chan struct{})
 	ttl := s.jobClaimLeaseTTL()
 	interval := ttl / 3
 	if interval <= 0 {
@@ -58,12 +96,13 @@ func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName strin
 	metrics := s.metrics
 	logger := s.logger
 	panicguard.Go(logger, "youtube-poller-claim-renew", func() {
+		defer close(done)
 		err := panicguard.RunE(logger, "youtube-poller-claim-renew", func() error {
 			runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, interval, errCh, metrics, logger)
 			return nil
 		})
 		if err != nil {
-			errCh <- err
+			sendJobClaimRenewError(errCh, err)
 			pollCancel()
 		}
 	})
@@ -72,7 +111,13 @@ func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName strin
 		renewCancel()
 		pollCancel()
 	}
-	return pollCtx, cancel, errCh
+	return &jobClaimRenewController{
+		pollCtx: pollCtx,
+		cancel:  cancel,
+		errCh:   errCh,
+		done:    done,
+		active:  true,
+	}
 }
 
 func runJobClaimRenewLoop(
@@ -122,7 +167,7 @@ func renewJobClaim(
 			slog.String("result", "error"),
 			slog.Any("error", err),
 		)
-		errCh <- fmt.Errorf("renew poll job claim: %w", err)
+		sendJobClaimRenewError(errCh, fmt.Errorf("renew poll job claim: %w", err))
 		cancel()
 		return false
 	}
@@ -131,11 +176,21 @@ func renewJobClaim(
 			slog.String("poller", pollerName),
 			slog.String("result", "lost"),
 		)
-		errCh <- fmt.Errorf("renew poll job claim: ownership lost")
+		sendJobClaimRenewError(errCh, fmt.Errorf("renew poll job claim: ownership lost"))
 		cancel()
 		return false
 	}
 	return true
+}
+
+func sendJobClaimRenewError(errCh chan<- error, err error) {
+	if errCh == nil || err == nil {
+		return
+	}
+	select {
+	case errCh <- err:
+	default:
+	}
 }
 
 func drainJobClaimRenewError(errCh <-chan error) error {
@@ -151,7 +206,7 @@ func drainJobClaimRenewError(errCh <-chan error) error {
 }
 
 func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim polling.JobClaim, pollErr error) error {
-	completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.claimCompletionTimeout)
+	completeCtx, cancel := cleanupctx.WithTimeout(ctx, s.claimCompletionTimeout)
 	defer cancel()
 
 	if pollErr == nil {
@@ -175,6 +230,12 @@ func (s *Scheduler) finishJobClaim(ctx context.Context, job *Job, claim polling.
 
 	s.releaseJobClaim(completeCtx, job, claim)
 	return pollErr
+}
+
+func (s *Scheduler) releaseJobClaimWithCleanup(ctx context.Context, job *Job, claim polling.JobClaim) {
+	cleanupCtx, cancel := cleanupctx.WithTimeout(ctx, s.claimCompletionTimeout)
+	defer cancel()
+	s.releaseJobClaim(cleanupCtx, job, claim)
 }
 
 func (s *Scheduler) releaseJobClaim(ctx context.Context, job *Job, claim polling.JobClaim) {

@@ -307,6 +307,7 @@ hololive/hololive-shared/pkg/domain/youtube_content.go
 hololive/hololive-shared/pkg/domain/youtube_content_thumbnails.go
 hololive/hololive-shared/pkg/domain/youtube_delivery.go
 hololive/hololive-shared/pkg/domain/youtube_delivery_telemetry.go
+hololive/hololive-shared/pkg/cleanupctx/context.go
 hololive/hololive-shared/pkg/health/health.go
 hololive/hololive-shared/pkg/panicguard/panicguard.go
 hololive/hololive-shared/pkg/pgxutil/rollback.go
