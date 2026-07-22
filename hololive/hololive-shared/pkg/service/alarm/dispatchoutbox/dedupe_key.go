@@ -56,11 +56,7 @@ func buildRawEventKey(input *DedupeInput) string {
 		return "celebration:" + input.SourceIdentity
 	}
 	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		sourceIdentity := input.SourceIdentity
-		if sourceIdentity != "" && sourceIdentity == input.preparedYouTubeIdentity {
-			return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + sourceIdentity
-		}
-		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + boundedYouTubeSourceIdentity(sourceIdentity)
+		return buildYouTubeEventKey(input)
 	}
 	alarmType := input.AlarmType
 	if alarmType == "" {
@@ -92,6 +88,14 @@ func buildRawEventKey(input *DedupeInput) string {
 		category,
 		alarmType,
 	)
+}
+
+func buildYouTubeEventKey(input *DedupeInput) string {
+	sourceIdentity := input.SourceIdentity
+	if sourceIdentity == "" || sourceIdentity != input.preparedYouTubeIdentity {
+		sourceIdentity = boundedYouTubeSourceIdentity(sourceIdentity)
+	}
+	return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + sourceIdentity
 }
 
 func boundedYouTubeSourceIdentity(identity string) string {
