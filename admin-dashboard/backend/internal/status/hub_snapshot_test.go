@@ -33,14 +33,14 @@ func TestPublishIsolatesInputSubscribersAndHistory(t *testing.T) {
 	gotA.ServiceRuntime[0].Count = 88
 	*gotA.ServiceRuntime[0].Error = "subscriber mutated"
 
-	assertOriginalRuntimeSnapshot(t, gotB)
+	assertOriginalRuntimeSnapshot(t, &gotB)
 
 	history, _, unsubscribeHistory := hub.Subscribe()
 	unsubscribeHistory()
 	if len(history) != 1 {
 		t.Fatalf("history len = %d, want 1", len(history))
 	}
-	assertOriginalRuntimeSnapshot(t, history[0])
+	assertOriginalRuntimeSnapshot(t, &history[0])
 
 	history[0].ServiceRuntime[0].Count = 77
 	*history[0].ServiceRuntime[0].Error = "history mutated"
@@ -50,7 +50,7 @@ func TestPublishIsolatesInputSubscribersAndHistory(t *testing.T) {
 	if len(historyAgain) != 1 {
 		t.Fatalf("second history len = %d, want 1", len(historyAgain))
 	}
-	assertOriginalRuntimeSnapshot(t, historyAgain[0])
+	assertOriginalRuntimeSnapshot(t, &historyAgain[0])
 }
 
 func receiveSystemStats(t *testing.T, updates <-chan SystemStats) SystemStats {
@@ -64,7 +64,7 @@ func receiveSystemStats(t *testing.T, updates <-chan SystemStats) SystemStats {
 	}
 }
 
-func assertOriginalRuntimeSnapshot(t *testing.T, stats SystemStats) {
+func assertOriginalRuntimeSnapshot(t *testing.T, stats *SystemStats) {
 	t.Helper()
 	if len(stats.ServiceRuntime) != 1 {
 		t.Fatalf("service runtime len = %d, want 1", len(stats.ServiceRuntime))

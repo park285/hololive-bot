@@ -87,7 +87,7 @@ func (c *Client) Proxy(ctx context.Context, method, path string, query url.Value
 	if err != nil {
 		return ProxyResponse{}, err
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:bodyclose // proxyResponseFromHTTP가 response body를 모든 반환 경로에서 닫는다.
 	if err != nil {
 		return ProxyResponse{}, proxyBadGateway(fmt.Errorf("request holo admin api: %w", err))
 	}

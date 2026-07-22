@@ -6,13 +6,13 @@ func cloneSystemStatsHistory(history []SystemStats) []SystemStats {
 	}
 	cloned := make([]SystemStats, len(history))
 	for i := range history {
-		cloned[i] = cloneSystemStats(history[i])
+		cloned[i] = cloneSystemStats(&history[i])
 	}
 	return cloned
 }
 
-func cloneSystemStats(stats SystemStats) SystemStats {
-	cloned := stats
+func cloneSystemStats(stats *SystemStats) SystemStats {
+	cloned := *stats
 	cloned.ServiceRuntime = cloneServiceRuntimeStats(stats.ServiceRuntime)
 	return cloned
 }

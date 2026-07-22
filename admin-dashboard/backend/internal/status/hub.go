@@ -144,7 +144,7 @@ func (h *Hub) Subscribe() (history []SystemStats, updates chan SystemStats, unsu
 }
 
 func (h *Hub) Publish(stats *SystemStats) {
-	snapshot := cloneSystemStats(*stats)
+	snapshot := cloneSystemStats(stats)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.history = append(h.history, snapshot)
@@ -152,7 +152,7 @@ func (h *Hub) Publish(stats *SystemStats) {
 		h.history = h.history[len(h.history)-historyCap:]
 	}
 	for _, ch := range h.subs {
-		subscriberSnapshot := cloneSystemStats(snapshot)
+		subscriberSnapshot := cloneSystemStats(&snapshot)
 		sendDropOldest(ch, &subscriberSnapshot)
 	}
 }

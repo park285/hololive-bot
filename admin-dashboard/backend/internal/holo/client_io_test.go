@@ -94,7 +94,9 @@ func TestProxyDrains5xxBodyForKeepAliveReuse(t *testing.T) {
 	var newConnections atomic.Int32
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
-		_, _ = io.WriteString(w, "temporary upstream failure")
+		if _, err := io.WriteString(w, "temporary upstream failure"); err != nil {
+			t.Errorf("write upstream failure response: %v", err)
+		}
 	}))
 	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
 		if state == http.StateNew {
