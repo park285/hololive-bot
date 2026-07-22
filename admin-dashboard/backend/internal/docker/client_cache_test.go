@@ -21,7 +21,9 @@ func TestListContainersCoalescesConcurrentCacheMisses(t *testing.T) {
 		requests.Add(1)
 		<-release
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `[{"Id":"1","Names":["/hololive-api"],"Image":"img","Status":"Up","State":"running","Created":1}]`)
+		if _, err := io.WriteString(w, `[{"Id":"1","Names":["/hololive-api"],"Image":"img","Status":"Up","State":"running","Created":1}]`); err != nil {
+			t.Errorf("write docker response: %v", err)
+		}
 	}))
 
 	const callers = 16
@@ -67,7 +69,9 @@ func TestListContainersCacheReturnsDeepCopies(t *testing.T) {
 	const body = `[{"Id":"1","Names":["/hololive-api"],"Image":"img","Status":"Up (healthy)","State":"running","Created":1,"Ports":[{"PrivatePort":30001,"PublicPort":40001,"Type":"tcp"}]}]`
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, body)
+		if _, err := io.WriteString(w, body); err != nil {
+			t.Errorf("write docker response: %v", err)
+		}
 	}))
 
 	first, err := client.ListContainers(context.Background())
@@ -111,7 +115,9 @@ func TestListContainersWaiterHonorsCancellation(t *testing.T) {
 	release := make(chan struct{})
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		<-release
-		_, _ = io.WriteString(w, `[]`)
+		if _, err := io.WriteString(w, `[]`); err != nil {
+			t.Errorf("write docker response: %v", err)
+		}
 	}))
 
 	leaderDone := make(chan error, 1)
@@ -149,7 +155,9 @@ func TestListContainersWaiterHonorsCancellation(t *testing.T) {
 
 func TestListContainersRejectsOversizedResponse(t *testing.T) {
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, strings.Repeat("x", maxDockerListResponseBytes+1))
+		if _, err := io.WriteString(w, strings.Repeat("x", maxDockerListResponseBytes+1)); err != nil {
+			t.Errorf("write oversized docker response: %v", err)
+		}
 	}))
 	if _, err := client.ListContainers(context.Background()); err == nil {
 		t.Fatal("oversized docker response error = nil")
@@ -160,7 +168,9 @@ func TestDockerActionDrainsErrorBodyForKeepAliveReuse(t *testing.T) {
 	var newConnections atomic.Int32
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
-		_, _ = io.WriteString(w, "temporary docker proxy failure")
+		if _, err := io.WriteString(w, "temporary docker proxy failure"); err != nil {
+			t.Errorf("write docker error response: %v", err)
+		}
 	}))
 	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
 		if state == http.StateNew {

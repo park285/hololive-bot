@@ -90,7 +90,7 @@ func (c *Client) Available(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:bodyclose // DrainAndClose가 응답 body를 모든 반환 경로에서 닫는다.
 	if err != nil || resp == nil {
 		return false
 	}
@@ -108,13 +108,7 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 
 	refresh, leader := c.beginListRefresh()
 	if leader {
-		if cached, ok := c.cachedContainers(); ok {
-			c.finishListRefresh(refresh, cached, nil)
-			return cached, nil
-		}
-		containers, err := c.fetchAndMapContainers(ctx)
-		c.finishListRefresh(refresh, containers, err)
-		return cloneContainers(containers), err
+		return c.runListRefresh(ctx, refresh)
 	}
 
 	select {
@@ -127,6 +121,16 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 	case <-refresh.done:
 		return cloneContainers(refresh.containers), refresh.err
 	}
+}
+
+func (c *Client) runListRefresh(ctx context.Context, refresh *containerListRefresh) ([]Container, error) {
+	if cached, ok := c.cachedContainers(); ok {
+		c.finishListRefresh(refresh, cached, nil)
+		return cached, nil
+	}
+	containers, err := c.fetchAndMapContainers(ctx)
+	c.finishListRefresh(refresh, containers, err)
+	return cloneContainers(containers), err
 }
 
 func (c *Client) beginListRefresh() (*containerListRefresh, bool) {
@@ -184,7 +188,7 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:bodyclose // ReadAllAndClose가 응답 body를 모든 반환 경로에서 닫는다.
 	if err != nil || resp == nil {
 		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
 	}
@@ -292,7 +296,7 @@ func (c *Client) action(ctx context.Context, name, action string, timeout time.D
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	resp, err := c.doAction(ctx, name, action)
+	resp, err := c.doAction(ctx, name, action) //nolint:bodyclose // DrainAndClose가 응답 body를 모든 반환 경로에서 닫는다.
 	if err != nil {
 		return err
 	}

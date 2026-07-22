@@ -10,6 +10,7 @@ import (
 type trackingBody struct {
 	reader   io.Reader
 	read     int
+	sawEOF   bool
 	closed   bool
 	closeErr error
 }
@@ -17,6 +18,9 @@ type trackingBody struct {
 func (b *trackingBody) Read(p []byte) (int, error) {
 	n, err := b.reader.Read(p)
 	b.read += n
+	if errors.Is(err, io.EOF) {
+		b.sawEOF = true
+	}
 	return n, err
 }
 
@@ -67,11 +71,21 @@ func TestDrainAndCloseIsBounded(t *testing.T) {
 	if err := DrainAndClose(body, 16); err != nil {
 		t.Fatalf("DrainAndClose() error = %v", err)
 	}
-	if body.read != 16 {
-		t.Fatalf("bytes drained = %d, want 16", body.read)
+	if body.read != 17 {
+		t.Fatalf("bytes drained = %d, want 17 (limit plus EOF probe)", body.read)
 	}
 	if !body.closed {
 		t.Fatal("body was not closed")
+	}
+}
+
+func TestDrainAndCloseReachesEOFAtExactLimit(t *testing.T) {
+	body := &trackingBody{reader: strings.NewReader(strings.Repeat("x", 16))}
+	if err := DrainAndClose(body, 16); err != nil {
+		t.Fatalf("DrainAndClose() error = %v", err)
+	}
+	if !body.sawEOF {
+		t.Fatal("exact-limit body did not reach EOF")
 	}
 }
 
