@@ -49,7 +49,7 @@ func newLeasedPhotoSyncService(inner photoSyncService, guard *ingestionlease.Job
 }
 
 func (s *leasedPhotoSyncService) Start(ctx context.Context) {
-	if s == nil || s.inner == nil || s.guard == nil {
+	if !s.isConfigured() {
 		return
 	}
 	if ctx == nil {
@@ -64,6 +64,10 @@ func (s *leasedPhotoSyncService) Start(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (s *leasedPhotoSyncService) isConfigured() bool {
+	return s != nil && s.inner != nil && s.guard != nil
 }
 
 func (s *leasedPhotoSyncService) tryAcquire(ctx context.Context) (*ingestionlease.JobRunClaim, bool) {
