@@ -1,3 +1,0 @@
-module example.com/pgo-profile-fixture
-
-go 1.26.5
