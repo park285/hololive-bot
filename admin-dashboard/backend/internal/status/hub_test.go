@@ -128,21 +128,17 @@ func TestConcurrentStartAndStopAreIdempotent(t *testing.T) {
 
 	var startWG sync.WaitGroup
 	for range 8 {
-		startWG.Add(1)
-		go func() {
-			defer startWG.Done()
+		startWG.Go(func() {
 			hub.Start()
-		}()
+		})
 	}
 	startWG.Wait()
 
 	var stopWG sync.WaitGroup
 	for range 8 {
-		stopWG.Add(1)
-		go func() {
-			defer stopWG.Done()
+		stopWG.Go(func() {
 			hub.Stop()
-		}()
+		})
 	}
 	done := make(chan struct{})
 	go func() {
