@@ -1,5 +1,4 @@
-// Package httpbody provides bounded HTTP response body reads and a bounded
-// drain-on-close policy so small responses remain eligible for keep-alive reuse.
+// Package httpbody는 HTTP response body의 read와 close 전 drain을 제한한다.
 package httpbody
 
 import (
@@ -8,19 +7,18 @@ import (
 	"io"
 )
 
-// DefaultDrainLimit bounds best-effort draining before a response body is closed.
+// DefaultDrainLimit은 response body를 닫기 전 drain 상한이다.
 const DefaultDrainLimit int64 = 64 << 10
 
 var (
-	// ErrNilBody reports that a response did not provide a body.
+	// ErrNilBody는 response body가 없음을 나타낸다.
 	ErrNilBody = errors.New("http response body is nil")
-	// ErrTooLarge reports that a response body exceeded its configured limit.
+	// ErrTooLarge는 response body가 설정한 상한을 초과했음을 나타낸다.
 	ErrTooLarge = errors.New("http response body exceeds limit")
 )
 
-// ReadAllAndClose reads at most maxBytes, detects an oversized body with one
-// extra byte, then drains a bounded remainder and closes the body. A negative
-// maxBytes is invalid; zero permits only an empty body.
+// ReadAllAndClose는 maxBytes와 초과 탐지용 1바이트를 읽고 남은 body를 제한해 drain한다.
+// 음수 상한은 잘못된 값이며 0은 빈 body만 허용한다.
 func ReadAllAndClose(body io.ReadCloser, maxBytes int64) ([]byte, error) {
 	if body == nil {
 		return nil, ErrNilBody
@@ -45,17 +43,20 @@ func ReadAllAndClose(body io.ReadCloser, maxBytes int64) ([]byte, error) {
 	return data, nil
 }
 
-// DrainAndClose discards at most maxDrainBytes before closing body. Small
-// unread responses are consumed to EOF and can be reused by net/http; large or
-// unbounded responses remain bounded and are closed without an unbounded read.
+// DrainAndClose는 설정된 상한과 EOF 확인용 1바이트까지만 버린 뒤 body를 닫는다.
+// 작은 응답은 EOF까지 소비해 net/http 연결 재사용을 허용하고 큰 응답은 제한한다.
 func DrainAndClose(body io.ReadCloser, maxDrainBytes int64) error {
 	if body == nil {
 		return nil
 	}
-	if maxDrainBytes < 0 {
-		maxDrainBytes = 0
+	if maxDrainBytes <= 0 {
+		return body.Close()
 	}
-	_, drainErr := io.Copy(io.Discard, io.LimitReader(body, maxDrainBytes))
+	drainLimit := maxDrainBytes
+	if maxDrainBytes != int64(^uint64(0)>>1) {
+		drainLimit++
+	}
+	_, drainErr := io.Copy(io.Discard, io.LimitReader(body, drainLimit))
 	closeErr := body.Close()
 	return errors.Join(drainErr, closeErr)
 }

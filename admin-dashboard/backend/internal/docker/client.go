@@ -60,13 +60,6 @@ type Client struct {
 	cacheGeneration uint64
 }
 
-type containerListRefresh struct {
-	done       chan struct{}
-	containers []Container
-	err        error
-	generation uint64
-}
-
 func NewClient(dockerHost string) (*Client, error) {
 	baseURL, transport, err := dockerHTTPTransport(dockerHost)
 	if err != nil {
@@ -93,7 +86,7 @@ func (c *Client) Available(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:bodyclose // DrainAndClose가 응답 body를 모든 반환 경로에서 닫는다.
 	if err != nil || resp == nil {
 		return false
 	}
@@ -128,16 +121,6 @@ func (c *Client) resolveListRefresh(ctx context.Context, refresh *containerListR
 	return waitForListRefresh(ctx, refresh)
 }
 
-func (c *Client) runListRefresh(ctx context.Context, refresh *containerListRefresh) ([]Container, error) {
-	if cached, ok := c.cachedContainers(); ok {
-		c.finishListRefresh(refresh, cached, nil, false)
-		return cached, nil
-	}
-	containers, err := c.fetchAndMapContainers(ctx)
-	c.finishListRefresh(refresh, containers, err, true)
-	return cloneContainers(containers), err
-}
-
 func waitForListRefresh(ctx context.Context, refresh *containerListRefresh) ([]Container, error) {
 	select {
 	case <-ctx.Done():
@@ -149,20 +132,6 @@ func waitForListRefresh(ctx context.Context, refresh *containerListRefresh) ([]C
 	case <-refresh.done:
 		return cloneContainers(refresh.containers), refresh.err
 	}
-}
-
-func (c *Client) beginListRefresh() (*containerListRefresh, bool) {
-	c.refreshMu.Lock()
-	defer c.refreshMu.Unlock()
-	if c.refresh != nil {
-		return c.refresh, false
-	}
-	refresh := &containerListRefresh{
-		done:       make(chan struct{}),
-		generation: c.cacheGeneration,
-	}
-	c.refresh = refresh
-	return refresh, true
 }
 
 func (c *Client) fetchAndMapContainers(ctx context.Context) ([]Container, error) {
@@ -180,30 +149,6 @@ func (c *Client) fetchAndMapContainers(ctx context.Context) ([]Container, error)
 	return containers, nil
 }
 
-func (c *Client) finishListRefresh(refresh *containerListRefresh, containers []Container, err error, cacheResult bool) {
-	c.refreshMu.Lock()
-	defer c.refreshMu.Unlock()
-
-	refresh.containers = cloneContainers(containers)
-	refresh.err = err
-	if cacheResult && err == nil && refresh.generation == c.cacheGeneration {
-		c.storeCache(containers)
-	}
-	if c.refresh == refresh {
-		c.refresh = nil
-	}
-	close(refresh.done)
-}
-
-func (c *Client) cachedContainers() ([]Container, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if time.Since(c.cachedAt) < c.cacheTTL && c.cached != nil {
-		return cloneContainers(c.cached), true
-	}
-	return nil, false
-}
-
 func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummary, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.listTimeout)
 	defer cancel()
@@ -211,7 +156,7 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 	if err != nil {
 		return nil, httpx.Internal(fmt.Errorf("create docker list containers request: %w", err))
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:bodyclose // ReadAllAndClose가 응답 body를 모든 반환 경로에서 닫는다.
 	if err != nil {
 		return nil, dockerUnavailableError("list containers", err)
 	}
@@ -239,45 +184,6 @@ func dockerUnavailableError(operation string, cause error) *httpx.AppError {
 	}
 	return err
 }
-
-func (c *Client) storeCache(containers []Container) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cachedAt = time.Now()
-	c.cached = cloneContainers(containers)
-}
-
-func cloneContainers(containers []Container) []Container {
-	if containers == nil {
-		return nil
-	}
-	cloned := make([]Container, len(containers))
-	for i := range containers {
-		cloned[i] = containers[i]
-		if containers[i].Health != nil {
-			health := *containers[i].Health
-			cloned[i].Health = &health
-		}
-		cloned[i].Ports = clonePortMappings(containers[i].Ports)
-	}
-	return cloned
-}
-
-func clonePortMappings(ports []PortMapping) []PortMapping {
-	if ports == nil {
-		return nil
-	}
-	cloned := make([]PortMapping, len(ports))
-	for i := range ports {
-		cloned[i] = ports[i]
-		if ports[i].PublicPort != nil {
-			publicPort := *ports[i].PublicPort
-			cloned[i].PublicPort = &publicPort
-		}
-	}
-	return cloned
-}
-
 func (c *Client) RestartContainer(ctx context.Context, name string) error {
 	return c.action(ctx, name, fmt.Sprintf("restart?t=%d", stopGraceSeconds), c.actionTimeout)
 }
@@ -345,7 +251,7 @@ func (c *Client) action(ctx context.Context, name, action string, timeout time.D
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	resp, err := c.doAction(ctx, name, action)
+	resp, err := c.doAction(ctx, name, action) //nolint:bodyclose // DrainAndClose가 응답 body를 모든 반환 경로에서 닫는다.
 	if err != nil {
 		return err
 	}
@@ -375,17 +281,6 @@ func (c *Client) doAction(ctx context.Context, name, action string) (*http.Respo
 		return nil, dockerUnavailableError(action+" "+name, err)
 	}
 	return resp, nil
-}
-
-func (c *Client) clearCache() {
-	c.refreshMu.Lock()
-	defer c.refreshMu.Unlock()
-
-	c.cacheGeneration++
-	c.mu.Lock()
-	c.cached = nil
-	c.cachedAt = time.Time{}
-	c.mu.Unlock()
 }
 
 func (c *Client) mapContainer(summary *containerSummary) (Container, bool) {

@@ -11,6 +11,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
+const holodexUserAgent = "hololive-bot (Linux; Holodex API client; +https://github.com/park285/hololive-bot)"
+
 func (c *APIClient) DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
 	if err := c.rejectIfCircuitOpen(); err != nil {
 		return nil, err
@@ -152,6 +154,6 @@ func (c *APIClient) newRequest(ctx context.Context, method, reqURL, apiKey strin
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-APIKEY", apiKey)
 	// Holodex API Terms 준수를 위해 정직한 User-Agent 사용 (Section 6: Attribution)
-	req.Header.Set("User-Agent", "api.capu.blog/hololive-bot (Linux; +https://api.capu.blog; Holodex API client)")
+	req.Header.Set("User-Agent", holodexUserAgent)
 	return req, nil
 }

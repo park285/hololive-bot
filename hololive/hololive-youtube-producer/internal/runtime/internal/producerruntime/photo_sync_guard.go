@@ -49,11 +49,11 @@ func newLeasedPhotoSyncService(inner photoSyncService, guard *ingestionlease.Job
 }
 
 func (s *leasedPhotoSyncService) Start(ctx context.Context) {
-	if s == nil || s.inner == nil || s.guard == nil {
+	if !s.isConfigured() {
 		return
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return
 	}
 	for ctx.Err() == nil {
 		claim, ok := s.tryAcquire(ctx)
@@ -64,6 +64,10 @@ func (s *leasedPhotoSyncService) Start(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (s *leasedPhotoSyncService) isConfigured() bool {
+	return s != nil && s.inner != nil && s.guard != nil
 }
 
 func (s *leasedPhotoSyncService) tryAcquire(ctx context.Context) (*ingestionlease.JobRunClaim, bool) {
@@ -165,11 +169,16 @@ func (s *leasedPhotoSyncService) waitForInnerStop(done <-chan struct{}) bool {
 }
 
 func (s *leasedPhotoSyncService) releaseClaim(ctx context.Context, claim *ingestionlease.JobRunClaim) {
-	base := context.Background()
-	if ctx != nil {
-		base = context.WithoutCancel(ctx)
+	if ctx == nil {
+		if s.logger != nil {
+			s.logger.Warn("photo_sync_lease_release_skipped",
+				slog.String("task", photoSyncLeasePollerName),
+				slog.String("reason", "release context is nil"),
+			)
+		}
+		return
 	}
-	releaseCtx, cancel := context.WithTimeout(base, s.effectiveCleanupTimeout())
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.effectiveCleanupTimeout())
 	defer cancel()
 
 	released, err := claim.Release(releaseCtx)
@@ -241,12 +250,17 @@ func (s *leasedPhotoSyncService) logWarn(ctx context.Context, message string, er
 	if s.logger == nil {
 		return
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	attrs := []slog.Attr{slog.String("task", photoSyncLeasePollerName)}
 	if err != nil {
 		attrs = append(attrs, slog.Any("error", err))
+	}
+	if ctx == nil {
+		if err != nil {
+			s.logger.Warn(message, slog.String("task", photoSyncLeasePollerName), slog.Any("error", err))
+		} else {
+			s.logger.Warn(message, slog.String("task", photoSyncLeasePollerName))
+		}
+		return
 	}
 	s.logger.LogAttrs(ctx, slog.LevelWarn, message, attrs...)
 }
@@ -256,7 +270,12 @@ func (s *leasedPhotoSyncService) logShutdownTimeout(ctx context.Context) {
 		return
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		s.logger.Error("photo_sync_inner_shutdown_timed_out",
+			slog.String("task", photoSyncLeasePollerName),
+			slog.Duration("shutdown_timeout", s.effectiveShutdownTimeout()),
+			slog.String("lease_cleanup", "deferred_to_ttl"),
+		)
+		return
 	}
 	s.logger.LogAttrs(ctx, slog.LevelError, "photo_sync_inner_shutdown_timed_out",
 		slog.String("task", photoSyncLeasePollerName),
