@@ -9,15 +9,16 @@ type containerListRefresh struct {
 	done       chan struct{}
 	containers []Container
 	err        error
+	generation uint64
 }
 
 func (c *Client) runListRefresh(ctx context.Context, refresh *containerListRefresh) ([]Container, error) {
 	if cached, ok := c.cachedContainers(); ok {
-		c.finishListRefresh(refresh, cached, nil)
+		c.finishListRefresh(refresh, cached, nil, false)
 		return cached, nil
 	}
 	containers, err := c.fetchAndMapContainers(ctx)
-	c.finishListRefresh(refresh, containers, err)
+	c.finishListRefresh(refresh, containers, err, true)
 	return cloneContainers(containers), err
 }
 
@@ -27,21 +28,27 @@ func (c *Client) beginListRefresh() (*containerListRefresh, bool) {
 	if c.refresh != nil {
 		return c.refresh, false
 	}
-	refresh := &containerListRefresh{done: make(chan struct{})}
+	refresh := &containerListRefresh{
+		done:       make(chan struct{}),
+		generation: c.cacheGeneration,
+	}
 	c.refresh = refresh
 	return refresh, true
 }
 
-func (c *Client) finishListRefresh(refresh *containerListRefresh, containers []Container, err error) {
+func (c *Client) finishListRefresh(refresh *containerListRefresh, containers []Container, err error, cacheResult bool) {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
 	refresh.containers = cloneContainers(containers)
 	refresh.err = err
-
-	c.refreshMu.Lock()
+	if cacheResult && err == nil && refresh.generation == c.cacheGeneration {
+		c.storeCache(containers)
+	}
 	if c.refresh == refresh {
 		c.refresh = nil
 	}
 	close(refresh.done)
-	c.refreshMu.Unlock()
 }
 
 func (c *Client) cachedContainers() ([]Container, bool) {
@@ -61,10 +68,14 @@ func (c *Client) storeCache(containers []Container) {
 }
 
 func (c *Client) clearCache() {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
+	c.cacheGeneration++
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.cached = nil
 	c.cachedAt = time.Time{}
+	c.mu.Unlock()
 }
 
 func cloneContainers(containers []Container) []Container {

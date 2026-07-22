@@ -37,6 +37,22 @@ func TestDockerHTTPTransport(t *testing.T) {
 	}
 }
 
+func TestDockerNetworkTransportsOwnConnectionPools(t *testing.T) {
+	t.Parallel()
+
+	_, first, err := dockerHTTPTransport("tcp://127.0.0.1:2375")
+	if err != nil {
+		t.Fatalf("first dockerHTTPTransport() error = %v", err)
+	}
+	_, second, err := dockerHTTPTransport("http://127.0.0.1:2375")
+	if err != nil {
+		t.Fatalf("second dockerHTTPTransport() error = %v", err)
+	}
+	if first == http.DefaultTransport || second == http.DefaultTransport || first == second {
+		t.Fatal("Docker network transports must not share the process-global or each other's idle connection pool")
+	}
+}
+
 func requireTransportError(t *testing.T, dockerHost string, err error) {
 	t.Helper()
 	if err == nil {
@@ -61,11 +77,10 @@ func requireTransportSuccess(t *testing.T, dockerHost, baseURL, wantBaseURL stri
 
 func requireTransportKind(t *testing.T, httpTransport *http.Transport, transport http.RoundTripper, wantUnix bool) {
 	t.Helper()
-	hasCustomDial := httpTransport.DialContext != nil && httpTransport != http.DefaultTransport
-	if wantUnix && !hasCustomDial {
-		t.Fatal("unix host must install a custom DialContext")
+	if transport == http.DefaultTransport {
+		t.Fatal("Docker client must own its idle connection pool")
 	}
-	if !wantUnix && transport != http.DefaultTransport {
-		t.Fatalf("non-unix host must reuse http.DefaultTransport, got %p", httpTransport)
+	if wantUnix && httpTransport.DialContext == nil {
+		t.Fatal("unix host must install a custom DialContext")
 	}
 }
