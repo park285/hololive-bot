@@ -58,12 +58,6 @@ type Client struct {
 	refresh   *containerListRefresh
 }
 
-type containerListRefresh struct {
-	done       chan struct{}
-	containers []Container
-	err        error
-}
-
 func NewClient(dockerHost string) (*Client, error) {
 	baseURL, transport, err := dockerHTTPTransport(dockerHost)
 	if err != nil {
@@ -123,27 +117,6 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 	}
 }
 
-func (c *Client) runListRefresh(ctx context.Context, refresh *containerListRefresh) ([]Container, error) {
-	if cached, ok := c.cachedContainers(); ok {
-		c.finishListRefresh(refresh, cached, nil)
-		return cached, nil
-	}
-	containers, err := c.fetchAndMapContainers(ctx)
-	c.finishListRefresh(refresh, containers, err)
-	return cloneContainers(containers), err
-}
-
-func (c *Client) beginListRefresh() (*containerListRefresh, bool) {
-	c.refreshMu.Lock()
-	defer c.refreshMu.Unlock()
-	if c.refresh != nil {
-		return c.refresh, false
-	}
-	refresh := &containerListRefresh{done: make(chan struct{})}
-	c.refresh = refresh
-	return refresh, true
-}
-
 func (c *Client) fetchAndMapContainers(ctx context.Context) ([]Container, error) {
 	summaries, err := c.fetchContainerSummaries(ctx)
 	if err != nil {
@@ -158,27 +131,6 @@ func (c *Client) fetchAndMapContainers(ctx context.Context) ([]Container, error)
 	sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
 	c.storeCache(containers)
 	return containers, nil
-}
-
-func (c *Client) finishListRefresh(refresh *containerListRefresh, containers []Container, err error) {
-	refresh.containers = cloneContainers(containers)
-	refresh.err = err
-
-	c.refreshMu.Lock()
-	if c.refresh == refresh {
-		c.refresh = nil
-	}
-	close(refresh.done)
-	c.refreshMu.Unlock()
-}
-
-func (c *Client) cachedContainers() ([]Container, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if time.Since(c.cachedAt) < c.cacheTTL && c.cached != nil {
-		return cloneContainers(c.cached), true
-	}
-	return nil, false
 }
 
 func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummary, error) {
@@ -204,44 +156,6 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 		return nil, httpx.Internal(err)
 	}
 	return summaries, nil
-}
-
-func (c *Client) storeCache(containers []Container) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cachedAt = time.Now()
-	c.cached = cloneContainers(containers)
-}
-
-func cloneContainers(containers []Container) []Container {
-	if containers == nil {
-		return nil
-	}
-	cloned := make([]Container, len(containers))
-	for i := range containers {
-		cloned[i] = containers[i]
-		if containers[i].Health != nil {
-			health := *containers[i].Health
-			cloned[i].Health = &health
-		}
-		cloned[i].Ports = clonePortMappings(containers[i].Ports)
-	}
-	return cloned
-}
-
-func clonePortMappings(ports []PortMapping) []PortMapping {
-	if ports == nil {
-		return nil
-	}
-	cloned := make([]PortMapping, len(ports))
-	for i := range ports {
-		cloned[i] = ports[i]
-		if ports[i].PublicPort != nil {
-			publicPort := *ports[i].PublicPort
-			cloned[i].PublicPort = &publicPort
-		}
-	}
-	return cloned
 }
 
 func (c *Client) RestartContainer(ctx context.Context, name string) error {
@@ -326,13 +240,6 @@ func (c *Client) doAction(ctx context.Context, name, action string) (*http.Respo
 		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
 	}
 	return resp, nil
-}
-
-func (c *Client) clearCache() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cached = nil
-	c.cachedAt = time.Time{}
 }
 
 func (c *Client) mapContainer(summary *containerSummary) (Container, bool) {
