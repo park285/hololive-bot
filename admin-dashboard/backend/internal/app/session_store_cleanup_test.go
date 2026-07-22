@@ -22,6 +22,9 @@ func TestCleanupSessionStoreDeleteDetachesCancellation(t *testing.T) {
 		return nil
 	}}
 	store := newCleanupSessionStore(underlying)
+	if store == nil {
+		t.Fatal("newCleanupSessionStore() returned nil")
+	}
 
 	parent := context.WithValue(context.Background(), cleanupSessionContextKey("trace"), "trace-1")
 	parent, cancelParent := context.WithCancel(parent)
@@ -47,6 +50,9 @@ func TestCleanupSessionStoreDeletePreservesError(t *testing.T) {
 	store := newCleanupSessionStore(&fakeSessions{deleteFn: func(context.Context, string) error {
 		return wantErr
 	}})
+	if store == nil {
+		t.Fatal("newCleanupSessionStore() returned nil")
+	}
 	if err := store.Delete(context.Background(), "session-1"); !errors.Is(err, wantErr) {
 		t.Fatalf("Delete() error = %v, want %v", err, wantErr)
 	}
