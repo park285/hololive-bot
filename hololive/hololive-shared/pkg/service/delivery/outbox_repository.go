@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/pkg/retry"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -264,14 +265,10 @@ func (r *OutboxRepository) cleanupInBatches(ctx context.Context, cutoff time.Tim
 }
 
 func yieldBetweenCleanupBatches(ctx context.Context) error {
-	timer := time.NewTimer(cleanupBatchYield)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
+	if retry.Sleep(ctx, cleanupBatchYield) {
 		return nil
 	}
+	return ctx.Err()
 }
 
 func (r *OutboxRepository) QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error) {
