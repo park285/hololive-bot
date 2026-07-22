@@ -32,15 +32,16 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 	if err := envelope.ValidateCanonicalDispatch(); err != nil {
 		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch ledger rows: validate envelope: %w", err)
 	}
-	input := EnvelopeDedupeInput(envelope)
+	preparedInput := prepareEnvelopeDedupeInput(envelope)
+	input := &preparedInput.input
 	alarmType := input.AlarmType
 	if alarmType == "" {
 		alarmType = domain.AlarmTypeLive
 		input.AlarmType = alarmType
 		envelope.Notification.AlarmType = alarmType
 	}
-	eventKey := BuildEventKey(&input)
-	dedupeKey := BuildDedupeKey(&input)
+	eventKey := preparedInput.eventKey()
+	dedupeKey := buildDedupeKey(input.RoomID, eventKey)
 	payload, err := marshalEventPayload(envelope)
 	if err != nil {
 		return eventInsert{}, deliveryInsert{}, err
@@ -59,7 +60,7 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 			AlarmType:   alarmType,
 			ChannelID:   input.ChannelID,
 			StreamID:    input.StreamID,
-			Category:    eventCategory(&input),
+			Category:    eventCategory(input),
 			Payload:     payload,
 		}, deliveryInsert{
 			EventKey:        eventKey,

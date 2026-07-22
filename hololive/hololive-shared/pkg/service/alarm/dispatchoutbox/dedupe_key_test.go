@@ -28,7 +28,7 @@ func TestBuildEventKeyUsesHashFormWhenOverLimit(t *testing.T) {
 		t.Fatalf("BuildEventKey = %q, want event_sha: prefix when over limit", got)
 	}
 
-	raw := buildRawEventKey(&input)
+	raw := buildRawEventKey(&input, "")
 	sum := sha256.Sum256([]byte(raw))
 	want := fmt.Sprintf("event_sha:%s", hex.EncodeToString(sum[:]))
 	if got != want {
@@ -45,8 +45,8 @@ func TestBuildEventKeyShortKeyUnchanged(t *testing.T) {
 		Category:     "claim:event",
 	}
 	got := BuildEventKey(&input)
-	if got != buildRawEventKey(&input) {
-		t.Fatalf("short key altered: %q != raw %q", got, buildRawEventKey(&input))
+	if got != buildRawEventKey(&input, "") {
+		t.Fatalf("short key altered: %q != raw %q", got, buildRawEventKey(&input, ""))
 	}
 	if strings.HasPrefix(got, "event_sha:") {
 		t.Fatalf("short key unexpectedly hashed: %q", got)
