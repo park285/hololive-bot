@@ -3,7 +3,6 @@ package status
 import (
 	"context"
 	"runtime"
-	"slices"
 	"sync"
 	"time"
 
@@ -132,7 +131,7 @@ func (h *Hub) Subscribe() (history []SystemStats, updates chan SystemStats, unsu
 	h.subs[id] = ch
 
 	var unsubscribeOnce sync.Once
-	return slices.Clone(h.history), ch, func() {
+	return cloneSystemStatsHistory(h.history), ch, func() {
 		unsubscribeOnce.Do(func() {
 			h.mu.Lock()
 			if _, ok := h.subs[id]; ok {
@@ -145,14 +144,16 @@ func (h *Hub) Subscribe() (history []SystemStats, updates chan SystemStats, unsu
 }
 
 func (h *Hub) Publish(stats *SystemStats) {
+	snapshot := cloneSystemStats(*stats)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.history = append(h.history, *stats)
+	h.history = append(h.history, snapshot)
 	if len(h.history) > historyCap {
 		h.history = h.history[len(h.history)-historyCap:]
 	}
 	for _, ch := range h.subs {
-		sendDropOldest(ch, stats)
+		subscriberSnapshot := cloneSystemStats(snapshot)
+		sendDropOldest(ch, &subscriberSnapshot)
 	}
 }
 
