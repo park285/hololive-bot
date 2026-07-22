@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/park285/shared-go/pkg/json"
 )
@@ -86,42 +87,44 @@ func (c *Client) Proxy(ctx context.Context, method, path string, query url.Value
 	if err != nil {
 		return ProxyResponse{}, err
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:bodyclose // proxyResponseFromHTTP가 response body를 모든 반환 경로에서 닫는다.
 	if err != nil {
-		return ProxyResponse{}, httpx.BadGateway()
+		return ProxyResponse{}, proxyBadGateway(fmt.Errorf("request holo admin api: %w", err))
 	}
 	if resp == nil {
-		return ProxyResponse{}, httpx.BadGateway()
+		return ProxyResponse{}, proxyBadGateway(fmt.Errorf("request holo admin api: empty response"))
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			return
-		}
-	}()
 	return proxyResponseFromHTTP(resp)
 }
 
 func proxyResponseFromHTTP(resp *http.Response) (ProxyResponse, error) {
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxProxyBodyBytes+1))
+	if resp.StatusCode >= http.StatusInternalServerError {
+		if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
+			return ProxyResponse{}, proxyBadGateway(fmt.Errorf("holo admin api returned status %d: drain response body: %w", resp.StatusCode, err))
+		}
+		return ProxyResponse{}, proxyBadGateway(fmt.Errorf("holo admin api returned status %d", resp.StatusCode))
+	}
+
+	respBody, err := httpbody.ReadAllAndClose(resp.Body, maxProxyBodyBytes)
 	if err != nil {
-		return ProxyResponse{}, httpx.BadGateway()
+		return ProxyResponse{}, proxyBadGateway(fmt.Errorf("read holo admin api response body: %w", err))
 	}
-	if len(respBody) > maxProxyBodyBytes {
-		return ProxyResponse{}, httpx.BadGateway()
-	}
-	if resp.StatusCode >= 500 {
-		return ProxyResponse{}, httpx.BadGateway()
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return ProxyResponse{}, upstreamError(resp.StatusCode, respBody)
 	}
 	return ProxyResponse{StatusCode: resp.StatusCode, Body: respBody, Header: resp.Header.Clone()}, nil
 }
 
+func proxyBadGateway(cause error) *httpx.AppError {
+	err := httpx.BadGateway()
+	err.Cause = cause
+	return err
+}
+
 func (c *Client) buildRequest(ctx context.Context, method, path string, query url.Values, body []byte) (*http.Request, error) {
 	upstreamURL, err := url.Parse(c.baseURL + path)
 	if err != nil {
-		return nil, httpx.BadGateway()
+		return nil, proxyBadGateway(fmt.Errorf("build holo admin api url: %w", err))
 	}
 	if len(query) > 0 {
 		upstreamURL.RawQuery = query.Encode()
@@ -132,7 +135,7 @@ func (c *Client) buildRequest(ctx context.Context, method, path string, query ur
 	}
 	req, err := http.NewRequestWithContext(ctx, method, upstreamURL.String(), reader)
 	if err != nil {
-		return nil, httpx.BadGateway()
+		return nil, proxyBadGateway(fmt.Errorf("build holo admin api request: %w", err))
 	}
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
