@@ -263,7 +263,7 @@ func loadCommunityShortsBigBangCutoverAt() (time.Time, error) {
 
 func loadCliproxyConfig() CliproxyConfig {
 	return CliproxyConfig{
-		BaseURL:         sharedenv.String("CLIPROXY_BASE_URL", "https://cliproxy.capu.blog/v1"),
+		BaseURL:         sharedenv.String("CLIPROXY_BASE_URL", ""),
 		APIKey:          sharedenv.String("CLIPROXY_API_KEY", ""),
 		Model:           sharedenv.String("CLIPROXY_MODEL", "gpt-5.4"),
 		Enabled:         sharedenv.Bool("CLIPROXY_ENABLED", false),
