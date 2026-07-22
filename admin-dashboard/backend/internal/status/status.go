@@ -74,12 +74,13 @@ func NewCollector(endpoints []ServiceEndpoint, version string) *Collector {
 }
 
 func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
-	services := make([]ServiceStatus, 1, len(c.endpoints)+1)
+	services := make([]ServiceStatus, len(c.endpoints)+1)
 	zero := uint64(0)
 	services[0] = ServiceStatus{Name: "admin-dashboard", Available: true, ResponseTimeMS: &zero}
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	for _, endpoint := range c.endpoints {
+	for i := range c.endpoints {
+		index := i + 1
+		endpoint := c.endpoints[i]
 		wg.Add(1)
 		panicguard.Go(nil, "admin-dashboard-status-endpoint", func() {
 			defer wg.Done()
@@ -91,9 +92,7 @@ func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
 				errText := err.Error()
 				status = ServiceStatus{Name: endpoint.Name, Available: false, Error: &errText}
 			}
-			mu.Lock()
-			services = append(services, status)
-			mu.Unlock()
+			services[index] = status
 		})
 	}
 	wg.Wait()

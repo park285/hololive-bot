@@ -21,8 +21,12 @@ type Hub struct {
 	nextID    int64
 	subs      map[int64]chan SystemStats
 	history   []SystemStats
-	stop      chan struct{}
-	done      chan struct{}
+
+	lifecycleMu sync.Mutex
+	started     bool
+	stopOnce    sync.Once
+	stop        chan struct{}
+	done        chan struct{}
 }
 
 func NewHub(endpoints []ServiceEndpoint) *Hub {
@@ -41,6 +45,21 @@ func (h *Hub) Start() {
 }
 
 func (h *Hub) StartContext(ctx context.Context) {
+	if h == nil {
+		return
+	}
+	if ctx == nil {
+		return
+	}
+
+	h.lifecycleMu.Lock()
+	if h.started {
+		h.lifecycleMu.Unlock()
+		return
+	}
+	h.started = true
+	h.lifecycleMu.Unlock()
+
 	panicguard.Go(nil, "admin-dashboard-status-hub", func() {
 		h.run(ctx)
 	})
@@ -86,13 +105,22 @@ func (h *Hub) broadcastSample(parent context.Context) {
 }
 
 func (h *Hub) Stop() {
-	select {
-	case <-h.done:
+	if h == nil {
 		return
-	default:
 	}
-	close(h.stop)
-	<-h.done
+
+	h.lifecycleMu.Lock()
+	if !h.started {
+		h.lifecycleMu.Unlock()
+		return
+	}
+	h.stopOnce.Do(func() {
+		close(h.stop)
+	})
+	done := h.done
+	h.lifecycleMu.Unlock()
+
+	<-done
 }
 
 func (h *Hub) Subscribe() (history []SystemStats, updates chan SystemStats, unsubscribe func()) {
@@ -102,11 +130,17 @@ func (h *Hub) Subscribe() (history []SystemStats, updates chan SystemStats, unsu
 	id := h.nextID
 	ch := make(chan SystemStats, 4)
 	h.subs[id] = ch
+
+	var unsubscribeOnce sync.Once
 	return slices.Clone(h.history), ch, func() {
-		h.mu.Lock()
-		delete(h.subs, id)
-		close(ch)
-		h.mu.Unlock()
+		unsubscribeOnce.Do(func() {
+			h.mu.Lock()
+			if _, ok := h.subs[id]; ok {
+				delete(h.subs, id)
+				close(ch)
+			}
+			h.mu.Unlock()
+		})
 	}
 }
 
@@ -176,10 +210,11 @@ func (h *Hub) collect(ctx context.Context) SystemStats {
 }
 
 func (h *Hub) externalRuntimeStats(ctx context.Context) []ServiceRuntimeStats {
-	results := make([]ServiceRuntimeStats, 0, len(h.endpoints))
+	results := make([]ServiceRuntimeStats, len(h.endpoints))
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	for _, endpoint := range h.endpoints {
+	for i := range h.endpoints {
+		index := i
+		endpoint := h.endpoints[i]
 		wg.Add(1)
 		panicguard.Go(nil, "admin-dashboard-runtime-status", func() {
 			defer wg.Done()
@@ -191,9 +226,7 @@ func (h *Hub) externalRuntimeStats(ctx context.Context) []ServiceRuntimeStats {
 				errText := err.Error()
 				stat = ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &errText}
 			}
-			mu.Lock()
-			results = append(results, stat)
-			mu.Unlock()
+			results[index] = stat
 		})
 	}
 	wg.Wait()
