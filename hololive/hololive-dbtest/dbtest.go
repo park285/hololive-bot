@@ -51,6 +51,8 @@ const (
 
 	// fallbackImage는 primaryImage pull 실패 시 사용할 이미지다.
 	fallbackImage = "postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777"
+
+	reaperRecoveryAttempts = 2
 )
 
 // baseProvider는 테스트 바이너리당 1개의 base DSN(컨테이너 또는 외부 DB)을 lazily 확보한다.
@@ -180,10 +182,10 @@ func provisionBaseDSN() (_ string, err error) {
 	}
 	defer func() { err = errors.Join(err, unlock()) }()
 
-	container, err := startPostgresContainer(ctx, primaryImage)
+	container, err := startVerifiedPostgres(ctx, primaryImage)
 	if err != nil {
 		// primary 이미지 기동 실패 시 fallback 이미지로 재시도.
-		container, err = startPostgresContainer(ctx, fallbackImage)
+		container, err = startVerifiedPostgres(ctx, fallbackImage)
 		if err != nil {
 			return "", fmt.Errorf("start postgres container (%s, %s): %w", primaryImage, fallbackImage, err)
 		}
@@ -194,11 +196,42 @@ func provisionBaseDSN() (_ string, err error) {
 		return "", fmt.Errorf("connection string: %w", err)
 	}
 
-	if err := ensureVerifiedReaperClient(ctx); err != nil {
-		return "", fmt.Errorf("verify reaper client registration: %w", err)
-	}
-
 	return dsn, nil
+}
+
+func startVerifiedPostgres(ctx context.Context, image string) (*postgres.PostgresContainer, error) {
+	var attemptErr error
+	for range reaperRecoveryAttempts {
+		container, err := startPostgresContainer(ctx, image)
+		if err != nil {
+			return nil, errors.Join(attemptErr, err)
+		}
+
+		verifyErr := ensureVerifiedReaperClient(ctx)
+		if verifyErr == nil {
+			return container, nil
+		}
+		attemptErr = errors.Join(attemptErr, fmt.Errorf("verify reaper client registration: %w", verifyErr))
+
+		if retryErr := preparePostgresRetry(ctx, container, verifyErr); retryErr != nil {
+			return nil, errors.Join(attemptErr, retryErr)
+		}
+	}
+	return nil, attemptErr
+}
+
+func preparePostgresRetry(
+	ctx context.Context,
+	container *postgres.PostgresContainer,
+	verifyErr error,
+) error {
+	if terminateErr := container.Terminate(ctx); terminateErr != nil {
+		return fmt.Errorf("terminate unverified postgres container: %w", terminateErr)
+	}
+	if !isTransientReaperError(verifyErr) {
+		return errors.New("reaper registration failure is not transient")
+	}
+	return nil
 }
 
 func validatedPresetDSN(dsn string) (string, error) {

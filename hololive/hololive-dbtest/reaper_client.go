@@ -27,6 +27,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
@@ -41,8 +42,22 @@ var verifiedReaperConn net.Conn
 
 const (
 	verifyReaperTimeout = 10 * time.Second
+	reaperRetryInterval = 100 * time.Millisecond
 	reaperAck           = "ACK\n"
 	reaperVersionLabel  = "org.testcontainers.version"
+)
+
+var (
+	errSessionReaperUnavailable = errors.New("session reaper unavailable")
+	transientReaperErrors       = [...]error{
+		errSessionReaperUnavailable,
+		io.EOF,
+		io.ErrUnexpectedEOF,
+		syscall.ECONNREFUSED,
+		syscall.ECONNRESET,
+		syscall.ECONNABORTED,
+		syscall.ETIMEDOUT,
+	}
 )
 
 type sessionReaper struct {
@@ -58,21 +73,75 @@ func ensureVerifiedReaperClient(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, verifyReaperTimeout)
 	defer cancel()
 
-	reaper, found, err := findSessionReaper(ctx)
+	conn, err := connectSessionReaper(ctx, findSessionReaper, registerReaperSessionFilters)
 	if err != nil {
-		return fmt.Errorf("find session reaper: %w", err)
-	}
-	if !found {
-		return nil
-	}
-
-	conn, err := registerReaperSessionFilters(ctx, reaper)
-	if err != nil {
-		return fmt.Errorf("register reaper session filters: %w", err)
+		return err
 	}
 
 	verifiedReaperConn = conn
 	return nil
+}
+
+func connectSessionReaper(
+	ctx context.Context,
+	lookup func(context.Context) (sessionReaper, bool, error),
+	register func(context.Context, sessionReaper) (net.Conn, error),
+) (net.Conn, error) {
+	// package binary 사이의 client 공백에 Ryuk 교체가 시작될 수 있으므로,
+	// 교체 중 상태와 transport 오류에만 endpoint 재조회를 허용합니다.
+	for {
+		conn, err := tryConnectSessionReaper(ctx, lookup, register)
+		if err == nil {
+			return conn, nil
+		}
+		if !isTransientReaperError(err) {
+			return nil, err
+		}
+		if waitErr := waitReaperRetry(ctx); waitErr != nil {
+			return nil, errors.Join(err, waitErr)
+		}
+	}
+}
+
+func tryConnectSessionReaper(
+	ctx context.Context,
+	lookup func(context.Context) (sessionReaper, bool, error),
+	register func(context.Context, sessionReaper) (net.Conn, error),
+) (net.Conn, error) {
+	reaper, found, err := lookup(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("find session reaper: %w", err)
+	}
+	if !found {
+		return nil, errSessionReaperUnavailable
+	}
+
+	conn, err := register(ctx, reaper)
+	if err != nil {
+		return nil, fmt.Errorf("register reaper session filters: %w", err)
+	}
+	return conn, nil
+}
+
+func waitReaperRetry(ctx context.Context) error {
+	timer := time.NewTimer(reaperRetryInterval)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-timer.C:
+		return nil
+	}
+}
+
+func isTransientReaperError(err error) bool {
+	for _, target := range transientReaperErrors {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+	return false
 }
 
 func findSessionReaper(ctx context.Context) (_ sessionReaper, _ bool, err error) {
@@ -111,7 +180,7 @@ func sessionReaperFromList(
 	item := resp.Items[0]
 	if item.State != container.StateRunning {
 		return sessionReaper{}, false, fmt.Errorf(
-			"session reaper container %.12s is %q, not running", item.ID, item.State)
+			"%w: container %.12s is %q, not running", errSessionReaperUnavailable, item.ID, item.State)
 	}
 
 	host, err := provider.DaemonHost(ctx)
@@ -126,7 +195,7 @@ func sessionReaperFromList(
 			}, true, nil
 		}
 	}
-	return sessionReaper{}, false, errors.New("session reaper has no published port")
+	return sessionReaper{}, false, fmt.Errorf("%w: no published port", errSessionReaperUnavailable)
 }
 
 func registerReaperSessionFilters(ctx context.Context, reaper sessionReaper) (net.Conn, error) {

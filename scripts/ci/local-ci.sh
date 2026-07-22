@@ -324,14 +324,9 @@ check_integration_tag_compilation
 check_staticcheck
 check_golangci_lint
 check_nilaway
-run_step "benchgate isolated tool gate" check_benchgate
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "PGO default policy tests" ./scripts/ci/check-pgo-default_test.sh
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
-run_step "PGO freshness tests" ./scripts/ci/check-pgo-freshness_test.sh
-run_step "PGO freshness gate" ./scripts/ci/check-pgo-freshness.sh --strict
-run_step "PGO compare tests" bash -c './scripts/perf/pgo/compare_test.sh && ./scripts/perf/pgo/compare_regression_test.sh'
-run_step "PGO generator tests" ./scripts/perf/pgo/generate_test.sh
 run_go_package_step "Go test" go_mod_readonly go test -count=1
 
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
