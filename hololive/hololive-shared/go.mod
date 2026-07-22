@@ -28,7 +28,7 @@ replace github.com/kapu/hololive-dbtest => ../hololive-dbtest
 require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v1.0.0
+	github.com/park285/iris-client-go v1.1.1
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.60.0
 	gopkg.in/yaml.v3 v3.0.1
