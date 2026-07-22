@@ -143,3 +143,17 @@ ensure_nilaway() {
     ensure_go_module_tool nilaway "go.uber.org/nilaway/cmd/nilaway" \
         "go.uber.org/nilaway" "${NILAWAY_VERSION}"
 }
+
+check_benchgate() {
+    local benchgate_dir="scripts/perf/benchgate"
+    if [[ ! -d "${benchgate_dir}" ]]; then
+        echo "[LOCAL CI] Skip benchgate: ${benchgate_dir} not present"
+        echo
+        return 0
+    fi
+
+    local golangci_lint_bin
+    golangci_lint_bin="$(ensure_golangci_lint)"
+
+    ( cd "${benchgate_dir}" && GOWORK=off "${golangci_lint_bin}" run )
+}

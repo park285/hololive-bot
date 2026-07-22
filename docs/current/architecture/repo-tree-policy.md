@@ -20,6 +20,8 @@ Allowed at root:
 
 Not at root — these were relocated and must not return:
 
+- Perf gate config → `scripts/perf/perf-budget.yaml`
+- Perf workload specs → `scripts/perf/workloads/`
 - Renovate config → `.github/renovate.json`
 - Workspace-level Go contract tests and their fixtures → `internal/workspace/` (with `internal/workspace/testdata/`); only `doc.go` stays at root as the package anchor
 - Local logs, backups, data dumps, generated review bundles, key/pem files, or unclassified design kits (covered by §Local Runtime Data and the artifact gate)
@@ -36,7 +38,6 @@ Not at root — these were relocated and must not return:
 ## Artifacts
 
 - `artifacts/architecture/go-workspace-import-graph.txt` is the tracked architecture artifact.
-- Machine-local benchmark baselines and candidates are not tracked release evidence or CI prerequisites.
 - Other generated artifacts should remain ignored unless a current governance document explicitly requires tracking them.
 
 ## Local Runtime Data

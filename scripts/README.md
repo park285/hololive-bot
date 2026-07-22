@@ -1,6 +1,6 @@
 # Scripts
 
-루트 `scripts/`는 현재 11개 영역을 운영합니다: `ci/`, `architecture/`, `deploy/`, `logs/`, `review/`, `runtime/`, `smoke/`, `maintenance/`, `ops/`, `refactor/`, `systemd/`.
+루트 `scripts/`는 현재 12개 영역을 운영합니다: `ci/`, `architecture/`, `deploy/`, `logs/`, `review/`, `runtime/`, `smoke/`, `maintenance/`, `ops/`, `perf/`, `refactor/`, `systemd/`.
 
 ## 1. ci/
 로컬 CI gate 진입점입니다. `build-all.sh`는 Docker build 전에 이 gate를 실행합니다.
@@ -86,13 +86,20 @@ Valkey self-heal 운영 자산(스크립트, systemd unit, 테스트)입니다.
 
 - `./scripts/ops/valkey-selfheal.sh` (+ `valkey-selfheal.service`/`.timer`, `valkey-selfheal_test.sh`)
 
-## 10. refactor/
+## 10. perf/
+performance budget gate와 PGO 도구입니다. pre-push perf budget gate가 사용합니다.
+
+- `./scripts/perf/check-bench-regression.sh` (+ `check-bench-regression_test.sh`)
+- `benchgate/` — 벤치 수집/비교 Go 모듈
+- `pgo/` — PGO profile 생성/비교 도구 (`generate.sh`, `compare-pgo.sh`)
+
+## 11. refactor/
 리팩터링 보조 가드 스크립트입니다.
 
 - `./scripts/refactor/grep-sensitive-logs.sh`
 - `./scripts/refactor/validate-no-admin-touch.sh`
 
-## 11. systemd/
+## 12. systemd/
 호스트 배포용 systemd unit 정본입니다.
 
 - `hololive-compose.service` (+ `hololive-compose.service.d/`)

@@ -81,10 +81,10 @@ done <"${POLICY_FILE}"
 (( entry_count > 0 )) || { echo "[pgo-gate] policy has no service entries" >&2; exit 1; }
 
 if [[ "${POLICY_FILE}" == "${DEFAULT_POLICY_FILE}" && "${COMPOSE_FILE}" == "${DEFAULT_COMPOSE_FILE}" ]]; then
-  cat >"${tmp_dir}/expected-policy-rows.tsv" <<'EOF_POLICY'
+  cat >"${tmp_dir}/expected-policy-rows.tsv" <<'EOF'
 hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate
 hololive/hololive-alarm-worker|./cmd/alarm-worker|hololive-alarm-worker
-EOF_POLICY
+EOF
   sort "${policy_rows_file}" -o "${policy_rows_file}"
   sort "${tmp_dir}/expected-policy-rows.tsv" -o "${tmp_dir}/expected-policy-rows.tsv"
   if ! cmp -s "${policy_rows_file}" "${tmp_dir}/expected-policy-rows.tsv"; then
@@ -151,7 +151,6 @@ def validate_dockerfile(service_name, service):
         if not re.search(r"(?:^|\s)-pgo=off(?:\s|$)", command):
             print(f"[pgo-gate] service {service_name} Dockerfile Go build must use -pgo=off", file=sys.stderr)
             raise SystemExit(1)
-
 
 for service_list in Path(sys.argv[2]).read_text().splitlines():
     for service_name in service_list.split(","):

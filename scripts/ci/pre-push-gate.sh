@@ -77,6 +77,29 @@ if [[ "${dependency_hygiene_default}" == "false" && -n "${non_doc_changes}" ]]; 
   dependency_hygiene_default="true"
 fi
 
+run_perf_budget_gate() {
+  local collect_args=(--policy scripts/perf/perf-budget.yaml --candidate artifacts/perf/pr --gate pr --gate-id hololive-pre-push-perf-gate)
+  if [[ -n "${PERF_GATE_COUNT:-}" ]]; then
+    collect_args+=(--count "${PERF_GATE_COUNT}")
+  fi
+  collect_args+=(--benchtime "${PERF_GATE_BENCHTIME:-100ms}")
+
+  echo "[pre-push] perf budget gate (mode=scripts/perf/perf-budget.yaml, baseline 부재·도구 실패 시 차단)"
+  ./scripts/perf/check-bench-regression_test.sh
+  ./scripts/perf/check-bench-regression.sh collect "${collect_args[@]}"
+  ./scripts/perf/check-bench-regression.sh \
+    --policy scripts/perf/perf-budget.yaml \
+    --baseline artifacts/perf/baseline/main \
+    --candidate artifacts/perf/pr \
+    --gate pr \
+    --gate-id hololive-pre-push-perf-gate
+}
+
+if [[ "${PERF_GATE_ONLY:-false}" == "true" ]]; then
+  run_perf_budget_gate
+  exit 0
+fi
+
 # 구 ci.yml secret-free-gate 의 로컬 미커버 항목을 이전(gofmt 는 local-ci.sh 가 이미 커버).
 echo "[pre-push] workflow boundary / gate ownership"
 bash scripts/ci/check-workflow-secrets.sh
@@ -114,6 +137,8 @@ STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}" \
 RUN_NILAWAY="${RUN_NILAWAY:-true}" \
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-${race_default}}" \
   ./scripts/ci/local-ci.sh
+
+run_perf_budget_gate
 
 if echo "$changed_files" | grep -qE '^admin-dashboard/(frontend|backend)/'; then
   echo "[pre-push] admin-dashboard frontend 품질 게이트"

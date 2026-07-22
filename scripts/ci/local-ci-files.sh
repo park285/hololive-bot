@@ -7,6 +7,10 @@ is_go_scope_excluded_file() {
         */node_modules/*|node_modules/*|*/target/*|target/*|.tmp/*|*/.tmp/*)
             return 0
             ;;
+        # benchgate는 check_benchgate가 GOWORK=off로 따로 게이트하므로 루트 Go 스코프에서 제외(삭제 금지).
+        scripts/perf/benchgate/*)
+            return 0
+            ;;
         *)
             return 1
             ;;

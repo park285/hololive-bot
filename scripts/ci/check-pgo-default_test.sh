@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GATE="${SCRIPT_DIR}/check-pgo-default.sh"
+DEFAULT_POLICY="${SCRIPT_DIR}/pgo-off-policy.tsv"
 
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "${TMP_ROOT}"' EXIT
@@ -173,6 +174,22 @@ EOF
   assert_contains "unmanaged service rejection names service" "unmanaged Compose PGO service: extra"
 }
 
+case_default_policy_has_exact_rows() {
+  local actual
+  local expected
+  actual="$(awk -F'|' 'NF && $1 !~ /^#/ { print }' "${DEFAULT_POLICY}" | sort)"
+  expected="$(printf '%s\n' \
+    'off|hololive/hololive-alarm-worker|./cmd/alarm-worker|hololive-alarm-worker' \
+    'off|hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate' | sort)"
+  if [[ "${actual}" != "${expected}" ]]; then
+    printf 'not ok - production off-only policy rows differ\nexpected:\n%s\nactual:\n%s\n' \
+      "${expected}" "${actual}" >&2
+    exit 1
+  fi
+  PASSED=$((PASSED + 1))
+  printf 'ok - production off-only policy has exact service rows\n'
+}
+
 case_off_policy_passes
 case_artifacts_rejected
 case_on_row_rejected
@@ -182,5 +199,6 @@ case_dockerfile_arg_rejected
 case_dockerfile_requires_explicit_off
 case_artifact_scan_failure_rejected
 case_unmanaged_service_rejected
+case_default_policy_has_exact_rows
 
 printf 'ok - %s off-only PGO default policy checks passed\n' "${PASSED}"
