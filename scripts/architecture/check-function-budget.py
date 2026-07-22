@@ -24,7 +24,6 @@ EXCLUDED_DIR_NAMES = {
     ".serena",
     ".gemini",
     "artifacts",
-    "benchgate",
     "coverage",
     "dist",
     "logs",
@@ -83,8 +82,6 @@ def iter_go_files(root: Path) -> list[Path]:
                 "--others",
                 "--exclude-standard",
                 "*.go",
-                # benchgate는 shared-go 정본의 vendored perf 게이트 도구(Python 1:1 포팅)라 production 함수 budget 대상이 아님
-                ":(exclude)scripts/perf/benchgate/**",
             ],
             check=True,
             stdout=subprocess.PIPE,
