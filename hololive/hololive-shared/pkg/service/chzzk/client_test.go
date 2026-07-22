@@ -604,9 +604,8 @@ func TestClient_UserAgent(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	expectedUA := "api.capu.blog/hololive-bot (Chzzk API client)"
-	if receivedUserAgent != expectedUA {
-		t.Errorf("Expected User-Agent %q, got %q", expectedUA, receivedUserAgent)
+	if receivedUserAgent != chzzkUserAgent {
+		t.Errorf("Expected User-Agent %q, got %q", chzzkUserAgent, receivedUserAgent)
 	}
 }
 

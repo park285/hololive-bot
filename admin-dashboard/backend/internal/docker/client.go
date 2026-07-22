@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/park285/shared-go/pkg/json"
 )
 
@@ -34,7 +35,10 @@ type PortMapping struct {
 	PortType    string  `json:"port_type"`
 }
 
-const stopGraceSeconds = 30
+const (
+	stopGraceSeconds           = 30
+	maxDockerListResponseBytes = 8 << 20
+)
 
 type Client struct {
 	baseURL             string
@@ -44,10 +48,14 @@ type Client struct {
 	excludeSuffixes     []string
 	listTimeout         time.Duration
 	actionTimeout       time.Duration
-	mu                  sync.RWMutex
-	cachedAt            time.Time
-	cached              []Container
-	cacheTTL            time.Duration
+
+	mu       sync.RWMutex
+	cachedAt time.Time
+	cached   []Container
+	cacheTTL time.Duration
+
+	refreshMu sync.Mutex
+	refresh   *containerListRefresh
 }
 
 func NewClient(dockerHost string) (*Client, error) {
@@ -76,25 +84,40 @@ func (c *Client) Available(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	resp, err := c.http.Do(req)
-	if err != nil {
+	resp, err := c.http.Do(req) //nolint:bodyclose // DrainAndClose가 응답 body를 모든 반환 경로에서 닫는다.
+	if err != nil || resp == nil {
 		return false
 	}
-	if resp == nil {
+	available := resp.StatusCode >= 200 && resp.StatusCode < 300
+	if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
 		return false
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			return
-		}
-	}()
-	return resp.StatusCode >= 200 && resp.StatusCode < 300
+	return available
 }
 
 func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 	if cached, ok := c.cachedContainers(); ok {
 		return cached, nil
 	}
+
+	refresh, leader := c.beginListRefresh()
+	if leader {
+		return c.runListRefresh(ctx, refresh)
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, &httpx.AppError{
+			Status: http.StatusServiceUnavailable,
+			Body:   httpx.ErrorResponse{Error: "Docker service not available"},
+			Cause:  ctx.Err(),
+		}
+	case <-refresh.done:
+		return cloneContainers(refresh.containers), refresh.err
+	}
+}
+
+func (c *Client) fetchAndMapContainers(ctx context.Context) ([]Container, error) {
 	summaries, err := c.fetchContainerSummaries(ctx)
 	if err != nil {
 		return nil, err
@@ -110,15 +133,6 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 	return containers, nil
 }
 
-func (c *Client) cachedContainers() ([]Container, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if time.Since(c.cachedAt) < c.cacheTTL && c.cached != nil {
-		return append([]Container(nil), c.cached...), true
-	}
-	return nil, false
-}
-
 func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummary, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.listTimeout)
 	defer cancel()
@@ -126,33 +140,22 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 	if err != nil {
 		return nil, httpx.Internal(err)
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:bodyclose // ReadAllAndClose가 응답 body를 모든 반환 경로에서 닫는다.
+	if err != nil || resp == nil {
+		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+	}
+	body, err := httpbody.ReadAllAndClose(resp.Body, maxDockerListResponseBytes)
 	if err != nil {
-		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
+		return nil, httpx.Internal(fmt.Errorf("read docker list containers response: %w", err))
 	}
-	if resp == nil {
-		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			return
-		}
-	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, httpx.Internal(fmt.Errorf("docker list containers returned %s", resp.Status))
 	}
 	var summaries []containerSummary
-	if err := json.NewDecoder(resp.Body).Decode(&summaries); err != nil {
+	if err := json.Unmarshal(body, &summaries); err != nil {
 		return nil, httpx.Internal(err)
 	}
 	return summaries, nil
-}
-
-func (c *Client) storeCache(containers []Container) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cachedAt = time.Now()
-	c.cached = append([]Container(nil), containers...)
 }
 
 func (c *Client) RestartContainer(ctx context.Context, name string) error {
@@ -207,18 +210,16 @@ func (c *Client) action(ctx context.Context, name, action string, timeout time.D
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	resp, err := c.doAction(ctx, name, action)
+	resp, err := c.doAction(ctx, name, action) //nolint:bodyclose // DrainAndClose가 응답 body를 모든 반환 경로에서 닫는다.
 	if err != nil {
 		return err
 	}
 	if resp == nil {
 		return httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			return
-		}
-	}()
+	if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
+		return httpx.Internal(fmt.Errorf("close docker %s response: %w", action, err))
+	}
 	if resp.StatusCode == http.StatusNotFound {
 		return httpx.NewError(http.StatusNotFound, "container not found")
 	}
@@ -239,13 +240,6 @@ func (c *Client) doAction(ctx context.Context, name, action string) (*http.Respo
 		return nil, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available")
 	}
 	return resp, nil
-}
-
-func (c *Client) clearCache() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cached = nil
-	c.cachedAt = time.Time{}
 }
 
 func (c *Client) mapContainer(summary *containerSummary) (Container, bool) {

@@ -32,6 +32,8 @@ import (
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
+const chzzkUserAgent = "hololive-bot (Chzzk API client; +https://github.com/park285/hololive-bot)"
+
 // IsCircuitOpen은 read-only 상태 조회입니다. side-effect가 없습니다.
 func (c *Client) IsCircuitOpen() bool {
 	return c.breaker.IsOpen()
@@ -44,7 +46,7 @@ func (c *Client) newRequest(ctx context.Context, method, targetURL string) (*htt
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "api.capu.blog/hololive-bot (Chzzk API client)")
+	req.Header.Set("User-Agent", chzzkUserAgent)
 
 	return req, nil
 }
