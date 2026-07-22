@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -87,10 +88,34 @@ func Abort(c *gin.Context, err error) {
 
 func DecodeJSON(r *http.Request, dst any, maxBytes int64) error {
 	defer closeBody(r.Body)
-	decoder := json.NewDecoder(io.LimitReader(r.Body, maxBytes))
+	if maxBytes <= 0 {
+		return fmt.Errorf("invalid json body: maximum body size must be positive")
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBytes+1))
+	if err != nil {
+		return fmt.Errorf("invalid json body: read body: %w", err)
+	}
+	if int64(len(body)) > maxBytes {
+		return fmt.Errorf("invalid json body: body exceeds %d bytes", maxBytes)
+	}
+	return DecodeJSONBytes(body, dst)
+}
+
+// DecodeJSONBytes decodes exactly one JSON value and rejects unknown fields.
+func DecodeJSONBytes(body []byte, dst any) error {
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
 		return fmt.Errorf("invalid json body: %w", err)
+	}
+
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err != nil {
+			return fmt.Errorf("invalid json body: trailing data: %w", err)
+		}
+		return fmt.Errorf("invalid json body: multiple json values are not allowed")
 	}
 	return nil
 }

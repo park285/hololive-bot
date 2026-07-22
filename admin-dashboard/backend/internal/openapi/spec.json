@@ -17,6 +17,7 @@
         ],
         "operationId": "handle_heartbeat",
         "requestBody": {
+          "description": "Optional; an absent or whitespace-only body means idle=false. Otherwise, the body must be a single JSON object of at most 1024 bytes with no unknown fields or trailing data.",
           "content": {
             "application/json": {
               "schema": {
@@ -24,7 +25,7 @@
               }
             }
           },
-          "required": true
+          "required": false
         },
         "responses": {
           "200": {
@@ -2107,6 +2108,7 @@
       },
       "HeartbeatRequest": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "idle": {
             "type": "boolean"

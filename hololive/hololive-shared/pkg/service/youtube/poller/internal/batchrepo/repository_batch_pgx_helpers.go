@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/kapu/hololive-shared/pkg/pgxutil"
 )
 
 type batchDB interface {
@@ -28,21 +31,24 @@ func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) erro
 		return fmt.Errorf("begin pgx transaction: %w", err)
 	}
 
-	defer func() {
-		if p := recover(); p != nil {
-			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-				panic(fmt.Errorf("panic during pgx transaction and rollback failed: %w", errors.Join(fmt.Errorf("%v", p), rollbackErr)))
-			}
-			panic(p)
-		}
-	}()
+	defer rollbackBatchTxOnPanic(ctx, tx)
 
 	return finishBatchTx(ctx, tx, fn(tx))
 }
 
+func rollbackBatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
+	if p := recover(); p != nil {
+		rollbackErr := pgxutil.Rollback(ctx, tx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			slog.Default().Warn("pgx batch transaction rollback after panic failed", slog.Any("error", rollbackErr))
+		}
+		panic(p)
+	}
+}
+
 func finishBatchTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
 	if fnErr != nil {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
 		return fmt.Errorf("pgx transaction failed: %w", fnErr)
