@@ -30,6 +30,7 @@ github.com/kapu/admin-dashboard/internal/docker -> github.com/kapu/admin-dashboa
 github.com/kapu/admin-dashboard/internal/docker -> github.com/kapu/hololive-shared/pkg/httpbody
 github.com/kapu/admin-dashboard/internal/docker -> github.com/park285/shared-go/pkg/json
 github.com/kapu/admin-dashboard/internal/holo -> github.com/kapu/admin-dashboard/internal/httpx
+github.com/kapu/admin-dashboard/internal/holo -> github.com/kapu/hololive-shared/pkg/httpbody
 github.com/kapu/admin-dashboard/internal/holo -> github.com/kapu/hololive-shared/pkg/service/internalhttp
 github.com/kapu/admin-dashboard/internal/holo -> github.com/park285/shared-go/pkg/json
 github.com/kapu/admin-dashboard/internal/httpx -> github.com/park285/shared-go/pkg/ginjson
