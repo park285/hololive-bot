@@ -34,12 +34,13 @@ fi
 export GOWORK=off
 export GOMAXPROCS="${GOMAXPROCS:-2}"
 export GOMEMLIMIT="${GOMEMLIMIT:-5GiB}"
-export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
 
 cd "${module_dir}"
 
 echo "[public-pr] module=${module} go mod tidy -diff"
 go mod tidy -diff
+
+export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
 
 echo "[public-pr] module=${module} go vet ./..."
 go vet ./...
