@@ -80,6 +80,9 @@ log "synced current (runtime data + runtime-config preserved)"
 # verify-exec-tree-ownership 를 통과한다(03e6dca8/4d57f81c). 런타임 데이터만 컨테이너 uid 1000.
 chown -R root:root "$OPT_CURRENT"
 chmod -R go-w "$OPT_CURRENT"
+if [[ -d "$OPT_CURRENT/runtime-config" ]]; then
+  chmod 0755 "$OPT_CURRENT/runtime-config"
+fi
 for d in data logs backups; do
   [[ -d "$OPT_CURRENT/$d" ]] && chown -R 1000:1000 "$OPT_CURRENT/$d"
 done
