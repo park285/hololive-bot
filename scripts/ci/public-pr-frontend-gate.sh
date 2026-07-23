@@ -10,6 +10,26 @@ FRONTEND_DIR="${ROOT_DIR}/admin-dashboard/frontend"
   exit 1
 }
 
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "required command not found: $1" >&2
+    exit 1
+  }
+}
+
+require_command node
+require_command npm
+
+node - <<'NODE'
+const [major, minor] = process.versions.node.split('.').map(Number)
+const supported = major > 22 || (major === 22 && minor >= 12) || (major === 20 && minor >= 19)
+if (!supported) {
+  console.error(`unsupported Node.js ${process.versions.node}; expected >=20.19 or >=22.12`)
+  process.exit(1)
+}
+console.log(`[public-pr] Node.js ${process.versions.node}, npm runtime available`)
+NODE
+
 cd "${FRONTEND_DIR}"
 
 echo "[public-pr] npm ci"
