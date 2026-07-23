@@ -5,18 +5,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 usage() {
-  echo "usage: $0 <module>" >&2
+  echo "usage: $0 <module> <tidy|vet|test|race>" >&2
   exit 2
 }
 
-(( $# == 1 )) || usage
+(( $# == 2 )) || usage
 module="$1"
+stage="$2"
 
 case "${module}" in
   .|admin-dashboard/backend|hololive/hololive-api|hololive/hololive-alarm-worker|hololive/hololive-dbtest|hololive/hololive-shared|hololive/hololive-youtube-producer)
     ;;
   *)
     echo "unsupported public PR module: ${module}" >&2
+    exit 2
+    ;;
+esac
+
+case "${stage}" in
+  tidy|vet|test|race)
+    ;;
+  *)
+    echo "unsupported public PR stage: ${stage}" >&2
     exit 2
     ;;
 esac
@@ -37,16 +47,24 @@ export GOMEMLIMIT="${GOMEMLIMIT:-5GiB}"
 
 cd "${module_dir}"
 
-echo "[public-pr] module=${module} go mod tidy -diff"
-go mod tidy -diff
-
-export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
-
-echo "[public-pr] module=${module} go vet ./..."
-go vet ./...
-
-echo "[public-pr] module=${module} go test -count=1 ./..."
-go test -count=1 ./...
-
-echo "[public-pr] module=${module} go test -race -p 2 -count=1 ./..."
-go test -race -p 2 -count=1 ./...
+case "${stage}" in
+  tidy)
+    echo "[public-pr] module=${module} go mod tidy -diff"
+    go mod tidy -diff
+    ;;
+  vet)
+    export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
+    echo "[public-pr] module=${module} go vet ./..."
+    go vet ./...
+    ;;
+  test)
+    export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
+    echo "[public-pr] module=${module} go test -count=1 ./..."
+    go test -count=1 ./...
+    ;;
+  race)
+    export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
+    echo "[public-pr] module=${module} go test -race -p 2 -count=1 ./..."
+    go test -race -p 2 -count=1 ./...
+    ;;
+esac
