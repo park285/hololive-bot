@@ -153,3 +153,26 @@ jobs:
         env:
           GOWORK: "off"
         run: bash scripts/ci/public-pr-frontend-gate.sh
+
+  fast-gate:
+    name: fast-gate
+    if: always()
+    needs:
+      - policy
+      - go-modules
+      - frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Require canonical verification
+        env:
+          POLICY_RESULT: ${{ needs.policy.result }}
+          GO_MODULES_RESULT: ${{ needs.go-modules.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+        run: |
+          test "${POLICY_RESULT}" = "success"
+          test "${GO_MODULES_RESULT}" = "success"
+          test "${FRONTEND_RESULT}" = "success"
