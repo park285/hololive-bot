@@ -71,6 +71,12 @@ else
   pass "sync-opt-current.sh installs root systemd material from the git archive snapshot, not the working tree"
 fi
 
+if ! grep -Fq 'chmod 0755 "$OPT_CURRENT/runtime-config"' "${SYNC}"; then
+  record_fail "sync-opt-current.sh must keep root-owned runtime-config traversable by container uid"
+else
+  pass "sync-opt-current.sh preserves runtime-config traversal after root ownership normalization"
+fi
+
 if (( failures > 0 )); then
   echo "systemd compose wrapper checks failed: ${failures}" >&2
   exit 1
