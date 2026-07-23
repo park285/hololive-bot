@@ -1,8 +1,8 @@
 name: ci
 
-# GitHub CI 는 secret-free fast gate만 책임진다.
-# full local-ci, race, dependency hygiene, frontend full build는
-# 로컬 pre-push 또는 non-PR security workflow 가 책임진다.
+# PUBLIC 저장소의 canonical PR gate. 비밀이 필요 없는 정책·Go·frontend 검증은
+# GitHub Actions에서 독립적으로 증적을 남기고, 운영·배포·대용량 분석은 로컬 pre-push와
+# non-PR security workflow가 계속 책임진다.
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -22,10 +22,10 @@ env:
   GOTMPDIR: /tmp
 
 jobs:
-  fast-gate:
-    name: fast-gate
+  policy:
+    name: policy
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash
@@ -38,33 +38,141 @@ jobs:
       - name: Workflow PR boundary and gate ownership
         run: bash scripts/ci/check-workflow-secrets.sh
 
+      - name: Workflow CI ownership contract
+        run: |
+          python3 scripts/ci/check-workflow-ci-owner.py
+          python3 scripts/ci/check-workflow-ci-owner_test.py
+
+      - name: Shell syntax
+        run: bash scripts/ci/shell-syntax-sweep.sh
+
+      - name: gofmt
+        run: bash scripts/ci/check-gofmt.sh
+
+  go-modules:
+    name: go-${{ matrix.module }}
+    needs: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        module:
+          - "."
+          - admin-dashboard/backend
+          - hololive/hololive-api
+          - hololive/hololive-alarm-worker
+          - hololive/hololive-dbtest
+          - hololive/hololive-shared
+          - hololive/hololive-youtube-producer
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache-dependency-path: |
-            go.work.sum
             go.sum
             admin-dashboard/backend/go.sum
             hololive/*/go.sum
 
-      - name: Shell syntax
-        run: bash scripts/ci/shell-syntax-sweep.sh
-
-      - name: Secret-free Go compile smoke
+      - name: Setup Docker Compose for repository contract tests
+        if: matrix.module == 'hololive/hololive-shared'
         env:
-          GOWORK: off
+          DOCKER_COMPOSE_VERSION: v2.39.4
+          DOCKER_COMPOSE_LINUX_X86_64_SHA256: 7af95166a730b87e172d4fc9aefea8725d3c6c7327d59149267b452114ddb7d4
         run: |
-          for module in \
-            . \
-            hololive/hololive-shared \
-            hololive/hololive-api \
-            hololive/hololive-alarm-worker \
-            hololive/hololive-youtube-producer \
-            admin-dashboard/backend; do
-            echo "compile ${module}"
-            (cd "${module}" && go build ./... && go test -run '^$' ./...)
-          done
+          compose_dir="${HOME}/.docker/cli-plugins"
+          compose_bin="${compose_dir}/docker-compose"
+          download="${RUNNER_TEMP}/docker-compose-linux-x86_64"
+          mkdir -p "${compose_dir}"
+          curl --fail --location --retry 3 --retry-all-errors \
+            "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+            --output "${download}"
+          printf '%s  %s\n' "${DOCKER_COMPOSE_LINUX_X86_64_SHA256}" "${download}" | sha256sum --check -
+          install -m 0755 "${download}" "${compose_bin}"
+          test "$(docker compose version --short)" = "${DOCKER_COMPOSE_VERSION#v}"
 
-      - name: gofmt
-        run: bash scripts/ci/check-gofmt.sh
+      - name: Module tidy drift
+        env:
+          GOWORK: "off"
+          GOMAXPROCS: "2"
+          GOMEMLIMIT: 5GiB
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" tidy
+
+      - name: Module vet
+        env:
+          GOWORK: "off"
+          GOMAXPROCS: "2"
+          GOMEMLIMIT: 5GiB
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" vet
+
+      - name: Module unit tests
+        env:
+          GOWORK: "off"
+          GOMAXPROCS: "2"
+          GOMEMLIMIT: 5GiB
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" test
+
+      - name: Module race tests
+        env:
+          GOWORK: "off"
+          GOMAXPROCS: "2"
+          GOMEMLIMIT: 5GiB
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" race
+
+  frontend:
+    name: frontend
+    needs: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: admin-dashboard/backend/go.sum
+
+      - name: Frontend test, lint, generation and build gate
+        env:
+          GOWORK: "off"
+        run: bash scripts/ci/public-pr-frontend-gate.sh
+
+  fast-gate:
+    name: fast-gate
+    if: always()
+    needs:
+      - policy
+      - go-modules
+      - frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Require canonical verification
+        env:
+          POLICY_RESULT: ${{ needs.policy.result }}
+          GO_MODULES_RESULT: ${{ needs.go-modules.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+        run: |
+          test "${POLICY_RESULT}" = "success"
+          test "${GO_MODULES_RESULT}" = "success"
+          test "${FRONTEND_RESULT}" = "success"
