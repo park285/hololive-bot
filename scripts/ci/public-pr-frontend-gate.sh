@@ -18,9 +18,14 @@ npm ci
 echo "[public-pr] generate API client"
 npm run generate:api
 
-if ! git -C "${ROOT_DIR}" diff --exit-code -- \
+generated_status="$(git -C "${ROOT_DIR}" status --porcelain -- \
   admin-dashboard/backend/docs/swagger.json \
-  admin-dashboard/frontend/src/api/generated; then
+  admin-dashboard/frontend/src/api/generated)"
+if [[ -n "${generated_status}" ]]; then
+  git -C "${ROOT_DIR}" diff -- \
+    admin-dashboard/backend/docs/swagger.json \
+    admin-dashboard/frontend/src/api/generated || true
+  printf '%s\n' "${generated_status}" >&2
   echo "generated OpenAPI artifacts are stale; run npm run generate:api and commit the result" >&2
   exit 1
 fi
