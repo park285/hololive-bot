@@ -38,6 +38,11 @@ jobs:
       - name: Workflow PR boundary and gate ownership
         run: bash scripts/ci/check-workflow-secrets.sh
 
+      - name: Workflow CI ownership contract
+        run: |
+          python3 scripts/ci/check-workflow-ci-owner.py
+          python3 scripts/ci/check-workflow-ci-owner_test.py
+
       - name: Shell syntax
         run: bash scripts/ci/shell-syntax-sweep.sh
 
