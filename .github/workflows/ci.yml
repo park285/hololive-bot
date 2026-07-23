@@ -79,12 +79,33 @@ jobs:
             admin-dashboard/backend/go.sum
             hololive/*/go.sum
 
-      - name: Module test and race gate
+      - name: Module tidy drift
         env:
           GOWORK: "off"
           GOMAXPROCS: "2"
           GOMEMLIMIT: 5GiB
-        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}"
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" tidy
+
+      - name: Module vet
+        env:
+          GOWORK: "off"
+          GOMAXPROCS: "2"
+          GOMEMLIMIT: 5GiB
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" vet
+
+      - name: Module unit tests
+        env:
+          GOWORK: "off"
+          GOMAXPROCS: "2"
+          GOMEMLIMIT: 5GiB
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" test
+
+      - name: Module race tests
+        env:
+          GOWORK: "off"
+          GOMAXPROCS: "2"
+          GOMEMLIMIT: 5GiB
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}" race
 
   frontend:
     name: frontend
