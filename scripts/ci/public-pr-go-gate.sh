@@ -54,7 +54,7 @@ run_with_failure_tail() {
   output_file="$(mktemp)"
   if ! "$@" >"${output_file}" 2>&1; then
     echo "::error title=${label} failed::module=${module} stage=${stage}"
-    tail -n 60 "${output_file}" >&2
+    tail -n 400 "${output_file}" >&2
     rm -f "${output_file}"
     return 1
   fi
