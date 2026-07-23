@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-dbtest v0.0.0
-	github.com/park285/shared-go v1.32.5
+	github.com/park285/shared-go v1.33.0
 	github.com/prometheus/client_golang v1.24.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
