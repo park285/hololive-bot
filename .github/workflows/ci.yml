@@ -1,8 +1,8 @@
 name: ci
 
-# GitHub CI 는 secret-free fast gate만 책임진다.
-# full local-ci, race, dependency hygiene, frontend full build는
-# 로컬 pre-push 또는 non-PR security workflow 가 책임진다.
+# PUBLIC 저장소의 canonical PR gate. 비밀이 필요 없는 정책·Go·frontend 검증은
+# GitHub Actions에서 독립적으로 증적을 남기고, 운영·배포·대용량 분석은 로컬 pre-push와
+# non-PR security workflow가 계속 책임진다.
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -22,10 +22,10 @@ env:
   GOTMPDIR: /tmp
 
 jobs:
-  fast-gate:
-    name: fast-gate
+  policy:
+    name: policy
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash
@@ -38,33 +38,82 @@ jobs:
       - name: Workflow PR boundary and gate ownership
         run: bash scripts/ci/check-workflow-secrets.sh
 
+      - name: Shell syntax
+        run: bash scripts/ci/shell-syntax-sweep.sh
+
+      - name: gofmt
+        run: bash scripts/ci/check-gofmt.sh
+
+  go-modules:
+    name: go-${{ matrix.module }}
+    needs: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        module:
+          - "."
+          - admin-dashboard/backend
+          - hololive/hololive-api
+          - hololive/hololive-alarm-worker
+          - hololive/hololive-dbtest
+          - hololive/hololive-shared
+          - hololive/hololive-youtube-producer
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache-dependency-path: |
-            go.work.sum
             go.sum
             admin-dashboard/backend/go.sum
             hololive/*/go.sum
 
-      - name: Shell syntax
-        run: bash scripts/ci/shell-syntax-sweep.sh
-
-      - name: Secret-free Go compile smoke
+      - name: Module test and race gate
         env:
-          GOWORK: off
-        run: |
-          for module in \
-            . \
-            hololive/hololive-shared \
-            hololive/hololive-api \
-            hololive/hololive-alarm-worker \
-            hololive/hololive-youtube-producer \
-            admin-dashboard/backend; do
-            echo "compile ${module}"
-            (cd "${module}" && go build ./... && go test -run '^$' ./...)
-          done
+          GOWORK: "off"
+          GOMAXPROCS: "2"
+          GOMEMLIMIT: 5GiB
+        run: bash scripts/ci/public-pr-go-gate.sh "${{ matrix.module }}"
 
-      - name: gofmt
-        run: bash scripts/ci/check-gofmt.sh
+  frontend:
+    name: frontend
+    needs: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: admin-dashboard/backend/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: admin-dashboard/frontend/package-lock.json
+
+      - name: Frontend test, lint, generation and build gate
+        env:
+          GOWORK: "off"
+        run: bash scripts/ci/public-pr-frontend-gate.sh
