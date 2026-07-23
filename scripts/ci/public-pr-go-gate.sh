@@ -52,14 +52,23 @@ run_with_failure_tail() {
   shift
   local output_file
   output_file="$(mktemp)"
-  trap 'rm -f "${output_file:-}"' RETURN
   if ! "$@" >"${output_file}" 2>&1; then
     echo "::error title=${label} failed::module=${module} stage=${stage}"
     tail -n 60 "${output_file}" >&2
+    rm -f "${output_file}"
     return 1
   fi
   rm -f "${output_file}"
-  trap - RETURN
+}
+
+prepare_test_environment() {
+  if [[ "${module}" == "." ]]; then
+    # The root package contains a local stack orchestration test that recursively
+    # invokes sibling shared-go/iris-client-go checkouts. PUBLIC PR CI validates
+    # every in-repo module directly; the cross-repository suite remains owned by
+    # the canonical local pre-push workspace gate.
+    export HOLOLIVE_WORKSPACE_MONOREPO_TEST=1
+  fi
 }
 
 case "${stage}" in
@@ -74,11 +83,13 @@ case "${stage}" in
     ;;
   test)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
+    prepare_test_environment
     echo "[public-pr] module=${module} go test -count=1 ./..."
     run_with_failure_tail "unit tests" go test -count=1 ./...
     ;;
   race)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
+    prepare_test_environment
     echo "[public-pr] module=${module} go test -race -p 2 -count=1 ./..."
     run_with_failure_tail "race tests" go test -race -p 2 -count=1 ./...
     ;;
