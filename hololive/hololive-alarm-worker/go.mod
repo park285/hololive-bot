@@ -10,8 +10,8 @@ require (
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/iris-client-go v1.1.1
-	github.com/park285/shared-go v1.32.0
-	github.com/prometheus/client_golang v1.23.2
+	github.com/park285/shared-go v1.32.5
+	github.com/prometheus/client_golang v1.24.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.76
 	golang.org/x/sync v0.22.0
@@ -39,12 +39,12 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/ebitengine/purego v0.10.1 // indirect
+	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.14 // indirect
 	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
@@ -59,7 +59,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.19.0 // indirect
+	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lmittmann/tint v1.2.0 // indirect
@@ -84,7 +84,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.70.0 // indirect
+	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.60.0 // indirect
