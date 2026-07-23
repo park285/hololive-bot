@@ -113,10 +113,6 @@ type Settings struct {
 	Value string `db:"value"`
 }
 
-func (Settings) TableName() string {
-	return "acl_settings"
-}
-
 type Room struct {
 	ID       uint   `db:"id"`
 	RoomID   string `db:"room_id"`

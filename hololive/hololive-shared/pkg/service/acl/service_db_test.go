@@ -221,11 +221,7 @@ func newACLRoomSetStatefulCache(state *aclRoomSetCacheState) *cachemocks.Client 
 	}
 }
 
-func TestSettingsAndRoom_TableName(t *testing.T) {
-	if got := (Settings{}).TableName(); got != "acl_settings" {
-		t.Fatalf("Settings.TableName()=%q", got)
-	}
-
+func TestRoom_TableName(t *testing.T) {
 	if got := (Room{}).TableName(); got != "acl_rooms" {
 		t.Fatalf("Room.TableName()=%q", got)
 	}

@@ -47,10 +47,6 @@ type Model struct {
 	TwitchUserID   *string    `db:"twitch_user_id"`
 }
 
-func (Model) TableName() string {
-	return "members"
-}
-
 type Repository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
