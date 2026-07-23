@@ -47,6 +47,21 @@ export GOMEMLIMIT="${GOMEMLIMIT:-5GiB}"
 
 cd "${module_dir}"
 
+run_with_failure_tail() {
+  local label="$1"
+  shift
+  local output_file
+  output_file="$(mktemp)"
+  trap 'rm -f "${output_file:-}"' RETURN
+  if ! "$@" >"${output_file}" 2>&1; then
+    echo "::error title=${label} failed::module=${module} stage=${stage}"
+    tail -n 60 "${output_file}" >&2
+    return 1
+  fi
+  rm -f "${output_file}"
+  trap - RETURN
+}
+
 case "${stage}" in
   tidy)
     echo "[public-pr] module=${module} go mod tidy -diff"
@@ -60,11 +75,11 @@ case "${stage}" in
   test)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
     echo "[public-pr] module=${module} go test -count=1 ./..."
-    go test -count=1 ./...
+    run_with_failure_tail "unit tests" go test -count=1 ./...
     ;;
   race)
     export GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly"
     echo "[public-pr] module=${module} go test -race -p 2 -count=1 ./..."
-    go test -race -p 2 -count=1 ./...
+    run_with_failure_tail "race tests" go test -race -p 2 -count=1 ./...
     ;;
 esac
