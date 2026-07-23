@@ -10,7 +10,7 @@ require (
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/iris-client-go v1.1.1
-	github.com/park285/shared-go v1.32.5
+	github.com/park285/shared-go v1.33.0
 	github.com/prometheus/client_golang v1.24.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.76
