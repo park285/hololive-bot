@@ -173,6 +173,41 @@ else
   record_fail "filtered rollup failed"
 fi
 
+metrics_root="${TMP_DIR}/metrics"
+metrics_dir="${metrics_root}/textfile"
+mkdir -p "${metrics_root}/logs" "${metrics_dir}"
+printf 'metric log\n' > "${metrics_root}/logs/svc.log"
+if LOG_ROOT="${metrics_root}/logs" LOG_ROLLUP_STATE_DIR="${metrics_root}/state" LOG_ROLLUP_DATE=2026-05-22 \
+    LOG_ROLLUP_METRICS_DIR="${metrics_dir}" \
+    "${ROOT_DIR}/scripts/logs/daily-rollup-logs.sh" once >/dev/null; then
+  prom_file="${metrics_dir}/hololive_log_rollup.prom"
+  if [[ -f "${prom_file}" ]] \
+      && grep -Eq '^hololive_log_rollup_last_success_timestamp_seconds [0-9]+$' "${prom_file}" \
+      && [[ "$(stat -c '%a' "${prom_file}")" == "644" ]] \
+      && ! find "${metrics_dir}" -maxdepth 1 -name '.hololive_log_rollup.*' | grep -q .; then
+    pass "once mode emits atomic world-readable last-success textfile metric"
+  else
+    record_fail "metric file missing, malformed, wrong mode, or staging leaked"
+  fi
+else
+  record_fail "metric-emitting rollup failed"
+fi
+
+noop_root="${TMP_DIR}/metrics-noop"
+mkdir -p "${noop_root}/logs"
+printf 'noop log\n' > "${noop_root}/logs/svc.log"
+if LOG_ROOT="${noop_root}/logs" LOG_ROLLUP_STATE_DIR="${noop_root}/state" LOG_ROLLUP_DATE=2026-05-23 \
+    LOG_ROLLUP_METRICS_DIR="${noop_root}/absent" \
+    "${ROOT_DIR}/scripts/logs/daily-rollup-logs.sh" once >/dev/null; then
+  if [[ ! -e "${noop_root}/absent" ]]; then
+    pass "unset/absent metrics dir is a silent no-op without aborting rollup"
+  else
+    record_fail "metrics no-op path created unexpected output"
+  fi
+else
+  record_fail "rollup aborted on absent metrics dir"
+fi
+
 if (( failures > 0 )); then
   echo "FAILED: ${failures} check(s)"
   exit 1
