@@ -107,20 +107,10 @@ const (
 	listTypeBlacklist = "blacklist"
 )
 
-type Settings struct {
-	ID    uint   `db:"id"`
-	Key   string `db:"key"`
-	Value string `db:"value"`
-}
-
 type Room struct {
 	ID       uint   `db:"id"`
 	RoomID   string `db:"room_id"`
 	ListType string `db:"list_type"`
-}
-
-func (Room) TableName() string {
-	return "acl_rooms"
 }
 
 // PostgreSQL을 영구 저장소로 사용하고, 성능을 위해 인메모리 및 Valkey 캐시를 활용한다.

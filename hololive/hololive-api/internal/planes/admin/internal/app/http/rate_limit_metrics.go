@@ -18,24 +18,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package member
+package apphttp
 
 import (
-	"log/slog"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-type Repository struct {
-	pool   *pgxpool.Pool
-	logger *slog.Logger
-}
+const (
+	rateLimitFailOpenReasonNoCache     = "no_cache"
+	rateLimitFailOpenReasonInitFailed  = "init_failed"
+	rateLimitFailOpenReasonCheckFailed = "check_failed"
+)
 
-func NewMemberRepository(postgres database.Client, logger *slog.Logger) *Repository {
-	return &Repository{
-		pool:   postgres.GetPool(),
-		logger: logger,
-	}
-}
+var apiRateLimitFailOpenTotal = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "hololive_admin_rate_limit_fail_open_total",
+		Help: "Number of admin holo API rate limiter fail-open events grouped by reason.",
+	},
+	[]string{"reason"},
+)
