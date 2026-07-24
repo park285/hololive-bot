@@ -221,12 +221,6 @@ func newACLRoomSetStatefulCache(state *aclRoomSetCacheState) *cachemocks.Client 
 	}
 }
 
-func TestRoom_TableName(t *testing.T) {
-	if got := (Room{}).TableName(); got != "acl_rooms" {
-		t.Fatalf("Room.TableName()=%q", got)
-	}
-}
-
 func TestNewACLService_FirstInitUsesDefaults(t *testing.T) {
 	pool, cacheMock, calls := newACLServiceWithPgx(t)
 	service := newACLServiceFromPool(t, pool, cacheMock, true, []string{"room-a", "room-b"})

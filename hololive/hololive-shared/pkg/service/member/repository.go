@@ -22,30 +22,11 @@ package member
 
 import (
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
-
-type Model struct {
-	ID             int        `db:"id"`
-	Slug           string     `db:"slug"`
-	ChannelID      *string    `db:"channel_id"`
-	EnglishName    string     `db:"english_name"`
-	JapaneseName   *string    `db:"japanese_name"`
-	KoreanName     *string    `db:"korean_name"`
-	Status         string     `db:"status"`
-	IsGraduated    bool       `db:"is_graduated"`
-	Aliases        []byte     `db:"aliases"`
-	Photo          *string    `db:"photo"`
-	PhotoUpdatedAt *time.Time `db:"photo_updated_at"`
-	Org            string     `db:"org"`
-	Suborg         *string    `db:"suborg"`
-	SyncSource     string     `db:"sync_source"`
-	TwitchUserID   *string    `db:"twitch_user_id"`
-}
 
 type Repository struct {
 	pool   *pgxpool.Pool
