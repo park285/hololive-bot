@@ -25,7 +25,10 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -38,6 +41,7 @@ const (
 	memberAliasKeyPrefix   = "member:alias:"
 	memberCachePattern     = "member:*"
 	allChannelIDsKey       = "channel_ids"
+	allMembersSnapshotKey  = "all_members"
 )
 
 // DB 부하를 줄이고 빠른 조회를 지원하며, 워밍업(Warm-up) 기능을 제공합니다.
@@ -49,6 +53,11 @@ type Cache struct {
 	byChannelID sync.Map // map[string]*domain.Member
 	byName      sync.Map // map[string]*domain.Member
 	allMembers  sync.Map // []string (channel IDs)
+
+	allMembersSnapshot atomic.Pointer[allMembersState]
+	allMembersGroup    singleflight.Group
+	snapshotTTL        time.Duration
+	loadAllMembers     func(ctx context.Context) ([]*domain.Member, error)
 
 	cacheTTL time.Duration
 	warmup   bool
@@ -77,11 +86,12 @@ func NewMemberCache(ctx context.Context, repository *Repository, cacheService ca
 	}
 
 	mc := &Cache{
-		repository: repository,
-		cache:      cacheService,
-		logger:     logger,
-		cacheTTL:   config.ValkeyTTL,
-		warmup:     config.WarmUp,
+		repository:  repository,
+		cache:       cacheService,
+		logger:      logger,
+		cacheTTL:    config.ValkeyTTL,
+		warmup:      config.WarmUp,
+		snapshotTTL: allMembersSnapshotTTL,
 
 		warmUpChunkSize:     config.WarmUpChunkSize,
 		warmUpMaxGoroutines: config.WarmUpMaxGoroutines,
@@ -289,9 +299,10 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member) {
 
 func (c *Cache) InvalidateAll(ctx context.Context) error {
 	// 인메모리 캐시 클리어
-	c.byChannelID = sync.Map{}
-	c.byName = sync.Map{}
-	c.allMembers = sync.Map{}
+	c.byChannelID.Clear()
+	c.byName.Clear()
+	c.allMembers.Clear()
+	c.allMembersSnapshot.Store(nil)
 
 	if !c.cacheEnabled() {
 		c.logger.Info("Member cache invalidated", slog.Int("keys_deleted", 0))

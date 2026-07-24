@@ -168,17 +168,15 @@ func TestServiceAdapter_FindMembersByAlias_ReturnsAllAliasMatches(t *testing.T) 
 
 func newAdapterTestCache(members ...*domain.Member) *Cache {
 	cache := &Cache{}
-	channelIDs := make([]string, 0, len(members))
+	snapshot := make([]*domain.Member, 0, len(members))
 	for _, member := range members {
 		if member == nil {
 			continue
 		}
-		if member.ChannelID != "" {
-			cache.byChannelID.Store(member.ChannelID, member)
-			channelIDs = append(channelIDs, member.ChannelID)
-		}
-		cache.byName.Store(member.Name, member)
+		snapshot = append(snapshot, member)
 	}
-	cache.allMembers.Store(allChannelIDsKey, channelIDs)
+	cache.loadAllMembers = func(context.Context) ([]*domain.Member, error) {
+		return snapshot, nil
+	}
 	return cache
 }

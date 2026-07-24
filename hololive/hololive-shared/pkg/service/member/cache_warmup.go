@@ -55,12 +55,7 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 	}
 	wg.Wait()
 
-	for _, member := range members {
-		if member.ChannelID != "" {
-			c.byChannelID.Store(member.ChannelID, member)
-		}
-		c.byName.Store(member.Name, member)
-	}
+	c.storeAllMembersSnapshot(members)
 
 	c.logger.Info("Member cache warmed up",
 		slog.Int("total_members", len(members)),

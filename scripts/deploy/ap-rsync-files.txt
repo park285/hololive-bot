@@ -479,6 +479,7 @@ hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/service_st
 hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/service_streams_fallback.go
 hololive/hololive-shared/pkg/service/member/adapter.go
 hololive/hololive-shared/pkg/service/member/cache.go
+hololive/hololive-shared/pkg/service/member/cache_all_members.go
 hololive/hololive-shared/pkg/service/member/interface.go
 hololive/hololive-shared/pkg/service/member/mocks/data_provider.go
 hololive/hololive-shared/pkg/service/member/profile.go

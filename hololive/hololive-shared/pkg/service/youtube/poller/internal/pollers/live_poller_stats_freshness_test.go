@@ -38,7 +38,7 @@ func TestMarkEndedSessionsEndsGenuinelyDisappearedSession(t *testing.T) {
 	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 
 	pollStartedAt := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
-	lastObservedAt := pollStartedAt.Add(-time.Minute)
+	lastObservedAt := pollStartedAt.Add(-(liveSessionLastSeenMinAdvance + time.Minute))
 	require.NoError(t, db.Create(&domain.YouTubeLiveSession{
 		VideoID:    "gone-live",
 		ChannelID:  "UC_FENCE",
@@ -66,7 +66,7 @@ func TestMarkEndedSessionsEndsSessionLastSeenAtFenceBoundary(t *testing.T) {
 		ChannelID:  "UC_FENCE",
 		Status:     domain.LiveStatusLive,
 		Title:      "Boundary Live",
-		LastSeenAt: pollStartedAt,
+		LastSeenAt: pollStartedAt.Add(-liveSessionLastSeenMinAdvance),
 	}).Error)
 
 	poller := NewLivePollerWithStatusProvider(nil, nil, db)
@@ -75,6 +75,28 @@ func TestMarkEndedSessionsEndsSessionLastSeenAtFenceBoundary(t *testing.T) {
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "boundary-live").Error)
 	require.Equal(t, domain.LiveStatusEnded, session.Status,
-		"last_seen_at == poll 시작 시각은 fence 경계(<=)에 포함되어 ENDED 되어야 한다")
+		"last_seen_at == poll 시작 - MinAdvance 시각은 fence 경계(<=)에 포함되어 ENDED 되어야 한다")
 	require.NotNil(t, session.EndedAt)
+}
+
+func TestMarkEndedSessionsKeepsSessionInsideMinAdvanceSlack(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+
+	pollStartedAt := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, db.Create(&domain.YouTubeLiveSession{
+		VideoID:    "slack-live",
+		ChannelID:  "UC_FENCE",
+		Status:     domain.LiveStatusLive,
+		Title:      "Recently Observed Live",
+		LastSeenAt: pollStartedAt.Add(-liveSessionLastSeenMinAdvance + time.Second),
+	}).Error)
+
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	poller.markEndedSessions(context.Background(), "UC_FENCE", []*domain.Stream{}, pollStartedAt)
+
+	var session domain.YouTubeLiveSession
+	require.NoError(t, db.First(&session, "video_id = ?", "slack-live").Error)
+	require.Equal(t, domain.LiveStatusLive, session.Status,
+		"skip 가드로 last_seen_at 기록이 MinAdvance만큼 늦을 수 있으므로 그 폭 안의 세션은 종료하면 안 된다")
+	require.Nil(t, session.EndedAt)
 }
