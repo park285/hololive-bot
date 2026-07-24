@@ -50,11 +50,19 @@ func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stre
 		session.TopicID,
 		session.ThumbnailURL,
 		session.LastSeenAt,
+		liveSessionLastSeenMinAdvance.Microseconds(),
 	); err != nil {
 		return fmt.Errorf("save live session: %w", err)
 	}
 	return nil
 }
+
+// last_seen_at 전진이 이 간격 미만이고 다른 필드가 전부 동일하면 upsert가 행 갱신을
+// 건너뛴다(쓰기 증폭 완화). 이 때문에 "다른 producer가 살아있는 스트림을 봤지만 아직
+// 기록하지 않았을" 수 있는 폭이 이 간격만큼 생기고, markSessionEnded의 ENDED 판정
+// fence도 정확히 이 간격만큼 과거로 물러나야 조기 종료가 성립하지 않는다. 소비자
+// 신선도 계약(alarm checker 15m, birthday runner 30m)이 이 간격의 상한을 규정한다.
+const liveSessionLastSeenMinAdvance = 2 * time.Minute
 
 func loadExistingLiveSession(ctx context.Context, tx dbx.Querier, videoID string) (domain.YouTubeLiveSession, bool, error) {
 	var existing domain.YouTubeLiveSession

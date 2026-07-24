@@ -100,7 +100,7 @@ func (p *LivePoller) markSessionEnded(ctx context.Context, videoID string, now, 
 		domain.LiveStatusEnded,
 		now,
 		videoID,
-		pollStartedAt,
+		pollStartedAt.Add(-liveSessionLastSeenMinAdvance),
 	)
 	if err != nil {
 		slog.Warn("Failed to mark live session ended", "video_id", videoID, "error", err)
