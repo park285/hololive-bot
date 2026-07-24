@@ -115,12 +115,14 @@ func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) gin.H
 
 	if cacheClient == nil {
 		logger.Warn("api_rate_limit_disabled_no_cache")
+		apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonNoCache).Inc()
 		return func(c *gin.Context) { c.Next() }
 	}
 
 	limiter, err := ratelimit.NewSlidingWindowLimiter(cacheClient, "api:holo:ip", logger)
 	if err != nil {
 		logger.Error("api_rate_limit_init_failed", slog.String("error", err.Error()))
+		apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonInitFailed).Inc()
 		return func(c *gin.Context) { c.Next() }
 	}
 
@@ -147,6 +149,7 @@ func (h apiRateLimitHandler) Handle(c *gin.Context) {
 	decision, err := h.limiter.Allow(c.Request.Context(), ip, h.limit, h.window)
 	if err != nil {
 		h.logger.Warn("api_rate_limit_check_failed", slog.String("ip", ip), slog.String("error", err.Error()))
+		apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonCheckFailed).Inc()
 		c.Next()
 
 		return
