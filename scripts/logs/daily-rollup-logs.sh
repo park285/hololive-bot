@@ -29,7 +29,8 @@ Behavior:
   LOG_ARCHIVE_DIR/<service>-YYYY-MM-DD.log.tar.gz by copying a snapshot and
   truncating the same inode, so long-lived file descriptors keep writing to the
   visible log path after rollup. Symlinked logs are skipped so remote mirrors
-  are not modified centrally.
+  are not modified centrally. Files with more than one hard link are refused
+  and left unchanged because copytruncate cannot preserve their aliases safely.
 USAGE
 }
 
@@ -76,6 +77,7 @@ import sys
 log_file, tmp_file = sys.argv[1:3]
 skip = 75
 empty = 76
+unsafe_links = 77
 
 flags = os.O_RDWR | os.O_APPEND
 if hasattr(os, "O_NOFOLLOW"):
@@ -92,6 +94,8 @@ try:
     st = os.fstat(log_fd)
     if not stat.S_ISREG(st.st_mode):
         sys.exit(skip)
+    if st.st_nlink != 1:
+        sys.exit(unsafe_links)
     if st.st_size <= 0:
         sys.exit(empty)
 
@@ -120,6 +124,10 @@ try:
         if not chunk:
             break
         tail_chunks.append(chunk)
+
+    current = os.fstat(log_fd)
+    if not stat.S_ISREG(current.st_mode) or current.st_nlink != 1:
+        sys.exit(unsafe_links)
 
     os.ftruncate(log_fd, 0)
     for chunk in tail_chunks:
@@ -194,6 +202,10 @@ archive_one_log() {
     if [[ "${rc}" -eq 76 ]]; then
       rm -rf "${tmp_dir}"
       return 0
+    fi
+    if [[ "${rc}" -eq 77 ]]; then
+      rm -rf "${tmp_dir}"
+      die "refusing copytruncate for multi-link log: ${log_file}"
     fi
     rm -rf "${tmp_dir}"
     die "snapshot/truncate failed for ${log_file}"
