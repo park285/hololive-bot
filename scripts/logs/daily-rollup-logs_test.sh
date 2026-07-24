@@ -63,6 +63,23 @@ else
   record_fail "open file descriptor did not keep writing to visible log after snapshot truncate"
 fi
 
+tmp_dir3="$(mktemp -d "${LOG_ROLLUP_STATE_DIR}/.rollup.XXXXXX")"
+hardlink_path="${LOG_ROOT}/hardlink.log"
+hardlink_alias="${TMP_DIR}/hardlink-alias.log"
+printf 'hardlink-content\n' > "${hardlink_path}"
+ln "${hardlink_path}" "${hardlink_alias}"
+if snapshot_and_truncate_log "${hardlink_path}" "${tmp_dir3}/hardlink.log" >/dev/null 2>&1; then
+  record_fail "snapshot_and_truncate_log accepted a multi-link inode"
+else
+  rc=$?
+  if [[ "${rc}" -eq 77 && "$(cat "${hardlink_path}")" == "hardlink-content" && "$(cat "${hardlink_alias}")" == "hardlink-content" ]]; then
+    pass "multi-link copytruncate refused; both links preserved"
+  else
+    record_fail "multi-link refusal rc=${rc}; original or alias changed"
+  fi
+fi
+rm -f -- "${hardlink_alias}" "${hardlink_path}"
+
 lock_target="${TMP_DIR}/lock-secret"
 printf 'LOCKSECRET' > "${lock_target}"
 ln -s "${lock_target}" "${LOG_ROOT}/.daily-rollup.lock"
