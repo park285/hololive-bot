@@ -16,25 +16,25 @@ type OperationalChannel struct {
 	Enabled    bool
 }
 
-type MemberRepository interface {
-	GetAllMembers(context.Context) ([]*domain.Member, error)
+type MemberSnapshotLoader interface {
+	AllMembers(context.Context) ([]*domain.Member, error)
 }
 
-func ResolveOperationalChannelsFromRepository(
+func ResolveOperationalChannels(
 	ctx context.Context,
-	repository MemberRepository,
+	loader MemberSnapshotLoader,
 ) ([]OperationalChannel, error) {
-	if repository == nil {
-		return nil, fmt.Errorf("member repository is nil")
+	if loader == nil {
+		return nil, fmt.Errorf("member snapshot loader is nil")
 	}
-	value := reflect.ValueOf(repository)
+	value := reflect.ValueOf(loader)
 	if value.Kind() == reflect.Pointer && value.IsNil() {
-		return nil, fmt.Errorf("member repository is nil")
+		return nil, fmt.Errorf("member snapshot loader is nil")
 	}
 
-	members, err := repository.GetAllMembers(ctx)
+	members, err := loader.AllMembers(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load members from repository: %w", err)
+		return nil, fmt.Errorf("load members from snapshot: %w", err)
 	}
 	return BuildOperationalChannelsFromMembers(members), nil
 }

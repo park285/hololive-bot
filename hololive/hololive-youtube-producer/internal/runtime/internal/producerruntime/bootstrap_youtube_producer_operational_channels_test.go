@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 )
 
-func TestBuildYouTubeProducerRuntime_FailsWhenOperationalChannelRepositoryUnavailable(t *testing.T) {
+func TestBuildYouTubeProducerRuntime_FailsWhenOperationalChannelSnapshotUnavailable(t *testing.T) {
 	t.Setenv("YOUTUBE_PRODUCER_RUNTIME_ALLOWED", "true")
 
 	originalInit := initYouTubeProducerInfrastructureFn
@@ -35,6 +35,6 @@ func TestBuildYouTubeProducerRuntime_FailsWhenOperationalChannelRepositoryUnavai
 	require.Error(t, err)
 	require.Nil(t, runtime)
 	require.ErrorContains(t, err, "resolve community shorts operational channels")
-	require.ErrorContains(t, err, "member repository is nil")
+	require.ErrorContains(t, err, "member snapshot loader is nil")
 	assert.Equal(t, 1, cleanupCalls)
 }

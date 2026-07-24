@@ -10,31 +10,31 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type fakeMemberRepository struct {
-	getAllMembers func(context.Context) ([]*domain.Member, error)
+type fakeMemberSnapshotLoader struct {
+	allMembers func(context.Context) ([]*domain.Member, error)
 }
 
-func (f fakeMemberRepository) GetAllMembers(ctx context.Context) ([]*domain.Member, error) {
-	return f.getAllMembers(ctx)
+func (f fakeMemberSnapshotLoader) AllMembers(ctx context.Context) ([]*domain.Member, error) {
+	return f.allMembers(ctx)
 }
 
-func TestResolveOperationalChannelsFromRepository_ReturnsErrorOnRepositoryFailure(t *testing.T) {
+func TestResolveOperationalChannels_ReturnsErrorOnSnapshotFailure(t *testing.T) {
 	t.Parallel()
 
-	_, err := ResolveOperationalChannelsFromRepository(context.Background(), fakeMemberRepository{
-		getAllMembers: func(context.Context) ([]*domain.Member, error) {
+	_, err := ResolveOperationalChannels(context.Background(), fakeMemberSnapshotLoader{
+		allMembers: func(context.Context) ([]*domain.Member, error) {
 			return nil, assert.AnError
 		},
 	})
 	require.Error(t, err)
-	require.ErrorContains(t, err, "load members from repository")
+	require.ErrorContains(t, err, "load members from snapshot")
 }
 
-func TestResolveOperationalChannelsFromRepository_SkipsGraduatedAndDedupesChannelIDs(t *testing.T) {
+func TestResolveOperationalChannels_SkipsGraduatedAndDedupesChannelIDs(t *testing.T) {
 	t.Parallel()
 
-	channels, err := ResolveOperationalChannelsFromRepository(context.Background(), fakeMemberRepository{
-		getAllMembers: func(context.Context) ([]*domain.Member, error) {
+	channels, err := ResolveOperationalChannels(context.Background(), fakeMemberSnapshotLoader{
+		allMembers: func(context.Context) ([]*domain.Member, error) {
 			return []*domain.Member{
 				{Name: "Pekora", Org: "Hololive", ChannelID: " UCdup "},
 				{Name: "Miko", Org: "Hololive", ChannelID: "UCdup"},
