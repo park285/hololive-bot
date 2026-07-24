@@ -107,3 +107,4 @@
 107 111_telemetry_hot_autovacuum.sql
 108 112_major_events_status_not_null.sql
 109 113_add_vocab_checks_acl_watermarks.sql
+110 114_drop_unused_indexes.sql
