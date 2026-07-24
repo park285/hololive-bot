@@ -43,6 +43,7 @@ type youtubeProducerInfrastructure struct {
 	cacheService     cache.Client
 	postgresService  database.Client
 	memberRepository *member.Repository
+	memberCache      *member.Cache
 	settingsService  settings.ReadWriter
 	holodexService   *holodex.Service
 	ytStack          *sharedproviders.YouTubeStack
@@ -85,6 +86,7 @@ func initYouTubeProducerInfrastructure(ctx context.Context, appConfig *config.Co
 		cacheService:     infra.Cache,
 		postgresService:  infra.Postgres,
 		memberRepository: infra.MemberRepository,
+		memberCache:      infra.MemberCache,
 		settingsService:  sharedmodules.BuildSettingsService(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
 		holodexService:   youTube.holodexService,
 		ytStack:          youTube.ytStack,
