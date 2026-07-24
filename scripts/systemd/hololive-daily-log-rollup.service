@@ -7,6 +7,7 @@ User=kapu
 Group=kapu
 WorkingDirectory=/home/kapu/work/iris-stack/hololive-bot
 Environment=LOG_ROOT=/home/kapu/work/iris-stack/hololive-bot/logs
+Environment=LOG_ROLLUP_METRICS_DIR=/var/lib/node-exporter/textfile
 ExecStart=/home/kapu/work/iris-stack/hololive-bot/scripts/logs/daily-rollup-logs.sh once
 UMask=0027
 Nice=10
