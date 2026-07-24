@@ -735,7 +735,6 @@ github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/pgxutil
 github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/sqlsplit
 github.com/kapu/hololive-shared/internal/dbx -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-shared/internal/dbx -> github.com/kapu/hololive-shared/pkg/pgxutil
-github.com/kapu/hololive-shared/internal/dbx -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/internal/service/fallback -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-shared/internal/service/template/sampledata -> github.com/kapu/hololive-shared/internal/service/template/sampledata
 github.com/kapu/hololive-shared/internal/service/template/sampledata -> github.com/kapu/hololive-shared/pkg/domain

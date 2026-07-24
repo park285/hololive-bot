@@ -87,7 +87,6 @@ hololive/hololive-youtube-producer/internal/communityshorts/constants.go
 hololive/hololive-youtube-producer/internal/communityshorts/operational_channels.go
 hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go
 hololive/hololive-youtube-producer/internal/communityshorts/target_baseline_routes.go
-hololive/hololive-shared/internal/dbx/pagination.go
 hololive/hololive-shared/internal/dbx/sqlhelpers.go
 hololive/hololive-shared/internal/dbx/tx.go
 hololive/hololive-shared/pkg/apperrors/errors.go
