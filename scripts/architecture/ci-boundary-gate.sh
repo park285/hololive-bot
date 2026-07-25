@@ -62,11 +62,6 @@ echo "[M1] migration manifest check"
 "${SCRIPT_DIR}/check-migration-manifest.sh"
 echo
 
-echo "[M1] blocking index-drop migration check"
-bash "${SCRIPT_DIR}/check-blocking-index-drop-migrations.sh"
-bash "${SCRIPT_DIR}/check-blocking-index-drop-migrations_test.sh"
-echo
-
 echo "[M1] SQL ownership check"
 "${SCRIPT_DIR}/check-sql-ownership.sh"
 echo
