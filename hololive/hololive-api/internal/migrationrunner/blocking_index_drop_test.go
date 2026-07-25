@@ -1,6 +1,8 @@
 package migrationrunner
 
 import (
+	"io/fs"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -8,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/dbmigrate"
 
+	"github.com/kapu/hololive-api/scripts/migrations"
 	"github.com/kapu/hololive-dbtest"
 )
 
@@ -15,6 +18,70 @@ const blockingIndexDropSetupSQL = `
 CREATE TABLE blocking_index_drop_probe(id integer);
 CREATE INDEX blocking_index_drop_probe_idx ON blocking_index_drop_probe(id);
 `
+
+func TestBlockingIndexDropSourcePolicy(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		source   string
+		allow    bool
+		wantFail bool
+	}{
+		{
+			name:     "plain multiline drop",
+			source:   "DROP /* blocking */\nINDEX IF EXISTS unsafe_index;",
+			wantFail: true,
+		},
+		{
+			name:   "concurrent drop",
+			source: "DROP /* safe */ INDEX\nCONCURRENTLY IF EXISTS safe_index;",
+		},
+		{
+			name:   "quoted body",
+			source: "DO $body$ BEGIN RAISE NOTICE 'DROP INDEX is quoted'; END $body$;",
+		},
+		{
+			name:   "maintenance override",
+			source: "DROP INDEX IF EXISTS maintenance_index;",
+			allow:  true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			exec := &guardedExecer{allowBlockingIndexDrop: test.allow}
+			err := exec.validateMigrationSource("policy.sql", test.source)
+			if test.wantFail && err == nil {
+				t.Fatal("validateMigrationSource() error = nil, want blocking DROP INDEX refusal")
+			}
+			if !test.wantFail && err != nil {
+				t.Fatalf("validateMigrationSource() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestCommittedMigrationsAfter114AvoidBlockingIndexDrops(t *testing.T) {
+	entries, err := dbmigrate.Manifest(migrations.FS)
+	if err != nil {
+		t.Fatalf("read migration manifest: %v", err)
+	}
+
+	exec := &guardedExecer{}
+	for _, name := range entries {
+		number, numberErr := migrationNumber(name)
+		if numberErr != nil {
+			t.Fatalf("parse migration number %q: %v", name, numberErr)
+		}
+		if number <= 114 {
+			continue
+		}
+		content, readErr := fs.ReadFile(migrations.FS, name)
+		if readErr != nil {
+			t.Fatalf("read migration %s: %v", name, readErr)
+		}
+		if validateErr := exec.validateMigrationSource(name, string(content)); validateErr != nil {
+			t.Fatalf("migration %s violates blocking index-drop policy: %v", name, validateErr)
+		}
+	}
+}
 
 func TestFreshDatabaseAllowsBlockingIndexDropDuringBootstrap(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
@@ -36,7 +103,8 @@ func TestExistingDatabaseRejectsBlockingIndexDropBeforeExecution(t *testing.T) {
 	setupBlockingIndexDropProbe(t, pool)
 	fsys := blockingIndexDropManifest(`
 CREATE TABLE blocking_index_drop_side_effect(id integer);
-DROP INDEX IF EXISTS blocking_index_drop_probe_idx;
+DROP /* blocking */
+INDEX IF EXISTS blocking_index_drop_probe_idx;
 `)
 
 	_, err := Run(t.Context(), pool, fsys, Config{})
@@ -73,6 +141,17 @@ func TestExistingDatabaseAllowsConcurrentIndexDrop(t *testing.T) {
 	}
 	assertIndexPresence(t, pool, "blocking_index_drop_probe_idx", false)
 	assertMigrationRecorded(t, pool, "drop.sql", true)
+}
+
+func migrationNumber(name string) (int, error) {
+	end := 0
+	for end < len(name) && name[end] >= '0' && name[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0, strconv.ErrSyntax
+	}
+	return strconv.Atoi(name[:end])
 }
 
 func setupBlockingIndexDropProbe(t *testing.T, pool *pgxpool.Pool) {
