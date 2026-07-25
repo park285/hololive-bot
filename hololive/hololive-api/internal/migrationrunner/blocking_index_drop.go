@@ -24,7 +24,7 @@ func configureBlockingIndexDropPolicy(ctx context.Context, conn *pgxpool.Conn, e
 
 	exec.allowBlockingIndexDrop = count == 0 || cfg.AllowBlockingIndexDrop
 	if count > 0 && cfg.AllowBlockingIndexDrop {
-		cfg.logf("blocking DROP INDEX override enabled for existing database; dedicated maintenance window is required")
+		cfg.logf("blocking index-removal override enabled for existing database; dedicated maintenance window is required")
 	}
 	return nil
 }
@@ -40,7 +40,7 @@ func (e *guardedExecer) validateMigrationSource(name, content string) error {
 			continue
 		}
 		return fmt.Errorf(
-			"exec %s: blocking DROP INDEX is disabled on an existing database; use DROP INDEX CONCURRENTLY or rerun in a dedicated maintenance window with MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true",
+			"exec %s: blocking index removal is disabled on an existing database; use the concurrent form or rerun in a dedicated maintenance window with MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true",
 			name,
 		)
 	}

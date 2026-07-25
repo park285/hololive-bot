@@ -37,7 +37,7 @@ func run() error {
 	allowBlockingIndexDrop := flag.Bool(
 		"allow-blocking-index-drop",
 		allowBlockingIndexDropDefault,
-		"allow plain DROP INDEX on an existing database during a dedicated maintenance window",
+		"allow blocking index removal on an existing database during a dedicated maintenance window",
 	)
 	flag.Parse()
 

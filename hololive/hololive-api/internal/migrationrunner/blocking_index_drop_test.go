@@ -100,7 +100,7 @@ DROP INDEX IF EXISTS blocking_index_drop_probe_idx;
 	if _, err := Run(t.Context(), pool, fsys, Config{}); err != nil {
 		t.Fatalf("Run() fresh bootstrap error = %v", err)
 	}
-	assertIndexPresence(t, pool, "blocking_index_drop_probe_idx", false)
+	assertBlockingIndexPresence(t, pool, false)
 }
 
 func TestExistingDatabaseRejectsBlockingIndexDropBeforeExecution(t *testing.T) {
@@ -120,7 +120,26 @@ INDEX IF EXISTS blocking_index_drop_probe_idx;
 		t.Fatalf("Run() error = %v, want maintenance override guidance", err)
 	}
 	assertTablePresence(t, pool, "blocking_index_drop_side_effect", false)
-	assertIndexPresence(t, pool, "blocking_index_drop_probe_idx", true)
+	assertBlockingIndexPresence(t, pool, true)
+	assertMigrationRecorded(t, pool, "drop.sql", false)
+}
+
+func TestExistingDatabaseRejectsBlockingIndexDropBeforeAnyPendingMigrationExecution(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	setupBlockingIndexDropProbe(t, pool)
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 setup.sql\n002 safe.sql\n003 drop.sql\n")},
+		"setup.sql":            {Data: []byte(blockingIndexDropSetupSQL)},
+		"safe.sql":             {Data: []byte("CREATE TABLE blocking_index_drop_early_side_effect(id integer);")},
+		"drop.sql":             {Data: []byte("DROP INDEX IF EXISTS blocking_index_drop_probe_idx;")},
+	}
+
+	if _, err := Run(t.Context(), pool, fsys, Config{}); err == nil {
+		t.Fatal("Run() error = nil, want blocking DROP INDEX refusal")
+	}
+	assertTablePresence(t, pool, "blocking_index_drop_early_side_effect", false)
+	assertBlockingIndexPresence(t, pool, true)
+	assertMigrationRecorded(t, pool, "safe.sql", false)
 	assertMigrationRecorded(t, pool, "drop.sql", false)
 }
 
@@ -132,7 +151,7 @@ func TestExistingDatabaseMaintenanceOverrideAllowsBlockingIndexDrop(t *testing.T
 	if _, err := Run(t.Context(), pool, fsys, Config{AllowBlockingIndexDrop: true}); err != nil {
 		t.Fatalf("Run() maintenance override error = %v", err)
 	}
-	assertIndexPresence(t, pool, "blocking_index_drop_probe_idx", false)
+	assertBlockingIndexPresence(t, pool, false)
 	assertMigrationRecorded(t, pool, "drop.sql", true)
 }
 
@@ -144,7 +163,7 @@ func TestExistingDatabaseAllowsConcurrentIndexDrop(t *testing.T) {
 	if _, err := Run(t.Context(), pool, fsys, Config{}); err != nil {
 		t.Fatalf("Run() concurrent drop error = %v", err)
 	}
-	assertIndexPresence(t, pool, "blocking_index_drop_probe_idx", false)
+	assertBlockingIndexPresence(t, pool, false)
 	assertMigrationRecorded(t, pool, "drop.sql", true)
 }
 
@@ -189,8 +208,10 @@ func assertTablePresence(t *testing.T, pool *pgxpool.Pool, name string, want boo
 	}
 }
 
-func assertIndexPresence(t *testing.T, pool *pgxpool.Pool, name string, want bool) {
+func assertBlockingIndexPresence(t *testing.T, pool *pgxpool.Pool, want bool) {
 	t.Helper()
+	const name = "blocking_index_drop_probe_idx"
+
 	var present bool
 	if err := pool.QueryRow(t.Context(), "SELECT to_regclass($1) IS NOT NULL", name).Scan(&present); err != nil {
 		t.Fatalf("query index %s: %v", name, err)

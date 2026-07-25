@@ -18,15 +18,20 @@ type migrationSource struct {
 	checksumPresent bool
 }
 
+type plannedMigration struct {
+	source  migrationSource
+	applied bool
+}
+
 func applyManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
-	querier := pgxRowQuerier{conn: conn}
+	plan, err := planManifest(ctx, conn, fsys, exec, ledger, entries)
+	if err != nil {
+		return Result{}, err
+	}
+
 	result := Result{Total: len(entries)}
-	for _, name := range entries {
-		source, err := loadMigrationSource(ctx, conn, fsys, name)
-		if err != nil {
-			return Result{}, err
-		}
-		applied, err := applyMigrationSource(ctx, exec, ledger, querier, source, cfg)
+	for _, migration := range plan {
+		applied, err := applyPlannedMigration(ctx, exec, ledger, migration, cfg)
 		if err != nil {
 			return Result{}, err
 		}
@@ -37,6 +42,48 @@ func applyManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *gu
 		}
 	}
 	return result, nil
+}
+
+func applyPlannedMigration(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, migration plannedMigration, cfg Config) (bool, error) {
+	if migration.applied {
+		return false, skipAppliedMigration(ctx, exec, migration.source, cfg)
+	}
+
+	cfg.logf("apply %s", migration.source.name)
+	if err := applyEntry(ctx, exec, ledger, migration.source); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func planManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string) ([]plannedMigration, error) {
+	querier := pgxRowQuerier{conn: conn}
+	plan := make([]plannedMigration, 0, len(entries))
+	for _, name := range entries {
+		migration, err := planMigration(ctx, conn, fsys, exec, ledger, querier, name)
+		if err != nil {
+			return nil, err
+		}
+		plan = append(plan, migration)
+	}
+	return plan, nil
+}
+
+func planMigration(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, querier dbmigrate.RowQuerier, name string) (plannedMigration, error) {
+	source, err := loadMigrationSource(ctx, conn, fsys, name)
+	if err != nil {
+		return plannedMigration{}, err
+	}
+	applied, err := ledger.Applied(ctx, querier, source.name)
+	if err != nil {
+		return plannedMigration{}, err
+	}
+	if !applied {
+		if err := exec.validateMigrationSource(source.name, source.content); err != nil {
+			return plannedMigration{}, err
+		}
+	}
+	return plannedMigration{source: source, applied: applied}, nil
 }
 
 func loadMigrationSource(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, name string) (migrationSource, error) {
@@ -55,21 +102,6 @@ func loadMigrationSource(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, na
 	return migrationSource{name: name, content: string(content), checksum: checksum, checksumPresent: present}, nil
 }
 
-func applyMigrationSource(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, querier dbmigrate.RowQuerier, source migrationSource, cfg Config) (bool, error) {
-	alreadyApplied, err := ledger.Applied(ctx, querier, source.name)
-	if err != nil {
-		return false, err
-	}
-	if alreadyApplied {
-		return false, skipAppliedMigration(ctx, exec, source, cfg)
-	}
-	cfg.logf("apply %s", source.name)
-	if err := applyEntry(ctx, exec, ledger, source); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
 func skipAppliedMigration(ctx context.Context, exec *guardedExecer, source migrationSource, cfg Config) error {
 	if !source.checksumPresent {
 		if err := recordMigrationChecksum(ctx, exec.Exec, source.name, source.checksum); err != nil {
@@ -81,9 +113,6 @@ func skipAppliedMigration(ctx context.Context, exec *guardedExecer, source migra
 }
 
 func applyEntry(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, source migrationSource) error {
-	if err := exec.validateMigrationSource(source.name, source.content); err != nil {
-		return err
-	}
 	if err := exec.execFile(ctx, source.name, source.content); err != nil {
 		return err
 	}
