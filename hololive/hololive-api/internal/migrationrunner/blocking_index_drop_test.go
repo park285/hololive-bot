@@ -5,6 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/dbmigrate"
 
 	"github.com/kapu/hololive-dbtest"
@@ -70,7 +71,7 @@ func TestExistingDatabaseAllowsConcurrentIndexDrop(t *testing.T) {
 	assertMigrationRecorded(t, pool, "drop.sql", true)
 }
 
-func setupBlockingIndexDropProbe(t *testing.T, pool dbtest.Pool) {
+func setupBlockingIndexDropProbe(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 setup.sql\n")},
@@ -89,7 +90,7 @@ func blockingIndexDropManifest(dropSQL string) fstest.MapFS {
 	}
 }
 
-func assertIndexPresence(t *testing.T, pool dbtest.Pool, name string, want bool) {
+func assertIndexPresence(t *testing.T, pool *pgxpool.Pool, name string, want bool) {
 	t.Helper()
 	var present bool
 	if err := pool.QueryRow(t.Context(), "SELECT to_regclass($1) IS NOT NULL", name).Scan(&present); err != nil {
@@ -100,7 +101,7 @@ func assertIndexPresence(t *testing.T, pool dbtest.Pool, name string, want bool)
 	}
 }
 
-func assertMigrationRecorded(t *testing.T, pool dbtest.Pool, name string, want bool) {
+func assertMigrationRecorded(t *testing.T, pool *pgxpool.Pool, name string, want bool) {
 	t.Helper()
 	var recorded bool
 	if err := pool.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE filename = $1)", name).Scan(&recorded); err != nil {
