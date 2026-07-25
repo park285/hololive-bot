@@ -22,7 +22,7 @@ blocking_drop = re.compile(r"^\s*DROP\s+INDEX\b", re.IGNORECASE | re.DOTALL)
 concurrent_drop = re.compile(r"^\s*DROP\s+INDEX\s+CONCURRENTLY\b", re.IGNORECASE | re.DOTALL)
 
 
-def dollar_tag(text: str, pos: int) -> str | None:
+def dollar_tag(text, pos):
     if text[pos] != "$":
         return None
     end = pos + 1
@@ -36,7 +36,7 @@ def dollar_tag(text: str, pos: int) -> str | None:
     return None
 
 
-def scan_quoted(text: str, pos: int) -> int:
+def scan_quoted(text, pos):
     quote = text[pos]
     escape_string = quote == "'" and pos > 0 and text[pos - 1] in {"E", "e"}
     pos += 1
@@ -54,7 +54,7 @@ def scan_quoted(text: str, pos: int) -> int:
     return pos
 
 
-def scan_block_comment(text: str, pos: int) -> int:
+def scan_block_comment(text, pos):
     depth = 1
     pos += 2
     while pos < len(text) and depth > 0:
@@ -69,12 +69,12 @@ def scan_block_comment(text: str, pos: int) -> int:
     return pos
 
 
-def statements(text: str) -> list[str]:
-    result: list[str] = []
-    buffer: list[str] = []
+def statements(text):
+    result = []
+    buffer = []
     pos = 0
 
-    def flush() -> None:
+    def flush():
         statement = "".join(buffer).strip()
         buffer.clear()
         if statement:
