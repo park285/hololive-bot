@@ -220,7 +220,7 @@ services:
     image: ${POSTGRES_IMAGE:-postgres:18@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20}
     container_name: holo-postgres
     oom_score_adj: -300
-    shm_size: 256mb
+    shm_size: 512mb
     command:
       - postgres
       - "-c"
@@ -238,11 +238,11 @@ services:
       - "-c"
       - "track_wal_io_timing=on"
       - "-c"
-      - "shared_buffers=128MB"
+      - "shared_buffers=512MB"
       - "-c"
-      - "effective_cache_size=256MB"
+      - "effective_cache_size=1536MB"
       - "-c"
-      - "maintenance_work_mem=64MB"
+      - "maintenance_work_mem=128MB"
       - "-c"
       - "work_mem=4MB"
       - "-c"
@@ -291,13 +291,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    # shm_size 256mb는 tmpfs라 컨테이너 메모리 cgroup에 합산된다:
-    # shared_buffers 128MB + shm 최대 256MB + work_mem/maintenance 여유분 → 512m은 OOM-kill 산수.
-    # 상한을 1g로 상향(대안: shm_size 128mb 축소). valkey는 기존 *deploy-512m 유지.
+    # burst 시 shared buffers와 dynamic shared memory를 동시에 수용하도록 DB 전용 여유분을 둔다.
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 2g
           pids: 256
     networks:
       - hololive-net
