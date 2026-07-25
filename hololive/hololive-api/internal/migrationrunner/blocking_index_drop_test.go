@@ -79,7 +79,7 @@ func setupBlockingIndexDropProbe(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 setup.sql\n")},
-		"setup.sql":           {Data: []byte(blockingIndexDropSetupSQL)},
+		"setup.sql":            {Data: []byte(blockingIndexDropSetupSQL)},
 	}
 	if _, err := Run(t.Context(), pool, fsys, Config{}); err != nil {
 		t.Fatalf("setup Run() error = %v", err)
@@ -89,8 +89,8 @@ func setupBlockingIndexDropProbe(t *testing.T, pool *pgxpool.Pool) {
 func blockingIndexDropManifest(dropSQL string) fstest.MapFS {
 	return fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 setup.sql\n002 drop.sql\n")},
-		"setup.sql":           {Data: []byte(blockingIndexDropSetupSQL)},
-		"drop.sql":            {Data: []byte(dropSQL)},
+		"setup.sql":            {Data: []byte(blockingIndexDropSetupSQL)},
+		"drop.sql":             {Data: []byte(dropSQL)},
 	}
 }
 
