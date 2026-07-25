@@ -14,10 +14,10 @@
 # limitations under the License.
 
 ARG GO_VERSION=1.26.5
-ARG ALPINE_VERSION=3.23
-ARG NODE_VERSION=22
+ARG ALPINE_VERSION=3.24
+ARG NODE_VERSION=24
 
-FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e AS frontend-builder
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS frontend-builder
 WORKDIR /app/frontend
 
 COPY admin-dashboard/frontend/package.json admin-dashboard/frontend/package-lock.json ./
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY admin-dashboard/frontend/ .
 RUN npm run build
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:5e9acfbe29a783d9e2295bc88d30b7c3556e31c8bd21de10a887c4572f58dbd9 AS builder
+FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
 
 ARG VERSION=dev
 ARG TARGETOS
@@ -77,7 +77,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
     if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/admin-dashboard /dist/bin/healthcheck; fi
 
-FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838
+FROM gcr.io/distroless/static-debian12@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="admin-dashboard" \

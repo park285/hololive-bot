@@ -14,9 +14,9 @@
 # limitations under the License.
 
 ARG GO_VERSION=1.26.5
-ARG ALPINE_VERSION=3.23
+ARG ALPINE_VERSION=3.24
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:5e9acfbe29a783d9e2295bc88d30b7c3556e31c8bd21de10a887c4572f58dbd9 AS builder
+FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
 
 ARG VERSION=dev
 ARG TARGETOS
@@ -74,7 +74,7 @@ RUN \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 
-FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838
+FROM gcr.io/distroless/static-debian12@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="hololive-alarm-worker" \
