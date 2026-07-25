@@ -487,7 +487,7 @@ services:
       LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MIN_CONNS:-1}
       LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS: ${LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS:-4}
       ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-172.16.0.0/12,127.0.0.1/32}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://admin.holo-oshi.com,https://admin.capu.blog}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://admin.holoshi.com}
       CORS_ENFORCE: ${CORS_ENFORCE:-true}
       KAKAO_ROOMS: ${KAKAO_ROOMS:-}
       KAKAO_ACL_ENABLED: ${KAKAO_ACL_ENABLED:-true}
@@ -625,7 +625,7 @@ services:
       # 안전하게 격하된다(단일 버킷 rate limit).
       TRUSTED_PROXY_CIDRS: "172.23.0.1/32"
       LOG_LEVEL: "info"
-      ALLOWED_ORIGINS: "https://admin.holo-oshi.com,https://admin.capu.blog"
+      ALLOWED_ORIGINS: "https://admin.holoshi.com"
       ADMIN_USER: ${ADMIN_USER:-admin}
       SESSION_TOKEN_ROTATION: "true"
       DOCKER_HOST: tcp://docker-proxy:2375

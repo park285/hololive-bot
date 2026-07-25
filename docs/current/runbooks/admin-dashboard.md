@@ -9,7 +9,7 @@
 | Check | Expected |
 |---|---|
 | Health | `http://127.0.0.1:30190/health` returns `{"status":"ok"}` |
-| Public ingress | Seoul Caddy proxies `admin.holo-oshi.com` to `100.100.1.3:30191`; central `admin-dashboard-ingress.socket` bridges that to loopback `127.0.0.1:30190` |
+| Public ingress | Seoul Nginx proxies `admin.holoshi.com` to `100.100.1.3:30191`; central `admin-dashboard-ingress` Nginx proxies that to loopback `127.0.0.1:30190` |
 | Container | `admin-dashboard` healthy (`./bin/healthcheck` 기반 compose healthcheck) |
 | Auth | 미인증 `/admin/api/*` 호출이 401 JSON 반환 |
 | Logs | no repeated valkey/session/relay errors |
@@ -83,22 +83,27 @@ cd admin-dashboard/frontend && npm ci && npm run lint && npm run build
 ## Public ingress
 
 `admin-dashboard`는 중앙 호스트에서 `127.0.0.1:30190` loopback-only로 유지합니다. 공개 도메인
-`admin.holo-oshi.com`은 Seoul Caddy가 종료점을 맡고, 중앙 호스트의
-`admin-dashboard-ingress.socket`이 Tailscale 전용 포트 `100.100.1.3:30191`에서 받아
+`admin.holoshi.com`은 Seoul Nginx가 TLS/HTTP3 종료점을 맡고, 중앙 호스트의 host-networked
+`admin-dashboard-ingress` Nginx 컨테이너가 Tailscale 전용 포트 `100.100.1.3:30191`에서 받아
 `127.0.0.1:30190`으로 전달합니다.
 
-중앙 호스트 source 제한은 `admin-dashboard-ingress-firewall.service`가
-`/etc/nftables.d/admin-dashboard-ingress.nft`를 로드해서 적용합니다. 허용 source는 Seoul gateway
-`100.100.1.5`와 로컬 loopback뿐입니다.
+source 제한은 `deploy/nginx/admin-dashboard-ingress.conf`가 적용합니다. 허용 source는 Seoul gateway
+`100.100.1.5`, 중앙 Tailscale 주소 `100.100.1.3`, 로컬 loopback뿐입니다. 컨테이너는 Tailscale IP가
+아직 준비되지 않아 bind에 실패해도 `restart: unless-stopped`로 재시도하므로 systemd의 early-boot
+`sockets.target` ordering에 의존하지 않습니다.
 
 설치/재적용:
 
 ```bash
-sudo scripts/deploy/sync-opt-current.sh
-sudo systemctl enable --now admin-dashboard-ingress-firewall.service admin-dashboard-ingress.socket
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env \
+  ./scripts/deploy/compose.sh up -d --no-deps admin-dashboard-ingress
 ```
 
-Seoul Caddy upstream:
+기존 `admin-dashboard-ingress.socket`/`.service`와 firewall unit은 Nginx health 확인 후 한 번만
+`disable --now`하고 제거합니다. 먼저 timestamp backup을 남기고, rollback 시 Nginx를 중지한 뒤
+백업 unit과 nft 규칙을 복원합니다.
+
+Seoul Nginx upstream:
 
 ```text
 reverse_proxy 100.100.1.3:30191
@@ -108,6 +113,7 @@ reverse_proxy 100.100.1.3:30191
 
 ```bash
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f admin-dashboard
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f admin-dashboard-ingress
 tail -f logs/admin-dashboard.log
 ```
 
@@ -186,7 +192,7 @@ Mitigation:
 ```bash
 curl -s http://127.0.0.1:30190/health
 curl -fsS http://100.100.1.3:30191/health   # central 또는 Seoul gateway에서 실행
-curl -fsS https://admin.holo-oshi.com/health
+curl -fsS https://admin.holoshi.com/health
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30190/admin/api/auth/session   # 401
 curl -sI http://127.0.0.1:30190/health | grep -i x-content-type-options                  # nosniff
 ```

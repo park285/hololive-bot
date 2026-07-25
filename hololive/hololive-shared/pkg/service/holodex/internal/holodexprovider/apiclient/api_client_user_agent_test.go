@@ -17,7 +17,7 @@ func TestNewRequestUsesRepositoryOwnedUserAgent(t *testing.T) {
 	if got != holodexUserAgent {
 		t.Fatalf("User-Agent = %q, want %q", got, holodexUserAgent)
 	}
-	if strings.Contains(got, "capu.blog") {
+	if strings.Contains(got, "holoshi.com") {
 		t.Fatalf("User-Agent = %q, deployment domain must not be hardcoded", got)
 	}
 }

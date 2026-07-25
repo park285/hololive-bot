@@ -61,7 +61,7 @@ func TestDevelopmentOriginsUseLocalhostFallbackOnly(t *testing.T) {
 		if !isLocalhostOrigin(origin) {
 			t.Fatalf("fallback origin = %q, want localhost", origin)
 		}
-		if strings.Contains(origin, "capu.blog") {
+		if strings.Contains(origin, "holoshi.com") {
 			t.Fatalf("fallback origin = %q, deployment domain must not be hardcoded", origin)
 		}
 	}

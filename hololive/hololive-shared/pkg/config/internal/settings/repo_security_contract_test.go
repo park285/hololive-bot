@@ -774,7 +774,7 @@ func assertLiveCompatDashboardOrigin(t *testing.T, cfg renderedCompose) {
 	if strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "100.100.1.3:30190") {
 		t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want no default Tailnet origin", dashboardEnv["ALLOWED_ORIGINS"])
 	}
-	if !strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "https://admin.holo-oshi.com") {
+	if !strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "https://admin.holoshi.com") {
 		t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want explicit HTTPS admin origin", dashboardEnv["ALLOWED_ORIGINS"])
 	}
 }
