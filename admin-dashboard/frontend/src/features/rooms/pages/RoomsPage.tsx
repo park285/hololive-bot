@@ -8,8 +8,8 @@ export const RoomsPage = () => {
 	const {
 		newRoom,
 		setNewRoom,
-		deleteModal,
-		setDeleteModal,
+		removeModal,
+		setRemoveModal,
 		query,
 		addRoomMutation,
 		removeRoomMutation,
@@ -20,12 +20,11 @@ export const RoomsPage = () => {
 		labels,
 		isBlacklist,
 		joinedRooms,
-		joinedRoomsMap,
 		joinedLoading,
 		joinedUnavailable,
 		handleAddRoom,
 		handleAddRoomId,
-		confirmDelete,
+		confirmRemoveRoom,
 		handleToggleACL,
 		handleModeChange,
 	} = useRoomsPage();
@@ -89,7 +88,6 @@ export const RoomsPage = () => {
 				rooms={rooms}
 				listTitle={labels.listTitle}
 				emptyText={labels.emptyText}
-				addTitle={labels.addTitle}
 				indicatorClassName={labels.indicator}
 				isBlacklist={isBlacklist}
 				infoMessage={
@@ -101,31 +99,49 @@ export const RoomsPage = () => {
 				onNewRoomChange={setNewRoom}
 				onAddRoom={handleAddRoom}
 				onAddRoomId={handleAddRoomId}
-				onDeleteRoom={(room) => {
-					setDeleteModal({ isOpen: true, room });
+				onRemoveRoom={(room) => {
+					removeRoomMutation.reset();
+					setRemoveModal({ isOpen: true, room });
 				}}
 				addPending={addRoomMutation.isPending}
 				removePending={removeRoomMutation.isPending}
 				joinedRooms={joinedRooms}
-				joinedRoomsMap={joinedRoomsMap}
 				joinedLoading={joinedLoading}
 				joinedUnavailable={joinedUnavailable}
+				actionError={addRoomMutation.error ?? removeRoomMutation.error}
 			/>
 
 			<ConfirmModal
-				isOpen={deleteModal.isOpen}
+				isOpen={removeModal.isOpen}
 				onClose={() => {
-					setDeleteModal({ isOpen: false, room: "" });
+					if (!removeRoomMutation.isPending) {
+						setRemoveModal({ isOpen: false, room: "" });
+					}
 				}}
-				onConfirm={confirmDelete}
-				title={isBlacklist ? "차단 해제" : "채팅방 삭제"}
-				message={labels.deleteConfirm}
-				confirmText="삭제"
-				confirmColor="danger"
+				onConfirm={confirmRemoveRoom}
+				title={isBlacklist ? "차단 해제" : "허용 해제"}
+				message={labels.removeConfirm}
+				confirmText={
+					removeRoomMutation.isPending
+						? "처리 중…"
+						: isBlacklist
+							? "차단 해제"
+							: "허용 해제"
+				}
+				confirmColor={isBlacklist ? "primary" : "danger"}
+				isPending={removeRoomMutation.isPending}
 			>
-				{deleteModal.room && (
+				{removeModal.room && (
 					<div className="bg-muted p-3 rounded-lg mt-2 text-center font-mono font-bold text-foreground border border-border">
-						{deleteModal.room}
+						{removeModal.room}
+					</div>
+				)}
+				{removeRoomMutation.isError && (
+					<div
+						role="alert"
+						className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"
+					>
+						변경사항을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.
 					</div>
 				)}
 			</ConfirmModal>

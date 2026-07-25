@@ -65,7 +65,7 @@ export const BaseModal = ({
 					role="dialog"
 					aria-modal="true"
 					className={clsx(
-						"w-full overflow-hidden rounded-2xl border border-border-subtle bg-card p-6 text-left shadow-xl",
+						"max-h-[calc(100dvh-2rem)] w-full overflow-y-auto overscroll-contain rounded-2xl border border-border-subtle bg-card p-6 text-left shadow-xl",
 						maxWidthClasses[maxWidth],
 					)}
 				>

@@ -145,6 +145,19 @@ test("msw serves generated-client collection endpoints", async () => {
 	assert.equal(rooms.rooms.length, 2);
 });
 
+test("roomsApi removes an ACL entry with a DELETE request body", async () => {
+	server.use(
+		http.delete("*/admin/api/holo/rooms", async ({ request }) => {
+			assert.deepEqual(await request.json(), { room: "200000000000002" });
+			return HttpResponse.json({ status: "ok", message: "removed" });
+		}),
+	);
+
+	const response = await roomsApi.remove({ room: "200000000000002" });
+
+	assert.equal(response.status, "ok");
+});
+
 test("msw preserves stream query defaults and upcoming results", async () => {
 	const [live, upcoming] = await Promise.all([
 		streamsApi.getLive("hololive"),
