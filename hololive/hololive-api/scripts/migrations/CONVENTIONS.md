@@ -15,10 +15,15 @@
 - 따라서: ① 모든 문장은 멱등이어야 한다(`IF [NOT] EXISTS`, `NOT VALID` 재적용 가드, 조건부 DO 블록).
   ② `CREATE/DROP INDEX CONCURRENTLY` 사용 가능(autocommit 문장). ③ `BEGIN;/COMMIT;` 블록 안에는
   CONCURRENTLY를 넣을 수 없다 — 러너와 `check-migration-manifest.sh`가 명시적 에러로 거부한다.
+- 기존 ledger가 있는 DB에서는 plain `DROP INDEX`를 SQL 실행 전에 거부한다. 새 migration은
+  `DROP INDEX CONCURRENTLY`를 사용한다. 이미 존재하는 maintenance-only migration을 적용해야 할 때만
+  서비스 quiescence를 확인한 전용 점검 창에서 `MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true`를 명시한다.
+  빈 DB의 fresh bootstrap은 전체 manifest 재생을 위해 plain drop을 허용한다.
 - 과거에 적용된 파일의 수정은 프로덕션에 영향이 없고(ledger skip) fresh bootstrap/dbtest 경로만 바꾼다.
   프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다.
 - 레거시 수동 경로 `apply-all.sh`(파일 단위 `psql -f`, `-1` 미사용)는 psql 세션이 `BEGIN;/COMMIT;`을
-  그대로 실행하므로 위와 동일 의미론이다.
+  그대로 실행하므로 위와 동일 의미론이다. 단, blocking index-drop guard는 Go 러너 소유이므로
+  프로덕션과 복구 적용은 `db-migrate`를 사용한다.
 
 ## 번호
 
