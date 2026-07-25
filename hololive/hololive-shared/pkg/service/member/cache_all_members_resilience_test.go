@@ -29,15 +29,16 @@ func TestCacheAllMembers_SharedLoadHasOwnedDeadline(t *testing.T) {
 		},
 	}
 
+	startedAt := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := c.AllMembers(ctx); err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
 
-	remaining := time.Until(loaderDeadline)
-	if remaining <= allMembersSnapshotLoadTimeout/2 || remaining > allMembersSnapshotLoadTimeout {
-		t.Fatalf("shared load deadline remaining = %v, want bounded near %v", remaining, allMembersSnapshotLoadTimeout)
+	deadlineBudget := loaderDeadline.Sub(startedAt)
+	if deadlineBudget < allMembersSnapshotLoadTimeout-time.Second || deadlineBudget > allMembersSnapshotLoadTimeout+time.Second {
+		t.Fatalf("shared load deadline budget = %v, want near %v", deadlineBudget, allMembersSnapshotLoadTimeout)
 	}
 }
 
@@ -57,7 +58,7 @@ func TestCacheAllMembers_StaleFallbackDefersRepeatedReloads(t *testing.T) {
 		loadedAt: time.Now().Add(-2 * time.Minute),
 	})
 
-	for attempt := range 2 {
+	for attempt := 0; attempt < 2; attempt++ {
 		got, err := c.AllMembers(context.Background())
 		if err != nil {
 			t.Fatalf("AllMembers() attempt %d error = %v", attempt+1, err)
