@@ -27,14 +27,23 @@ export const RoomsAclSection = ({
 	return (
 		<Card
 			className={clsx(
-				"relative transition-all duration-300 border overflow-hidden",
+				"relative overflow-hidden border transition-[background-color,border-color,box-shadow] duration-300",
 				aclEnabled
 					? "bg-card border-blue-100 shadow-sm"
 					: "bg-muted border-border",
 			)}
 		>
 			<div className="p-6 space-y-5">
-			<div className={clsx("absolute top-0 left-0 right-0 h-1", !aclEnabled ? "bg-linear-to-r from-slate-300 to-slate-400" : isBlacklist ? "bg-linear-to-r from-rose-400 to-rose-500" : "bg-linear-to-r from-sky-400 to-cyan-400")} />
+				<div
+					className={clsx(
+						"absolute top-0 left-0 right-0 h-1",
+						!aclEnabled
+							? "bg-linear-to-r from-slate-300 to-slate-400"
+							: isBlacklist
+								? "bg-linear-to-r from-rose-400 to-rose-500"
+								: "bg-linear-to-r from-sky-400 to-cyan-400",
+					)}
+				/>
 				<div className="flex flex-col md:flex-row items-center justify-between gap-4">
 					<div className="flex items-start gap-4">
 						<div
@@ -117,7 +126,7 @@ export const RoomsAclSection = ({
 								}}
 								disabled={isPending}
 								className={clsx(
-									"px-4 py-1.5 rounded-md text-sm font-semibold transition-all",
+									"px-4 py-1.5 rounded-md text-sm font-semibold transition-colors",
 									!isBlacklist
 										? "bg-card text-blue-700 shadow-sm"
 										: "text-muted-foreground hover:text-foreground",
@@ -134,7 +143,7 @@ export const RoomsAclSection = ({
 								}}
 								disabled={isPending}
 								className={clsx(
-									"px-4 py-1.5 rounded-md text-sm font-semibold transition-all",
+									"px-4 py-1.5 rounded-md text-sm font-semibold transition-colors",
 									isBlacklist
 										? "bg-card text-rose-700 shadow-sm"
 										: "text-muted-foreground hover:text-foreground",

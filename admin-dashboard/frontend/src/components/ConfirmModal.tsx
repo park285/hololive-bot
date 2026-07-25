@@ -9,6 +9,7 @@ interface ConfirmModalProps {
 	message: React.ReactNode;
 	confirmText?: string;
 	confirmColor?: "primary" | "danger";
+	isPending?: boolean;
 	children?: React.ReactNode;
 }
 
@@ -20,12 +21,16 @@ export function ConfirmModal({
 	message,
 	confirmText = "확인",
 	confirmColor = "primary",
+	isPending = false,
 	children,
 }: ConfirmModalProps) {
 	const buttonVariant = confirmColor === "danger" ? "destructive" : "default";
+	const handleClose = () => {
+		if (!isPending) onClose();
+	};
 
 	return (
-		<BaseModal isOpen={isOpen} onClose={onClose} title={title}>
+		<BaseModal isOpen={isOpen} onClose={handleClose} title={title}>
 			<div className="mt-2">
 				<div className="text-sm text-muted-foreground whitespace-pre-wrap">
 					{message}
@@ -34,11 +39,22 @@ export function ConfirmModal({
 			</div>
 
 			<div className="mt-6 flex justify-end gap-3">
-				<Button type="button" variant="outline" onClick={onClose}>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={handleClose}
+					disabled={isPending}
+				>
 					취소
 				</Button>
-				<Button type="button" variant={buttonVariant} onClick={onConfirm}>
-					{confirmText}
+				<Button
+					type="button"
+					variant={buttonVariant}
+					onClick={onConfirm}
+					disabled={isPending}
+					aria-busy={isPending}
+				>
+					<span aria-live="polite">{confirmText}</span>
 				</Button>
 			</div>
 		</BaseModal>
