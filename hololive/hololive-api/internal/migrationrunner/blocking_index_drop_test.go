@@ -32,6 +32,11 @@ func TestBlockingIndexDropSourcePolicy(t *testing.T) {
 			wantFail: true,
 		},
 		{
+			name:     "leading comment drop",
+			source:   "-- maintenance DDL\nDROP INDEX IF EXISTS unsafe_index;",
+			wantFail: true,
+		},
+		{
 			name:   "concurrent drop",
 			source: "DROP /* safe */ INDEX\nCONCURRENTLY IF EXISTS safe_index;",
 		},
