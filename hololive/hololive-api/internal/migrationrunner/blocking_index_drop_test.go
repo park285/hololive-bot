@@ -34,7 +34,10 @@ DROP INDEX IF EXISTS blocking_index_drop_probe_idx;
 func TestExistingDatabaseRejectsBlockingIndexDropBeforeExecution(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	setupBlockingIndexDropProbe(t, pool)
-	fsys := blockingIndexDropManifest("DROP INDEX IF EXISTS blocking_index_drop_probe_idx;")
+	fsys := blockingIndexDropManifest(`
+CREATE TABLE blocking_index_drop_side_effect(id integer);
+DROP INDEX IF EXISTS blocking_index_drop_probe_idx;
+`)
 
 	_, err := Run(t.Context(), pool, fsys, Config{})
 	if err == nil {
@@ -43,6 +46,7 @@ func TestExistingDatabaseRejectsBlockingIndexDropBeforeExecution(t *testing.T) {
 	if !strings.Contains(err.Error(), "MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true") {
 		t.Fatalf("Run() error = %v, want maintenance override guidance", err)
 	}
+	assertTablePresence(t, pool, "blocking_index_drop_side_effect", false)
 	assertIndexPresence(t, pool, "blocking_index_drop_probe_idx", true)
 	assertMigrationRecorded(t, pool, "drop.sql", false)
 }
@@ -87,6 +91,17 @@ func blockingIndexDropManifest(dropSQL string) fstest.MapFS {
 		dbmigrate.ManifestName: {Data: []byte("001 setup.sql\n002 drop.sql\n")},
 		"setup.sql":           {Data: []byte(blockingIndexDropSetupSQL)},
 		"drop.sql":            {Data: []byte(dropSQL)},
+	}
+}
+
+func assertTablePresence(t *testing.T, pool *pgxpool.Pool, name string, want bool) {
+	t.Helper()
+	var present bool
+	if err := pool.QueryRow(t.Context(), "SELECT to_regclass($1) IS NOT NULL", name).Scan(&present); err != nil {
+		t.Fatalf("query table %s: %v", name, err)
+	}
+	if present != want {
+		t.Fatalf("table %s present = %t, want %t", name, present, want)
 	}
 }
 
