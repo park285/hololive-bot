@@ -8,4 +8,3 @@
 		    updated_at = EXCLUDED.updated_at
 		WHERE (youtube_content_watermarks.initialized, youtube_content_watermarks.last_content_id)
 		      IS DISTINCT FROM (EXCLUDED.initialized, EXCLUDED.last_content_id)
-		

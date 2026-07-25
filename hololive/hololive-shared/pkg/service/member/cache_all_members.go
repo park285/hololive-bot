@@ -78,6 +78,10 @@ func (*Cache) snapshotReloadDeferred(snap *allMembersState, now time.Time) bool 
 }
 
 func (c *Cache) loadAllMembersSnapshot(ctx context.Context, snap *allMembersState) ([]*domain.Member, error) {
+	return c.loadAllMembersSnapshotWithin(ctx, snap, allMembersSnapshotLoadTimeout)
+}
+
+func (c *Cache) loadAllMembersSnapshotWithin(ctx context.Context, snap *allMembersState, loadTimeout time.Duration) ([]*domain.Member, error) {
 	loader := c.loadAllMembers
 	if loader == nil {
 		if c.repository == nil {
@@ -87,7 +91,7 @@ func (c *Cache) loadAllMembersSnapshot(ctx context.Context, snap *allMembersStat
 	}
 
 	result, err, _ := c.allMembersGroup.Do(allMembersSnapshotKey, func() (any, error) {
-		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), allMembersSnapshotLoadTimeout)
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), loadTimeout)
 		defer cancel()
 
 		members, err := loader(loadCtx)

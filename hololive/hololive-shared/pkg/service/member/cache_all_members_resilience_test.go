@@ -1,16 +1,37 @@
 package member
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+func TestCacheAllMembers_SharedLoadStopsAtOwnedDeadline(t *testing.T) {
+	c := &Cache{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		loadAllMembers: func(ctx context.Context) ([]*domain.Member, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+
+	startedAt := time.Now()
+	_, err := c.loadAllMembersSnapshotWithin(context.Background(), nil, 20*time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("loadAllMembersSnapshotWithin() error = %v, want context deadline exceeded", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > time.Second {
+		t.Fatalf("shared load elapsed = %v, want bounded deadline", elapsed)
+	}
+}
 
 func TestCacheAllMembers_SharedLoadHasOwnedDeadline(t *testing.T) {
 	var loaderDeadline time.Time
@@ -58,7 +79,7 @@ func TestCacheAllMembers_StaleFallbackDefersRepeatedReloads(t *testing.T) {
 		loadedAt: time.Now().Add(-2 * time.Minute),
 	})
 
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		got, err := c.AllMembers(context.Background())
 		if err != nil {
 			t.Fatalf("AllMembers() attempt %d error = %v", attempt+1, err)
@@ -79,8 +100,9 @@ func TestCacheAllMembers_StaleFallbackDefersRepeatedReloads(t *testing.T) {
 
 func TestCacheAllMembers_ReloadsAfterRetryBoundaryAndClearsBackoff(t *testing.T) {
 	var calls atomic.Int64
+	var logs bytes.Buffer
 	c := &Cache{
-		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:      slog.New(slog.NewTextHandler(&logs, nil)),
 		snapshotTTL: time.Minute,
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
 			calls.Add(1)
@@ -105,5 +127,8 @@ func TestCacheAllMembers_ReloadsAfterRetryBoundaryAndClearsBackoff(t *testing.T)
 	}
 	if snap := c.allMembersSnapshot.Load(); snap == nil || !snap.retryAfter.IsZero() {
 		t.Fatalf("recovered snapshot retry_after = %v, want zero", snap)
+	}
+	if got := logs.String(); !strings.Contains(got, "member_snapshot_reload_recovered") {
+		t.Fatalf("recovery log = %q, want member_snapshot_reload_recovered", got)
 	}
 }
