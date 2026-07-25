@@ -48,7 +48,7 @@ func TestIsLocalhostOrigin(t *testing.T) {
 		{"127.0.0.1", true},
 		{"http://[::1]:5173", true},
 		{"https://[::1]", true},
-		{"http://admin.capu.blog", false},
+		{"http://admin.holoshi.com", false},
 		{"https://example.com:443", false},
 		{"http://[2001:db8::1]:80", false},
 		{"http://127.0.0.2:5173", false},
