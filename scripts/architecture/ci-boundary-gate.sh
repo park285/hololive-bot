@@ -63,7 +63,7 @@ echo "[M1] migration manifest check"
 echo
 
 echo "[M1] blocking index-drop migration check"
-"${SCRIPT_DIR}/check-blocking-index-drop-migrations.sh"
+bash "${SCRIPT_DIR}/check-blocking-index-drop-migrations.sh"
 bash "${SCRIPT_DIR}/check-blocking-index-drop-migrations_test.sh"
 echo
 
