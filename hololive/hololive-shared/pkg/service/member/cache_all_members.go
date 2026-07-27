@@ -23,29 +23,37 @@ package member
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// plane마다 별도 Cache 인스턴스라 admin의 InvalidateAll이 bot plane 스냅샷에 닿지 않는다. 이 TTL이 그 cross-plane staleness의 유일한 상한이다.
-const allMembersSnapshotTTL = 5 * time.Minute
+const (
+	// plane마다 별도 Cache 인스턴스라 admin의 InvalidateAll이 bot plane 스냅샷에 닿지 않는다. 이 TTL이 그 cross-plane staleness의 유일한 상한이다.
+	allMembersSnapshotTTL         = 5 * time.Minute
+	allMembersSnapshotLoadTimeout = 10 * time.Second
+	allMembersSnapshotRetryDelay  = time.Minute
+)
 
 type allMembersState struct {
-	members  []*domain.Member
-	loadedAt time.Time
+	members    []*domain.Member
+	loadedAt   time.Time
+	retryAfter time.Time
 }
 
 func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 	if c == nil {
 		return nil, fmt.Errorf("member cache is nil")
 	}
+
 	snap := c.allMembersSnapshot.Load()
-	if c.snapshotFresh(snap) {
+	now := time.Now()
+	if c.snapshotFreshAt(snap, now) || c.snapshotReloadDeferred(snap, now) {
 		return cloneMemberSlice(snap.members), nil
 	}
 
-	members, err := c.loadAllMembersSnapshot(ctx)
+	members, err := c.loadAllMembersSnapshot(ctx, snap)
 	if err != nil {
 		if snap != nil {
 			return cloneMemberSlice(snap.members), nil
@@ -55,17 +63,21 @@ func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 	return members, nil
 }
 
-func (c *Cache) snapshotFresh(snap *allMembersState) bool {
+func (c *Cache) snapshotFreshAt(snap *allMembersState, now time.Time) bool {
 	if snap == nil {
 		return false
 	}
 	if c.snapshotTTL <= 0 {
 		return true
 	}
-	return time.Since(snap.loadedAt) < c.snapshotTTL
+	return now.Sub(snap.loadedAt) < c.snapshotTTL
 }
 
-func (c *Cache) loadAllMembersSnapshot(ctx context.Context) ([]*domain.Member, error) {
+func (*Cache) snapshotReloadDeferred(snap *allMembersState, now time.Time) bool {
+	return snap != nil && !snap.retryAfter.IsZero() && now.Before(snap.retryAfter)
+}
+
+func (c *Cache) loadAllMembersSnapshot(ctx context.Context, snap *allMembersState) ([]*domain.Member, error) {
 	loader := c.loadAllMembers
 	if loader == nil {
 		if c.repository == nil {
@@ -75,11 +87,17 @@ func (c *Cache) loadAllMembersSnapshot(ctx context.Context) ([]*domain.Member, e
 	}
 
 	result, err, _ := c.allMembersGroup.Do(allMembersSnapshotKey, func() (any, error) {
-		members, err := loader(context.WithoutCancel(ctx))
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), allMembersSnapshotLoadTimeout)
+		defer cancel()
+
+		members, err := loader(loadCtx)
 		if err != nil {
+			c.deferAllMembersSnapshotReload(snap, err)
 			return nil, fmt.Errorf("load all members from repository: %w", err)
 		}
+
 		c.storeAllMembersSnapshot(members)
+		c.logAllMembersSnapshotRecovery(snap, len(members))
 		return members, nil
 	})
 	if err != nil {
@@ -91,6 +109,41 @@ func (c *Cache) loadAllMembersSnapshot(ctx context.Context) ([]*domain.Member, e
 		return nil, fmt.Errorf("unexpected all members result type %T", result)
 	}
 	return cloneMemberSlice(members), nil
+}
+
+func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, err error) {
+	if snap == nil {
+		if c.logger != nil {
+			c.logger.Warn("member_snapshot_reload_failed",
+				slog.Bool("stale_available", false),
+				slog.Any("error", err),
+			)
+		}
+		return
+	}
+
+	retryAfter := time.Now().Add(allMembersSnapshotRetryDelay)
+	deferred := &allMembersState{
+		members:    snap.members,
+		loadedAt:   snap.loadedAt,
+		retryAfter: retryAfter,
+	}
+	retryScheduled := c.allMembersSnapshot.CompareAndSwap(snap, deferred)
+	if c.logger != nil {
+		c.logger.Warn("member_snapshot_reload_failed",
+			slog.Bool("stale_available", true),
+			slog.Bool("retry_scheduled", retryScheduled),
+			slog.Time("retry_after", retryAfter),
+			slog.Any("error", err),
+		)
+	}
+}
+
+func (c *Cache) logAllMembersSnapshotRecovery(snap *allMembersState, memberCount int) {
+	if snap == nil || snap.retryAfter.IsZero() || c.logger == nil {
+		return
+	}
+	c.logger.Info("member_snapshot_reload_recovered", slog.Int("member_count", memberCount))
 }
 
 func (c *Cache) storeAllMembersSnapshot(members []*domain.Member) {
