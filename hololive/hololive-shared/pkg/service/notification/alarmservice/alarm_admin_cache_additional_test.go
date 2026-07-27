@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
@@ -172,17 +171,12 @@ func TestMarkAsNotified(t *testing.T) {
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-1", start, 5))
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-1", start, 3))
 
-	var data dedup.NotifiedData
-	require.NoError(t, as.cache.Get(ctx, sharedalarmkeys.NotifiedKeyPrefix+"stream-1", &data))
-	require.Equal(t, normalizeScheduledMinute(start).Format(time.RFC3339), data.StartScheduled)
-	assert.True(t, data.SentAt[5])
-	assert.True(t, data.SentAt[3])
+	assert.True(t, as.WasNotified(ctx, "stream-1", start, 5))
+	assert.True(t, as.WasNotified(ctx, "stream-1", start, 3))
 
 	moved := start.Add(2 * time.Minute)
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-1", moved, 1))
-	require.NoError(t, as.cache.Get(ctx, sharedalarmkeys.NotifiedKeyPrefix+"stream-1", &data))
-	require.Equal(t, normalizeScheduledMinute(moved).Format(time.RFC3339), data.StartScheduled)
-	assert.True(t, data.SentAt[1])
+	assert.True(t, as.WasNotified(ctx, "stream-1", moved, 1))
 }
 
 func TestMarkAsNotified_SetFailure(t *testing.T) {

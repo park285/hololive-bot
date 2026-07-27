@@ -35,7 +35,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	appConfig, err := settings.Load()
+	appConfig, err := settings.LoadBotRuntime()
 	if err != nil {
 		slog.Error("load_config_failed", slog.Any("error", err))
 		return

@@ -2,7 +2,6 @@ package alarmcache
 
 import (
 	"log/slog"
-	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -11,10 +10,9 @@ import (
 type MemberDataFunc func() domain.MemberDataProvider
 
 type State struct {
-	Cache            cache.Client
-	memberDataFn     MemberDataFunc
-	Logger           *slog.Logger
-	NotifiedLegacyMu sync.Mutex
+	Cache        cache.Client
+	memberDataFn MemberDataFunc
+	Logger       *slog.Logger
 }
 
 func NewState(cacheClient cache.Client, memberDataFn MemberDataFunc, logger *slog.Logger) *State {

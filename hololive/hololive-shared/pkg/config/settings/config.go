@@ -74,10 +74,6 @@ type configLoadOptions struct {
 	CORSDefaultEnforce     bool
 }
 
-func Load() (*Config, error) {
-	return loadConfigValidated((*Config).Validate, configLoadOptions{FetchIrisWorkerProfile: true})
-}
-
 func LoadAdminAPIRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{CORSDefaultEnforce: true})
 }
@@ -136,7 +132,7 @@ func buildConfig(
 			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
 			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
 		},
-		Valkey:                 loadValkeyConfig(),
+		Valkey:                 LoadValkeyConfig(),
 		Postgres:               loadPostgresConfig(),
 		Notification:           loadNotificationConfig(),
 		AlarmDispatchRetention: loadAlarmDispatchRetentionConfig(),

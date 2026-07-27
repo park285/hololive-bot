@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -277,11 +276,8 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 				require.NoError(t, service.MarkAsNotified(ctx, "stream-roundtrip", roundTripStart, 5))
 				require.NoError(t, service.MarkAsNotified(ctx, "stream-roundtrip", roundTripStart, 3))
 
-				var data dedup.NotifiedData
-				require.NoError(t, service.cache.Get(ctx, sharedalarmkeys.NotifiedKeyPrefix+"stream-roundtrip", &data))
-				assert.Equal(t, normalizeScheduledMinute(roundTripStart).Format(time.RFC3339), data.StartScheduled)
-				assert.True(t, data.SentAt[5])
-				assert.True(t, data.SentAt[3])
+				assert.True(t, service.WasNotified(ctx, "stream-roundtrip", roundTripStart, 5))
+				assert.True(t, service.WasNotified(ctx, "stream-roundtrip", roundTripStart, 3))
 			},
 		},
 		{
@@ -295,11 +291,9 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 				require.NoError(t, service.MarkAsNotified(ctx, "stream-reset", firstStart, 5))
 				require.NoError(t, service.MarkAsNotified(ctx, "stream-reset", secondStart, 3))
 
-				var data dedup.NotifiedData
-				require.NoError(t, service.cache.Get(ctx, sharedalarmkeys.NotifiedKeyPrefix+"stream-reset", &data))
-				assert.Equal(t, normalizeScheduledMinute(secondStart).Format(time.RFC3339), data.StartScheduled)
-				assert.False(t, data.SentAt[5])
-				assert.True(t, data.SentAt[3])
+				assert.True(t, service.WasNotified(ctx, "stream-reset", firstStart, 5))
+				assert.True(t, service.WasNotified(ctx, "stream-reset", secondStart, 3))
+				assert.False(t, service.WasNotified(ctx, "stream-reset", secondStart, 5))
 			},
 		},
 		{

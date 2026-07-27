@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/park285/shared-go/pkg/logging"
 )
@@ -41,41 +40,6 @@ func (s *State) MarkAsNotified(ctx context.Context, streamID string, startSchedu
 		)
 	}
 
-	if err := s.UpdateLegacyNotifiedData(ctx, streamID, startScheduled, minutesUntil); err != nil {
-		return logging.LogAndWrapError(ctx, s.Logger, "mark as notified legacy data", err,
-			slog.String("stream_id", streamID),
-			slog.Int("minutes_until", minutesUntil),
-		)
-	}
-
-	return nil
-}
-
-func (s *State) UpdateLegacyNotifiedData(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) error {
-	s.NotifiedLegacyMu.Lock()
-	defer s.NotifiedLegacyMu.Unlock()
-
-	notifiedKey := sharedalarmkeys.NotifiedKeyPrefix + streamID
-	scheduledStr := NormalizeScheduledMinute(startScheduled).Format(time.RFC3339)
-
-	var existing dedup.NotifiedData
-	if err := s.Cache.Get(ctx, notifiedKey, &existing); err != nil || existing.StartScheduled == "" {
-		existing = dedup.NotifiedData{StartScheduled: scheduledStr, SentAt: make(map[int]bool)}
-	}
-
-	if existing.StartScheduled != scheduledStr {
-		existing = dedup.NotifiedData{StartScheduled: scheduledStr, SentAt: make(map[int]bool)}
-	}
-	if existing.SentAt == nil {
-		existing.SentAt = make(map[int]bool)
-	}
-
-	existing.SentAt[minutesUntil] = true
-
-	if err := s.Cache.Set(ctx, notifiedKey, existing, constants.CacheTTL.NotificationSent); err != nil {
-		return fmt.Errorf("set legacy notified data: %w", err)
-	}
-
 	return nil
 }
 
@@ -90,13 +54,5 @@ func (s *State) WasNotified(ctx context.Context, streamID string, startScheduled
 		return true
 	}
 
-	var legacy dedup.NotifiedData
-	if err := s.Cache.Get(ctx, sharedalarmkeys.NotifiedKeyPrefix+streamID, &legacy); err != nil {
-		return false
-	}
-	if legacy.StartScheduled != NormalizeScheduledMinute(startScheduled).Format(time.RFC3339) {
-		return false
-	}
-
-	return legacy.SentAt != nil && legacy.SentAt[minutesUntil]
+	return false
 }

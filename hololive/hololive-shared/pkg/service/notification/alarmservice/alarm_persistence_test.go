@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,11 +40,8 @@ func TestAlarmPersistence_MarkAsNotifiedRoundTrip(t *testing.T) {
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-roundtrip", start, 5))
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-roundtrip", start, 3))
 
-	var data dedup.NotifiedData
-	require.NoError(t, as.cache.Get(ctx, sharedalarmkeys.NotifiedKeyPrefix+"stream-roundtrip", &data))
-	assert.Equal(t, normalizeScheduledMinute(start).Format(time.RFC3339), data.StartScheduled)
-	assert.True(t, data.SentAt[5])
-	assert.True(t, data.SentAt[3])
+	assert.True(t, as.WasNotified(ctx, "stream-roundtrip", start, 5))
+	assert.True(t, as.WasNotified(ctx, "stream-roundtrip", start, 3))
 }
 
 func TestAlarmPersistence_MarkAsNotifiedTimeout(t *testing.T) {

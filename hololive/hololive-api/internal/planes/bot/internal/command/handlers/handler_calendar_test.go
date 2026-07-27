@@ -55,7 +55,7 @@ type calendarImageRendererStub struct {
 	err  error
 }
 
-func (s *calendarImageRendererStub) RenderCalendarImage(_, _ int, _ []domain.CalendarEntry) ([]byte, error) {
+func (s *calendarImageRendererStub) RenderCalendarImageContext(_ context.Context, _, _ int, _ []domain.CalendarEntry) ([]byte, error) {
 	return s.data, s.err
 }
 

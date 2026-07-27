@@ -412,6 +412,7 @@ hololive/hololive-shared/pkg/service/cache/service_hash.go
 hololive/hololive-shared/pkg/service/cache/service_kv.go
 hololive/hololive-shared/pkg/service/cache/service_scripts.go
 hololive/hololive-shared/pkg/service/cache/service_set.go
+hololive/hololive-shared/pkg/service/cache/state_audit.go
 hololive/hololive-shared/pkg/service/cache/stream_cache.go
 hololive/hololive-shared/pkg/service/chzzk/client.go
 hololive/hololive-shared/pkg/service/chzzk/client_openapi.go

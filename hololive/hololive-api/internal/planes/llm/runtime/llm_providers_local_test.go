@@ -325,9 +325,9 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 
 	t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 
-	appConfig, err := settings.Load()
+	appConfig, err := settings.LoadBotRuntime()
 	if err != nil {
-		t.Fatalf("settings.Load() error = %v", err)
+		t.Fatalf("settings.LoadBotRuntime() error = %v", err)
 	}
 
 	var buf bytes.Buffer

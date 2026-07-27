@@ -109,10 +109,7 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 }
 
 func (c *CalendarCommand) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
-	if renderer, ok := c.imageRenderer.(CalendarImageRendererContext); ok {
-		return renderer.RenderCalendarImageContext(ctx, month, year, entries)
-	}
-	return c.imageRenderer.RenderCalendarImage(month, year, entries)
+	return c.imageRenderer.RenderCalendarImageContext(ctx, month, year, entries)
 }
 
 func (c *CalendarCommand) ensureDeps() error {

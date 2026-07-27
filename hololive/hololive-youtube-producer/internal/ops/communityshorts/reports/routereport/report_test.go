@@ -86,7 +86,7 @@ func testRoute(
 		NewPathConfigured:     true,
 		EffectiveDeliveryMode: mode,
 		FinalDeliveryOwner:    communityshorts.RuntimeOwnerAlarmWorker,
-		FinalDeliveryPath:     communityshorts.RuntimeOwnerAlarmWorker + "." + communityshorts.NewDeliveryPath,
+		FinalDeliveryPath:     communityshorts.RuntimeOwnerAlarmWorker + "." + communityshorts.DeliveryPathYouTubeOutbox,
 	}
 }
 
@@ -100,7 +100,7 @@ func testPathUsage(generatedAt time.Time) []analytics.PostDeliveryPathUsage {
 			AlarmType:         domain.AlarmTypeCommunity,
 			ChannelID:         "UC_A",
 			ContentID:         "community-a-1",
-			DeliveryPath:      communityshorts.NewDeliveryPath,
+			DeliveryPath:      communityshorts.DeliveryPathYouTubeOutbox,
 			ActualPublishedAt: timePtr(generatedAt.Add(-2 * time.Hour)),
 			FirstSuccessAt:    timePtr(generatedAt.Add(-119 * time.Minute)),
 			SuccessSendCount:  2,
@@ -110,7 +110,7 @@ func testPathUsage(generatedAt time.Time) []analytics.PostDeliveryPathUsage {
 			AlarmType:         domain.AlarmTypeShorts,
 			ChannelID:         "UC_A",
 			ContentID:         "short-a-1",
-			DeliveryPath:      communityshorts.NewDeliveryPath,
+			DeliveryPath:      communityshorts.DeliveryPathYouTubeOutbox,
 			ActualPublishedAt: timePtr(generatedAt.Add(-90 * time.Minute)),
 			FirstSuccessAt:    timePtr(generatedAt.Add(-80 * time.Minute)),
 			SuccessSendCount:  1,
@@ -125,7 +125,7 @@ func testLegacyPathUsage(generatedAt time.Time) analytics.PostDeliveryPathUsage 
 		AlarmType:          domain.AlarmTypeShorts,
 		ChannelID:          "UC_A",
 		ContentID:          "short-a-1",
-		DeliveryPath:       communityshorts.LegacyDeliveryPath,
+		DeliveryPath:       "legacy_alarm_queue",
 		ActualPublishedAt:  timePtr(generatedAt.Add(-90 * time.Minute)),
 		FailedAttemptCount: 1,
 	}
@@ -184,12 +184,12 @@ func assertRouteUsage(t *testing.T, report *Report) {
 	require.Equal(t, routeUsageNewOnlyVerified, aCommunity.ActualUsageState)
 	require.Equal(t, 1, aCommunity.ObservedPostCount)
 	require.Equal(t, 1, aCommunity.NewPathOnlyPostCount)
-	require.Equal(t, []string{communityshorts.NewDeliveryPath}, aCommunity.ObservedPaths)
+	require.Equal(t, []string{communityshorts.DeliveryPathYouTubeOutbox}, aCommunity.ObservedPaths)
 
 	aShorts := reportRouteFor(t, report, "UC_A", domain.AlarmTypeShorts)
 	require.Equal(t, routeUsageMixedPathsDetected, aShorts.ActualUsageState)
 	require.Equal(t, 1, aShorts.MixedPathPostCount)
-	require.Equal(t, []string{communityshorts.LegacyDeliveryPath, communityshorts.NewDeliveryPath}, aShorts.ObservedPaths)
+	require.Equal(t, []string{"legacy_alarm_queue", communityshorts.DeliveryPathYouTubeOutbox}, aShorts.ObservedPaths)
 
 	bShorts := reportRouteFor(t, report, "UC_B", domain.AlarmTypeShorts)
 	require.Equal(t, routeUsageNoPathObserved, bShorts.ActualUsageState)

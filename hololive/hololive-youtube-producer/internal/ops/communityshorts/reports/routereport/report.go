@@ -233,7 +233,7 @@ func resolvePostPathState(paths []string) string {
 	case 0:
 		return routeUsageNoPathObserved
 	case 1:
-		if paths[0] == communityshorts.NewDeliveryPath {
+		if paths[0] == communityshorts.DeliveryPathYouTubeOutbox {
 			return routeUsageNewOnlyVerified
 		}
 		return routeUsageUnexpectedPathDetected

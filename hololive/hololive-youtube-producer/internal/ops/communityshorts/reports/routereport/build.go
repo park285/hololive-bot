@@ -107,7 +107,7 @@ func newReport(
 			FinalDeliveryOwner:              baseline.Runtime.FinalDeliveryOwner,
 			CommunityShortsBigBangEnabled:   baseline.Runtime.CommunityShortsBigBangEnabled,
 			CommunityShortsBigBangCutoverAt: shared.CloneSendCountTime(baseline.Runtime.CommunityShortsBigBangCutoverAt),
-			ExpectedTelemetryPath:           communityshorts.NewDeliveryPath,
+			ExpectedTelemetryPath:           communityshorts.DeliveryPathYouTubeOutbox,
 		},
 		Summary:  Summary{TargetChannelCount: len(baseline.Channels)},
 		Channels: make([]Channel, 0, len(baseline.Channels)),
@@ -155,7 +155,7 @@ func buildRoute(
 
 func newRoute(baseRoute *communityshorts.TargetBaselineChannelRoute) Route {
 	if baseRoute == nil {
-		return Route{ExpectedTelemetryPath: communityshorts.NewDeliveryPath, ObservedPaths: make([]string, 0)}
+		return Route{ExpectedTelemetryPath: communityshorts.DeliveryPathYouTubeOutbox, ObservedPaths: make([]string, 0)}
 	}
 	return Route{
 		AlarmType:             baseRoute.AlarmType,
@@ -164,7 +164,7 @@ func newRoute(baseRoute *communityshorts.TargetBaselineChannelRoute) Route {
 		SubscriberRoomCount:   baseRoute.SubscriberRoomCount,
 		DeploymentTargetOwner: strings.TrimSpace(baseRoute.FinalDeliveryOwner),
 		DeploymentTargetPath:  strings.TrimSpace(baseRoute.FinalDeliveryPath),
-		ExpectedTelemetryPath: communityshorts.NewDeliveryPath,
+		ExpectedTelemetryPath: communityshorts.DeliveryPathYouTubeOutbox,
 		ObservedPaths:         make([]string, 0),
 	}
 }

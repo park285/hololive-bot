@@ -14,7 +14,7 @@ import (
 
 func loadReportConfig(loadConfig func() (*settings.Config, error)) (*settings.Config, error) {
 	if loadConfig == nil {
-		loadConfig = settings.Load
+		loadConfig = settings.LoadYouTubeProducerRuntime
 	}
 	return loadConfig()
 }

@@ -53,14 +53,6 @@ type Service struct {
 	logger          *slog.Logger
 }
 
-type notifiedDataSource int
-
-const (
-	notifiedDataSourceMissing notifiedDataSource = iota
-	notifiedDataSourceHash
-	notifiedDataSourceLegacyString
-)
-
 func NewService(c cache.Client, targetMinutes []int, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()

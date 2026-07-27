@@ -31,7 +31,7 @@ type MemberDataProvider interface {
 	FindMemberByName(name string) *Member
 	FindMemberByAlias(alias string) *Member
 	GetChannelIDs() []string
-	GetAllMembers() []*Member // 순회용 (레거시 호환성)
+	GetAllMembers() []*Member // 전체 멤버 순회 계약
 	WithContext(ctx context.Context) MemberDataProvider
 	// Multi-result methods (동명이인/공유 별명 처리용)
 	FindMembersByName(name string) []*Member
@@ -45,7 +45,7 @@ type MemberDataLoader interface {
 }
 
 // LoadAllMembers는 error-aware loader가 있으면 그 경로를 사용하고,
-// 없으면 레거시 GetAllMembers() 동작으로 폴백한다.
+// 없으면 기본 전체 멤버 순회 계약을 사용한다.
 func LoadAllMembers(provider MemberDataProvider) ([]*Member, error) {
 	if provider == nil {
 		return nil, nil

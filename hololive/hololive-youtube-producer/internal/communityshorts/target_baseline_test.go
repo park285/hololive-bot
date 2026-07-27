@@ -52,8 +52,8 @@ func TestBuildTargetBaseline(t *testing.T) {
 
 		communityPath := baselinePathForType(t, baseline.PathMappings, domain.AlarmTypeCommunity)
 		require.Equal(t, sharedalarmkeys.ChannelSubscribersCommunityPrefix, communityPath.SubscriberKeyPrefix)
-		require.Equal(t, RuntimeOwnerAlarmWorker+"."+NewDeliveryPath, communityPath.FinalDeliveryPath)
-		require.False(t, communityPath.LegacyPathActive)
+		require.Equal(t, RuntimeOwnerAlarmWorker+"."+DeliveryPathYouTubeOutbox, communityPath.FinalDeliveryPath)
+		require.Equal(t, DeliveryModeNew, communityPath.EffectiveDeliveryMode)
 		require.True(t, communityPath.NewPathConfigured)
 		require.False(t, communityPath.CutoverPending)
 		require.Equal(t, 2, communityPath.ConfiguredChannelCount)

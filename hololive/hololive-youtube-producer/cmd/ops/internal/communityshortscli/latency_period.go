@@ -26,7 +26,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 		return fmt.Errorf("invalid period flag: %w", err)
 	}
 
-	appConfig, err := settings.Load()
+	appConfig, err := settings.LoadYouTubeProducerRuntime()
 	if err != nil {
 		return fmt.Errorf("failed to load community/shorts latency-period config: %w", err)
 	}

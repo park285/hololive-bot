@@ -28,9 +28,7 @@ const (
 	notificationSchedulerRoleOff    = "off"
 )
 
-// proactive notification egress 소유를 거부하는 bot runtime config 로더다. 구버전
-// 호출부를 위해 legacy Load 함수를 의도적으로 남겨두지만, binary는 runtime별 로더를
-// 써야 ownership drift가 startup에서 실패한다.
+// proactive notification egress 소유를 거부하는 bot runtime config 로더다.
 func LoadBotRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateBotRuntime, configLoadOptions{FetchIrisWorkerProfile: true})
 }

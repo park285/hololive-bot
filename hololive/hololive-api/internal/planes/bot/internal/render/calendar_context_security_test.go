@@ -58,7 +58,7 @@ func TestCalendarCardRendererCancelledRenderDoesNotFetchOrPoisonCache(t *testing
 		t.Fatalf("cancelled render fetched %d photos, want 0", got)
 	}
 
-	data, err = renderer.RenderCalendarImage(6, 2026, entries)
+	data, err = renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
 		t.Fatalf("subsequent render error = %v", err)
 	}
@@ -143,9 +143,9 @@ func TestCalendarCardRendererGlobalPhotoFetchTruncationDoesNotPopulateCaches(t *
 	}
 
 	renderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(t.TempDir()))
-	first, err := renderer.RenderCalendarImage(6, 2026, entries)
+	first, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("first RenderCalendarImage() error = %v", err)
+		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, first)
 
@@ -157,9 +157,9 @@ func TestCalendarCardRendererGlobalPhotoFetchTruncationDoesNotPopulateCaches(t *
 		t.Fatal("globally truncated render was stored in disk cache")
 	}
 
-	second, err := renderer.RenderCalendarImage(6, 2026, entries)
+	second, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("second RenderCalendarImage() error = %v", err)
+		t.Fatalf("second RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, second)
 	if got, want := requests, calendarPhotoMaxFetches*2; got != want {
@@ -229,9 +229,9 @@ func TestCalendarCardRendererOrdinaryPhotoFetchFailureStillPopulatesMemoryCache(
 	}}
 	renderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(t.TempDir()))
 
-	first, err := renderer.RenderCalendarImage(6, 2026, entries)
+	first, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("first RenderCalendarImage() error = %v", err)
+		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, first)
 
@@ -243,9 +243,9 @@ func TestCalendarCardRendererOrdinaryPhotoFetchFailureStillPopulatesMemoryCache(
 		t.Fatal("ordinary photo fetch failure was stored in disk cache")
 	}
 
-	second, err := renderer.RenderCalendarImage(6, 2026, entries)
+	second, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("second RenderCalendarImage() error = %v", err)
+		t.Fatalf("second RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, second)
 	if got, want := requests, 1; got != want {

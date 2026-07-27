@@ -40,6 +40,10 @@ import (
 	"github.com/park285/shared-go/pkg/workerconfig"
 )
 
+func load() (*Config, error) {
+	return LoadBotRuntime()
+}
+
 func setRequiredLoadEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOLODEX_API_KEY", "test-key")
@@ -357,7 +361,7 @@ func TestLoad_HolodexLiveStatusFallbackEnvOverrides(t *testing.T) {
 	t.Setenv("HOLODEX_LIVE_STATUS_FALLBACK_WALL_CLOCK_BUDGET_SECONDS", "18")
 	t.Setenv("HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS", "750")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -405,7 +409,7 @@ func TestLoad_HolodexLiveStatusFallbackValidation(t *testing.T) {
 				t.Setenv(key, value)
 			}
 
-			_, err := Load()
+			_, err := load()
 			if err == nil {
 				t.Fatal("Load() error = nil, want validation error")
 			}
@@ -513,7 +517,7 @@ func TestLoad_UsesSeparateIrisTokens(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", " webhook-token ")
 	t.Setenv("IRIS_BOT_TOKEN", " bot-token ")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -534,7 +538,7 @@ func TestLoad_ServerHTTP3Config(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -562,7 +566,7 @@ func TestLoad_ServerHTTP3RequiresCertificateFiles(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_H3_CERT_FILE is required") {
 		t.Fatalf("Load() error = %v, want missing H3 cert file", err)
 	}
@@ -574,7 +578,7 @@ func TestLoad_ServerHTTP3AliasesRequireCertificateFiles(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_H3_CERT_FILE is required") {
 		t.Fatalf("Load() error = %v, want missing H3 cert file", err)
 	}
@@ -584,7 +588,7 @@ func TestLoad_ServerHTTPTransportsRejectUnsupportedValue(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "htp3")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil || !strings.Contains(err.Error(), "unsupported HOLOLIVE_HTTP_TRANSPORTS value: htp3") {
 		t.Fatalf("Load() error = %v, want unsupported transport", err)
 	}
@@ -594,7 +598,7 @@ func TestLoad_ServerHTTPTransportsRejectClientOnlyTransportValue(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "http2")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil || !strings.Contains(err.Error(), "unsupported HOLOLIVE_HTTP_TRANSPORTS value: http2") {
 		t.Fatalf("Load() error = %v, want unsupported transport", err)
 	}
@@ -603,7 +607,7 @@ func TestLoad_ServerHTTPTransportsRejectClientOnlyTransportValue(t *testing.T) {
 func TestLoad_CommunityShortsBigBangCutoverDefaultsZero(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -616,7 +620,7 @@ func TestLoad_CommunityShortsBigBangCutoverEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "2026-04-10T01:11:12+09:00")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -631,7 +635,7 @@ func TestLoad_CommunityShortsBigBangCutoverRejectsInvalidRFC3339(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "2026-04-10 01:11:12")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want error")
 	}
@@ -643,7 +647,7 @@ func TestLoad_CommunityShortsBigBangCutoverRejectsInvalidRFC3339(t *testing.T) {
 func TestLoad_ScraperPollDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -665,7 +669,7 @@ func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_POLL_STATS_INTERVAL_SECONDS", "14400")
 	t.Setenv("SCRAPER_POLL_LIVE_INTERVAL_SECONDS", "180")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -687,7 +691,7 @@ func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
 	t.Setenv("SCRAPER_STATS_SECONDS", "14400")
 	t.Setenv("SCRAPER_LIVE_SECONDS", "180")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -704,7 +708,7 @@ func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
 func TestLoad_ScraperBackfillDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -747,7 +751,7 @@ func TestLoad_ScraperBackfillEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", "180")
 	t.Setenv("SCRAPER_BACKFILL_TARGET_GROUP", " notification ")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -821,7 +825,7 @@ func TestLoad_ScraperBackfillValidation(t *testing.T) {
 				t.Setenv(key, value)
 			}
 
-			_, err := Load()
+			_, err := load()
 			if tt.wantErr == "" {
 				if err != nil {
 					t.Fatalf("Load() error = %v", err)
@@ -842,7 +846,7 @@ func TestLoad_ScraperWorkerCountEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_SCHEDULER_WORKER_COUNT", "6")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -856,7 +860,7 @@ func TestLoad_ScraperWorkerCountLegacyEnvFallback(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_WORKER_COUNT", "6")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -869,7 +873,7 @@ func TestLoad_ScraperWorkerCountLegacyEnvFallback(t *testing.T) {
 func TestLoad_ScraperFetcherEngineDefault(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -883,7 +887,7 @@ func TestLoad_ScraperFetcherEngineRejectsRemovedGoScrapy(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "goscrapy")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want removed goscrapy engine error")
 	}
@@ -896,7 +900,7 @@ func TestLoad_ScraperFetcherEngineValidation(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "bad-engine")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want invalid scraper fetcher engine error")
 	}
@@ -909,7 +913,7 @@ func TestLoad_ScraperFetcherEngineRejectsBrowserSnapshot(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "browser_snapshot")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want invalid scraper fetcher engine error")
 	}
@@ -921,7 +925,7 @@ func TestLoad_ScraperFetcherEngineRejectsBrowserSnapshot(t *testing.T) {
 func TestLoad_ScraperSnapshotAndChannelHealthDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -947,7 +951,7 @@ func TestLoad_ScraperChannelHealthEnforceCanBeDisabled(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_CHANNEL_HEALTH_ENFORCE", "false")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -970,7 +974,7 @@ func TestLoad_ScraperSnapshotAndChannelHealthEnvOverride(t *testing.T) {
 	t.Setenv("SCRAPER_BROWSER_DIAGNOSTIC_ENDPOINT", "http://browser:9222/snapshot")
 	t.Setenv("SCRAPER_POLL_TIERING_ENABLED", "true")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1010,7 +1014,7 @@ func TestLoad_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected missing webhook token error, got nil")
 	}
@@ -1025,7 +1029,7 @@ func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "false")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1042,7 +1046,7 @@ func TestLoad_UnsupportedLegacyTelemetryEnvRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("OTEL_ENVIRONMENT", "development")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
@@ -1057,7 +1061,7 @@ func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "true")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatalf("Load() expected error, got nil")
 	}
@@ -1072,7 +1076,7 @@ func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
 	t.Setenv("CORS_ENFORCE", "false")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "*,http://localhost:5173,https://admin.example.com")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1087,7 +1091,7 @@ func TestLoad_UnsupportedLegacyDBAliasRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("DB_SSLMODE", "disable")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
@@ -1100,7 +1104,7 @@ func TestLoad_UnsupportedLegacyQueryModeAliasRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("DB_QUERY_EXEC_MODE", "describe_exec")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
@@ -1119,7 +1123,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 		setup(t)
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1132,7 +1136,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 		setup(t)
 		t.Setenv("MEMBER_NEWS_CLIPROXY_MODEL", "old-model")
 
-		_, err := Load()
+		_, err := load()
 		if err == nil {
 			t.Fatal("Load() expected unsupported legacy env error, got nil")
 		}
@@ -1146,7 +1150,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 		t.Setenv("MEMBER_NEWS_CLIPROXY_MODEL", "new-model")
 
-		_, err := Load()
+		_, err := load()
 		if err == nil {
 			t.Fatal("Load() expected unsupported legacy env error, got nil")
 		}
@@ -1158,7 +1162,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 	t.Run("both unset", func(t *testing.T) {
 		setup(t)
 
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1170,7 +1174,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 	t.Run("temperature default", func(t *testing.T) {
 		setup(t)
 
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1183,7 +1187,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 func TestLoad_DefaultPostgresSSLModeVerifyFull(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1198,7 +1202,7 @@ func TestLoad_PostgresSSLRootCertEnvOverride(t *testing.T) {
 	t.Setenv("POSTGRES_SSLMODE", "verify-full")
 	t.Setenv("POSTGRES_SSLROOTCERT", "/run/postgresql/root.crt")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1213,7 +1217,7 @@ func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("API_SECRET_KEY", "")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected production API key validation error, got nil")
 	}
@@ -1227,7 +1231,7 @@ func TestLoad_ProductionRejectsWeakPostgresSSLMode(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "require")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected production sslmode validation error, got nil")
 	}
@@ -1245,7 +1249,7 @@ func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode(t *testing.T) {
 	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected production verify-ca validation error, got nil")
 	}
@@ -1263,7 +1267,7 @@ func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode_WithRetiredOverride(t *te
 	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected production verify-ca validation error, got nil")
 	}
@@ -1278,7 +1282,7 @@ func TestLoad_ProductionAllowsVerifyFullPostgresSSLMode(t *testing.T) {
 	t.Setenv("POSTGRES_SSLMODE", "verify-full")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1293,7 +1297,7 @@ func TestLoad_ProductionRejectsWeakPostgresSSLMode_WithRetiredOverride(t *testin
 	t.Setenv("POSTGRES_SSLMODE", "require")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() expected production sslmode validation error, got nil")
 	}
@@ -1307,7 +1311,7 @@ func TestLoad_DevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("POSTGRES_SSLMODE", "prefer")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1353,7 +1357,7 @@ func TestLoadLLMScheduler_ProductionRequiresAPISecretKey(t *testing.T) {
 func TestLoadLLMConfig_ConsensusDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1383,7 +1387,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 
 	t.Run("negative clamped to 0", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "-0.5")
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1394,7 +1398,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 
 	t.Run("above 1 clamped to 1", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "1.5")
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1405,7 +1409,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 
 	t.Run("NaN falls back to default", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "NaN")
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1416,7 +1420,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 
 	t.Run("Inf falls back to default", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "Inf")
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1431,7 +1435,7 @@ func TestLoadLLMConfig_ConsensusTimeoutMinimum(t *testing.T) {
 
 	t.Run("review timeout below minimum", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_REVIEW_TIMEOUT_SEC", "2")
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1442,7 +1446,7 @@ func TestLoadLLMConfig_ConsensusTimeoutMinimum(t *testing.T) {
 
 	t.Run("adjudicate timeout below minimum", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_ADJUDICATE_TIMEOUT_SEC", "3")
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1457,7 +1461,7 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 
 	t.Run("empty reviewer model falls back to MemberNewsModel", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "primary-model")
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1468,7 +1472,7 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 
 	t.Run("explicit reviewer model preserved", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_REVIEWER_MODEL", "gpt-4.1-mini")
-		config, err := Load()
+		config, err := load()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1545,7 +1549,7 @@ func TestLoad_InvalidNumericStillUsesDefault(t *testing.T) {
 	t.Setenv("POSTGRES_PORT", "not-a-number")
 	t.Setenv("CACHE_PORT", "invalid")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1561,7 +1565,7 @@ func TestLoad_InvalidCoreNumeric(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVER_PORT", "invalid")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1623,7 +1627,7 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 	}`)
 	t.Setenv("IRIS_BASE_URL", server.URL)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1663,7 +1667,7 @@ func TestLoad_WebhookRequireHMACEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("IRIS_WEBHOOK_REQUIRE_HMAC", "true")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1676,7 +1680,7 @@ func TestLoad_WebhookRequireHMACFalseFailsClosed(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("IRIS_WEBHOOK_REQUIRE_HMAC", "false")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want HMAC false rejection")
 	}
@@ -1689,7 +1693,7 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1701,7 +1705,7 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 func TestLoad_ScraperSchedulerDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1723,7 +1727,7 @@ func TestLoad_ScraperSchedulerEnvOverride(t *testing.T) {
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", "7")
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", "99")
 
-	config, err := Load()
+	config, err := load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1744,7 +1748,7 @@ func TestLoad_ScraperSchedulerBackoffValidation(t *testing.T) {
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", "60")
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", "30")
 
-	_, err := Load()
+	_, err := load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want validation error")
 	}

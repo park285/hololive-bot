@@ -39,12 +39,10 @@ type TargetBaselineSources struct {
 
 type TargetBaselinePath struct {
 	AlarmType                domain.AlarmType `json:"alarm_type"`
-	LegacyDeliveryPath       string           `json:"legacy_delivery_path"`
-	LegacyStatus             string           `json:"legacy_status"`
-	LegacyPathActive         bool             `json:"legacy_path_active"`
 	NewDeliveryPath          string           `json:"new_delivery_path"`
 	NewPathConfigured        bool             `json:"new_path_configured"`
 	CutoverPending           bool             `json:"cutover_pending"`
+	EffectiveDeliveryMode    string           `json:"effective_delivery_mode"`
 	FinalDeliveryOwner       string           `json:"final_delivery_owner"`
 	FinalDeliveryPath        string           `json:"final_delivery_path"`
 	SubscriberKeyPrefix      string           `json:"subscriber_key_prefix"`
@@ -67,7 +65,6 @@ type TargetBaselineChannelRoute struct {
 	SubscriberKey         string           `json:"subscriber_key"`
 	AlarmEnabled          bool             `json:"alarm_enabled"`
 	SubscriberRoomCount   int              `json:"subscriber_room_count"`
-	LegacyPathActive      bool             `json:"legacy_path_active"`
 	NewPathConfigured     bool             `json:"new_path_configured"`
 	CutoverPending        bool             `json:"cutover_pending"`
 	EffectiveDeliveryMode string           `json:"effective_delivery_mode"`

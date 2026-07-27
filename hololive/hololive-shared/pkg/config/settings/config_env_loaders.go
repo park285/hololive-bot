@@ -35,7 +35,7 @@ func loadAppEnvironment() string {
 	return sharedenv.String("APP_ENV", "production")
 }
 
-func loadValkeyConfig() ValkeyConfig {
+func LoadValkeyConfig() ValkeyConfig {
 	return ValkeyConfig{
 		Host:       sharedenv.String("CACHE_HOST", "localhost"),
 		Port:       sharedenv.Int("CACHE_PORT", 6379),

@@ -21,6 +21,7 @@
 package dispatchrun
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -54,7 +55,8 @@ func TestAlarmDispatchClientRequestID(t *testing.T) {
 	assert.Equal(t, first, second)
 	assert.NotEqual(t, first, differentRange)
 	assert.NotEqual(t, first, differentEnvelope)
-	assert.Contains(t, first, "hololive-alarm:")
+	assert.Equal(t, "hololive-alarm:", alarmDispatchClientRequestIDNamespace)
+	assert.True(t, strings.HasPrefix(first, alarmDispatchClientRequestIDNamespace))
 }
 
 func TestApplyAlarmDispatchKaringReceiver(t *testing.T) {

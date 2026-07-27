@@ -69,7 +69,7 @@ type CelebrationCalendarFinder interface {
 }
 
 type CalendarImageRenderer interface {
-	RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error)
+	RenderCalendarImageContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error)
 }
 
 type BroadcastHistoryQuery struct {

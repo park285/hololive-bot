@@ -18,7 +18,7 @@ func runTargetBaselineCommand(ctx commandContext, args []string) error {
 		return err
 	}
 
-	appConfig, err := settings.Load()
+	appConfig, err := settings.LoadYouTubeProducerRuntime()
 	if err != nil {
 		return fmt.Errorf("failed to load community/shorts baseline config: %w", err)
 	}

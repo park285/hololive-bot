@@ -25,3 +25,13 @@ Valkey is an ephemeral cache, wakeup, index, and fast-path layer. PostgreSQL is 
 - `sent`, `dlq`, `quarantined`, and `cancelled` rows must not be reset to `pending` by dedupe conflict handling.
 - Valkey wakeup uses a fixed list token, not Pub/Sub payload delivery. Wakeup loss must not lose a dispatch; PG fallback polling must still claim due rows.
 - Legacy Valkey queue consumption and PG ledger consumption must not process the same newly published event at the same time.
+
+## Canonical State Audit
+
+다음 read-only 명령은 notified key와 member field를 `missing`, `canonical`, `legacy_shape` count로만 출력하며 key/value는 출력하지 않습니다.
+
+```bash
+go run ./hololive/hololive-shared/cmd/valkey-state-audit
+```
+
+연결 설정은 runtime과 동일한 `CACHE_HOST`, `CACHE_PORT`, `CACHE_PASSWORD`, `CACHE_DB`, `CACHE_SOCKET_PATH`를 사용합니다. `legacy_shape`가 0이 아니면 canonical-only cutover를 진행하지 않습니다.
