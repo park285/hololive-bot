@@ -81,6 +81,9 @@ func skipAppliedMigration(ctx context.Context, exec *guardedExecer, source migra
 }
 
 func applyEntry(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, source migrationSource) error {
+	if err := exec.validateMigrationSource(source.name, source.content); err != nil {
+		return err
+	}
 	if err := exec.execFile(ctx, source.name, source.content); err != nil {
 		return err
 	}
