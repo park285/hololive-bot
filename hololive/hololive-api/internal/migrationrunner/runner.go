@@ -25,9 +25,10 @@ const (
 )
 
 type Config struct {
-	BaselineThrough string
-	LockKey         int64
-	Logf            func(format string, args ...any)
+	BaselineThrough        string
+	LockKey                int64
+	AllowBlockingIndexDrop bool
+	Logf                   func(format string, args ...any)
 }
 
 type Result struct {
@@ -94,6 +95,9 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 	}
 
 	if err := reconcileBaseline(ctx, conn, fsys, exec, ledger, entries, cfg); err != nil {
+		return Result{}, err
+	}
+	if err := configureBlockingIndexDropPolicy(ctx, conn, exec, cfg); err != nil {
 		return Result{}, err
 	}
 
@@ -177,7 +181,8 @@ func lockKey(cfg Config) int64 {
 // session timeout(set_config)이 conn scope라 pool 실행으로 되돌리면 무효화된다 —
 // 모든 실행은 advisory lock을 쥔 pinned conn 하나에서 돌아야 한다.
 type guardedExecer struct {
-	conn *pgxpool.Conn
+	conn                   *pgxpool.Conn
+	allowBlockingIndexDrop bool
 }
 
 func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) error {
