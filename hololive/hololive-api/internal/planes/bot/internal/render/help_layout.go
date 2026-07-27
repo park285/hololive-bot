@@ -14,22 +14,20 @@ import (
 
 const (
 	helpCardCanvasWidth      = 1448
+	helpCardCanvasHeight     = 1086
 	helpCardOutputWidth      = 1448
-	helpCardMinHeight        = 900
-	helpCardMaxHeight        = 1600
-	helpCardPanelY           = 188
-	helpCardPanelHeaderH     = 64
-	helpCardPanelBottomPad   = 28
-	helpCardFooterHeight     = 92
-	helpCardTargetContentH   = 930
-	helpCardMaxContentH      = 1180
+	helpCardTargetContentH   = 700
+	helpCardMaxContentH      = 720
 	helpCardCommandWidth     = 350
-	helpCardDescriptionWidth = 806
+	helpCardDescriptionWidth = 820
 	helpCardMaxSourceLines   = 96
 	helpCardMaxLineRunes     = 512
-	helpCardMaxWrappedLines  = 3
+	helpCardMaxWrappedLines  = 2
 	helpCardMaxSections      = 24
 	helpCardMaxRows          = 64
+	helpCardSectionHeight    = 40
+	helpCardRowMinHeight     = 58
+	helpCardTextLineHeight   = 27
 )
 
 type helpCardFonts struct {
@@ -64,8 +62,6 @@ type helpCardPage struct {
 	subtitle      string
 	sections      []helpCardSection
 	contentHeight int
-	panelHeight   int
-	canvasHeight  int
 }
 
 func loadHelpCardFonts() (helpCardFonts, error) {
@@ -87,25 +83,25 @@ func loadHelpCardFonts() (helpCardFonts, error) {
 
 	var faces helpCardFonts
 	var err error
-	if faces.title, err = load("title", 58, true); err != nil {
+	if faces.title, err = load("title", 48, true); err != nil {
 		return faces, err
 	}
-	if faces.subtitle, err = load("subtitle", 27, false); err != nil {
+	if faces.subtitle, err = load("subtitle", 23, false); err != nil {
 		return faces, err
 	}
-	if faces.header, err = load("header", 24, true); err != nil {
+	if faces.header, err = load("header", 23, true); err != nil {
 		return faces, err
 	}
-	if faces.section, err = load("section", 25, true); err != nil {
+	if faces.section, err = load("section", 22, true); err != nil {
 		return faces, err
 	}
-	if faces.command, err = load("command", 29, true); err != nil {
+	if faces.command, err = load("command", 25, true); err != nil {
 		return faces, err
 	}
-	if faces.description, err = load("description", 24, false); err != nil {
+	if faces.description, err = load("description", 22, false); err != nil {
 		return faces, err
 	}
-	if faces.footer, err = load("footer", 23, false); err != nil {
+	if faces.footer, err = load("footer", 19, false); err != nil {
 		return faces, err
 	}
 	return faces, nil
@@ -118,7 +114,7 @@ func parseHelpCardDocument(ctx context.Context, text string, faces helpCardFonts
 	}
 
 	title := renderableHelpText(faces.title, strings.TrimSpace(source[0]))
-	title = cardkit.ClampToWidth(faces.title, title, helpCardCanvasWidth-144)
+	title = cardkit.ClampToWidth(faces.title, title, helpCardCanvasWidth-320)
 	if title == "" {
 		return helpCardDocument{}, fmt.Errorf("help title cannot be rendered")
 	}
@@ -149,11 +145,11 @@ func parseHelpSections(ctx context.Context, source []string, faces helpCardFonts
 			if label == "" {
 				return nil, fmt.Errorf("help section cannot be rendered")
 			}
-			sections = append(sections, helpCardSection{label: label, height: 54})
+			sections = append(sections, helpCardSection{label: label, height: helpCardSectionHeight})
 			continue
 		}
 		if len(sections) == 0 {
-			sections = append(sections, helpCardSection{label: "명령어", height: 54})
+			sections = append(sections, helpCardSection{label: "명령어", height: helpCardSectionHeight})
 		}
 		if rowCount >= helpCardMaxRows {
 			return nil, fmt.Errorf("help row count exceeds %d", helpCardMaxRows)
@@ -208,7 +204,7 @@ func layoutHelpRow(line string, faces helpCardFonts) (helpCardRow, error) {
 	return helpCardRow{
 		commandLines:     commandLines,
 		descriptionLines: descriptionLines,
-		height:           max(78, 28+lineCount*34) + 6,
+		height:           max(helpCardRowMinHeight, 18+lineCount*helpCardTextLineHeight),
 	}, nil
 }
 
@@ -273,7 +269,7 @@ func splitHelpSection(section helpCardSection) ([]helpCardSection, error) {
 		if continued {
 			label += " · 계속"
 		}
-		fragment := helpCardSection{label: label, height: 54}
+		fragment := helpCardSection{label: label, height: helpCardSectionHeight}
 		for len(rows) > 0 && fragment.height+rows[0].height <= helpCardMaxContentH {
 			fragment.rows = append(fragment.rows, rows[0])
 			fragment.height += rows[0].height
@@ -289,14 +285,10 @@ func splitHelpSection(section helpCardSection) ([]helpCardSection, error) {
 }
 
 func newHelpCardPage(title string, sections []helpCardSection, contentHeight int) helpCardPage {
-	panelHeight := helpCardPanelHeaderH + contentHeight + helpCardPanelBottomPad
-	canvasHeight := max(helpCardMinHeight, helpCardPanelY+panelHeight+helpCardFooterHeight)
 	return helpCardPage{
 		title:         title,
 		sections:      append([]helpCardSection(nil), sections...),
 		contentHeight: contentHeight,
-		panelHeight:   panelHeight,
-		canvasHeight:  canvasHeight,
 	}
 }
 
