@@ -7,7 +7,8 @@ import (
 )
 
 func TestCommandInitViewWiresHelpImageRenderer(t *testing.T) {
-	deps := (&Bot{}).commandInitView().toCommandDependencies(command.NewRegistry())
+	view := (&Bot{}).commandInitView()
+	deps := view.toCommandDependencies(command.NewRegistry())
 	if deps.HelpImageRenderer == nil {
 		t.Fatal("help image renderer must be initialized")
 	}
