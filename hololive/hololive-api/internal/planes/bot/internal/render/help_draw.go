@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"strings"
 
 	"golang.org/x/image/font"
 
@@ -28,19 +29,19 @@ const (
 )
 
 var (
-	helpColorOuter       = color.RGBA{R: 255, G: 250, B: 243, A: 255}
-	helpColorBorder      = color.RGBA{R: 57, G: 141, B: 204, A: 255}
-	helpColorSurface     = color.RGBA{R: 255, G: 252, B: 248, A: 255}
-	helpColorTitle       = color.RGBA{R: 24, G: 63, B: 92, A: 255}
-	helpColorMuted       = color.RGBA{R: 107, G: 135, B: 153, A: 255}
-	helpColorHeader      = color.RGBA{R: 234, G: 245, B: 251, A: 255}
-	helpColorSection     = color.RGBA{R: 30, G: 95, B: 138, A: 255}
-	helpColorCommand     = color.RGBA{R: 30, G: 95, B: 138, A: 255}
-	helpColorDescription = color.RGBA{R: 52, G: 77, B: 95, A: 255}
-	helpColorRule        = color.RGBA{R: 213, G: 232, B: 243, A: 255}
-	helpColorRowPrimary  = color.RGBA{R: 255, G: 252, B: 248, A: 255}
+	helpColorOuter        = color.RGBA{R: 255, G: 250, B: 243, A: 255}
+	helpColorBorder       = color.RGBA{R: 57, G: 141, B: 204, A: 255}
+	helpColorSurface      = color.RGBA{R: 255, G: 252, B: 248, A: 255}
+	helpColorTitle        = color.RGBA{R: 24, G: 63, B: 92, A: 255}
+	helpColorMuted        = color.RGBA{R: 107, G: 135, B: 153, A: 255}
+	helpColorHeader       = color.RGBA{R: 234, G: 245, B: 251, A: 255}
+	helpColorSection      = color.RGBA{R: 30, G: 95, B: 138, A: 255}
+	helpColorCommand      = color.RGBA{R: 30, G: 95, B: 138, A: 255}
+	helpColorDescription  = color.RGBA{R: 52, G: 77, B: 95, A: 255}
+	helpColorRule         = color.RGBA{R: 213, G: 232, B: 243, A: 255}
+	helpColorRowPrimary   = color.RGBA{R: 255, G: 252, B: 248, A: 255}
 	helpColorRowAlternate = color.RGBA{R: 247, G: 251, B: 253, A: 255}
-	helpColorBadge       = color.RGBA{R: 226, G: 241, B: 250, A: 255}
+	helpColorBadge        = color.RGBA{R: 226, G: 241, B: 250, A: 255}
 )
 
 func renderHelpCards(ctx context.Context, text string) ([][]byte, error) {
@@ -123,8 +124,8 @@ func drawHelpHeader(canvas *image.RGBA, faces helpCardFonts, page helpCardPage) 
 
 func drawHelpPageBadge(canvas *image.RGBA, face font.Face, subtitle string) {
 	label := "명령어 안내"
-	if slash := pageFraction(subtitle); slash != "" {
-		label += " " + slash
+	if fraction := pageFraction(subtitle); fraction != "" {
+		label += " " + fraction
 	}
 	width := cardkit.MeasureText(face, label) + 44
 	right := 1378
