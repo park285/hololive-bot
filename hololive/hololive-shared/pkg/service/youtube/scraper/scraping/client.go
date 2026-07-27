@@ -1,0 +1,362 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package scraping
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
+	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
+	"net"
+	"net/http"
+	"net/url"
+	"reflect"
+	"strings"
+	"time"
+)
+
+const FetchPageMaxAttempts = 3
+
+type FetchPolicy struct {
+	MaxAttempts       int
+	PerAttemptTimeout time.Duration
+	BaseDelay         time.Duration
+	Jitter            time.Duration
+	MaxDelay          time.Duration
+	AdmissionBlocking bool
+}
+
+func defaultFetchPerAttemptTimeout(fallback time.Duration) time.Duration {
+	if ytDefaults.ScraperHTTPTimeout > 0 {
+		return ytDefaults.ScraperHTTPTimeout
+	}
+	return fallback
+}
+
+var (
+	DefaultFetchPolicy = FetchPolicy{
+		MaxAttempts:       FetchPageMaxAttempts,
+		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
+		BaseDelay:         2 * time.Second,
+		Jitter:            1500 * time.Millisecond,
+		MaxDelay:          10 * time.Second,
+	}
+	HighFrequencyChannelFetchPolicy = FetchPolicy{
+		MaxAttempts:       1,
+		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
+	}
+	MetadataResolveFetchPolicy = FetchPolicy{
+		MaxAttempts:       1,
+		PerAttemptTimeout: 10 * time.Second,
+	}
+	RSSFetchPolicy = FetchPolicy{
+		MaxAttempts:       1,
+		PerAttemptTimeout: 10 * time.Second,
+	}
+	LiveStatusFallbackFetchPolicy = FetchPolicy{
+		MaxAttempts:       1,
+		PerAttemptTimeout: defaultFetchPerAttemptTimeout(15 * time.Second),
+		AdmissionBlocking: true,
+	}
+)
+
+var ErrRateLimited = errors.New("rate limited by YouTube (429)")
+
+var ErrForbidden = errors.New("forbidden by YouTube (403)")
+
+var ErrTransientCooldown = errors.New("youtube transient cooldown")
+
+var ErrEmptyResponse = errors.New("youtube returned empty response")
+
+var ErrBlockedResponse = errors.New("youtube returned blocked or challenge response")
+
+var ErrBlockedBodySignature = errors.New("youtube response body contains blocked or challenge signature")
+
+var ErrResponseTooLarge = errors.New("youtube response body exceeds configured limit")
+
+var errFetchAttemptTimeout = errors.New("youtube fetch attempt timeout")
+
+type CooldownError struct {
+	Kind  string
+	Delay time.Duration
+	Err   error
+}
+
+func (e *CooldownError) Error() string {
+	if e == nil {
+		return "cooldown error"
+	}
+
+	return fmt.Sprintf(
+		"%s cooldown remaining: %s: %v",
+		e.Kind,
+		e.Delay.Round(time.Second),
+		e.Err,
+	)
+}
+
+func (e *CooldownError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+
+	return e.Err
+}
+
+func (e *CooldownError) RetryDelay() time.Duration {
+	if e == nil || e.Delay <= 0 {
+		return 0
+	}
+
+	return e.Delay
+}
+
+var ErrChannelNotFound = errors.New("channel does not exist")
+
+var ErrChannelUnavailable = errors.New("channel is unavailable")
+
+// httpStatusError: HTTP 상태 코드 기반 에러 (재시도 판단용)
+type httpStatusError struct {
+	code       int
+	retryAfter time.Duration
+	cause      error
+}
+
+func (e *httpStatusError) Error() string {
+	if e.retryAfter > 0 {
+		return fmt.Sprintf("unexpected status code: %d (retry-after: %s)", e.code, e.retryAfter.Round(time.Second))
+	}
+	return fmt.Sprintf("unexpected status code: %d", e.code)
+}
+
+func (e *httpStatusError) Unwrap() error {
+	return e.cause
+}
+
+func extractHTTPStatusCode(err error) (int, bool) {
+	if err == nil {
+		return 0, false
+	}
+	var statusErr *httpStatusError
+	if !errors.As(err, &statusErr) {
+		return 0, false
+	}
+	return statusErr.code, true
+}
+
+func extractHTTPRetryAfter(err error) time.Duration {
+	if err == nil {
+		return 0
+	}
+	var statusErr *httpStatusError
+	if !errors.As(err, &statusErr) {
+		return 0
+	}
+	return statusErr.retryAfter
+}
+
+func isRetryableStatusError(err error) bool {
+	statusCode, ok := extractHTTPStatusCode(err)
+	return ok && isRetryableStatusCode(statusCode)
+}
+
+func isRetryableVideoPageError(err error) bool {
+	return isRetryableFetchPageError(err) || parser.IsParserDriftError(err)
+}
+
+func isRetryableFetchPageError(err error) bool {
+	if youtubeadmission.IsDeferred(err) {
+		return false
+	}
+	return errors.Is(err, ErrEmptyResponse) ||
+		errors.Is(err, errFetchAttemptTimeout) ||
+		isRetryableStatusError(err) ||
+		isRetryableTransportError(err)
+}
+
+func isRetryableStatusCode(code int) bool {
+	switch code {
+	case http.StatusRequestTimeout, http.StatusTooEarly:
+		return true
+	default:
+		return isRetryable5xx(code)
+	}
+}
+
+// isRetryable5xx: 5xx 서버 에러인지 확인 (재시도 대상)
+func isRetryable5xx(code int) bool {
+	switch code {
+	case 500, 502, 503, 504:
+		return true
+	default:
+		return false
+	}
+}
+
+// isRetryableTransportError: 네트워크/프록시 계층 일시 장애인지 확인
+func isRetryableTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// 호출자 컨텍스트 취소는 재시도하지 않는다.
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+
+	// 호출자 deadline 초과는 재시도하지 않는다.
+	// 단, http.Client 자체 타임아웃은 문자열 시그니처로 구분하여 재시도 허용.
+	if errors.Is(err, context.DeadlineExceeded) {
+		return isRetryableDeadlineExceeded(err)
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return isRetryableURLError(urlErr)
+	}
+
+	if isTimeoutOrTemporaryError(err) {
+		return true
+	}
+
+	return hasTransientTransportSignature(err.Error())
+}
+
+func isRetryableDeadlineExceeded(err error) bool {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		return hasTransientTransportSignature(urlErr.Err.Error())
+	}
+
+	return hasTransientTransportSignature(err.Error())
+}
+
+func isRetryableURLError(err *url.Error) bool {
+	if isTimeoutOrTemporaryError(err) {
+		return true
+	}
+	if err.Err == nil {
+		return false
+	}
+	if isTimeoutOrTemporaryError(err.Err) {
+		return true
+	}
+	return hasTransientTransportSignature(err.Err.Error())
+}
+
+type temporaryError interface {
+	Temporary() bool
+}
+
+func isTimeoutOrTemporaryError(err error) bool {
+	if isTimeoutNetError(err) {
+		return true
+	}
+
+	return isTemporaryNetError(err)
+}
+
+func isTimeoutNetError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
+		if urlErr.Err == nil {
+			return false
+		}
+		return isTimeoutNetError(urlErr.Err)
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) && !isNilInterfaceValue(netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
+
+func isTemporaryNetError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
+		if urlErr.Err == nil {
+			return false
+		}
+		return isTemporaryNetError(urlErr.Err)
+	}
+
+	var tempErr temporaryError
+	if !errors.As(err, &tempErr) {
+		return false
+	}
+	if isNilInterfaceValue(tempErr) {
+		return false
+	}
+	return tempErr.Temporary()
+}
+
+func isNilInterfaceValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	kind := reflected.Kind()
+	if kind == reflect.Chan ||
+		kind == reflect.Func ||
+		kind == reflect.Interface ||
+		kind == reflect.Map ||
+		kind == reflect.Pointer ||
+		kind == reflect.Slice {
+		return reflected.IsNil()
+	}
+	return false
+}
+
+var transientTransportSignatures = []string{
+	"connection reset by peer",
+	"connection reset",
+	"connection refused",
+	"broken pipe",
+	"http2: timeout awaiting response headers",
+	"http2: client connection lost",
+	"server closed idle connection",
+	"use of closed network connection",
+	"forcibly closed by the remote host",
+	"tls handshake timeout",
+	"timeout exceeded while awaiting headers",
+	"client.timeout exceeded while awaiting headers",
+	"client.timeout exceeded",
+	"temporary failure in name resolution",
+	"unexpected eof",
+}
+
+func hasTransientTransportSignature(msg string) bool {
+	lower := strings.ToLower(msg)
+	for _, signature := range transientTransportSignatures {
+		if strings.Contains(lower, signature) {
+			return true
+		}
+	}
+	return false
+}

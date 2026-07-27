@@ -3,32 +3,37 @@ package bootstrap
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
+
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/workerpool"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
 func BuildBotDependencyModules(
-	appConfig *config.Config,
+	appConfig *configsettings.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *ScraperHolodexProfileFoundation,
 	alarmYouTubeStack *AlarmYouTubeStackComponents,
 	integrationServices *CoreIntegrationServices,
-	messageAdapter *adapter.MessageAdapter,
-	formatter *adapter.ResponseFormatter,
+	messageAdapter *messaging.MessageAdapter,
+	formatter *messageformatter.ResponseFormatter,
 	messageStrings *messagestrings.Store,
 	irisClient iris.BotClient,
 	logger *slog.Logger,
@@ -43,7 +48,7 @@ func BuildBotDependencyModules(
 	}
 }
 
-func buildBotCoreModule(appConfig *config.Config, logger *slog.Logger) BotCoreModule {
+func buildBotCoreModule(appConfig *configsettings.Config, logger *slog.Logger) BotCoreModule {
 	return BotCoreModule{
 		BotSelfUser:           appConfig.Bot.SelfUser,
 		IrisBaseURL:           appConfig.Iris.BaseURL,
@@ -56,8 +61,8 @@ func buildBotCoreModule(appConfig *config.Config, logger *slog.Logger) BotCoreMo
 
 func buildBotMessagingModule(
 	irisClient iris.BotClient,
-	messageAdapter *adapter.MessageAdapter,
-	formatter *adapter.ResponseFormatter,
+	messageAdapter *messaging.MessageAdapter,
+	formatter *messageformatter.ResponseFormatter,
 	messageStrings *messagestrings.Store,
 ) BotMessagingModule {
 	return BotMessagingModule{
@@ -85,7 +90,7 @@ func buildBotDataModule(
 
 func buildBotStreamModule(
 	alarmMode *AlarmModeComponents,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	memberMatcher *matcher.Matcher,
 	youTubeStack *providers.YouTubeStack,
 ) BotStreamModule {
@@ -114,13 +119,13 @@ func buildBotSupportModule(
 }
 
 func buildBotFeatureModule(
-	majorEventRepository command.MajorEventRepository,
-	memberNewsService command.MemberNewsService,
-	commandBuilders []bot.CommandBuilder,
+	majorEventRepository handlercore.MajorEventRepository,
+	memberNewsService handlercore.MemberNewsService,
+	commandBuilders []orchcmd.CommandBuilder,
 ) BotFeatureModule {
 	return BotFeatureModule{
 		MajorEventRepository: majorEventRepository,
 		MemberNews:           memberNewsService,
-		CommandBuilders:      bot.CloneCommandBuilders(commandBuilders),
+		CommandBuilders:      orchcmd.CloneCommandBuilders(commandBuilders),
 	}
 }

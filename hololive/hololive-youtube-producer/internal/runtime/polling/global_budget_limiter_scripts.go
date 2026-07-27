@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -215,22 +216,22 @@ redis.call('DEL', reservationKey)
 return 0
 `
 
-func parseGlobalBudgetReserveResult(values []valkey.ValkeyMessage) (poller.BudgetDecision, error) {
+func parseGlobalBudgetReserveResult(values []valkey.ValkeyMessage) (polling.BudgetDecision, error) {
 	code, retryAfterMS, reason, err := parseGlobalBudgetReserveValues(values)
 	if err != nil {
-		return poller.BudgetDecision{}, err
+		return polling.BudgetDecision{}, err
 	}
 	switch code {
 	case globalBudgetReserveCodeAllowed:
-		return poller.BudgetDecision{Allowed: true}, nil
+		return polling.BudgetDecision{Allowed: true}, nil
 	case globalBudgetReserveCodeDenied:
-		return poller.BudgetDecision{
+		return polling.BudgetDecision{
 			Allowed:    false,
 			RetryAfter: millisDuration(retryAfterMS),
 			Reason:     reason,
 		}, nil
 	default:
-		return poller.BudgetDecision{}, fmt.Errorf("reserve global budget: unknown result code: %d", code)
+		return polling.BudgetDecision{}, fmt.Errorf("reserve global budget: unknown result code: %d", code)
 	}
 }
 

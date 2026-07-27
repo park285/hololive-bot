@@ -12,7 +12,7 @@ import (
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 )
 
-type youtubePollTargets struct {
+type Targets struct {
 	NotificationChannelIDs []string
 	StatsChannelIDs        []string
 	DroppedAlarmTargets    int
@@ -24,12 +24,12 @@ func resolveYouTubePollTargets(
 	ctx context.Context,
 	cacheService cache.Client,
 	postgresService database.Client,
-	operationalChannels []communityShortsOperationalChannel,
+	operationalChannels []communityshorts.OperationalChannel,
 	logger *slog.Logger,
-) (youtubePollTargets, error) {
+) (Targets, error) {
 	alarmChannelIDs, err := loadAlarmChannelIDsFromRepository(ctx, postgresService)
 	if err != nil {
-		return youtubePollTargets{}, err
+		return Targets{}, err
 	}
 	dbTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(alarmChannelIDs, operationalChannels)
 
@@ -62,8 +62,8 @@ func loadAlarmChannelIDs(ctx context.Context, postgresService database.Client) (
 
 func resolveYouTubePollTargetsFromAlarmChannelIDs(
 	alarmChannelIDs []string,
-	operationalChannels []communityShortsOperationalChannel,
-) youtubePollTargets {
+	operationalChannels []communityshorts.OperationalChannel,
+) Targets {
 	statsChannelIDs := communityshorts.EnabledChannelIDs(operationalChannels)
 	allowed := make(map[string]struct{}, len(statsChannelIDs))
 	for _, channelID := range statsChannelIDs {
@@ -85,7 +85,7 @@ func resolveYouTubePollTargetsFromAlarmChannelIDs(
 		notificationChannelIDs = append(notificationChannelIDs, channelID)
 	}
 
-	return youtubePollTargets{
+	return Targets{
 		NotificationChannelIDs: notificationChannelIDs,
 		StatsChannelIDs:        statsChannelIDs,
 		DroppedAlarmTargets:    dropped,
@@ -94,8 +94,8 @@ func resolveYouTubePollTargetsFromAlarmChannelIDs(
 
 func logYouTubePollTargetStartupSourceState(
 	logger *slog.Logger,
-	cacheTargets youtubePollTargets,
-	dbTargets youtubePollTargets,
+	cacheTargets Targets,
+	dbTargets Targets,
 ) {
 	if logger == nil {
 		return

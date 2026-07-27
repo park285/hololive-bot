@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
@@ -69,7 +69,7 @@ type CelebrationCalendarFinder interface {
 }
 
 type CalendarImageRenderer interface {
-	RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error)
+	RenderCalendarImageContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error)
 }
 
 type BroadcastHistoryQuery struct {
@@ -124,8 +124,8 @@ type Dependencies struct {
 	MemberNews          MemberNewsService
 	BroadcastHistory    BroadcastHistoryRepository
 	ThumbnailDownloader BroadcastThumbnailDownloader
-	MembersData         member.DataProvider
-	Formatter           *adapter.ResponseFormatter
+	MembersData         domain.MemberDataProvider
+	Formatter           *formatter.ResponseFormatter
 	SendMessage         func(ctx context.Context, room, message string) error
 	SendImage           func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
 	SendError           func(ctx context.Context, room, message string) error

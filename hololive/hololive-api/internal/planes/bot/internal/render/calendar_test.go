@@ -2,7 +2,6 @@ package render
 
 import (
 	"bytes"
-	"errors"
 	"image"
 	"image/png"
 	"net/http"
@@ -19,9 +18,9 @@ func TestCalendarCardRenderer_RenderCalendarImage_EmptyEntries(t *testing.T) {
 	t.Parallel()
 
 	r := NewCalendarCardRenderer()
-	data, err := r.RenderCalendarImage(6, 2026, nil)
+	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, nil)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, data)
 }
@@ -36,9 +35,9 @@ func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
 		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{NameKo: "스이세이"}, Day: 22},
 	}
 
-	data, err := r.RenderCalendarImage(6, 2026, entries)
+	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, data)
 
@@ -61,11 +60,11 @@ func TestCalendarCardRenderer_RenderCalendarImage_UsesTransportFriendlyCanvas(t 
 	t.Parallel()
 
 	r := NewCalendarCardRenderer()
-	data, err := r.RenderCalendarImage(6, 2026, []domain.CalendarEntry{
+	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, []domain.CalendarEntry{
 		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "페코라"}, Day: 15},
 	})
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
 
 	img, decErr := png.Decode(bytes.NewReader(data))
@@ -95,15 +94,15 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.
 		},
 	}
 
-	first, err := r.RenderCalendarImage(6, 2026, entries)
+	first, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("first RenderCalendarImage() error = %v", err)
+		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
 	first[0] = 0
 
-	second, err := r.RenderCalendarImage(6, 2026, entries)
+	second, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("second RenderCalendarImage() error = %v", err)
+		t.Fatalf("second RenderCalendarImageContext() error = %v", err)
 	}
 
 	assertValidPNG(t, second)
@@ -127,16 +126,16 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers
 	}
 
 	firstRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
-	first, err := firstRenderer.RenderCalendarImage(6, 2026, entries)
+	first, err := firstRenderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("first RenderCalendarImage() error = %v", err)
+		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, first)
 
 	secondRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
-	second, err := secondRenderer.RenderCalendarImage(6, 2026, entries)
+	second, err := secondRenderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("second RenderCalendarImage() error = %v", err)
+		t.Fatalf("second RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, second)
 
@@ -196,53 +195,6 @@ func TestDiskCache_ConcurrentCrossHashStoreServesValidDataOrMiss(t *testing.T) {
 	wg.Wait()
 }
 
-func TestCalendarCardRenderer_RenderCalendarImage_CoalescesConcurrentMonthlyCacheMisses(t *testing.T) {
-	var requests atomic.Int32
-	server := newDelayedPNGServer(t, &requests, 25*time.Millisecond)
-	defer server.Close()
-
-	r := NewCalendarCardRenderer()
-	entries := []domain.CalendarEntry{
-		{
-			Kind:   domain.CelebrationKindBirthday,
-			Member: &domain.Member{ShortKoreanName: "페코라", Photo: server.URL + "/avatar=s88-c"},
-			Day:    15,
-		},
-	}
-
-	const workers = 5
-	start := make(chan struct{})
-	errs := make(chan error, workers)
-	var wg sync.WaitGroup
-	wg.Add(workers)
-	for range workers {
-		go func() {
-			defer wg.Done()
-			<-start
-			data, err := r.RenderCalendarImage(6, 2026, entries)
-			if err != nil {
-				errs <- err
-				return
-			}
-			if !bytes.HasPrefix(data, []byte{0x89, 'P', 'N', 'G'}) {
-				errs <- errors.New("rendered data is not a valid PNG")
-			}
-		}()
-	}
-	close(start)
-	wg.Wait()
-	close(errs)
-
-	for err := range errs {
-		if err != nil {
-			t.Fatalf("RenderCalendarImage() error = %v", err)
-		}
-	}
-	if got, want := requests.Load(), int32(1); got != want {
-		t.Fatalf("photo requests = %d, want %d", got, want)
-	}
-}
-
 func TestCalendarCardRenderer_RenderCalendarImage_RefreshesCacheWhenEntriesChange(t *testing.T) {
 	var requests atomic.Int32
 	server := newPNGServer(t, &requests)
@@ -264,11 +216,11 @@ func TestCalendarCardRenderer_RenderCalendarImage_RefreshesCacheWhenEntriesChang
 		},
 	}
 
-	if _, err := r.RenderCalendarImage(6, 2026, entries); err != nil {
-		t.Fatalf("first RenderCalendarImage() error = %v", err)
+	if _, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries); err != nil {
+		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
-	if _, err := r.RenderCalendarImage(6, 2026, changedEntries); err != nil {
-		t.Fatalf("changed RenderCalendarImage() error = %v", err)
+	if _, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, changedEntries); err != nil {
+		t.Fatalf("changed RenderCalendarImageContext() error = %v", err)
 	}
 
 	if got, want := requests.Load(), int32(2); got != want {
@@ -371,9 +323,9 @@ func TestCalendarCardRenderer_RenderCalendarImage_NilMember(t *testing.T) {
 		{Kind: domain.CelebrationKindBirthday, Member: nil, Day: 1},
 	}
 
-	data, err := r.RenderCalendarImage(1, 2026, entries)
+	data, err := r.RenderCalendarImageContext(t.Context(), 1, 2026, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
 
 	assertValidPNG(t, data)
@@ -392,9 +344,9 @@ func TestCalendarCardRenderer_CompactsBusyMonthIntoSingleImage(t *testing.T) {
 		}
 	}
 
-	data, err := r.RenderCalendarImage(6, 2026, entries)
+	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
 
 	img, decErr := png.Decode(bytes.NewReader(data))

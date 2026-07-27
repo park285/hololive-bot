@@ -8,16 +8,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
 	"github.com/stretchr/testify/require"
 )
 
-func goldenScraperConfig(tiering, backfill bool) config.ScraperConfig {
-	cfg := config.ScraperConfig{
-		Poll: config.ScraperPoll{
+func goldenScraperConfig(tiering, backfill bool) settings.ScraperConfig {
+	cfg := settings.ScraperConfig{
+		Poll: settings.ScraperPoll{
 			Videos:    15 * time.Minute,
 			Shorts:    6 * time.Minute,
 			Community: 15 * time.Minute,
@@ -27,7 +30,7 @@ func goldenScraperConfig(tiering, backfill bool) config.ScraperConfig {
 	}
 	cfg.PollTiering.Enabled = tiering
 	if backfill {
-		cfg.Backfill = config.ScraperBackfillConfig{
+		cfg.Backfill = settings.ScraperBackfillConfig{
 			Enabled:           true,
 			ShortsEnabled:     true,
 			ShortsInterval:    5 * time.Minute,
@@ -41,7 +44,7 @@ func goldenScraperConfig(tiering, backfill bool) config.ScraperConfig {
 	return cfg
 }
 
-func goldenBuildRegistrations(tiering, backfill bool, liveStatusProvider poller.LiveStatusProvider) []providers.ChannelPollerRegistration {
+func goldenBuildRegistrations(tiering, backfill bool, liveStatusProvider pollers.LiveStatusProvider) []providers.ChannelPollerRegistration {
 	postgres := &databasemocks.Client{}
 	scraperConfig := goldenScraperConfig(tiering, backfill)
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
@@ -55,7 +58,7 @@ func goldenBuildRegistrations(tiering, backfill bool, liveStatusProvider poller.
 	)
 }
 
-func serializeBudgetSourceUnits(units map[poller.BudgetSource]float64) string {
+func serializeBudgetSourceUnits(units map[polling.BudgetSource]float64) string {
 	if len(units) == 0 {
 		return "{}"
 	}
@@ -66,7 +69,7 @@ func serializeBudgetSourceUnits(units map[poller.BudgetSource]float64) string {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, source := range keys {
-		parts = append(parts, fmt.Sprintf("%s=%g", source, units[poller.BudgetSource(source)]))
+		parts = append(parts, fmt.Sprintf("%s=%g", source, units[polling.BudgetSource(source)]))
 	}
 	return "{" + strings.Join(parts, ",") + "}"
 }
@@ -107,7 +110,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsGolden(t *testing.T) {
 		name       string
 		tiering    bool
 		backfill   bool
-		liveStatus poller.LiveStatusProvider
+		liveStatus pollers.LiveStatusProvider
 		want       []string
 	}{
 		{

@@ -40,7 +40,7 @@ type Publisher struct {
 func NewPublisher(client valkey.Client) *Publisher {
 	return &Publisher{
 		client:  client,
-		channel: DefaultChannel,
+		channel: defaultChannel,
 	}
 }
 
@@ -68,7 +68,7 @@ func (p *Publisher) publish(ctx context.Context, updateType string, payload any)
 		return fmt.Errorf("publish config update: marshal payload: %w", err)
 	}
 
-	update := ConfigUpdate{
+	update := contractssettings.ConfigUpdateV1{
 		Type:    updateType,
 		Payload: rawPayload,
 	}

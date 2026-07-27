@@ -27,9 +27,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
 )
 
 type fakeRunner struct{}
@@ -40,8 +39,8 @@ func (f *fakeRunner) Check(_ context.Context) ([]*domain.AlarmNotification, erro
 
 type fakeSender struct{}
 
-func (f *fakeSender) Send(_ context.Context, _ []*domain.AlarmNotification) (checker.SendResult, error) {
-	return checker.SendResult{}, nil
+func (f *fakeSender) Send(_ context.Context, _ []*domain.AlarmNotification) (delivery.SendResult, error) {
+	return delivery.SendResult{}, nil
 }
 
 func TestRuntimeSchedulerStart_CancellationPath(t *testing.T) {

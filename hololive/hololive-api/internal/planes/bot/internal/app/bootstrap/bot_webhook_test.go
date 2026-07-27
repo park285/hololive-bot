@@ -33,7 +33,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/park285/iris-client-go/webhook"
@@ -99,9 +100,9 @@ func buildBotWebhookHandlerForTest(t *testing.T, messageHandler webhook.MessageH
 	valkeyClient, _ := sharedtestutil.NewTestValkeyClient(t)
 	cacheClient := cachemocks.NewLenientClient()
 	cacheClient.GetClientFunc = func() valkey.Client { return valkeyClient }
-	appConfig := &config.Config{
-		Iris: config.IrisConfig{WebhookToken: "test-token"},
-		Webhook: config.WebhookConfig{
+	appConfig := &settings.Config{
+		Iris: settings.IrisConfig{WebhookToken: "test-token"},
+		Webhook: settings.WebhookConfig{
 			WorkerCount:    1,
 			QueueSize:      8,
 			EnqueueTimeout: 100 * time.Millisecond,
@@ -150,9 +151,9 @@ func TestBuildBotWebhookHandlerRequiresHMACWhenConfigured(t *testing.T) {
 	cacheClient := cachemocks.NewLenientClient()
 	cacheClient.GetClientFunc = func() valkey.Client { return valkeyClient }
 
-	appConfig := &config.Config{
-		Iris: config.IrisConfig{WebhookToken: token},
-		Webhook: config.WebhookConfig{
+	appConfig := &settings.Config{
+		Iris: settings.IrisConfig{WebhookToken: token},
+		Webhook: settings.WebhookConfig{
 			WorkerCount:    1,
 			QueueSize:      8,
 			EnqueueTimeout: 100 * time.Millisecond,

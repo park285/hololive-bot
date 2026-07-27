@@ -31,17 +31,15 @@ import (
 
 type majorEventWeeklySummaryData struct {
 	Count      int
-	Events     []majorEventView
+	Events     []templateview.MajorEventView
 	LLMSummary string
 }
 
 type majorEventMonthlySummaryData struct {
 	Count      int
-	Events     []majorEventView
+	Events     []templateview.MajorEventView
 	LLMSummary string
 }
-
-type majorEventView = templateview.MajorEventView
 
 type majorEventSubscribedData struct {
 	Prefix string
@@ -110,7 +108,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 	return f.foldSeeMore(rendered)
 }
 
-func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
+func buildMajorEventViews(events []domain.MajorEvent) []templateview.MajorEventView {
 	return templateview.BuildMajorEventViews(events)
 }
 

@@ -32,9 +32,15 @@ import (
 const memberHashKey = "hololive:members"
 
 func (c *Service) InitializeMemberDatabase(ctx context.Context, memberData map[string]string) error {
+	for field := range memberData {
+		if !isCanonicalMemberField(field) {
+			return fmt.Errorf("initialize member database: member field must use name:org format")
+		}
+	}
+
 	if err := c.client.Do(ctx, c.client.B().Del().Key(memberHashKey).Build()).Error(); err != nil {
 		c.logger.Error("Failed to clear member database", slog.Any("error", err))
-		return NewCacheError("del failed", "del", memberHashKey, err)
+		return NewCacheError("del", memberHashKey, err)
 	}
 
 	if len(memberData) == 0 {
@@ -49,7 +55,7 @@ func (c *Service) InitializeMemberDatabase(ctx context.Context, memberData map[s
 
 	if err := c.client.Do(ctx, builder.Build()).Error(); err != nil {
 		c.logger.Error("Failed to initialize member database", slog.Any("error", err))
-		return NewCacheError("hset failed", "hset", memberHashKey, err)
+		return NewCacheError("hset", memberHashKey, err)
 	}
 
 	c.logger.Info("Member database initialized",
@@ -58,71 +64,33 @@ func (c *Service) InitializeMemberDatabase(ctx context.Context, memberData map[s
 	return nil
 }
 
-// 역호환을 위해 먼저 name:Hololive 키를 시도하고, 실패 시 레거시 키(name만)를 시도합니다.
-func (c *Service) GetMemberChannelID(ctx context.Context, memberName string) (string, error) {
-	if memberName == "" {
-		return "", nil
-	}
-
-	if value, ok := c.getMemberChannelIDIfPresent(ctx, memberName+":Hololive"); ok {
-		return value, nil
-	}
-
-	return c.getLegacyMemberChannelID(ctx, memberName)
-}
-
-func (c *Service) getMemberChannelIDIfPresent(ctx context.Context, key string) (string, bool) {
-	resp := c.client.Do(ctx, c.client.B().Hget().Key(memberHashKey).Field(key).Build())
-	if valkey.IsValkeyNil(resp.Error()) || resp.Error() != nil {
-		return "", false
-	}
-
-	value, err := resp.ToString()
-	return value, err == nil && value != ""
-}
-
-func (c *Service) getLegacyMemberChannelID(ctx context.Context, memberName string) (string, error) {
-	resp := c.client.Do(ctx, c.client.B().Hget().Key(memberHashKey).Field(memberName).Build())
-	if valkey.IsValkeyNil(resp.Error()) {
-		return "", nil
-	}
-	if resp.Error() != nil {
-		c.logger.Error("Failed to get member channel ID", slog.String("member", memberName), slog.Any("error", resp.Error()))
-		return "", NewCacheError("hget failed", "hget", memberHashKey, resp.Error())
-	}
-
-	value, err := resp.ToString()
-	if err != nil {
-		return "", NewCacheError("hget conversion failed", "hget", memberHashKey, err)
-	}
-
-	return value, nil
-}
-
 func (c *Service) GetAllMembers(ctx context.Context) (map[string]string, error) {
 	resp := c.client.Do(ctx, c.client.B().Hgetall().Key(memberHashKey).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Failed to get all members", slog.Any("error", resp.Error()))
-		return map[string]string{}, NewCacheError("hgetall failed", "hgetall", memberHashKey, resp.Error())
+		return map[string]string{}, NewCacheError("hgetall", memberHashKey, resp.Error())
 	}
 
 	values, err := resp.AsStrMap()
 	if err != nil {
-		return map[string]string{}, NewCacheError("hgetall conversion failed", "hgetall", memberHashKey, err)
+		return map[string]string{}, NewCacheError("hgetall", memberHashKey, err)
 	}
 
-	return values, nil
+	canonical := make(map[string]string, len(values))
+	for field, channelID := range values {
+		if isCanonicalMemberField(field) {
+			canonical[field] = channelID
+		}
+	}
+	return canonical, nil
 }
 
 func (c *Service) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org string) (string, error) {
-	if memberName == "" {
+	if memberName == "" || org == "" {
 		return "", nil
 	}
 
-	key := memberName
-	if org != "" {
-		key = memberName + ":" + org
-	}
+	key := memberName + ":" + org
 
 	resp := c.client.Do(ctx, c.client.B().Hget().Key(memberHashKey).Field(key).Build())
 	if valkey.IsValkeyNil(resp.Error()) {
@@ -133,12 +101,12 @@ func (c *Service) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org
 			slog.String("member", memberName),
 			slog.String("org", org),
 			slog.Any("error", resp.Error()))
-		return "", NewCacheError("hget failed", "hget", memberHashKey, resp.Error())
+		return "", NewCacheError("hget", memberHashKey, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
-		return "", NewCacheError("hget conversion failed", "hget", memberHashKey, err)
+		return "", NewCacheError("hget", memberHashKey, err)
 	}
 
 	return value, nil
@@ -170,18 +138,10 @@ func (c *Service) GetMemberChannelIDs(ctx context.Context, memberName string) ([
 	return channelIDs, nil
 }
 
-func (c *Service) AddMember(ctx context.Context, memberName, channelID string) error {
-	if memberName == "" || channelID == "" {
-		return fmt.Errorf("member name and channel ID must be provided")
+func isCanonicalMemberField(field string) bool {
+	if strings.Count(field, ":") != 1 {
+		return false
 	}
-
-	if err := c.client.Do(ctx, c.client.B().Hset().Key(memberHashKey).FieldValue().FieldValue(memberName, channelID).Build()).Error(); err != nil {
-		c.logger.Error("Failed to add member", slog.String("member", memberName), slog.String("channel_id", channelID), slog.Any("error", err))
-		return NewCacheError("hset failed", "hset", memberHashKey, err)
-	}
-	c.logger.Info("Member added/updated",
-		slog.String("member", memberName),
-		slog.String("channel_id", channelID),
-	)
-	return nil
+	name, org, _ := strings.Cut(field, ":")
+	return strings.TrimSpace(name) != "" && strings.TrimSpace(org) != ""
 }

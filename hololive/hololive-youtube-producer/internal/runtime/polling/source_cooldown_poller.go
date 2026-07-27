@@ -7,8 +7,10 @@ import (
 	"time"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
 const (
@@ -20,29 +22,29 @@ const (
 const defaultSourceCooldownReportTimeout = 2 * time.Second
 
 type sourceCooldownReportingPoller struct {
-	inner         poller.Poller
-	reporter      poller.SourceCooldownReporter
-	source        poller.BudgetSource
+	inner         scheduler.Poller
+	reporter      polling.SourceCooldownReporter
+	source        polling.BudgetSource
 	logger        *slog.Logger
 	reportTimeout time.Duration
 }
 
 func wrapYouTubeProducerSourceCooldownPollers(
 	registrations []providers.ChannelPollerRegistration,
-	limiter poller.GlobalBudgetLimiter,
+	limiter polling.GlobalBudgetLimiter,
 	logger *slog.Logger,
 ) []providers.ChannelPollerRegistration {
 	if registrations == nil {
 		registrations = []providers.ChannelPollerRegistration{}
 	}
-	reporter, ok := limiter.(poller.SourceCooldownReporter)
+	reporter, ok := limiter.(polling.SourceCooldownReporter)
 	if !ok || reporter == nil {
 		return registrations
 	}
 	wrapped := make([]providers.ChannelPollerRegistration, len(registrations))
 	copy(wrapped, registrations)
 	for i := range wrapped {
-		if !registrationUsesSource(&wrapped[i], poller.BudgetSourceYouTubeScraper) {
+		if !registrationUsesSource(&wrapped[i], polling.BudgetSourceYouTubeScraper) {
 			continue
 		}
 		wrapped[i].Poller = newSourceCooldownReportingPoller(wrapped[i].Poller, reporter, logger)
@@ -50,7 +52,7 @@ func wrapYouTubeProducerSourceCooldownPollers(
 	return wrapped
 }
 
-func registrationUsesSource(registration *providers.ChannelPollerRegistration, source poller.BudgetSource) bool {
+func registrationUsesSource(registration *providers.ChannelPollerRegistration, source polling.BudgetSource) bool {
 	if registration == nil {
 		return false
 	}
@@ -62,17 +64,17 @@ func registrationUsesSource(registration *providers.ChannelPollerRegistration, s
 }
 
 func newSourceCooldownReportingPoller(
-	inner poller.Poller,
-	reporter poller.SourceCooldownReporter,
+	inner scheduler.Poller,
+	reporter polling.SourceCooldownReporter,
 	logger *slog.Logger,
-) poller.Poller {
+) scheduler.Poller {
 	if inner == nil || reporter == nil {
 		return inner
 	}
 	return &sourceCooldownReportingPoller{
 		inner:         inner,
 		reporter:      reporter,
-		source:        poller.BudgetSourceYouTubeScraper,
+		source:        polling.BudgetSourceYouTubeScraper,
 		logger:        logger,
 		reportTimeout: defaultSourceCooldownReportTimeout,
 	}

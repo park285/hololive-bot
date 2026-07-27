@@ -26,7 +26,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
@@ -52,7 +52,7 @@ func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *dom
 	}
 
 	if c.Deps().MemberNews == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsServiceNotInitialized)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsServiceNotInitialized)
 	}
 
 	switch memberNewsSubscriptionAction(params) {
@@ -94,14 +94,14 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 	return handlercore.NewSubscriptionFlow(&handlercore.SubscriptionFlowConfig{
 		Port: memberNewsSubscriptionPort{service: c.Deps().MemberNews},
 		OnCheckError: func(ctx context.Context, _ error) error {
-			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsSubscriptionFailed)
 		},
 		OnAlreadySubscribed: func(ctx context.Context) error {
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsAlreadySubscribed(ctx))
 		},
 		OnSubscribeError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Member news subscribe failed", "room", cmdCtx.Room, "error", err)
-			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsSubscriptionFailed)
 		},
 		OnSubscribed: func(ctx context.Context) error {
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsSubscribed(ctx))
@@ -111,7 +111,7 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 		},
 		OnUnsubscribeError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Member news unsubscribe failed", "room", cmdCtx.Room, "error", err)
-			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
+			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsSubscriptionFailed)
 		},
 		OnUnsubscribed: func(ctx context.Context) error {
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsUnsubscribed(ctx))

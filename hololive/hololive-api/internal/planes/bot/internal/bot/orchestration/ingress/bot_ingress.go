@@ -30,7 +30,7 @@ import (
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 )
 
@@ -43,18 +43,18 @@ type Envelope struct {
 	RoomName    string
 	UserID      string
 	UserName    string
-	Parsed      *adapter.ParsedCommand
+	Parsed      *messaging.ParsedCommand
 }
 
 type MessageIngress struct {
-	messageAdapter *adapter.MessageAdapter
+	messageAdapter *messaging.MessageAdapter
 	acl            *acl.Service
 	logger         *slog.Logger
 	selfSender     string
 }
 
 func NewMessageIngress(
-	messageAdapter *adapter.MessageAdapter,
+	messageAdapter *messaging.MessageAdapter,
 	aclService *acl.Service,
 	logger *slog.Logger,
 	selfSender string,
@@ -149,7 +149,7 @@ func (i *MessageIngress) isRoomBlocked(ctx context.Context, roomName, chatID, us
 	return true
 }
 
-func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Message, chatID, userName string) *adapter.ParsedCommand {
+func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Message, chatID, userName string) *messaging.ParsedCommand {
 	parsed := i.messageAdapter.ParseMessage(message)
 	if parsed == nil {
 		i.logWarn(ctx, "Parsed command is nil", slog.String("room", chatID))
@@ -177,7 +177,7 @@ func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Mess
 
 func (i *MessageIngress) logCommandReceived(
 	ctx context.Context,
-	parsed *adapter.ParsedCommand,
+	parsed *messaging.ParsedCommand,
 	commandType string,
 	userID string,
 	userName string,

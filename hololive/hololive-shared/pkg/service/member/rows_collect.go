@@ -7,9 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type pgxRows = pgx.Rows
-
-func collectJoinedRows[T any](rows pgxRows, iterLabel string, scan func(pgxRows) (T, error)) ([]T, error) {
+func collectJoinedRows[T any](rows pgx.Rows, iterLabel string, scan func(pgx.Rows) (T, error)) ([]T, error) {
 	var (
 		collected []T
 		rowErrs   []error

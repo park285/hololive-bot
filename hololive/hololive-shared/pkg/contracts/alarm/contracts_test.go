@@ -29,25 +29,26 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	keyspkg "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func TestAlarmQueueContractConstants(t *testing.T) {
 	t.Parallel()
 
-	if contractsalarm.DispatchQueueKey != "alarm:dispatch:queue" {
-		t.Fatalf("DispatchQueueKey = %q", contractsalarm.DispatchQueueKey)
+	if keyspkg.DispatchQueueKey != "alarm:dispatch:queue" {
+		t.Fatalf("DispatchQueueKey = %q", keyspkg.DispatchQueueKey)
 	}
-	if contractsalarm.DispatchRetryQueueKey != "alarm:dispatch:retry" {
-		t.Fatalf("DispatchRetryQueueKey = %q", contractsalarm.DispatchRetryQueueKey)
+	if keyspkg.DispatchRetryQueueKey != "alarm:dispatch:retry" {
+		t.Fatalf("DispatchRetryQueueKey = %q", keyspkg.DispatchRetryQueueKey)
 	}
-	if contractsalarm.DispatchDLQKey != "alarm:dispatch:dlq" {
-		t.Fatalf("DispatchDLQKey = %q", contractsalarm.DispatchDLQKey)
+	if keyspkg.DispatchDLQKey != "alarm:dispatch:dlq" {
+		t.Fatalf("DispatchDLQKey = %q", keyspkg.DispatchDLQKey)
 	}
-	if contractsalarm.NotifyClaimKeyPrefix != "notified:claim:" {
-		t.Fatalf("NotifyClaimKeyPrefix = %q", contractsalarm.NotifyClaimKeyPrefix)
+	if keyspkg.NotifyClaimKeyPrefix != "notified:claim:" {
+		t.Fatalf("NotifyClaimKeyPrefix = %q", keyspkg.NotifyClaimKeyPrefix)
 	}
-	if contractsalarm.NotifyLogicalClaimKeyPrefix != "notified:claim:event:" {
-		t.Fatalf("NotifyLogicalClaimKeyPrefix = %q", contractsalarm.NotifyLogicalClaimKeyPrefix)
+	if keyspkg.NotifyLogicalClaimKeyPrefix != "notified:claim:event:" {
+		t.Fatalf("NotifyLogicalClaimKeyPrefix = %q", keyspkg.NotifyLogicalClaimKeyPrefix)
 	}
 	if contractsalarm.QueueEnvelopeVersionV1 != 1 {
 		t.Fatalf("QueueEnvelopeVersionV1 = %d", contractsalarm.QueueEnvelopeVersionV1)

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"sync"
 
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
@@ -34,16 +35,16 @@ var ErrUnknownCommand = errors.New("unknown command")
 
 type Registry struct {
 	mu       sync.RWMutex
-	handlers map[string]Command
+	handlers map[string]handlercore.Command
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		handlers: make(map[string]Command),
+		handlers: make(map[string]handlercore.Command),
 	}
 }
 
-func (r *Registry) Register(handler Command) {
+func (r *Registry) Register(handler handlercore.Command) {
 	if handler == nil {
 		return
 	}
@@ -84,7 +85,7 @@ func (r *Registry) Count() int {
 	return len(r.handlers)
 }
 
-func (r *Registry) getHandler(key string) Command {
+func (r *Registry) getHandler(key string) handlercore.Command {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

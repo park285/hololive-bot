@@ -81,7 +81,7 @@ compact_sql_file() {
 }
 
 alarm_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_claim_0053_02.sql")"
-youtube_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/queries/dispatcher_claim_0050_01.sql")"
+youtube_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-shared/pkg/service/youtube/outbox/dispatch/queries/dispatcher_claim_0050_01.sql")"
 
 if (( ${#alarm_claim_source} <= 500 || ${#youtube_claim_source} <= 500 )); then
   echo "runtime claim fixtures must retain their full post-500-character structure" >&2
@@ -139,7 +139,7 @@ for non_claim_source_path in \
   fi
 done
 
-youtube_revive_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/queries/dispatcher_claim_revive_0109_01.sql")"
+youtube_revive_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-shared/pkg/service/youtube/outbox/dispatch/queries/dispatcher_claim_revive_0109_01.sql")"
 if [[ "${youtube_revive_source}" == *"), updated AS ("* \
   || "${youtube_revive_source}" == *"UPDATE youtube_notification_outbox o"* \
   || "${youtube_revive_source}" == *"RETURNING o.id, o.kind, o.channel_id, o.content_id"* ]]; then

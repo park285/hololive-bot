@@ -7,10 +7,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
@@ -74,7 +75,7 @@ type alarmDispatchMaintenancePgxStore struct {
 
 func NewMaintenanceRunner(
 	infra *sharedmodules.InfraModule,
-	retentionConfig config.AlarmDispatchRetentionConfig,
+	retentionConfig settings.AlarmDispatchRetentionConfig,
 	logger *slog.Logger,
 ) Scheduler {
 	if infra == nil || infra.Postgres == nil {

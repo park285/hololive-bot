@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/deliverylogs"
+
 	"github.com/kapu/hololive-youtube-producer/cmd/ops/internal/reportcli"
-	opsapp "github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts"
 )
 
 type deliveryLogsFlags struct {
@@ -40,18 +41,18 @@ func parseDeliveryLogsFlags(ctx commandContext, args []string) (deliveryLogsFlag
 }
 
 func deliveryLogsReportCommand(ctx commandContext, flags deliveryLogsFlags) reportcli.WindowCommand[
-	opsapp.CommunityShortsDeliveryLogCollectOptions,
-	opsapp.CommunityShortsDeliveryLogReport,
+	deliverylogs.CollectOptions,
+	deliverylogs.Report,
 ] {
 	return reportcli.WindowCommand[
-		opsapp.CommunityShortsDeliveryLogCollectOptions,
-		opsapp.CommunityShortsDeliveryLogReport,
+		deliverylogs.CollectOptions,
+		deliverylogs.Report,
 	]{
 		Stdout:             ctx.stdout,
 		Stderr:             ctx.stderr,
 		BuildOptions:       buildDeliveryLogsOptions(flags),
-		Collect:            opsapp.CollectCommunityShortsDeliveryLogReport,
-		RenderMarkdown:     opsapp.RenderCommunityShortsDeliveryLogMarkdown,
+		Collect:            deliverylogs.Collect,
+		RenderMarkdown:     deliverylogs.RenderMarkdown,
 		LoadConfigError:    "Failed to load community/shorts delivery-log config",
 		CollectError:       "Failed to collect community/shorts delivery logs",
 		JSONWriteError:     "Failed to write community/shorts delivery-log JSON",
@@ -62,16 +63,16 @@ func deliveryLogsReportCommand(ctx commandContext, flags deliveryLogsFlags) repo
 func buildDeliveryLogsOptions(flags deliveryLogsFlags) func(
 	time.Time,
 	time.Duration,
-) (opsapp.CommunityShortsDeliveryLogCollectOptions, error) {
-	return func(now time.Time, window time.Duration) (opsapp.CommunityShortsDeliveryLogCollectOptions, error) {
+) (deliverylogs.CollectOptions, error) {
+	return func(now time.Time, window time.Duration) (deliverylogs.CollectOptions, error) {
 		if window <= 0 {
-			return opsapp.CommunityShortsDeliveryLogCollectOptions{}, fmt.Errorf("window must be greater than zero")
+			return deliverylogs.CollectOptions{}, fmt.Errorf("window must be greater than zero")
 		}
 		if *flags.limit <= 0 {
-			return opsapp.CommunityShortsDeliveryLogCollectOptions{}, fmt.Errorf("limit must be greater than zero")
+			return deliverylogs.CollectOptions{}, fmt.Errorf("limit must be greater than zero")
 		}
 		since := now.Add(-window)
-		return opsapp.CommunityShortsDeliveryLogCollectOptions{
+		return deliverylogs.CollectOptions{
 			Since: &since,
 			Limit: *flags.limit,
 		}, nil

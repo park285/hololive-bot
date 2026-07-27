@@ -28,16 +28,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	youtubeoutbox "github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+
+	leasepkg "github.com/kapu/hololive-shared/pkg/service/lease"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatch"
 	"github.com/park285/shared-go/pkg/retry"
 )
 
@@ -46,7 +50,7 @@ type Scheduler interface {
 }
 
 type AlarmWorkerRuntime struct {
-	Config *config.Config
+	Config *settings.Config
 	Logger *slog.Logger
 
 	Scheduler            Scheduler
@@ -76,7 +80,7 @@ type notificationEgressRunner struct {
 }
 
 type youtubeOutboxDispatcherRunner struct {
-	dispatcher *youtubeoutbox.Dispatcher
+	dispatcher *dispatch.Dispatcher
 	logger     *slog.Logger
 }
 
@@ -94,7 +98,7 @@ func NewNotificationEgressRunner(
 	}
 }
 
-func NewYouTubeOutboxDispatcherRunner(dispatcher *youtubeoutbox.Dispatcher, logger *slog.Logger) Scheduler {
+func NewYouTubeOutboxDispatcherRunner(dispatcher *dispatch.Dispatcher, logger *slog.Logger) Scheduler {
 	return youtubeOutboxDispatcherRunner{dispatcher: dispatcher, logger: logger}
 }
 
@@ -234,11 +238,11 @@ func (r notificationEgressRunner) startLeaseRenewLoop(ctx context.Context, lease
 }
 
 func (r notificationEgressRunner) acquireLease(ctx context.Context) (*egress.NotificationEgressLease, error) {
-	lease, err := egress.AcquireNotificationEgressLease(ctx, r.leaseCache, r.logger)
+	acquiredLease, err := egress.AcquireNotificationEgressLease(ctx, r.leaseCache, r.logger)
 	if err == nil {
-		return lease, nil
+		return acquiredLease, nil
 	}
-	if errors.Is(err, egress.ErrNotificationEgressLeaseHeld) {
+	if errors.Is(err, leasepkg.ErrHeld) {
 		if r.logger != nil {
 			r.logger.Warn("Notification egress disabled because notification egress lease is held",
 				slog.String("lease_key", egress.NotificationEgressLeaseKey),

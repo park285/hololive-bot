@@ -22,7 +22,7 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 // GET /oauth/callback?code=XXX&state=YYY

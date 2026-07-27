@@ -32,26 +32,10 @@ import (
 	_ "embed"
 )
 
-type BroadcastType = broadcasttype.Type
-
 type BroadcastClassification struct {
-	Type   BroadcastType
+	Type   broadcasttype.Type
 	Source string
 }
-
-const (
-	BroadcastTypeGame        = broadcasttype.Game
-	BroadcastTypeTalk        = broadcasttype.Talk
-	BroadcastTypeSinging     = broadcasttype.Singing
-	BroadcastTypeASMR        = broadcasttype.ASMR
-	BroadcastTypeMembership  = broadcasttype.Membership
-	BroadcastTypeEvent       = broadcasttype.Event
-	BroadcastTypeHorseRacing = broadcasttype.HorseRacing
-	BroadcastTypeWatchalong  = broadcasttype.Watchalong
-	BroadcastTypeNews        = broadcasttype.News
-	BroadcastTypeOther       = broadcasttype.Other
-	BroadcastTypeUnknown     = broadcasttype.Unknown
-)
 
 //go:embed broadcast_type_rules.json
 var broadcastTypeRulesJSON []byte
@@ -59,9 +43,9 @@ var broadcastTypeRulesJSON []byte
 var broadcastRules = mustLoadBroadcastRules(broadcastTypeRulesJSON)
 
 type broadcastTitleRule struct {
-	Type           BroadcastType `json:"type"`
-	Keywords       []string      `json:"keywords"`
-	RejectKeywords []string      `json:"reject_keywords,omitempty"`
+	Type           broadcasttype.Type `json:"type"`
+	Keywords       []string           `json:"keywords"`
+	RejectKeywords []string           `json:"reject_keywords,omitempty"`
 }
 
 type broadcastGameTagRules struct {
@@ -71,12 +55,12 @@ type broadcastGameTagRules struct {
 }
 
 type broadcastTypeRules struct {
-	Version     string                   `json:"version"`
-	SourceNotes []string                 `json:"source_notes,omitempty"`
-	Topics      map[string]BroadcastType `json:"topics"`
-	TitleRules  []broadcastTitleRule     `json:"title_rules"`
-	Generic     []broadcastTitleRule     `json:"generic_title_rules,omitempty"`
-	GameTag     broadcastGameTagRules    `json:"game_title_tag"`
+	Version     string                        `json:"version"`
+	SourceNotes []string                      `json:"source_notes,omitempty"`
+	Topics      map[string]broadcasttype.Type `json:"topics"`
+	TitleRules  []broadcastTitleRule          `json:"title_rules"`
+	Generic     []broadcastTitleRule          `json:"generic_title_rules,omitempty"`
+	GameTag     broadcastGameTagRules         `json:"game_title_tag"`
 }
 
 type broadcastTitleStrength int
@@ -89,11 +73,27 @@ const (
 )
 
 type broadcastTitleClassification struct {
-	Type     BroadcastType
+	Type     broadcasttype.Type
 	Strength broadcastTitleStrength
 }
 
-func ClassifyBroadcast(topicID, title string) BroadcastType {
+var broadcastTitleAlwaysOverrides = map[broadcasttype.Type]struct{}{
+	broadcasttype.ASMR:        {},
+	broadcasttype.Membership:  {},
+	broadcasttype.HorseRacing: {},
+	broadcasttype.Watchalong:  {},
+}
+
+var broadcastTitleOverrideStrengths = map[broadcasttype.Type]map[broadcastTitleStrength]struct{}{
+	broadcasttype.Singing: {broadcastTitleStrengthStrong: {}},
+	broadcasttype.News:    {broadcastTitleStrengthStrong: {}},
+	broadcasttype.Event: {
+		broadcastTitleStrengthLead:   {},
+		broadcastTitleStrengthStrong: {},
+	},
+}
+
+func ClassifyBroadcast(topicID, title string) broadcasttype.Type {
 	return ClassifyBroadcastWithSource(topicID, title).Type
 }
 
@@ -103,17 +103,17 @@ func ClassifyBroadcastWithSource(topicID, title string) BroadcastClassification 
 	if broadcastTitleOverridesTopic(titleClass, topicType) {
 		return BroadcastClassification{Type: titleClass.Type, Source: "title"}
 	}
-	if topicType != BroadcastTypeUnknown {
+	if topicType != broadcasttype.Unknown {
 		return BroadcastClassification{Type: topicType, Source: "topic"}
 	}
-	if titleClass.Type != BroadcastTypeUnknown {
+	if titleClass.Type != broadcasttype.Unknown {
 		return BroadcastClassification{Type: titleClass.Type, Source: "title"}
 	}
-	return BroadcastClassification{Type: BroadcastTypeUnknown, Source: "unknown"}
+	return BroadcastClassification{Type: broadcasttype.Unknown, Source: "unknown"}
 }
 
-func broadcastTitleOverridesTopic(titleClass broadcastTitleClassification, topicType BroadcastType) bool {
-	if titleClass.Type == BroadcastTypeUnknown || topicType == BroadcastTypeUnknown {
+func broadcastTitleOverridesTopic(titleClass broadcastTitleClassification, topicType broadcasttype.Type) bool {
+	if titleClass.Type == broadcasttype.Unknown || topicType == broadcasttype.Unknown {
 		return false
 	}
 	if !broadcastTopicAcceptsTitleOverride(topicType) {
@@ -122,39 +122,33 @@ func broadcastTitleOverridesTopic(titleClass broadcastTitleClassification, topic
 	return broadcastTitleClassOverridesTopic(titleClass)
 }
 
-func broadcastTopicAcceptsTitleOverride(topicType BroadcastType) bool {
-	return topicType == BroadcastTypeGame || topicType == BroadcastTypeOther
+func broadcastTopicAcceptsTitleOverride(topicType broadcasttype.Type) bool {
+	return topicType == broadcasttype.Game || topicType == broadcasttype.Other
 }
 
 func broadcastTitleClassOverridesTopic(titleClass broadcastTitleClassification) bool {
-	switch titleClass.Type {
-	case BroadcastTypeASMR,
-		BroadcastTypeMembership,
-		BroadcastTypeHorseRacing,
-		BroadcastTypeWatchalong:
+	if _, ok := broadcastTitleAlwaysOverrides[titleClass.Type]; ok {
 		return true
-	case BroadcastTypeSinging,
-		BroadcastTypeNews:
-		return titleClass.Strength == broadcastTitleStrengthStrong
-	case BroadcastTypeEvent:
-		return titleClass.Strength == broadcastTitleStrengthStrong || titleClass.Strength == broadcastTitleStrengthLead
-	default:
+	}
+
+	strengths, ok := broadcastTitleOverrideStrengths[titleClass.Type]
+	if !ok {
 		return false
 	}
+
+	_, ok = strengths[titleClass.Strength]
+
+	return ok
 }
 
-func ParseBroadcastType(raw string) (BroadcastType, bool) {
-	return broadcasttype.Parse(raw)
-}
-
-func classifyBroadcastTopic(topicID string) BroadcastType {
+func classifyBroadcastTopic(topicID string) broadcasttype.Type {
 	topics := broadcastTopics(topicID)
 	for _, topic := range topics {
 		if typ, ok := broadcastRules.Topics[topic]; ok {
 			return typ
 		}
 	}
-	return BroadcastTypeUnknown
+	return broadcasttype.Unknown
 }
 
 func classifyBroadcastTitle(title string) broadcastTitleClassification {
@@ -173,15 +167,15 @@ func classifyBroadcastTitle(title string) broadcastTitleClassification {
 		}
 	}
 	if titleLooksLikeGameBroadcast(normalized, leadTag) {
-		return broadcastTitleClassification{Type: BroadcastTypeGame, Strength: broadcastTitleStrengthStrong}
+		return broadcastTitleClassification{Type: broadcasttype.Game, Strength: broadcastTitleStrengthStrong}
 	}
 	if typ, ok := classifyBroadcastTitleByKeyword(normalized, normalized, broadcastRules.Generic); ok {
 		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthGeneric}
 	}
-	return broadcastTitleClassification{Type: BroadcastTypeUnknown, Strength: broadcastTitleStrengthUnknown}
+	return broadcastTitleClassification{Type: broadcasttype.Unknown, Strength: broadcastTitleStrengthUnknown}
 }
 
-func classifyBroadcastTitleByKeyword(normalized, rejectScope string, rules []broadcastTitleRule) (BroadcastType, bool) {
+func classifyBroadcastTitleByKeyword(normalized, rejectScope string, rules []broadcastTitleRule) (broadcasttype.Type, bool) {
 	for _, rule := range rules {
 		if broadcastRejectScopeMatches(rejectScope, rule.RejectKeywords) {
 			continue
@@ -190,7 +184,7 @@ func classifyBroadcastTitleByKeyword(normalized, rejectScope string, rules []bro
 			return rule.Type, true
 		}
 	}
-	return BroadcastTypeUnknown, false
+	return broadcasttype.Unknown, false
 }
 
 // reject는 boundary 없는 substring 검사라 «Winning Post10»처럼 숫자가 붙은 표기도 걸러낸다.

@@ -7,22 +7,23 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 type CalendarCommand struct {
-	BaseCommand
-	memberRepo    CelebrationCalendarFinder
-	imageRenderer CalendarImageRenderer
+	handlercore.BaseCommand
+
+	memberRepo    handlercore.CelebrationCalendarFinder
+	imageRenderer handlercore.CalendarImageRenderer
 	now           func() time.Time
 }
 
-func NewCalendarCommand(deps *Dependencies, memberRepo CelebrationCalendarFinder, imageRenderer CalendarImageRenderer) *CalendarCommand {
+func NewCalendarCommand(deps *handlercore.Dependencies, memberRepo handlercore.CelebrationCalendarFinder, imageRenderer handlercore.CalendarImageRenderer) *CalendarCommand {
 	return &CalendarCommand{
-		BaseCommand:   NewBaseCommand(deps),
+		BaseCommand:   handlercore.NewBaseCommand(deps),
 		memberRepo:    memberRepo,
 		imageRenderer: imageRenderer,
 	}
@@ -49,7 +50,7 @@ func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 			slog.Int("month", month), slog.Int("year", year),
 			slog.Any("error", err),
 		)
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrCalendarQueryFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrCalendarQueryFailed)
 	}
 
 	if c.trySendCalendarImage(ctx, cmdCtx.Room, month, year, entries) {
@@ -108,10 +109,7 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 }
 
 func (c *CalendarCommand) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
-	if renderer, ok := c.imageRenderer.(CalendarImageRendererContext); ok {
-		return renderer.RenderCalendarImageContext(ctx, month, year, entries)
-	}
-	return c.imageRenderer.RenderCalendarImage(month, year, entries)
+	return c.imageRenderer.RenderCalendarImageContext(ctx, month, year, entries)
 }
 
 func (c *CalendarCommand) ensureDeps() error {

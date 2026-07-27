@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/pkg/stringutil"
 
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/config"
@@ -65,7 +66,7 @@ func (r *Runtime) csrf() gin.HandlerFunc {
 			return
 		}
 		if r.cfg.Security.CSRFMode == config.SecurityMonitor {
-			r.logger.Warn("csrf violation monitor", slog.String("session_id", auth.TruncateSessionID(sessionID)))
+			r.logger.Warn("csrf violation monitor", slog.String("session_id", stringutil.TruncateString(sessionID, 8)))
 			c.Next()
 			return
 		}

@@ -296,36 +296,17 @@ func TestMemberCacheOperations(t *testing.T) {
 	service, _ := newTestCacheService(t)
 	ctx := context.Background()
 
-	members := map[string]string{"member": "channel"}
+	members := map[string]string{"member:Hololive": "channel"}
 	if err := service.InitializeMemberDatabase(ctx, members); err != nil {
 		t.Fatalf("initialize failed: %v", err)
-	}
-
-	channelID, err := service.GetMemberChannelID(ctx, "member")
-	if err != nil {
-		t.Fatalf("get member failed: %v", err)
-	}
-	if channelID != "channel" {
-		t.Fatalf("unexpected channel id: %s", channelID)
 	}
 
 	all, err := service.GetAllMembers(ctx)
 	if err != nil {
 		t.Fatalf("get all failed: %v", err)
 	}
-	if all["member"] != "channel" {
+	if all["member:Hololive"] != "channel" {
 		t.Fatalf("unexpected members: %+v", all)
-	}
-
-	if err := service.AddMember(ctx, "member2", "channel2"); err != nil {
-		t.Fatalf("add member failed: %v", err)
-	}
-	channelID, err = service.GetMemberChannelID(ctx, "member2")
-	if err != nil {
-		t.Fatalf("get member2 failed: %v", err)
-	}
-	if channelID != "channel2" {
-		t.Fatalf("unexpected channel id: %s", channelID)
 	}
 }
 

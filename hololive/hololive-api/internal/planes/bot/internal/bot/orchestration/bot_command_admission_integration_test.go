@@ -28,14 +28,15 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/park285/iris-client-go/webhook"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
 
 func TestBotHandleMessageRejectsUnknownIngressUserForExpensiveCommand(t *testing.T) {
 	cacheClient := sharedtestutil.NewTestCacheService(t, t.Context())
 	executions := 0
-	registry := command.NewRegistry()
+	registry := handlers.NewRegistry()
 	registry.Register(&testCommand{
 		name: "broadcast_history",
 		execute: func(context.Context, *domain.CommandContext, map[string]any) error {
@@ -46,9 +47,9 @@ func TestBotHandleMessageRejectsUnknownIngressUserForExpensiveCommand(t *testing
 	b := &Bot{
 		logger:          newBotTestLogger(),
 		commandRegistry: registry,
-		messageAdapter:  adapter.NewMessageAdapter("!", ""),
+		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      &testIrisClient{},
-		formatter:       adapter.NewResponseFormatter("!", nil),
+		formatter:       formatter.NewResponseFormatter("!", nil),
 		cache:           cacheClient,
 	}
 	sender := "user"

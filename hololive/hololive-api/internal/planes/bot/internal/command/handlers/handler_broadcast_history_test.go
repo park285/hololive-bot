@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
@@ -70,16 +71,16 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 				MemberName:    "테스트",
 				Title:         "【Forza】test",
 				TopicID:       "Forza",
-				BroadcastType: string(BroadcastTypeGame),
+				BroadcastType: string(broadcasttype.Game),
 				EndedAt:       &endedAt,
 				LastSeenAt:    endedAt,
 			},
 		},
 	}
 	var sent string
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
-		Formatter:        adapter.NewResponseFormatter("!", nil),
+		Formatter:        formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sent = message
 			return nil
@@ -102,7 +103,7 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 		t.Fatalf("ListEndedBroadcasts calls = %d, want 1", repo.listCalls)
 	}
 	after := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(2 * time.Second)
-	if repo.listQuery.Type != string(BroadcastTypeGame) || repo.listQuery.TopicID != "Forza" || repo.listQuery.Limit != 5 || repo.listQuery.IncludeAll {
+	if repo.listQuery.Type != string(broadcasttype.Game) || repo.listQuery.TopicID != "Forza" || repo.listQuery.Limit != 5 || repo.listQuery.IncludeAll {
 		t.Fatalf("query = %+v", repo.listQuery)
 	}
 	if repo.listQuery.Since.Before(before) || repo.listQuery.Since.After(after) {
@@ -119,9 +120,9 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 func TestBroadcastHistoryCommandReportsTruncatedResult(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{truncated: true}
 	var sent string
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
-		Formatter:        adapter.NewResponseFormatter("!", nil),
+		Formatter:        formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sent = message
 			return nil
@@ -140,9 +141,9 @@ func TestBroadcastHistoryCommandReportsTruncatedResult(t *testing.T) {
 func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{}
 	var sent string
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
-		Formatter:        adapter.NewResponseFormatter("!", nil),
+		Formatter:        formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sent = message
 			return nil
@@ -177,9 +178,9 @@ func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
 		Aliases:   &domain.Aliases{Ko: []string{"미코치"}},
 	})
 	var sent string
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
-		Formatter:        adapter.NewResponseFormatter("!", nil),
+		Formatter:        formatter.NewResponseFormatter("!", nil),
 		Matcher:          matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sent = message
@@ -201,8 +202,8 @@ func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
 	if repo.listQuery.ChannelID != "ch-miko" {
 		t.Fatalf("ChannelID = %q, want ch-miko", repo.listQuery.ChannelID)
 	}
-	if repo.listQuery.Type != string(BroadcastTypeGame) {
-		t.Fatalf("Type = %q, want %q", repo.listQuery.Type, BroadcastTypeGame)
+	if repo.listQuery.Type != string(broadcasttype.Game) {
+		t.Fatalf("Type = %q, want %q", repo.listQuery.Type, broadcasttype.Game)
 	}
 	if !strings.Contains(sent, "멤버: 사쿠라 미코") || !strings.Contains(sent, "타입: 게임") {
 		t.Fatalf("sent message = %q, want resolved member and type filters", sent)
@@ -211,9 +212,9 @@ func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
 
 func TestBroadcastHistoryCommandDefaultDaysIsOneWeek(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{}
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
-		Formatter:        adapter.NewResponseFormatter("!", nil),
+		Formatter:        formatter.NewResponseFormatter("!", nil),
 		SendMessage:      func(_ context.Context, _, _ string) error { return nil },
 		SendError:        func(_ context.Context, _, _ string) error { return nil },
 	}
@@ -236,9 +237,9 @@ func TestBroadcastHistoryCommandDefaultDaysIsOneWeek(t *testing.T) {
 func TestBroadcastHistoryCommandListErrorSendsOneUserMessage(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{listErr: errors.New("db down")}
 	var sent []string
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
-		Formatter:        adapter.NewResponseFormatter("!", nil),
+		Formatter:        formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sent = append(sent, message)
 			return nil
@@ -288,7 +289,7 @@ func TestPgBroadcastHistoryRepositoryStopsAtScanBudgetForTypeFilter(t *testing.T
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
 	result, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
-		Type:  string(BroadcastTypeGame),
+		Type:  string(broadcasttype.Game),
 		Limit: 1,
 		Since: base.Add(-24 * time.Hour),
 	})
@@ -401,7 +402,7 @@ func TestPgBroadcastHistoryRepositoryUsesLiveEventMetadataFallback(t *testing.T)
 	if entry.ThumbnailURL != "https://i.ytimg.com/vi/fallback001/maxresdefault.jpg" {
 		t.Fatalf("ThumbnailURL = %q, want maxres fallback URL", entry.ThumbnailURL)
 	}
-	if entry.BroadcastType != string(BroadcastTypeGame) || entry.BroadcastTypeSource != "topic" {
+	if entry.BroadcastType != string(broadcasttype.Game) || entry.BroadcastTypeSource != "topic" {
 		t.Fatalf("classification = {%q %q}, want {game topic}", entry.BroadcastType, entry.BroadcastTypeSource)
 	}
 }
@@ -458,7 +459,7 @@ func TestBroadcastThumbnailCommandExecute(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{getEntry: &entry}
 	downloader := &stubBroadcastThumbnailDownloader{}
 	var sentImage []byte
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory:    repo,
 		ThumbnailDownloader: downloader,
 		SendMessage:         func(_ context.Context, _, _ string) error { return nil },
@@ -489,7 +490,7 @@ func TestBroadcastThumbnailCommandExecute(t *testing.T) {
 func TestBroadcastThumbnailCommandLookupErrorSendsOneUserMessage(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{getErr: errors.New("db down")}
 	var sent []string
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory:    repo,
 		ThumbnailDownloader: &stubBroadcastThumbnailDownloader{},
 		SendMessage: func(_ context.Context, _, message string) error {
@@ -522,7 +523,7 @@ func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T)
 	entry := handlercore.BroadcastHistoryEntry{VideoID: "AqxEw3kXcgU", Title: "test"}
 	repo := &stubBroadcastHistoryRepository{getEntry: &entry}
 	var sent []string
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		BroadcastHistory:    repo,
 		ThumbnailDownloader: &stubBroadcastThumbnailDownloader{err: errors.New("thumbnail timeout")},
 		SendMessage: func(_ context.Context, _, message string) error {

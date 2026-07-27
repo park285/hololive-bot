@@ -26,7 +26,7 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 	if dest != nil {
 		if err := json.Unmarshal([]byte(value), dest); err != nil {
 			c.logger.Error("Cache value unmarshal failed", slog.String("key", key), slog.Any("error", err))
-			return true, NewCacheError("unmarshal failed", "get", key, err)
+			return true, NewCacheError("get", key, err)
 		}
 	}
 	return true, nil
@@ -39,13 +39,13 @@ func (c *Service) GetString(ctx context.Context, key string) (value0 string, ok1
 	}
 	if resp.Error() != nil {
 		c.logger.Error("Cache get operation failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return "", false, NewCacheError("get failed", "get", key, resp.Error())
+		return "", false, NewCacheError("get", key, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
 		c.logger.Error("Cache value conversion failed", slog.String("key", key), slog.Any("error", err))
-		return "", false, NewCacheError("conversion failed", "get", key, err)
+		return "", false, NewCacheError("get", key, err)
 	}
 	return value, true, nil
 }
@@ -59,12 +59,12 @@ func (c *Service) MGet(ctx context.Context, keys []string) (map[string]string, e
 	resp := c.client.Do(ctx, c.client.B().Mget().Key(keys...).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache mget failed", slog.Int("keys", len(keys)), slog.Any("error", resp.Error()))
-		return nil, NewCacheError("mget failed", "mget", fmt.Sprintf("%d keys", len(keys)), resp.Error())
+		return nil, NewCacheError("mget", fmt.Sprintf("%d keys", len(keys)), resp.Error())
 	}
 
 	values, err := resp.AsStrSlice()
 	if err != nil {
-		return nil, NewCacheError("mget conversion failed", "mget", "", err)
+		return nil, NewCacheError("mget", "", err)
 	}
 
 	result := make(map[string]string, len(keys))
@@ -96,14 +96,14 @@ func ttlSecondsCeil(ttl time.Duration) (int64, error) {
 func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	jsonData, err := json.Marshal(value)
 	if err != nil {
-		return NewCacheError("marshal failed", "set", key, err)
+		return NewCacheError("set", key, err)
 	}
 
 	var cmd valkey.Completed
 	if ttl > 0 {
 		ttlSeconds, err := ttlSecondsCeil(ttl)
 		if err != nil {
-			return NewCacheError("invalid ttl", "set", key, err)
+			return NewCacheError("set", key, err)
 		}
 		cmd = c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(ttlSeconds).Build()
 	} else {
@@ -112,7 +112,7 @@ func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Durat
 
 	if err := c.client.Do(ctx, cmd).Error(); err != nil {
 		c.logger.Error("Cache set failed", slog.String("key", key), slog.Any("error", err))
-		return NewCacheError("set failed", "set", key, err)
+		return NewCacheError("set", key, err)
 	}
 
 	return nil
@@ -132,7 +132,7 @@ func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Durat
 	for _, resp := range c.client.DoMulti(ctx, cmds...) {
 		if resp.Error() != nil {
 			c.logger.Error("MSet command failed", slog.Any("error", resp.Error()))
-			return NewCacheError("mset failed", "mset", "", resp.Error())
+			return NewCacheError("mset", "", resp.Error())
 		}
 	}
 
@@ -155,13 +155,13 @@ func (c *Service) msetCommand(key string, value any, ttl time.Duration) (valkey.
 	jsonData, err := json.Marshal(value)
 	if err != nil {
 		c.logger.Error("Failed to marshal value for MSet", slog.String("key", key), slog.Any("error", err))
-		return valkey.Completed{}, NewCacheError("marshal failed", "mset", key, err)
+		return valkey.Completed{}, NewCacheError("mset", key, err)
 	}
 
 	if ttl > 0 {
 		ttlSeconds, err := ttlSecondsCeil(ttl)
 		if err != nil {
-			return valkey.Completed{}, NewCacheError("invalid ttl", "mset", key, err)
+			return valkey.Completed{}, NewCacheError("mset", key, err)
 		}
 		return c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(ttlSeconds).Build(), nil
 	}
@@ -172,7 +172,7 @@ func (c *Service) msetCommand(key string, value any, ttl time.Duration) (valkey.
 func (c *Service) Del(ctx context.Context, key string) error {
 	if err := c.client.Do(ctx, c.client.B().Del().Key(key).Build()).Error(); err != nil {
 		c.logger.Error("Cache delete failed", slog.String("key", key), slog.Any("error", err))
-		return NewCacheError("delete failed", "del", key, err)
+		return NewCacheError("del", key, err)
 	}
 	return nil
 }
@@ -192,12 +192,12 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 		resp := c.client.Do(ctx, c.client.B().Del().Key(chunk...).Build())
 		if resp.Error() != nil {
 			c.logger.Error("Cache delete many failed", slog.Int("count", len(chunk)), slog.Any("error", resp.Error()))
-			return totalDeleted, NewCacheError("delete many failed", "del", fmt.Sprintf("%d keys", len(chunk)), resp.Error())
+			return totalDeleted, NewCacheError("del", fmt.Sprintf("%d keys", len(chunk)), resp.Error())
 		}
 
 		deleted, err := resp.AsInt64()
 		if err != nil {
-			return totalDeleted, NewCacheError("delete many conversion failed", "del", "", err)
+			return totalDeleted, NewCacheError("del", "", err)
 		}
 		totalDeleted += deleted
 	}
@@ -220,12 +220,12 @@ func (c *Service) ScanKeys(ctx context.Context, pattern string, batchSize int64)
 		resp := c.client.Do(ctx, cmd)
 		if resp.Error() != nil {
 			c.logger.Error("Cache scan failed", slog.String("pattern", pattern), slog.Any("error", resp.Error()))
-			return keys, NewCacheError("scan failed", "scan", pattern, resp.Error())
+			return keys, NewCacheError("scan", pattern, resp.Error())
 		}
 
 		entry, err := resp.AsScanEntry()
 		if err != nil {
-			return keys, NewCacheError("scan parse failed", "scan", pattern, err)
+			return keys, NewCacheError("scan", pattern, err)
 		}
 
 		keys = append(keys, entry.Elements...)
@@ -242,11 +242,11 @@ func (c *Service) ScanKeys(ctx context.Context, pattern string, batchSize int64)
 func (c *Service) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	ttlSeconds, err := ttlSecondsCeil(ttl)
 	if err != nil {
-		return NewCacheError("invalid ttl", "expire", key, err)
+		return NewCacheError("expire", key, err)
 	}
 	if err := c.client.Do(ctx, c.client.B().Expire().Key(key).Seconds(ttlSeconds).Build()).Error(); err != nil {
 		c.logger.Error("Cache expire failed", slog.String("key", key), slog.Any("error", err))
-		return NewCacheError("expire failed", "expire", key, err)
+		return NewCacheError("expire", key, err)
 	}
 	return nil
 }
@@ -255,12 +255,12 @@ func (c *Service) Exists(ctx context.Context, key string) (bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Exists().Key(key).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache exists failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, NewCacheError("exists failed", "exists", key, resp.Error())
+		return false, NewCacheError("exists", key, resp.Error())
 	}
 
 	count, err := resp.AsInt64()
 	if err != nil {
-		return false, NewCacheError("exists conversion failed", "exists", key, err)
+		return false, NewCacheError("exists", key, err)
 	}
 
 	return count > 0, nil
@@ -272,7 +272,7 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 	if ttl > 0 {
 		ttlSeconds, err := ttlSecondsCeil(ttl)
 		if err != nil {
-			return false, NewCacheError("invalid ttl", "setnx", key, err)
+			return false, NewCacheError("setnx", key, err)
 		}
 		cmd = c.client.B().Set().Key(key).Value(value).Nx().ExSeconds(ttlSeconds).Build()
 	} else {
@@ -285,7 +285,7 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 	}
 	if resp.Error() != nil {
 		c.logger.Error("Cache setnx failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, NewCacheError("setnx failed", "setnx", key, resp.Error())
+		return false, NewCacheError("setnx", key, resp.Error())
 	}
 
 	return true, nil
@@ -325,7 +325,7 @@ func (c *Service) buildSetNXCmd(e SetNXEntry) (valkey.Completed, error) {
 	}
 	ttlSeconds, err := ttlSecondsCeil(e.TTL)
 	if err != nil {
-		return valkey.Completed{}, NewCacheError("invalid ttl", "setnx_multi", e.Key, err)
+		return valkey.Completed{}, NewCacheError("setnx_multi", e.Key, err)
 	}
 	return c.client.B().Set().Key(e.Key).Value(e.Value).Nx().ExSeconds(ttlSeconds).Build(), nil
 }

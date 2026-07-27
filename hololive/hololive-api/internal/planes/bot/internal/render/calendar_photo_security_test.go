@@ -119,18 +119,18 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
-	data, err := r.RenderCalendarImage(6, 2026, entries)
+	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
-		t.Fatalf("RenderCalendarImage() error = %v", err)
+		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
 	assertValidPNG(t, data)
 	if got := recorder.requests.Load(); got != 0 {
 		t.Fatalf("blocked photo URL was fetched %d times, want 0", got)
 	}
 
-	fallbackData, err := NewCalendarCardRenderer().RenderCalendarImage(6, 2026, fallbackEntries)
+	fallbackData, err := NewCalendarCardRenderer().RenderCalendarImageContext(t.Context(), 6, 2026, fallbackEntries)
 	if err != nil {
-		t.Fatalf("fallback RenderCalendarImage() error = %v", err)
+		t.Fatalf("fallback RenderCalendarImageContext() error = %v", err)
 	}
 	if !bytes.Equal(data, fallbackData) {
 		t.Fatal("blocked photo render should match default-avatar fallback")

@@ -24,6 +24,7 @@ import (
 	"context"
 	"testing"
 
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -74,7 +75,7 @@ func TestSequentialDispatcherPublishExecutesEvents(t *testing.T) {
 		},
 	)
 
-	executed, err := dispatcher.Publish(t.Context(), &domain.CommandContext{}, Event{
+	executed, err := dispatcher.Publish(t.Context(), &domain.CommandContext{}, handlercore.Event{
 		Type:   domain.CommandHelp,
 		Params: map[string]any{"foo": "bar"},
 	})

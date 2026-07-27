@@ -29,8 +29,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type testSourceValidator struct{}
@@ -108,9 +109,9 @@ func (m *mockMemberDataForFilter) FindMembersByAlias(_ string) []*domain.Member 
 func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
-	targetDate := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
-	farFuture := time.Date(2026, 6, 1, 12, 0, 0, 0, model.KST)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	targetDate := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone)
+	farFuture := time.Date(2026, 6, 1, 12, 0, 0, 0, util.KSTZone)
 
 	candidates := []model.Candidate{
 		{
@@ -287,11 +288,11 @@ func TestMatchMembers(t *testing.T) {
 }
 
 func TestApplyPeriodFilter(t *testing.T) {
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
 
 	t.Run("weekly: in-range passes, out-of-range excluded", func(t *testing.T) {
-		inRange := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
-		outOfRange := time.Date(2026, 6, 1, 12, 0, 0, 0, model.KST)
+		inRange := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone)
+		outOfRange := time.Date(2026, 6, 1, 12, 0, 0, 0, util.KSTZone)
 		candidates := []model.Candidate{
 			{EventStartDate: &inRange, Type: domain.MajorEventTypeEvent},
 			{EventStartDate: &outOfRange, Type: domain.MajorEventTypeEvent},
@@ -303,8 +304,8 @@ func TestApplyPeriodFilter(t *testing.T) {
 	})
 
 	t.Run("monthly: month boundary check", func(t *testing.T) {
-		inRange := time.Date(2026, 2, 15, 12, 0, 0, 0, model.KST)
-		outOfRange := time.Date(2026, 3, 5, 12, 0, 0, 0, model.KST)
+		inRange := time.Date(2026, 2, 15, 12, 0, 0, 0, util.KSTZone)
+		outOfRange := time.Date(2026, 3, 5, 12, 0, 0, 0, util.KSTZone)
 		candidates := []model.Candidate{
 			{EventStartDate: &inRange, Type: domain.MajorEventTypeEvent},
 			{EventStartDate: &outOfRange, Type: domain.MajorEventTypeEvent},
@@ -316,8 +317,8 @@ func TestApplyPeriodFilter(t *testing.T) {
 	})
 
 	t.Run("news type: PubDate takes priority over EventStartDate", func(t *testing.T) {
-		pubDate := time.Date(2026, 2, 15, 12, 0, 0, 0, model.KST)
-		eventDate := time.Date(2026, 6, 1, 12, 0, 0, 0, model.KST) // 범위 밖
+		pubDate := time.Date(2026, 2, 15, 12, 0, 0, 0, util.KSTZone)
+		eventDate := time.Date(2026, 6, 1, 12, 0, 0, 0, util.KSTZone) // 범위 밖
 		candidates := []model.Candidate{
 			{Type: domain.MajorEventTypeNews, PubDate: &pubDate, EventStartDate: &eventDate},
 		}
@@ -325,14 +326,14 @@ func TestApplyPeriodFilter(t *testing.T) {
 		if len(result) != 1 {
 			t.Fatalf("expected 1 (news uses PubDate in range), got %d", len(result))
 		}
-		if !result[0].date.Equal(pubDate.In(model.KST)) {
-			t.Fatalf("expected effective date = PubDate %v, got %v", pubDate.In(model.KST), result[0].date)
+		if !result[0].date.Equal(pubDate.In(util.KSTZone)) {
+			t.Fatalf("expected effective date = PubDate %v, got %v", pubDate.In(util.KSTZone), result[0].date)
 		}
 	})
 
 	t.Run("event type: EventStartDate takes priority over PubDate", func(t *testing.T) {
-		pubDate := time.Date(2026, 6, 1, 12, 0, 0, 0, model.KST)    // 범위 밖
-		eventDate := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST) // 범위 내
+		pubDate := time.Date(2026, 6, 1, 12, 0, 0, 0, util.KSTZone)    // 범위 밖
+		eventDate := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone) // 범위 내
 		candidates := []model.Candidate{
 			{Type: domain.MajorEventTypeEvent, PubDate: &pubDate, EventStartDate: &eventDate},
 		}
@@ -340,8 +341,8 @@ func TestApplyPeriodFilter(t *testing.T) {
 		if len(result) != 1 {
 			t.Fatalf("expected 1 (event uses EventStartDate in range), got %d", len(result))
 		}
-		if !result[0].date.Equal(eventDate.In(model.KST)) {
-			t.Fatalf("expected effective date = EventStartDate %v, got %v", eventDate.In(model.KST), result[0].date)
+		if !result[0].date.Equal(eventDate.In(util.KSTZone)) {
+			t.Fatalf("expected effective date = EventStartDate %v, got %v", eventDate.In(util.KSTZone), result[0].date)
 		}
 	})
 
@@ -436,8 +437,8 @@ func requireAdditionalTokens(t *testing.T, profiles []memberProfile) {
 func TestFilterCandidates_EmptySourceURL(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
-	date := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	date := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone)
 
 	candidates := []model.Candidate{
 		{Title: "사쿠라 미코 event", EventStartDate: &date, Type: domain.MajorEventTypeEvent, SourceURL: ""},
@@ -453,8 +454,8 @@ func TestFilterCandidates_EmptySourceURL(t *testing.T) {
 func TestFilterCandidates_CommunityWithoutCorroboration(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
-	date := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	date := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone)
 
 	candidates := []model.Candidate{
 		{
@@ -475,9 +476,9 @@ func TestFilterCandidates_CommunityWithoutCorroboration(t *testing.T) {
 func TestFilterCandidates_SortStability(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
-	date1 := time.Date(2026, 2, 18, 12, 0, 0, 0, model.KST)
-	date2 := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	date1 := time.Date(2026, 2, 18, 12, 0, 0, 0, util.KSTZone)
+	date2 := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone)
 
 	candidates := []model.Candidate{
 		{
@@ -516,8 +517,8 @@ func TestFilterCandidates_SortStability(t *testing.T) {
 func TestFilterCandidates_MultipleMatchedMembers(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
-	date := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	date := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone)
 
 	candidates := []model.Candidate{
 		{

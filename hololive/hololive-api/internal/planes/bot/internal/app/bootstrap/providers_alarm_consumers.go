@@ -5,31 +5,34 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+
 	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
-	"github.com/kapu/hololive-shared/pkg/service/notification"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 func ProvideAlarmService(
 	advanceMinutes []int,
 	cacheClient cache.Client,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	memberData domain.MemberDataProvider,
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
-) (*notification.AlarmService, error) {
-	service, err := notification.NewAlarmService(
+) (*alarmservice.AlarmService, error) {
+	service, err := alarmservice.NewAlarmService(
 		cacheClient,
 		holodexService,
 		chzzkClient,
@@ -50,7 +53,7 @@ func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alar
 	return alarm.NewRepository(postgres, logger)
 }
 
-func ProvideAlarmWorkerPool(cfg config.WorkerPoolConfig) *workerpool.QueuedPool {
+func ProvideAlarmWorkerPool(cfg settings.WorkerPoolConfig) *workerpool.QueuedPool {
 	return workerpool.NewQueued(workerpool.QueuedConfig{
 		Workers:   cfg.Workers,
 		QueueSize: cfg.QueueSize,
@@ -61,7 +64,7 @@ func ProvideMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
 	cacheClient cache.Client,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	logger *slog.Logger,
 ) *matcher.Matcher {
 	return matcher.NewMatcher(ctx, membersData, cacheClient, holodexService, nil, logger)

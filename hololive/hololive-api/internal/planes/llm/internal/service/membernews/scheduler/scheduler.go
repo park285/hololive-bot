@@ -29,10 +29,11 @@ import (
 	"github.com/park285/shared-go/pkg/outputguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 const maxConcurrentDigests = 5
@@ -117,12 +118,12 @@ func (s *Scheduler) Stop() {
 }
 
 func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
-	nowKST := now.In(model.KST)
+	nowKST := now.In(util.KSTZone)
 
 	daysUntilMonday := (int(time.Monday) - int(nowKST.Weekday()) + 7) % 7
 	target := time.Date(
 		nowKST.Year(), nowKST.Month(), nowKST.Day()+daysUntilMonday,
-		WeeklyScheduleHourKST, weeklyScheduleMinuteKST, 0, 0, model.KST,
+		WeeklyScheduleHourKST, weeklyScheduleMinuteKST, 0, 0, util.KSTZone,
 	)
 
 	if !target.After(nowKST) {
@@ -157,8 +158,8 @@ func (s *Scheduler) processRoomDigest(ctx context.Context, weekKey, roomID strin
 }
 
 func startOfWeek(t time.Time) time.Time {
-	kstNow := t.In(model.KST)
+	kstNow := t.In(util.KSTZone)
 	daysFromMonday := (int(kstNow.Weekday()) - int(time.Monday) + 7) % 7
 	start := kstNow.AddDate(0, 0, -daysFromMonday)
-	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, model.KST)
+	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, util.KSTZone)
 }

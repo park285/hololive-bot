@@ -28,7 +28,7 @@ import (
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
@@ -54,7 +54,7 @@ func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	if c.Deps().MemberNews == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsServiceNotInitialized)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsServiceNotInitialized)
 	}
 
 	period := membernewscontracts.PeriodWeekly
@@ -71,7 +71,7 @@ func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 
 		c.Deps().Logger.Error("Member news command failed", "room", cmdCtx.Room, "error", err)
 
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsQueryFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsQueryFailed)
 	}
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsDigest(ctx, digest))

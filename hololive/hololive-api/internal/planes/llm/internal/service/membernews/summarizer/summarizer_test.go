@@ -30,7 +30,8 @@ import (
 	"time"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type fakeLLM struct {
@@ -118,7 +119,7 @@ func TestSummarizer_SchemaSuccess(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
 	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
@@ -148,7 +149,7 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
 	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
@@ -165,7 +166,7 @@ func TestSummarizer_LLMFailureUsesFallback(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST), Candidates: sampleCandidates()}
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
 	digest, err := s.Summarize(context.Background(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
@@ -197,7 +198,7 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 				Title:       "SUISIEI LIVE",
 				Description: "official event",
 			},
-			EffectiveDate: time.Date(2026, 2, 21, 12, 0, 0, 0, model.KST),
+			EffectiveDate: time.Date(2026, 2, 21, 12, 0, 0, 0, util.KSTZone),
 			MemberText:    "호시마치 스이세이",
 			Category:      model.CategorySoloLive,
 			SourceTier:    model.SourceTierOfficial,
@@ -208,7 +209,7 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 				Title:       "Miko Goods",
 				Description: "official goods",
 			},
-			EffectiveDate: time.Date(2026, 2, 22, 12, 0, 0, 0, model.KST),
+			EffectiveDate: time.Date(2026, 2, 22, 12, 0, 0, 0, util.KSTZone),
 			MemberText:    "사쿠라 미코",
 			Category:      model.CategoryGoods,
 			SourceTier:    model.SourceTierOfficial,
@@ -218,7 +219,7 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:     model.PeriodWeekly,
-		Now:        time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
+		Now:        time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
 		Candidates: candidates,
 	}
 	digest, err := s.Summarize(context.Background(), &input)
@@ -311,7 +312,7 @@ func TestMemberNewsSystemPrompt_ContainsGuide(t *testing.T) {
 }
 
 func sampleCandidates() []model.FilteredCandidate {
-	date := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
+	date := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone)
 	return []model.FilteredCandidate{
 		{
 			Candidate: model.Candidate{

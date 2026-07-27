@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
@@ -75,16 +75,16 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 			slog.Any("error", err),
 		)
 
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberProfileLoadFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberProfileLoadFailed)
 	}
 
 	message := c.Deps().Formatter.FormatTalentProfile(ctx, rawProfile, translated)
 	if message == "" {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberProfileBuildFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberProfileBuildFailed)
 	}
 
 	if member.IsGraduated {
-		message = c.Deps().Formatter.GraduatedMemberWarning() + message
+		message = c.Deps().Formatter.GraduatedMemberWarning(ctx) + message
 	}
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)

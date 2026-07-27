@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	opsapp "github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/latencycause"
 )
 
 func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
@@ -26,7 +26,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 		return fmt.Errorf("invalid period flag: %w", err)
 	}
 
-	appConfig, err := config.Load()
+	appConfig, err := settings.LoadYouTubeProducerRuntime()
 	if err != nil {
 		return fmt.Errorf("failed to load community/shorts latency-period config: %w", err)
 	}
@@ -36,7 +36,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 	reqCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	report, err := opsapp.CollectCommunityShortsLatencyPeriodReport(reqCtx, appConfig, logger, now, specs)
+	report, err := latencycause.CollectPeriodReport(reqCtx, appConfig, logger, now, specs)
 	if err != nil {
 		return fmt.Errorf("failed to collect community/shorts latency period report: %w", err)
 	}
@@ -44,7 +44,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 	return writeLatencyPeriodReport(ctx, *format, report)
 }
 
-func writeLatencyPeriodReport(ctx commandContext, format string, report opsapp.CommunityShortsLatencyPeriodReport) error {
+func writeLatencyPeriodReport(ctx commandContext, format string, report latencycause.PeriodReport) error {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "markdown":
 		return writeLatencyPeriodMarkdown(ctx, report)
@@ -55,14 +55,14 @@ func writeLatencyPeriodReport(ctx commandContext, format string, report opsapp.C
 	}
 }
 
-func writeLatencyPeriodMarkdown(ctx commandContext, report opsapp.CommunityShortsLatencyPeriodReport) error {
-	if _, err := fmt.Fprint(ctx.stdout, opsapp.RenderCommunityShortsLatencyPeriodMarkdown(&report)); err != nil {
+func writeLatencyPeriodMarkdown(ctx commandContext, report latencycause.PeriodReport) error {
+	if _, err := fmt.Fprint(ctx.stdout, latencycause.RenderPeriodMarkdown(&report)); err != nil {
 		return fmt.Errorf("failed to write community/shorts latency period markdown: %w", err)
 	}
 	return nil
 }
 
-func writeLatencyPeriodJSON(ctx commandContext, report opsapp.CommunityShortsLatencyPeriodReport) error {
+func writeLatencyPeriodJSON(ctx commandContext, report latencycause.PeriodReport) error {
 	encoder := json.NewEncoder(ctx.stdout)
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")

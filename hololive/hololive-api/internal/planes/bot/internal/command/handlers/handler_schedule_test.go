@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
 
@@ -82,10 +84,10 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 		},
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
+		Formatter: formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -110,10 +112,10 @@ func TestScheduleCommand_Execute_GoldenPath(t *testing.T) {
 func TestScheduleCommand_Execute_NoMemberName(t *testing.T) {
 	var sentError string
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   &scheduleStreamProviderStub{},
 		Matcher:   &matcher.Matcher{},
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -130,18 +132,18 @@ func TestScheduleCommand_Execute_NoMemberName(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	if sentError != adapter.ErrScheduleNeedMemberName {
-		t.Fatalf("sent error %q, want %q", sentError, adapter.ErrScheduleNeedMemberName)
+	if sentError != messaging.ErrScheduleNeedMemberName {
+		t.Fatalf("sent error %q, want %q", sentError, messaging.ErrScheduleNeedMemberName)
 	}
 }
 
 func TestScheduleCommand_Execute_NoMemberName_SuppressedByMemberToken(t *testing.T) {
 	sendErrorCalled := false
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   &scheduleStreamProviderStub{},
 		Matcher:   &matcher.Matcher{},
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -177,10 +179,10 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 		scheduleErr: errors.New("holodex down"),
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -199,8 +201,8 @@ func TestScheduleCommand_Execute_QueryError(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	if sentError != adapter.ErrScheduleQueryFailed {
-		t.Fatalf("sent error %q, want %q", sentError, adapter.ErrScheduleQueryFailed)
+	if sentError != messaging.ErrScheduleQueryFailed {
+		t.Fatalf("sent error %q, want %q", sentError, messaging.ErrScheduleQueryFailed)
 	}
 }
 
@@ -209,10 +211,10 @@ func TestScheduleCommand_Execute_MemberNotFound(t *testing.T) {
 
 	memberProvider := newContextAwareMemberProvider(nil)
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   &scheduleStreamProviderStub{},
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			sendMessageCalled = true
 			return nil
@@ -249,10 +251,10 @@ func TestScheduleCommand_Execute_WithDays(t *testing.T) {
 		},
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
+		Formatter: formatter.NewResponseFormatter("!", setupScheduleTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil

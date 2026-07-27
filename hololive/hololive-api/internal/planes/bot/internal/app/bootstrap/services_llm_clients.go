@@ -3,17 +3,17 @@ package bootstrap
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/membernews"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 func ResolveLLMSchedulerClients(
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	logger *slog.Logger,
-) (majorEventRepository command.MajorEventRepository, memberNewsService command.MemberNewsService) {
+) (majorEventRepository handlercore.MajorEventRepository, memberNewsService handlercore.MemberNewsService) {
 	if appConfig.LLMSchedulerURL == "" {
 		logger.Warn("LLM scheduler URL not configured; majorevent/membernews commands disabled",
 			slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"),

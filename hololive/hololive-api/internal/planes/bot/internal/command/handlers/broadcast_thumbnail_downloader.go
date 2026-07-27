@@ -46,7 +46,7 @@ const maxBroadcastThumbnailBytes = 12 << 20
 
 var youtubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
-func NewYouTubeThumbnailDownloader(client *http.Client) BroadcastThumbnailDownloader {
+func NewYouTubeThumbnailDownloader(client *http.Client) handlercore.BroadcastThumbnailDownloader {
 	if client == nil {
 		policy := netguard.Policy{
 			Timeout:      5 * time.Second,

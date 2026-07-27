@@ -35,17 +35,17 @@ type ApplyHandlers struct {
 	Unknown             func(updateType string)
 }
 
-func NewApplyFn(logger *slog.Logger, handlers ApplyHandlers) func(ConfigUpdate) {
+func NewApplyFn(logger *slog.Logger, handlers ApplyHandlers) func(contractssettings.ConfigUpdateV1) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	return func(update ConfigUpdate) {
+	return func(update contractssettings.ConfigUpdateV1) {
 		dispatchConfigUpdate(logger, handlers, update)
 	}
 }
 
-func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	switch update.Type {
 	case contractssettings.UpdateTypeScraperProxy:
 		applyScraperProxyUpdate(logger, handlers, update)
@@ -56,7 +56,7 @@ func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update Co
 	}
 }
 
-func applyScraperProxyUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+func applyScraperProxyUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	if handlers.ScraperProxy == nil {
 		logConfigUpdateHandlerMissing(logger, update.Type)
 		return
@@ -69,7 +69,7 @@ func applyScraperProxyUpdate(logger *slog.Logger, handlers ApplyHandlers, update
 	handlers.ScraperProxy(payload)
 }
 
-func applyAlarmAdvanceMinutesUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+func applyAlarmAdvanceMinutesUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	if handlers.AlarmAdvanceMinutes == nil {
 		logConfigUpdateHandlerMissing(logger, update.Type)
 		return
@@ -82,7 +82,7 @@ func applyAlarmAdvanceMinutesUpdate(logger *slog.Logger, handlers ApplyHandlers,
 	handlers.AlarmAdvanceMinutes(payload)
 }
 
-func applyUnknownConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+func applyUnknownConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	if handlers.Unknown != nil {
 		handlers.Unknown(update.Type)
 		return
@@ -91,7 +91,7 @@ func applyUnknownConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, updat
 	logger.Warn("Unknown config update type", slog.String("type", update.Type))
 }
 
-func decodeConfigUpdatePayload(logger *slog.Logger, update ConfigUpdate, target any) bool {
+func decodeConfigUpdatePayload(logger *slog.Logger, update contractssettings.ConfigUpdateV1, target any) bool {
 	if err := json.Unmarshal(update.Payload, target); err != nil {
 		logger.Warn("Failed to decode config update payload",
 			slog.String("type", update.Type),

@@ -20,7 +20,7 @@
 
 package filter
 
-import "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+import "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 
 func buildFilteredCandidate(
 	item *datedCandidate,

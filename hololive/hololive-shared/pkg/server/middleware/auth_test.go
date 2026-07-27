@@ -28,6 +28,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	common "github.com/kapu/hololive-shared/pkg/contracts/common"
+	"github.com/park285/shared-go/pkg/httputil"
 )
 
 func TestAPIKeyAuthMiddleware(t *testing.T) {
@@ -78,7 +80,7 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", http.NoBody)
 			if tt.headerVal != "" {
-				req.Header.Set(APIKeyHeader, tt.headerVal)
+				req.Header.Set(common.APIKeyHeader, tt.headerVal)
 			}
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
@@ -126,7 +128,7 @@ func TestAuthMiddlewareExplicitDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	router.Use(AuthMiddleware(AuthConfig{Disabled: true}))
+	router.Use(AuthMiddleware(httputil.AdminAuthConfig{Disabled: true}))
 	router.GET("/test", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -186,7 +188,7 @@ func TestNoRouteAuthHandler(t *testing.T) {
 
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
 			if tt.headerVal != "" {
-				req.Header.Set(APIKeyHeader, tt.headerVal)
+				req.Header.Set(common.APIKeyHeader, tt.headerVal)
 			}
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
@@ -206,7 +208,7 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 	router.NoRoute(NoRouteAuthHandler("test-key"))
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
-	req.Header.Set(APIKeyHeader, "wrong-key")
+	req.Header.Set(common.APIKeyHeader, "wrong-key")
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -232,7 +234,7 @@ func TestNoRouteHandlerExplicitDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	router.NoRoute(NoRouteHandler(AuthConfig{Disabled: true}))
+	router.NoRoute(NoRouteHandler(httputil.AdminAuthConfig{Disabled: true}))
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
 	rec := httptest.NewRecorder()

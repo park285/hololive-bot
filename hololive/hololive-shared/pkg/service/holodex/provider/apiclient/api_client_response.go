@@ -1,0 +1,81 @@
+package apiclient
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+)
+
+func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
+	if status == http.StatusTooManyRequests {
+		return c.handleRateLimitedResponse(status, reqURL, attempt, maxAttempts)
+	}
+	if status == http.StatusForbidden {
+		return c.handleForbiddenResponse(status, body, reqURL, attempt)
+	}
+	if status >= 500 {
+		return c.handleServerError(ctx, status, attempt, maxAttempts)
+	}
+	if status >= 400 {
+		return nil, true, holodexClientError(status, reqURL)
+	}
+	return body, true, nil
+}
+
+func (c *APIClient) handleRateLimitedResponse(status int, reqURL string, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
+	c.logger.Warn("Holodex rate limited, retrying",
+		slog.Int("status", status),
+		slog.Int("attempt", attempt+1),
+		slog.String("url", reqURL),
+	)
+	if attempt < maxAttempts-1 {
+		return nil, false, nil
+	}
+	return nil, true, NewKeyRotationError(reqURL, status)
+}
+
+func (c *APIClient) handleForbiddenResponse(status int, body []byte, reqURL string, attempt int) (result0 []byte, ok1 bool, err error) {
+	c.logger.Error("Holodex forbidden response",
+		slog.Int("status", status),
+		slog.Int("attempt", attempt+1),
+		slog.String("url", reqURL),
+		slog.String("body_preview", summarizeHolodexErrorBody(body)),
+	)
+	return nil, true, NewAPIError(reqURL, status)
+}
+
+func holodexClientError(status int, reqURL string) error {
+	return NewAPIError(reqURL, status)
+}
+
+func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
+	c.openCircuit()
+	c.logger.Warn("Server error",
+		slog.Int("status", status),
+	)
+
+	// circuit이 열렸으면 추가 재시도 없이 즉시 중단합니다.
+	if c.IsCircuitOpen() {
+		return nil, true, NewAPIError(fmt.Sprintf("Server error: %d", status), status)
+	}
+
+	if attempt < maxAttempts-1 {
+		return nil, false, NewAPIError(fmt.Sprintf("Server error: %d", status), status)
+	}
+
+	return nil, true, NewAPIError(fmt.Sprintf("Server error: %d", status), status)
+}
+
+func summarizeHolodexErrorBody(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return ""
+	}
+	const maxPreviewLen = 256
+	if len(trimmed) <= maxPreviewLen {
+		return trimmed
+	}
+	return trimmed[:maxPreviewLen] + "..."
+}

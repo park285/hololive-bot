@@ -11,29 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-type (
-	Check = sharedreadiness.Check
-	Probe = sharedreadiness.Probe
-)
-
-func NewProbe(runtimeName string, checks ...Check) *Probe {
-	return sharedreadiness.NewProbe(runtimeName, checks...)
-}
-
-func PostgresCheck(db database.Client) Check {
-	return sharedreadiness.PostgresCheck(db)
-}
-
-func ValkeyCheck(client cache.Client) Check {
-	return sharedreadiness.ValkeyCheck(client)
-}
-
-func BoolEnvNotFalseCheck(name, key string, defaultValue bool) Check {
-	return Check{
+func BoolEnvNotFalseCheck(name, key string, defaultValue bool) sharedreadiness.Check {
+	return sharedreadiness.Check{
 		Name:  name,
 		Group: sharedreadiness.GroupEgressFlags,
 		Probe: func(context.Context) error {
@@ -42,8 +23,8 @@ func BoolEnvNotFalseCheck(name, key string, defaultValue bool) Check {
 	}
 }
 
-func ExplicitTrueBoolEnvCheck(name, key string) Check {
-	return Check{
+func ExplicitTrueBoolEnvCheck(name, key string) sharedreadiness.Check {
+	return sharedreadiness.Check{
 		Name:  name,
 		Group: sharedreadiness.GroupEgressFlags,
 		Probe: func(context.Context) error {
@@ -59,21 +40,21 @@ func ExplicitTrueBoolEnvCheck(name, key string) Check {
 	}
 }
 
-func PublicGinHandler(ctx context.Context, probe *Probe) gin.HandlerFunc {
+func PublicGinHandler(ctx context.Context, probe *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		statusCode, payload := publicResponse(probe, sharedreadiness.RequestContext(ctx, c))
 		c.JSON(statusCode, payload)
 	}
 }
 
-func InternalGinHandler(ctx context.Context, probe *Probe) gin.HandlerFunc {
+func InternalGinHandler(ctx context.Context, probe *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		statusCode, payload := internalResponse(probe, sharedreadiness.RequestContext(ctx, c))
 		c.JSON(statusCode, payload)
 	}
 }
 
-func internalResponse(probe *Probe, ctx context.Context) (statusCode int, payload map[string]any) {
+func internalResponse(probe *sharedreadiness.Probe, ctx context.Context) (statusCode int, payload map[string]any) {
 	base := health.Get()
 	if probe == nil {
 		return http.StatusServiceUnavailable, runtimePayload(base, "not_ready", "")
@@ -88,7 +69,7 @@ func internalResponse(probe *Probe, ctx context.Context) (statusCode int, payloa
 	return statusCode, payload
 }
 
-func publicResponse(probe *Probe, ctx context.Context) (statusCode int, payload map[string]any) {
+func publicResponse(probe *sharedreadiness.Probe, ctx context.Context) (statusCode int, payload map[string]any) {
 	base := health.Get()
 	if probe == nil {
 		return http.StatusServiceUnavailable, runtimePayload(base, "not_ready", "")

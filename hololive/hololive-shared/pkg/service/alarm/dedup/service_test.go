@@ -580,43 +580,34 @@ func TestService_RecentlyNotifiedStreamIDs(t *testing.T) {
 	assert.Equal(t, map[string]struct{}{"stream-1": {}}, recent)
 }
 
-func TestService_LegacyStringNotifiedData_MigratesToHash(t *testing.T) {
+func TestService_OldStringNotifiedDataFailsClosed(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
-	streamID := "vid-legacy"
+	streamID := "vid-old-shape"
 	start := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
 	key := keys.NotifiedKey(streamID)
 
-	legacyJSON, err := json.Marshal(NotifiedData{
+	oldJSON, err := json.Marshal(NotifiedData{
 		StartScheduled: keys.FormatScheduled(start),
 		SentAt:         map[int]bool{5: true},
 	})
 	require.NoError(t, err)
-	state.setRawString(key, string(legacyJSON))
+	state.setRawString(key, string(oldJSON))
 
-	already, err := service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
-	require.NoError(t, err)
-	assert.True(t, already)
+	_, err = service.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
+	require.ErrorContains(t, err, "notified data has non-hash type")
 
-	state.mu.Lock()
-	_, hasLegacyString := state.strings[key]
-	hashFields := maps.Clone(state.hashes[key])
-	state.mu.Unlock()
-
-	assert.False(t, hasLegacyString)
-	require.NotNil(t, hashFields)
-	assert.Equal(t, keys.FormatScheduled(start), hashFields["start_scheduled"])
-	assert.Equal(t, "1", hashFields["5"])
-
-	require.NoError(t, service.MarkAsNotified(t.Context(), streamID, start, 3))
+	err = service.MarkAsNotified(t.Context(), streamID, start, 3)
+	require.ErrorContains(t, err, "notified data has non-hash type")
 
 	state.mu.Lock()
-	hashFields = maps.Clone(state.hashes[key])
+	stored := state.strings[key]
+	_, hasHash := state.hashes[key]
 	state.mu.Unlock()
 
-	assert.Equal(t, "1", hashFields["3"])
-	assert.Equal(t, "1", hashFields["5"])
+	assert.Equal(t, string(oldJSON), stored)
+	assert.False(t, hasHash)
 }
 
 func TestService_UpcomingEventRecentlyWindow(t *testing.T) {
@@ -733,41 +724,6 @@ func TestService_TryClaimLogicalEvent_NilStream(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, key)
 	assert.False(t, acquired)
-}
-
-func TestService_ReadNotifiedData_LegacyJSONMigrated(t *testing.T) {
-	cacheMock, state := newMockDedupCache(t)
-	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
-
-	key := keys.NotifiedKey("legacy-stream")
-	legacy := NotifiedData{
-		StartScheduled: "2026-03-04T10:00:00Z",
-		SentAt: map[int]bool{
-			5: true,
-		},
-	}
-	legacyJSON, err := json.Marshal(legacy)
-	require.NoError(t, err)
-	state.setRawString(key, string(legacyJSON))
-
-	notified, err := service.IsAlreadyNotifiedForSchedule(
-		t.Context(),
-		"legacy-stream",
-		time.Date(2026, 3, 4, 10, 0, 1, 0, time.UTC),
-		5,
-	)
-	require.NoError(t, err)
-	assert.True(t, notified)
-
-	state.mu.Lock()
-	_, hasLegacyString := state.strings[key]
-	hashFields := maps.Clone(state.hashes[key])
-	state.mu.Unlock()
-
-	assert.False(t, hasLegacyString)
-	require.NotNil(t, hashFields)
-	assert.Equal(t, "2026-03-04T10:00:00Z", hashFields["start_scheduled"])
-	assert.Equal(t, "1", hashFields["5"])
 }
 
 func newMockDedupCacheWithSetNXMulti(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) {

@@ -27,11 +27,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/app"
 )
 
 func main() {
@@ -42,7 +42,7 @@ func main() {
 
 	postgresConfig := postgresConfigFromEnv()
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
-	runtime, err := app.BuildDBIntegrationRuntime(buildCtx, &postgresConfig, logger)
+	runtime, err := botruntime.BuildDBIntegrationRuntime(buildCtx, &postgresConfig, logger)
 	buildCancel()
 
 	if err != nil {
@@ -61,8 +61,8 @@ func main() {
 	printSummary(memberCount, channelIDCount)
 }
 
-func postgresConfigFromEnv() config.PostgresConfig {
-	return config.PostgresConfig{
+func postgresConfigFromEnv() settings.PostgresConfig {
+	return settings.PostgresConfig{
 		Host:     envOrDefault("POSTGRES_HOST", constants.DatabaseDefaults.Host),
 		Port:     envOrDefaultInt("POSTGRES_PORT", constants.DatabaseDefaults.Port),
 		User:     envOrDefault("POSTGRES_USER", constants.DatabaseDefaults.User),
@@ -71,7 +71,7 @@ func postgresConfigFromEnv() config.PostgresConfig {
 	}
 }
 
-func runIntegrationChecks(ctx context.Context, runtime *app.DBIntegrationRuntime) (memberCount, channelIDCount int) {
+func runIntegrationChecks(ctx context.Context, runtime *botruntime.DBIntegrationRuntime) (memberCount, channelIDCount int) {
 	testChannelID := "UChAnqc_AY5_I3Px5dig3X1Q" // Korone
 
 	memberCount = runRepositoryChecks(ctx, runtime, testChannelID)
@@ -81,7 +81,7 @@ func runIntegrationChecks(ctx context.Context, runtime *app.DBIntegrationRuntime
 	return memberCount, channelIDCount
 }
 
-func runRepositoryChecks(ctx context.Context, runtime *app.DBIntegrationRuntime, testChannelID string) int {
+func runRepositoryChecks(ctx context.Context, runtime *botruntime.DBIntegrationRuntime, testChannelID string) int {
 	repository := runtime.Repository
 
 	log.Println("Repository created")
@@ -121,7 +121,7 @@ func runRepositoryChecks(ctx context.Context, runtime *app.DBIntegrationRuntime,
 	return len(members)
 }
 
-func runCacheCheck(ctx context.Context, runtime *app.DBIntegrationRuntime, testChannelID string) {
+func runCacheCheck(ctx context.Context, runtime *botruntime.DBIntegrationRuntime, testChannelID string) {
 	memberCache := runtime.Cache
 
 	log.Println("Cache created with warm-up")
@@ -139,7 +139,7 @@ func runCacheCheck(ctx context.Context, runtime *app.DBIntegrationRuntime, testC
 	log.Printf("Cache hit: %s", foundMember.Name)
 }
 
-func runAdapterChecks(ctx context.Context, runtime *app.DBIntegrationRuntime, testChannelID string) int {
+func runAdapterChecks(ctx context.Context, runtime *botruntime.DBIntegrationRuntime, testChannelID string) int {
 	adapter := runtime.MemberAdapter
 	adapterCtx := adapter.WithContext(ctx)
 

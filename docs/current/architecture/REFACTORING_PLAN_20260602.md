@@ -83,7 +83,7 @@
 - [P2] `cache.Service.MGet`이 nil/빈값 구분 불가(`service_kv.go:69`) — `Get`/`GetString`과 불일치.
 - [P2] `alarm/cache_warm.go` package-level var hooks(`:21`) → Repository interface 주입(parallel test race).
 - [P2] auth `cacheClient nil` 분기 5+곳; bcrypt `DefaultCost` 하드코딩(`auth/service.go:100`) → config화(권장 cost 12).
-- [P2] bot: admin Handler god-struct 22필드 + `DomainHandlers struct{*Handler}`(`api.go:55`) → per-domain dep struct(Wave 5). `alarmActionHandlers()` per-call map alloc(`handler_alarm.go:83`) → switch. `SettingsAPIHandler.settingsHandler()` per-request 재할당(`api_settings.go:28`) → 필드. ingress 로깅 `context.Background()`(`bot_ingress.go:187`) → 요청 ctx 전파.
+- [P2] bot: admin Handler god-struct 22필드 + `DomainHandlers struct{*Handler}`(`api.go:55`) → per-domain dep struct(Wave 5). `alarmActionHandlers()` per-call map alloc(`handlers/alarm/alarm.go`) → switch. `SettingsAPIHandler.settingsHandler()` per-request 재할당(`api_settings.go:28`) → 필드. ingress 로깅 `context.Background()`(`bot_ingress.go:187`) → 요청 ctx 전파.
 - [P2] `dbx.InTx`/`InTxWithResult` 미사용(9곳이 `gorm.DB.Transaction` 직접) — wrapper 통일 또는 제거(panic→rollback은 GORM이 보장).
 - [P2] `contracts/delivery` prod 소비자 0(alias 통과 계층) — 제거/통합.
 - [P3] KST 15곳(이 repo: llm-sched 4 + youtube 1 + alarm-worker 1 + `pkg/util/time.go` 1) → `pkg/util/time.go` 단일 참조.

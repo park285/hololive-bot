@@ -24,19 +24,21 @@ import (
 	"time"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
 type registrationSpec struct {
-	Poller                poller.Poller
-	Priority              poller.Priority
+	Poller                scheduler.Poller
+	Priority              scheduler.Priority
 	Interval              time.Duration
 	ChannelIDs            []string
 	TargetGroup           providers.ChannelTargetGroup
 	WorstCaseAttempts     int
 	WorstCaseRequestUnits float64
-	BudgetProfile         poller.BudgetProfile
+	BudgetProfile         polling.BudgetProfile
 }
 
 func buildRegistration(spec *registrationSpec) providers.ChannelPollerRegistration {
@@ -48,16 +50,16 @@ func buildRegistration(spec *registrationSpec) providers.ChannelPollerRegistrati
 		WithBudgetProfile(spec.BudgetProfile)
 }
 
-func buildStatsRegistration(statsPoller poller.Poller, interval time.Duration, channelIDs []string) providers.ChannelPollerRegistration {
+func buildStatsRegistration(statsPoller scheduler.Poller, interval time.Duration, channelIDs []string) providers.ChannelPollerRegistration {
 	return buildRegistration(&registrationSpec{
 		Poller:                statsPoller,
-		Priority:              poller.PriorityLow,
+		Priority:              scheduler.PriorityLow,
 		Interval:              interval,
 		ChannelIDs:            channelIDs,
 		TargetGroup:           providers.ChannelTargetGroupStats,
 		WorstCaseAttempts:     scraper.FetchPageMaxAttempts,
 		WorstCaseRequestUnits: channelStatsWorstCaseRequestUnits(),
-		BudgetProfile:         youtubeScraperBudgetProfile(channelStatsWorstCaseRequestUnits(), poller.BudgetBurstPrimary, poller.BudgetPriorityLow),
+		BudgetProfile:         youtubeScraperBudgetProfile(channelStatsWorstCaseRequestUnits(), polling.BudgetBurstPrimary, polling.BudgetPriorityLow),
 	})
 }
 

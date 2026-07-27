@@ -19,12 +19,10 @@ func buildTargetBaselinePaths(
 
 		paths = append(paths, TargetBaselinePath{
 			AlarmType:                alarmType,
-			LegacyDeliveryPath:       LegacyDeliveryPath,
-			LegacyStatus:             LegacyStatus,
-			LegacyPathActive:         false,
-			NewDeliveryPath:          NewDeliveryPath,
+			NewDeliveryPath:          DeliveryPathYouTubeOutbox,
 			NewPathConfigured:        true,
 			CutoverPending:           cutoverPending && pathCutoverPending,
+			EffectiveDeliveryMode:    effectiveDeliveryMode(alarmEnabledRoomCount, cutoverPending && pathCutoverPending),
 			FinalDeliveryOwner:       finalOwner,
 			FinalDeliveryPath:        finalDeliveryPath(finalOwner),
 			SubscriberKeyPrefix:      subscriberKeyPrefix(alarmType),
@@ -71,7 +69,6 @@ func buildTargetBaselineRoutes(
 			SubscriberKey:         sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType),
 			AlarmEnabled:          roomCount > 0,
 			SubscriberRoomCount:   roomCount,
-			LegacyPathActive:      false,
 			NewPathConfigured:     true,
 			CutoverPending:        routeCutoverPending,
 			EffectiveDeliveryMode: effectiveDeliveryMode(roomCount, routeCutoverPending),
@@ -164,7 +161,7 @@ func normalizedCutoverAt(cutoverAt time.Time) *time.Time {
 func finalDeliveryPath(finalOwner string) string {
 	trimmedOwner := strings.TrimSpace(finalOwner)
 	if trimmedOwner == "" {
-		return NewDeliveryPath
+		return DeliveryPathYouTubeOutbox
 	}
-	return trimmedOwner + "." + NewDeliveryPath
+	return trimmedOwner + "." + DeliveryPathYouTubeOutbox
 }

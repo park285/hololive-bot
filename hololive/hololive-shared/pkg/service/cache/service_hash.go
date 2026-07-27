@@ -13,7 +13,7 @@ import (
 func (c *Service) HSet(ctx context.Context, key, field, value string) error {
 	if err := c.client.Do(ctx, c.client.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()).Error(); err != nil {
 		c.logger.Error("Cache hset failed", slog.String("key", key), slog.String("field", field), slog.Any("error", err))
-		return NewCacheError("hset failed", "hset", key, err)
+		return NewCacheError("hset", key, err)
 	}
 	return nil
 }
@@ -30,7 +30,7 @@ func (c *Service) HMSet(ctx context.Context, key string, fields map[string]any) 
 
 	if err := c.client.Do(ctx, builder.Build()).Error(); err != nil {
 		c.logger.Error("Cache hmset failed", slog.String("key", key), slog.Int("fields", len(fields)), slog.Any("error", err))
-		return NewCacheError("hmset failed", "hmset", key, err)
+		return NewCacheError("hmset", key, err)
 	}
 	return nil
 }
@@ -42,12 +42,12 @@ func (c *Service) HGet(ctx context.Context, key, field string) (string, error) {
 	}
 	if resp.Error() != nil {
 		c.logger.Error("Cache hash get failed", slog.String("key", key), slog.String("field", field), slog.Any("error", resp.Error()))
-		return "", NewCacheError("hget failed", "hget", key, resp.Error())
+		return "", NewCacheError("hget", key, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
-		return "", NewCacheError("hget conversion failed", "hget", key, err)
+		return "", NewCacheError("hget", key, err)
 	}
 
 	return value, nil
@@ -84,12 +84,12 @@ func (c *Service) batchHGetValue(key string, result valkey.ValkeyResult) (value0
 			return "", false, nil
 		}
 		c.logger.Error("Cache batch hget failed", slog.String("key", key), slog.Any("error", err))
-		return "", false, NewCacheError("batch hget failed", "hget", key, err)
+		return "", false, NewCacheError("hget", key, err)
 	}
 
 	value, err := result.ToString()
 	if err != nil {
-		return "", false, NewCacheError("batch hget conversion failed", "hget", key, err)
+		return "", false, NewCacheError("hget", key, err)
 	}
 	return value, value != "", nil
 }
@@ -101,7 +101,7 @@ func (c *Service) HDel(ctx context.Context, key string, fields ...string) error 
 	cmd := c.client.B().Hdel().Key(key).Field(fields...).Build()
 	if err := c.client.Do(ctx, cmd).Error(); err != nil {
 		c.logger.Error("Cache hdel failed", slog.String("key", key), slog.Int("fields", len(fields)), slog.Any("error", err))
-		return NewCacheError("hdel failed", "hdel", key, err)
+		return NewCacheError("hdel", key, err)
 	}
 	return nil
 }
@@ -110,12 +110,12 @@ func (c *Service) HGetAll(ctx context.Context, key string) (map[string]string, e
 	resp := c.client.Do(ctx, c.client.B().Hgetall().Key(key).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache hgetall failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return map[string]string{}, NewCacheError("hgetall failed", "hgetall", key, resp.Error())
+		return map[string]string{}, NewCacheError("hgetall", key, resp.Error())
 	}
 
 	values, err := resp.AsStrMap()
 	if err != nil {
-		return map[string]string{}, NewCacheError("hgetall conversion failed", "hgetall", key, err)
+		return map[string]string{}, NewCacheError("hgetall", key, err)
 	}
 
 	return values, nil

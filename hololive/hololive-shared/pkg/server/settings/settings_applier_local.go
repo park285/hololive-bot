@@ -24,16 +24,17 @@ import (
 	"context"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 // localSettingsApplier: Bot 프로세스 내 직접 설정 적용 (in-process)
 type localSettingsApplier struct {
 	youtube             youtube.Service
-	holodex             *holodex.Service
-	scraperProxyToggler *poller.Scheduler
+	holodex             *holodexprovider.Service
+	scraperProxyToggler *scheduler.Scheduler
 	alarm               domain.AlarmCRUD
 }
 
@@ -41,8 +42,8 @@ var _ SettingsApplier = (*localSettingsApplier)(nil)
 
 func NewLocalSettingsApplier(
 	youtubeService youtube.Service,
-	holodexService *holodex.Service,
-	scraperProxyToggler *poller.Scheduler,
+	holodexService *holodexprovider.Service,
+	scraperProxyToggler *scheduler.Scheduler,
 	alarm domain.AlarmCRUD,
 ) SettingsApplier {
 	return &localSettingsApplier{

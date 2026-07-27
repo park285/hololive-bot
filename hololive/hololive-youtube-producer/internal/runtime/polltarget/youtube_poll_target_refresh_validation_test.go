@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func TestResolveTargetsWithCacheValidation(t *testing.T) {
 	t.Run("accepts non cache candidate without db validation", func(t *testing.T) {
 		t.Parallel()
 
-		refresher := &youTubePollTargetRefresher{
+		refresher := &Refresher{
 			loadAlarmChannelIDs: func(context.Context) ([]string, error) {
 				t.Fatal("loadAlarmChannelIDs must not be called")
 				return nil, nil
@@ -62,8 +63,8 @@ func TestResolveTargetsWithCacheValidation(t *testing.T) {
 		t.Parallel()
 
 		dbCalls := 0
-		refresher := &youTubePollTargetRefresher{
-			lastResolvedTargets: youtubePollTargets{NotificationChannelIDs: []string{"UC_BASE"}},
+		refresher := &Refresher{
+			lastResolvedTargets: Targets{NotificationChannelIDs: []string{"UC_BASE"}},
 			loadAlarmChannelIDs: func(context.Context) ([]string, error) {
 				dbCalls++
 				return []string{"UC_BASE"}, nil
@@ -89,8 +90,8 @@ func TestResolveTargetsWithCacheValidation(t *testing.T) {
 		t.Parallel()
 
 		dbCalled := false
-		refresher := &youTubePollTargetRefresher{
-			lastResolvedTargets: youtubePollTargets{NotificationChannelIDs: []string{"UC_BASE", "UC_CACHE_ONLY"}},
+		refresher := &Refresher{
+			lastResolvedTargets: Targets{NotificationChannelIDs: []string{"UC_BASE", "UC_CACHE_ONLY"}},
 			cacheOnlyFirstSeen: map[string]time.Time{
 				"UC_CACHE_ONLY": now.Add(-youtubePollTargetCacheOnlyAdditionGracePeriod - time.Nanosecond),
 			},
@@ -117,8 +118,8 @@ func TestResolveTargetsWithCacheValidation(t *testing.T) {
 		t.Parallel()
 
 		dbCalls := 0
-		refresher := &youTubePollTargetRefresher{
-			lastResolvedTargets: youtubePollTargets{NotificationChannelIDs: []string{"UC_BASE", "UC_REMOVED"}},
+		refresher := &Refresher{
+			lastResolvedTargets: Targets{NotificationChannelIDs: []string{"UC_BASE", "UC_REMOVED"}},
 			loadAlarmChannelIDs: func(context.Context) ([]string, error) {
 				dbCalls++
 				return []string{"UC_BASE", "UC_REMOVED"}, nil
@@ -141,8 +142,8 @@ func TestResolveTargetsWithCacheValidation(t *testing.T) {
 	t.Run("fails closed when db validation fails", func(t *testing.T) {
 		t.Parallel()
 
-		refresher := &youTubePollTargetRefresher{
-			lastResolvedTargets: youtubePollTargets{NotificationChannelIDs: []string{"UC_PREVIOUS"}},
+		refresher := &Refresher{
+			lastResolvedTargets: Targets{NotificationChannelIDs: []string{"UC_PREVIOUS"}},
 			loadAlarmChannelIDs: func(context.Context) ([]string, error) {
 				return nil, assert.AnError
 			},
@@ -234,10 +235,10 @@ func TestClearExpiredOrResolvedCacheOnly(t *testing.T) {
 	assert.Equal(t, map[string]time.Time{"UC_PENDING": now}, state)
 }
 
-func testValidationOperationalChannels(channelIDs ...string) []communityShortsOperationalChannel {
-	channels := make([]communityShortsOperationalChannel, 0, len(channelIDs))
+func testValidationOperationalChannels(channelIDs ...string) []communityshorts.OperationalChannel {
+	channels := make([]communityshorts.OperationalChannel, 0, len(channelIDs))
 	for _, channelID := range channelIDs {
-		channels = append(channels, communityShortsOperationalChannel{
+		channels = append(channels, communityshorts.OperationalChannel{
 			ChannelID: channelID,
 			Enabled:   true,
 		})

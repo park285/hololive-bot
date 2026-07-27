@@ -47,19 +47,9 @@ func (e APIError) Error() string {
 
 func (e APIError) Unwrap() error { return e.Err }
 
-func NewAPIError(message string, statusCode int, context map[string]any) *APIError {
-	op := message
-
-	if context != nil {
-		if v, ok := context["operation"]; ok {
-			if opStr, ok := v.(string); ok {
-				op = opStr
-			}
-		}
-	}
-
+func NewAPIError(message string, statusCode int, operation string) *APIError {
 	return &APIError{
-		Operation:  op,
+		Operation:  operation,
 		StatusCode: statusCode,
 		Message:    message,
 	}
@@ -74,17 +64,9 @@ func (e KeyRotationError) Error() string {
 	return fmt.Sprintf("key rotation exhausted operation=%s status=%d", e.Operation, e.StatusCode)
 }
 
-func NewKeyRotationError(message string, statusCode int, context map[string]any) *KeyRotationError {
-	op := message
-
-	if v, ok := context["url"]; ok {
-		if urlStr, ok := v.(string); ok {
-			op = urlStr
-		}
-	}
-
+func NewKeyRotationError(operation string, statusCode int) *KeyRotationError {
 	return &KeyRotationError{
-		Operation:  op,
+		Operation:  operation,
 		StatusCode: statusCode,
 	}
 }

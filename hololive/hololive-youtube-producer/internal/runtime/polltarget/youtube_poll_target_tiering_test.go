@@ -97,7 +97,7 @@ func TestAppendClassifiedYouTubePollTarget(t *testing.T) {
 	t.Run("skips empty channel id", func(t *testing.T) {
 		t.Parallel()
 
-		out := youtubeTieredPollTargets{}
+		out := TieredTargets{}
 
 		appendClassifiedYouTubePollTarget(&out, " \t", nil, activeCutoff, warmCutoff)
 
@@ -109,7 +109,7 @@ func TestAppendClassifiedYouTubePollTarget(t *testing.T) {
 	t.Run("assigns trimmed channel ids to tier buckets", func(t *testing.T) {
 		t.Parallel()
 
-		out := youtubeTieredPollTargets{}
+		out := TieredTargets{}
 		lastActivity := map[string]time.Time{
 			"UC_ACTIVE": now.Add(-time.Hour),
 			"UC_WARM":   activeCutoff.Add(-time.Nanosecond),
@@ -133,18 +133,18 @@ func TestClassifyYouTubePollTargetsByActivityShortCircuits(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		targets youtubePollTargets
+		targets Targets
 	}{
 		{
 			name: "nil db keeps notification targets active",
-			targets: youtubePollTargets{
+			targets: Targets{
 				NotificationChannelIDs: []string{"UC_ACTIVE_BY_DEFAULT", " "},
 				StatsChannelIDs:        []string{"UC_STATS"},
 			},
 		},
 		{
 			name: "empty notification list preserves stats targets",
-			targets: youtubePollTargets{
+			targets: Targets{
 				StatsChannelIDs: []string{"UC_STATS"},
 			},
 		},

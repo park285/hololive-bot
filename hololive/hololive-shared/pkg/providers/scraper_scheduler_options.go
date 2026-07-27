@@ -21,15 +21,15 @@
 package providers
 
 import (
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	"maps"
 	"time"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
 
 type ChannelPollerRegistration struct {
-	Poller   poller.Poller
-	Priority poller.Priority
+	Poller   scheduler.Poller
+	Priority scheduler.Priority
 	Interval time.Duration
 	*ChannelPollerRegistrationOptions
 }
@@ -41,7 +41,7 @@ type ChannelPollerRegistrationOptions struct {
 	RequestsPerRun              int
 	WorstCaseAttempts           int
 	WorstCaseRequestUnitsPerRun float64
-	BudgetProfile               poller.BudgetProfile
+	BudgetProfile               polling.BudgetProfile
 	HasBudgetProfile            bool
 }
 
@@ -59,7 +59,7 @@ const (
 	SyntheticGlobalPollerChannelID = "__global__"
 )
 
-func NewChannelPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
+func NewChannelPollerRegistration(p scheduler.Poller, priority scheduler.Priority, interval time.Duration) ChannelPollerRegistration {
 	return ChannelPollerRegistration{
 		Poller:   p,
 		Priority: priority,
@@ -104,14 +104,14 @@ func (r ChannelPollerRegistration) WithWorstCaseRequestUnitsPerRun(units float64
 	return r
 }
 
-func (r ChannelPollerRegistration) WithBudgetProfile(profile poller.BudgetProfile) ChannelPollerRegistration {
+func (r ChannelPollerRegistration) WithBudgetProfile(profile polling.BudgetProfile) ChannelPollerRegistration {
 	if profile.SourceUnits != nil {
-		sourceUnits := make(map[poller.BudgetSource]float64, len(profile.SourceUnits))
+		sourceUnits := make(map[polling.BudgetSource]float64, len(profile.SourceUnits))
 		maps.Copy(sourceUnits, profile.SourceUnits)
 		profile.SourceUnits = sourceUnits
 	}
 	if profile.FallbackSourceUnits != nil {
-		fallbackSourceUnits := make(map[poller.BudgetSource]float64, len(profile.FallbackSourceUnits))
+		fallbackSourceUnits := make(map[polling.BudgetSource]float64, len(profile.FallbackSourceUnits))
 		maps.Copy(fallbackSourceUnits, profile.FallbackSourceUnits)
 		profile.FallbackSourceUnits = fallbackSourceUnits
 	}
@@ -121,15 +121,15 @@ func (r ChannelPollerRegistration) WithBudgetProfile(profile poller.BudgetProfil
 	return r
 }
 
-func NewGlobalPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
+func NewGlobalPollerRegistration(p scheduler.Poller, priority scheduler.Priority, interval time.Duration) ChannelPollerRegistration {
 	return NewChannelPollerRegistration(p, priority, interval).
 		WithChannelIDs([]string{SyntheticGlobalPollerChannelID}).
 		WithTargetGroup(ChannelTargetGroupGlobal)
 }
 
-func (r ChannelPollerRegistration) ToTargetSync() poller.PollerTargetSync {
+func (r ChannelPollerRegistration) ToTargetSync() scheduler.PollerTargetSync {
 	options := r.optionsOrDefault()
-	return poller.PollerTargetSync{
+	return scheduler.PollerTargetSync{
 		Poller:        r.Poller,
 		Priority:      r.Priority,
 		Interval:      r.Interval,
@@ -178,9 +178,9 @@ type scraperSchedulerOptions struct {
 	pollTimeout                time.Duration
 	errorBackoffMin            time.Duration
 	errorBackoffMax            time.Duration
-	jobClaimer                 poller.JobClaimer
-	budgetLimiter              poller.GlobalBudgetLimiter
-	budgetContext              poller.BudgetContext
+	jobClaimer                 polling.JobClaimer
+	budgetLimiter              polling.GlobalBudgetLimiter
+	budgetContext              polling.BudgetContext
 	budgetAcquireTimeout       time.Duration
 	channelIDs                 []string
 }
@@ -216,19 +216,19 @@ func WithSchedulerErrorBackoff(minBackoff, maxBackoff time.Duration) ScraperSche
 	}
 }
 
-func WithSchedulerJobClaimer(claimer poller.JobClaimer) ScraperSchedulerOption {
+func WithSchedulerJobClaimer(claimer polling.JobClaimer) ScraperSchedulerOption {
 	return func(options *scraperSchedulerOptions) {
 		options.jobClaimer = claimer
 	}
 }
 
-func WithSchedulerBudgetLimiter(limiter poller.GlobalBudgetLimiter) ScraperSchedulerOption {
+func WithSchedulerBudgetLimiter(limiter polling.GlobalBudgetLimiter) ScraperSchedulerOption {
 	return func(options *scraperSchedulerOptions) {
 		options.budgetLimiter = limiter
 	}
 }
 
-func WithSchedulerBudgetContext(budgetContext poller.BudgetContext) ScraperSchedulerOption {
+func WithSchedulerBudgetContext(budgetContext polling.BudgetContext) ScraperSchedulerOption {
 	return func(options *scraperSchedulerOptions) {
 		options.budgetContext = budgetContext
 	}

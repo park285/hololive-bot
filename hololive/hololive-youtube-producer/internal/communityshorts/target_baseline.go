@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
@@ -38,12 +39,10 @@ type TargetBaselineSources struct {
 
 type TargetBaselinePath struct {
 	AlarmType                domain.AlarmType `json:"alarm_type"`
-	LegacyDeliveryPath       string           `json:"legacy_delivery_path"`
-	LegacyStatus             string           `json:"legacy_status"`
-	LegacyPathActive         bool             `json:"legacy_path_active"`
 	NewDeliveryPath          string           `json:"new_delivery_path"`
 	NewPathConfigured        bool             `json:"new_path_configured"`
 	CutoverPending           bool             `json:"cutover_pending"`
+	EffectiveDeliveryMode    string           `json:"effective_delivery_mode"`
 	FinalDeliveryOwner       string           `json:"final_delivery_owner"`
 	FinalDeliveryPath        string           `json:"final_delivery_path"`
 	SubscriberKeyPrefix      string           `json:"subscriber_key_prefix"`
@@ -66,7 +65,6 @@ type TargetBaselineChannelRoute struct {
 	SubscriberKey         string           `json:"subscriber_key"`
 	AlarmEnabled          bool             `json:"alarm_enabled"`
 	SubscriberRoomCount   int              `json:"subscriber_room_count"`
-	LegacyPathActive      bool             `json:"legacy_path_active"`
 	NewPathConfigured     bool             `json:"new_path_configured"`
 	CutoverPending        bool             `json:"cutover_pending"`
 	EffectiveDeliveryMode string           `json:"effective_delivery_mode"`
@@ -79,7 +77,7 @@ type alarmActivationKey struct {
 	alarmType domain.AlarmType
 }
 
-func CollectTargetBaseline(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (TargetBaseline, error) {
+func CollectTargetBaseline(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (TargetBaseline, error) {
 	if ctx == nil {
 		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: context is nil")
 	}
@@ -117,7 +115,7 @@ func CollectTargetBaseline(ctx context.Context, appConfig *config.Config, logger
 func BuildTargetBaseline(
 	channels []OperationalChannel,
 	alarms []*domain.Alarm,
-	ingestionConfig config.IngestionConfig,
+	ingestionConfig settings.IngestionConfig,
 	generatedAt time.Time,
 ) (TargetBaseline, error) {
 	if err := ValidateOperationalTargets(channels); err != nil {

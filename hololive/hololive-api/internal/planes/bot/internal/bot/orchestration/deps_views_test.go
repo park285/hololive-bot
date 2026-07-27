@@ -25,15 +25,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/shared-go/pkg/workerpool"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	messagingadapter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 func TestDependenciesViews_NilSafety(t *testing.T) {
@@ -61,22 +64,22 @@ func TestDependenciesViews_NilSafety(t *testing.T) {
 
 func TestDependenciesViews_FieldMapping(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	messageAdapter := &adapter.MessageAdapter{}
-	formatter := &adapter.ResponseFormatter{}
+	messageAdapter := &messagingadapter.MessageAdapter{}
+	formatter := &messageformatter.ResponseFormatter{}
 	cacheService := &cache.Service{}
 	postgresService := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	workerPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
 	t.Cleanup(workerPool.StopAndWait)
-	externalBuilder := orchcmd.CommandBuilder(func(_ *command.Dependencies) command.Command {
+	externalBuilder := orchcmd.CommandBuilder(func(_ *handlercore.Dependencies) handlercore.Command {
 		return command.NewHelpCommand(nil)
 	})
 
 	deps := &Dependencies{
 		BotSelfUser:           "bot-self",
 		IrisBaseURL:           "https://iris.internal",
-		Notification:          config.NotificationConfig{},
+		Notification:          settings.NotificationConfig{},
 		CalendarImageCacheDir: "data/test-calendar-cache",
 		CalendarEntryCacheTTL: time.Hour,
 		Logger:                logger,

@@ -3,13 +3,15 @@ package polling
 import (
 	"fmt"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 )
 
-func BuildJobRunGuardClaimer(cacheClient cache.Client, activeActiveConfig config.ScraperActiveActiveConfig) (poller.JobClaimer, error) {
+func BuildJobRunGuardClaimer(cacheClient cache.Client, activeActiveConfig settings.ScraperActiveActiveConfig) (polling.JobClaimer, error) {
 	if !activeActiveConfig.Enabled {
 		return nil, nil
 	}

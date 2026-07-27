@@ -25,7 +25,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
+	twitch2 "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/twitch"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
@@ -37,12 +38,12 @@ func newOptionalTwitchChecker(
 	twitchClient *twitch.Client,
 	twitchEnabled bool,
 	logger *slog.Logger,
-) (checker.Runner, error) {
+) (checking.Runner, error) {
 	if !twitchEnabled {
 		logger.Info("Twitch alarm loop disabled")
 		return nil, nil
 	}
-	twitchChecker, err := checker.NewTwitchChecker(cacheClient, twitchClient, logger)
+	twitchChecker, err := twitch2.NewTwitchChecker(cacheClient, twitchClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create twitch checker: %w", err)
 	}

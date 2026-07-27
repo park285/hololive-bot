@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-func loadReportConfig(loadConfig func() (*config.Config, error)) (*config.Config, error) {
+func loadReportConfig(loadConfig func() (*settings.Config, error)) (*settings.Config, error) {
 	if loadConfig == nil {
-		loadConfig = config.Load
+		loadConfig = settings.LoadYouTubeProducerRuntime
 	}
 	return loadConfig()
 }

@@ -26,18 +26,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/stringutil"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 type ScheduleCommand struct {
-	BaseCommand
+	handlercore.BaseCommand
 }
 
-func NewScheduleCommand(deps *Dependencies) *ScheduleCommand {
-	return &ScheduleCommand{BaseCommand: NewBaseCommand(deps)}
+func NewScheduleCommand(deps *handlercore.Dependencies) *ScheduleCommand {
+	return &ScheduleCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
 }
 
 func (c *ScheduleCommand) Name() string {
@@ -60,11 +60,11 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 			return nil
 		}
 
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrScheduleNeedMemberName)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrScheduleNeedMemberName)
 	}
 
 	days := scheduleDays(params)
-	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "일정")
+	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "일정")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -79,7 +79,7 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 
 	streams, err := c.Deps().Holodex.GetChannelSchedule(ctx, channel.ID, hours, true)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrScheduleQueryFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrScheduleQueryFailed)
 	}
 
 	message := c.Deps().Formatter.ChannelSchedule(ctx, channel, streams, days)

@@ -7,10 +7,6 @@ import (
 	"github.com/park285/shared-go/pkg/envutil"
 )
 
-func ParseBool(key string, def bool) bool {
-	return envutil.Bool(key, def)
-}
-
 func ParsePositiveInt(key string, def int) int {
 	raw := envutil.String(key, "")
 	if raw == "" {

@@ -20,11 +20,7 @@
 
 package alarm
 
-import (
-	"net/url"
-
-	keyspkg "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-)
+import "net/url"
 
 const (
 	BasePath = "/internal/alarm"
@@ -49,16 +45,7 @@ const (
 	KeysPath     = BasePath + KeysRoute
 )
 
-const (
-	DispatchQueueKey      = keyspkg.DispatchQueueKey
-	DispatchRetryQueueKey = keyspkg.DispatchRetryQueueKey
-	DispatchDLQKey        = keyspkg.DispatchDLQKey
-
-	NotifyClaimKeyPrefix        = keyspkg.NotifyClaimKeyPrefix
-	NotifyLogicalClaimKeyPrefix = keyspkg.NotifyLogicalClaimKeyPrefix
-
-	QueueEnvelopeVersionV1 uint8 = 1
-)
+const QueueEnvelopeVersionV1 uint8 = 1
 
 func RoomAlarmsPath(roomID string) string {
 	return BasePath + "/room/" + url.PathEscape(roomID)

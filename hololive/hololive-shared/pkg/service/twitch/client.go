@@ -31,7 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/httputil"
@@ -77,7 +78,7 @@ func NewClient(cfg *ClientConfig, logger *slog.Logger) *Client {
 		logger = slog.Default()
 	}
 
-	d := config.DefaultTwitchOperationalConfig()
+	d := settings.DefaultTwitchOperationalConfig()
 
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
@@ -97,7 +98,7 @@ func NewClient(cfg *ClientConfig, logger *slog.Logger) *Client {
 	}
 	maxBody := cfg.MaxResponseBodyBytes
 	if maxBody == 0 {
-		maxBody = config.DefaultMaxResponseBodyBytes
+		maxBody = settings.DefaultMaxResponseBodyBytes
 	}
 
 	httpClient := cfg.HTTPClient

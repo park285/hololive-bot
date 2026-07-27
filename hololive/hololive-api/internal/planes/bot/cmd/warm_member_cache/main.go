@@ -25,17 +25,17 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/app"
+	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
+	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	appConfig, err := config.Load()
+	appConfig, err := settings.LoadBotRuntime()
 	if err != nil {
 		slog.Error("load_config_failed", slog.Any("error", err))
 		return
@@ -56,7 +56,7 @@ func main() {
 
 	logger.Info("Manual member list cache refresh started")
 
-	_, cleanup, err := app.InitializeWarmMemberCache(ctx, appConfig, logger)
+	_, cleanup, err := botruntime.InitializeWarmMemberCache(ctx, appConfig, logger)
 	if err != nil {
 		logger.Error("Manual cache refresh failed", slog.Any("error", err))
 		return

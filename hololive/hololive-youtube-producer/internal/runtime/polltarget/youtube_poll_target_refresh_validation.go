@@ -2,17 +2,17 @@ package polltarget
 
 import (
 	"context"
+	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"log/slog"
 	"time"
 )
 
-func (r *youTubePollTargetRefresher) resolveTargetsWithCacheValidation(
+func (r *Refresher) resolveTargetsWithCacheValidation(
 	ctx context.Context,
 	now time.Time,
-	operationalChannels []communityShortsOperationalChannel,
-	alarmChannelIDs []string,
+	operationalChannels []communityshorts.OperationalChannel, alarmChannelIDs []string,
 	candidateFromCache bool,
-) (youtubePollTargets, bool) {
+) (Targets, bool) {
 	candidateTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(alarmChannelIDs, operationalChannels)
 	if !candidateFromCache {
 		return candidateTargets, true
@@ -46,18 +46,18 @@ func (r *youTubePollTargetRefresher) resolveTargetsWithCacheValidation(
 	return r.validateTargetsAgainstDB(ctx, now, operationalChannels, candidateTargets, removed)
 }
 
-func targetsWithoutExpiredCacheOnly(targets youtubePollTargets, expired []string) youtubePollTargets {
+func targetsWithoutExpiredCacheOnly(targets Targets, expired []string) Targets {
 	targets.NotificationChannelIDs = diffChannelIDs(targets.NotificationChannelIDs, expired)
 	return targets
 }
 
-func (r *youTubePollTargetRefresher) validateTargetsAgainstDB(
+func (r *Refresher) validateTargetsAgainstDB(
 	ctx context.Context,
 	now time.Time,
-	operationalChannels []communityShortsOperationalChannel,
-	candidateTargets youtubePollTargets,
+	operationalChannels []communityshorts.OperationalChannel,
+	candidateTargets Targets,
 	removed []string,
-) (youtubePollTargets, bool) {
+) (Targets, bool) {
 	dbAlarmChannelIDs, dbErr := r.loadAlarmChannelIDs(ctx)
 	if dbErr != nil {
 		observeYouTubePollTargetValidation("failed")
@@ -65,7 +65,7 @@ func (r *youTubePollTargetRefresher) validateTargetsAgainstDB(
 			r.logger.Warn("Failed to validate YouTube poll targets from DB",
 				slog.Any("error", dbErr))
 		}
-		return youtubePollTargets{}, false
+		return Targets{}, false
 	}
 
 	dbTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(dbAlarmChannelIDs, operationalChannels)
@@ -199,7 +199,7 @@ func hasChannelID(set map[string]struct{}, channelID string) bool {
 	return ok
 }
 
-func equalYouTubePollTargets(a, b youtubePollTargets) bool {
+func equalYouTubePollTargets(a, b Targets) bool {
 	return sameChannelIDSet(a.NotificationChannelIDs, b.NotificationChannelIDs) &&
 		sameChannelIDSet(a.StatsChannelIDs, b.StatsChannelIDs)
 }

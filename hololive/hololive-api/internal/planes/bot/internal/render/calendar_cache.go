@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"io"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -17,10 +16,6 @@ type calendarCacheKey struct {
 	month       int
 	year        int
 	entriesHash string
-}
-
-func (key calendarCacheKey) string() string {
-	return fmt.Sprintf("%04d-%02d-%s", key.year, key.month, key.entriesHash)
 }
 
 func (r *CalendarCardRenderer) cachedImage(key calendarCacheKey) ([]byte, bool) {

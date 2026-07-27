@@ -49,7 +49,7 @@ func NewCacheService(ctx context.Context, config Config, logger *slog.Logger) (*
 
 	client, err := valkey.NewClient(opts)
 	if err != nil {
-		return nil, NewCacheError("failed to create cache client", "init", "", err)
+		return nil, NewCacheError("init", "", err)
 	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, constants.ValkeyConfig.ReadyTimeout)
@@ -57,7 +57,7 @@ func NewCacheService(ctx context.Context, config Config, logger *slog.Logger) (*
 
 	if err := client.Do(pingCtx, client.B().Ping().Build()).Error(); err != nil {
 		client.Close()
-		return nil, NewCacheError("failed to connect to cache store", "ping", "", err)
+		return nil, NewCacheError("ping", "", err)
 	}
 
 	logger.Info("Cache store connected",

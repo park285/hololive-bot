@@ -26,14 +26,13 @@ import (
 	"github.com/park285/shared-go/pkg/json"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 func TestSettingsPubSubContractConstants(t *testing.T) {
 	t.Parallel()
 
-	if contractssettings.PubSubChannelV1 != configsub.DefaultChannel {
-		t.Fatalf("PubSubChannelV1 = %q, DefaultChannel = %q", contractssettings.PubSubChannelV1, configsub.DefaultChannel)
+	if contractssettings.PubSubChannelV1 != "config:update" {
+		t.Fatalf("PubSubChannelV1 = %q", contractssettings.PubSubChannelV1)
 	}
 	if contractssettings.ConfigUpdateVersionV1 != 1 {
 		t.Fatalf("ConfigUpdateVersionV1 = %d", contractssettings.ConfigUpdateVersionV1)

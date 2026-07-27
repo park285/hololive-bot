@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/admin-dashboard/internal/auth"
@@ -37,7 +38,7 @@ func (r *Runtime) handleLogin(c *gin.Context) {
 		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many login attempts", RetryAfter: &retry}})
 		return
 	}
-	usernameOK := auth.ConstantTimeStringEqual(body.Username, r.cfg.AdminUser)
+	usernameOK := httputil.ConstantTimeStringEqual(body.Username, r.cfg.AdminUser)
 	passwordOK := bcrypt.CompareHashAndPassword([]byte(r.cfg.AdminPassHash), []byte(body.Password)) == nil
 	if !(usernameOK && passwordOK) {
 		count := r.rateLimiter.RecordFailure(ip)

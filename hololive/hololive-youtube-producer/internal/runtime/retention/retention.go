@@ -27,7 +27,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 	"github.com/park285/shared-go/pkg/retry"
 )
@@ -115,7 +116,7 @@ type Cleaner struct {
 func NewCleaner(pool *pgxpool.Pool, config Config, logger *slog.Logger) *Cleaner {
 	c := &Cleaner{pool: pool, config: config, logger: logger}
 	if pool != nil && config.ViewerSamplesDays > 0 {
-		c.viewerCleaner = poller.NewViewerSampleCleaner(pool, poller.ViewerSampleCleanerConfig{
+		c.viewerCleaner = polling.NewViewerSampleCleaner(pool, polling.ViewerSampleCleanerConfig{
 			RetentionDays: config.ViewerSamplesDays,
 			BatchSize:     config.effectiveBatchSize(),
 		})

@@ -6,12 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	pollerruntime "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +70,7 @@ func TestNamedBackfillPollerDelegatesPollAndProxyToggle(t *testing.T) {
 }
 
 func TestBuildRegistrationsAddsEnabledBackfillPollers(t *testing.T) {
-	registrations := buildBackfillTestRegistrations(config.ScraperBackfillConfig{
+	registrations := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -83,8 +87,8 @@ func TestBuildRegistrationsAddsEnabledBackfillPollers(t *testing.T) {
 }
 
 func TestBuildRegistrationsLeavesOutputUnchangedWhenBackfillDisabled(t *testing.T) {
-	base := buildBackfillTestRegistrations(config.ScraperBackfillConfig{}, []string{"UC_A"})
-	withDisabled := buildBackfillTestRegistrations(config.ScraperBackfillConfig{
+	base := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{}, []string{"UC_A"})
+	withDisabled := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{
 		Enabled:           false,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -102,8 +106,8 @@ func TestBuildRegistrationsLeavesOutputUnchangedWhenBackfillDisabled(t *testing.
 }
 
 func TestBudgetIncludesBackfillRegistrations(t *testing.T) {
-	base := buildBackfillTestRegistrations(config.ScraperBackfillConfig{}, []string{"UC_A"})
-	withBackfill := buildBackfillTestRegistrations(config.ScraperBackfillConfig{
+	base := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{}, []string{"UC_A"})
+	withBackfill := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -118,7 +122,7 @@ func TestBudgetIncludesBackfillRegistrations(t *testing.T) {
 }
 
 func TestFlatAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
-	registrations := buildBackfillTestRegistrations(config.ScraperBackfillConfig{
+	registrations := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -134,7 +138,7 @@ func TestFlatAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 
 func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{})
-	poll := config.ScraperPoll{
+	poll := settings.ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
 		Community: 15 * time.Minute,
@@ -152,7 +156,7 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 			StatsChannelIDs:              []string{"UC_STATS"},
 		},
 	)
-	registrations = appendBackfillChannelPollerRegistrations(registrations, &pollers, config.ScraperBackfillConfig{
+	registrations = appendBackfillChannelPollerRegistrations(registrations, &pollers, settings.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -170,7 +174,7 @@ func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{})
 	videosName := pollers.videos.Name()
 	shortsName := pollers.shorts.Name()
-	poll := config.ScraperPoll{
+	poll := settings.ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
 		Community: 15 * time.Minute,
@@ -190,14 +194,14 @@ func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 	)
 
 	videosCold := requireRegistrationForTargetGroup(t, registrations, videosName, providers.ChannelTargetGroupCold)
-	require.Equal(t, poller.BudgetPriorityNormal, videosCold.BudgetProfile.Priority)
+	require.Equal(t, polling.BudgetPriorityNormal, videosCold.BudgetProfile.Priority)
 
 	shortsCold := requireRegistrationForTargetGroup(t, registrations, shortsName, providers.ChannelTargetGroupCold)
-	require.Equal(t, poller.BudgetPriorityLow, shortsCold.BudgetProfile.Priority)
+	require.Equal(t, polling.BudgetPriorityLow, shortsCold.BudgetProfile.Priority)
 }
 
 func TestPrimaryCommunityRegistrationUsesShortsInterval(t *testing.T) {
-	registrations := buildBackfillTestRegistrations(config.ScraperBackfillConfig{}, []string{"UC_A"})
+	registrations := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{}, []string{"UC_A"})
 
 	shorts := requireRegistration(t, registrations, "shorts")
 	community := requireRegistration(t, registrations, "community")
@@ -208,7 +212,7 @@ func TestPrimaryCommunityRegistrationUsesShortsInterval(t *testing.T) {
 
 func TestTieredCommunityRegistrationsUseShortsInterval(t *testing.T) {
 	pollers := newYouTubeProducerPollerSet(nil, nil, nil, []string{})
-	poll := config.ScraperPoll{
+	poll := settings.ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
 		Community: 15 * time.Minute,
@@ -241,7 +245,7 @@ func TestTieredCommunityRegistrationsUseShortsInterval(t *testing.T) {
 }
 
 func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
-	registrations := buildBackfillTestRegistrationsWithLiveBatch(config.ScraperBackfillConfig{
+	registrations := buildBackfillTestRegistrationsWithLiveBatch(settings.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -253,45 +257,45 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 	}, []string{"UC_A", "UC_B"})
 
 	live := requireRegistration(t, registrations, "live_batch")
-	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[poller.BudgetSourceHolodexLive])
-	require.Equal(t, float64(2), live.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
-	require.Equal(t, poller.BudgetBurstPrimary, live.BudgetProfile.BurstClass)
-	require.Equal(t, poller.BudgetPriorityHigh, live.BudgetProfile.Priority)
+	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[polling.BudgetSourceHolodexLive])
+	require.Equal(t, float64(2), live.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
+	require.Equal(t, polling.BudgetBurstPrimary, live.BudgetProfile.BurstClass)
+	require.Equal(t, polling.BudgetPriorityHigh, live.BudgetProfile.Priority)
 
 	videos := requireRegistration(t, registrations, "videos")
-	require.Greater(t, videos.BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper], float64(0))
-	require.Equal(t, float64(1), videos.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
-	require.Equal(t, poller.BudgetBurstPrimary, videos.BudgetProfile.BurstClass)
-	require.Equal(t, poller.BudgetPriorityNormal, videos.BudgetProfile.Priority)
+	require.Greater(t, videos.BudgetProfile.SourceUnits[polling.BudgetSourceYouTubeScraper], float64(0))
+	require.Equal(t, float64(1), videos.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
+	require.Equal(t, polling.BudgetBurstPrimary, videos.BudgetProfile.BurstClass)
+	require.Equal(t, polling.BudgetPriorityNormal, videos.BudgetProfile.Priority)
 
 	liveBackfill := requireRegistration(t, registrations, "live_backfill_batch")
-	require.Equal(t, poller.BudgetBurstBackfill, liveBackfill.BudgetProfile.BurstClass)
-	require.Equal(t, poller.BudgetPriorityLow, liveBackfill.BudgetProfile.Priority)
+	require.Equal(t, polling.BudgetBurstBackfill, liveBackfill.BudgetProfile.BurstClass)
+	require.Equal(t, polling.BudgetPriorityLow, liveBackfill.BudgetProfile.Priority)
 
 	stats := requireRegistration(t, registrations, "channel_stats")
-	require.Equal(t, 2*float64(scraper.FetchPageMaxAttempts), stats.BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper])
-	require.Equal(t, float64(1), stats.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
-	require.Equal(t, poller.BudgetBurstPrimary, stats.BudgetProfile.BurstClass)
-	require.Equal(t, poller.BudgetPriorityLow, stats.BudgetProfile.Priority)
+	require.Equal(t, 2*float64(scraper.FetchPageMaxAttempts), stats.BudgetProfile.SourceUnits[polling.BudgetSourceYouTubeScraper])
+	require.Equal(t, float64(1), stats.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
+	require.Equal(t, polling.BudgetBurstPrimary, stats.BudgetProfile.BurstClass)
+	require.Equal(t, polling.BudgetPriorityLow, stats.BudgetProfile.Priority)
 }
 
 func TestValidateRegistrationBudgetProfilesRequiresExplicitProfiles(t *testing.T) {
 	registrations := []providers.ChannelPollerRegistration{
-		providers.NewChannelPollerRegistration(&backfillTestPoller{name: "missing_budget"}, poller.PriorityNormal, time.Minute).
+		providers.NewChannelPollerRegistration(&backfillTestPoller{name: "missing_budget"}, scheduler.PriorityNormal, time.Minute).
 			WithChannelIDs([]string{"UC_A"}),
-		providers.NewChannelPollerRegistration(&backfillTestPoller{name: "empty_budget"}, poller.PriorityNormal, time.Minute).
+		providers.NewChannelPollerRegistration(&backfillTestPoller{name: "empty_budget"}, scheduler.PriorityNormal, time.Minute).
 			WithChannelIDs([]string{"UC_B"}).
-			WithBudgetProfile(poller.BudgetProfile{
-				SourceUnits: map[poller.BudgetSource]float64{},
-				BurstClass:  poller.BudgetBurstPrimary,
-				Priority:    poller.BudgetPriorityNormal,
+			WithBudgetProfile(polling.BudgetProfile{
+				SourceUnits: map[polling.BudgetSource]float64{},
+				BurstClass:  polling.BudgetBurstPrimary,
+				Priority:    polling.BudgetPriorityNormal,
 			}),
-		providers.NewChannelPollerRegistration(&backfillTestPoller{name: "satisfied_budget"}, poller.PriorityNormal, time.Minute).
+		providers.NewChannelPollerRegistration(&backfillTestPoller{name: "satisfied_budget"}, scheduler.PriorityNormal, time.Minute).
 			WithChannelIDs([]string{"UC_C"}).
-			WithBudgetProfile(poller.BudgetProfile{
-				SourceUnits: map[poller.BudgetSource]float64{poller.BudgetSourceYouTubeScraper: 1},
-				BurstClass:  poller.BudgetBurstPrimary,
-				Priority:    poller.BudgetPriorityNormal,
+			WithBudgetProfile(polling.BudgetProfile{
+				SourceUnits: map[polling.BudgetSource]float64{polling.BudgetSourceYouTubeScraper: 1},
+				BurstClass:  polling.BudgetBurstPrimary,
+				Priority:    polling.BudgetPriorityNormal,
 			}),
 	}
 
@@ -304,7 +308,7 @@ func TestValidateRegistrationBudgetProfilesRequiresExplicitProfiles(t *testing.T
 }
 
 func TestEstimateYouTubeProducerSourceBudgetKeepsSustainedIndependentOfAPCount(t *testing.T) {
-	registrations := buildBackfillTestRegistrationsWithLiveBatch(config.ScraperBackfillConfig{
+	registrations := buildBackfillTestRegistrationsWithLiveBatch(settings.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    5 * time.Minute,
@@ -319,8 +323,8 @@ func TestEstimateYouTubeProducerSourceBudgetKeepsSustainedIndependentOfAPCount(t
 	threeAPs := estimateYouTubeProducerSourceBudget(registrations, 3, 2)
 
 	require.Equal(t, twoAPs.SustainedRPMBySource, threeAPs.SustainedRPMBySource)
-	require.Greater(t, twoAPs.SustainedRPMBySource[poller.BudgetSourceYouTubeScraper], float64(0))
-	require.Greater(t, twoAPs.SustainedRPMBySource[poller.BudgetSourceHolodexLive], float64(0))
+	require.Greater(t, twoAPs.SustainedRPMBySource[polling.BudgetSourceYouTubeScraper], float64(0))
+	require.Greater(t, twoAPs.SustainedRPMBySource[polling.BudgetSourceHolodexLive], float64(0))
 	for source := range twoAPs.BurstInflightBySource {
 		require.Equal(t, 4, twoAPs.BurstInflightBySource[source])
 		require.Equal(t, 6, threeAPs.BurstInflightBySource[source])
@@ -334,7 +338,7 @@ func TestResolveYouTubeProducerActiveAPCount(t *testing.T) {
 }
 
 func TestBudgetRejectsAggressiveBackfillInterval(t *testing.T) {
-	registrations := buildBackfillTestRegistrations(config.ScraperBackfillConfig{
+	registrations := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{
 		Enabled:           true,
 		ShortsEnabled:     true,
 		ShortsInterval:    time.Second,
@@ -349,21 +353,21 @@ func TestBudgetRejectsAggressiveBackfillInterval(t *testing.T) {
 	require.Error(t, validateYouTubeProducerPollerBudget(summary))
 }
 
-func buildBackfillTestRegistrations(backfill config.ScraperBackfillConfig, notificationChannelIDs []string) []providers.ChannelPollerRegistration {
+func buildBackfillTestRegistrations(backfill settings.ScraperBackfillConfig, notificationChannelIDs []string) []providers.ChannelPollerRegistration {
 	return buildBackfillTestRegistrationsWithLiveStatusProvider(backfill, notificationChannelIDs, nil)
 }
 
-func buildBackfillTestRegistrationsWithLiveBatch(backfill config.ScraperBackfillConfig, notificationChannelIDs []string) []providers.ChannelPollerRegistration {
+func buildBackfillTestRegistrationsWithLiveBatch(backfill settings.ScraperBackfillConfig, notificationChannelIDs []string) []providers.ChannelPollerRegistration {
 	return buildBackfillTestRegistrationsWithLiveStatusProvider(backfill, notificationChannelIDs, registrationTestLiveStatusProvider{})
 }
 
-func buildBackfillTestRegistrationsWithLiveStatusProvider(backfill config.ScraperBackfillConfig, notificationChannelIDs []string, liveStatusProvider poller.LiveStatusProvider) []providers.ChannelPollerRegistration {
+func buildBackfillTestRegistrationsWithLiveStatusProvider(backfill settings.ScraperBackfillConfig, notificationChannelIDs []string, liveStatusProvider pollerruntime.LiveStatusProvider) []providers.ChannelPollerRegistration {
 	postgres := &databasemocks.Client{}
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		context.Background(),
 		postgres,
-		&config.ScraperConfig{
-			Poll: config.ScraperPoll{
+		&settings.ScraperConfig{
+			Poll: settings.ScraperPoll{
 				Videos:    15 * time.Minute,
 				Shorts:    6 * time.Minute,
 				Community: 15 * time.Minute,
@@ -386,7 +390,7 @@ func assertBackfillRegistration(t *testing.T, registrations []providers.ChannelP
 		if registration.Poller == nil || registration.Poller.Name() != name {
 			continue
 		}
-		require.Equal(t, poller.PriorityLow, registration.Priority)
+		require.Equal(t, scheduler.PriorityLow, registration.Priority)
 		require.Equal(t, interval, registration.Interval)
 		require.Equal(t, providers.ChannelTargetGroupNotification, registration.TargetGroup)
 		require.Equal(t, []string{"UC_A", "UC_B"}, registration.ChannelIDs)
@@ -445,11 +449,11 @@ func TestSummarizeBudgetFaultEnvelopeComparesAgainstFleetBudget(t *testing.T) {
 	}
 	registration := providers.NewChannelPollerRegistration(
 		sourceCooldownTestPoller{name: "videos"},
-		poller.PriorityNormal,
+		scheduler.PriorityNormal,
 		time.Minute,
 	).
 		WithChannelIDs(channelIDs).
-		WithBudgetProfile(youtubeScraperBudgetProfile(1, poller.BudgetBurstPrimary, poller.BudgetPriorityNormal))
+		WithBudgetProfile(youtubeScraperBudgetProfile(1, polling.BudgetBurstPrimary, polling.BudgetPriorityNormal))
 
 	registrations := []providers.ChannelPollerRegistration{registration}
 

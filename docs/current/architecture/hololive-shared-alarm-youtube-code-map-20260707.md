@@ -93,7 +93,7 @@ alarm dispatch runner
 
 파일:
 
-- `hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_alarm.go`
+- `hololive/hololive-api/internal/planes/bot/internal/command/handlers/alarm/alarm.go`
 - `hololive/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd/command_execution_policy.go`
 
 주요 함수:
@@ -1006,7 +1006,7 @@ ClientRequestID downstream idempotency
 ### Command/API
 
 - `hololive/hololive-api/internal/planes/bot/internal/adapter/messaging/message_parser_alarm.go`: 알람 명령 파싱
-- `hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_alarm.go`: 알람 명령 실행
+- `hololive/hololive-api/internal/planes/bot/internal/command/handlers/alarm/alarm.go`: 알람 명령 실행
 - `hololive/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd/command_execution_policy.go`: 알람 명령 동기 처리 정책
 
 ### Shared alarm subscription

@@ -72,7 +72,9 @@ compose_args=()
 compose_files=()
 compose_invokes_up=false
 compose_up_build=false
+compose_command_seen=false
 previous=""
+previous_option=""
 for arg in "$@"; do
     if [[ "${previous}" == "-f" || "${previous}" == "--file" ]]; then
         resolved_file="$(compose_file_resolve_path "${arg}")"
@@ -81,22 +83,49 @@ for arg in "$@"; do
         previous=""
         continue
     fi
+    if [[ "${previous}" == "global-option-value" ]]; then
+        compose_args+=("${arg}")
+        previous=""
+        previous_option=""
+        continue
+    fi
 
     case "${arg}" in
-        -f|--file)
-            previous="${arg}"
-            continue
-            ;;
-        --file=*)
-            resolved_file="$(compose_file_resolve_path "${arg#--file=}")"
-            compose_files+=("${resolved_file}")
-            compose_args+=("--file=${resolved_file}")
-            continue
-            ;;
         --env-file|--env-file=*)
             echo "[ERROR] Use COMPOSE_ENV_FILE with this wrapper; do not pass --env-file directly" >&2
             exit 1
             ;;
+    esac
+
+    if [[ "${compose_command_seen}" == false ]]; then
+        case "${arg}" in
+            -f|--file)
+                previous="${arg}"
+                continue
+                ;;
+            -f=*|--file=*)
+                resolved_file="$(compose_file_resolve_path "${arg#*=}")"
+                compose_files+=("${resolved_file}")
+                compose_args+=("${arg%%=*}=${resolved_file}")
+                continue
+                ;;
+            --ansi|--parallel|--profile|--progress|--project-directory|-p|--project-name)
+                compose_args+=("${arg}")
+                previous="global-option-value"
+                previous_option="${arg}"
+                continue
+                ;;
+            --ansi=*|--parallel=*|--profile=*|--progress=*|--project-directory=*|--project-name=*)
+                ;;
+            -*)
+                ;;
+            *)
+                compose_command_seen=true
+                ;;
+        esac
+    fi
+
+    case "${arg}" in
         up)
             compose_invokes_up=true
             ;;
@@ -112,7 +141,7 @@ for arg in "$@"; do
 done
 
 if [[ -n "${previous}" ]]; then
-    echo "[ERROR] Missing value for ${previous}" >&2
+    echo "[ERROR] Missing value for ${previous_option:-${previous}}" >&2
     exit 1
 fi
 

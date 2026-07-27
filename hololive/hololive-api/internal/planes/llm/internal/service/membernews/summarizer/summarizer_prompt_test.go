@@ -24,13 +24,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func promptFixtureInput() *model.SummarizeInput {
 	return &model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
 		RoomMembers: []string{"호시마치 스이세이", "사쿠라 미코"},
 		Candidates: []model.FilteredCandidate{
 			{
@@ -38,7 +39,7 @@ func promptFixtureInput() *model.SummarizeInput {
 					Title:       "EXPO",
 					Description: "official news",
 				},
-				EffectiveDate: time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST),
+				EffectiveDate: time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone),
 				MemberText:    "사쿠라 미코",
 				Category:      model.CategoryEvent,
 				SourceTier:    model.SourceTierOfficial,
@@ -49,7 +50,7 @@ func promptFixtureInput() *model.SummarizeInput {
 					Title:       "SUISEI LIVE",
 					Description: "official event",
 				},
-				EffectiveDate: time.Date(2026, 2, 21, 12, 0, 0, 0, model.KST),
+				EffectiveDate: time.Date(2026, 2, 21, 12, 0, 0, 0, util.KSTZone),
 				MemberText:    "호시마치 스이세이",
 				Category:      model.CategorySoloLive,
 				SourceTier:    model.SourceTierOfficial,

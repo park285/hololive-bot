@@ -9,19 +9,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 )
-
-type Targets = youtubePollTargets
-type TieredTargets = youtubeTieredPollTargets
-type Refresher = youTubePollTargetRefresher
-type SchedulerSyncer = youTubePollSchedulerSyncer
 
 func Resolve(
 	ctx context.Context,
 	cacheService cache.Client,
 	postgresService database.Client,
-	operationalChannels []communityShortsOperationalChannel,
+	operationalChannels []communityshorts.OperationalChannel,
 	logger *slog.Logger,
 ) (Targets, error) {
 	return resolveYouTubePollTargets(ctx, cacheService, postgresService, operationalChannels, logger)
@@ -33,9 +29,9 @@ func LoadAlarmChannelIDs(ctx context.Context, postgresService database.Client) (
 
 func NewRefresher(
 	cacheService cache.Client,
-	scheduler *poller.Scheduler,
+	scheduler *pollscheduler.Scheduler,
 	registrations []providers.ChannelPollerRegistration,
-	operationalChannels []communityShortsOperationalChannel,
+	operationalChannels []communityshorts.OperationalChannel,
 	loadAlarmChannelIDs func(context.Context) ([]string, error),
 	logger *slog.Logger,
 ) *Refresher {
@@ -43,11 +39,11 @@ func NewRefresher(
 }
 
 func NewSchedulerSyncer(
-	scheduler *poller.Scheduler,
+	scheduler *pollscheduler.Scheduler,
 	registrations []providers.ChannelPollerRegistration,
 	tieringDB *pgxpool.Pool,
 ) *SchedulerSyncer {
-	return &youTubePollSchedulerSyncer{
+	return &SchedulerSyncer{
 		scheduler:     scheduler,
 		registrations: registrations,
 		tieringDB:     tieringDB,
@@ -59,7 +55,7 @@ func (r *Refresher) WithTieringDB(pool *pgxpool.Pool) *Refresher {
 }
 
 func (r *Refresher) WithOperationalChannelLoader(
-	loadOperationalChannels func(context.Context) ([]communityShortsOperationalChannel, error),
+	loadOperationalChannels func(context.Context) ([]communityshorts.OperationalChannel, error),
 ) *Refresher {
 	return r.withOperationalChannelLoader(loadOperationalChannels)
 }

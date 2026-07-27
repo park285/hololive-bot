@@ -32,7 +32,8 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-shared/pkg/util"
 	json "github.com/park285/shared-go/pkg/json"
 )
 
@@ -212,7 +213,7 @@ func TestIntegration_MemberNewsSummarize_Weekly(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
 		RoomMembers: []string{"사쿠라 미코", "호시마치 스이세이"},
 		Candidates:  integrationCandidates(),
 	}
@@ -251,7 +252,7 @@ func TestIntegration_MemberNewsSummarize_Monthly(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:      model.PeriodMonthly,
-		Now:         time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST),
+		Now:         time.Date(2026, 3, 1, 10, 0, 0, 0, util.KSTZone),
 		RoomMembers: []string{"사쿠라 미코", "호시마치 스이세이"},
 		Candidates:  integrationCandidates(),
 	}
@@ -287,7 +288,7 @@ func TestIntegration_MemberNewsSummarize_SchemaCompliance(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
 		RoomMembers: []string{"사쿠라 미코"},
 		Candidates:  integrationCandidates(),
 	}
@@ -367,7 +368,7 @@ func TestIntegration_Consensus_FullPipeline(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
 		RoomMembers: []string{"사쿠라 미코", "호시마치 스이세이"},
 		Candidates:  integrationCandidates(),
 	}

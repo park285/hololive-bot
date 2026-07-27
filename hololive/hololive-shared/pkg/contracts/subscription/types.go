@@ -28,5 +28,3 @@ type SubscribeRequest struct {
 type SubscriptionStatusResponse struct {
 	Subscribed bool `json:"subscribed"`
 }
-
-type StatusResponse = SubscriptionStatusResponse

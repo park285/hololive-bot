@@ -26,12 +26,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-type DataProvider = domain.MemberDataProvider
-
 type CacheProvider interface {
 	WarmUpCache(ctx context.Context) error
 	Refresh(ctx context.Context) error
 }
 
-var _ DataProvider = (*ServiceAdapter)(nil)
+var _ domain.MemberDataProvider = (*ServiceAdapter)(nil)
 var _ CacheProvider = (*Cache)(nil)

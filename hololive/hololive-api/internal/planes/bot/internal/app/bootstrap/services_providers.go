@@ -8,7 +8,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
 )
@@ -42,14 +42,14 @@ func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
 	return activity.NewActivityLogger("", logger)
 }
 
-func ProvideBotDependencies(modules *BotDependencyModules) *bot.Dependencies {
+func ProvideBotDependencies(modules *BotDependencyModules) *orchestration.Dependencies {
 	if modules == nil {
 		return nil
 	}
 
 	var youTubeService = modules.Stream.YTStack.GetService()
 
-	return &bot.Dependencies{
+	return &orchestration.Dependencies{
 		BotSelfUser:           modules.Core.BotSelfUser,
 		IrisBaseURL:           modules.Core.IrisBaseURL,
 		Notification:          modules.Core.Notification,

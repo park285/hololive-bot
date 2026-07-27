@@ -25,17 +25,17 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 type UpcomingCommand struct {
-	BaseCommand
+	handlercore.BaseCommand
 }
 
-func NewUpcomingCommand(deps *Dependencies) *UpcomingCommand {
-	return &UpcomingCommand{BaseCommand: NewBaseCommand(deps)}
+func NewUpcomingCommand(deps *handlercore.Dependencies) *UpcomingCommand {
+	return &UpcomingCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
 }
 
 func (c *UpcomingCommand) Name() string {
@@ -122,7 +122,7 @@ func normalizeUpcomingDisplayLimit(displayLimit int, showAll bool) int {
 }
 
 func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, memberName string, hours int) error {
-	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), roomID, memberName, "예정")
+	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), roomID, memberName, "예정")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -135,7 +135,7 @@ func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, mem
 
 	streams, err := c.Deps().Holodex.GetUpcomingStreams(ctx, hours)
 	if err != nil {
-		return c.Deps().SendError(ctx, roomID, adapter.ErrUpcomingStreamQueryFailed)
+		return c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed)
 	}
 	if streams == nil {
 		streams = []*domain.Stream{}
@@ -167,7 +167,7 @@ func filterUpcomingStreamsByChannel(streams []*domain.Stream, channelID string) 
 func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string, options upcomingOptions) error {
 	streams, err := c.Deps().Holodex.GetUpcomingStreams(ctx, options.hours)
 	if err != nil {
-		return c.Deps().SendError(ctx, roomID, adapter.ErrUpcomingStreamQueryFailed)
+		return c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed)
 	}
 	if streams == nil {
 		streams = []*domain.Stream{}
