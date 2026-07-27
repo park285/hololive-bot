@@ -22,7 +22,7 @@ const (
 	helpCardDescriptionWidth = 820
 	helpCardMaxSourceLines   = 96
 	helpCardMaxLineRunes     = 512
-	helpCardMaxWrappedLines  = 2
+	helpCardMaxWrappedLines  = 3
 	helpCardMaxSections      = 24
 	helpCardMaxRows          = 64
 	helpCardSectionHeight    = 36
@@ -320,7 +320,7 @@ func wrapHelpLine(face font.Face, text string, maxWidth int) []string {
 	}
 
 	runes := []rune(text)
-	lines := make([]string, 0, 2)
+	lines := make([]string, 0, helpCardMaxWrappedLines)
 	for len(runes) > 0 {
 		end := fittingHelpPrefix(face, runes, maxWidth)
 		if end < len(runes) {
