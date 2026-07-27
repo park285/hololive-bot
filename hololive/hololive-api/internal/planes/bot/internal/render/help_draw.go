@@ -12,28 +12,35 @@ import (
 )
 
 const (
-	helpCardPanelX       = 48
-	helpCardPanelWidth   = 1352
-	helpCardContentX     = 72
-	helpCardContentWidth = 1304
-	helpCardCommandX     = 112
-	helpCardDescriptionX = 510
+	helpCardFrameX          = 16
+	helpCardFrameY          = 12
+	helpCardFrameInset      = 6
+	helpCardFrameRadius     = 34
+	helpCardContentX        = 56
+	helpCardContentWidth    = 1336
+	helpCardCommandX        = 88
+	helpCardDescriptionX    = 500
+	helpCardColumnDividerX  = 468
+	helpCardTableHeaderY    = 178
+	helpCardTableHeaderH    = 54
+	helpCardTableBodyY      = 246
+	helpCardFooterBaselineY = 1028
 )
 
 var (
-	helpColorBackgroundStart = color.RGBA{R: 15, G: 23, B: 42, A: 255}
-	helpColorBackgroundEnd   = color.RGBA{R: 23, G: 37, B: 84, A: 255}
-	helpColorTopOrb          = color.RGBA{R: 22, G: 45, B: 81, A: 255}
-	helpColorBottomOrb       = color.RGBA{R: 39, G: 43, B: 94, A: 255}
-	helpColorPanelShadow     = color.RGBA{R: 8, G: 15, B: 32, A: 255}
-	helpColorPanel           = color.RGBA{R: 238, G: 242, B: 255, A: 255}
-	helpColorRowPrimary      = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	helpColorRowAlternate    = color.RGBA{R: 246, G: 248, B: 252, A: 255}
-	helpColorTitle           = color.RGBA{R: 248, G: 250, B: 252, A: 255}
-	helpColorMuted           = color.RGBA{R: 203, G: 213, B: 225, A: 255}
-	helpColorCommand         = color.RGBA{R: 15, G: 23, B: 42, A: 255}
-	helpColorDescription     = color.RGBA{R: 51, G: 65, B: 85, A: 255}
-	helpColorSection         = color.RGBA{R: 30, G: 64, B: 175, A: 255}
+	helpColorOuter       = color.RGBA{R: 255, G: 250, B: 243, A: 255}
+	helpColorBorder      = color.RGBA{R: 57, G: 141, B: 204, A: 255}
+	helpColorSurface     = color.RGBA{R: 255, G: 252, B: 248, A: 255}
+	helpColorTitle       = color.RGBA{R: 24, G: 63, B: 92, A: 255}
+	helpColorMuted       = color.RGBA{R: 107, G: 135, B: 153, A: 255}
+	helpColorHeader      = color.RGBA{R: 234, G: 245, B: 251, A: 255}
+	helpColorSection     = color.RGBA{R: 30, G: 95, B: 138, A: 255}
+	helpColorCommand     = color.RGBA{R: 30, G: 95, B: 138, A: 255}
+	helpColorDescription = color.RGBA{R: 52, G: 77, B: 95, A: 255}
+	helpColorRule        = color.RGBA{R: 213, G: 232, B: 243, A: 255}
+	helpColorRowPrimary  = color.RGBA{R: 255, G: 252, B: 248, A: 255}
+	helpColorRowAlternate = color.RGBA{R: 247, G: 251, B: 253, A: 255}
+	helpColorBadge       = color.RGBA{R: 226, G: 241, B: 250, A: 255}
 )
 
 func renderHelpCards(ctx context.Context, text string) ([][]byte, error) {
@@ -68,16 +75,16 @@ func renderHelpCards(ctx context.Context, text string) ([][]byte, error) {
 }
 
 func renderHelpPage(ctx context.Context, page helpCardPage, faces helpCardFonts) ([]byte, error) {
-	if page.canvasHeight > helpCardMaxHeight {
-		return nil, fmt.Errorf("help card height %d exceeds %d", page.canvasHeight, helpCardMaxHeight)
+	if page.contentHeight > helpCardMaxContentH {
+		return nil, fmt.Errorf("help card content height %d exceeds %d", page.contentHeight, helpCardMaxContentH)
 	}
-	canvas, err := newHelpCardCanvas(ctx, page.canvasHeight)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	drawHelpDecorations(canvas, page)
+	canvas := newHelpCardCanvas()
+	drawHelpFrame(canvas)
 	drawHelpHeader(canvas, faces, page)
-	if err := drawHelpPanel(ctx, canvas, faces, page); err != nil {
+	if err := drawHelpTable(ctx, canvas, faces, page); err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -86,70 +93,74 @@ func renderHelpPage(ctx context.Context, page helpCardPage, faces helpCardFonts)
 	return cardkit.EncodePNG(canvas, helpCardOutputWidth)
 }
 
-func newHelpCardCanvas(ctx context.Context, height int) (*image.RGBA, error) {
-	canvas := image.NewRGBA(image.Rect(0, 0, helpCardCanvasWidth, height))
-	for y := 0; y < height; y++ {
-		if y%64 == 0 {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-		}
-		for x := 0; x < helpCardCanvasWidth; x++ {
-			position := float64(x)/float64(helpCardCanvasWidth-1) + float64(y)/float64(max(height-1, 1))
-			pixel := blendHelpColor(helpColorBackgroundStart, helpColorBackgroundEnd, position/2)
-			offset := y*canvas.Stride + x*4
-			canvas.Pix[offset] = pixel.R
-			canvas.Pix[offset+1] = pixel.G
-			canvas.Pix[offset+2] = pixel.B
-			canvas.Pix[offset+3] = 255
-		}
-	}
-	return canvas, nil
+func newHelpCardCanvas() *image.RGBA {
+	return cardkit.NewCanvas(helpCardCanvasWidth, helpCardCanvasHeight, helpColorOuter)
 }
 
-func blendHelpColor(start, end color.RGBA, position float64) color.RGBA {
-	blend := func(a, b uint8) uint8 {
-		return uint8(float64(a) + (float64(b)-float64(a))*position)
-	}
-	return color.RGBA{R: blend(start.R, end.R), G: blend(start.G, end.G), B: blend(start.B, end.B), A: 255}
-}
-
-func drawHelpDecorations(canvas *image.RGBA, page helpCardPage) {
-	cardkit.FillCircle(canvas, 1320, 86, 180, helpColorTopOrb)
-	cardkit.FillCircle(canvas, 1180, page.canvasHeight-76, 220, helpColorBottomOrb)
-	shadow := image.Rect(
-		helpCardPanelX+8,
-		helpCardPanelY+14,
-		helpCardPanelX+helpCardPanelWidth+8,
-		helpCardPanelY+page.panelHeight+14,
+func drawHelpFrame(canvas *image.RGBA) {
+	outer := image.Rect(
+		helpCardFrameX,
+		helpCardFrameY,
+		helpCardCanvasWidth-helpCardFrameX,
+		helpCardCanvasHeight-helpCardFrameY,
 	)
-	cardkit.FillRoundedRect(canvas, shadow, 34, helpColorPanelShadow)
-	panel := image.Rect(
-		helpCardPanelX,
-		helpCardPanelY,
-		helpCardPanelX+helpCardPanelWidth,
-		helpCardPanelY+page.panelHeight,
+	cardkit.FillRoundedRect(canvas, outer, helpCardFrameRadius, helpColorBorder)
+	inner := image.Rect(
+		helpCardFrameX+helpCardFrameInset,
+		helpCardFrameY+helpCardFrameInset,
+		helpCardCanvasWidth-helpCardFrameX-helpCardFrameInset,
+		helpCardCanvasHeight-helpCardFrameY-helpCardFrameInset,
 	)
-	cardkit.FillRoundedRect(canvas, panel, 34, helpColorPanel)
+	cardkit.FillRoundedRect(canvas, inner, helpCardFrameRadius-helpCardFrameInset, helpColorSurface)
 }
 
 func drawHelpHeader(canvas *image.RGBA, faces helpCardFonts, page helpCardPage) {
-	cardkit.DrawText(canvas, faces.title, 72, 96, helpColorTitle, page.title)
-	cardkit.DrawText(canvas, faces.subtitle, 76, 146, helpColorMuted, page.subtitle)
+	cardkit.DrawText(canvas, faces.title, 64, 96, helpColorTitle, page.title)
+	cardkit.DrawText(canvas, faces.subtitle, 67, 136, helpColorMuted, page.subtitle)
+	cardkit.FillRoundedRect(canvas, image.Rect(64, 151, 1384, 157), 3, helpColorBorder)
+	drawHelpPageBadge(canvas, faces.header, page.subtitle)
 }
 
-func drawHelpPanel(ctx context.Context, canvas *image.RGBA, faces helpCardFonts, page helpCardPage) error {
-	cardkit.DrawText(canvas, faces.header, helpCardCommandX, 226, helpColorDescription, "명령어")
-	cardkit.DrawText(canvas, faces.header, helpCardDescriptionX, 226, helpColorDescription, "설명")
+func drawHelpPageBadge(canvas *image.RGBA, face font.Face, subtitle string) {
+	label := "명령어 안내"
+	if slash := pageFraction(subtitle); slash != "" {
+		label += " " + slash
+	}
+	width := cardkit.MeasureText(face, label) + 44
+	right := 1378
+	cardkit.FillRoundedRect(canvas, image.Rect(right-width, 54, right, 104), 25, helpColorBadge)
+	cardkit.DrawText(canvas, face, right-width+22, 88, helpColorCommand, label)
+}
 
-	y := helpCardPanelY + helpCardPanelHeaderH
+func pageFraction(subtitle string) string {
+	for _, field := range strings.Fields(subtitle) {
+		parts := strings.Split(field, "/")
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return field
+		}
+	}
+	return ""
+}
+
+func drawHelpTable(ctx context.Context, canvas *image.RGBA, faces helpCardFonts, page helpCardPage) error {
+	cardkit.FillRoundedRect(
+		canvas,
+		image.Rect(helpCardContentX, helpCardTableHeaderY, helpCardContentX+helpCardContentWidth, helpCardTableHeaderY+helpCardTableHeaderH),
+		16,
+		helpColorHeader,
+	)
+	cardkit.DrawText(canvas, faces.header, helpCardCommandX, 212, helpColorCommand, "명령어")
+	cardkit.DrawText(canvas, faces.header, helpCardDescriptionX, 212, helpColorCommand, "설명")
+	cardkit.FillRect(canvas, image.Rect(helpCardColumnDividerX, 185, helpCardColumnDividerX+2, 225), helpColorRule)
+
+	y := helpCardTableBodyY
 	alternate := false
 	for _, section := range page.sections {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		cardkit.DrawText(canvas, faces.section, helpCardCommandX, y+36, helpColorSection, section.label)
-		y += 54
+		cardkit.DrawText(canvas, faces.section, helpCardCommandX, y+29, helpColorSection, section.label)
+		y += helpCardSectionHeight
 		for _, row := range section.rows {
 			drawHelpCommandRow(canvas, faces, row, y, alternate)
 			y += row.height
@@ -160,8 +171,8 @@ func drawHelpPanel(ctx context.Context, canvas *image.RGBA, faces helpCardFonts,
 	cardkit.DrawText(
 		canvas,
 		faces.footer,
-		72,
-		page.canvasHeight-42,
+		64,
+		helpCardFooterBaselineY,
 		helpColorMuted,
 		"이미지 전송이 불가능한 경우 같은 내용을 텍스트로 안내합니다.",
 	)
@@ -173,26 +184,26 @@ func drawHelpCommandRow(canvas *image.RGBA, faces helpCardFonts, row helpCardRow
 	if alternate {
 		background = helpColorRowAlternate
 	}
-	rowBottom := y + row.height - 6
+	rowBottom := y + row.height - 4
 	cardkit.FillRoundedRect(
 		canvas,
 		image.Rect(helpCardContentX, y, helpCardContentX+helpCardContentWidth, rowBottom),
-		20,
+		14,
 		background,
 	)
-
-	contentHeight := row.height - 6
-	drawHelpTextLines(canvas, faces.command, helpCardCommandX, y, contentHeight, 34, helpColorCommand, row.commandLines)
+	cardkit.FillRect(canvas, image.Rect(helpCardColumnDividerX, y+8, helpCardColumnDividerX+2, rowBottom-8), helpColorRule)
+	drawHelpTextLines(canvas, faces.command, helpCardCommandX, y, row.height-4, helpCardTextLineHeight, helpColorCommand, row.commandLines)
 	drawHelpTextLines(
 		canvas,
 		faces.description,
 		helpCardDescriptionX,
 		y,
-		contentHeight,
-		34,
+		row.height-4,
+		helpCardTextLineHeight,
 		helpColorDescription,
 		row.descriptionLines,
 	)
+	cardkit.FillRect(canvas, image.Rect(72, rowBottom+1, 1376, rowBottom+3), helpColorRule)
 }
 
 func drawHelpTextLines(
@@ -209,7 +220,7 @@ func drawHelpTextLines(
 		return
 	}
 	blockHeight := len(lines) * lineHeight
-	baseline := y + (rowHeight-blockHeight)/2 + lineHeight - 5
+	baseline := y + (rowHeight-blockHeight)/2 + lineHeight - 4
 	for _, line := range lines {
 		cardkit.DrawText(canvas, face, x, baseline, textColor, line)
 		baseline += lineHeight
