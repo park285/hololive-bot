@@ -756,11 +756,6 @@ github.com/kapu/hololive-shared/internal/service/youtube/apiservice -> github.co
 github.com/kapu/hololive-shared/internal/service/youtube/apiservice -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser
 github.com/kapu/hololive-shared/internal/service/youtube/apiservice -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
 github.com/kapu/hololive-shared/internal/service/youtube/contentid -> github.com/kapu/hololive-shared/pkg/domain
-github.com/kapu/hololive-shared/internal/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/internal/service/youtube/apiservice
-github.com/kapu/hololive-shared/internal/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/cache
-github.com/kapu/hololive-shared/internal/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/youtube
-github.com/kapu/hololive-shared/internal/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping
-github.com/kapu/hololive-shared/internal/service/youtube/youtubefactory -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
 github.com/kapu/hololive-shared/internal/testutil -> github.com/kapu/hololive-shared/internal/testredis
 github.com/kapu/hololive-shared/internal/testutil -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/internal/testutil -> github.com/park285/shared-go/pkg/logging
@@ -805,7 +800,7 @@ github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
 github.com/kapu/hololive-shared/pkg/providers -> github.com/park285/iris-client-go/iris
-github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/internal/service/youtube/youtubefactory
+github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/internal/service/youtube/apiservice
 github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-shared/pkg/providers/modules -> github.com/kapu/hololive-shared/pkg/service/alarm/checker

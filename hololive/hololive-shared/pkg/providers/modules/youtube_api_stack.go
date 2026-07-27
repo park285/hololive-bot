@@ -6,7 +6,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/kapu/hololive-shared/internal/service/youtube/youtubefactory"
+	"github.com/kapu/hololive-shared/internal/service/youtube/apiservice"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
@@ -26,7 +26,7 @@ func BuildYouTubeAPIStack(ctx context.Context, params *YouTubeAPIStackParams) *p
 		return &providers.YouTubeStack{}
 	}
 
-	service, err := youtubefactory.NewYouTubeService(ctx, params.CacheService, scraper.ProxyConfig{
+	service, err := apiservice.New(ctx, params.CacheService, scraper.ProxyConfig{
 		Enabled: params.ScraperConfig.ProxyEnabled,
 		URL:     params.ScraperConfig.ProxyURL,
 	}, params.SharedRateLimit, params.Logger)

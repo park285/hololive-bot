@@ -747,7 +747,6 @@ hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/repository_scan.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_new_short_dedup.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_new_video_dedup.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_inspection.go
-hololive/hololive-shared/internal/service/youtube/youtubefactory/youtubefactory.go
 hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_set.go
 ../shared-go/pkg/healthprobe/cli.go
 hololive/hololive-shared/pkg/repository/queries/template_repository_0051_01.sql
