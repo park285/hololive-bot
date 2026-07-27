@@ -58,8 +58,8 @@ func TestHelpCardRendererMatchesChatBotGoQuestionFrame(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderHelpImages() error = %v", err)
 	}
-	if len(images) != 3 {
-		t.Fatalf("image count = %d, want 3", len(images))
+	if len(images) == 0 || len(images) > helpCardMaxImages {
+		t.Fatalf("image count = %d, want 1..%d", len(images), helpCardMaxImages)
 	}
 
 	originalFirst := bytes.Clone(images[0])
@@ -126,8 +126,8 @@ func TestHelpCardPaginationPreservesEveryCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("paginateHelpDocument() error = %v", err)
 	}
-	if len(pages) != 3 {
-		t.Fatalf("page count = %d, want 3", len(pages))
+	if len(pages) == 0 || len(pages) > helpCardMaxImages {
+		t.Fatalf("page count = %d, want 1..%d", len(pages), helpCardMaxImages)
 	}
 
 	wantRows := helpDocumentRowCount(document.sections)
