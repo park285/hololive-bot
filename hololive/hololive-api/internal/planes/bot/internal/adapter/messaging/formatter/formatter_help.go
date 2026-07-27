@@ -22,6 +22,8 @@ package formatter
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -31,13 +33,30 @@ type helpTemplateData struct {
 	Prefix string
 }
 
-func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
-	data := helpTemplateData{Prefix: f.prefix}
+type HelpContent struct {
+	ImageText    string
+	TextFallback string
+}
 
+func (f *ResponseFormatter) FormatHelpContent(ctx context.Context) (HelpContent, error) {
+	data := helpTemplateData{Prefix: f.prefix}
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdHelp, data)
+	if err != nil {
+		return HelpContent{}, err
+	}
+	if strings.TrimSpace(rendered) == "" {
+		return HelpContent{}, errors.New("help template rendered empty")
+	}
+	return HelpContent{
+		ImageText:    rendered,
+		TextFallback: f.foldSeeMore(rendered),
+	}, nil
+}
+
+func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
+	content, err := f.FormatHelpContent(ctx)
 	if err != nil {
 		return messagestrings.FallbackSentinel
 	}
-
-	return f.foldSeeMore(rendered)
+	return content.TextFallback
 }
