@@ -3,8 +3,6 @@ package render
 import (
 	"context"
 	"fmt"
-	"image"
-	"image/color"
 	"strings"
 	"unicode/utf8"
 
@@ -15,162 +13,310 @@ import (
 )
 
 const (
-	helpCardCanvasWidth   = 1448
-	helpCardOutputWidth   = 1080
-	helpCardHeaderHeight  = 188
-	helpCardBodyPadX      = 88
-	helpCardBodyPadTop    = 48
-	helpCardBodyPadBottom = 64
-	helpCardMaxLines      = 96
-	helpCardMaxLineRunes  = 512
-	helpCardMaxHeight     = 3072
-)
-
-var (
-	helpColorBackground = color.RGBA{R: 246, G: 248, B: 252, A: 255}
-	helpColorHeader     = color.RGBA{R: 15, G: 23, B: 42, A: 255}
-	helpColorAccent     = color.RGBA{R: 14, G: 165, B: 233, A: 255}
-	helpColorTitle      = color.RGBA{R: 248, G: 250, B: 252, A: 255}
-	helpColorSection    = color.RGBA{R: 3, G: 105, B: 161, A: 255}
-	helpColorBody       = color.RGBA{R: 30, G: 41, B: 59, A: 255}
-	helpColorRule       = color.RGBA{R: 226, G: 232, B: 240, A: 255}
+	helpCardCanvasWidth      = 1448
+	helpCardOutputWidth      = 1448
+	helpCardMinHeight        = 900
+	helpCardMaxHeight        = 1600
+	helpCardPanelY           = 188
+	helpCardPanelHeaderH     = 64
+	helpCardPanelBottomPad   = 28
+	helpCardFooterHeight     = 92
+	helpCardTargetContentH   = 930
+	helpCardMaxContentH      = 1180
+	helpCardCommandWidth     = 350
+	helpCardDescriptionWidth = 806
+	helpCardMaxSourceLines   = 96
+	helpCardMaxLineRunes     = 512
+	helpCardMaxWrappedLines  = 3
+	helpCardMaxSections      = 24
+	helpCardMaxRows          = 64
 )
 
 type helpCardFonts struct {
-	title   font.Face
-	section font.Face
-	body    font.Face
+	title       font.Face
+	subtitle    font.Face
+	header      font.Face
+	section     font.Face
+	command     font.Face
+	description font.Face
+	footer      font.Face
 }
 
-type helpCardLine struct {
-	text   string
-	kind   helpCardLineKind
+type helpCardDocument struct {
+	title    string
+	sections []helpCardSection
+}
+
+type helpCardSection struct {
+	label  string
+	rows   []helpCardRow
 	height int
 }
 
-type helpCardLineKind uint8
+type helpCardRow struct {
+	commandLines     []string
+	descriptionLines []string
+	height           int
+}
 
-const (
-	helpLineBlank helpCardLineKind = iota
-	helpLineSection
-	helpLineBody
-)
-
-func renderHelpCard(ctx context.Context, text string) ([]byte, error) {
-	fontMu.Lock()
-	defer fontMu.Unlock()
-
-	faces, err := loadHelpCardFonts()
-	if err != nil {
-		return nil, err
-	}
-
-	title, lines, err := layoutHelpCard(ctx, text, faces)
-	if err != nil {
-		return nil, err
-	}
-
-	canvasHeight := helpCardHeaderHeight + helpCardBodyPadTop + helpCardBodyPadBottom
-	for _, line := range lines {
-		canvasHeight += line.height
-	}
-	if canvasHeight > helpCardMaxHeight {
-		return nil, fmt.Errorf("help card height %d exceeds %d", canvasHeight, helpCardMaxHeight)
-	}
-
-	canvas := cardkit.NewCanvas(helpCardCanvasWidth, canvasHeight, helpColorBackground)
-	drawHelpHeader(canvas, faces.title, title)
-	if err := drawHelpBody(ctx, canvas, faces, lines); err != nil {
-		return nil, err
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return cardkit.EncodePNG(canvas, helpCardOutputWidth)
+type helpCardPage struct {
+	title         string
+	subtitle      string
+	sections      []helpCardSection
+	contentHeight int
+	panelHeight   int
+	canvasHeight  int
 }
 
 func loadHelpCardFonts() (helpCardFonts, error) {
-	title, err := fonts.CaptionBoldFaceSized(52)
-	if err != nil {
-		return helpCardFonts{}, fmt.Errorf("load help title font: %w", err)
-	}
-	section, err := fonts.CaptionBoldFaceSized(32)
-	if err != nil {
-		return helpCardFonts{}, fmt.Errorf("load help section font: %w", err)
-	}
-	body, err := fonts.CaptionFaceSized(27)
-	if err != nil {
-		return helpCardFonts{}, fmt.Errorf("load help body font: %w", err)
-	}
-	return helpCardFonts{title: title, section: section, body: body}, nil
-}
-
-func layoutHelpCard(
-	ctx context.Context,
-	text string,
-	faces helpCardFonts,
-) (string, []helpCardLine, error) {
-	source := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	if len(source) == 0 || len(source) > helpCardMaxLines {
-		return "", nil, fmt.Errorf("help source line count %d is outside 1..%d", len(source), helpCardMaxLines)
-	}
-
-	title := strings.TrimSpace(source[0])
-	if title == "" {
-		return "", nil, fmt.Errorf("help title is empty")
-	}
-	title = cardkit.DropUncoveredRunes(faces.title, title)
-	title = cardkit.ClampToWidth(faces.title, title, helpCardCanvasWidth-2*helpCardBodyPadX)
-	if title == "" {
-		return "", nil, fmt.Errorf("help title cannot be rendered")
-	}
-
-	lines := make([]helpCardLine, 0, len(source))
-	for _, raw := range source[1:] {
-		if err := ctx.Err(); err != nil {
-			return "", nil, err
+	load := func(name string, size float64, bold bool) (font.Face, error) {
+		var (
+			face font.Face
+			err  error
+		)
+		if bold {
+			face, err = fonts.CaptionBoldFaceSized(size)
+		} else {
+			face, err = fonts.CaptionFaceSized(size)
 		}
-		laidOut, err := layoutHelpSourceLine(raw, faces)
 		if err != nil {
-			return "", nil, err
+			return nil, fmt.Errorf("load help %s font: %w", name, err)
 		}
-		if len(lines)+len(laidOut) > helpCardMaxLines {
-			return "", nil, fmt.Errorf("help rendered line count exceeds %d", helpCardMaxLines)
-		}
-		lines = append(lines, laidOut...)
+		return face, nil
 	}
-	return title, trimTrailingHelpBlanks(lines), nil
+
+	var faces helpCardFonts
+	var err error
+	if faces.title, err = load("title", 58, true); err != nil {
+		return faces, err
+	}
+	if faces.subtitle, err = load("subtitle", 27, false); err != nil {
+		return faces, err
+	}
+	if faces.header, err = load("header", 24, true); err != nil {
+		return faces, err
+	}
+	if faces.section, err = load("section", 25, true); err != nil {
+		return faces, err
+	}
+	if faces.command, err = load("command", 29, true); err != nil {
+		return faces, err
+	}
+	if faces.description, err = load("description", 24, false); err != nil {
+		return faces, err
+	}
+	if faces.footer, err = load("footer", 23, false); err != nil {
+		return faces, err
+	}
+	return faces, nil
 }
 
-func layoutHelpSourceLine(raw string, faces helpCardFonts) ([]helpCardLine, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return []helpCardLine{{kind: helpLineBlank, height: 22}}, nil
-	}
-	if utf8.RuneCountInString(trimmed) > helpCardMaxLineRunes {
-		return nil, fmt.Errorf("help line exceeds %d runes", helpCardMaxLineRunes)
+func parseHelpCardDocument(ctx context.Context, text string, faces helpCardFonts) (helpCardDocument, error) {
+	source := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	if len(source) == 0 || len(source) > helpCardMaxSourceLines {
+		return helpCardDocument{}, fmt.Errorf("help source line count %d is outside 1..%d", len(source), helpCardMaxSourceLines)
 	}
 
-	kind := helpLineBody
-	face := faces.body
-	height := 44
-	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
-		kind = helpLineSection
-		face = faces.section
-		height = 58
+	title := renderableHelpText(faces.title, strings.TrimSpace(source[0]))
+	title = cardkit.ClampToWidth(faces.title, title, helpCardCanvasWidth-144)
+	if title == "" {
+		return helpCardDocument{}, fmt.Errorf("help title cannot be rendered")
 	}
 
-	trimmed = cardkit.DropUncoveredRunes(face, trimmed)
-	wrapped := wrapHelpLine(face, trimmed, helpCardCanvasWidth-2*helpCardBodyPadX)
-	if len(wrapped) == 0 {
-		return nil, fmt.Errorf("help line cannot be rendered")
+	sections, err := parseHelpSections(ctx, source[1:], faces)
+	if err != nil {
+		return helpCardDocument{}, err
+	}
+	return helpCardDocument{title: title, sections: sections}, nil
+}
+
+func parseHelpSections(ctx context.Context, source []string, faces helpCardFonts) ([]helpCardSection, error) {
+	sections := make([]helpCardSection, 0, 8)
+	rowCount := 0
+	for _, raw := range source {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		if label, ok := helpSectionLabel(trimmed); ok {
+			if len(sections) >= helpCardMaxSections {
+				return nil, fmt.Errorf("help section count exceeds %d", helpCardMaxSections)
+			}
+			label = renderableHelpText(faces.section, label)
+			if label == "" {
+				return nil, fmt.Errorf("help section cannot be rendered")
+			}
+			sections = append(sections, helpCardSection{label: label, height: 54})
+			continue
+		}
+		if len(sections) == 0 {
+			sections = append(sections, helpCardSection{label: "명령어", height: 54})
+		}
+		if rowCount >= helpCardMaxRows {
+			return nil, fmt.Errorf("help row count exceeds %d", helpCardMaxRows)
+		}
+		row, err := layoutHelpRow(trimmed, faces)
+		if err != nil {
+			return nil, err
+		}
+		last := len(sections) - 1
+		sections[last].rows = append(sections[last].rows, row)
+		sections[last].height += row.height
+		rowCount++
+	}
+	if len(sections) == 0 || rowCount == 0 {
+		return nil, fmt.Errorf("help card has no renderable commands")
+	}
+	for _, section := range sections {
+		if len(section.rows) == 0 {
+			return nil, fmt.Errorf("help section %q has no commands", section.label)
+		}
+	}
+	return sections, nil
+}
+
+func helpSectionLabel(line string) (string, bool) {
+	if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+		return strings.TrimSpace(line[1 : len(line)-1]), true
+	}
+	return "", false
+}
+
+func layoutHelpRow(line string, faces helpCardFonts) (helpCardRow, error) {
+	if utf8.RuneCountInString(line) > helpCardMaxLineRunes {
+		return helpCardRow{}, fmt.Errorf("help line exceeds %d runes", helpCardMaxLineRunes)
+	}
+	command, description := splitHelpColumns(line)
+	command = renderableHelpText(faces.command, command)
+	description = renderableHelpText(faces.description, description)
+	commandLines := wrapHelpLine(faces.command, command, helpCardCommandWidth)
+	descriptionLines := wrapHelpLine(faces.description, description, helpCardDescriptionWidth)
+	if len(commandLines) == 0 {
+		return helpCardRow{}, fmt.Errorf("help command cannot be rendered")
+	}
+	if len(commandLines) > helpCardMaxWrappedLines || len(descriptionLines) > helpCardMaxWrappedLines {
+		return helpCardRow{}, fmt.Errorf("help row exceeds %d wrapped lines", helpCardMaxWrappedLines)
 	}
 
-	lines := make([]helpCardLine, 0, len(wrapped))
-	for _, line := range wrapped {
-		lines = append(lines, helpCardLine{text: line, kind: kind, height: height})
+	lineCount := max(len(commandLines), len(descriptionLines))
+	if lineCount == 0 {
+		lineCount = 1
 	}
-	return lines, nil
+	return helpCardRow{
+		commandLines:     commandLines,
+		descriptionLines: descriptionLines,
+		height:           max(78, 28+lineCount*34) + 6,
+	}, nil
+}
+
+func splitHelpColumns(line string) (string, string) {
+	if command, description, ok := strings.Cut(line, " - "); ok {
+		return strings.TrimSpace(command), strings.TrimSpace(description)
+	}
+	if label, description, ok := strings.Cut(line, ":"); ok && !strings.HasPrefix(strings.TrimSpace(label), "!") {
+		return strings.TrimSpace(label), strings.TrimSpace(description)
+	}
+	return strings.TrimSpace(line), ""
+}
+
+func paginateHelpDocument(document helpCardDocument) ([]helpCardPage, error) {
+	pages := make([]helpCardPage, 0, 3)
+	current := make([]helpCardSection, 0, 4)
+	currentHeight := 0
+	flush := func() {
+		if len(current) == 0 {
+			return
+		}
+		pages = append(pages, newHelpCardPage(document.title, current, currentHeight))
+		current = nil
+		currentHeight = 0
+	}
+
+	for _, section := range document.sections {
+		if section.height > helpCardMaxContentH {
+			flush()
+			fragments, err := splitHelpSection(section)
+			if err != nil {
+				return nil, err
+			}
+			for _, fragment := range fragments {
+				pages = append(pages, newHelpCardPage(document.title, []helpCardSection{fragment}, fragment.height))
+			}
+			continue
+		}
+		if len(current) > 0 && currentHeight+section.height > helpCardTargetContentH {
+			flush()
+		}
+		current = append(current, section)
+		currentHeight += section.height
+	}
+	flush()
+
+	if len(pages) == 0 || len(pages) > helpCardMaxImages {
+		return nil, fmt.Errorf("help page count %d is outside 1..%d", len(pages), helpCardMaxImages)
+	}
+	for index := range pages {
+		pages[index].subtitle = helpPageSubtitle(pages[index].sections, index+1, len(pages))
+	}
+	return pages, nil
+}
+
+func splitHelpSection(section helpCardSection) ([]helpCardSection, error) {
+	fragments := make([]helpCardSection, 0, 2)
+	rows := section.rows
+	continued := false
+	for len(rows) > 0 {
+		label := section.label
+		if continued {
+			label += " · 계속"
+		}
+		fragment := helpCardSection{label: label, height: 54}
+		for len(rows) > 0 && fragment.height+rows[0].height <= helpCardMaxContentH {
+			fragment.rows = append(fragment.rows, rows[0])
+			fragment.height += rows[0].height
+			rows = rows[1:]
+		}
+		if len(fragment.rows) == 0 {
+			return nil, fmt.Errorf("help section %q contains a row larger than the page budget", section.label)
+		}
+		fragments = append(fragments, fragment)
+		continued = true
+	}
+	return fragments, nil
+}
+
+func newHelpCardPage(title string, sections []helpCardSection, contentHeight int) helpCardPage {
+	panelHeight := helpCardPanelHeaderH + contentHeight + helpCardPanelBottomPad
+	canvasHeight := max(helpCardMinHeight, helpCardPanelY+panelHeight+helpCardFooterHeight)
+	return helpCardPage{
+		title:         title,
+		sections:      append([]helpCardSection(nil), sections...),
+		contentHeight: contentHeight,
+		panelHeight:   panelHeight,
+		canvasHeight:  canvasHeight,
+	}
+}
+
+func helpPageSubtitle(sections []helpCardSection, page, total int) string {
+	labels := make([]string, 0, len(sections))
+	for _, section := range sections {
+		label := strings.TrimSuffix(section.label, " · 계속")
+		if len(labels) == 0 || labels[len(labels)-1] != label {
+			labels = append(labels, label)
+		}
+	}
+	subtitle := strings.Join(labels, " · ")
+	if total > 1 {
+		subtitle = fmt.Sprintf("%s · %d/%d", subtitle, page, total)
+	}
+	return subtitle
+}
+
+func renderableHelpText(face font.Face, text string) string {
+	return cardkit.DropUncoveredRunes(face, strings.TrimSpace(text))
 }
 
 func wrapHelpLine(face font.Face, text string, maxWidth int) []string {
@@ -188,7 +334,6 @@ func wrapHelpLine(face font.Face, text string, maxWidth int) []string {
 		if end < len(runes) {
 			end = preferredHelpBreak(runes, end)
 		}
-
 		line := strings.TrimSpace(string(runes[:end]))
 		if line != "" {
 			lines = append(lines, line)
@@ -221,47 +366,4 @@ func preferredHelpBreak(runes []rune, fitting int) int {
 		}
 	}
 	return fitting
-}
-
-func trimTrailingHelpBlanks(lines []helpCardLine) []helpCardLine {
-	for len(lines) > 0 && lines[len(lines)-1].kind == helpLineBlank {
-		lines = lines[:len(lines)-1]
-	}
-	return lines
-}
-
-func drawHelpHeader(canvas *image.RGBA, face font.Face, title string) {
-	cardkit.FillRect(canvas, image.Rect(0, 0, helpCardCanvasWidth, helpCardHeaderHeight), helpColorHeader)
-	cardkit.FillRect(canvas, image.Rect(0, helpCardHeaderHeight-8, helpCardCanvasWidth, helpCardHeaderHeight), helpColorAccent)
-	cardkit.DrawText(canvas, face, helpCardBodyPadX, 116, helpColorTitle, title)
-}
-
-func drawHelpBody(
-	ctx context.Context,
-	canvas *image.RGBA,
-	faces helpCardFonts,
-	lines []helpCardLine,
-) error {
-	y := helpCardHeaderHeight + helpCardBodyPadTop
-	for _, line := range lines {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		switch line.kind {
-		case helpLineBlank:
-			y += line.height
-		case helpLineSection:
-			cardkit.DrawText(canvas, faces.section, helpCardBodyPadX, y+38, helpColorSection, line.text)
-			y += line.height
-		case helpLineBody:
-			cardkit.DrawText(canvas, faces.body, helpCardBodyPadX+20, y+31, helpColorBody, line.text)
-			y += line.height
-			cardkit.FillRect(
-				canvas,
-				image.Rect(helpCardBodyPadX, y-1, helpCardCanvasWidth-helpCardBodyPadX, y),
-				helpColorRule,
-			)
-		}
-	}
-	return nil
 }
