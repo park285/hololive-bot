@@ -86,7 +86,7 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 			WebhookToken: webhookToken,
 			BotToken:     botToken,
 		},
-		Valkey:   LoadValkeyConfig(),
+		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Logging:  loadLoggingConfig(),
 		Bot: BotConfig{

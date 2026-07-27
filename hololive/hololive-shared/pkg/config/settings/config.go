@@ -132,7 +132,7 @@ func buildConfig(
 			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
 			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
 		},
-		Valkey:                 LoadValkeyConfig(),
+		Valkey:                 loadValkeyConfig(),
 		Postgres:               loadPostgresConfig(),
 		Notification:           loadNotificationConfig(),
 		AlarmDispatchRetention: loadAlarmDispatchRetentionConfig(),
