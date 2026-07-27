@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -28,7 +29,16 @@ func main() {
 }
 
 func run() error {
+	allowBlockingIndexDropDefault, err := envBool("MIGRATION_ALLOW_BLOCKING_INDEX_DROP")
+	if err != nil {
+		return err
+	}
 	baselineThrough := flag.String("baseline-through", os.Getenv("MIGRATION_BASELINE_THROUGH"), "baseline watermark")
+	allowBlockingIndexDrop := flag.Bool(
+		"allow-blocking-index-drop",
+		allowBlockingIndexDropDefault,
+		"allow plain index drops on an existing database during a dedicated maintenance window",
+	)
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -53,8 +63,9 @@ func run() error {
 
 	stdout := log.New(os.Stdout, "", 0)
 	result, err := migrationrunner.Run(ctx, pool, migrations.FS, migrationrunner.Config{
-		BaselineThrough: *baselineThrough,
-		Logf:            stdout.Printf,
+		BaselineThrough:        *baselineThrough,
+		AllowBlockingIndexDrop: *allowBlockingIndexDrop,
+		Logf:                   stdout.Printf,
 	})
 	if err != nil {
 		return err
@@ -107,4 +118,16 @@ func envDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envBool(key string) (bool, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return false, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
+	}
+	return value, nil
 }
