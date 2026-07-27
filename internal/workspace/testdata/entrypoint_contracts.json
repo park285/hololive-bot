@@ -48,12 +48,6 @@
     ]
   },
   {
-    "path": "hololive/hololive-shared/cmd/valkey-state-audit/main.go",
-    "must_contain": [
-      "runMain("
-    ]
-  },
-  {
     "path": "hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts/main.go",
     "must_contain": [
       "communityshortscli.Run("
