@@ -28,7 +28,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/httputil"
@@ -73,7 +74,7 @@ type ClientConfig struct {
 }
 
 func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Client {
-	d := config.DefaultChzzkOperationalConfig()
+	d := settings.DefaultChzzkOperationalConfig()
 	l := defaultClientLogger(logger)
 	return &Client{
 		httpClient:                defaultHTTPClient(httpClient),
@@ -82,7 +83,7 @@ func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Cl
 		maxLivesPageSize:          d.MaxLivesPageSize,
 		batchLookupThreshold:      d.BatchLookupThreshold,
 		maxConcurrentStatusChecks: d.MaxConcurrentStatusChecks,
-		maxResponseBodyBytes:      config.DefaultMaxResponseBodyBytes,
+		maxResponseBodyBytes:      settings.DefaultMaxResponseBodyBytes,
 		logger:                    l,
 		breaker: util.NewBreaker(
 			constants.CircuitBreakerConfig.FailureThreshold,
@@ -95,7 +96,7 @@ func NewClientWithConfig(cfg *ClientConfig) *Client {
 	if cfg == nil {
 		cfg = &ClientConfig{}
 	}
-	d := config.DefaultChzzkOperationalConfig()
+	d := settings.DefaultChzzkOperationalConfig()
 	mlps := cfg.MaxLivesPageSize
 	if mlps == 0 {
 		mlps = d.MaxLivesPageSize
@@ -110,7 +111,7 @@ func NewClientWithConfig(cfg *ClientConfig) *Client {
 	}
 	maxBody := cfg.MaxResponseBodyBytes
 	if maxBody == 0 {
-		maxBody = config.DefaultMaxResponseBodyBytes
+		maxBody = settings.DefaultMaxResponseBodyBytes
 	}
 	l := defaultClientLogger(cfg.Logger)
 	return &Client{

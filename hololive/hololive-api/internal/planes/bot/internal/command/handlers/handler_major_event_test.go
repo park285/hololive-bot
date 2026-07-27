@@ -26,9 +26,10 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 func TestMajorEventCommand_Name(t *testing.T) {
@@ -68,9 +69,9 @@ func (s *stubMajorEventRepository) Unsubscribe(_ context.Context, _ string) erro
 	return s.unsubscribeErr
 }
 
-func newMajorEventErrorDeps(sentError *string) *Dependencies {
-	return &Dependencies{
-		Formatter:   adapter.NewResponseFormatter("!", nil),
+func newMajorEventErrorDeps(sentError *string) *handlercore.Dependencies {
+	return &handlercore.Dependencies{
+		Formatter:   formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error { return nil },
 		SendError: func(_ context.Context, _, message string) error {
 			*sentError = message
@@ -89,8 +90,8 @@ func TestMajorEventCommand_ServiceNotInitializedUsesSendError(t *testing.T) {
 		t.Fatalf("ensureMajorEventReady returned error: %v", err)
 	}
 
-	if sentError != adapter.ErrMajorEventServiceNotInitialized {
-		t.Fatalf("expected sendError %q, got %q", adapter.ErrMajorEventServiceNotInitialized, sentError)
+	if sentError != messaging.ErrMajorEventServiceNotInitialized {
+		t.Fatalf("expected sendError %q, got %q", messaging.ErrMajorEventServiceNotInitialized, sentError)
 	}
 }
 
@@ -99,7 +100,7 @@ func TestMajorEventCommand_RepositoryErrorPathsUseSendError(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		repository MajorEventRepository
+		repository handlercore.MajorEventRepository
 		params     map[string]any
 		want       string
 	}{
@@ -107,31 +108,31 @@ func TestMajorEventCommand_RepositoryErrorPathsUseSendError(t *testing.T) {
 			name:       "subscribe status check failure",
 			repository: &stubMajorEventRepository{isSubscribedErr: errors.New("boom")},
 			params:     map[string]any{"action": "on"},
-			want:       adapter.ErrMajorEventStatusCheckFailed,
+			want:       messaging.ErrMajorEventStatusCheckFailed,
 		},
 		{
 			name:       "subscribe failure",
 			repository: &stubMajorEventRepository{isSubscribed: false, subscribeErr: errors.New("boom")},
 			params:     map[string]any{"action": "on"},
-			want:       adapter.ErrMajorEventSubscribeFailed,
+			want:       messaging.ErrMajorEventSubscribeFailed,
 		},
 		{
 			name:       "unsubscribe status check failure",
 			repository: &stubMajorEventRepository{isSubscribedErr: errors.New("boom")},
 			params:     map[string]any{"action": "off"},
-			want:       adapter.ErrMajorEventStatusCheckFailed,
+			want:       messaging.ErrMajorEventStatusCheckFailed,
 		},
 		{
 			name:       "unsubscribe failure",
 			repository: &stubMajorEventRepository{isSubscribed: true, unsubscribeErr: errors.New("boom")},
 			params:     map[string]any{"action": "off"},
-			want:       adapter.ErrMajorEventUnsubscribeFailed,
+			want:       messaging.ErrMajorEventUnsubscribeFailed,
 		},
 		{
 			name:       "status status check failure",
 			repository: &stubMajorEventRepository{isSubscribedErr: errors.New("boom")},
 			params:     map[string]any{"action": "status"},
-			want:       adapter.ErrMajorEventStatusCheckFailed,
+			want:       messaging.ErrMajorEventStatusCheckFailed,
 		},
 	}
 

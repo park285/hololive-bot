@@ -202,7 +202,7 @@ func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query strin
 }
 
 func (r *Repository) collectAllMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	return collectJoinedRows(rows, "rows iteration error", func(rows pgxRows) (*domain.Member, error) {
+	return collectJoinedRows(rows, "rows iteration error", func(rows pgx.Rows) (*domain.Member, error) {
 		row, err := scanMemberFullRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan member row: %w", err)
@@ -221,7 +221,7 @@ type photoMemberRow struct {
 }
 
 func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]*domain.Member, error) {
-	collected, err := collectJoinedRows(rows, "rows iteration error", func(rows pgxRows) (photoMemberRow, error) {
+	collected, err := collectJoinedRows(rows, "rows iteration error", func(rows pgx.Rows) (photoMemberRow, error) {
 		channelID, member, scanErr := r.collectMemberWithPhotoRow(rows)
 		if scanErr != nil {
 			return photoMemberRow{}, scanErr
@@ -330,7 +330,7 @@ func (r *Repository) scanMemberWithPhoto(
 }
 
 func (r *Repository) collectMembersByNameFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	return collectJoinedRows(rows, "rows iteration error", func(rows pgxRows) (*domain.Member, error) {
+	return collectJoinedRows(rows, "rows iteration error", func(rows pgx.Rows) (*domain.Member, error) {
 		row, err := scanMemberQueryRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan member row: %w", err)

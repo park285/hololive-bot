@@ -7,24 +7,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
+
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/httputil"
 )
 
 func InitAlarmDependencies(
-	chzzkConfig config.ChzzkConfig,
-	twitchConfig *config.TwitchConfig,
+	chzzkConfig settings.ChzzkConfig,
+	twitchConfig *settings.TwitchConfig,
 	advanceMinutes []int,
 	scraperProxyEnabled bool,
 	cacheService cache.Client,
-	holodexService *holodex.Service,
-	memberServiceAdapter member.DataProvider,
-	alarmRepository *alarm.Repository,
+	holodexService *holodexprovider.Service,
+	memberServiceAdapter domain.MemberDataProvider, alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*AlarmDependencies, error) {
 	httpClient := httputil.NewExternalAPIClient(10 * time.Second)
@@ -49,11 +51,10 @@ func InitAlarmDependencies(
 
 func InitAlarmModeComponents(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
-	holodexService *holodex.Service,
-	memberServiceAdapter member.DataProvider,
-	alarmRepository *alarm.Repository,
+	holodexService *holodexprovider.Service,
+	memberServiceAdapter domain.MemberDataProvider, alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*AlarmModeComponents, error) {
 	if providerURL := strings.TrimSpace(appConfig.AlarmServiceURL); providerURL != "" {

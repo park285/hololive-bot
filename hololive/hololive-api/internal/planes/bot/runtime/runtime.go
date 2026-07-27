@@ -1,9 +1,72 @@
-// Package runtime은 bot plane의 안정적인 composition surface를 노출한다.
-// 구현 세부는 모듈의 internal 경계 안에 보호된 채로 남는다.
-package runtime
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
-import app "github.com/kapu/hololive-api/internal/planes/bot/internal/app"
+package botruntime
 
-type Runtime = app.BotRuntime
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
 
-var Build = app.BuildRuntime
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
+	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/quic-go/quic-go/http3"
+)
+
+type BotRuntime struct {
+	Config *settings.Config
+	Logger *slog.Logger
+
+	Bot *orchestration.Bot
+
+	ConfigSubscriber *configsub.Subscriber
+
+	ServerAddr    string
+	H3Server      *http3.Server
+	MetricsServer *http.Server
+	PprofServer   *http.Server
+
+	h3CertReloadStart func(context.Context)
+
+	webhookHandlerCloser interface{ Close() error }
+	webhookPool          interface{ StopAndWait() }
+	lifecycle.Managed
+}
+
+func BuildRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*BotRuntime, error) {
+	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime, cleanup, err := InitializeBotRuntime(ctx, appConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
+	}
+
+	runtime.Managed = lifecycle.NewManaged(cleanup)
+
+	return runtime, nil
+}

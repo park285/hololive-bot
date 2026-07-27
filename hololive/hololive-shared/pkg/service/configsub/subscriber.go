@@ -32,23 +32,21 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
-const DefaultChannel = contractssettings.PubSubChannelV1
-
-type ConfigUpdate = contractssettings.ConfigUpdateV1
+const defaultChannel = contractssettings.PubSubChannelV1
 
 type Subscriber struct {
 	client  valkey.Client
-	applyFn func(ConfigUpdate)
+	applyFn func(contractssettings.ConfigUpdateV1)
 	logger  *slog.Logger
 	channel string
 }
 
-func New(client valkey.Client, applyFn func(ConfigUpdate), logger *slog.Logger) *Subscriber {
+func New(client valkey.Client, applyFn func(contractssettings.ConfigUpdateV1), logger *slog.Logger) *Subscriber {
 	return &Subscriber{
 		client:  client,
 		applyFn: applyFn,
 		logger:  logger,
-		channel: DefaultChannel,
+		channel: defaultChannel,
 	}
 }
 
@@ -68,7 +66,7 @@ func (s *Subscriber) Run(ctx context.Context) {
 }
 
 func (s *Subscriber) handleMessage(msg valkey.PubSubMessage) {
-	var update ConfigUpdate
+	var update contractssettings.ConfigUpdateV1
 	if err := json.Unmarshal([]byte(msg.Message), &update); err != nil {
 		s.logger.Warn("Failed to unmarshal config update",
 			slog.String("channel", s.channel),

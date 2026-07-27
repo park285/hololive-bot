@@ -46,14 +46,14 @@ func TestAPIError_ErrorAndUnwrap(t *testing.T) {
 }
 
 func TestNewAPIError_OperationSelection(t *testing.T) {
-	err := NewAPIError("fallback-op", 429, map[string]any{"operation": "explicit-op"})
+	err := NewAPIError("fallback-op", 429, "explicit-op")
 	if err.Operation != "explicit-op" || err.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("unexpected NewAPIError result: %+v", err)
 	}
 
-	err = NewAPIError("fallback-op", 400, map[string]any{"operation": 123})
+	err = NewAPIError("fallback-op", 400, "fallback-op")
 	if err.Operation != "fallback-op" {
-		t.Fatalf("non-string operation should fallback to message, got=%q", err.Operation)
+		t.Fatalf("operation = %q", err.Operation)
 	}
 }
 
@@ -63,15 +63,11 @@ func TestKeyRotationError_ErrorAndFactory(t *testing.T) {
 		t.Fatalf("unexpected KeyRotationError string: %q", got)
 	}
 
-	err := NewKeyRotationError("fallback", 429, map[string]any{"url": "https://api.example.com"})
+	err := NewKeyRotationError("https://api.example.com", 429)
 	if err.Operation != "https://api.example.com" || err.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("unexpected NewKeyRotationError result: %+v", err)
 	}
 
-	err = NewKeyRotationError("fallback", 429, map[string]any{"url": 123})
-	if err.Operation != "fallback" {
-		t.Fatalf("non-string url should fallback to message, got=%q", err.Operation)
-	}
 }
 
 func TestCacheError_ErrorAndFactory(t *testing.T) {

@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func TestBuildActiveMemberIndex(t *testing.T) {

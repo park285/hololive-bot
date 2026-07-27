@@ -9,28 +9,31 @@ import (
 	"time"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
 const defaultLiveBatchChannelChunkSize = 40
 
 type livePollerRegistrationSpec struct {
 	Name           string
-	Base           poller.Poller
-	BatchBase      *poller.LivePoller
+	Base           scheduler.Poller
+	BatchBase      *pollers.LivePoller
 	BatchEnabled   bool
-	Priority       poller.Priority
+	Priority       scheduler.Priority
 	Interval       time.Duration
 	ChannelIDs     []string
 	TargetGroup    providers.ChannelTargetGroup
-	BurstClass     poller.BudgetBurstClass
-	BudgetPriority poller.BudgetPriority
+	BurstClass     polling.BudgetBurstClass
+	BudgetPriority polling.BudgetPriority
 }
 
 type liveBatchPoller struct {
 	name       string
-	base       *poller.LivePoller
+	base       *pollers.LivePoller
 	channelIDs []string
 }
 
@@ -76,7 +79,7 @@ func appendLiveBatchPollerRegistrations(
 	return registrations
 }
 
-func newLiveBatchPoller(name string, base *poller.LivePoller, channelIDs []string) poller.Poller {
+func newLiveBatchPoller(name string, base *pollers.LivePoller, channelIDs []string) scheduler.Poller {
 	return &liveBatchPoller{
 		name:       strings.TrimSpace(name),
 		base:       base,
@@ -161,17 +164,17 @@ func liveBatchRegistrationName(baseName string, index, total int) string {
 	return fmt.Sprintf("%s_batch_%02d", trimmed, index+1)
 }
 
-func holodexLiveBatchBudgetProfile(channelCount int, class poller.BudgetBurstClass, priority poller.BudgetPriority) poller.BudgetProfile {
+func holodexLiveBatchBudgetProfile(channelCount int, class polling.BudgetBurstClass, priority polling.BudgetPriority) polling.BudgetProfile {
 	if channelCount < 1 {
 		channelCount = 1
 	}
-	return poller.BudgetProfile{
-		SourceUnits: map[poller.BudgetSource]float64{
-			poller.BudgetSourceHolodexLive:   1,
-			poller.BudgetSourcePostgresWrite: float64(channelCount),
+	return polling.BudgetProfile{
+		SourceUnits: map[polling.BudgetSource]float64{
+			polling.BudgetSourceHolodexLive:   1,
+			polling.BudgetSourcePostgresWrite: float64(channelCount),
 		},
-		FallbackSourceUnits: map[poller.BudgetSource]float64{
-			poller.BudgetSourceYouTubeScraper: liveBatchYouTubeScraperFallbackUnits(channelCount),
+		FallbackSourceUnits: map[polling.BudgetSource]float64{
+			polling.BudgetSourceYouTubeScraper: liveBatchYouTubeScraperFallbackUnits(channelCount),
 		},
 		BurstClass: class,
 		Priority:   priority,

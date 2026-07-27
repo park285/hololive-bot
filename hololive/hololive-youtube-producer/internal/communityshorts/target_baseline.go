@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
@@ -79,7 +80,7 @@ type alarmActivationKey struct {
 	alarmType domain.AlarmType
 }
 
-func CollectTargetBaseline(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (TargetBaseline, error) {
+func CollectTargetBaseline(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (TargetBaseline, error) {
 	if ctx == nil {
 		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: context is nil")
 	}
@@ -117,7 +118,7 @@ func CollectTargetBaseline(ctx context.Context, appConfig *config.Config, logger
 func BuildTargetBaseline(
 	channels []OperationalChannel,
 	alarms []*domain.Alarm,
-	ingestionConfig config.IngestionConfig,
+	ingestionConfig settings.IngestionConfig,
 	generatedAt time.Time,
 ) (TargetBaseline, error) {
 	if err := ValidateOperationalTargets(channels); err != nil {

@@ -22,8 +22,9 @@ package api
 
 import (
 	"context"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
+
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"

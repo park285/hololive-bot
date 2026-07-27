@@ -24,12 +24,13 @@ import (
 	"sort"
 	"time"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 var (
-	kst = model.KST
+	kst = util.KSTZone
 )
 
 type datedCandidate struct {

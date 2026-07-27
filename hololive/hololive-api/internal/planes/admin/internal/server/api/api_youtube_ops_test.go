@@ -10,17 +10,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 )
 
 type stubYouTubeCommunityShortsOpsRepository struct {
-	listPostSendCountsSince func(context.Context, time.Time) ([]outbox.PostSendCount, error)
+	listPostSendCountsSince func(context.Context, time.Time) ([]analytics.PostSendCount, error)
 }
 
 func (s *stubYouTubeCommunityShortsOpsRepository) ListPostSendCountsSince(
 	ctx context.Context,
 	since time.Time,
-) ([]outbox.PostSendCount, error) {
+) ([]analytics.PostSendCount, error) {
 	if s.listPostSendCountsSince == nil {
 		return nil, nil
 	}
@@ -66,11 +66,11 @@ func newYouTubeCommunityShortsOpsTestHandler(t *testing.T) (handler *StatsHandle
 
 	handler = &StatsHandler{Handler: &Handler{
 		communityShortsOps: &stubYouTubeCommunityShortsOpsRepository{
-			listPostSendCountsSince: func(_ context.Context, since time.Time) ([]outbox.PostSendCount, error) {
+			listPostSendCountsSince: func(_ context.Context, since time.Time) ([]analytics.PostSendCount, error) {
 				if since.IsZero() {
 					t.Fatal("since must be set")
 				}
-				return []outbox.PostSendCount{
+				return []analytics.PostSendCount{
 					{
 						AlarmType:            domain.AlarmTypeCommunity,
 						ChannelID:            "channel-1",
@@ -202,7 +202,7 @@ func TestStatsHandler_GetYouTubeCommunityShortsOps_RepositoryError(t *testing.T)
 
 	handler := &StatsHandler{Handler: &Handler{
 		communityShortsOps: &stubYouTubeCommunityShortsOpsRepository{
-			listPostSendCountsSince: func(context.Context, time.Time) ([]outbox.PostSendCount, error) {
+			listPostSendCountsSince: func(context.Context, time.Time) ([]analytics.PostSendCount, error) {
 				return nil, errors.New("boom")
 			},
 		},

@@ -27,9 +27,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -46,7 +47,7 @@ type DatabaseResources struct {
 }
 
 // ProvideCacheResources - 캐시 리소스 생성 (정리 함수 포함)
-func ProvideCacheResources(ctx context.Context, valkeyConfig config.ValkeyConfig, logger *slog.Logger) (*CacheResources, func(), error) {
+func ProvideCacheResources(ctx context.Context, valkeyConfig settings.ValkeyConfig, logger *slog.Logger) (*CacheResources, func(), error) {
 	cacheClient, err := cache.NewCacheService(ctx, cache.Config{
 		Host:       valkeyConfig.Host,
 		Port:       valkeyConfig.Port,
@@ -70,7 +71,7 @@ func ProvideCacheResources(ctx context.Context, valkeyConfig config.ValkeyConfig
 }
 
 // ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함)
-func ProvideDatabaseResources(ctx context.Context, postgresConfig *config.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
+func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
 	if postgresConfig == nil {
 		return nil, nil, fmt.Errorf("postgres config is nil")
 	}

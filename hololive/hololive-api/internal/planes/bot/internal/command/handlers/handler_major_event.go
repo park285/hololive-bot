@@ -27,19 +27,19 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 type MajorEventCommand struct {
-	BaseCommand
+	handlercore.BaseCommand
 
-	repository MajorEventRepository
+	repository handlercore.MajorEventRepository
 }
 
-func NewMajorEventCommand(deps *Dependencies, repository MajorEventRepository) *MajorEventCommand {
+func NewMajorEventCommand(deps *handlercore.Dependencies, repository handlercore.MajorEventRepository) *MajorEventCommand {
 	return &MajorEventCommand{
-		BaseCommand: NewBaseCommand(deps),
+		BaseCommand: handlercore.NewBaseCommand(deps),
 		repository:  repository,
 	}
 }
@@ -66,7 +66,7 @@ func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *d
 	}
 
 	if c.repository == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMajorEventServiceNotInitialized)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventServiceNotInitialized)
 	}
 
 	return nil
@@ -99,14 +99,14 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 		Port: c.repository,
 		OnCheckError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Failed to check subscription", slog.String("error", err.Error()))
-			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMajorEventStatusCheckFailed)
+			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventStatusCheckFailed)
 		},
 		OnAlreadySubscribed: func(ctx context.Context) error {
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventAlreadySubscribed(ctx))
 		},
 		OnSubscribeError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Failed to subscribe", slog.String("error", err.Error()))
-			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMajorEventSubscribeFailed)
+			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventSubscribeFailed)
 		},
 		OnSubscribed: func(ctx context.Context) error {
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventSubscribed(ctx))
@@ -116,7 +116,7 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 		},
 		OnUnsubscribeError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Failed to unsubscribe", slog.String("error", err.Error()))
-			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMajorEventUnsubscribeFailed)
+			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventUnsubscribeFailed)
 		},
 		OnUnsubscribed: func(ctx context.Context) error {
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventUnsubscribed(ctx))

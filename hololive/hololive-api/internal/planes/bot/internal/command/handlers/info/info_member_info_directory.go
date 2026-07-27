@@ -24,10 +24,10 @@ import (
 	"context"
 	"slices"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/stringutil"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *domain.CommandContext) error {
@@ -35,19 +35,19 @@ func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *d
 
 	activeMembers := c.filterActiveMembers(provider.GetAllMembers())
 	if len(activeMembers) == 0 {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrNoMemberInfoFound)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrNoMemberInfoFound)
 	}
 
 	groupEntries := c.buildGroupEntries(ctx, activeMembers)
 	if len(groupEntries) == 0 {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrNoMemberInfoFound)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrNoMemberInfoFound)
 	}
 
 	ordered := c.sortGroupsByPreference(groupEntries)
 
 	message := c.Deps().Formatter.MemberDirectory(ctx, ordered, len(activeMembers))
 	if stringutil.TrimSpace(message) == "" {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrCannotDisplayMemberInfo)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrCannotDisplayMemberInfo)
 	}
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
@@ -64,15 +64,15 @@ func (c *MemberInfoCommand) filterActiveMembers(members []*domain.Member) []*dom
 	return activeMembers
 }
 
-func (c *MemberInfoCommand) buildGroupEntries(ctx context.Context, members []*domain.Member) map[string]map[string]adapter.MemberDirectoryEntry {
-	groupEntries := make(map[string]map[string]adapter.MemberDirectoryEntry)
+func (c *MemberInfoCommand) buildGroupEntries(ctx context.Context, members []*domain.Member) map[string]map[string]formatter.MemberDirectoryEntry {
+	groupEntries := make(map[string]map[string]formatter.MemberDirectoryEntry)
 
 	for _, member := range members {
 		if member == nil {
 			continue
 		}
 
-		entry := adapter.MemberDirectoryEntry{
+		entry := formatter.MemberDirectoryEntry{
 			PrimaryName:   PrimaryMemberName(member),
 			SecondaryName: member.Name,
 		}
@@ -92,22 +92,22 @@ func (c *MemberInfoCommand) directoryGroupsForMember(ctx context.Context, member
 }
 
 func addMemberDirectoryEntry(
-	groupEntries map[string]map[string]adapter.MemberDirectoryEntry,
+	groupEntries map[string]map[string]formatter.MemberDirectoryEntry,
 	memberName string,
-	entry adapter.MemberDirectoryEntry,
+	entry formatter.MemberDirectoryEntry,
 	groups []string,
 ) {
 	for _, group := range groups {
 		if groupEntries[group] == nil {
-			groupEntries[group] = make(map[string]adapter.MemberDirectoryEntry)
+			groupEntries[group] = make(map[string]formatter.MemberDirectoryEntry)
 		}
 
 		groupEntries[group][memberName] = entry
 	}
 }
 
-func (c *MemberInfoCommand) sortGroupsByPreference(groupEntries map[string]map[string]adapter.MemberDirectoryEntry) []adapter.MemberDirectoryGroup {
-	ordered := make([]adapter.MemberDirectoryGroup, 0, len(groupEntries))
+func (c *MemberInfoCommand) sortGroupsByPreference(groupEntries map[string]map[string]formatter.MemberDirectoryEntry) []formatter.MemberDirectoryGroup {
+	ordered := make([]formatter.MemberDirectoryGroup, 0, len(groupEntries))
 	used := make(map[string]bool)
 
 	for _, groupName := range memberDirectoryPreferredOrder {
@@ -133,13 +133,13 @@ func (c *MemberInfoCommand) sortGroupsByPreference(groupEntries map[string]map[s
 	return ordered
 }
 
-func BuildMemberDirectoryGroup(groupName string, entries map[string]adapter.MemberDirectoryEntry) adapter.MemberDirectoryGroup {
-	list := make([]adapter.MemberDirectoryEntry, 0, len(entries))
+func BuildMemberDirectoryGroup(groupName string, entries map[string]formatter.MemberDirectoryEntry) formatter.MemberDirectoryGroup {
+	list := make([]formatter.MemberDirectoryEntry, 0, len(entries))
 	for _, entry := range entries {
 		list = append(list, entry)
 	}
 
-	slices.SortStableFunc(list, func(a, b adapter.MemberDirectoryEntry) int {
+	slices.SortStableFunc(list, func(a, b formatter.MemberDirectoryEntry) int {
 		if a.PrimaryName < b.PrimaryName {
 			return -1
 		}
@@ -151,7 +151,7 @@ func BuildMemberDirectoryGroup(groupName string, entries map[string]adapter.Memb
 		return 0
 	})
 
-	return adapter.MemberDirectoryGroup{
+	return formatter.MemberDirectoryGroup{
 		GroupName: groupName,
 		Members:   list,
 	}

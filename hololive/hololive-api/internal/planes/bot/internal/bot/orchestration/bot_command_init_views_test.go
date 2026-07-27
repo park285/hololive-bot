@@ -30,7 +30,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 type stubCommandInitStreamProvider struct{}
@@ -109,7 +110,7 @@ func (s *stubCommandInitCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 }
 
 func TestCommandInitView_DefensiveCopyCommandBuilders(t *testing.T) {
-	external := orchcmd.CommandBuilder(func(_ *command.Dependencies) command.Command {
+	external := orchcmd.CommandBuilder(func(_ *handlercore.Dependencies) handlercore.Command {
 		return &stubCommandInitCommand{name: "external"}
 	})
 	b := &Bot{
@@ -138,7 +139,7 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 
 	view := b.commandInitView()
 
-	deps := view.toCommandDependencies(command.NewRegistry())
+	deps := view.toCommandDependencies(handlers.NewRegistry())
 	if deps == nil {
 		t.Fatal("toCommandDependencies() returned nil")
 	}
@@ -161,14 +162,14 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 }
 
 func TestCommandInitView_AssemblesCommands(t *testing.T) {
-	registry := command.NewRegistry()
+	registry := handlers.NewRegistry()
 	view := commandInitView{
 		logger:               slog.New(slog.DiscardHandler),
 		majorEventRepository: &stubCommandInitMajorEventRepository{},
 		memberNews:           &stubCommandInitMemberNewsService{},
 		commandBuilders: []orchcmd.CommandBuilder{
 			nil,
-			func(_ *command.Dependencies) command.Command {
+			func(_ *handlercore.Dependencies) handlercore.Command {
 				return &stubCommandInitCommand{name: "external"}
 			},
 		},
@@ -207,19 +208,19 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 }
 
 func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testing.T) {
-	registry := command.NewRegistry()
+	registry := handlers.NewRegistry()
 	targetName := domain.CommandType("external_target")
 	target := &stubCommandInitCommand{name: string(targetName)}
 	registry.Register(target)
 
-	var builtDeps *command.Dependencies
-	builder := orchcmd.CommandBuilder(func(deps *command.Dependencies) command.Command {
+	var builtDeps *handlercore.Dependencies
+	builder := orchcmd.CommandBuilder(func(deps *handlercore.Dependencies) handlercore.Command {
 		builtDeps = deps
 
 		return &stubCommandInitCommand{
 			name: "external",
 			exec: func(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-				_, err := deps.Dispatcher.Publish(ctx, cmdCtx, command.Event{Type: targetName})
+				_, err := deps.Dispatcher.Publish(ctx, cmdCtx, handlercore.Event{Type: targetName})
 				return err
 			},
 		}
@@ -233,7 +234,7 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 	deps := view.toCommandDependencies(registry)
 	commands := view.buildCommands(deps)
 
-	var external command.Command
+	var external handlercore.Command
 	for _, cmd := range commands {
 		if cmd.Name() == "external" {
 			external = cmd
@@ -267,7 +268,7 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 }
 
 var (
-	_ streamRuntime                = (*stubCommandInitStreamProvider)(nil)
-	_ command.MajorEventRepository = (*stubCommandInitMajorEventRepository)(nil)
-	_ command.MemberNewsService    = (*stubCommandInitMemberNewsService)(nil)
+	_ streamRuntime                    = (*stubCommandInitStreamProvider)(nil)
+	_ handlercore.MajorEventRepository = (*stubCommandInitMajorEventRepository)(nil)
+	_ handlercore.MemberNewsService    = (*stubCommandInitMemberNewsService)(nil)
 )

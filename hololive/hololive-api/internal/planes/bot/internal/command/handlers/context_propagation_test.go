@@ -31,7 +31,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
@@ -193,16 +196,16 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 
 	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Matcher:   matcherService,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendError: func(context.Context, string, string) error {
 			t.Fatal("unexpected SendError call")
 			return nil
 		},
 	}
 
-	channel, err := FindActiveMemberOrError(reqCtx, deps, "room-1", "Aqua")
+	channel, err := handlercore.FindActiveMemberOrError(reqCtx, deps, "room-1", "Aqua")
 	require.NoError(t, err)
 	require.NotNil(t, channel)
 	assert.Equal(t, "ch-aqua", channel.ID)
@@ -226,10 +229,10 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		sendErrorMsg string
 	)
 
-	cmd := NewAlarmCommand(&Dependencies{
+	cmd := alarmcmd.NewAlarmCommand(&handlercore.Dependencies{
 		Alarm:     &alarmListViewerStub{},
 		Matcher:   matcherService,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			t.Fatal("unexpected SendMessage call")
 			return nil
@@ -249,7 +252,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, sendErrorCtx == reqCtx)
-	assert.Equal(t, adapter.ErrGraduatedMemberBlocked, sendErrorMsg)
+	assert.Equal(t, messaging.ErrGraduatedMemberBlocked, sendErrorMsg)
 	provider.state.assertContains(t, reqCtx)
 }
 
@@ -271,10 +274,10 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		sendMessageMsg string
 	)
 
-	cmd := NewLiveCommand(&Dependencies{
+	cmd := NewLiveCommand(&handlercore.Dependencies{
 		Holodex:   streamProvider,
 		Matcher:   matcherService,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(ctx context.Context, _, message string) error {
 			sendMessageCtx = ctx
 			sendMessageMsg = message
@@ -308,7 +311,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 	})
 	streamProvider := &trackedStreamProvider{}
 
-	cmd := NewLiveCommand(&Dependencies{
+	cmd := NewLiveCommand(&handlercore.Dependencies{
 		Holodex: streamProvider,
 		Chzzk: chzzk.NewClientWithConfig(&chzzk.ClientConfig{
 			ClientID:     "test-client",
@@ -317,7 +320,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 		}),
 		MembersData: provider,
 		Matcher:     matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, newCommandTestLogger()),
-		Formatter:   adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		Formatter:   formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
 		},

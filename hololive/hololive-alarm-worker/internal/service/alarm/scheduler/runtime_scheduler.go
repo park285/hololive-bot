@@ -26,7 +26,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
@@ -35,10 +36,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
+	chzzk2 "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/chzzk"
+	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -61,10 +64,10 @@ type targetMinutesUpdater interface {
 
 // RuntimeScheduler는 런타임 알람 체크 루프를 관리한다.
 type RuntimeScheduler struct {
-	youtubeChecker checker.Runner
-	chzzkChecker   checker.Runner
-	twitchChecker  checker.Runner
-	notifier       checker.Sender
+	youtubeChecker checking.Runner
+	chzzkChecker   checking.Runner
+	twitchChecker  checking.Runner
+	notifier       checking.Sender
 	cacheClient    cache.Client
 
 	youtubeTargetUpdater  targetMinutesUpdater
@@ -87,12 +90,12 @@ type RuntimeScheduler struct {
 // NewRuntimeScheduler는 런타임 알람 스케줄러를 생성한다.
 func NewRuntimeScheduler(
 	cacheClient cache.Client,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	alarmCRUD domain.AlarmCRUD,
 	postgres database.Client,
-	notifConfig config.NotificationConfig,
+	notifConfig settings.NotificationConfig,
 	outbox dispatchoutbox.Writer,
 	publishConfig queue.PublishConfig,
 	twitchEnabled bool,
@@ -117,14 +120,14 @@ func NewRuntimeScheduler(
 		dedupService,
 		targetMinutes,
 		youtubeEvaluationWindowCap,
-		checker.NewPgYouTubeLiveSessionSource(postgres),
+		checking.NewPgYouTubeLiveSessionSource(postgres),
 		logger,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	chzzkChecker, err := checker.NewChzzkChecker(cacheClient, chzzkClient, logger)
+	chzzkChecker, err := chzzk2.NewChzzkChecker(cacheClient, chzzkClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create chzzk checker: %w", err)
 	}
@@ -133,7 +136,7 @@ func NewRuntimeScheduler(
 	if err != nil {
 		return nil, err
 	}
-	notifierService, err := checker.NewNotifier(dedupService, queuePublisher, tierScheduler, logger)
+	notifierService, err := checknotifier.NewNotifier(dedupService, queuePublisher, tierScheduler, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}
@@ -143,15 +146,15 @@ func NewRuntimeScheduler(
 
 func newRuntimeSchedulerYouTubeChecker(
 	cacheClient cache.Client,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	tierScheduler *tier.TieredScheduler,
 	dedupService *dedup.Service,
 	targetMinutes []int,
 	evaluationWindowCap time.Duration,
-	persistedLiveSource checker.YouTubeLiveSessionSource,
+	persistedLiveSource checking.YouTubeLiveSessionSource,
 	logger *slog.Logger,
-) (*checker.YouTubeChecker, error) {
-	youtubeChecker, err := checker.NewYouTubeCheckerWithPersistedLiveSource(
+) (*checking.YouTubeChecker, error) {
+	youtubeChecker, err := checking.NewYouTubeCheckerWithPersistedLiveSource(
 		cacheClient,
 		holodexService,
 		tierScheduler,
@@ -178,7 +181,7 @@ func runtimeSchedulerLogger(logger *slog.Logger) *slog.Logger {
 
 func validateRuntimeSchedulerDeps(
 	cacheClient cache.Client,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	alarmCRUD domain.AlarmCRUD,
@@ -233,10 +236,10 @@ func newRuntimeSchedulerQueuePublisher(
 func newRuntimeSchedulerInstance(
 	cacheClient cache.Client,
 	alarmCRUD domain.AlarmCRUD,
-	youtubeChecker *checker.YouTubeChecker,
-	chzzkChecker checker.Runner,
-	twitchChecker checker.Runner,
-	notifierService checker.Sender,
+	youtubeChecker *checking.YouTubeChecker,
+	chzzkChecker checking.Runner,
+	twitchChecker checking.Runner,
+	notifierService checking.Sender,
 	dedupService targetMinutesUpdater,
 	youtubeInterval time.Duration,
 	logger *slog.Logger,

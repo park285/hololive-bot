@@ -6,12 +6,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
-var FindMemberOrError = handlercore.FindMemberOrError
-var FindActiveMemberOrError = handlercore.FindActiveMemberOrError
-var FindMemberWithCandidatesOrError = handlercore.FindMemberWithCandidatesOrError
-var FindActiveMemberWithCandidatesOrError = handlercore.FindActiveMemberWithCandidatesOrError
-
-func validateMemberLookupDependencies(deps *Dependencies) error {
+func validateMemberLookupDependencies(deps *handlercore.Dependencies) error {
 	return handlercore.ValidateMemberLookupDependencies(deps)
 }
 

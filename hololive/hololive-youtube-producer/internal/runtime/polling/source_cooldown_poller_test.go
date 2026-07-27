@@ -7,8 +7,11 @@ import (
 	"time"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,14 +29,14 @@ func (p sourceCooldownTestPoller) Name() string {
 }
 
 type sourceCooldownTestReporter struct {
-	source poller.BudgetSource
+	source polling.BudgetSource
 	ttl    time.Duration
 	reason string
 	calls  int
 	err    error
 }
 
-func (r *sourceCooldownTestReporter) MarkSourceCooldown(ctx context.Context, source poller.BudgetSource, ttl time.Duration, reason string) error {
+func (r *sourceCooldownTestReporter) MarkSourceCooldown(ctx context.Context, source polling.BudgetSource, ttl time.Duration, reason string) error {
 	r.calls++
 	r.source = source
 	r.ttl = ttl
@@ -49,8 +52,8 @@ type sourceCooldownTestLimiter struct {
 	sourceCooldownTestReporter
 }
 
-func (l *sourceCooldownTestLimiter) TryReserve(context.Context, *poller.BudgetJob, poller.BudgetProfile, time.Duration) (reservation poller.BudgetReservation, decision poller.BudgetDecision, err error) {
-	return nil, poller.BudgetDecision{Allowed: true}, nil
+func (l *sourceCooldownTestLimiter) TryReserve(context.Context, *polling.BudgetJob, polling.BudgetProfile, time.Duration) (reservation polling.BudgetReservation, decision polling.BudgetDecision, err error) {
+	return nil, polling.BudgetDecision{Allowed: true}, nil
 }
 
 func TestSourceCooldownReportingPollerReportsOnlySourceLevelYouTubeErrors(t *testing.T) {
@@ -64,13 +67,13 @@ func TestSourceCooldownReportingPollerReportsOnlySourceLevelYouTubeErrors(t *tes
 	err := wrapped.Poll(context.Background(), "UC_TEST")
 	require.ErrorIs(t, err, scraper.ErrRateLimited)
 	require.Equal(t, 1, reporter.calls)
-	require.Equal(t, poller.BudgetSourceYouTubeScraper, reporter.source)
+	require.Equal(t, polling.BudgetSourceYouTubeScraper, reporter.source)
 	require.Equal(t, "youtube_rate_limited", reporter.reason)
 	require.Greater(t, reporter.ttl, time.Duration(0))
 
 	reporter.calls = 0
 	wrapped = newSourceCooldownReportingPoller(
-		sourceCooldownTestPoller{err: scraper.ErrAdmissionDeferred},
+		sourceCooldownTestPoller{err: youtubeadmission.ErrDeferred},
 		reporter,
 		nil,
 	)
@@ -91,18 +94,18 @@ func TestWrapSourceCooldownPollersIncludesLiveBatchFallbackScraperSource(t *test
 	limiter := &sourceCooldownTestLimiter{}
 	registration := providers.NewChannelPollerRegistration(
 		sourceCooldownTestPoller{name: "live_batch", err: scraper.ErrBlockedResponse},
-		poller.PriorityHigh,
+		scheduler.PriorityHigh,
 		time.Minute,
 	).
 		WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).
-		WithBudgetProfile(holodexLiveBatchBudgetProfile(30, poller.BudgetBurstPrimary, poller.BudgetPriorityHigh))
+		WithBudgetProfile(holodexLiveBatchBudgetProfile(30, polling.BudgetBurstPrimary, polling.BudgetPriorityHigh))
 
 	wrapped := wrapYouTubeProducerSourceCooldownPollers([]providers.ChannelPollerRegistration{registration}, limiter, nil)
 	err := wrapped[0].Poller.Poll(context.Background(), providers.SyntheticGlobalPollerChannelID)
 
 	require.ErrorIs(t, err, scraper.ErrBlockedResponse)
 	require.Equal(t, 1, limiter.calls)
-	require.Equal(t, poller.BudgetSourceYouTubeScraper, limiter.source)
+	require.Equal(t, polling.BudgetSourceYouTubeScraper, limiter.source)
 	require.Equal(t, "youtube_blocked_response", limiter.reason)
 }
 

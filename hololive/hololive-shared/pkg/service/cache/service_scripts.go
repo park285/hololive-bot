@@ -23,12 +23,12 @@ func (c *Service) CompareAndDelete(ctx context.Context, key, expectedValue strin
 	resp := c.client.Do(ctx, cmd)
 	if resp.Error() != nil {
 		c.logger.Error("Cache compare-and-delete failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, NewCacheError("compare-and-delete failed", "cas", key, resp.Error())
+		return false, NewCacheError("cas", key, resp.Error())
 	}
 
 	result, err := resp.AsInt64()
 	if err != nil {
-		return false, NewCacheError("compare-and-delete conversion failed", "cas", key, err)
+		return false, NewCacheError("cas", key, err)
 	}
 
 	return result == 1, nil
@@ -62,12 +62,12 @@ func (c *Service) CompareAndExpire(ctx context.Context, key, expectedValue strin
 	resp := c.client.Do(ctx, cmd)
 	if resp.Error() != nil {
 		c.logger.Error("Cache compare-and-expire failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, NewCacheError("compare-and-expire failed", "cas-expire", key, resp.Error())
+		return false, NewCacheError("cas-expire", key, resp.Error())
 	}
 
 	result, err := resp.AsInt64()
 	if err != nil {
-		return false, NewCacheError("compare-and-expire conversion failed", "cas-expire", key, err)
+		return false, NewCacheError("cas-expire", key, err)
 	}
 
 	return result == 1, nil

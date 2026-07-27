@@ -5,35 +5,41 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/workerpool"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
-	"github.com/kapu/hololive-shared/pkg/service/notification"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type BotInfrastructure struct {
-	Deps           *bot.Dependencies
+	Deps           *orchestration.Dependencies
 	AlarmCRUD      domain.AlarmCRUD
-	HolodexService *holodex.Service
+	HolodexService *holodexprovider.Service
 	IrisRoomLister IrisRoomLister
 	Postgres       database.Client
 	Cache          cache.Client
@@ -46,44 +52,44 @@ type IrisRoomLister interface {
 
 type AlarmModeComponents struct {
 	AlarmCRUD        domain.AlarmCRUD
-	AlarmService     *notification.AlarmService
+	AlarmService     *alarmservice.AlarmService
 	ChzzkClient      *chzzk.Client
 	TwitchClient     *twitch.Client
-	MemberDataSource member.DataProvider
+	MemberDataSource domain.MemberDataProvider
 }
 
 type AlarmDependencies struct {
-	AlarmService       *notification.AlarmService
-	MemberDataProvider member.DataProvider
+	AlarmService       *alarmservice.AlarmService
+	MemberDataProvider domain.MemberDataProvider
 	ChzzkClient        *chzzk.Client
 	TwitchClient       *twitch.Client
 }
 
 type ScraperHolodexFoundation struct {
-	HolodexService       *holodex.Service
-	MemberServiceAdapter member.DataProvider
-	SharedRL             *scraper.RateLimiter
+	HolodexService       *holodexprovider.Service
+	MemberServiceAdapter domain.MemberDataProvider
+	SharedRL             *ratelimiter.RateLimiter
 }
 
 type ScraperHolodexProfileFoundation struct {
-	HolodexService       *holodex.Service
-	MemberServiceAdapter member.DataProvider
+	HolodexService       *holodexprovider.Service
+	MemberServiceAdapter domain.MemberDataProvider
 	ProfileService       *member.ProfileService
-	SharedRL             *scraper.RateLimiter
+	SharedRL             *ratelimiter.RateLimiter
 }
 
 type CoreIntegrationServices struct {
 	ACLService           *acl.Service
-	MajorEventRepository command.MajorEventRepository
-	MemberNewsService    command.MemberNewsService
-	CommandBuilders      []bot.CommandBuilder
+	MajorEventRepository handlercore.MajorEventRepository
+	MemberNewsService    handlercore.MemberNewsService
+	CommandBuilders      []orchcmd.CommandBuilder
 	WorkerPool           *workerpool.QueuedPool
 }
 
 type BotCoreModule struct {
 	BotSelfUser           string
 	IrisBaseURL           string
-	Notification          config.NotificationConfig
+	Notification          configsettings.NotificationConfig
 	CalendarImageCacheDir string
 	CalendarEntryCacheTTL time.Duration
 	Logger                *slog.Logger
@@ -91,8 +97,8 @@ type BotCoreModule struct {
 
 type BotMessagingModule struct {
 	Client         iris.BotClient
-	MessageAdapter *adapter.MessageAdapter
-	Formatter      *adapter.ResponseFormatter
+	MessageAdapter *messaging.MessageAdapter
+	Formatter      *formatter.ResponseFormatter
 	MessageStrings *messagestrings.Store
 }
 
@@ -102,11 +108,11 @@ type BotDataModule struct {
 	MemberRepository *member.Repository
 	MemberCache      *member.Cache
 	Profiles         *member.ProfileService
-	MembersData      member.DataProvider
+	MembersData      domain.MemberDataProvider
 }
 
 type BotStreamModule struct {
-	Holodex      *holodex.Service
+	Holodex      *holodexprovider.Service
 	ChzzkClient  *chzzk.Client
 	TwitchClient *twitch.Client
 	Alarm        domain.AlarmCRUD
@@ -122,9 +128,9 @@ type BotSupportModule struct {
 }
 
 type BotFeatureModule struct {
-	MajorEventRepository command.MajorEventRepository
-	MemberNews           command.MemberNewsService
-	CommandBuilders      []bot.CommandBuilder
+	MajorEventRepository handlercore.MajorEventRepository
+	MemberNews           handlercore.MemberNewsService
+	CommandBuilders      []orchcmd.CommandBuilder
 }
 
 type BotDependencyModules struct {
@@ -147,6 +153,6 @@ type BotConfigSubscriberDependencies struct {
 
 type BotConfigSubscriberRuntimeDependencies struct {
 	YouTubeService youtube.Service
-	HolodexService *holodex.Service
+	HolodexService *holodexprovider.Service
 	AlarmCRUD      domain.AlarmCRUD
 }

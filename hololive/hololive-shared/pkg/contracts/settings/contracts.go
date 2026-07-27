@@ -24,8 +24,6 @@ import "github.com/park285/shared-go/pkg/json"
 
 const (
 	// PubSubChannelV1: 설정 변경 Pub/Sub 채널 이름 (SSOT).
-	//
-	// 현재 hololive-shared/pkg/service/configsub.DefaultChannel 과 동일합니다.
 	PubSubChannelV1 = "config:update"
 )
 
@@ -40,7 +38,6 @@ const (
 	UpdateTypeMemberNewsRunNow    = "membernews_weekly_run_now"
 )
 
-// 현재 hololive-shared/pkg/service/configsub.ConfigUpdate 와 동일한 형태입니다.
 type ConfigUpdateV1 struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`

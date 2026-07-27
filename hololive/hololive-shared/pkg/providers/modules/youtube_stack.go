@@ -4,17 +4,18 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type YouTubeStackParams struct {
-	YouTubeConfig   config.YouTubeConfig
-	ScraperConfig   config.ScraperConfig
+	YouTubeConfig   settings.YouTubeConfig
+	ScraperConfig   settings.ScraperConfig
 	CacheService    cache.Client
-	SharedRateLimit *scraper.RateLimiter
+	SharedRateLimit *ratelimiter.RateLimiter
 	Logger          *slog.Logger
 }
 

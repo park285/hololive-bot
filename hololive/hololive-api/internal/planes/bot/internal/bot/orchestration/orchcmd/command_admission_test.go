@@ -37,7 +37,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
 
 type admissionLimiterCall struct {

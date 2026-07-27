@@ -10,8 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 const (
@@ -22,7 +23,7 @@ const (
 var youtubeCommunityShortsOpsWindow = 24 * time.Hour
 
 type YouTubeCommunityShortsOpsRepository interface {
-	ListPostSendCountsSince(ctx context.Context, since time.Time) ([]outbox.PostSendCount, error)
+	ListPostSendCountsSince(ctx context.Context, since time.Time) ([]analytics.PostSendCount, error)
 }
 
 type YouTubeCommunityShortsOpsResponse struct {
@@ -111,14 +112,14 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 		return
 	}
 
-	channelSummaries, err := outbox.BuildChannelPostDeliverySummaries(posts)
+	channelSummaries, err := analytics.BuildChannelPostDeliverySummaries(posts)
 	if err != nil {
 		h.safeLogger().Error("Failed to build YouTube community/shorts channel summaries", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts channel summaries", nil)
 		return
 	}
 
-	latencySummaries, err := outbox.BuildPostLatencyPeriodSummaries(
+	latencySummaries, err := analytics.BuildPostLatencyPeriodSummaries(
 		posts,
 		youtubeCommunityShortsOpsLatencyPeriods(windowStart, now),
 	)
@@ -189,8 +190,8 @@ func youtubeCommunityShortsMemberName(member *domain.Member, channelID string) s
 	return memberName
 }
 
-func youtubeCommunityShortsOpsLatencyPeriods(windowStart, now time.Time) []outbox.PostLatencyPeriod {
-	return []outbox.PostLatencyPeriod{{
+func youtubeCommunityShortsOpsLatencyPeriods(windowStart, now time.Time) []analytics.PostLatencyPeriod {
+	return []analytics.PostLatencyPeriod{{
 		Label:   "last_24h",
 		StartAt: windowStart,
 		EndAt:   now,
@@ -198,20 +199,20 @@ func youtubeCommunityShortsOpsLatencyPeriods(windowStart, now time.Time) []outbo
 }
 
 func firstYouTubeCommunityShortsOpsLatencySummary(
-	latencySummaries []outbox.PostLatencyPeriodSummary,
-) outbox.PostLatencyPeriodSummary {
+	latencySummaries []analytics.PostLatencyPeriodSummary,
+) analytics.PostLatencyPeriodSummary {
 	if len(latencySummaries) == 0 {
-		return outbox.PostLatencyPeriodSummary{}
+		return analytics.PostLatencyPeriodSummary{}
 	}
 	return latencySummaries[0]
 }
 
 func buildYouTubeCommunityShortsOpsOverview(
-	channelSummaries []outbox.ChannelPostDeliverySummary,
-	latencySummary *outbox.PostLatencyPeriodSummary,
+	channelSummaries []analytics.ChannelPostDeliverySummary,
+	latencySummary *analytics.PostLatencyPeriodSummary,
 ) YouTubeCommunityShortsOpsOverview {
 	if latencySummary == nil {
-		latencySummary = &outbox.PostLatencyPeriodSummary{}
+		latencySummary = &analytics.PostLatencyPeriodSummary{}
 	}
 	overview := YouTubeCommunityShortsOpsOverview{
 		ChannelCount:               int64(len(channelSummaries)),
@@ -239,7 +240,7 @@ func buildYouTubeCommunityShortsOpsOverview(
 }
 
 func buildYouTubeCommunityShortsOpsChannels(
-	channelSummaries []outbox.ChannelPostDeliverySummary,
+	channelSummaries []analytics.ChannelPostDeliverySummary,
 	latencySummaries map[string]youtubeCommunityShortsChannelLatencySummary,
 	memberNames map[string]string,
 ) []YouTubeCommunityShortsOpsChannel {
@@ -271,7 +272,7 @@ func buildYouTubeCommunityShortsOpsChannels(
 }
 
 func buildYouTubeCommunityShortsChannelLatencySummaries(
-	posts []outbox.PostSendCount,
+	posts []analytics.PostSendCount,
 ) (map[string]youtubeCommunityShortsChannelLatencySummary, error) {
 	if len(posts) == 0 {
 		return map[string]youtubeCommunityShortsChannelLatencySummary{}, nil
@@ -300,7 +301,7 @@ func buildYouTubeCommunityShortsChannelLatencySummaries(
 	return summaries, nil
 }
 
-func (a *youtubeCommunityShortsChannelLatencyAccumulator) add(post *outbox.PostSendCount) {
+func (a *youtubeCommunityShortsChannelLatencyAccumulator) add(post *analytics.PostSendCount) {
 	if post.AlarmSentAt == nil {
 		a.summary.PendingPostCount++
 	}
@@ -347,4 +348,4 @@ func (a youtubeCommunityShortsChannelLatencyAccumulator) finalize() youtubeCommu
 	return a.summary
 }
 
-var _ YouTubeCommunityShortsOpsRepository = (*outbox.DeliveryTelemetryRepository)(nil)
+var _ YouTubeCommunityShortsOpsRepository = (*telemetry.Repository)(nil)

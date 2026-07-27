@@ -8,7 +8,7 @@ import (
 	"github.com/park285/shared-go/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 )
 
 func filterPromptCandidates(candidates []model.FilteredCandidate, guard *promptguard.Guard, logger *slog.Logger) ([]model.FilteredCandidate, error) {

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 type testReport struct {
@@ -21,8 +21,8 @@ func TestRunWindowReport(t *testing.T) {
 	newCommand := func(stdout io.Writer) WindowCommand[string, testReport] {
 		return WindowCommand[string, testReport]{
 			Stdout: stdout,
-			LoadConfig: func() (*config.Config, error) {
-				return &config.Config{}, nil
+			LoadConfig: func() (*settings.Config, error) {
+				return &settings.Config{}, nil
 			},
 			NewLogger: func(io.Writer) *slog.Logger {
 				return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -33,7 +33,7 @@ func TestRunWindowReport(t *testing.T) {
 			BuildOptions: func(now time.Time, window time.Duration) (string, error) {
 				return now.Add(-window).Format(time.RFC3339), nil
 			},
-			Collect: func(_ context.Context, _ *config.Config, _ *slog.Logger, _ time.Time, options string) (testReport, error) {
+			Collect: func(_ context.Context, _ *settings.Config, _ *slog.Logger, _ time.Time, options string) (testReport, error) {
 				return testReport{Message: options}, nil
 			},
 			RenderMarkdown:     func(report *testReport) string { return "markdown:" + report.Message },

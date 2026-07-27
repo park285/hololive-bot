@@ -32,13 +32,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/json"
 	"github.com/park285/shared-go/pkg/stringutil"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/app"
 )
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	runtime, err := app.BuildFetchProfilesRuntime(ctx)
+	runtime, err := botruntime.BuildFetchProfilesRuntime(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize runtime: %w", err)
 	}
@@ -72,7 +72,7 @@ func run(ctx context.Context) error {
 
 	logger.Info("Profile fetch completed",
 		slog.Int("count", len(profiles)),
-		slog.String("output", config.DefaultOfficialProfileConfig().OutputFile),
+		slog.String("output", settings.DefaultOfficialProfileConfig().OutputFile),
 	)
 	return nil
 }
@@ -90,7 +90,7 @@ func fetchProfiles(
 			continue
 		}
 		profiles[profile.Slug] = profile
-		time.Sleep(config.DefaultOfficialProfileConfig().DelayBetween)
+		time.Sleep(settings.DefaultOfficialProfileConfig().DelayBetween)
 	}
 	return profiles
 }
@@ -108,7 +108,7 @@ func fetchTalentProfile(
 
 	slug := talent.Slug()
 	english := stringutil.TrimSpace(talent.English)
-	profileURL := fmt.Sprintf("%s/%s/", config.DefaultOfficialProfileConfig().BaseURL, slug)
+	profileURL := fmt.Sprintf("%s/%s/", settings.DefaultOfficialProfileConfig().BaseURL, slug)
 	logger.Info("Fetching profile", slog.Int("index", idx+1), slog.String("slug", slug), slog.String("url", profileURL))
 
 	profile, err := fetchProfile(ctx, client, profileURL, english, slug)
@@ -140,8 +140,8 @@ func fetchProfileResponse(ctx context.Context, client *http.Client, url string) 
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", config.DefaultOfficialProfileConfig().UserAgent)
-	req.Header.Set("Accept-Language", config.DefaultOfficialProfileConfig().AcceptLanguage)
+	req.Header.Set("User-Agent", settings.DefaultOfficialProfileConfig().UserAgent)
+	req.Header.Set("Accept-Language", settings.DefaultOfficialProfileConfig().AcceptLanguage)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -260,7 +260,7 @@ func normalizeText(input string) string {
 }
 
 func writeProfiles(profiles map[string]*domain.TalentProfile) error {
-	outputFile := config.DefaultOfficialProfileConfig().OutputFile
+	outputFile := settings.DefaultOfficialProfileConfig().OutputFile
 	if err := writeJSONFile(outputFile, profiles); err != nil {
 		return err
 	}

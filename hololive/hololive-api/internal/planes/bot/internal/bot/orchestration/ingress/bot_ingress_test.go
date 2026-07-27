@@ -24,11 +24,10 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/webhook"
 	"github.com/park285/shared-go/pkg/stringutil"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 func TestMessageIngressPrepare_SkipsSelfSender(t *testing.T) {
@@ -36,7 +35,7 @@ func TestMessageIngressPrepare_SkipsSelfSender(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 	ingress := NewMessageIngress(
-		adapter.NewMessageAdapter("!", ""),
+		messaging.NewMessageAdapter("!", ""),
 		nil,
 		logger,
 		stringutil.Normalize("봇계정"),
@@ -64,7 +63,7 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 	ingress := NewMessageIngress(
-		adapter.NewMessageAdapter("!", ""),
+		messaging.NewMessageAdapter("!", ""),
 		nil,
 		logger,
 		"",

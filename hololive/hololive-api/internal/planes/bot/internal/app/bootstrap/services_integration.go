@@ -4,16 +4,17 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 )
 
 func InitCoreIntegrationServices(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*CoreIntegrationServices, error) {
@@ -38,7 +39,7 @@ func InitCoreIntegrationServices(
 		ACLService:           aclService,
 		MajorEventRepository: majorEventRepository,
 		MemberNewsService:    memberNewsService,
-		CommandBuilders:      []bot.CommandBuilder{},
+		CommandBuilders:      []orchcmd.CommandBuilder{},
 		WorkerPool:           workerPool,
 	}, nil
 }

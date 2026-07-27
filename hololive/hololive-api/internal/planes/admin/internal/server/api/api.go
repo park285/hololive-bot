@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -38,6 +38,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/park285/iris-client-go/iris"
 )
 
@@ -57,7 +58,7 @@ type Handler struct {
 	valkeyCache                cache.Client
 	profiles                   *member.ProfileService
 	alarm                      domain.AlarmCRUD
-	holodex                    *holodex.Service
+	holodex                    *holodexprovider.Service
 	youtube                    youtube.Service
 	communityShortsOps         YouTubeCommunityShortsOpsRepository
 	activity                   *activity.Logger
@@ -137,7 +138,7 @@ type MemberDeps struct {
 }
 
 type StreamDeps struct {
-	Holodex     *holodex.Service
+	Holodex     *holodexprovider.Service
 	YouTube     youtube.Service
 	ValkeyCache cache.Client
 }

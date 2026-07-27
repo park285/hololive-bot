@@ -4,18 +4,20 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 )
 
-func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
+func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
 	infra, err := InitInfraResources(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
@@ -43,8 +45,8 @@ func InitBotInfrastructure(ctx context.Context, appConfig *config.Config, logger
 	if err := messageStrings.Load(ctx); err != nil {
 		logger.WarnContext(ctx, "message_strings 초기 적재 실패, lazy 재시도로 진행", "error", err)
 	}
-	messageAdapter := adapter.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
-	formatter := adapter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, adapter.WithMessageStrings(messageStrings), adapter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold))
+	messageAdapter := messaging.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
+	formatter := messageformatter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, messageformatter.WithMessageStrings(messageStrings), messageformatter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold))
 
 	foundation, err := InitScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
@@ -89,17 +91,17 @@ func buildBotIrisRoomLister(irisClient iris.Client, logger *slog.Logger) IrisRoo
 }
 
 func provideBotDependenciesFromStacks(
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *ScraperHolodexProfileFoundation,
 	alarmYouTubeStack *AlarmYouTubeStackComponents,
 	integrationServices *CoreIntegrationServices,
-	messageAdapter *adapter.MessageAdapter,
-	formatter *adapter.ResponseFormatter,
+	messageAdapter *messaging.MessageAdapter,
+	formatter *messageformatter.ResponseFormatter,
 	messageStrings *messagestrings.Store,
 	irisClient iris.BotClient,
 	logger *slog.Logger,
-) *bot.Dependencies {
+) *orchestration.Dependencies {
 	modules := BuildBotDependencyModules(
 		appConfig,
 		infra,

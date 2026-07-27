@@ -11,7 +11,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -20,17 +21,6 @@ type JobIdentity struct {
 	ChannelID  string
 	Interval   time.Duration
 }
-
-type JobClaimResult = poller.JobClaimResult
-
-const (
-	JobClaimAcquired         = poller.JobClaimAcquired
-	JobClaimPeerOwned        = poller.JobClaimPeerOwned
-	JobClaimAlreadyCompleted = poller.JobClaimAlreadyCompleted
-	JobClaimUnavailable      = poller.JobClaimUnavailable
-)
-
-type JobClaimStatus = poller.JobClaimStatus
 
 type JobRunGuardConfig struct {
 	Namespace  string
@@ -136,7 +126,7 @@ func (g *JobRunGuard) TryClaim(
 	channelID string,
 	leaseTTL time.Duration,
 	cooldownTTL time.Duration,
-) (status poller.JobClaimStatus, claim poller.JobClaim, err error) {
+) (status polling.JobClaimStatus, claim polling.JobClaim, err error) {
 	status, jobClaim, err := g.TryLease(ctx, JobIdentity{
 		PollerName: pollerName,
 		ChannelID:  channelID,
@@ -150,30 +140,30 @@ func (g *JobRunGuard) TryLease(
 	identity JobIdentity,
 	leaseTTL time.Duration,
 	cooldownTTL time.Duration,
-) (JobClaimStatus, *JobRunClaim, error) {
+) (polling.JobClaimStatus, *JobRunClaim, error) {
 	if g == nil || g.cacheClient == nil {
-		return JobClaimStatus{Result: JobClaimUnavailable}, nil, fmt.Errorf("try claim job run: cache service must not be nil")
+		return polling.JobClaimStatus{Result: polling.JobClaimUnavailable}, nil, fmt.Errorf("try claim job run: cache service must not be nil")
 	}
 	keys, err := BuildJobLeaseKeys(g.namespace, identity)
 	if err != nil {
-		return JobClaimStatus{Result: JobClaimUnavailable}, nil, err
+		return polling.JobClaimStatus{Result: polling.JobClaimUnavailable}, nil, err
 	}
 	if err := validateJobRunTTLs(leaseTTL, cooldownTTL); err != nil {
-		return JobClaimStatus{Result: JobClaimUnavailable}, nil, err
+		return polling.JobClaimStatus{Result: polling.JobClaimUnavailable}, nil, err
 	}
 
 	ownerToken := g.newOwnerToken()
 	result, retryAfter, err := g.acquire(ctx, keys, ownerToken, leaseTTL)
-	status := JobClaimStatus{
+	status := polling.JobClaimStatus{
 		Result:     result,
 		RetryAfter: retryAfter,
 		LeaseTTL:   leaseTTL,
 	}
 	if err != nil {
-		status.Result = JobClaimUnavailable
+		status.Result = polling.JobClaimUnavailable
 		return status, nil, err
 	}
-	if result != JobClaimAcquired {
+	if result != polling.JobClaimAcquired {
 		return status, nil, nil
 	}
 	status.OwnerToken = ownerToken
@@ -189,7 +179,7 @@ func (g *JobRunGuard) acquire(
 	keys JobLeaseKeys,
 	ownerToken string,
 	leaseTTL time.Duration,
-) (JobClaimResult, time.Duration, error) {
+) (polling.JobClaimResult, time.Duration, error) {
 	cmd := g.cacheClient.B().
 		Eval().
 		Script(acquireJobRunScript).
@@ -199,25 +189,25 @@ func (g *JobRunGuard) acquire(
 		Build()
 	values, err := evalArray(ctx, g.cacheClient, cmd)
 	if err != nil {
-		return JobClaimUnavailable, 0, fmt.Errorf("acquire job run: %w", err)
+		return polling.JobClaimUnavailable, 0, fmt.Errorf("acquire job run: %w", err)
 	}
 	return parseAcquireJobRunResult(values)
 }
 
-func parseAcquireJobRunResult(values []valkey.ValkeyMessage) (JobClaimResult, time.Duration, error) {
+func parseAcquireJobRunResult(values []valkey.ValkeyMessage) (polling.JobClaimResult, time.Duration, error) {
 	code, retryAfterMS, err := parseAcquireJobRunValues(values)
 	if err != nil {
-		return JobClaimUnavailable, 0, err
+		return polling.JobClaimUnavailable, 0, err
 	}
 	switch code {
 	case jobRunGuardAcquireCodeAcquired:
-		return JobClaimAcquired, 0, nil
+		return polling.JobClaimAcquired, 0, nil
 	case jobRunGuardAcquireCodeAlreadyCompleted:
-		return JobClaimAlreadyCompleted, millisDuration(retryAfterMS), nil
+		return polling.JobClaimAlreadyCompleted, millisDuration(retryAfterMS), nil
 	case jobRunGuardAcquireCodePeerOwned:
-		return JobClaimPeerOwned, millisDuration(retryAfterMS), nil
+		return polling.JobClaimPeerOwned, millisDuration(retryAfterMS), nil
 	default:
-		return JobClaimUnavailable, 0, fmt.Errorf("acquire job run: unknown result code: %d", code)
+		return polling.JobClaimUnavailable, 0, fmt.Errorf("acquire job run: unknown result code: %d", code)
 	}
 }
 

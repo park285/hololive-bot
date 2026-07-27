@@ -31,11 +31,12 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 var (
-	kst = model.KST
+	kst = util.KSTZone
 )
 
 var categoryLabels = map[model.Category]string{

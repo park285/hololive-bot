@@ -6,13 +6,14 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
@@ -20,10 +21,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/notification"
+
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/park285/shared-go/pkg/envutil"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
@@ -32,10 +32,10 @@ import (
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
-
-type AlarmWorkerRuntime = workerruntime.AlarmWorkerRuntime
-type runtimeAlarmScheduler = workerruntime.Scheduler
 
 const (
 	notificationSchedulerRoleEnv = "NOTIFICATION_SCHEDULER_ROLE"
@@ -45,7 +45,7 @@ const (
 )
 
 type alarmFoundation struct {
-	HolodexService *holodex.Service
+	HolodexService *holodexprovider.Service
 	ChzzkClient    *chzzk.Client
 	TwitchClient   *twitch.Client
 	AlarmCRUD      domain.AlarmCRUD
@@ -53,14 +53,14 @@ type alarmFoundation struct {
 	Postgres       database.Client
 }
 
-func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err error) (*AlarmWorkerRuntime, error) {
+func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err error) (*workerruntime.AlarmWorkerRuntime, error) {
 	if infra != nil && infra.Cleanup != nil {
 		infra.Cleanup()
 	}
 	return nil, fmt.Errorf("build alarm worker runtime: %s: %w", stage, err)
 }
 
-func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*AlarmWorkerRuntime, error) {
+func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*workerruntime.AlarmWorkerRuntime, error) {
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 		return failAlarmWorkerBuild(infra, stage, err)
 	}
 
-	return &AlarmWorkerRuntime{
+	return &workerruntime.AlarmWorkerRuntime{
 		Config:               appConfig,
 		Logger:               logger,
 		Scheduler:            scheduler,
@@ -109,13 +109,13 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *config.Config, logg
 }
 
 type alarmWorkerBackgroundRunners struct {
-	celebration    runtimeAlarmScheduler
-	birthdayStream runtimeAlarmScheduler
+	celebration    workerruntime.Scheduler
+	birthdayStream workerruntime.Scheduler
 }
 
 func buildAlarmWorkerHTTPRuntime(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
@@ -144,7 +144,7 @@ func buildAlarmWorkerHTTPRuntime(
 		birthdayStream: buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger),
 	}
 
-	servers, err = sharedserver.NewRuntimeHTTPServers(&appConfig.Server, router, "hololive-alarm-worker.http")
+	servers, err = sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, "hololive-alarm-worker.http")
 	if err != nil {
 		return nil, alarmWorkerBackgroundRunners{}, "http servers", err
 	}
@@ -152,16 +152,16 @@ func buildAlarmWorkerHTTPRuntime(
 	return servers, runners, "", nil
 }
 
-func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *readiness.Probe {
+func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness.Probe {
 	var postgres database.Client
 	var cacheClient cache.Client
 	if infra != nil {
 		postgres = infra.Postgres
 		cacheClient = infra.Cache
 	}
-	return readiness.NewProbe("alarm-worker",
-		readiness.PostgresCheck(postgres),
-		readiness.ValkeyCheck(cacheClient),
+	return sharedreadiness.NewProbe("alarm-worker",
+		sharedreadiness.PostgresCheck(postgres),
+		sharedreadiness.ValkeyCheck(cacheClient),
 		readiness.BoolEnvNotFalseCheck("notification_egress_lease_enabled", "ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
 		readiness.BoolEnvNotFalseCheck("delivery_dispatcher_enabled", "DELIVERY_DISPATCHER_ENABLED", true),
 		readiness.BoolEnvNotFalseCheck("alarm_dispatch_consumer_enabled", "ALARM_DISPATCH_CONSUMER_ENABLED", true),
@@ -215,12 +215,12 @@ func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
 }
 
 func buildRuntimeScheduler(
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	cacheClient cache.Client,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
 	configuredRole string,
-) (runtimeAlarmScheduler, error) {
+) (workerruntime.Scheduler, error) {
 	if err := validateRuntimeSchedulerInputs(appConfig, foundation); err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func buildRuntimeScheduler(
 		appConfig.Notification,
 		foundation.Outbox,
 		publishConfig,
-		envconfig.ParseBool("ALARM_TWITCH_ENABLED", true),
+		envutil.Bool("ALARM_TWITCH_ENABLED", true),
 		logger,
 	)
 	if err != nil {
@@ -253,7 +253,7 @@ func buildRuntimeScheduler(
 	return scheduler, nil
 }
 
-func validateRuntimeSchedulerInputs(appConfig *config.Config, foundation *alarmFoundation) error {
+func validateRuntimeSchedulerInputs(appConfig *settings.Config, foundation *alarmFoundation) error {
 	if appConfig == nil {
 		return fmt.Errorf("config is required")
 	}
@@ -279,7 +279,7 @@ func runtimeSchedulerDisabled(runtimeRole, configuredRole string, logger *slog.L
 
 func buildAlarmFoundation(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*alarmFoundation, error) {
@@ -314,7 +314,7 @@ func buildAlarmFoundation(
 	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
 	outboxRepository := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
-	alarmService, err := notification.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
+	alarmService, err := alarmservice.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}
@@ -339,7 +339,7 @@ func loadAlarmDispatchPublishConfig() (queue.PublishConfig, error) {
 		return queue.PublishConfig{}, err
 	}
 	return queue.PublishConfig{
-		WakeupEnabled:         envconfig.ParseBool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
+		WakeupEnabled:         envutil.Bool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
 		MaxDeliveriesPerBatch: envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000),
 	}, nil
 }

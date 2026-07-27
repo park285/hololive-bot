@@ -26,20 +26,19 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 type BuildHooks struct {
-	InitializeBotDependencies func(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (*bot.Dependencies, func(), error)
+	InitializeBotDependencies func(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*orchestration.Dependencies, func(), error)
 }
 
 type BuiltContainer struct {
 	Cleanup func()
 }
 
-func BuildContainer(ctx context.Context, appConfig *config.Config, logger *slog.Logger, hooks BuildHooks) (*BuiltContainer, error) {
+func BuildContainer(ctx context.Context, appConfig *settings.Config, logger *slog.Logger, hooks BuildHooks) (*BuiltContainer, error) {
 	if appConfig == nil {
 		return nil, errors.New("config must not be nil")
 	}

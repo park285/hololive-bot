@@ -21,10 +21,10 @@
 package providers
 
 import (
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	"testing"
 	"time"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
 
 func TestYouTubeStackNilSafeAccessors(t *testing.T) {
@@ -39,60 +39,60 @@ func TestYouTubeStackNilSafeAccessors(t *testing.T) {
 func TestChannelPollerRegistrationWithBudgetProfileCopiesSourceUnits(t *testing.T) {
 	t.Parallel()
 
-	sourceUnits := map[poller.BudgetSource]float64{
-		poller.BudgetSourceYouTubeScraper: 3,
-		poller.BudgetSourcePostgresWrite:  1,
+	sourceUnits := map[polling.BudgetSource]float64{
+		polling.BudgetSourceYouTubeScraper: 3,
+		polling.BudgetSourcePostgresWrite:  1,
 	}
-	fallbackSourceUnits := map[poller.BudgetSource]float64{
-		poller.BudgetSourceYouTubeScraper: 12,
+	fallbackSourceUnits := map[polling.BudgetSource]float64{
+		polling.BudgetSourceYouTubeScraper: 12,
 	}
-	profile := poller.BudgetProfile{
+	profile := polling.BudgetProfile{
 		SourceUnits:         sourceUnits,
 		FallbackSourceUnits: fallbackSourceUnits,
-		BurstClass:          poller.BudgetBurstPrimary,
-		Priority:            poller.BudgetPriorityHigh,
+		BurstClass:          polling.BudgetBurstPrimary,
+		Priority:            polling.BudgetPriorityHigh,
 	}
 
-	registration := NewChannelPollerRegistration(nil, poller.PriorityHigh, time.Minute).
+	registration := NewChannelPollerRegistration(nil, scheduler.PriorityHigh, time.Minute).
 		WithBudgetProfile(profile)
-	sourceUnits[poller.BudgetSourceYouTubeScraper] = 999
-	sourceUnits[poller.BudgetSourceHolodexLive] = 2
-	fallbackSourceUnits[poller.BudgetSourceYouTubeScraper] = 999
-	fallbackSourceUnits[poller.BudgetSourceHolodexLive] = 2
+	sourceUnits[polling.BudgetSourceYouTubeScraper] = 999
+	sourceUnits[polling.BudgetSourceHolodexLive] = 2
+	fallbackSourceUnits[polling.BudgetSourceYouTubeScraper] = 999
+	fallbackSourceUnits[polling.BudgetSourceHolodexLive] = 2
 
 	if !registration.HasBudgetProfile {
 		t.Fatal("WithBudgetProfile must mark profile as explicit")
 	}
-	if registration.BudgetProfile.BurstClass != poller.BudgetBurstPrimary {
+	if registration.BudgetProfile.BurstClass != polling.BudgetBurstPrimary {
 		t.Fatalf("unexpected burst class: %q", registration.BudgetProfile.BurstClass)
 	}
-	if registration.BudgetProfile.Priority != poller.BudgetPriorityHigh {
+	if registration.BudgetProfile.Priority != polling.BudgetPriorityHigh {
 		t.Fatalf("unexpected priority: %q", registration.BudgetProfile.Priority)
 	}
-	if got := registration.BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper]; got != 3 {
+	if got := registration.BudgetProfile.SourceUnits[polling.BudgetSourceYouTubeScraper]; got != 3 {
 		t.Fatalf("registration source units were not defensively copied: got %v", got)
 	}
-	if _, ok := registration.BudgetProfile.SourceUnits[poller.BudgetSourceHolodexLive]; ok {
+	if _, ok := registration.BudgetProfile.SourceUnits[polling.BudgetSourceHolodexLive]; ok {
 		t.Fatal("registration source units must not observe mutations to the original map")
 	}
-	if got := registration.BudgetProfile.FallbackSourceUnits[poller.BudgetSourceYouTubeScraper]; got != 12 {
+	if got := registration.BudgetProfile.FallbackSourceUnits[polling.BudgetSourceYouTubeScraper]; got != 12 {
 		t.Fatalf("registration fallback source units were not defensively copied: got %v", got)
 	}
-	if _, ok := registration.BudgetProfile.FallbackSourceUnits[poller.BudgetSourceHolodexLive]; ok {
+	if _, ok := registration.BudgetProfile.FallbackSourceUnits[polling.BudgetSourceHolodexLive]; ok {
 		t.Fatal("registration fallback source units must not observe mutations to the original map")
 	}
 
 	target := registration.ToTargetSync()
-	if target.BudgetProfile.BurstClass != poller.BudgetBurstPrimary {
+	if target.BudgetProfile.BurstClass != polling.BudgetBurstPrimary {
 		t.Fatalf("target sync burst class was not propagated: %q", target.BudgetProfile.BurstClass)
 	}
-	if target.BudgetProfile.Priority != poller.BudgetPriorityHigh {
+	if target.BudgetProfile.Priority != polling.BudgetPriorityHigh {
 		t.Fatalf("target sync priority was not propagated: %q", target.BudgetProfile.Priority)
 	}
-	if got := target.BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite]; got != 1 {
+	if got := target.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite]; got != 1 {
 		t.Fatalf("target sync budget profile was not propagated: got %v", got)
 	}
-	if got := target.BudgetProfile.FallbackSourceUnits[poller.BudgetSourceYouTubeScraper]; got != 12 {
+	if got := target.BudgetProfile.FallbackSourceUnits[polling.BudgetSourceYouTubeScraper]; got != 12 {
 		t.Fatalf("target sync fallback budget profile was not propagated: got %v", got)
 	}
 }
@@ -100,7 +100,7 @@ func TestChannelPollerRegistrationWithBudgetProfileCopiesSourceUnits(t *testing.
 func TestChannelPollerRegistrationDefaultHasNoBudgetProfile(t *testing.T) {
 	t.Parallel()
 
-	registration := NewChannelPollerRegistration(nil, poller.PriorityNormal, time.Minute)
+	registration := NewChannelPollerRegistration(nil, scheduler.PriorityNormal, time.Minute)
 	if registration.HasBudgetProfile {
 		t.Fatal("new registration must not have an explicit budget profile")
 	}

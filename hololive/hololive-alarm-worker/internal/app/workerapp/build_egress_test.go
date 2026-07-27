@@ -4,10 +4,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -84,7 +85,7 @@ func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t 
 }
 
 func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
-	runner, err := buildNotificationEgress(&config.Config{}, &sharedmodules.InfraModule{}, nil)
+	runner, err := buildNotificationEgress(&settings.Config{}, &sharedmodules.InfraModule{}, nil)
 
 	require.Error(t, err)
 	assert.Nil(t, runner)

@@ -13,9 +13,8 @@ for f in "${GO_CONTRACT_FILE}" "${GO_KEYS_FILE}"; do
   fi
 done
 
-# H5 이후 dispatch/claim 키의 리터럴 SSOT는 keys.go이고 contracts.go는 re-export(`= keyspkg.X`)다.
-# 문자열 리터럴은 keys.go에서, envelope version 숫자는 contracts.go에서 추출한다.
-# re-export 심볼명을 값으로 오인하던 false-green을 막기 위해 기대값과 정확히 비교한다.
+# dispatch/claim 키의 리터럴 SSOT는 keys.go이고 envelope version은 contracts.go가 직접 소유한다.
+# top-level typed const와 const block을 모두 읽되 심볼명을 값으로 오인하지 않도록 기대값과 정확히 비교한다.
 extract_go_string_const() {
   local file="$1"
   local name="$2"
@@ -32,7 +31,7 @@ extract_go_numeric_const() {
   local file="$1"
   local name="$2"
   awk -v n="${name}" '
-    $1 == n {
+    $1 == n || ($1 == "const" && $2 == n) {
       for (i = 1; i <= NF; i++) {
         if ($i == "=") {
           v = $(i + 1)

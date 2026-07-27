@@ -27,14 +27,15 @@ import (
 	"github.com/kapu/hololive-shared/internal/service/youtube/apiservice"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 func NewYouTubeService(
 	ctx context.Context,
 	cacheClient cache.Client,
 	scraperProxyConfig scraper.ProxyConfig,
-	sharedRL *scraper.RateLimiter,
+	sharedRL *ratelimiter.RateLimiter,
 	logger *slog.Logger,
 ) (youtube.Service, error) {
 	return apiservice.New(ctx, cacheClient, scraperProxyConfig, sharedRL, logger)

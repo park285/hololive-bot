@@ -7,7 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 )
 
@@ -17,7 +18,7 @@ func runTargetBaselineCommand(ctx commandContext, args []string) error {
 		return err
 	}
 
-	appConfig, err := config.Load()
+	appConfig, err := settings.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load community/shorts baseline config: %w", err)
 	}

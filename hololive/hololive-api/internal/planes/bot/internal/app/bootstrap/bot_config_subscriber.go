@@ -8,14 +8,14 @@ import (
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 func BuildBotConfigSubscriber(
 	ctx context.Context,
 	deps BotConfigSubscriberDependencies,
 	runtimeDeps BotConfigSubscriberRuntimeDependencies,
-	scraperScheduler *poller.Scheduler,
+	scraperScheduler *scheduler.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{

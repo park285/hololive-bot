@@ -30,16 +30,17 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 type LiveCommand struct {
-	BaseCommand
+	handlercore.BaseCommand
 }
 
-func NewLiveCommand(deps *Dependencies) *LiveCommand {
-	return &LiveCommand{BaseCommand: NewBaseCommand(deps)}
+func NewLiveCommand(deps *handlercore.Dependencies) *LiveCommand {
+	return &LiveCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
 }
 
 func (c *LiveCommand) Name() string {
@@ -65,7 +66,7 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 }
 
 func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.CommandContext, memberName string) error {
-	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "라이브")
+	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "라이브")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -78,7 +79,7 @@ func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.Comm
 
 	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrLiveStreamQueryFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrLiveStreamQueryFailed)
 	}
 
 	memberStreams := filterLiveStreamsByChannel(streams, channel.ID)
@@ -118,7 +119,7 @@ func (c *LiveCommand) memberChzzkLiveStreams(ctx context.Context, channelID stri
 func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *domain.CommandContext) error {
 	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrLiveStreamQueryFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrLiveStreamQueryFailed)
 	}
 
 	chzzkStreams := c.getAllChzzkLiveStreams(ctx)

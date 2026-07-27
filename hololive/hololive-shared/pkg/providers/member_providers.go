@@ -86,7 +86,7 @@ func initializeMemberDatabase(
 }
 
 // ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성
-func ProvideMemberServiceAdapter(ctx context.Context, memberCache *member.Cache, logger *slog.Logger) member.DataProvider {
+func ProvideMemberServiceAdapter(ctx context.Context, memberCache *member.Cache, logger *slog.Logger) domain.MemberDataProvider {
 	ctx = memberAdapterContext(ctx)
 
 	return member.NewMemberServiceAdapter(ctx, memberCache, logger)
@@ -103,7 +103,7 @@ func memberAdapterContext(ctx context.Context) context.Context {
 func ProvideProfileService(
 	ctx context.Context,
 	cacheClient cache.Client,
-	members member.DataProvider,
+	members domain.MemberDataProvider,
 	logger *slog.Logger,
 ) (*member.ProfileService, error) {
 	service, err := member.NewProfileService(cacheClient, members, logger)

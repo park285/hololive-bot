@@ -25,30 +25,31 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
 type youTubeProducerPollerSet struct {
-	videos           poller.Poller
-	shorts           poller.Poller
-	community        poller.Poller
-	stats            poller.Poller
-	live             poller.Poller
-	liveBatch        *poller.LivePoller
+	videos           scheduler.Poller
+	shorts           scheduler.Poller
+	community        scheduler.Poller
+	stats            scheduler.Poller
+	live             scheduler.Poller
+	liveBatch        *pollers.LivePoller
 	liveBatchEnabled bool
 }
 
 type namedBackfillPoller struct {
 	name string
-	base poller.Poller
+	base scheduler.Poller
 }
 
 type unavailableYouTubeProducerPoller struct {
 	name string
 }
 
-func newNamedBackfillPoller(name string, base poller.Poller) poller.Poller {
+func newNamedBackfillPoller(name string, base scheduler.Poller) scheduler.Poller {
 	return namedBackfillPoller{name: name, base: base}
 }
 
@@ -77,7 +78,7 @@ func (p namedBackfillPoller) ProxyEnabled() bool {
 	return ok && proxyPoller.ProxyEnabled()
 }
 
-func newUnavailableYouTubeProducerPoller(name string) poller.Poller {
+func newUnavailableYouTubeProducerPoller(name string) scheduler.Poller {
 	return unavailableYouTubeProducerPoller{name: name}
 }
 
@@ -91,11 +92,11 @@ func (p unavailableYouTubeProducerPoller) Name() string {
 
 func newYouTubeProducerPollerSet(
 	scraperClient *scraper.Client,
-	liveStatusProvider poller.LiveStatusProvider,
+	liveStatusProvider pollers.LiveStatusProvider,
 	db any,
 	communityKeywords []string,
 ) youTubeProducerPollerSet {
-	livePoller := poller.NewLivePollerWithStatusProvider(liveStatusProvider, scraperClient, db)
+	livePoller := pollers.NewLivePollerWithStatusProvider(liveStatusProvider, scraperClient, db)
 	if !hasYouTubeProducerPollerDB(db) {
 		return youTubeProducerPollerSet{
 			videos:           newUnavailableYouTubeProducerPoller("videos"),
@@ -108,10 +109,10 @@ func newYouTubeProducerPollerSet(
 		}
 	}
 	return youTubeProducerPollerSet{
-		videos:           poller.NewVideosPoller(scraperClient, db, defaultChannelPollerMaxResults),
-		shorts:           poller.NewShortsPoller(scraperClient, db, defaultChannelPollerMaxResults),
-		community:        poller.NewCommunityPoller(scraperClient, db, defaultChannelPollerMaxResults, communityKeywords),
-		stats:            poller.NewChannelStatsPoller(scraperClient, db),
+		videos:           pollers.NewVideosPoller(scraperClient, db, defaultChannelPollerMaxResults),
+		shorts:           pollers.NewShortsPoller(scraperClient, db, defaultChannelPollerMaxResults),
+		community:        pollers.NewCommunityPoller(scraperClient, db, defaultChannelPollerMaxResults, communityKeywords),
+		stats:            pollers.NewChannelStatsPoller(scraperClient, db),
 		live:             livePoller,
 		liveBatch:        livePoller,
 		liveBatchEnabled: liveStatusProvider != nil,

@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/backoff"
+	envutil "github.com/park285/shared-go/pkg/envutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/park285/shared-go/pkg/retry"
@@ -37,7 +38,7 @@ type alarmDispatchWakeupWaiter struct {
 func NewWakeupWaiter(c cache.LowLevelCache, logger *slog.Logger) *alarmDispatchWakeupWaiter {
 	waiter := &alarmDispatchWakeupWaiter{
 		cache:         c,
-		wakeupEnabled: envconfig.ParseBool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
+		wakeupEnabled: envutil.Bool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
 		pollInterval:  envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_POLL_INTERVAL_MS", time.Second),
 		backoffMin:    envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS", 250*time.Millisecond),
 		backoffMax:    envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_IDLE_BACKOFF_MAX_MS", 5*time.Second),

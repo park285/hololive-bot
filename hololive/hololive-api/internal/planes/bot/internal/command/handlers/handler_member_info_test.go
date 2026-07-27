@@ -6,13 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
 
@@ -47,11 +49,11 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 
 	var textSent string
 	var imageSent bool
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Matcher:          matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		MembersData:      provider,
 		OfficialProfiles: profiles,
-		Formatter:        adapter.NewResponseFormatter("!", setupProfileCommandTestRenderer(t)),
+		Formatter:        formatter.NewResponseFormatter("!", setupProfileCommandTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			textSent = msg
 			return nil
@@ -67,7 +69,7 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err = NewMemberInfoCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room-1"}, map[string]any{
+	err = info.NewMemberInfoCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"member": "Shirakami Fubuki",
 	})
 	if err != nil {

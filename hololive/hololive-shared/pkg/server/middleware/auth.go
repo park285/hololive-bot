@@ -30,13 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
-const (
-	// APIKeyHeader: 하위 호환성을 위한 재수출. 실제 정의는 contracts/common 패키지에 있습니다.
-	APIKeyHeader = common.APIKeyHeader
-)
-
-type AuthConfig = httputil.AdminAuthConfig
-
 func errorPayload(code, message string) gin.H {
 	payload := gin.H{"error": code}
 	if message != "" {
@@ -53,7 +46,7 @@ func respondWithError(c *gin.Context, status int, code, message string) {
 	c.JSON(status, errorPayload(code, message))
 }
 
-func AuthMiddleware(config AuthConfig) gin.HandlerFunc {
+func AuthMiddleware(config httputil.AdminAuthConfig) gin.HandlerFunc {
 	expected := strings.TrimSpace(config.APIKey)
 
 	return func(c *gin.Context) {
@@ -66,7 +59,7 @@ func AuthMiddleware(config AuthConfig) gin.HandlerFunc {
 			return
 		}
 
-		providedKey := c.GetHeader(APIKeyHeader)
+		providedKey := c.GetHeader(common.APIKeyHeader)
 		if providedKey == "" {
 			abortWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
 			return
@@ -82,10 +75,10 @@ func AuthMiddleware(config AuthConfig) gin.HandlerFunc {
 }
 
 func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
-	return AuthMiddleware(AuthConfig{APIKey: apiKey})
+	return AuthMiddleware(httputil.AdminAuthConfig{APIKey: apiKey})
 }
 
-func NoRouteHandler(config AuthConfig) gin.HandlerFunc {
+func NoRouteHandler(config httputil.AdminAuthConfig) gin.HandlerFunc {
 	expected := strings.TrimSpace(config.APIKey)
 
 	return func(c *gin.Context) {
@@ -98,7 +91,7 @@ func NoRouteHandler(config AuthConfig) gin.HandlerFunc {
 			return
 		}
 
-		providedKey := c.GetHeader(APIKeyHeader)
+		providedKey := c.GetHeader(common.APIKeyHeader)
 		if providedKey == "" {
 			respondWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
 			return
@@ -114,5 +107,5 @@ func NoRouteHandler(config AuthConfig) gin.HandlerFunc {
 }
 
 func NoRouteAuthHandler(apiKey string) gin.HandlerFunc {
-	return NoRouteHandler(AuthConfig{APIKey: apiKey})
+	return NoRouteHandler(httputil.AdminAuthConfig{APIKey: apiKey})
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/httpserver"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 
-	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/config"
 	"github.com/kapu/admin-dashboard/internal/docker"
 	"github.com/kapu/admin-dashboard/internal/holo"
@@ -21,6 +20,7 @@ import (
 	"github.com/kapu/admin-dashboard/internal/session"
 	"github.com/kapu/admin-dashboard/internal/static"
 	"github.com/kapu/admin-dashboard/internal/status"
+	"github.com/park285/shared-go/pkg/httputil"
 )
 
 const (
@@ -52,7 +52,7 @@ type Runtime struct {
 	cfg             config.Config
 	logger          *slog.Logger
 	sessions        sessionStore
-	rateLimiter     *auth.LoginRateLimiter
+	rateLimiter     *httputil.LoginFailureRateLimiter
 	docker          *docker.Client
 	holo            *holo.Client
 	statusCollector *status.Collector
@@ -90,7 +90,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		store.Close()
 		return nil, fmt.Errorf("marshal openapi spec: %w", err)
 	}
-	rateLimiter := auth.NewLoginRateLimiter()
+	rateLimiter := httputil.NewDefaultLoginFailureRateLimiter()
 	rateLimiter.Start()
 	statsHub := status.NewHub(endpoints)
 	startStatsHub(statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다

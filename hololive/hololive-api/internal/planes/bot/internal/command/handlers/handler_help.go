@@ -25,14 +25,15 @@ import (
 	"errors"
 	"fmt"
 
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type HelpCommand struct {
-	deps *Dependencies
+	deps *handlercore.Dependencies
 }
 
-func NewHelpCommand(deps *Dependencies) *HelpCommand {
+func NewHelpCommand(deps *handlercore.Dependencies) *HelpCommand {
 	return &HelpCommand{deps: deps}
 }
 

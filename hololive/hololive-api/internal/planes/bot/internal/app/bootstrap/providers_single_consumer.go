@@ -6,7 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
-func ProvideChzzkClient(httpClient *http.Client, chzzkConfig config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
+func ProvideChzzkClient(httpClient *http.Client, chzzkConfig settings.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
 	return chzzk.NewClientWithConfig(&chzzk.ClientConfig{
 		HTTPClient:   httpClient,
 		BaseURL:      chzzk.DefaultBaseURL,
@@ -24,7 +25,7 @@ func ProvideChzzkClient(httpClient *http.Client, chzzkConfig config.ChzzkConfig,
 	})
 }
 
-func ProvideTwitchClient(twitchConfig *config.TwitchConfig, logger *slog.Logger) *twitch.Client {
+func ProvideTwitchClient(twitchConfig *settings.TwitchConfig, logger *slog.Logger) *twitch.Client {
 	if twitchConfig == nil {
 		return twitch.NewClient(&twitch.ClientConfig{}, logger)
 	}

@@ -30,7 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 	json "github.com/park285/shared-go/pkg/json"
 
-	"github.com/kapu/hololive-api/internal/readiness"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
 func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
@@ -61,7 +61,7 @@ func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
 func TestBotReadyResponder_DegradedDependencyReturns503(t *testing.T) {
 	t.Parallel()
 
-	probe := readiness.NewProbe("bot", readiness.Check{
+	probe := sharedreadiness.NewProbe("bot", sharedreadiness.Check{
 		Name:  "postgres",
 		Probe: func(context.Context) error { return errors.New("pool exhausted") },
 	})
@@ -87,7 +87,7 @@ func TestBotReadyResponder_DegradedDependencyReturns503(t *testing.T) {
 func TestBotReadyResponder_HealthyDependencyReturns200(t *testing.T) {
 	t.Parallel()
 
-	probe := readiness.NewProbe("bot", readiness.Check{
+	probe := sharedreadiness.NewProbe("bot", sharedreadiness.Check{
 		Name:  "postgres",
 		Probe: func(context.Context) error { return nil },
 	})

@@ -25,11 +25,12 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -39,8 +40,10 @@ import (
 	"github.com/park285/shared-go/pkg/stringutil"
 	"github.com/park285/shared-go/pkg/workerpool"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	messagingadapter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
@@ -56,11 +59,11 @@ type streamRuntime interface {
 type Bot struct {
 	botSelfUser           string
 	irisBaseURL           string
-	notification          config.NotificationConfig
+	notification          settings.NotificationConfig
 	logger                *slog.Logger
 	irisClient            iris.BotClient
-	messageAdapter        *adapter.MessageAdapter
-	formatter             *adapter.ResponseFormatter
+	messageAdapter        *messagingadapter.MessageAdapter
+	formatter             *formatter.ResponseFormatter
 	messageStrings        *messagestrings.Store
 	cache                 cache.Client
 	postgres              database.Client
@@ -72,12 +75,12 @@ type Bot struct {
 	matcher               *matcher.Matcher
 	commandRegistry       *command.Registry
 	acl                   *acl.Service
-	majorEventRepository  command.MajorEventRepository
-	memberNews            command.MemberNewsService
+	majorEventRepository  handlercore.MajorEventRepository
+	memberNews            handlercore.MemberNewsService
 	commandBuilders       []orchcmd.CommandBuilder
-	membersData           member.DataProvider
-	memberRepository      command.CelebrationCalendarFinder
-	calendarImageRenderer command.CalendarImageRenderer
+	membersData           domain.MemberDataProvider
+	memberRepository      handlercore.CelebrationCalendarFinder
+	calendarImageRenderer handlercore.CalendarImageRenderer
 	stopCh                chan struct{}
 	doneCh                chan struct{}
 	selfSender            string
@@ -150,7 +153,7 @@ func (b *Bot) initImageRenderers(calendarCacheDir string, strings *messagestring
 	b.calendarImageRenderer = render.NewCalendarCardRenderer(render.WithCalendarDiskCacheDir(calendarCacheDir), render.WithCalendarStrings(strings))
 }
 
-func newCelebrationCalendarFinder(data dataDependencies, core *coreDependencies) command.CelebrationCalendarFinder {
+func newCelebrationCalendarFinder(data dataDependencies, core *coreDependencies) handlercore.CelebrationCalendarFinder {
 	if core == nil {
 		return nil
 	}

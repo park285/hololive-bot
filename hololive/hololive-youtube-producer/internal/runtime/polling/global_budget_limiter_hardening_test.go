@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -41,57 +42,57 @@ func TestGlobalBudgetLimiterBoundedCleanupReportsIncompleteBacklog(t *testing.T)
 	ctx := context.Background()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
 	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
-		SourceMaxInflight: map[poller.BudgetSource]int{poller.BudgetSourceYouTubeScraper: 1},
-		ClassMaxInflight:  map[poller.BudgetBurstClass]int{poller.BudgetBurstPrimary: 1},
+		SourceMaxInflight: map[polling.BudgetSource]int{polling.BudgetSourceYouTubeScraper: 1},
+		ClassMaxInflight:  map[polling.BudgetBurstClass]int{polling.BudgetBurstPrimary: 1},
 		CleanupLimit:      1,
 	})
-	seedExpiredBudgetReservations(t, ctx, cacheClient, poller.BudgetSourceYouTubeScraper, poller.BudgetBurstPrimary, "expired-a", "expired-b")
+	seedExpiredBudgetReservations(t, ctx, cacheClient, polling.BudgetSourceYouTubeScraper, polling.BudgetBurstPrimary, "expired-a", "expired-b")
 
-	reservation, decision, err := limiter.TryReserve(ctx, testBudgetJob("bounded-cleanup-a"), testBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstPrimary), time.Minute)
+	reservation, decision, err := limiter.TryReserve(ctx, testBudgetJob("bounded-cleanup-a"), testBudgetProfile(polling.BudgetSourceYouTubeScraper, polling.BudgetBurstPrimary), time.Minute)
 
 	require.NoError(t, err)
 	require.Nil(t, reservation)
 	require.False(t, decision.Allowed)
 	require.Equal(t, "budget_cleanup_incomplete", decision.Reason)
-	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceYouTubeScraper)))
+	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(polling.BudgetSourceYouTubeScraper)))
 
-	reservation, decision, err = limiter.TryReserve(ctx, testBudgetJob("bounded-cleanup-b"), testBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstPrimary), time.Minute)
+	reservation, decision, err = limiter.TryReserve(ctx, testBudgetJob("bounded-cleanup-b"), testBudgetProfile(polling.BudgetSourceYouTubeScraper, polling.BudgetBurstPrimary), time.Minute)
 
 	require.NoError(t, err)
 	require.True(t, decision.Allowed)
 	require.NotNil(t, reservation)
-	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceYouTubeScraper)))
-	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testClassInflightKey(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstPrimary)))
+	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(polling.BudgetSourceYouTubeScraper)))
+	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testClassInflightKey(polling.BudgetSourceYouTubeScraper, polling.BudgetBurstPrimary)))
 }
 
 func TestGlobalBudgetLimiterEncodedExpiredMemberCleansEvenWhenHashExpired(t *testing.T) {
 	ctx := context.Background()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
 	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
-		SourceMaxInflight: map[poller.BudgetSource]int{poller.BudgetSourceYouTubeScraper: 1},
-		ClassMaxInflight:  map[poller.BudgetBurstClass]int{poller.BudgetBurstPrimary: 1},
+		SourceMaxInflight: map[polling.BudgetSource]int{polling.BudgetSourceYouTubeScraper: 1},
+		ClassMaxInflight:  map[polling.BudgetBurstClass]int{polling.BudgetBurstPrimary: 1},
 		CleanupLimit:      1,
 	})
-	seedHashlessExpiredBudgetReservation(t, ctx, cacheClient, poller.BudgetSourceYouTubeScraper, poller.BudgetBurstPrimary, "expired-no-hash")
+	seedHashlessExpiredBudgetReservation(t, ctx, cacheClient, polling.BudgetSourceYouTubeScraper, polling.BudgetBurstPrimary, "expired-no-hash")
 
-	reservation, decision, err := limiter.TryReserve(ctx, testBudgetJob("hashless-cleanup"), testBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstPrimary), time.Minute)
+	reservation, decision, err := limiter.TryReserve(ctx, testBudgetJob("hashless-cleanup"), testBudgetProfile(polling.BudgetSourceYouTubeScraper, polling.BudgetBurstPrimary), time.Minute)
 
 	require.NoError(t, err)
 	require.True(t, decision.Allowed)
 	require.NotNil(t, reservation)
-	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceYouTubeScraper)))
-	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testClassInflightKey(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstPrimary)))
+	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(polling.BudgetSourceYouTubeScraper)))
+	require.Equal(t, 1, testInflightValue(t, ctx, cacheClient, testClassInflightKey(polling.BudgetSourceYouTubeScraper, polling.BudgetBurstPrimary)))
 }
 
 func TestGlobalBudgetLimiterExpiredLegacyMemberFadesOutDuringCleanup(t *testing.T) {
 	ctx := context.Background()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
-	source := poller.BudgetSourceYouTubeScraper
-	class := poller.BudgetBurstPrimary
+	source := polling.BudgetSourceYouTubeScraper
+	class := polling.BudgetBurstPrimary
 	token := "expired-legacy-hash"
 	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
-		SourceMaxInflight: map[poller.BudgetSource]int{source: 1},
-		ClassMaxInflight:  map[poller.BudgetBurstClass]int{class: 1},
+		SourceMaxInflight: map[polling.BudgetSource]int{source: 1},
+		ClassMaxInflight:  map[polling.BudgetBurstClass]int{class: 1},
 		CleanupLimit:      1,
 	})
 	seedLegacyExpiredBudgetReservation(t, ctx, cacheClient, source, class, token)
@@ -108,11 +109,11 @@ func TestGlobalBudgetLimiterExpiredLegacyMemberFadesOutDuringCleanup(t *testing.
 func TestGlobalBudgetLimiterReleaseLeavesLegacyOwnerTokenReservationForFadeout(t *testing.T) {
 	ctx := context.Background()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
-	source := poller.BudgetSourceYouTubeScraper
-	class := poller.BudgetBurstBackfill
+	source := polling.BudgetSourceYouTubeScraper
+	class := polling.BudgetBurstBackfill
 	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
-		SourceMaxInflight: map[poller.BudgetSource]int{source: 5},
-		ClassMaxInflight:  map[poller.BudgetBurstClass]int{class: 5},
+		SourceMaxInflight: map[polling.BudgetSource]int{source: 5},
+		ClassMaxInflight:  map[polling.BudgetBurstClass]int{class: 5},
 	})
 
 	held, decision, err := limiter.TryReserve(ctx, testBudgetJob("release-fadeout"), testBudgetProfile(source, class), time.Minute)
@@ -136,22 +137,22 @@ func TestGlobalBudgetLimiterReleaseUsesReservationClassAndMember(t *testing.T) {
 	ctx := context.Background()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
 	limiter := newTestGlobalBudgetLimiter(t, cacheClient, GlobalBudgetLimiterConfig{
-		SourceMaxInflight: map[poller.BudgetSource]int{poller.BudgetSourceYouTubeScraper: 5},
-		ClassMaxInflight:  map[poller.BudgetBurstClass]int{poller.BudgetBurstBackfill: 5},
+		SourceMaxInflight: map[polling.BudgetSource]int{polling.BudgetSourceYouTubeScraper: 5},
+		ClassMaxInflight:  map[polling.BudgetBurstClass]int{polling.BudgetBurstBackfill: 5},
 	})
 
-	held, decision, err := limiter.TryReserve(ctx, testBudgetJob("backfill-member-release"), testBudgetProfile(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstBackfill), time.Minute)
+	held, decision, err := limiter.TryReserve(ctx, testBudgetJob("backfill-member-release"), testBudgetProfile(polling.BudgetSourceYouTubeScraper, polling.BudgetBurstBackfill), time.Minute)
 	require.NoError(t, err)
 	require.True(t, decision.Allowed)
 	require.NotNil(t, held)
 	reservation, ok := held.(*globalBudgetReservation)
 	require.True(t, ok)
-	require.Equal(t, poller.BudgetBurstBackfill, reservation.burstClass)
+	require.Equal(t, polling.BudgetBurstBackfill, reservation.burstClass)
 	require.Contains(t, reservation.reservationMember, globalBudgetReservationMemberSeparator)
 
 	require.NoError(t, held.Release(ctx))
-	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(poller.BudgetSourceYouTubeScraper)))
-	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testClassInflightKey(poller.BudgetSourceYouTubeScraper, poller.BudgetBurstBackfill)))
+	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testGlobalInflightKey(polling.BudgetSourceYouTubeScraper)))
+	require.Equal(t, 0, testInflightValue(t, ctx, cacheClient, testClassInflightKey(polling.BudgetSourceYouTubeScraper, polling.BudgetBurstBackfill)))
 }
 
 func TestGlobalBudgetReserveScriptHardeningContract(t *testing.T) {
@@ -175,8 +176,8 @@ func seedExpiredBudgetReservations(
 	t *testing.T,
 	ctx context.Context,
 	cacheClient *cache.Service,
-	source poller.BudgetSource,
-	class poller.BudgetBurstClass,
+	source polling.BudgetSource,
+	class polling.BudgetBurstClass,
 	firstToken string,
 	secondToken string,
 ) {
@@ -205,8 +206,8 @@ func seedHashlessExpiredBudgetReservation(
 	t *testing.T,
 	ctx context.Context,
 	cacheClient *cache.Service,
-	source poller.BudgetSource,
-	class poller.BudgetBurstClass,
+	source polling.BudgetSource,
+	class polling.BudgetBurstClass,
 	token string,
 ) {
 	t.Helper()
@@ -227,8 +228,8 @@ func seedLegacyExpiredBudgetReservation(
 	t *testing.T,
 	ctx context.Context,
 	cacheClient *cache.Service,
-	source poller.BudgetSource,
-	class poller.BudgetBurstClass,
+	source polling.BudgetSource,
+	class polling.BudgetBurstClass,
 	token string,
 ) {
 	t.Helper()

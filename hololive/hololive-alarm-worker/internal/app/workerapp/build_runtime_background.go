@@ -8,9 +8,11 @@ import (
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	envutil "github.com/park285/shared-go/pkg/envutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/celebration"
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
+	workerruntime "github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 )
 
 func buildCelebrationRunnerScheduler(
@@ -18,8 +20,8 @@ func buildCelebrationRunnerScheduler(
 	foundation *alarmFoundation,
 	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
-) runtimeAlarmScheduler {
-	if !envconfig.ParseBool("CELEBRATION_RUNNER_ENABLED", false) {
+) workerruntime.Scheduler {
+	if !envutil.Bool("CELEBRATION_RUNNER_ENABLED", false) {
 		if logger != nil {
 			logger.Info("Celebration runner disabled")
 		}
@@ -50,8 +52,8 @@ func buildBirthdayStreamRunnerScheduler(
 	foundation *alarmFoundation,
 	publishConfig queue.PublishConfig,
 	logger *slog.Logger,
-) runtimeAlarmScheduler {
-	if !envconfig.ParseBool("BIRTHDAY_STREAM_RUNNER_ENABLED", false) {
+) workerruntime.Scheduler {
+	if !envutil.Bool("BIRTHDAY_STREAM_RUNNER_ENABLED", false) {
 		if logger != nil {
 			logger.Info("Birthday stream runner disabled")
 		}

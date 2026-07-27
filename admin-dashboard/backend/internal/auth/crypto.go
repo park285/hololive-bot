@@ -8,9 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"strings"
-
-	"github.com/park285/shared-go/pkg/httputil"
-	"github.com/park285/shared-go/pkg/stringutil"
 )
 
 func GenerateSessionID() (string, error) {
@@ -64,12 +61,4 @@ func ValidateCSRFToken(sessionID, token, secret string) bool {
 	_, _ = mac.Write([]byte(sessionID))
 	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1
-}
-
-func ConstantTimeStringEqual(left, right string) bool {
-	return httputil.ConstantTimeStringEqual(left, right)
-}
-
-func TruncateSessionID(sessionID string) string {
-	return stringutil.TruncateString(sessionID, 8)
 }

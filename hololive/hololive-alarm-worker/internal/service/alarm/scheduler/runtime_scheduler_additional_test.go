@@ -36,8 +36,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
-	"github.com/kapu/hololive-shared/pkg/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
 type runnerFunc struct {
@@ -53,12 +53,12 @@ func (r *runnerFunc) Check(ctx context.Context) ([]*domain.AlarmNotification, er
 }
 
 type senderFunc struct {
-	send func(context.Context, []*domain.AlarmNotification) (checker.SendResult, error)
+	send func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error)
 }
 
-func (s *senderFunc) Send(ctx context.Context, notifications []*domain.AlarmNotification) (checker.SendResult, error) {
+func (s *senderFunc) Send(ctx context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, error) {
 	if s.send == nil {
-		return checker.SendResult{}, nil
+		return delivery.SendResult{}, nil
 	}
 
 	return s.send(ctx, notifications)
@@ -179,8 +179,8 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 				},
 			},
 			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (checker.SendResult, error) {
-					return checker.SendResult{}, errors.New("send failed")
+				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
+					return delivery.SendResult{}, errors.New("send failed")
 				},
 			},
 			logger: testSchedulerLogger(),
@@ -213,7 +213,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 	})
 
 	t.Run("youtube iteration picks up updated alarm service targets", func(t *testing.T) {
-		alarmService, err := notification.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
+		alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
 		require.NoError(t, err)
 
 		youtubeUpdater := &targetMinutesUpdaterStub{}
@@ -260,7 +260,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 		s := &RuntimeScheduler{
 			youtubeChecker: &runnerFunc{
 				check: func(context.Context) ([]*domain.AlarmNotification, error) {
-					return nil, sharedcache.NewCacheError("failed", "smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
+					return nil, sharedcache.NewCacheError("smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
 				},
 			},
 			cacheClient:           cache,
@@ -286,9 +286,9 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 				},
 			},
 			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (checker.SendResult, error) {
+				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
 					sent.Add(1)
-					return checker.SendResult{Sent: 1}, nil
+					return delivery.SendResult{Sent: 1}, nil
 				},
 			},
 			logger: testSchedulerLogger(),
@@ -307,9 +307,9 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 				},
 			},
 			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (checker.SendResult, error) {
+				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
 					sent.Add(1)
-					return checker.SendResult{}, nil
+					return delivery.SendResult{}, nil
 				},
 			},
 			logger: testSchedulerLogger(),
@@ -499,7 +499,7 @@ func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t
 
 	err := s.recoverAlarmCacheAfterCheckFailure(
 		context.Background(),
-		sharedcache.NewCacheError("failed", "smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF")),
+		sharedcache.NewCacheError("smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF")),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), warmer.calls.Load())

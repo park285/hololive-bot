@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
@@ -656,7 +656,7 @@ func TestCommandTransportSendError(t *testing.T) {
 
 	t.Run("formatter without strings resolves unknown key to sentinel", func(t *testing.T) {
 		c := &stubBotClient{}
-		formatter := adapter.NewResponseFormatter("!", nil)
+		formatter := messageformatter.NewResponseFormatter("!", nil)
 		transport := NewCommandTransport(c, formatter)
 		require.NoError(t, transport.SendError(ctx, "room", "totally_unknown_key"))
 		assert.Equal(t, messagestrings.FallbackSentinel, c.lastMessage)

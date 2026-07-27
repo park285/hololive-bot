@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 func setupHelpTestRenderer(t *testing.T) *serviceTemplate.Renderer {
@@ -48,8 +48,8 @@ func TestHelpCommand_Description(t *testing.T) {
 func TestHelpCommand_Execute_GoldenPath(t *testing.T) {
 	var sentRoom, sentMessage string
 
-	deps := &Dependencies{
-		Formatter: adapter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+	deps := &handlercore.Dependencies{
+		Formatter: formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
 		SendMessage: func(_ context.Context, room, message string) error {
 			sentRoom = room
 			sentMessage = message
@@ -85,8 +85,8 @@ func TestHelpCommand_Execute_NilDeps(t *testing.T) {
 }
 
 func TestHelpCommand_Execute_NilSendMessage(t *testing.T) {
-	deps := &Dependencies{
-		Formatter: adapter.NewResponseFormatter("!", nil),
+	deps := &handlercore.Dependencies{
+		Formatter: formatter.NewResponseFormatter("!", nil),
 	}
 	cmd := NewHelpCommand(deps)
 
@@ -97,7 +97,7 @@ func TestHelpCommand_Execute_NilSendMessage(t *testing.T) {
 }
 
 func TestHelpCommand_Execute_NilFormatter(t *testing.T) {
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 	}
 	cmd := NewHelpCommand(deps)

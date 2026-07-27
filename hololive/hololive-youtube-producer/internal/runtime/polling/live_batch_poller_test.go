@@ -6,13 +6,16 @@ import (
 	"time"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAppendLivePollerRegistrationsBatchesWhenProviderEnabled(t *testing.T) {
-	base := poller.NewLivePollerWithStatusProvider(nil, nil, nil)
+	base := pollers.NewLivePollerWithStatusProvider(nil, nil, nil)
 	ids := make([]string, 0, defaultLiveBatchChannelChunkSize+1)
 	for i := range defaultLiveBatchChannelChunkSize + 1 {
 		ids = append(ids, fmt.Sprintf("UC_TEST_%02d", i))
@@ -23,31 +26,31 @@ func TestAppendLivePollerRegistrationsBatchesWhenProviderEnabled(t *testing.T) {
 		Base:           base,
 		BatchBase:      base,
 		BatchEnabled:   true,
-		Priority:       poller.PriorityHigh,
+		Priority:       scheduler.PriorityHigh,
 		Interval:       time.Minute,
 		ChannelIDs:     ids,
 		TargetGroup:    providers.ChannelTargetGroupNotification,
-		BurstClass:     poller.BudgetBurstPrimary,
-		BudgetPriority: poller.BudgetPriorityHigh,
+		BurstClass:     polling.BudgetBurstPrimary,
+		BudgetPriority: polling.BudgetPriorityHigh,
 	})
 
 	require.Len(t, registrations, 2)
 	require.Equal(t, "live_batch_01", registrations[0].Poller.Name())
 	require.Equal(t, []string{providers.SyntheticGlobalPollerChannelID}, registrations[0].ChannelIDs)
-	require.Equal(t, 1.0, registrations[0].BudgetProfile.SourceUnits[poller.BudgetSourceHolodexLive])
-	require.Zero(t, registrations[0].BudgetProfile.SourceUnits[poller.BudgetSourceYouTubeScraper])
-	require.Equal(t, float64(defaultLiveBatchChannelChunkSize*scraper.LiveStatusFallbackFetchPolicy.MaxAttempts), registrations[0].BudgetProfile.FallbackSourceUnits[poller.BudgetSourceYouTubeScraper])
-	require.Equal(t, float64(defaultLiveBatchChannelChunkSize), registrations[0].BudgetProfile.SourceUnits[poller.BudgetSourcePostgresWrite])
+	require.Equal(t, 1.0, registrations[0].BudgetProfile.SourceUnits[polling.BudgetSourceHolodexLive])
+	require.Zero(t, registrations[0].BudgetProfile.SourceUnits[polling.BudgetSourceYouTubeScraper])
+	require.Equal(t, float64(defaultLiveBatchChannelChunkSize*scraper.LiveStatusFallbackFetchPolicy.MaxAttempts), registrations[0].BudgetProfile.FallbackSourceUnits[polling.BudgetSourceYouTubeScraper])
+	require.Equal(t, float64(defaultLiveBatchChannelChunkSize), registrations[0].BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
 	require.Equal(t, float64(defaultLiveBatchChannelChunkSize*scraper.LiveStatusFallbackFetchPolicy.MaxAttempts), registrations[0].WorstCaseRequestUnitsPerRun)
 }
 
 func TestSummarizeBudgetIncludesLiveBatchFallbackInYouTubeScraperFaultEnvelope(t *testing.T) {
 	fallbackUnits := float64(30 * scraper.LiveStatusFallbackFetchPolicy.MaxAttempts)
 	base := sourceCooldownTestPoller{name: "live"}
-	registration := providers.NewChannelPollerRegistration(base, poller.PriorityHigh, time.Minute).
+	registration := providers.NewChannelPollerRegistration(base, scheduler.PriorityHigh, time.Minute).
 		WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).
 		WithWorstCaseRequestUnitsPerRun(fallbackUnits).
-		WithBudgetProfile(holodexLiveBatchBudgetProfile(30, poller.BudgetBurstPrimary, poller.BudgetPriorityHigh))
+		WithBudgetProfile(holodexLiveBatchBudgetProfile(30, polling.BudgetBurstPrimary, polling.BudgetPriorityHigh))
 
 	summary := summarizeYouTubeProducerBudget([]providers.ChannelPollerRegistration{registration})
 

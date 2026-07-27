@@ -142,8 +142,8 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 		token string
 	}{
 		{file: "hololive/hololive-shared/pkg/domain/command.go", token: removedCommandToken("SettlementStatus")},
-		{file: "hololive/hololive-shared/pkg/config/config.go", token: removedRoomEnv()},
-		{file: "hololive/hololive-shared/pkg/config/internal/settings/config_types.go", token: "Settlement" + "RoomID"},
+		{file: "hololive/hololive-shared/pkg/config/settings/config.go", token: removedRoomEnv()},
+		{file: "hololive/hololive-shared/pkg/config/settings/config_types.go", token: "Settlement" + "RoomID"},
 		{file: "hololive/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd/command_normalizer_test.go", token: removedCommandValue("status")},
 		{file: "hololive/hololive-api/internal/planes/bot/internal/bot/orchestration/bot_command_init_views_test.go", token: removedCommandToken("SettlementStatus")},
 	}

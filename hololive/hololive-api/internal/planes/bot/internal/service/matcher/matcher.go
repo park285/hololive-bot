@@ -28,7 +28,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -77,7 +78,7 @@ type Matcher struct {
 	ctx                   context.Context
 	membersData           domain.MemberDataProvider
 	cache                 cache.Client
-	holodex               *holodex.Service
+	holodex               *holodexprovider.Service
 	selector              ChannelSelector
 	logger                *slog.Logger
 	matchCache            map[string]*MatchCacheEntry
@@ -94,7 +95,7 @@ func NewMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
 	cacheClient cache.Client,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	selector ChannelSelector,
 	logger *slog.Logger,
 ) *Matcher {

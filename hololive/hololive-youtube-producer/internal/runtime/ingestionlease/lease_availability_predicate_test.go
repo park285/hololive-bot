@@ -3,26 +3,27 @@ package ingestionlease
 import (
 	"testing"
 
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/stretchr/testify/require"
 )
 
-func photoSyncGuardTreatsAsAvailable(result JobClaimResult) bool {
-	return result == JobClaimAcquired
+func photoSyncGuardTreatsAsAvailable(result polling.JobClaimResult) bool {
+	return result == polling.JobClaimAcquired
 }
 
 func TestIngestionLeaseAvailabilityTruthTablePinsCurrentSites(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		result         JobClaimResult
+		result         polling.JobClaimResult
 		photoSyncAvail bool
 	}{
-		{JobClaimAcquired, true},
-		{JobClaimPeerOwned, false},
-		{JobClaimAlreadyCompleted, false},
-		{JobClaimUnavailable, false},
-		{JobClaimResult(""), false},
-		{JobClaimResult("totally_unknown"), false},
+		{polling.JobClaimAcquired, true},
+		{polling.JobClaimPeerOwned, false},
+		{polling.JobClaimAlreadyCompleted, false},
+		{polling.JobClaimUnavailable, false},
+		{polling.JobClaimResult(""), false},
+		{polling.JobClaimResult("totally_unknown"), false},
 	}
 
 	for _, tc := range cases {

@@ -26,13 +26,13 @@
   {
     "path": "hololive/hololive-api/internal/planes/bot/cmd/test_db_integration/main.go",
     "must_contain": [
-      "app.BuildDBIntegrationRuntime("
+      "botruntime.BuildDBIntegrationRuntime("
     ]
   },
   {
     "path": "hololive/hololive-api/internal/planes/bot/cmd/fetch_profiles/main.go",
     "must_contain": [
-      "app.BuildFetchProfilesRuntime("
+      "botruntime.BuildFetchProfilesRuntime("
     ]
   },
   {
@@ -44,7 +44,7 @@
   {
     "path": "hololive/hololive-api/internal/planes/bot/cmd/warm_member_cache/main.go",
     "must_contain": [
-      "app.InitializeWarmMemberCache("
+      "botruntime.InitializeWarmMemberCache("
     ]
   },
   {

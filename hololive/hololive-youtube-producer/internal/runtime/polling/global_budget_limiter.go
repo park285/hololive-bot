@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 )
 
 type GlobalBudgetLimiterConfig struct {
 	Namespace          string
 	InstanceID         string
-	SourceMaxInflight  map[poller.BudgetSource]int
-	ClassMaxInflight   map[poller.BudgetBurstClass]int
+	SourceMaxInflight  map[polling.BudgetSource]int
+	ClassMaxInflight   map[polling.BudgetBurstClass]int
 	DeniedRetryAfter   time.Duration
 	WindowCheckEnabled bool
 	// CleanupLimit은 단일 Valkey Lua reserve 실행 안에서 만료된 reservation cleanup
@@ -28,8 +28,8 @@ type globalBudgetLimiter struct {
 	cacheClient        cache.Client
 	namespace          string
 	instanceID         string
-	sourceMaxInflight  map[poller.BudgetSource]int
-	classMaxInflight   map[poller.BudgetBurstClass]int
+	sourceMaxInflight  map[polling.BudgetSource]int
+	classMaxInflight   map[polling.BudgetBurstClass]int
 	deniedRetryAfter   time.Duration
 	windowCheckEnabled bool
 	cleanupLimit       int
@@ -40,8 +40,8 @@ type globalBudgetReservation struct {
 	namespace         string
 	ownerToken        string
 	reservationMember string
-	burstClass        poller.BudgetBurstClass
-	sources           []poller.BudgetSource
+	burstClass        polling.BudgetBurstClass
+	sources           []polling.BudgetSource
 	state             atomic.Uint32
 }
 
@@ -54,7 +54,7 @@ const (
 	globalBudgetReservationDone       uint32 = 2
 )
 
-func NewGlobalBudgetLimiter(cacheClient cache.Client, cfg GlobalBudgetLimiterConfig) (poller.GlobalBudgetLimiter, error) {
+func NewGlobalBudgetLimiter(cacheClient cache.Client, cfg GlobalBudgetLimiterConfig) (polling.GlobalBudgetLimiter, error) {
 	if cacheClient == nil {
 		return nil, fmt.Errorf("new global budget limiter: cache service must not be nil")
 	}
@@ -84,18 +84,18 @@ func NewGlobalBudgetLimiter(cacheClient cache.Client, cfg GlobalBudgetLimiterCon
 
 func (l *globalBudgetLimiter) TryReserve(
 	ctx context.Context,
-	job *poller.BudgetJob,
-	profile poller.BudgetProfile,
+	job *polling.BudgetJob,
+	profile polling.BudgetProfile,
 	ttl time.Duration,
-) (reservation poller.BudgetReservation, decision poller.BudgetDecision, err error) {
+) (reservation polling.BudgetReservation, decision polling.BudgetDecision, err error) {
 	if len(profile.SourceUnits) == 0 {
-		return nil, poller.BudgetDecision{Allowed: true}, nil
+		return nil, polling.BudgetDecision{Allowed: true}, nil
 	}
 	if ttl <= 0 {
-		return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: ttl must be positive")
+		return nil, polling.BudgetDecision{}, fmt.Errorf("try reserve global budget: ttl must be positive")
 	}
 	if job == nil {
-		return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: job must not be nil")
+		return nil, polling.BudgetDecision{}, fmt.Errorf("try reserve global budget: job must not be nil")
 	}
 	profile = normalizeGlobalBudgetProfile(profile)
 	return l.tryReserveNormalizedProfile(ctx, job, profile, ttl)
@@ -103,24 +103,24 @@ func (l *globalBudgetLimiter) TryReserve(
 
 func (l *globalBudgetLimiter) tryReserveNormalizedProfile(
 	ctx context.Context,
-	job *poller.BudgetJob,
-	profile poller.BudgetProfile,
+	job *polling.BudgetJob,
+	profile polling.BudgetProfile,
 	ttl time.Duration,
-) (reservation poller.BudgetReservation, decision poller.BudgetDecision, err error) {
+) (reservation polling.BudgetReservation, decision polling.BudgetDecision, err error) {
 	if decision, denied, cooldownErr := l.fallbackSourceCooldownDecision(ctx, profile); cooldownErr != nil {
-		return nil, poller.BudgetDecision{}, cooldownErr
+		return nil, polling.BudgetDecision{}, cooldownErr
 	} else if denied {
 		return nil, decision, nil
 	}
 	ownerToken, err := l.newOwnerToken(job)
 	if err != nil {
-		return nil, poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: owner token: %w", err)
+		return nil, polling.BudgetDecision{}, fmt.Errorf("try reserve global budget: owner token: %w", err)
 	}
 	reservationMember := globalBudgetReservationMember(profile.BurstClass, ownerToken)
 
 	acquired, decision, err := l.reserveProfileSources(ctx, profile, ownerToken, reservationMember, ttl)
 	if err != nil {
-		return nil, poller.BudgetDecision{}, err
+		return nil, polling.BudgetDecision{}, err
 	}
 	if !decision.Allowed {
 		return nil, decision, nil
@@ -133,17 +133,17 @@ func (l *globalBudgetLimiter) tryReserveNormalizedProfile(
 		reservationMember: reservationMember,
 		burstClass:        profile.BurstClass,
 		sources:           acquired,
-	}, poller.BudgetDecision{Allowed: true}, nil
+	}, polling.BudgetDecision{Allowed: true}, nil
 }
 
-func normalizeGlobalBudgetProfile(profile poller.BudgetProfile) poller.BudgetProfile {
+func normalizeGlobalBudgetProfile(profile polling.BudgetProfile) polling.BudgetProfile {
 	if strings.TrimSpace(string(profile.BurstClass)) == "" {
-		profile.BurstClass = poller.BudgetBurstPrimary
+		profile.BurstClass = polling.BudgetBurstPrimary
 	}
 	return profile
 }
 
-func (l *globalBudgetLimiter) MarkSourceCooldown(ctx context.Context, source poller.BudgetSource, ttl time.Duration, reason string) error {
+func (l *globalBudgetLimiter) MarkSourceCooldown(ctx context.Context, source polling.BudgetSource, ttl time.Duration, reason string) error {
 	if l == nil || l.cacheClient == nil {
 		return fmt.Errorf("mark source cooldown: limiter is nil")
 	}
@@ -154,7 +154,7 @@ func (l *globalBudgetLimiter) MarkSourceCooldown(ctx context.Context, source pol
 		return nil
 	}
 
-	keys := buildGlobalBudgetKeys(l.namespace, source, poller.BudgetBurstPrimary, "")
+	keys := buildGlobalBudgetKeys(l.namespace, source, polling.BudgetBurstPrimary, "")
 	value := globalBudgetSourceCooldownValue(l.instanceID, reason)
 	cmd := l.cacheClient.B().
 		Set().
@@ -194,39 +194,39 @@ func globalBudgetCooldownSeconds(ttl time.Duration) int64 {
 
 func (l *globalBudgetLimiter) reserveProfileSources(
 	ctx context.Context,
-	profile poller.BudgetProfile,
+	profile polling.BudgetProfile,
 	ownerToken string,
 	reservationMember string,
 	ttl time.Duration,
-) (acquiredSources []poller.BudgetSource, decision poller.BudgetDecision, err error) {
+) (acquiredSources []polling.BudgetSource, decision polling.BudgetDecision, err error) {
 	sources := sortedBudgetSources(profile.SourceUnits)
-	acquired := make([]poller.BudgetSource, 0, len(sources))
+	acquired := make([]polling.BudgetSource, 0, len(sources))
 	nowMS := time.Now().UnixMilli()
 	ttlMS := durationMillis(ttl)
 	for _, source := range sources {
 		decision, err := l.reserveSource(ctx, source, profile, reservationMember, nowMS, ttlMS)
 		if err != nil {
-			return nil, poller.BudgetDecision{}, l.wrapReserveSourceError(ctx, ownerToken, reservationMember, profile.BurstClass, acquired, source, err)
+			return nil, polling.BudgetDecision{}, l.wrapReserveSourceError(ctx, ownerToken, reservationMember, profile.BurstClass, acquired, source, err)
 		}
 		if !decision.Allowed {
 			decision, err = l.rollbackDeniedReserveSource(ctx, ownerToken, reservationMember, profile.BurstClass, acquired, source, decision)
 			if err != nil {
-				return nil, poller.BudgetDecision{}, err
+				return nil, polling.BudgetDecision{}, err
 			}
 			return nil, decision, nil
 		}
 		acquired = append(acquired, source)
 	}
-	return acquired, poller.BudgetDecision{Allowed: true}, nil
+	return acquired, polling.BudgetDecision{Allowed: true}, nil
 }
 
 func (l *globalBudgetLimiter) wrapReserveSourceError(
 	ctx context.Context,
 	ownerToken string,
 	reservationMember string,
-	burstClass poller.BudgetBurstClass,
-	acquired []poller.BudgetSource,
-	source poller.BudgetSource,
+	burstClass polling.BudgetBurstClass,
+	acquired []polling.BudgetSource,
+	source polling.BudgetSource,
 	err error,
 ) error {
 	if rollbackErr := l.releaseSourcesForClass(ctx, ownerToken, reservationMember, burstClass, acquired); rollbackErr != nil {
@@ -239,13 +239,13 @@ func (l *globalBudgetLimiter) rollbackDeniedReserveSource(
 	ctx context.Context,
 	ownerToken string,
 	reservationMember string,
-	burstClass poller.BudgetBurstClass,
-	acquired []poller.BudgetSource,
-	source poller.BudgetSource,
-	decision poller.BudgetDecision,
-) (poller.BudgetDecision, error) {
+	burstClass polling.BudgetBurstClass,
+	acquired []polling.BudgetSource,
+	source polling.BudgetSource,
+	decision polling.BudgetDecision,
+) (polling.BudgetDecision, error) {
 	if rollbackErr := l.releaseSourcesForClass(ctx, ownerToken, reservationMember, burstClass, acquired); rollbackErr != nil {
-		return poller.BudgetDecision{}, fmt.Errorf("try reserve global budget: rollback source %s: %w", source, rollbackErr)
+		return polling.BudgetDecision{}, fmt.Errorf("try reserve global budget: rollback source %s: %w", source, rollbackErr)
 	}
 	decision.AffectedSource = string(source)
 	return decision, nil
@@ -253,12 +253,12 @@ func (l *globalBudgetLimiter) rollbackDeniedReserveSource(
 
 func (l *globalBudgetLimiter) reserveSource(
 	ctx context.Context,
-	source poller.BudgetSource,
-	profile poller.BudgetProfile,
+	source polling.BudgetSource,
+	profile polling.BudgetProfile,
 	reservationMember string,
 	nowMS int64,
 	ttlMS int64,
-) (poller.BudgetDecision, error) {
+) (polling.BudgetDecision, error) {
 	keys := l.keys(source, profile.BurstClass, reservationMember)
 	units := profile.SourceUnits[source]
 	keysForScript := []string{
@@ -286,7 +286,7 @@ func (l *globalBudgetLimiter) reserveSource(
 	}
 	values, err := evalGlobalBudgetArray(ctx, l.cacheClient, globalBudgetReserveLua, keysForScript, args, "reserve global budget")
 	if err != nil {
-		return poller.BudgetDecision{}, err
+		return polling.BudgetDecision{}, err
 	}
 	return parseGlobalBudgetReserveResult(values)
 }
@@ -318,7 +318,7 @@ func (r *globalBudgetReservation) terminal(ctx context.Context, action string) e
 func (r *globalBudgetReservation) releaseAll(ctx context.Context, action string) error {
 	class := r.burstClass
 	if strings.TrimSpace(string(class)) == "" {
-		class = poller.BudgetBurstPrimary
+		class = polling.BudgetBurstPrimary
 	}
 	reservationMember := r.reservationMember
 	if reservationMember == "" {
@@ -347,8 +347,8 @@ func (l *globalBudgetLimiter) releaseSourcesForClass(
 	ctx context.Context,
 	ownerToken string,
 	reservationMember string,
-	class poller.BudgetBurstClass,
-	sources []poller.BudgetSource,
+	class polling.BudgetBurstClass,
+	sources []polling.BudgetSource,
 ) error {
 	reservation := globalBudgetReservation{
 		cacheClient:       l.cacheClient,

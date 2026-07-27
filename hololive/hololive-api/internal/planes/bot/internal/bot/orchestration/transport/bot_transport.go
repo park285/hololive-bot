@@ -33,7 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -58,10 +58,10 @@ type acceptedMessageSender interface {
 
 type CommandTransport struct {
 	irisClient iris.BotClient
-	formatter  *adapter.ResponseFormatter
+	formatter  *messageformatter.ResponseFormatter
 }
 
-func NewCommandTransport(irisClient iris.BotClient, formatter *adapter.ResponseFormatter) *CommandTransport {
+func NewCommandTransport(irisClient iris.BotClient, formatter *messageformatter.ResponseFormatter) *CommandTransport {
 	return &CommandTransport{
 		irisClient: irisClient,
 		formatter:  formatter,
@@ -285,7 +285,7 @@ func (t *CommandTransport) SendError(ctx context.Context, room, key string) erro
 	message := messagestrings.FallbackSentinel
 
 	if t != nil && t.formatter != nil {
-		message = t.formatter.ResolveError(key)
+		message = t.formatter.ResolveError(ctx, key)
 	}
 
 	if err := t.SendMessage(ctx, room, message); err != nil {

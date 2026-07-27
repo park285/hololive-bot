@@ -15,15 +15,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &config.Config{
-		Server: config.ServerConfig{
+	appConfig := &settings.Config{
+		Server: settings.ServerConfig{
 			H3Addr:     "127.0.0.1:0",
 			H3CertFile: certFile,
 			H3KeyFile:  keyFile,
@@ -72,8 +72,8 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &config.Config{
-		Server: config.ServerConfig{
+	appConfig := &settings.Config{
+		Server: settings.ServerConfig{
 			H3Addr:     "127.0.0.1:0",
 			H3CertFile: certFile,
 			H3KeyFile:  keyFile,
@@ -112,8 +112,8 @@ func TestBuildBotHTTP3ServerServesCachedCertificateFiles(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &config.Config{
-		Server: config.ServerConfig{
+	appConfig := &settings.Config{
+		Server: settings.ServerConfig{
 			H3Addr:     "127.0.0.1:0",
 			H3CertFile: certFile,
 			H3KeyFile:  keyFile,
@@ -154,8 +154,8 @@ func TestBuildBotHTTP3ServerKeepsPreviousCertificateWhenReloadFails(t *testing.T
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
-	appConfig := &config.Config{
-		Server: config.ServerConfig{
+	appConfig := &settings.Config{
+		Server: settings.ServerConfig{
 			H3Addr:     "127.0.0.1:0",
 			H3CertFile: certFile,
 			H3KeyFile:  keyFile,

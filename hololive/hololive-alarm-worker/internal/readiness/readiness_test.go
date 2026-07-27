@@ -6,16 +6,14 @@ import (
 	"net/http"
 	"testing"
 
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 func TestInternalResponseReportsDependenciesAndEgressFlags(t *testing.T) {
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
-	probe := NewProbe("alarm-worker",
-		PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}),
-		ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}),
-		BoolEnvNotFalseCheck("notification_egress_lease_enabled", "ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
+	probe := sharedreadiness.NewProbe("alarm-worker", sharedreadiness.PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}), sharedreadiness.ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}), BoolEnvNotFalseCheck("notification_egress_lease_enabled", "ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
 		ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),
 	)
 
@@ -39,11 +37,7 @@ func TestInternalResponseReportsDependenciesAndEgressFlags(t *testing.T) {
 
 func TestInternalResponseNotReadyWhenDependencyFails(t *testing.T) {
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
-	probe := NewProbe("alarm-worker",
-		PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return errors.New("down") }}),
-		ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}),
-		ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),
-	)
+	probe := sharedreadiness.NewProbe("alarm-worker", sharedreadiness.PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return errors.New("down") }}), sharedreadiness.ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}), ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"))
 
 	statusCode, payload := internalResponse(probe, t.Context())
 
@@ -60,7 +54,7 @@ func TestInternalResponseNotReadyWhenDependencyFails(t *testing.T) {
 }
 
 func TestExplicitTrueBoolEnvCheckRequiresExplicitTrue(t *testing.T) {
-	probe := NewProbe("alarm-worker",
+	probe := sharedreadiness.NewProbe("alarm-worker",
 		ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),
 	)
 
@@ -77,11 +71,7 @@ func TestExplicitTrueBoolEnvCheckRequiresExplicitTrue(t *testing.T) {
 
 func TestPublicResponseOmitsDependencyAndFlagDetails(t *testing.T) {
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
-	probe := NewProbe("alarm-worker",
-		PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}),
-		ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}),
-		ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),
-	)
+	probe := sharedreadiness.NewProbe("alarm-worker", sharedreadiness.PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}), sharedreadiness.ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}), ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"))
 
 	statusCode, payload := publicResponse(probe, t.Context())
 

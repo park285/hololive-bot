@@ -32,18 +32,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
 
 type CommandRouter struct {
-	registry       *command.Registry
+	registry       *handlers.Registry
 	logger         *slog.Logger
 	sendMessage    func(ctx context.Context, room, message string) error
 	messageStrings *messagestrings.Store
 	admission      *commandAdmissionPolicy
 }
 
-func NewCommandRouter(registry *command.Registry, logger *slog.Logger, sendMessage func(ctx context.Context, room, message string) error, messageStrings *messagestrings.Store, cacheClient cache.LowLevelCache) *CommandRouter {
+func NewCommandRouter(registry *handlers.Registry, logger *slog.Logger, sendMessage func(ctx context.Context, room, message string) error, messageStrings *messagestrings.Store, cacheClient cache.LowLevelCache) *CommandRouter {
 	return &CommandRouter{
 		registry:       registry,
 		logger:         logger,
@@ -70,7 +70,7 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 	sharedlog.Debug(ctx, r.logger, EventBotCommandExecuteStarted, "command execution started", attrs...)
 
 	if err := r.registry.Execute(ctx, cmdCtx, key, normalizedParams); err != nil {
-		if errors.Is(err, command.ErrUnknownCommand) {
+		if errors.Is(err, handlers.ErrUnknownCommand) {
 			warnAttrs := append([]slog.Attr{}, attrs...)
 			warnAttrs = append(warnAttrs, sharedlog.SinceMS(started))
 			sharedlog.Warn(ctx, r.logger, EventBotCommandUnknown, "unknown command", warnAttrs...)

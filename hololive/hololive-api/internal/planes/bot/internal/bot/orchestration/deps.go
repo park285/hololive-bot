@@ -24,8 +24,9 @@ import (
 	"log/slog"
 	"time"
 
+	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -36,8 +37,10 @@ import (
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/workerpool"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
@@ -48,13 +51,13 @@ import (
 type Dependencies struct {
 	BotSelfUser           string
 	IrisBaseURL           string
-	Notification          config.NotificationConfig
+	Notification          configsettings.NotificationConfig
 	CalendarImageCacheDir string
 	CalendarEntryCacheTTL time.Duration
 	Logger                *slog.Logger
 	Client                iris.BotClient
-	MessageAdapter        *adapter.MessageAdapter
-	Formatter             *adapter.ResponseFormatter
+	MessageAdapter        *messaging.MessageAdapter
+	Formatter             *formatter.ResponseFormatter
 	MessageStrings        *messagestrings.Store
 	Cache                 cache.Client
 	Postgres              database.Client
@@ -66,13 +69,13 @@ type Dependencies struct {
 	Profiles              *member.ProfileService
 	Alarm                 domain.AlarmCRUD
 	Matcher               *matcher.Matcher
-	MembersData           member.DataProvider
+	MembersData           domain.MemberDataProvider
 	Service               youtube.Service
 	Activity              *activity.Logger
 	Settings              settings.ReadWriter
 	ACL                   *acl.Service
-	MajorEventRepository  command.MajorEventRepository
-	MemberNews            command.MemberNewsService
+	MajorEventRepository  handlercore.MajorEventRepository
+	MemberNews            handlercore.MemberNewsService
 	CommandBuilders       []orchcmd.CommandBuilder
 	WorkerPool            *workerpool.QueuedPool
 }
@@ -80,7 +83,7 @@ type Dependencies struct {
 type coreDependencies struct {
 	botSelfUser           string
 	irisBaseURL           string
-	notification          config.NotificationConfig
+	notification          configsettings.NotificationConfig
 	calendarImageCacheDir string
 	calendarEntryCacheTTL time.Duration
 	logger                *slog.Logger
@@ -88,8 +91,8 @@ type coreDependencies struct {
 
 type messagingDependencies struct {
 	client         iris.BotClient
-	messageAdapter *adapter.MessageAdapter
-	formatter      *adapter.ResponseFormatter
+	messageAdapter *messaging.MessageAdapter
+	formatter      *formatter.ResponseFormatter
 	messageStrings *messagestrings.Store
 }
 
@@ -107,7 +110,7 @@ type streamDependencies struct {
 	profiles    *member.ProfileService
 	alarm       domain.AlarmCRUD
 	matcher     *matcher.Matcher
-	membersData member.DataProvider
+	membersData domain.MemberDataProvider
 	service     youtube.Service
 }
 
@@ -119,8 +122,8 @@ type supportDependencies struct {
 }
 
 type featureDependencies struct {
-	majorEventRepository command.MajorEventRepository
-	memberNews           command.MemberNewsService
+	majorEventRepository handlercore.MajorEventRepository
+	memberNews           handlercore.MemberNewsService
 	commandBuilders      []orchcmd.CommandBuilder
 }
 

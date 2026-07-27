@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -37,17 +38,17 @@ func TestHandleMessageRecoversApplyPanicAndKeepsSubscribing(t *testing.T) {
 	var applied atomic.Int32
 	s := &Subscriber{
 		logger:  newDiscardLogger(),
-		channel: DefaultChannel,
-		applyFn: func(ConfigUpdate) {
+		channel: defaultChannel,
+		applyFn: func(contractssettings.ConfigUpdateV1) {
 			if applied.Add(1) == 1 {
 				panic("apply exploded")
 			}
 		},
 	}
 
-	payload, err := json.Marshal(ConfigUpdate{Type: "scraper_proxy"})
+	payload, err := json.Marshal(contractssettings.ConfigUpdateV1{Type: "scraper_proxy"})
 	require.NoError(t, err)
-	msg := valkey.PubSubMessage{Channel: DefaultChannel, Message: string(payload)}
+	msg := valkey.PubSubMessage{Channel: defaultChannel, Message: string(payload)}
 
 	require.NotPanics(t, func() { s.handleMessage(msg) })
 	require.NotPanics(t, func() { s.handleMessage(msg) })

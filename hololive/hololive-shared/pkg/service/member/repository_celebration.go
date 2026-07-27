@@ -35,7 +35,7 @@ func scanCalendarRow(scanner memberRowScanner, kindStr *string, day *int) (membe
 }
 
 func (r *Repository) collectCalendarEntriesFromRows(rows pgx.Rows, referenceYear int) ([]domain.CalendarEntry, error) {
-	return collectJoinedRows(rows, "calendar rows iteration", func(rows pgxRows) (domain.CalendarEntry, error) {
+	return collectJoinedRows(rows, "calendar rows iteration", func(rows pgx.Rows) (domain.CalendarEntry, error) {
 		var (
 			kindStr string
 			day     int
@@ -101,7 +101,7 @@ func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, da
 }
 
 func (r *Repository) collectCelebrationMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	return collectJoinedRows(rows, "celebration member rows iteration", func(rows pgxRows) (*domain.Member, error) {
+	return collectJoinedRows(rows, "celebration member rows iteration", func(rows pgx.Rows) (*domain.Member, error) {
 		row, err := scanCelebrationMemberRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan celebration member row: %w", err)

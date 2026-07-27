@@ -24,11 +24,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func TestProvideYouTubeProducerRateLimiter_DisabledDistributed_AllowsNilCache(t *testing.T) {
-	ytCfg := config.DefaultYouTubeOperationalConfig()
+	ytCfg := settings.DefaultYouTubeOperationalConfig()
 	ytCfg.ProducerDistributedRateLimit.Enabled = false
 
 	limiter, err := ProvideYouTubeProducerRateLimiterWithConfig(&ytCfg, nil, nil)
@@ -41,7 +41,7 @@ func TestProvideYouTubeProducerRateLimiter_DisabledDistributed_AllowsNilCache(t 
 }
 
 func TestProvideYouTubeProducerRateLimiter_EnabledDistributed_RequiresCache(t *testing.T) {
-	ytCfg := config.DefaultYouTubeOperationalConfig()
+	ytCfg := settings.DefaultYouTubeOperationalConfig()
 	ytCfg.ProducerDistributedRateLimit.Enabled = true
 
 	limiter, err := ProvideYouTubeProducerRateLimiterWithConfig(&ytCfg, nil, nil)

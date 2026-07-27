@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 func TestShouldSyncYouTubePollRegistration(t *testing.T) {
@@ -42,26 +42,26 @@ func TestShouldSyncYouTubePollRegistration(t *testing.T) {
 	}{
 		{
 			name: "syncs explicit registration with poller and interval",
-			registration: providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+			registration: providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Minute).
 				WithChannelIDs([]string{"UC_NOTIFY"}).
 				WithTargetGroup(providers.ChannelTargetGroupNotification),
 			want: true,
 		},
 		{
 			name: "skips nil poller",
-			registration: providers.NewChannelPollerRegistration(nil, poller.PriorityNormal, time.Minute).
+			registration: providers.NewChannelPollerRegistration(nil, pollscheduler.PriorityNormal, time.Minute).
 				WithChannelIDs([]string{"UC_NOTIFY"}).
 				WithTargetGroup(providers.ChannelTargetGroupNotification),
 		},
 		{
 			name: "skips zero interval",
-			registration: providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, 0).
+			registration: providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, 0).
 				WithChannelIDs([]string{"UC_NOTIFY"}).
 				WithTargetGroup(providers.ChannelTargetGroupNotification),
 		},
 		{
 			name: "skips implicit channel registration",
-			registration: providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+			registration: providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Minute).
 				WithTargetGroup(providers.ChannelTargetGroupNotification),
 		},
 	}
@@ -80,11 +80,11 @@ func TestShouldSyncYouTubePollRegistration(t *testing.T) {
 func TestYouTubePollRegistrationChannelIDs(t *testing.T) {
 	t.Parallel()
 
-	targets := youtubePollTargets{
+	targets := Targets{
 		NotificationChannelIDs: []string{"UC_NOTIFY"},
 		StatsChannelIDs:        []string{"UC_STATS"},
 	}
-	tieredTargets := youtubeTieredPollTargets{
+	tieredTargets := TieredTargets{
 		ActiveNotificationChannelIDs: []string{"UC_ACTIVE"},
 		WarmNotificationChannelIDs:   []string{"UC_WARM"},
 		ColdNotificationChannelIDs:   []string{"UC_COLD"},
@@ -145,7 +145,7 @@ func TestYouTubePollRegistrationChannelIDs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+			registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Minute).
 				WithChannelIDs([]string{"UC_REGISTRATION"}).
 				WithTargetGroup(tt.group)
 
@@ -159,11 +159,11 @@ func TestYouTubePollRegistrationChannelIDs(t *testing.T) {
 func TestYouTubePollRegistrationTargetSync(t *testing.T) {
 	t.Parallel()
 
-	targets := youtubePollTargets{
+	targets := Targets{
 		NotificationChannelIDs: []string{"UC_NOTIFY"},
 		StatsChannelIDs:        []string{"UC_STATS"},
 	}
-	tieredTargets := youtubeTieredPollTargets{
+	tieredTargets := TieredTargets{
 		ActiveNotificationChannelIDs: []string{"UC_ACTIVE"},
 		WarmNotificationChannelIDs:   []string{"UC_WARM"},
 		ColdNotificationChannelIDs:   []string{"UC_COLD"},
@@ -212,7 +212,7 @@ func TestYouTubePollRegistrationTargetSync(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, tt.interval).
+			registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, tt.interval).
 				WithChannelIDs([]string{"UC_REGISTRATION"}).
 				WithTargetGroup(tt.group)
 
@@ -230,22 +230,22 @@ func TestYouTubePollRegistrationTargetSync(t *testing.T) {
 func TestYouTubePollSchedulerSyncerSyncAtHandlesNilDependencies(t *testing.T) {
 	t.Parallel()
 
-	targets := youtubePollTargets{NotificationChannelIDs: []string{"UC_NOTIFY"}}
+	targets := Targets{NotificationChannelIDs: []string{"UC_NOTIFY"}}
 	now := time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
 
 	assert.NotPanics(t, func() {
-		var syncer *youTubePollSchedulerSyncer
+		var syncer *SchedulerSyncer
 		syncer.SyncAt(context.Background(), targets, now)
 	})
 	assert.NotPanics(t, func() {
-		(&youTubePollSchedulerSyncer{}).SyncAt(context.Background(), targets, now)
+		(&SchedulerSyncer{}).SyncAt(context.Background(), targets, now)
 	})
 }
 
 func TestYouTubePollSchedulerSyncerSyncAtClearsEmptyTargets(t *testing.T) {
 	t.Parallel()
 
-	registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+	registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Minute).
 		WithChannelIDs([]string{"UC_OLD"}).
 		WithTargetGroup(providers.ChannelTargetGroupNotification)
 	registrations := []providers.ChannelPollerRegistration{registration}
@@ -256,12 +256,12 @@ func TestYouTubePollSchedulerSyncerSyncAtClearsEmptyTargets(t *testing.T) {
 	)
 	require.Contains(t, schedulerJobKeys(t, scheduler), "UC_OLD:videos")
 
-	syncer := &youTubePollSchedulerSyncer{
+	syncer := &SchedulerSyncer{
 		scheduler:     scheduler,
 		registrations: registrations,
 	}
 
-	syncer.SyncAt(context.Background(), youtubePollTargets{}, time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC))
+	syncer.SyncAt(context.Background(), Targets{}, time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC))
 
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_OLD:videos")
 }
@@ -269,11 +269,11 @@ func TestYouTubePollSchedulerSyncerSyncAtClearsEmptyTargets(t *testing.T) {
 func TestYouTubePollSchedulerSyncerSyncAtSkipsTieredClassifyOnCancelledContext(t *testing.T) {
 	t.Parallel()
 
-	registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+	registration := providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Minute).
 		WithChannelIDs([]string{"UC_ACTIVE_REG"}).
 		WithTargetGroup(providers.ChannelTargetGroupActive)
 	registrations := []providers.ChannelPollerRegistration{registration}
-	targets := youtubePollTargets{NotificationChannelIDs: []string{"UC_NOTIFY"}}
+	targets := Targets{NotificationChannelIDs: []string{"UC_NOTIFY"}}
 	now := time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
 
 	liveScheduler := providers.ProvideScraperScheduler(
@@ -281,7 +281,7 @@ func TestYouTubePollSchedulerSyncerSyncAtSkipsTieredClassifyOnCancelledContext(t
 		newYouTubePollTargetTestLogger(),
 		providers.WithChannelPollerRegistrations(registrations),
 	)
-	liveSyncer := &youTubePollSchedulerSyncer{scheduler: liveScheduler, registrations: registrations}
+	liveSyncer := &SchedulerSyncer{scheduler: liveScheduler, registrations: registrations}
 	liveSyncer.SyncAt(context.Background(), targets, now)
 	require.Contains(t, schedulerJobKeys(t, liveScheduler), "UC_NOTIFY:videos",
 		"non-cancelled context must classify tiers and sync resolved notification targets")
@@ -291,7 +291,7 @@ func TestYouTubePollSchedulerSyncerSyncAtSkipsTieredClassifyOnCancelledContext(t
 		newYouTubePollTargetTestLogger(),
 		providers.WithChannelPollerRegistrations(registrations),
 	)
-	cancelledSyncer := &youTubePollSchedulerSyncer{scheduler: cancelledScheduler, registrations: registrations}
+	cancelledSyncer := &SchedulerSyncer{scheduler: cancelledScheduler, registrations: registrations}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cancelledSyncer.SyncAt(ctx, targets, now)

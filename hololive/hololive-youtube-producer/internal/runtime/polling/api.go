@@ -5,33 +5,36 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
-type BudgetSummary = youtubeProducerBudgetSummary
-
 type GlobalBudgetWiring struct {
-	Limiter             poller.GlobalBudgetLimiter
-	Context             poller.BudgetContext
+	Limiter             polling.GlobalBudgetLimiter
+	Context             polling.BudgetContext
 	AcquireTimeout      time.Duration
 	ActiveInstanceCount int
 	BudgetRPM           float64
 }
 
 func BuildComponents(
-	scraperConfig *config.ScraperConfig,
+	scraperConfig *settings.ScraperConfig,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
-	liveStatusProvider poller.LiveStatusProvider,
+	liveStatusProvider pollers.LiveStatusProvider,
 	logger *slog.Logger,
-) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
+) (*scheduler.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return BuildComponentsWithJobClaimerContext(
 		context.Background(),
 		scraperConfig,
@@ -47,16 +50,16 @@ func BuildComponents(
 }
 
 func BuildComponentsWithJobClaimer(
-	scraperConfig *config.ScraperConfig,
-	jobClaimer poller.JobClaimer,
+	scraperConfig *settings.ScraperConfig,
+	jobClaimer polling.JobClaimer,
 	budgetWiring *GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
-	liveStatusProvider poller.LiveStatusProvider,
+	liveStatusProvider pollers.LiveStatusProvider,
 	logger *slog.Logger,
-) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
+) (*scheduler.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return BuildComponentsWithJobClaimerContext(
 		context.Background(),
 		scraperConfig,
@@ -73,16 +76,16 @@ func BuildComponentsWithJobClaimer(
 
 func BuildComponentsWithJobClaimerContext(
 	ctx context.Context,
-	scraperConfig *config.ScraperConfig,
-	jobClaimer poller.JobClaimer,
+	scraperConfig *settings.ScraperConfig,
+	jobClaimer polling.JobClaimer,
 	budgetWiring *GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
-	liveStatusProvider poller.LiveStatusProvider,
+	liveStatusProvider pollers.LiveStatusProvider,
 	logger *slog.Logger,
-) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
+) (*scheduler.Scheduler, []providers.ChannelPollerRegistration, error) {
 	return buildYouTubeProducerComponents(
 		ctx,
 		scraperConfig,
@@ -98,17 +101,17 @@ func BuildComponentsWithJobClaimerContext(
 }
 
 func BuildSharedClient(
-	scraperConfig *config.ScraperConfig,
+	scraperConfig *settings.ScraperConfig,
 	cacheClient cache.Client,
-	sharedRL *scraper.RateLimiter,
+	sharedRL *ratelimiter.RateLimiter,
 ) *scraper.Client {
 	return buildSharedYouTubeProducerClient(scraperConfig, cacheClient, sharedRL)
 }
 
 func BuildRegistrations(
 	postgres database.Client,
-	scraperConfig *config.ScraperConfig,
-	sharedRL *scraper.RateLimiter,
+	scraperConfig *settings.ScraperConfig,
+	sharedRL *ratelimiter.RateLimiter,
 	cacheClient cache.Client,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
@@ -126,9 +129,9 @@ func BuildRegistrations(
 
 func BuildRegistrationsWithClient(
 	postgres database.Client,
-	scraperConfig *config.ScraperConfig,
+	scraperConfig *settings.ScraperConfig,
 	scraperClient *scraper.Client,
-	liveStatusProvider poller.LiveStatusProvider,
+	liveStatusProvider pollers.LiveStatusProvider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
@@ -143,11 +146,11 @@ func BuildRegistrationsWithClient(
 	)
 }
 
-func SummarizeBudget(registrations []providers.ChannelPollerRegistration) BudgetSummary {
+func SummarizeBudget(registrations []providers.ChannelPollerRegistration) youtubeProducerBudgetSummary {
 	return summarizeYouTubeProducerBudget(registrations)
 }
 
-func LogBudgetSummary(summary BudgetSummary, logger *slog.Logger) {
+func LogBudgetSummary(summary youtubeProducerBudgetSummary, logger *slog.Logger) {
 	logYouTubeProducerBudgetSummary(summary, logger)
 }
 

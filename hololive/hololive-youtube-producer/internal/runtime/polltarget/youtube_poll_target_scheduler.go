@@ -7,24 +7,24 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 const tieringQueryTimeout = 10 * time.Second
 
-type youTubePollSchedulerSyncer struct {
-	scheduler     *poller.Scheduler
+type SchedulerSyncer struct {
+	scheduler     *scheduler.Scheduler
 	registrations []providers.ChannelPollerRegistration
 	tieringDB     *pgxpool.Pool
 	logger        *slog.Logger
 }
 
-func (s *youTubePollSchedulerSyncer) SyncAt(ctx context.Context, targets youtubePollTargets, now time.Time) {
+func (s *SchedulerSyncer) SyncAt(ctx context.Context, targets Targets, now time.Time) {
 	if s == nil || s.scheduler == nil {
 		return
 	}
 	tieredTargets, hasTieredTargets := s.classifyTargetsForTieredRegistrations(ctx, targets, now)
-	tieredSyncs := make(map[string][]poller.PollerTargetSync)
+	tieredSyncs := make(map[string][]scheduler.PollerTargetSync)
 	for i := range s.registrations {
 		registration := &s.registrations[i]
 		if !shouldSyncYouTubePollRegistration(registration) {
@@ -42,13 +42,13 @@ func (s *youTubePollSchedulerSyncer) SyncAt(ctx context.Context, targets youtube
 	}
 }
 
-func (s *youTubePollSchedulerSyncer) classifyTargetsForTieredRegistrations(ctx context.Context, targets youtubePollTargets, now time.Time) (youtubeTieredPollTargets, bool) {
+func (s *SchedulerSyncer) classifyTargetsForTieredRegistrations(ctx context.Context, targets Targets, now time.Time) (TieredTargets, bool) {
 	if !s.hasTieredRegistrations() {
-		return youtubeTieredPollTargets{}, false
+		return TieredTargets{}, false
 	}
 	if err := ctx.Err(); err != nil {
 		s.logTieredClassifySkipped(err)
-		return youtubeTieredPollTargets{}, false
+		return TieredTargets{}, false
 	}
 	classifyCtx, cancel := context.WithTimeout(ctx, tieringQueryTimeout)
 	defer cancel()
@@ -57,18 +57,18 @@ func (s *youTubePollSchedulerSyncer) classifyTargetsForTieredRegistrations(ctx c
 		if classifyCtx.Err() != nil {
 			s.logTieredClassifySkipped(err)
 		}
-		return youtubeTieredPollTargets{}, false
+		return TieredTargets{}, false
 	}
 	return tieredTargets, true
 }
 
-func (s *youTubePollSchedulerSyncer) logTieredClassifySkipped(err error) {
+func (s *SchedulerSyncer) logTieredClassifySkipped(err error) {
 	if s.logger != nil {
 		s.logger.Warn("youtube_poll_target_tiered_classify_skipped", slog.Any("error", err))
 	}
 }
 
-func (s *youTubePollSchedulerSyncer) hasTieredRegistrations() bool {
+func (s *SchedulerSyncer) hasTieredRegistrations() bool {
 	return s != nil && hasTieredNotificationRegistration(s.registrations)
 }
 
@@ -81,12 +81,12 @@ func shouldSyncYouTubePollRegistration(registration *providers.ChannelPollerRegi
 
 func youtubePollRegistrationTargetSync(
 	registration *providers.ChannelPollerRegistration,
-	targets youtubePollTargets,
-	tieredTargets *youtubeTieredPollTargets,
+	targets Targets,
+	tieredTargets *TieredTargets,
 	hasTieredTargets bool,
-) poller.PollerTargetSync {
+) scheduler.PollerTargetSync {
 	if registration == nil {
-		return poller.PollerTargetSync{}
+		return scheduler.PollerTargetSync{}
 	}
 	updated := cloneYouTubePollRegistration(registration)
 	updated.ChannelIDs = youtubePollRegistrationChannelIDs(registration, targets, tieredTargets, hasTieredTargets)
@@ -113,8 +113,8 @@ func cloneYouTubePollRegistration(registration *providers.ChannelPollerRegistrat
 
 func youtubePollRegistrationChannelIDs(
 	registration *providers.ChannelPollerRegistration,
-	targets youtubePollTargets,
-	tieredTargets *youtubeTieredPollTargets,
+	targets Targets,
+	tieredTargets *TieredTargets,
 	hasTieredTargets bool,
 ) []string {
 	if registration.TargetGroup == providers.ChannelTargetGroupStats {
@@ -134,7 +134,7 @@ func youtubePollRegistrationChannelIDs(
 
 func tieredRegistrationChannelIDs(
 	registration *providers.ChannelPollerRegistration,
-	targets *youtubeTieredPollTargets,
+	targets *TieredTargets,
 	hasTargets bool,
 ) []string {
 	if !hasTargets || targets == nil {
@@ -143,7 +143,7 @@ func tieredRegistrationChannelIDs(
 	return append([]string(nil), channelIDsForTierGroup(registration.TargetGroup, targets)...)
 }
 
-func channelIDsForTierGroup(group providers.ChannelTargetGroup, targets *youtubeTieredPollTargets) []string {
+func channelIDsForTierGroup(group providers.ChannelTargetGroup, targets *TieredTargets) []string {
 	if targets == nil {
 		return nil
 	}

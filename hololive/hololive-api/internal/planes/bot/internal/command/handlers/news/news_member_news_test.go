@@ -30,7 +30,8 @@ import (
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
@@ -86,7 +87,7 @@ func (s *stubMemberNewsService) IsRoomSubscribed(_ context.Context, _ string) (b
 }
 
 func TestMemberNewsCommand_NoMembersMessage(t *testing.T) {
-	formatter := adapter.NewResponseFormatter("!", nil)
+	formatter := messageformatter.NewResponseFormatter("!", nil)
 	stub := &stubMemberNewsService{generateErr: membernewscontracts.ErrNoSubscribedMembers}
 
 	var sentMessage string
@@ -129,7 +130,7 @@ func TestMemberNewsCommand_EnsureBaseDepsError(t *testing.T) {
 }
 
 func TestMemberNewsCommand_ServiceNotInitializedUsesSendError(t *testing.T) {
-	formatter := adapter.NewResponseFormatter("!", nil)
+	formatter := messageformatter.NewResponseFormatter("!", nil)
 
 	var sentError string
 
@@ -150,13 +151,13 @@ func TestMemberNewsCommand_ServiceNotInitializedUsesSendError(t *testing.T) {
 		t.Fatalf("execute returned error: %v", err)
 	}
 
-	if sentError != adapter.ErrMemberNewsServiceNotInitialized {
-		t.Fatalf("expected sendError %q, got %q", adapter.ErrMemberNewsServiceNotInitialized, sentError)
+	if sentError != messaging.ErrMemberNewsServiceNotInitialized {
+		t.Fatalf("expected sendError %q, got %q", messaging.ErrMemberNewsServiceNotInitialized, sentError)
 	}
 }
 
 func TestMemberNewsCommand_ServiceErrorUsesSendError(t *testing.T) {
-	formatter := adapter.NewResponseFormatter("!", nil)
+	formatter := messageformatter.NewResponseFormatter("!", nil)
 	stub := &stubMemberNewsService{generateErr: errors.New("boom")}
 
 	var sentError string
@@ -181,13 +182,13 @@ func TestMemberNewsCommand_ServiceErrorUsesSendError(t *testing.T) {
 		t.Fatalf("execute returned error: %v", err)
 	}
 
-	if sentError != adapter.ErrMemberNewsQueryFailed {
-		t.Fatalf("expected sendError %q, got %q", adapter.ErrMemberNewsQueryFailed, sentError)
+	if sentError != messaging.ErrMemberNewsQueryFailed {
+		t.Fatalf("expected sendError %q, got %q", messaging.ErrMemberNewsQueryFailed, sentError)
 	}
 }
 
 func TestMemberNewsSubscriptionCommand_SubscribeAndStatus(t *testing.T) {
-	formatter := adapter.NewResponseFormatter("!", nil)
+	formatter := messageformatter.NewResponseFormatter("!", nil)
 	stub := &stubMemberNewsService{isSubscribed: false}
 
 	var sentMessages []string

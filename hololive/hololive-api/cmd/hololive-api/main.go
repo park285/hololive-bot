@@ -5,8 +5,9 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-api/internal/app"
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
@@ -18,15 +19,15 @@ var Version = "dev"
 
 func main() {
 	var logCloser io.Closer
-	code := bootstrap.Run(bootstrap.Options[*config.HololiveAPIConfig, *app.Runtime]{
+	code := bootstrap.Run(bootstrap.Options[*settings.HololiveAPIConfig, *app.Runtime]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             config.LoadHololiveAPIRuntime,
+		LoadConfig:             settings.LoadHololiveAPIRuntime,
 		LoadConfigErrorMessage: "Failed to load hololive-api config",
-		NewLogger: func(appConfig *config.HololiveAPIConfig) (*slog.Logger, error) {
+		NewLogger: func(appConfig *settings.HololiveAPIConfig) (*slog.Logger, error) {
 			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
 				Level:      appConfig.Logging.Level,
 				Dir:        appConfig.Logging.Dir,
@@ -41,11 +42,11 @@ func main() {
 			}
 			return logger, err
 		},
-		LoggerLevel: func(appConfig *config.HololiveAPIConfig) string {
+		LoggerLevel: func(appConfig *settings.HololiveAPIConfig) string {
 			return appConfig.Logging.Level
 		},
 		StartupMessage: "Hololive unified API starting...",
-		StartupFields: func(appConfig *config.HololiveAPIConfig) []any {
+		StartupFields: func(appConfig *settings.HololiveAPIConfig) []any {
 			return []any{
 				slog.Int("bot_port", appConfig.Bot.Server.Port),
 				slog.Int("admin_port", appConfig.Admin.Server.Port),

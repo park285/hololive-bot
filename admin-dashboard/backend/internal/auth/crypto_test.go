@@ -1,6 +1,10 @@
 package auth
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/park285/shared-go/pkg/httputil"
+)
 
 func TestSessionSignatureRoundTrip(t *testing.T) {
 	signed := SignSessionID("abcdef123456", "secret-key")
@@ -27,10 +31,10 @@ func TestCSRFTokenRoundTrip(t *testing.T) {
 }
 
 func TestConstantTimeStringEqual(t *testing.T) {
-	if !ConstantTimeStringEqual("admin", "admin") {
+	if !httputil.ConstantTimeStringEqual("admin", "admin") {
 		t.Fatal("same value must match")
 	}
-	if ConstantTimeStringEqual("admin", "Admin") {
+	if httputil.ConstantTimeStringEqual("admin", "Admin") {
 		t.Fatal("different value must fail")
 	}
 }

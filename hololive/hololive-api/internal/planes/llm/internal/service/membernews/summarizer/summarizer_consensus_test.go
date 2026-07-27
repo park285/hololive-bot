@@ -31,7 +31,8 @@ import (
 	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 // fakeLLMWithCounter: 호출 횟수를 추적하는 LLM 모의 클라이언트.
@@ -73,7 +74,7 @@ func defaultConsensusConfig() consensus.Config {
 func defaultTestInput() *model.SummarizeInput {
 	return &model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
 		RoomMembers: []string{"사쿠라 미코"},
 		Candidates:  sampleCandidates(),
 	}

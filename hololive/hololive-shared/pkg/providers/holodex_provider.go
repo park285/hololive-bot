@@ -24,9 +24,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper"
 )
 
 // ProvideHolodexService - Holodex API 서비스 생성
@@ -34,26 +36,26 @@ func ProvideHolodexService(
 	baseURL string,
 	apiKey string,
 	cacheClient cache.Client,
-	scraperService *holodex.ScraperService,
+	scraperService *htmlscraper.Service,
 	logger *slog.Logger,
-) (*holodex.Service, error) {
-	holodexCfg := config.DefaultHolodexOperationalConfig()
+) (*holodexprovider.Service, error) {
+	holodexCfg := settings.DefaultHolodexOperationalConfig()
 	holodexCfg.BaseURL = baseURL
 	holodexCfg.APIKey = apiKey
 	return ProvideHolodexServiceWithConfig(&holodexCfg, cacheClient, scraperService, logger)
 }
 
 func ProvideHolodexServiceWithConfig(
-	holodexCfg *config.HolodexConfig,
+	holodexCfg *settings.HolodexConfig,
 	cacheClient cache.Client,
-	scraperService *holodex.ScraperService,
+	scraperService *htmlscraper.Service,
 	logger *slog.Logger,
-) (*holodex.Service, error) {
+) (*holodexprovider.Service, error) {
 	if holodexCfg == nil {
-		cfg := config.DefaultHolodexOperationalConfig()
+		cfg := settings.DefaultHolodexOperationalConfig()
 		holodexCfg = &cfg
 	}
-	service, err := holodex.NewHolodexServiceWithConfig(holodexCfg, holodexCfg.BaseURL, holodexCfg.APIKey, cacheClient, scraperService, logger)
+	service, err := holodexprovider.NewHolodexServiceWithConfig(holodexCfg, holodexCfg.BaseURL, holodexCfg.APIKey, cacheClient, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create holodex service: %w", err)
 	}

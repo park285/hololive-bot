@@ -3,16 +3,16 @@ package settings
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 func ApplyScraperProxyToggle(
 	enabled bool,
 	youtubeService youtube.Service,
-	holodexService *holodex.Service,
-	scraperScheduler *poller.Scheduler,
+	holodexService *holodexprovider.Service,
+	scraperScheduler *scheduler.Scheduler,
 	logger *slog.Logger,
 ) {
 	youtubeApplied := false

@@ -5,10 +5,13 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 )
 
@@ -63,18 +66,18 @@ func summarizeYouTubeProducerBudgetForFleet(registrations []providers.ChannelPol
 }
 
 func defaultYouTubeProducerBudgetRPM() float64 {
-	return 60.0 / config.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
+	return 60.0 / settings.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
 }
 
 func estimateRegistrationYouTubeScraperRPM(registration *providers.ChannelPollerRegistration) float64 {
-	if registration.HasBudgetProfile && !registrationHasReservedSourceUnits(registration, poller.BudgetSourceYouTubeScraper) {
+	if registration.HasBudgetProfile && !registrationHasReservedSourceUnits(registration, polling.BudgetSourceYouTubeScraper) {
 		return 0
 	}
 	return estimateRegistrationRPM(registration)
 }
 
 func estimateRegistrationYouTubeScraperWorstCaseRPM(registration *providers.ChannelPollerRegistration) float64 {
-	if fallbackUnits := registrationFallbackSourceUnits(registration, poller.BudgetSourceYouTubeScraper); fallbackUnits > 0 {
+	if fallbackUnits := registrationFallbackSourceUnits(registration, polling.BudgetSourceYouTubeScraper); fallbackUnits > 0 {
 		if registration.Poller == nil || registration.Interval <= 0 {
 			return 0
 		}
@@ -84,13 +87,13 @@ func estimateRegistrationYouTubeScraperWorstCaseRPM(registration *providers.Chan
 		}
 		return float64(channelCount) * fallbackUnits * (60.0 / registration.Interval.Seconds())
 	}
-	if registration.HasBudgetProfile && !registrationHasReservedSourceUnits(registration, poller.BudgetSourceYouTubeScraper) {
+	if registration.HasBudgetProfile && !registrationHasReservedSourceUnits(registration, polling.BudgetSourceYouTubeScraper) {
 		return 0
 	}
 	return estimateRegistrationWorstCaseRPM(registration)
 }
 
-func registrationHasReservedSourceUnits(registration *providers.ChannelPollerRegistration, source poller.BudgetSource) bool {
+func registrationHasReservedSourceUnits(registration *providers.ChannelPollerRegistration, source polling.BudgetSource) bool {
 	if len(registration.BudgetProfile.SourceUnits) == 0 {
 		return false
 	}
@@ -98,7 +101,7 @@ func registrationHasReservedSourceUnits(registration *providers.ChannelPollerReg
 	return units > 0
 }
 
-func registrationFallbackSourceUnits(registration *providers.ChannelPollerRegistration, source poller.BudgetSource) float64 {
+func registrationFallbackSourceUnits(registration *providers.ChannelPollerRegistration, source polling.BudgetSource) float64 {
 	if len(registration.BudgetProfile.FallbackSourceUnits) == 0 {
 		return 0
 	}
@@ -211,29 +214,31 @@ func validateExplicitPollerRegistrations(registrations []providers.ChannelPoller
 	)
 }
 
-func youtubeScraperBudgetProfile(units float64, class poller.BudgetBurstClass, priority poller.BudgetPriority) poller.BudgetProfile {
-	return poller.BudgetProfile{
-		SourceUnits: map[poller.BudgetSource]float64{
-			poller.BudgetSourceYouTubeScraper: units,
-			poller.BudgetSourcePostgresWrite:  1,
+func youtubeScraperBudgetProfile(units float64, class polling.BudgetBurstClass, priority polling.BudgetPriority) polling.BudgetProfile {
+	return polling.BudgetProfile{
+		SourceUnits: map[polling.BudgetSource]float64{
+			polling.BudgetSourceYouTubeScraper: units,
+			polling.BudgetSourcePostgresWrite:  1,
 		},
 		BurstClass: class,
 		Priority:   priority,
 	}
 }
 
-func budgetProfileWithRegistrationPriority(profile poller.BudgetProfile, priority poller.Priority) poller.BudgetProfile {
+func budgetProfileWithRegistrationPriority(profile polling.BudgetProfile, priority scheduler.Priority) polling.BudgetProfile {
 	profile.Priority = budgetPriorityFromRegistrationPriority(priority)
 	return profile
 }
 
-func budgetPriorityFromRegistrationPriority(priority poller.Priority) poller.BudgetPriority {
+func budgetPriorityFromRegistrationPriority(priority scheduler.Priority) polling.BudgetPriority {
 	switch priority {
-	case poller.PriorityHigh, poller.PriorityBoost:
-		return poller.BudgetPriorityHigh
-	case poller.PriorityLow:
-		return poller.BudgetPriorityLow
+	case scheduler.PriorityHigh, scheduler.PriorityBoost:
+		return polling.BudgetPriorityHigh
+	case scheduler.PriorityLow:
+		return polling.BudgetPriorityLow
+	case scheduler.PriorityNormal:
+		return polling.BudgetPriorityNormal
 	default:
-		return poller.BudgetPriorityNormal
+		return polling.BudgetPriorityNormal
 	}
 }

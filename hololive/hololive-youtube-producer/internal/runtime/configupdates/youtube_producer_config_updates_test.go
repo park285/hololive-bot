@@ -29,7 +29,6 @@ import (
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	svcsettings "github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
@@ -122,7 +121,7 @@ func TestBuildSubscriber_ApplyScraperProxyPersistsSettingAndUpdatesYouTube(t *te
 		testLogger(),
 	)
 
-	applyFn(configsub.ConfigUpdate{
+	applyFn(contractssettings.ConfigUpdateV1{
 		Type:    contractssettings.UpdateTypeScraperProxy,
 		Payload: []byte(`{"enabled":true}`),
 	})
@@ -160,15 +159,15 @@ func TestBuildSubscriber_IgnoresAlarmAdvanceMinutesAndInvalidPayload(t *testing.
 		testLogger(),
 	)
 
-	applyFn(configsub.ConfigUpdate{
+	applyFn(contractssettings.ConfigUpdateV1{
 		Type:    contractssettings.UpdateTypeScraperProxy,
 		Payload: []byte(`{"enabled":`),
 	})
-	applyFn(configsub.ConfigUpdate{
+	applyFn(contractssettings.ConfigUpdateV1{
 		Type:    contractssettings.UpdateTypeAlarmAdvanceMinutes,
 		Payload: []byte(`{"minutes":30}`),
 	})
-	applyFn(configsub.ConfigUpdate{
+	applyFn(contractssettings.ConfigUpdateV1{
 		Type:    "unknown_update_type",
 		Payload: []byte(`{}`),
 	})
@@ -203,7 +202,7 @@ func TestBuildSubscriber_ApplyScraperProxyLogsPersistError(t *testing.T) {
 	)
 
 	require.NotPanics(t, func() {
-		applyFn(configsub.ConfigUpdate{
+		applyFn(contractssettings.ConfigUpdateV1{
 			Type:    contractssettings.UpdateTypeScraperProxy,
 			Payload: []byte(`{"enabled":true}`),
 		})

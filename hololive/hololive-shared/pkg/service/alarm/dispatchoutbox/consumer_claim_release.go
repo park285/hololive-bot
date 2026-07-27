@@ -3,15 +3,14 @@ package dispatchoutbox
 import (
 	"context"
 	"fmt"
+	keyspkg "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"strings"
-
-	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
 
 // claimKeyPrefix는 dedup 마커(notified:claim:, notified:claim:event:) SSOT prefix다.
 // queue.Consumer와 동일하게 이 prefix만 삭제 대상으로 허용해, dispatch claim 등
 // 다른 키가 잘못 해제되는 것을 막는다.
-const claimKeyPrefix = contractsalarm.NotifyClaimKeyPrefix
+const claimKeyPrefix = keyspkg.NotifyClaimKeyPrefix
 
 // ClaimKeyReleaser는 Consumer가 dedup claim 키를 삭제할 때 의존하는 narrow interface다.
 // cache.Client(god interface)가 그대로 만족한다. nil이면 ReleaseClaimKeys는 no-op로

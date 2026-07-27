@@ -24,7 +24,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	membermocks "github.com/kapu/hololive-shared/pkg/service/member/mocks"
@@ -36,8 +37,8 @@ func TestInitAlarmDependenciesReturnsErrorWhenCacheIsNil(t *testing.T) {
 	t.Parallel()
 
 	deps, err := InitAlarmDependencies(
-		config.ChzzkConfig{},
-		&config.TwitchConfig{},
+		settings.ChzzkConfig{},
+		&settings.TwitchConfig{},
 		[]int{10, 5, 1},
 		false,
 		nil,
@@ -57,8 +58,8 @@ func TestInitAlarmDependenciesBuildsAlarmDependencies(t *testing.T) {
 	memberProvider := &membermocks.DataProvider{}
 
 	deps, err := InitAlarmDependencies(
-		config.ChzzkConfig{},
-		&config.TwitchConfig{},
+		settings.ChzzkConfig{},
+		&settings.TwitchConfig{},
 		[]int{10, 5, 1},
 		false,
 		cachemocks.NewLenientClient(),
@@ -87,8 +88,8 @@ func TestInitAlarmModeComponentsWrapsAlarmServiceAsCRUD(t *testing.T) {
 
 	components, err := InitAlarmModeComponents(
 		t.Context(),
-		&config.Config{
-			Notification: config.NotificationConfig{AdvanceMinutes: []int{10, 5, 1}},
+		&settings.Config{
+			Notification: settings.NotificationConfig{AdvanceMinutes: []int{10, 5, 1}},
 		},
 		infra,
 		nil,

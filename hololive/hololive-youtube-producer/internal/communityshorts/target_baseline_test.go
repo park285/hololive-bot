@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
@@ -38,7 +39,7 @@ func TestBuildTargetBaseline(t *testing.T) {
 			{RoomID: "room-default-1", ChannelID: "UCmiko"},
 			{RoomID: "room-shorts-1", ChannelID: "UCpekora", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
 			{RoomID: "room-live-only", ChannelID: "UCpekora", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
-		}, config.IngestionConfig{
+		}, settings.IngestionConfig{
 			CommunityShortsBigBangCutoverAt: cutoverAt,
 		}, cutoverAt.Add(time.Minute))
 		require.NoError(t, err)
@@ -73,7 +74,7 @@ func TestBuildTargetBaseline(t *testing.T) {
 		generatedAt := cutoverAt.Add(-30 * time.Minute)
 		baseline, err := BuildTargetBaseline([]OperationalChannel{{OwnerLabel: "Miko", ChannelID: "UCmiko", Enabled: true}}, []*domain.Alarm{{
 			RoomID: "room-community-1", ChannelID: "UCmiko", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
-		}}, config.IngestionConfig{
+		}}, settings.IngestionConfig{
 			CommunityShortsBigBangCutoverAt: cutoverAt,
 		}, generatedAt)
 		require.NoError(t, err)
@@ -84,7 +85,7 @@ func TestBuildTargetBaseline(t *testing.T) {
 
 	t.Run("final delivery owner is alarm worker after cutover", func(t *testing.T) {
 		t.Parallel()
-		baseline, err := BuildTargetBaseline([]OperationalChannel{{OwnerLabel: "Sora", ChannelID: "UCsora", Enabled: true}}, nil, config.IngestionConfig{}, time.Date(2026, 4, 10, 2, 0, 0, 0, time.UTC))
+		baseline, err := BuildTargetBaseline([]OperationalChannel{{OwnerLabel: "Sora", ChannelID: "UCsora", Enabled: true}}, nil, settings.IngestionConfig{}, time.Date(2026, 4, 10, 2, 0, 0, 0, time.UTC))
 		require.NoError(t, err)
 		require.Equal(t, RuntimeOwnerAlarmWorker, baseline.Runtime.FinalDeliveryOwner)
 		require.True(t, baseline.Runtime.CommunityShortsBigBangEnabled)

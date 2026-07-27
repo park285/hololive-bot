@@ -29,7 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
@@ -175,15 +176,15 @@ func TestCollectChzzkLiveStreams_ReturnsEmptySliceWhenNoStreams(t *testing.T) {
 	}
 }
 
-func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *Dependencies, single *[]byte, text *string) {
+func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *handlercore.Dependencies, single *[]byte, text *string) {
 	t.Helper()
 
 	var singleSent []byte
 	var textSent string
-	deps = &Dependencies{
+	deps = &handlercore.Dependencies{
 		Holodex:   &liveStreamProviderStub{},
 		Matcher:   matcher.NewMatcher(nilBaseContext(), newContextAwareMemberProvider(members), nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			textSent = msg
 			return nil
@@ -226,10 +227,10 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 		ChannelID: "ch-aqua",
 		Name:      "Aqua",
 	}})
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   &liveStreamProviderStub{},
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
 		},

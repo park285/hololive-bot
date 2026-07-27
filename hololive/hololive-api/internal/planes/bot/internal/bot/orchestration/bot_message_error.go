@@ -26,7 +26,7 @@ import (
 
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
@@ -49,28 +49,28 @@ func (b *Bot) getErrorMessage(err error) string {
 
 	var serviceErr *appErrors.ServiceError
 	if errors.As(err, &serviceErr) && serviceErr.Service == serviceNameIris {
-		return adapter.ErrIrisConnectionFailed
+		return messaging.ErrIrisConnectionFailed
 	}
 
 	var apiErr *appErrors.APIError
 	if errors.As(err, &apiErr) {
-		return adapter.ErrExternalAPICallFailed
+		return messaging.ErrExternalAPICallFailed
 	}
 
 	var keyRotationErr *appErrors.KeyRotationError
 	if errors.As(err, &keyRotationErr) {
-		return adapter.ErrExternalAPICallFailed
+		return messaging.ErrExternalAPICallFailed
 	}
 
 	var cacheErr *appErrors.CacheError
 	if errors.As(err, &cacheErr) {
-		return adapter.ErrCacheConnectionFailed
+		return messaging.ErrCacheConnectionFailed
 	}
 
 	var validationErr *appErrors.ValidationError
 	if errors.As(err, &validationErr) {
-		return adapter.ErrCommandProcessingFailed
+		return messaging.ErrCommandProcessingFailed
 	}
 
-	return adapter.ErrCommandProcessingFailed
+	return messaging.ErrCommandProcessingFailed
 }

@@ -31,10 +31,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
 )
 
 func TestNextLoopDelay(t *testing.T) {
@@ -111,9 +110,9 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 		var calls atomic.Int32
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (checker.SendResult, error) {
+				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
 					calls.Add(1)
-					return checker.SendResult{}, nil
+					return delivery.SendResult{}, nil
 				},
 			},
 			logger: testSchedulerLogger(),
@@ -131,10 +130,10 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 		var gotNotifications []*domain.AlarmNotification
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
-				send: func(_ context.Context, notifications []*domain.AlarmNotification) (checker.SendResult, error) {
+				send: func(_ context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, error) {
 					calls.Add(1)
 					gotNotifications = notifications
-					return checker.SendResult{Sent: 1}, nil
+					return delivery.SendResult{Sent: 1}, nil
 				},
 			},
 			logger: testSchedulerLogger(),
@@ -153,9 +152,9 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 		var calls atomic.Int32
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (checker.SendResult, error) {
+				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
 					calls.Add(1)
-					return checker.SendResult{Sent: 1, Failed: 1}, sendErr
+					return delivery.SendResult{Sent: 1, Failed: 1}, sendErr
 				},
 			},
 			logger: testSchedulerLogger(),
@@ -277,7 +276,7 @@ func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailure(t *testing.T) {
 		t.Parallel()
 
 		s := &RuntimeScheduler{logger: testSchedulerLogger()}
-		checkErr := sharedcache.NewCacheError("failed", "smembers", "alarm:test", errors.New("EOF"))
+		checkErr := sharedcache.NewCacheError("smembers", "alarm:test", errors.New("EOF"))
 
 		require.NoError(t, s.recoverAlarmCacheAfterCheckFailure(t.Context(), checkErr))
 	})
@@ -289,7 +288,7 @@ func TestIsCacheFailure(t *testing.T) {
 	t.Run("returns true for cache error", func(t *testing.T) {
 		t.Parallel()
 
-		err := sharedcache.NewCacheError("failed", "get", "alarm:test", errors.New("EOF"))
+		err := sharedcache.NewCacheError("get", "alarm:test", errors.New("EOF"))
 
 		assert.True(t, isCacheFailure(err))
 	})
