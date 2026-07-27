@@ -73,7 +73,7 @@ type CalendarImageRenderer interface {
 }
 
 type HelpImageRenderer interface {
-	RenderHelpImage(ctx context.Context, text string) ([]byte, error)
+	RenderHelpImages(ctx context.Context, text string) ([][]byte, error)
 }
 
 type BroadcastHistoryQuery struct {
