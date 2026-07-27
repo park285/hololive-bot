@@ -16,8 +16,8 @@ const (
 	helpCardCanvasWidth      = 1448
 	helpCardCanvasHeight     = 1086
 	helpCardOutputWidth      = 1448
-	helpCardTargetContentH   = 700
-	helpCardMaxContentH      = 720
+	helpCardTargetContentH   = 720
+	helpCardMaxContentH      = 744
 	helpCardCommandWidth     = 350
 	helpCardDescriptionWidth = 820
 	helpCardMaxSourceLines   = 96
@@ -25,9 +25,9 @@ const (
 	helpCardMaxWrappedLines  = 2
 	helpCardMaxSections      = 24
 	helpCardMaxRows          = 64
-	helpCardSectionHeight    = 40
-	helpCardRowMinHeight     = 58
-	helpCardTextLineHeight   = 27
+	helpCardSectionHeight    = 36
+	helpCardRowMinHeight     = 52
+	helpCardTextLineHeight   = 24
 )
 
 type helpCardFonts struct {
