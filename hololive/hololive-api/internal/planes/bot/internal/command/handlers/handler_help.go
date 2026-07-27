@@ -66,7 +66,7 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 		imageErr = fmt.Errorf("format help content: %w", contentErr)
 	} else {
 		fallback = content.TextFallback
-		imageErr = c.sendHelpImage(ctx, cmdCtx.Room, content.ImageText)
+		imageErr = c.sendHelpImages(ctx, cmdCtx.Room, content.ImageText)
 	}
 	if imageErr == nil {
 		return nil
@@ -79,20 +79,39 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	return nil
 }
 
-func (c *HelpCommand) sendHelpImage(ctx context.Context, room, text string) error {
+type helpImageSendError struct {
+	sent  int
+	total int
+	err   error
+}
+
+func (e *helpImageSendError) Error() string {
+	return fmt.Sprintf("send help image %d/%d: %v", e.sent+1, e.total, e.err)
+}
+
+func (e *helpImageSendError) Unwrap() error {
+	return e.err
+}
+
+func (c *HelpCommand) sendHelpImages(ctx context.Context, room, text string) error {
 	if c.deps.HelpImageRenderer == nil || c.deps.SendImage == nil {
 		return errHelpImageUnavailable
 	}
 
-	imageData, err := c.deps.HelpImageRenderer.RenderHelpImage(ctx, text)
+	images, err := c.deps.HelpImageRenderer.RenderHelpImages(ctx, text)
 	if err != nil {
-		return fmt.Errorf("render help image: %w", err)
+		return fmt.Errorf("render help images: %w", err)
 	}
-	if len(imageData) == 0 {
-		return errors.New("render help image: empty payload")
+	if len(images) == 0 {
+		return errors.New("render help images: empty result")
 	}
-	if err := c.deps.SendImage(ctx, room, imageData); err != nil {
-		return fmt.Errorf("send help image: %w", err)
+	for index, imageData := range images {
+		if len(imageData) == 0 {
+			return fmt.Errorf("render help image %d/%d: empty payload", index+1, len(images))
+		}
+		if err := c.deps.SendImage(ctx, room, imageData); err != nil {
+			return &helpImageSendError{sent: index, total: len(images), err: err}
+		}
 	}
 	return nil
 }
@@ -101,7 +120,12 @@ func (c *HelpCommand) logImageFallback(ctx context.Context, err error) {
 	if c.deps.Logger == nil {
 		return
 	}
-	c.deps.Logger.WarnContext(ctx, "help_image_fallback", slog.Any("error", err))
+	args := []any{slog.Any("error", err)}
+	var sendErr *helpImageSendError
+	if errors.As(err, &sendErr) {
+		args = append(args, slog.Int("sent_images", sendErr.sent), slog.Int("total_images", sendErr.total))
+	}
+	c.deps.Logger.WarnContext(ctx, "help_image_fallback", args...)
 }
 
 func (c *HelpCommand) ensureDeps() error {
