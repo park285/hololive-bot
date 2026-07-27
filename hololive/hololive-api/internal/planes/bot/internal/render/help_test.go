@@ -52,7 +52,7 @@ const helpCardTestText = `홀로라이브 봇 명령어
   !구독자 [멤버명] - 구독자 수
   !도움말 - 도움말`
 
-func TestHelpCardRendererUsesQuestionHelpVisualContract(t *testing.T) {
+func TestHelpCardRendererMatchesChatBotGoQuestionFrame(t *testing.T) {
 	renderer := NewHelpCardRenderer()
 	images, err := renderer.RenderHelpImages(t.Context(), helpCardTestText)
 	if err != nil {
@@ -68,11 +68,15 @@ func TestHelpCardRendererUsesQuestionHelpVisualContract(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode PNG %d config: %v", index+1, err)
 		}
-		if config.Width != helpCardOutputWidth {
-			t.Fatalf("PNG %d width = %d, want %d", index+1, config.Width, helpCardOutputWidth)
-		}
-		if config.Height < helpCardMinHeight || config.Height > helpCardMaxHeight {
-			t.Fatalf("PNG %d height = %d, want %d..%d", index+1, config.Height, helpCardMinHeight, helpCardMaxHeight)
+		if config.Width != helpCardCanvasWidth || config.Height != helpCardCanvasHeight {
+			t.Fatalf(
+				"PNG %d dimensions = %dx%d, want %dx%d",
+				index+1,
+				config.Width,
+				config.Height,
+				helpCardCanvasWidth,
+				helpCardCanvasHeight,
+			)
 		}
 		if len(imageData) > helpCardMaxPNGBytes {
 			t.Fatalf("PNG %d size = %d, want <= %d", index+1, len(imageData), helpCardMaxPNGBytes)
@@ -83,12 +87,10 @@ func TestHelpCardRendererUsesQuestionHelpVisualContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode first PNG: %v", err)
 	}
-	if got := color.RGBAModel.Convert(decoded.At(0, 0)).(color.RGBA); got != helpColorBackgroundStart {
-		t.Fatalf("background pixel = %#v, want %#v", got, helpColorBackgroundStart)
-	}
-	if got := color.RGBAModel.Convert(decoded.At(100, 200)).(color.RGBA); got != helpColorPanel {
-		t.Fatalf("panel pixel = %#v, want %#v", got, helpColorPanel)
-	}
+	assertHelpPixel(t, decoded, 0, 0, helpColorOuter)
+	assertHelpPixel(t, decoded, helpCardCanvasWidth/2, helpCardFrameY, helpColorBorder)
+	assertHelpPixel(t, decoded, helpCardCanvasWidth/2, helpCardFrameY+helpCardFrameInset, helpColorSurface)
+	assertHelpPixel(t, decoded, 100, helpCardTableHeaderY+20, helpColorHeader)
 
 	images[0][0] ^= 0xff
 	cached, err := renderer.RenderHelpImages(t.Context(), helpCardTestText)
@@ -97,6 +99,14 @@ func TestHelpCardRendererUsesQuestionHelpVisualContract(t *testing.T) {
 	}
 	if !bytes.Equal(cached[0], originalFirst) {
 		t.Fatal("cached PNG was aliased by the caller")
+	}
+}
+
+func assertHelpPixel(t *testing.T, image interface{ At(int, int) color.Color }, x, y int, want color.RGBA) {
+	t.Helper()
+	got := color.RGBAModel.Convert(image.At(x, y)).(color.RGBA)
+	if got != want {
+		t.Fatalf("pixel (%d,%d) = %#v, want %#v", x, y, got, want)
 	}
 }
 
@@ -123,6 +133,9 @@ func TestHelpCardPaginationPreservesEveryCommand(t *testing.T) {
 	wantRows := helpDocumentRowCount(document.sections)
 	gotRows := 0
 	for _, page := range pages {
+		if page.contentHeight > helpCardMaxContentH {
+			t.Fatalf("page content height = %d, want <= %d", page.contentHeight, helpCardMaxContentH)
+		}
 		gotRows += helpDocumentRowCount(page.sections)
 	}
 	if gotRows != wantRows {
