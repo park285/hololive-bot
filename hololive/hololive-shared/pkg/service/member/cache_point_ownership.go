@@ -21,6 +21,7 @@
 package member
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -111,10 +112,5 @@ func memberMatchesPointAlias(member *domain.Member, alias string) bool {
 		strings.EqualFold(member.NameKo, alias) {
 		return true
 	}
-	for _, candidate := range member.GetAllAliases() {
-		if candidate == alias {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(member.GetAllAliases(), alias)
 }
