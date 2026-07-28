@@ -54,6 +54,8 @@ type Cache struct {
 	byName      sync.Map // map[string]*domain.Member
 	allMembers  sync.Map // []string (channel IDs)
 
+	snapshotMu         sync.RWMutex
+	snapshotGeneration atomic.Uint64
 	allMembersSnapshot atomic.Pointer[allMembersState]
 	allMembersGroup    singleflight.Group
 	snapshotTTL        time.Duration
@@ -71,6 +73,11 @@ type CacheConfig struct {
 	WarmUp              bool // 시작 시 전체 멤버를 메모리에 로드
 	WarmUpChunkSize     int
 	WarmUpMaxGoroutines int
+}
+
+type memoryMember struct {
+	member     *domain.Member
+	generation uint64
 }
 
 // 설정에 따라 생성 시점에 자동으로 캐시 워밍업을 수행할 수 있다.
@@ -115,7 +122,8 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 		return member, nil
 	}
 
-	if member := c.loadChannelFromDistributedCache(ctx, channelID); member != nil {
+	generation := c.currentSnapshotGeneration()
+	if member := c.loadChannelFromDistributedCache(ctx, channelID, generation); member != nil {
 		return member, nil
 	}
 
@@ -127,7 +135,7 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 		return nil, nil
 	}
 
-	c.cacheMember(ctx, dbMember)
+	c.cacheMember(ctx, dbMember, generation, "")
 
 	return dbMember, nil
 }
@@ -137,7 +145,8 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 		return member, nil
 	}
 
-	if member := c.loadNameFromDistributedCache(ctx, name); member != nil {
+	generation := c.currentSnapshotGeneration()
+	if member := c.loadNameFromDistributedCache(ctx, name, generation); member != nil {
 		return member, nil
 	}
 
@@ -149,17 +158,22 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 		return nil, nil
 	}
 
-	c.cacheMember(ctx, dbMember)
+	c.cacheMember(ctx, dbMember, generation, "")
 	return dbMember, nil
 }
 
 func (c *Cache) loadChannelFromMemory(channelID string) (*domain.Member, bool) {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+
 	val, ok := c.byChannelID.Load(channelID)
 	if !ok {
 		return nil, false
 	}
-	member, ok := val.(*domain.Member)
-	if ok {
+	switch member := val.(type) {
+	case *memoryMember:
+		return member.member, true
+	case *domain.Member:
 		return member, true
 	}
 	c.byChannelID.Delete(channelID)
@@ -167,39 +181,56 @@ func (c *Cache) loadChannelFromMemory(channelID string) (*domain.Member, bool) {
 }
 
 func (c *Cache) loadNameFromMemory(name string) (*domain.Member, bool) {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+
 	val, ok := c.byName.Load(name)
 	if !ok {
 		return nil, false
 	}
-	member, ok := val.(*domain.Member)
-	if ok {
+	switch member := val.(type) {
+	case *memoryMember:
+		return member.member, true
+	case *domain.Member:
 		return member, true
 	}
 	c.byName.Delete(name)
 	return nil, false
 }
 
-func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID string) *domain.Member {
+func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID string, generation uint64) *domain.Member {
 	if !c.cacheEnabled() {
 		return nil
 	}
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
+		return nil
+	}
+
 	cacheKey := memberChannelKeyPrefix + channelID
 	var member domain.Member
 	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-		c.byChannelID.Store(channelID, &member)
+		c.storePointMemberInMemoryLocked(&member, generation)
 		return &member
 	}
 	return nil
 }
 
-func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string) *domain.Member {
+func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string, generation uint64) *domain.Member {
 	if !c.cacheEnabled() {
 		return nil
 	}
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
+		return nil
+	}
+
 	cacheKey := memberNameKeyPrefix + name
 	var member domain.Member
 	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-		c.byName.Store(name, &member)
+		c.storePointMemberInMemoryLocked(&member, generation)
 		return &member
 	}
 	return nil
@@ -207,7 +238,8 @@ func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string) *
 
 // 별명 조회 성공 시 해당 멤버 정보를 캐시에 등록한다.
 func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
-	if member := c.getAliasFromCache(ctx, alias); member != nil {
+	generation := c.currentSnapshotGeneration()
+	if member := c.getAliasFromCache(ctx, alias, generation); member != nil {
 		return member, nil
 	}
 
@@ -219,59 +251,68 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 		return nil, nil
 	}
 
-	c.cacheMember(ctx, dbMember)
-
-	if c.cacheEnabled() {
-		cacheKey := memberAliasKeyPrefix + alias
-		if err := c.cache.Set(ctx, cacheKey, dbMember, c.cacheTTL); err != nil && c.logger != nil {
-			c.logger.Warn("Failed to cache member alias",
-				slog.String("alias", alias),
-				slog.Any("error", err))
-		}
-	}
+	c.cacheMember(ctx, dbMember, generation, alias)
 
 	return dbMember, nil
 }
 
-func (c *Cache) getAliasFromCache(ctx context.Context, alias string) *domain.Member {
+func (c *Cache) getAliasFromCache(ctx context.Context, alias string, generation uint64) *domain.Member {
 	if !c.cacheEnabled() {
 		return nil
 	}
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
+		return nil
+	}
+
 	cacheKey := memberAliasKeyPrefix + alias
 	var member domain.Member
 	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
 		return nil
 	}
-	if member.ChannelID != "" {
-		c.byChannelID.Store(member.ChannelID, &member)
-	}
-	c.byName.Store(member.Name, &member)
+	c.storePointMemberInMemoryLocked(&member, generation)
 	return &member
 }
 
 func (c *Cache) GetAllChannelIDs(ctx context.Context) ([]string, error) {
+	c.snapshotMu.RLock()
 	if val, ok := c.allMembers.Load(allChannelIDsKey); ok {
 		if channelIDs, ok := val.([]string); ok {
+			c.snapshotMu.RUnlock()
 			return channelIDs, nil
 		}
 		c.allMembers.Delete(allChannelIDsKey)
 	}
+	c.snapshotMu.RUnlock()
+	generation := c.currentSnapshotGeneration()
 
 	channelIDs, err := c.repository.GetAllChannelIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	c.allMembers.Store(allChannelIDsKey, channelIDs)
+	c.snapshotMu.RLock()
+	if c.snapshotGeneration.Load() == generation {
+		c.allMembers.Store(allChannelIDsKey, channelIDs)
+	}
+	c.snapshotMu.RUnlock()
 
 	return channelIDs, nil
 }
 
-func (c *Cache) cacheMember(ctx context.Context, member *domain.Member) {
-	if member.ChannelID != "" {
-		c.byChannelID.Store(member.ChannelID, member)
+func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generation uint64, alias string) {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
+		return
 	}
-	c.byName.Store(member.Name, member)
+
+	entry := &memoryMember{member: member, generation: generation}
+	if member.ChannelID != "" {
+		c.byChannelID.Store(member.ChannelID, entry)
+	}
+	c.byName.Store(member.Name, entry)
 
 	if !c.cacheEnabled() {
 		return
@@ -295,10 +336,45 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member) {
 			slog.Any("error", err),
 		)
 	}
+
+	if alias != "" {
+		aliasKey := memberAliasKeyPrefix + alias
+		if err := c.cache.Set(ctx, aliasKey, member, c.cacheTTL); err != nil && c.logger != nil {
+			c.logger.Warn("Failed to cache member alias",
+				slog.String("alias", alias),
+				slog.Any("error", err))
+		}
+	}
+}
+
+func (c *Cache) storePointMemberInMemory(member *domain.Member, generation uint64) bool {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
+		return false
+	}
+	c.storePointMemberInMemoryLocked(member, generation)
+	return true
+}
+
+func (c *Cache) storePointMemberInMemoryLocked(member *domain.Member, generation uint64) {
+	entry := &memoryMember{member: member, generation: generation}
+	if member.ChannelID != "" {
+		c.byChannelID.Store(member.ChannelID, entry)
+	}
+	c.byName.Store(member.Name, entry)
+}
+
+func (c *Cache) currentSnapshotGeneration() uint64 {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	return c.snapshotGeneration.Load()
 }
 
 func (c *Cache) InvalidateAll(ctx context.Context) error {
-	// 인메모리 캐시 클리어
+	c.snapshotMu.Lock()
+	defer c.snapshotMu.Unlock()
+	c.snapshotGeneration.Add(1)
 	c.byChannelID.Clear()
 	c.byName.Clear()
 	c.allMembers.Clear()

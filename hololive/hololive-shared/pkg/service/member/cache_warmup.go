@@ -32,9 +32,18 @@ import (
 
 // 병렬 처리를 통해 대량의 데이터도 빠르게 처리한다.
 func (c *Cache) WarmUpCache(ctx context.Context) error {
-	members, err := c.repository.GetAllMembers(ctx)
+	if c == nil {
+		return fmt.Errorf("member cache is nil")
+	}
+
+	snap, generation := c.allMembersView()
+	members, err := c.loadAllMembersSnapshot(ctx, snap, generation)
 	if err != nil {
 		return fmt.Errorf("failed to load all members: %w", err)
+	}
+	warmupGeneration, ok := c.snapshotGenerationForMembers(members)
+	if !ok {
+		return fmt.Errorf("failed to load all members: %w", errAllMembersGenerationChanged)
 	}
 
 	chunkSize := c.warmUpChunkSize
@@ -50,22 +59,22 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			c.cacheChunk(ctx, chunk)
+			c.cacheChunk(ctx, chunk, warmupGeneration)
 		})
 	}
 	wg.Wait()
 
-	c.storeAllMembersSnapshot(members)
-
-	c.logger.Info("Member cache warmed up",
-		slog.Int("total_members", len(members)),
-		slog.Int("chunks", len(chunks)),
-	)
+	if c.logger != nil {
+		c.logger.Info("Member cache warmed up",
+			slog.Int("total_members", len(members)),
+			slog.Int("chunks", len(chunks)),
+		)
+	}
 
 	return nil
 }
 
-func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member) {
+func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, generation uint64) {
 	if len(members) == 0 {
 		return
 	}
@@ -85,11 +94,31 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member) {
 		pairs[nameKey] = member
 	}
 
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
+		return
+	}
 	if err := c.cache.MSet(ctx, pairs, c.cacheTTL); err != nil {
 		c.logger.Warn("Failed to batch cache members",
 			slog.Int("count", len(members)),
 			slog.Any("error", err))
 	}
+}
+
+func (c *Cache) snapshotGenerationForMembers(members []*domain.Member) (uint64, bool) {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	snap := c.allMembersSnapshot.Load()
+	if !snapshotSuccessful(snap) || len(snap.members) != len(members) {
+		return 0, false
+	}
+	for i := range members {
+		if snap.members[i] != members[i] {
+			return 0, false
+		}
+	}
+	return c.snapshotGeneration.Load(), true
 }
 
 func chunkMembers(members []*domain.Member, chunkSize int) [][]*domain.Member {

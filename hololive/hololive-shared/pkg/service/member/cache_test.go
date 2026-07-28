@@ -22,10 +22,14 @@ package member
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -86,6 +90,150 @@ func TestCacheInvalidateAll_UsesScanKeysAndDelMany(t *testing.T) {
 	}
 	if _, ok := c.allMembers.Load(allChannelIDsKey); ok {
 		t.Fatalf("expected all-members cache to be cleared")
+	}
+}
+
+func TestCacheInvalidateAll_DeletesValkeyBeforeNewGenerationRead(t *testing.T) {
+	t.Parallel()
+
+	scanStarted := make(chan struct{})
+	releaseScan := make(chan struct{})
+	lookupStarted := make(chan struct{})
+	var deleted atomic.Bool
+	var eventsMu sync.Mutex
+	events := make([]string, 0, 3)
+	cacheClient := cachemocks.NewLenientClient()
+	cacheClient.ScanKeysFunc = func(context.Context, string, int64) ([]string, error) {
+		eventsMu.Lock()
+		events = append(events, "scan")
+		eventsMu.Unlock()
+		close(scanStarted)
+		<-releaseScan
+		return []string{"member:name:Old"}, nil
+	}
+	cacheClient.DelManyFunc = func(context.Context, []string) (int64, error) {
+		deleted.Store(true)
+		eventsMu.Lock()
+		events = append(events, "delete")
+		eventsMu.Unlock()
+		return 1, nil
+	}
+	cacheClient.GetFunc = func(_ context.Context, _ string, dest any) error {
+		eventsMu.Lock()
+		events = append(events, "get")
+		eventsMu.Unlock()
+		if deleted.Load() {
+			return errors.New("cache miss")
+		}
+		member := dest.(*domain.Member)
+		*member = domain.Member{ChannelID: "old-channel", Name: "Old"}
+		return nil
+	}
+	c := &Cache{cache: cacheClient, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	c.byName.Store("Old", &domain.Member{Name: "Old"})
+
+	invalidateDone := make(chan error, 1)
+	go func() {
+		invalidateDone <- c.InvalidateAll(context.Background())
+	}()
+	<-scanStarted
+	if _, ok := c.byName.Load("Old"); ok {
+		t.Fatal("memory was not cleared before Valkey deletion")
+	}
+
+	lookupDone := make(chan *domain.Member, 1)
+	go func() {
+		close(lookupStarted)
+		generation := c.currentSnapshotGeneration()
+		lookupDone <- c.loadNameFromDistributedCache(context.Background(), "Old", generation)
+	}()
+	<-lookupStarted
+	close(releaseScan)
+	if err := <-invalidateDone; err != nil {
+		t.Fatalf("InvalidateAll() error = %v", err)
+	}
+	if member := <-lookupDone; member != nil {
+		t.Fatalf("distributed lookup member = %+v, want cache miss after deletion", member)
+	}
+
+	eventsMu.Lock()
+	gotEvents := append([]string(nil), events...)
+	eventsMu.Unlock()
+	wantEvents := []string{"scan", "delete", "get"}
+	if !reflect.DeepEqual(gotEvents, wantEvents) {
+		t.Fatalf("invalidate/read order = %v, want %v", gotEvents, wantEvents)
+	}
+	if _, ok := c.byName.Load("Old"); ok {
+		t.Fatal("stale Valkey value was published into the new generation")
+	}
+}
+
+func TestCacheInvalidateAll_ValkeyDeleteFollowsInFlightPointPublish(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cacheClient := cachemocks.NewLenientClient()
+	setStarted := make(chan struct{})
+	releaseSet := make(chan struct{})
+	invalidateStarted := make(chan struct{})
+	var eventsMu sync.Mutex
+	events := make([]string, 0, 5)
+	setCalls := 0
+	cacheClient.SetFunc = func(context.Context, string, any, time.Duration) error {
+		eventsMu.Lock()
+		setCalls++
+		call := setCalls
+		events = append(events, "set")
+		eventsMu.Unlock()
+		if call == 1 {
+			close(setStarted)
+			<-releaseSet
+		}
+		return nil
+	}
+	cacheClient.ScanKeysFunc = func(context.Context, string, int64) ([]string, error) {
+		eventsMu.Lock()
+		events = append(events, "scan")
+		eventsMu.Unlock()
+		return []string{"member:name:Old"}, nil
+	}
+	cacheClient.DelManyFunc = func(context.Context, []string) (int64, error) {
+		eventsMu.Lock()
+		events = append(events, "delete")
+		eventsMu.Unlock()
+		return 1, nil
+	}
+	c := &Cache{cache: cacheClient, logger: logger, cacheTTL: time.Minute}
+	generation := c.currentSnapshotGeneration()
+
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		c.cacheMember(context.Background(), &domain.Member{ChannelID: "old-channel", Name: "Old"}, generation, "")
+	}()
+	<-setStarted
+
+	invalidateDone := make(chan error, 1)
+	go func() {
+		close(invalidateStarted)
+		invalidateDone <- c.InvalidateAll(context.Background())
+	}()
+	<-invalidateStarted
+	close(releaseSet)
+	<-writerDone
+	if err := <-invalidateDone; err != nil {
+		t.Fatalf("InvalidateAll() error = %v", err)
+	}
+
+	eventsMu.Lock()
+	gotEvents := append([]string(nil), events...)
+	eventsMu.Unlock()
+	wantEvents := []string{"set", "set", "scan", "delete"}
+	if !reflect.DeepEqual(gotEvents, wantEvents) {
+		t.Fatalf("Valkey operation order = %v, want %v", gotEvents, wantEvents)
+	}
+	if _, ok := c.byName.Load("Old"); ok {
+		t.Fatal("InvalidateAll() left the in-flight point value in memory")
 	}
 }
 
