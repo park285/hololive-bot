@@ -238,7 +238,7 @@ run_ambient() {
 
   if echo "$changed_files" | grep -qE '^admin-dashboard/(frontend|backend)/'; then
     echo "[pre-push] admin-dashboard frontend 품질 게이트"
-    (cd admin-dashboard/frontend && npm ci && npm run generate:api && npm test && npm run lint && npm run build)
+    (cd admin-dashboard/frontend && corepack npm ci && corepack npm run generate:api && corepack npm test && corepack npm run lint && corepack npm run build)
   fi
 }
 

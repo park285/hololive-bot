@@ -11,6 +11,7 @@ cd "${ROOT_DIR}"
 
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
 source "${SCRIPT_DIR}/local-ci-files.sh"
+source "${SCRIPT_DIR}/go-work-sync-drift.sh"
 # These arrays are the input contract consumed by local-ci-packages.sh.
 # shellcheck disable=SC2034
 mapfile -t ROOT_GO_PACKAGES < <(root_go_package_patterns)
@@ -88,56 +89,6 @@ ensure_go_mod_toolchains() {
         stamp_toolchain_if_below_pin "${module}"
     done
 }
-
-check_go_work_sync() (
-    set -euo pipefail
-
-    local temp_root
-    local temp_repo
-    local file
-    local candidate
-    local drift=false
-    local sync_files=()
-
-    mapfile -t sync_files < <(workspace_metadata_files)
-    temp_root="$(mktemp -d)"
-    temp_repo="${temp_root}/hololive-bot"
-    trap 'rm -rf "${temp_root}"' EXIT
-
-    for file in "${sync_files[@]}"; do
-        candidate="${temp_repo}/${file}"
-        mkdir -p "$(dirname "${candidate}")"
-        if [[ -f "${file}" ]]; then
-            cp -p "${file}" "${candidate}"
-        fi
-    done
-
-    cd "${temp_repo}"
-    go work sync
-    ensure_go_mod_toolchains
-    cd "${ROOT_DIR}"
-
-    for file in "${sync_files[@]}"; do
-        candidate="${temp_repo}/${file}"
-        if cmp -s "${file}" "${candidate}"; then
-            continue
-        fi
-
-        drift=true
-        if [[ -f "${file}" && -f "${candidate}" ]]; then
-            diff -u --label "${file}" --label "${file} (go work sync)" "${file}" "${candidate}" >&2 || true
-        elif [[ -f "${candidate}" ]]; then
-            echo "go work sync would create ${file}" >&2
-        else
-            echo "go work sync would remove ${file}" >&2
-        fi
-    done
-
-    if [[ "${drift}" == "true" ]]; then
-        echo "go work sync changed workspace or module metadata; commit the sync result" >&2
-        exit 1
-    fi
-)
 
 check_go_mod_tidy() {
     local module
@@ -293,6 +244,7 @@ if (( $# != 0 )); then
 fi
 
 run_step "local-ci package scope tests" ./scripts/ci/test-local-ci-packages.sh
+run_step "go work sync drift tests" bash ./scripts/ci/go-work-sync-drift_test.sh
 run_step "NilAway input guard tests" bash ./scripts/ci/nilaway-inputs_test.sh
 configure_go_packages
 echo "[LOCAL CI] Go package scope: ${LOCAL_CI_GO_SCOPE} (${#GO_PACKAGES[@]} packages)"
@@ -314,7 +266,7 @@ else
     echo
 fi
 run_step "Go toolchain" check_go_toolchain
-run_step "go work sync drift" check_go_work_sync
+run_step "go work sync drift" verify_go_work_sync_drift "${ROOT_DIR}" ensure_go_mod_toolchains
 run_step "gofmt" bash "${SCRIPT_DIR}/check-gofmt.sh"
 run_step "go fix drift" check_go_fix
 check_go_mod_tidy

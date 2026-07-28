@@ -38,7 +38,7 @@ echo "admin-dashboard files changed; running Go-only admin-dashboard quality gat
 frontend_changed="$(echo "${admin_changed}" | grep -E '^admin-dashboard/frontend/' || true)"
 if [[ -n "${frontend_changed}" ]]; then
   echo "frontend files changed; running frontend lint/build" >&2
-  (cd admin-dashboard/frontend && npm ci --no-audit --no-fund && npm run lint && npm run build)
+  (cd admin-dashboard/frontend && corepack npm ci --no-audit --no-fund && corepack npm run lint && corepack npm run build)
 fi
 
 echo "ok: admin-dashboard changes passed active quality gates"
