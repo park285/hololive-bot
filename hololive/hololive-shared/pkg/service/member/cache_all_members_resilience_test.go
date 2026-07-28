@@ -140,7 +140,7 @@ func TestCacheAllMembers_ColdFailureBackoffReturnsSameError(t *testing.T) {
 	if firstMembers != nil || secondMembers != nil {
 		t.Fatalf("cold members = (%v, %v), want nil while no snapshot is available", firstMembers, secondMembers)
 	}
-	if firstErr == nil || secondErr != firstErr {
+	if firstErr == nil || !errors.Is(secondErr, firstErr) {
 		t.Fatalf("cold errors = (%v, %v), want same cached error", firstErr, secondErr)
 	}
 	if !errors.Is(firstErr, wantErr) {
@@ -197,7 +197,10 @@ func TestCachePointLookup_SerializesWithSnapshotRefresh(t *testing.T) {
 	cacheClient.GetFunc = func(_ context.Context, _ string, dest any) error {
 		close(lookupStarted)
 		<-releaseLookup
-		member := dest.(*domain.Member)
+		member, ok := dest.(*domain.Member)
+		if !ok {
+			return errors.New("cache destination is not a member")
+		}
 		*member = domain.Member{ChannelID: "stale-channel", Name: "Stale"}
 		return nil
 	}

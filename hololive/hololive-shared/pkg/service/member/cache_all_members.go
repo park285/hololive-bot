@@ -236,9 +236,9 @@ func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation ui
 	return true
 }
 
-func prepareAllMembersSnapshot(members []*domain.Member) ([]*domain.Member, []string) {
-	snapshot := make([]*domain.Member, 0, len(members))
-	channelIDs := make([]string, 0, len(members))
+func prepareAllMembersSnapshot(members []*domain.Member) (snapshot []*domain.Member, channelIDs []string) {
+	snapshot = make([]*domain.Member, 0, len(members))
+	channelIDs = make([]string, 0, len(members))
 	for _, member := range members {
 		if member == nil {
 			continue
@@ -273,7 +273,7 @@ func deleteMemberGeneration(index *sync.Map, generation uint64) {
 	})
 }
 
-func (c *Cache) allMembersView() (*allMembersState, uint64) {
+func (c *Cache) allMembersView() (snapshot *allMembersState, generation uint64) {
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
 	return c.allMembersSnapshot.Load(), c.snapshotGeneration.Load()

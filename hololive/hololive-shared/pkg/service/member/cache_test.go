@@ -125,7 +125,10 @@ func TestCacheInvalidateAll_DeletesValkeyBeforeNewGenerationRead(t *testing.T) {
 		if deleted.Load() {
 			return errors.New("cache miss")
 		}
-		member := dest.(*domain.Member)
+		member, ok := dest.(*domain.Member)
+		if !ok {
+			return errors.New("cache destination is not a member")
+		}
 		*member = domain.Member{ChannelID: "old-channel", Name: "Old"}
 		return nil
 	}
