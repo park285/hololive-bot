@@ -233,8 +233,6 @@ func (c *Cache) logAllMembersSnapshotRecovery(snap *allMembersState, memberCount
 
 func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation uint64, members []*domain.Member) bool {
 	snapshot, channelIDs := prepareAllMembersSnapshot(members)
-	c.cacheIOMu.Lock()
-	defer c.cacheIOMu.Unlock()
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
 	if c.snapshotGeneration.Load() != generation || c.allMembersSnapshot.Load() != previous {

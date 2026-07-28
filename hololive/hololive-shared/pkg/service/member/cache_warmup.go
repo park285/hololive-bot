@@ -94,12 +94,9 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, genera
 		pairs[nameKey] = member
 	}
 
-	c.cacheIOMu.RLock()
-	defer c.cacheIOMu.RUnlock()
 	c.snapshotMu.RLock()
-	generationMatches := c.snapshotGeneration.Load() == generation
-	c.snapshotMu.RUnlock()
-	if !generationMatches {
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
 		return
 	}
 	if err := c.cache.MSet(ctx, pairs, c.cacheTTL); err != nil {
