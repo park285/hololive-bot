@@ -274,14 +274,12 @@ func TestCacheChunk_SameGenerationWritesCanOverlap(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for i := range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			c.cacheChunk(context.Background(), []*domain.Member{{
 				ChannelID: fmt.Sprintf("channel-%d", i),
 				Name:      fmt.Sprintf("Member %d", i),
 			}}, generation)
-		}()
+		})
 	}
 
 	for range 2 {
