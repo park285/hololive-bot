@@ -78,16 +78,6 @@ func (c *Cache) cacheMemberByAlias(ctx context.Context, member *domain.Member, a
 	}
 }
 
-func (c *Cache) storePointMemberInMemory(member *domain.Member, generation uint64) bool {
-	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
-	if c.snapshotGeneration.Load() != generation {
-		return false
-	}
-	c.storePointMemberInMemoryLocked(member, generation)
-	return true
-}
-
 func (c *Cache) storePointMemberInMemoryLocked(member *domain.Member, generation uint64) {
 	entry := &memoryMember{member: member, generation: generation}
 	if member.ChannelID != "" {
