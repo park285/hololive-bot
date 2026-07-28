@@ -78,7 +78,7 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, genera
 	if len(members) == 0 {
 		return
 	}
-	if !c.cacheEnabled() {
+	if !c.distributedCacheUsable() {
 		return
 	}
 
@@ -86,11 +86,11 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, genera
 
 	for _, member := range members {
 		if member.ChannelID != "" {
-			channelKey := memberChannelKeyPrefix + member.ChannelID
+			channelKey := c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
 			pairs[channelKey] = member
 		}
 
-		nameKey := memberNameKeyPrefix + member.Name
+		nameKey := c.epochDataKey(memberNameKeyPrefix + member.Name)
 		pairs[nameKey] = member
 	}
 

@@ -473,6 +473,9 @@ hololive/hololive-shared/pkg/service/holodex/provider/service_streams_fallback.g
 hololive/hololive-shared/pkg/service/member/adapter.go
 hololive/hololive-shared/pkg/service/member/cache.go
 hololive/hololive-shared/pkg/service/member/cache_all_members.go
+hololive/hololive-shared/pkg/service/member/cache_epoch.go
+hololive/hololive-shared/pkg/service/member/cache_invalidation.go
+hololive/hololive-shared/pkg/service/member/cache_metrics.go
 hololive/hololive-shared/pkg/service/member/cache_point_ownership.go
 hololive/hololive-shared/pkg/service/member/cache_point_store.go
 hololive/hololive-shared/pkg/service/member/interface.go
