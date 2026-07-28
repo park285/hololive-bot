@@ -57,29 +57,54 @@ func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 
 	for {
 		snap, generation := c.allMembersView()
-		now := time.Now()
-		if c.snapshotFreshAt(snap, now) {
-			return cloneMemberSlice(snap.members), nil
-		}
-		if c.snapshotReloadDeferred(snap, now) {
-			if snapshotSuccessful(snap) {
-				return cloneMemberSlice(snap.members), nil
-			}
-			return nil, snap.loadErr
+		if members, err, ready := c.snapshotResultAt(snap, time.Now()); ready {
+			return cloneAllMembersResult(members, err)
 		}
 
-		members, err := c.loadAllMembersSnapshot(ctx, snap, generation)
-		if err != nil {
-			if errors.Is(err, errAllMembersGenerationChanged) {
-				continue
-			}
-			if snapshotSuccessful(snap) {
-				return cloneMemberSlice(snap.members), nil
-			}
-			return nil, err
+		members, err, retry := c.loadAllMembersResult(ctx, snap, generation)
+		if retry {
+			continue
 		}
-		return members, nil
+		return members, err
 	}
+}
+
+func cloneAllMembersResult(members []*domain.Member, err error) ([]*domain.Member, error) {
+	if err != nil {
+		return nil, err
+	}
+	return cloneMemberSlice(members), nil
+}
+
+func (c *Cache) loadAllMembersResult(
+	ctx context.Context,
+	snap *allMembersState,
+	generation uint64,
+) ([]*domain.Member, error, bool) {
+	members, err := c.loadAllMembersSnapshot(ctx, snap, generation)
+	if err == nil {
+		return members, nil, false
+	}
+	if errors.Is(err, errAllMembersGenerationChanged) {
+		return nil, nil, true
+	}
+	if snapshotSuccessful(snap) {
+		return cloneMemberSlice(snap.members), nil, false
+	}
+	return nil, err, false
+}
+
+func (c *Cache) snapshotResultAt(snap *allMembersState, now time.Time) ([]*domain.Member, error, bool) {
+	if c.snapshotFreshAt(snap, now) {
+		return snap.members, nil, true
+	}
+	if !c.snapshotReloadDeferred(snap, now) {
+		return nil, nil, false
+	}
+	if snapshotSuccessful(snap) {
+		return snap.members, nil, true
+	}
+	return nil, snap.loadErr, true
 }
 
 func (c *Cache) snapshotFreshAt(snap *allMembersState, now time.Time) bool {
@@ -96,46 +121,14 @@ func (*Cache) snapshotReloadDeferred(snap *allMembersState, now time.Time) bool 
 	return snap != nil && !snap.retryAfter.IsZero() && now.Before(snap.retryAfter)
 }
 
-func (c *Cache) loadAllMembersSnapshot(ctx context.Context, snap *allMembersState, generation uint64) ([]*domain.Member, error) {
-	loader := c.loadAllMembers
-	if loader == nil {
-		if c.repository == nil {
-			return nil, fmt.Errorf("member repository is nil")
-		}
-		loader = c.repository.GetAllMembers
+func (c *Cache) loadAllMembersSnapshot(ctx context.Context, _ *allMembersState, generation uint64) ([]*domain.Member, error) {
+	loader, err := c.allMembersLoader()
+	if err != nil {
+		return nil, err
 	}
-
 	groupKey := allMembersSnapshotKey + ":" + strconv.FormatUint(generation, 10)
 	result, err, _ := c.allMembersGroup.Do(groupKey, func() (any, error) {
-		current, currentGeneration := c.allMembersView()
-		if currentGeneration != generation {
-			return nil, errAllMembersGenerationChanged
-		}
-		if c.snapshotFreshAt(current, time.Now()) {
-			return current.members, nil
-		}
-		if c.snapshotReloadDeferred(current, time.Now()) {
-			if snapshotSuccessful(current) {
-				return current.members, nil
-			}
-			return nil, current.loadErr
-		}
-
-		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), allMembersSnapshotLoadTimeout)
-		defer cancel()
-
-		members, err := loader(loadCtx)
-		if err != nil {
-			loadErr := fmt.Errorf("load all members from repository: %w", err)
-			c.deferAllMembersSnapshotReload(current, generation, loadErr)
-			return nil, loadErr
-		}
-
-		if !c.storeAllMembersSnapshot(current, generation, members) {
-			return nil, errAllMembersGenerationChanged
-		}
-		c.logAllMembersSnapshotRecovery(current, len(members))
-		return members, nil
+		return c.reloadAllMembersSnapshot(ctx, loader, generation)
 	})
 	if err != nil {
 		return nil, err
@@ -146,6 +139,44 @@ func (c *Cache) loadAllMembersSnapshot(ctx context.Context, snap *allMembersStat
 		return nil, fmt.Errorf("unexpected all members result type %T", result)
 	}
 	return cloneMemberSlice(members), nil
+}
+
+func (c *Cache) allMembersLoader() (func(context.Context) ([]*domain.Member, error), error) {
+	if c.loadAllMembers != nil {
+		return c.loadAllMembers, nil
+	}
+	if c.repository == nil {
+		return nil, fmt.Errorf("member repository is nil")
+	}
+	return c.repository.GetAllMembers, nil
+}
+
+func (c *Cache) reloadAllMembersSnapshot(
+	ctx context.Context,
+	loader func(context.Context) ([]*domain.Member, error),
+	generation uint64,
+) ([]*domain.Member, error) {
+	current, currentGeneration := c.allMembersView()
+	if currentGeneration != generation {
+		return nil, errAllMembersGenerationChanged
+	}
+	if members, err, ready := c.snapshotResultAt(current, time.Now()); ready {
+		return members, err
+	}
+
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), allMembersSnapshotLoadTimeout)
+	defer cancel()
+	members, err := loader(loadCtx)
+	if err != nil {
+		loadErr := fmt.Errorf("load all members from repository: %w", err)
+		c.deferAllMembersSnapshotReload(current, generation, loadErr)
+		return nil, loadErr
+	}
+	if !c.storeAllMembersSnapshot(current, generation, members) {
+		return nil, errAllMembersGenerationChanged
+	}
+	c.logAllMembersSnapshotRecovery(current, len(members))
+	return members, nil
 }
 
 func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, generation uint64, err error) {
@@ -185,6 +216,27 @@ func (c *Cache) logAllMembersSnapshotRecovery(snap *allMembersState, memberCount
 }
 
 func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation uint64, members []*domain.Member) bool {
+	snapshot, channelIDs := prepareAllMembersSnapshot(members)
+	c.snapshotMu.Lock()
+	defer c.snapshotMu.Unlock()
+	if c.snapshotGeneration.Load() != generation || c.allMembersSnapshot.Load() != previous {
+		return false
+	}
+
+	nextGeneration := generation + 1
+	c.replaceMemberSnapshotIndexes(snapshot, generation, nextGeneration)
+	c.allMembers.Store(allChannelIDsKey, channelIDs)
+	c.snapshotGeneration.Store(nextGeneration)
+	c.allMembersSnapshot.Store(&allMembersState{
+		members:       snapshot,
+		loadedAt:      time.Now(),
+		generation:    nextGeneration,
+		hasSuccessful: true,
+	})
+	return true
+}
+
+func prepareAllMembersSnapshot(members []*domain.Member) ([]*domain.Member, []string) {
 	snapshot := make([]*domain.Member, 0, len(members))
 	channelIDs := make([]string, 0, len(members))
 	for _, member := range members {
@@ -196,32 +248,19 @@ func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation ui
 			channelIDs = append(channelIDs, member.ChannelID)
 		}
 	}
+	return snapshot, channelIDs
+}
 
-	c.snapshotMu.Lock()
-	defer c.snapshotMu.Unlock()
-	if c.snapshotGeneration.Load() != generation || c.allMembersSnapshot.Load() != previous {
-		return false
-	}
-
-	nextGeneration := generation + 1
+func (c *Cache) replaceMemberSnapshotIndexes(members []*domain.Member, generation, nextGeneration uint64) {
 	deleteMemberGeneration(&c.byChannelID, generation)
 	deleteMemberGeneration(&c.byName, generation)
-	for _, member := range snapshot {
+	for _, member := range members {
 		entry := &memoryMember{member: member, generation: nextGeneration}
 		if member.ChannelID != "" {
 			c.byChannelID.Store(member.ChannelID, entry)
 		}
 		c.byName.Store(member.Name, entry)
 	}
-	c.allMembers.Store(allChannelIDsKey, channelIDs)
-	c.snapshotGeneration.Store(nextGeneration)
-	c.allMembersSnapshot.Store(&allMembersState{
-		members:       snapshot,
-		loadedAt:      time.Now(),
-		generation:    nextGeneration,
-		hasSuccessful: true,
-	})
-	return true
 }
 
 func deleteMemberGeneration(index *sync.Map, generation uint64) {

@@ -135,8 +135,11 @@ func TestCacheAllMembers_ColdFailureBackoffReturnsSameError(t *testing.T) {
 		},
 	}
 
-	_, firstErr := c.AllMembers(context.Background())
-	_, secondErr := c.AllMembers(context.Background())
+	firstMembers, firstErr := c.AllMembers(context.Background())
+	secondMembers, secondErr := c.AllMembers(context.Background())
+	if firstMembers != nil || secondMembers != nil {
+		t.Fatalf("cold members = (%v, %v), want nil while no snapshot is available", firstMembers, secondMembers)
+	}
 	if firstErr == nil || secondErr != firstErr {
 		t.Fatalf("cold errors = (%v, %v), want same cached error", firstErr, secondErr)
 	}

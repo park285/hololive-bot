@@ -308,27 +308,30 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generati
 		return
 	}
 
-	entry := &memoryMember{member: member, generation: generation}
-	if member.ChannelID != "" {
-		c.byChannelID.Store(member.ChannelID, entry)
-	}
-	c.byName.Store(member.Name, entry)
+	c.storePointMemberInMemoryLocked(member, generation)
 
 	if !c.cacheEnabled() {
 		return
 	}
+	c.cacheMemberByChannelID(ctx, member)
+	c.cacheMemberByName(ctx, member)
+	c.cacheMemberByAlias(ctx, member, alias)
+}
 
-	// Valkey에도 저장
-	if member.ChannelID != "" {
-		channelKey := memberChannelKeyPrefix + member.ChannelID
-		if err := c.cache.Set(ctx, channelKey, member, c.cacheTTL); err != nil {
-			c.logger.Warn("Failed to cache member by channel ID",
-				slog.String("channel_id", member.ChannelID),
-				slog.Any("error", err),
-			)
-		}
+func (c *Cache) cacheMemberByChannelID(ctx context.Context, member *domain.Member) {
+	if member.ChannelID == "" {
+		return
 	}
+	channelKey := memberChannelKeyPrefix + member.ChannelID
+	if err := c.cache.Set(ctx, channelKey, member, c.cacheTTL); err != nil {
+		c.logger.Warn("Failed to cache member by channel ID",
+			slog.String("channel_id", member.ChannelID),
+			slog.Any("error", err),
+		)
+	}
+}
 
+func (c *Cache) cacheMemberByName(ctx context.Context, member *domain.Member) {
 	nameKey := memberNameKeyPrefix + member.Name
 	if err := c.cache.Set(ctx, nameKey, member, c.cacheTTL); err != nil {
 		c.logger.Warn("Failed to cache member by name",
@@ -336,14 +339,17 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generati
 			slog.Any("error", err),
 		)
 	}
+}
 
-	if alias != "" {
-		aliasKey := memberAliasKeyPrefix + alias
-		if err := c.cache.Set(ctx, aliasKey, member, c.cacheTTL); err != nil && c.logger != nil {
-			c.logger.Warn("Failed to cache member alias",
-				slog.String("alias", alias),
-				slog.Any("error", err))
-		}
+func (c *Cache) cacheMemberByAlias(ctx context.Context, member *domain.Member, alias string) {
+	if alias == "" {
+		return
+	}
+	aliasKey := memberAliasKeyPrefix + alias
+	if err := c.cache.Set(ctx, aliasKey, member, c.cacheTTL); err != nil && c.logger != nil {
+		c.logger.Warn("Failed to cache member alias",
+			slog.String("alias", alias),
+			slog.Any("error", err))
 	}
 }
 
