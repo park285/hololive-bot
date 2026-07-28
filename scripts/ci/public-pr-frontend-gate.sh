@@ -22,9 +22,9 @@ require_command npm
 
 node - <<'NODE'
 const [major, minor] = process.versions.node.split('.').map(Number)
-const supported = major > 22 || (major === 22 && minor >= 12) || (major === 20 && minor >= 19)
+const supported = major > 22 || (major === 22 && minor >= 22)
 if (!supported) {
-  console.error(`unsupported Node.js ${process.versions.node}; expected >=20.19 or >=22.12`)
+  console.error(`unsupported Node.js ${process.versions.node}; expected >=22.22.0`)
   process.exit(1)
 }
 console.log(`[public-pr] Node.js ${process.versions.node}, npm runtime available`)

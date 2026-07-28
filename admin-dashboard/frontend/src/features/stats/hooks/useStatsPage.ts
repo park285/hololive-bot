@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { statusApi } from "@/api/core";
 import { queryKeys } from "@/api/queryKeys";
 import { statsApi } from "@/features/stats/api";

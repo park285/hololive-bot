@@ -4,7 +4,7 @@ import Menu from "lucide-react/dist/esm/icons/menu.mjs";
 import Play from "lucide-react/dist/esm/icons/play.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { authApi } from "@/api/core";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
 import { Button } from "@/components/ui/Button";
