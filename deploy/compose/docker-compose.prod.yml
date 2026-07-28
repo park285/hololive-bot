@@ -77,7 +77,8 @@ x-go-build-base: &go-build-base
 
 x-go-healthcheck: &go-healthcheck
   interval: 30s
-  timeout: 5s
+  # healthprobe의 URL별 5s 제한보다 process/TLS 종료 여유를 크게 둔다.
+  timeout: 7s
   start_period: 30s
   retries: 3
 
@@ -355,6 +356,7 @@ services:
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
       MIGRATION_BASELINE_THROUGH: ${MIGRATION_BASELINE_THROUGH:-}
+      MIGRATION_ALLOW_BLOCKING_INDEX_DROP: ${MIGRATION_ALLOW_BLOCKING_INDEX_DROP:-false}
     entrypoint:
       - /app/bin/db-migrate
     volumes:
@@ -531,6 +533,8 @@ services:
           pids: 512
     healthcheck:
       <<: *go-healthcheck
+      # 세 endpoint를 순차 검사하므로 URL별 5s 제한의 합보다 길어야 한다.
+      timeout: 20s
       start_period: 45s
       test:
         - CMD
