@@ -65,7 +65,7 @@ func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 		if retry {
 			continue
 		}
-		return members, err
+		return cloneAllMembersResult(members, err)
 	}
 }
 
