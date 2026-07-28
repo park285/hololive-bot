@@ -23,6 +23,7 @@ package member
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"reflect"
@@ -246,6 +247,54 @@ func TestCachePointLookup_BlockedDistributedReadDoesNotBlockMemoryHit(t *testing
 	if err := <-invalidateDone; err != nil {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
+}
+
+func TestCacheChunk_SameGenerationWritesCanOverlap(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseWrites := func() {
+		releaseOnce.Do(func() { close(release) })
+	}
+	defer releaseWrites()
+
+	cacheClient := cachemocks.NewLenientClient()
+	cacheClient.MSetFunc = func(context.Context, map[string]any, time.Duration) error {
+		entered <- struct{}{}
+		<-release
+		return nil
+	}
+	c := &Cache{
+		cache:  cacheClient,
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	generation := c.currentSnapshotGeneration()
+
+	var wg sync.WaitGroup
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.cacheChunk(context.Background(), []*domain.Member{{
+				ChannelID: fmt.Sprintf("channel-%d", i),
+				Name:      fmt.Sprintf("Member %d", i),
+			}}, generation)
+		}()
+	}
+
+	for range 2 {
+		select {
+		case <-entered:
+		case <-time.After(time.Second):
+			releaseWrites()
+			wg.Wait()
+			t.Fatal("same-generation cache writes did not overlap")
+		}
+	}
+	releaseWrites()
+	wg.Wait()
 }
 
 func TestCachePointLookup_StaleDistributedReadCannotPublishAfterInvalidation(t *testing.T) {
