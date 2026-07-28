@@ -193,6 +193,10 @@ run_reusable() {
   echo "[pre-push] workflow boundary / gate ownership"
   bash scripts/ci/check-workflow-secrets.sh
   bash scripts/ci/check-workflow-secrets_test.sh
+  if [[ "${PRE_PUSH_PROFILE_CONTRACT_TEST_ACTIVE:-false}" != "true" ]]; then
+    PRE_PUSH_PROFILE_CONTRACT_TEST_ACTIVE=true \
+      bash scripts/ci/pre-push-gate-profile-v1_test.sh
+  fi
 }
 
 run_freshness() {
