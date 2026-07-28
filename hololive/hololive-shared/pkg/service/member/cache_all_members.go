@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	// plane마다 별도 Cache 인스턴스라 admin의 InvalidateAll이 bot plane 스냅샷에 닿지 않는다. 이 TTL이 그 cross-plane staleness의 유일한 상한이다.
+	// Durable epoch가 freshness를 소유하고, 이 TTL은 같은 epoch 안의 정기 DB refresh 상한을 둔다.
 	allMembersSnapshotTTL         = 5 * time.Minute
 	allMembersSnapshotLoadTimeout = 10 * time.Second
 	allMembersSnapshotRetryDelay  = time.Minute
@@ -56,6 +56,9 @@ func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 	}
 
 	for {
+		if c.cacheBypassRequired("all_members") {
+			return c.loadAllMembersBypass(ctx)
+		}
 		snap, generation := c.allMembersView()
 		if members, err, ready := c.snapshotResultAt(snap, time.Now()); ready {
 			return cloneAllMembersResult(members, err)
@@ -67,6 +70,20 @@ func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 		}
 		return cloneAllMembersResult(members, err)
 	}
+}
+
+func (c *Cache) loadAllMembersBypass(ctx context.Context) ([]*domain.Member, error) {
+	loader, err := c.allMembersLoader()
+	if err != nil {
+		return nil, err
+	}
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), allMembersSnapshotLoadTimeout)
+	defer cancel()
+	members, err := loader(loadCtx)
+	if err != nil {
+		return nil, fmt.Errorf("load all members from repository while cache bypassed: %w", err)
+	}
+	return cloneMemberSlice(members), nil
 }
 
 func cloneAllMembersResult(members []*domain.Member, err error) ([]*domain.Member, error) {
@@ -181,17 +198,32 @@ func (c *Cache) reloadAllMembersSnapshot(
 	defer cancel()
 	members, err := loader(loadCtx)
 	if err != nil {
-		loadErr := fmt.Errorf("load all members from repository: %w", err)
-		if !c.deferAllMembersSnapshotReload(current, generation, loadErr) {
-			return nil, errAllMembersGenerationChanged
-		}
-		return nil, loadErr
+		return nil, c.handleAllMembersLoadFailure(loadCtx, current, generation, err)
+	}
+	if err := c.confirmEpochAfterLoad(loadCtx, generation); err != nil {
+		return nil, err
 	}
 	if !c.storeAllMembersSnapshot(current, generation, members) {
 		return nil, errAllMembersGenerationChanged
 	}
 	c.logAllMembersSnapshotRecovery(current, len(members))
 	return members, nil
+}
+
+func (c *Cache) handleAllMembersLoadFailure(
+	ctx context.Context,
+	current *allMembersState,
+	generation uint64,
+	loadFailure error,
+) error {
+	loadErr := fmt.Errorf("load all members from repository: %w", loadFailure)
+	if err := c.confirmEpochAfterLoad(ctx, generation); err != nil {
+		return err
+	}
+	if !c.deferAllMembersSnapshotReload(current, generation, loadErr) {
+		return errAllMembersGenerationChanged
+	}
+	return loadErr
 }
 
 func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, generation uint64, err error) bool {

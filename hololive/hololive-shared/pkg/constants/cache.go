@@ -43,13 +43,15 @@ var CacheTTL = struct {
 }
 
 var MemberCacheDefaults = struct {
-	ValkeyTTL           time.Duration
-	WarmUpChunkSize     int
-	WarmUpMaxGoroutines int
+	ValkeyTTL              time.Duration
+	EpochReconcileInterval time.Duration
+	WarmUpChunkSize        int
+	WarmUpMaxGoroutines    int
 }{
-	ValkeyTTL:           30 * time.Minute,
-	WarmUpChunkSize:     50,
-	WarmUpMaxGoroutines: 10,
+	ValkeyTTL:              30 * time.Minute,
+	EpochReconcileInterval: 15 * time.Second,
+	WarmUpChunkSize:        50,
+	WarmUpMaxGoroutines:    10,
 }
 
 var WebSocketConfig = struct {

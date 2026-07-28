@@ -35,7 +35,7 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generati
 	}
 
 	c.storePointMemberInMemoryLocked(member, generation)
-	if !c.cacheEnabled() {
+	if !c.distributedCacheUsable() {
 		return
 	}
 	c.cacheMemberByChannelID(ctx, member)
@@ -47,7 +47,7 @@ func (c *Cache) cacheMemberByChannelID(ctx context.Context, member *domain.Membe
 	if member.ChannelID == "" {
 		return
 	}
-	channelKey := memberChannelKeyPrefix + member.ChannelID
+	channelKey := c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
 	if err := c.cache.Set(ctx, channelKey, member, c.cacheTTL); err != nil {
 		c.logger.Warn("Failed to cache member by channel ID",
 			slog.String("channel_id", member.ChannelID),
@@ -57,7 +57,7 @@ func (c *Cache) cacheMemberByChannelID(ctx context.Context, member *domain.Membe
 }
 
 func (c *Cache) cacheMemberByName(ctx context.Context, member *domain.Member) {
-	nameKey := memberNameKeyPrefix + member.Name
+	nameKey := c.epochDataKey(memberNameKeyPrefix + member.Name)
 	if err := c.cache.Set(ctx, nameKey, member, c.cacheTTL); err != nil {
 		c.logger.Warn("Failed to cache member by name",
 			slog.String("member", member.Name),
@@ -70,7 +70,7 @@ func (c *Cache) cacheMemberByAlias(ctx context.Context, member *domain.Member, a
 	if alias == "" {
 		return
 	}
-	aliasKey := memberAliasKeyPrefix + alias
+	aliasKey := c.epochDataKey(memberAliasKeyPrefix + alias)
 	if err := c.cache.Set(ctx, aliasKey, member, c.cacheTTL); err != nil && c.logger != nil {
 		c.logger.Warn("Failed to cache member alias",
 			slog.String("alias", alias),

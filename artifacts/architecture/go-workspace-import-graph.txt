@@ -989,6 +989,8 @@ github.com/kapu/hololive-shared/pkg/service/lease -> github.com/kapu/hololive-sh
 github.com/kapu/hololive-shared/pkg/service/lease -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/lease -> github.com/park285/shared-go/pkg/retry
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-dbtest
+github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/internal/testredis
+github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/internal/testutil
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/pkg/panicguard
@@ -998,6 +1000,7 @@ github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-s
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/pkg/service/database/mocks
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/park285/shared-go/pkg/json
+github.com/kapu/hololive-shared/pkg/service/member -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/member/mocks -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/messagestrings -> github.com/kapu/hololive-dbtest

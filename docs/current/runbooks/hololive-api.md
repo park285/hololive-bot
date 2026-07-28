@@ -188,6 +188,7 @@ bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spik
 
 ## Related contracts
 
+- `member-cache-v2-rollout.md`
 - `../contracts/iris-boundary.md`
 - `../contracts/membernews.md`
 - `../contracts/majorevent.md`
