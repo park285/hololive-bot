@@ -29,15 +29,26 @@ import (
 
 func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generation uint64, alias string) {
 	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
 	if c.snapshotGeneration.Load() != generation {
+		c.snapshotMu.RUnlock()
 		return
 	}
-
 	c.storePointMemberInMemoryLocked(member, generation)
+	c.snapshotMu.RUnlock()
+
 	if !c.cacheEnabled() {
 		return
 	}
+
+	c.cacheIOMu.RLock()
+	defer c.cacheIOMu.RUnlock()
+	c.snapshotMu.RLock()
+	generationMatches := c.snapshotGeneration.Load() == generation
+	c.snapshotMu.RUnlock()
+	if !generationMatches {
+		return
+	}
+
 	c.cacheMemberByChannelID(ctx, member)
 	c.cacheMemberByName(ctx, member)
 	c.cacheMemberByAlias(ctx, member, alias)

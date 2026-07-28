@@ -54,6 +54,7 @@ type Cache struct {
 	byName      sync.Map // map[string]*domain.Member
 	allMembers  sync.Map // []string (channel IDs)
 
+	cacheIOMu          sync.RWMutex
 	snapshotMu         sync.RWMutex
 	snapshotGeneration atomic.Uint64
 	allMembersSnapshot atomic.Pointer[allMembersState]
@@ -202,44 +203,51 @@ func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID s
 	if !c.cacheEnabled() {
 		return nil
 	}
+
+	cacheKey := memberChannelKeyPrefix + channelID
+	var member domain.Member
+	c.cacheIOMu.RLock()
+	defer c.cacheIOMu.RUnlock()
+	err := c.cache.Get(ctx, cacheKey, &member)
+	if err != nil || member.Name == "" {
+		return nil
+	}
+
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
 	if c.snapshotGeneration.Load() != generation {
 		return nil
 	}
-
-	cacheKey := memberChannelKeyPrefix + channelID
-	var member domain.Member
-	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-		owned := c.snapshotOwnedChannelMemberLocked(channelID, &member, generation)
-		if owned != nil {
-			c.storePointMemberInMemoryLocked(owned, generation)
-		}
-		return owned
+	owned := c.snapshotOwnedChannelMemberLocked(channelID, &member, generation)
+	if owned != nil {
+		c.storePointMemberInMemoryLocked(owned, generation)
 	}
-	return nil
+	return owned
 }
 
 func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string, generation uint64) *domain.Member {
 	if !c.cacheEnabled() {
 		return nil
 	}
+	cacheKey := memberNameKeyPrefix + name
+	var member domain.Member
+	c.cacheIOMu.RLock()
+	defer c.cacheIOMu.RUnlock()
+	err := c.cache.Get(ctx, cacheKey, &member)
+	if err != nil || member.Name == "" {
+		return nil
+	}
+
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
 	if c.snapshotGeneration.Load() != generation {
 		return nil
 	}
-
-	cacheKey := memberNameKeyPrefix + name
-	var member domain.Member
-	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-		owned := c.snapshotOwnedNameMemberLocked(name, &member, generation)
-		if owned != nil {
-			c.storePointMemberInMemoryLocked(owned, generation)
-		}
-		return owned
+	owned := c.snapshotOwnedNameMemberLocked(name, &member, generation)
+	if owned != nil {
+		c.storePointMemberInMemoryLocked(owned, generation)
 	}
-	return nil
+	return owned
 }
 
 // 별명 조회 성공 시 해당 멤버 정보를 캐시에 등록한다.
@@ -266,15 +274,18 @@ func (c *Cache) getAliasFromCache(ctx context.Context, alias string, generation 
 	if !c.cacheEnabled() {
 		return nil
 	}
-	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
-	if c.snapshotGeneration.Load() != generation {
+	cacheKey := memberAliasKeyPrefix + alias
+	var member domain.Member
+	c.cacheIOMu.RLock()
+	defer c.cacheIOMu.RUnlock()
+	err := c.cache.Get(ctx, cacheKey, &member)
+	if err != nil || member.Name == "" {
 		return nil
 	}
 
-	cacheKey := memberAliasKeyPrefix + alias
-	var member domain.Member
-	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
 		return nil
 	}
 	owned := c.snapshotOwnedAliasMemberLocked(alias, &member, generation)
@@ -317,13 +328,13 @@ func (c *Cache) currentSnapshotGeneration() uint64 {
 }
 
 func (c *Cache) InvalidateAll(ctx context.Context) error {
+	c.cacheIOMu.Lock()
+	defer c.cacheIOMu.Unlock()
+
 	c.snapshotMu.Lock()
-	defer c.snapshotMu.Unlock()
 	c.snapshotGeneration.Add(1)
-	c.byChannelID.Clear()
-	c.byName.Clear()
-	c.allMembers.Clear()
-	c.allMembersSnapshot.Store(nil)
+	c.clearMemoryLocked()
+	c.snapshotMu.Unlock()
 
 	if !c.cacheEnabled() {
 		c.logger.Info("Member cache invalidated", slog.Int("keys_deleted", 0))
@@ -345,6 +356,13 @@ func (c *Cache) InvalidateAll(ctx context.Context) error {
 	return nil
 }
 
+func (c *Cache) clearMemoryLocked() {
+	c.byChannelID.Clear()
+	c.byName.Clear()
+	c.allMembers.Clear()
+	c.allMembersSnapshot.Store(nil)
+}
+
 func (c *Cache) Refresh(ctx context.Context) error {
 	if err := c.InvalidateAll(ctx); err != nil {
 		return fmt.Errorf("failed to invalidate cache: %w", err)
@@ -357,6 +375,9 @@ func (c *Cache) InvalidateAliasCache(ctx context.Context, alias string) error {
 		c.logger.Info("Alias cache invalidated", slog.String("alias", alias))
 		return nil
 	}
+
+	c.cacheIOMu.RLock()
+	defer c.cacheIOMu.RUnlock()
 
 	aliasKey := memberAliasKeyPrefix + alias
 	if err := c.cache.Del(ctx, aliasKey); err != nil {

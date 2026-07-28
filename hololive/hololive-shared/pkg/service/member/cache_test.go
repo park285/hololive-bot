@@ -171,6 +171,118 @@ func TestCacheInvalidateAll_DeletesValkeyBeforeNewGenerationRead(t *testing.T) {
 	}
 }
 
+func TestCachePointLookup_BlockedDistributedReadDoesNotBlockMemoryHit(t *testing.T) {
+	t.Parallel()
+
+	getStarted := make(chan struct{})
+	releaseGet := make(chan struct{})
+	var releaseGetOnce sync.Once
+	releaseDistributedRead := func() {
+		releaseGetOnce.Do(func() { close(releaseGet) })
+	}
+	defer releaseDistributedRead()
+	cacheClient := cachemocks.NewLenientClient()
+	cacheClient.GetFunc = func(context.Context, string, any) error {
+		close(getStarted)
+		<-releaseGet
+		return errors.New("cache miss")
+	}
+	c := &Cache{
+		cache:  cacheClient,
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	generation := c.currentSnapshotGeneration()
+	cachedMember := &domain.Member{ChannelID: "memory-channel", Name: "Memory"}
+	c.byChannelID.Store(cachedMember.ChannelID, &memoryMember{
+		member:     cachedMember,
+		generation: generation,
+	})
+
+	lookupDone := make(chan *domain.Member, 1)
+	go func() {
+		lookupDone <- c.loadNameFromDistributedCache(context.Background(), "Missing", generation)
+	}()
+	<-getStarted
+
+	invalidateDone := make(chan error, 1)
+	go func() {
+		invalidateDone <- c.InvalidateAll(context.Background())
+	}()
+	deadline := time.Now().Add(time.Second)
+	for c.cacheIOMu.TryRLock() {
+		c.cacheIOMu.RUnlock()
+		if time.Now().After(deadline) {
+			releaseDistributedRead()
+			t.Fatal("InvalidateAll() did not queue behind distributed cache I/O")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	type memoryResult struct {
+		member *domain.Member
+		err    error
+	}
+	memoryDone := make(chan memoryResult, 1)
+	go func() {
+		member, err := c.GetByChannelID(context.Background(), cachedMember.ChannelID)
+		memoryDone <- memoryResult{member: member, err: err}
+	}()
+	select {
+	case got := <-memoryDone:
+		if got.err != nil {
+			t.Fatalf("GetByChannelID() error = %v", got.err)
+		}
+		if got.member != cachedMember {
+			t.Fatalf("memory hit = %+v, want %+v", got.member, cachedMember)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("memory hit blocked behind distributed cache I/O")
+	}
+
+	releaseDistributedRead()
+	if got := <-lookupDone; got != nil {
+		t.Fatalf("distributed lookup = %+v, want cache miss", got)
+	}
+	if err := <-invalidateDone; err != nil {
+		t.Fatalf("InvalidateAll() error = %v", err)
+	}
+}
+
+func TestCachePointLookup_StaleDistributedReadCannotPublishAfterInvalidation(t *testing.T) {
+	t.Parallel()
+
+	cacheClient := cachemocks.NewLenientClient()
+	cacheClient.GetFunc = func(_ context.Context, _ string, dest any) error {
+		member, ok := dest.(*domain.Member)
+		if !ok {
+			return errors.New("cache destination is not a member")
+		}
+		*member = domain.Member{ChannelID: "stale-channel", Name: "Stale"}
+		return nil
+	}
+	cacheClient.ScanKeysFunc = func(context.Context, string, int64) ([]string, error) {
+		return []string{"member:name:Stale"}, nil
+	}
+	cacheClient.DelManyFunc = func(context.Context, []string) (int64, error) {
+		return 1, nil
+	}
+	c := &Cache{
+		cache:  cacheClient,
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	generation := c.currentSnapshotGeneration()
+
+	if err := c.InvalidateAll(context.Background()); err != nil {
+		t.Fatalf("InvalidateAll() error = %v", err)
+	}
+	if got := c.loadNameFromDistributedCache(context.Background(), "Stale", generation); got != nil {
+		t.Fatalf("stale distributed lookup = %+v, want nil", got)
+	}
+	if _, ok := c.byName.Load("Stale"); ok {
+		t.Fatal("stale distributed value was published after invalidation")
+	}
+}
+
 func TestCacheInvalidateAll_ValkeyDeleteFollowsInFlightPointPublish(t *testing.T) {
 	t.Parallel()
 
