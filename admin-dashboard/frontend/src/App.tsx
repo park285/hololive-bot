@@ -4,8 +4,8 @@ import { lazy, Suspense, useCallback } from "react";
 import {
 	createBrowserRouter,
 	Navigate,
-	RouterProvider,
-} from "react-router-dom";
+} from "react-router";
+import { RouterProvider } from "react-router/dom";
 import { SessionAbsoluteWarningModal } from "@/components/auth/SessionAbsoluteWarningModal";
 import { SessionIdleWarningModal } from "@/components/auth/SessionIdleWarningModal";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
