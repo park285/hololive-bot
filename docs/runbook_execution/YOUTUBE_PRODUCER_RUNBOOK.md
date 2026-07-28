@@ -45,14 +45,17 @@ Remote AP split-host 운영 기준 (4-way active-active):
 - `SCRAPER_STATS_SECONDS` 기본값 `21600`
 - `SCRAPER_LIVE_SECONDS` 기본값 `300`
 
-원격 AP 재배포 (osaka / seoul) — rsync/build/recreate/검증을 포함한 scoped wrapper를 사용합니다:
+원격 AP 재배포 — rsync/build/recreate/검증을 포함한 runtime별 scoped wrapper를 사용합니다. Osaka와 Osaka2는 host-native `systemd`, Seoul은 Compose 경로입니다:
 
 ```bash
-./scripts/deploy/ap-deploy.sh osaka --dry-run
-I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh osaka --apply
+./scripts/deploy/ap-host-native-deploy.sh osaka --dry-run
+I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-host-native-deploy.sh osaka --apply
 
 ./scripts/deploy/ap-deploy.sh seoul --dry-run
 I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh seoul --apply
+
+./scripts/deploy/ap-host-native-deploy.sh osaka2 --dry-run
+I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-host-native-deploy.sh osaka2 --apply
 ```
 
 ## 3) 헬스체크
