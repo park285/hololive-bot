@@ -88,8 +88,21 @@ func (c *Cache) loadAllMembersResult(
 	if errors.Is(err, errAllMembersGenerationChanged) {
 		return nil, nil, true
 	}
+	return c.failedAllMembersResult(snap, generation, err)
+}
+
+func (c *Cache) failedAllMembersResult(
+	snap *allMembersState,
+	generation uint64,
+	err error,
+) ([]*domain.Member, error, bool) {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+	if c.snapshotGeneration.Load() != generation {
+		return nil, nil, true
+	}
 	if snapshotSuccessful(snap) {
-		return cloneMemberSlice(snap.members), nil, false
+		return snap.members, nil, false
 	}
 	return nil, err, false
 }
@@ -169,7 +182,9 @@ func (c *Cache) reloadAllMembersSnapshot(
 	members, err := loader(loadCtx)
 	if err != nil {
 		loadErr := fmt.Errorf("load all members from repository: %w", err)
-		c.deferAllMembersSnapshotReload(current, generation, loadErr)
+		if !c.deferAllMembersSnapshotReload(current, generation, loadErr) {
+			return nil, errAllMembersGenerationChanged
+		}
 		return nil, loadErr
 	}
 	if !c.storeAllMembersSnapshot(current, generation, members) {
@@ -179,7 +194,7 @@ func (c *Cache) reloadAllMembersSnapshot(
 	return members, nil
 }
 
-func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, generation uint64, err error) {
+func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, generation uint64, err error) bool {
 	retryAfter := time.Now().Add(allMembersSnapshotRetryDelay)
 	deferred := &allMembersState{
 		retryAfter: retryAfter,
@@ -206,6 +221,7 @@ func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, generation 
 			slog.Any("error", err),
 		)
 	}
+	return retryScheduled
 }
 
 func (c *Cache) logAllMembersSnapshotRecovery(snap *allMembersState, memberCount int) {

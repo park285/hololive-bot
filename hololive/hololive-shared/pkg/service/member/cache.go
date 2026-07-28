@@ -211,8 +211,11 @@ func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID s
 	cacheKey := memberChannelKeyPrefix + channelID
 	var member domain.Member
 	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-		c.storePointMemberInMemoryLocked(&member, generation)
-		return &member
+		owned := c.snapshotOwnedChannelMemberLocked(channelID, &member, generation)
+		if owned != nil {
+			c.storePointMemberInMemoryLocked(owned, generation)
+		}
+		return owned
 	}
 	return nil
 }
@@ -230,8 +233,11 @@ func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string, g
 	cacheKey := memberNameKeyPrefix + name
 	var member domain.Member
 	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-		c.storePointMemberInMemoryLocked(&member, generation)
-		return &member
+		owned := c.snapshotOwnedNameMemberLocked(name, &member, generation)
+		if owned != nil {
+			c.storePointMemberInMemoryLocked(owned, generation)
+		}
+		return owned
 	}
 	return nil
 }
@@ -271,8 +277,11 @@ func (c *Cache) getAliasFromCache(ctx context.Context, alias string, generation 
 	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
 		return nil
 	}
-	c.storePointMemberInMemoryLocked(&member, generation)
-	return &member
+	owned := c.snapshotOwnedAliasMemberLocked(alias, &member, generation)
+	if owned != nil {
+		c.storePointMemberInMemoryLocked(owned, generation)
+	}
+	return owned
 }
 
 func (c *Cache) GetAllChannelIDs(ctx context.Context) ([]string, error) {
