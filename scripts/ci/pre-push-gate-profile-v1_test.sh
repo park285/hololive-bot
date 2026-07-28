@@ -6,6 +6,12 @@ GATE="${ROOT_DIR}/scripts/ci/pre-push-gate.sh"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
+# 실제 hook이 주입한 ref range 대신 fixture가 만든 Git history만 사용한다.
+unset BASE_SHA HEAD_SHA FULL_PRE_PUSH PRE_PUSH_MODE LOCAL_CI_GO_SCOPE
+unset RUN_RACE_TESTS RUN_DEPENDENCY_HYGIENE RUN_ADMIN_TOUCH_GUARDRAIL
+unset PRE_PUSH_LOCAL_REF PRE_PUSH_LOCAL_SHA PRE_PUSH_REMOTE_REF PRE_PUSH_REMOTE_SHA
+unset PRE_PUSH_PEELED_TAG_TARGET PRE_PUSH_UPDATE_KIND PRE_PUSH_GATE_MODE
+
 fail() {
   echo "[FAIL] $*" >&2
   exit 1
