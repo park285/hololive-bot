@@ -4,7 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 source "${ROOT_DIR}/scripts/ci/go-tooling.sh"
+source "${ROOT_DIR}/scripts/ci/go-workspace-modules.sh"
+source "${ROOT_DIR}/scripts/ci/local-ci-files.sh"
+source "${ROOT_DIR}/scripts/ci/go-work-sync-drift.sh"
 source "${ROOT_DIR}/scripts/ci/nilaway-inputs.sh"
+
+# workspace_metadata_files가 source 이후 실행될 때 읽는 입력 계약이다.
+# shellcheck disable=SC2034
+GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
 
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-true}"
 RUN_NILAWAY="${RUN_NILAWAY:-true}"
@@ -33,7 +40,7 @@ check_go_toolchain() {
 
 run_step "Go toolchain" check_go_toolchain
 run_step "Go-only architecture gate" ./scripts/architecture/check-admin-dashboard-go-only.sh
-run_step "go work sync" go work sync
+run_step "go work sync drift" verify_go_work_sync_drift "${ROOT_DIR}"
 run_step "go mod tidy diff" bash -c 'cd admin-dashboard/backend && go mod tidy -diff'
 run_step "gofmt" bash -c 'unformatted="$(find admin-dashboard/backend -name "*.go" -not -path "*/vendor/*" -print0 | xargs -0 -r gofmt -l)"; if [[ -n "${unformatted}" ]]; then echo "gofmt required for:" >&2; echo "${unformatted}" >&2; exit 1; fi'
 run_step "go vet" bash -c 'cd admin-dashboard/backend && GOFLAGS=-mod=readonly go vet ./...'

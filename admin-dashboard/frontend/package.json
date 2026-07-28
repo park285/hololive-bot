@@ -3,15 +3,24 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "npm@12.0.1+sha512.2f94fd8bf600416416a934bfc59c4991e8bff7372ef7d842784e2a8b8d48c81555ee645069ddea73625fb8e92dc261feab0188fd5dab6c22fefd46316f5f9140",
   "engines": {
-    "node": ">=22.22.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": "^12.0.1",
+      "onFail": "error"
+    }
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node ./node_modules/@typescript/native/bin/tsc -b && vite build",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit",
-    "test": "npx tsx --tsconfig tsconfig.app.json --test 'src/**/*.test.ts' 'src/**/*.test.mjs'",
+    "tsc": "node ./node_modules/@typescript/native/bin/tsc",
+    "typecheck": "node ./node_modules/@typescript/native/bin/tsc -p tsconfig.app.json --noEmit",
+    "test": "tsx --tsconfig tsconfig.app.json --test 'src/**/*.test.ts' 'src/**/*.test.mjs'",
     "preview": "vite preview",
     "generate:api": "mkdir -p ../backend/docs && (cd ../backend && go run ./cmd/export-openapi > docs/swagger.json) && swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular"
   },
@@ -62,6 +71,7 @@
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "@vitejs/plugin-react": "^6.0.3",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^10.8.0",
@@ -72,7 +82,7 @@
     "swagger-typescript-api": "^13.12.5",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.1",
-    "typescript": "^6.0.3",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.64.0",
     "vite": "^8.1.5"
   },

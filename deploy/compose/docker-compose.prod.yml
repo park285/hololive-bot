@@ -664,7 +664,7 @@ services:
 
   docker-proxy:
     <<: *restart-logging
-    image: ${DOCKER_SOCKET_PROXY_IMAGE:-wollomatic/socket-proxy:1.12.2@sha256:ad9df81849436b5ddae36396e2aefd6562d4cd587d1b65fcb5ac71e4578c9da3}
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b}
     container_name: docker-proxy
     command:
       - '-loglevel=info'

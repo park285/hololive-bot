@@ -62,10 +62,10 @@ make build
 
 ```bash
 cd admin-dashboard/frontend
-npm ci
-npm test
-npm run lint
-npm run build
+corepack npm ci
+corepack npm test
+corepack npm run lint
+corepack npm run build
 ```
 
 ### 개발 서버
@@ -74,7 +74,7 @@ npm run build
 
 ```bash
 cd admin-dashboard/frontend
-ADMIN_DASHBOARD_PROXY_TARGET=http://localhost:30190 npm run dev
+ADMIN_DASHBOARD_PROXY_TARGET=http://localhost:30190 corepack npm run dev
 ```
 
 ## API 경로

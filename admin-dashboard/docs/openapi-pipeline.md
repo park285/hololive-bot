@@ -32,7 +32,7 @@ frontend/src/api/generated/*         (generated output — 수동 수정 금지)
 
 ```bash
 cd admin-dashboard/frontend
-npm run generate:api
+corepack npm run generate:api
 ```
 
 `generate:api`가 실제로 실행하는 것:
@@ -52,18 +52,18 @@ go run ./cmd/export-openapi | diff - docs/swagger.json
 
 # 2. generated client 재생성 후 drift 확인 (frontend/ 기준)
 cd ../frontend
-npm run generate:api
+corepack npm run generate:api
 git diff --exit-code -- ../backend/docs/swagger.json src/api/generated
 
 # 3. 빌드/테스트
-npm run build
-npm test
+corepack npm run build
+corepack npm test
 ```
 
 ## 변경 시 체크리스트
 
 1. handler나 schema를 바꾸면 `backend/internal/openapi/spec.json`을 같이 수정합니다.
 2. `go run ./cmd/export-openapi | diff - docs/swagger.json`로 미러 drift가 없는지 확인하고, 필요하면 미러를 다시 export합니다.
-3. 프런트가 새 계약을 써야 하면 `npm run generate:api`로 `swagger.json` 미러와 generated client를 재생성합니다.
+3. 프런트가 새 계약을 써야 하면 `corepack npm run generate:api`로 `swagger.json` 미러와 generated client를 재생성합니다.
 4. `git diff --exit-code -- ../backend/docs/swagger.json src/api/generated`로 drift가 없는지 확인합니다.
-5. backend `make test`와 프런트 `npm run build`를 다시 돌려 contract drift가 없는지 확인합니다.
+5. backend `make test`와 프런트 `corepack npm run build`를 다시 돌려 contract drift가 없는지 확인합니다.

@@ -2,6 +2,8 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+// TypeScript 7.0은 programmatic API가 없어, typescript-eslint는 공식 호환 패키지의 6.x API를 사용한다.
+// TypeScript 7 API를 지원하는 typescript-eslint stable이 나오면 package alias와 함께 제거한다.
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
