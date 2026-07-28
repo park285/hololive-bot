@@ -286,6 +286,18 @@ docker logs -f hololive-youtube-producer-c
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml up --build hololive-db-migrate
 ```
 
+기존 DB에서 plain `DROP INDEX`가 포함된 이미 배포된 migration을 적용해야 하는 경우에만,
+모든 central·AP writer가 quiescent임을 확인한 전용 maintenance window에서 다음 one-shot override를 사용합니다.
+일반 재배포나 상시 env 파일에는 이 값을 저장하지 않습니다.
+
+```bash
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml \
+  run --rm -e MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true hololive-db-migrate
+```
+
+명령 종료 후 `hololive-db-migrate` 성공 로그와 적용 ledger를 확인한 다음 runtime을 재개합니다.
+override를 지정하지 않은 모든 경로는 기본값 `false`로 plain index drop을 거부합니다.
+
 ## 관련 런북
 
 - `docs/runbook_execution/YOUTUBE_PRODUCER_RUNBOOK.md`

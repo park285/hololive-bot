@@ -52,25 +52,36 @@ func ProvideMemberCache(
 		logger.Warn("Cache service is nil; member database init skipped")
 		return memberCache, nil
 	}
-	if err := initializeMemberDatabase(ctx, repository, cacheClient, logger); err != nil {
+	if err := initializeMemberDatabaseFromSnapshot(ctx, memberCache, cacheClient, logger); err != nil {
 		return nil, err
 	}
 
 	return memberCache, nil
 }
 
-func initializeMemberDatabase(
+type allMembersSnapshot interface {
+	AllMembers(ctx context.Context) ([]*domain.Member, error)
+}
+
+func initializeMemberDatabaseFromSnapshot(
 	ctx context.Context,
-	repository *member.Repository,
+	memberCache allMembersSnapshot,
 	cacheClient cache.Client,
 	logger *slog.Logger,
 ) error {
-	members, err := repository.GetAllMembers(ctx)
+	members, err := memberCache.AllMembers(ctx)
 	if err != nil {
-		logger.Warn("Failed to load members for member database init", slog.Any("error", err))
-		members = []*domain.Member{}
+		logger.Warn("Failed to reuse members for member database init; initialization skipped", slog.Any("error", err))
+		return nil
 	}
+	return initializeMemberDatabase(ctx, members, cacheClient)
+}
 
+func initializeMemberDatabase(
+	ctx context.Context,
+	members []*domain.Member,
+	cacheClient cache.Client,
+) error {
 	memberMap := make(map[string]string, len(members))
 	for _, m := range members {
 		if m != nil && m.ChannelID != "" {
