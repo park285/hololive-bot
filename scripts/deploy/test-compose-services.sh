@@ -99,6 +99,12 @@ grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILE
 pass "ap active-active syncs Iris H3 trust preflight"
 grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
 pass "ap active-active deploy runs Iris H3 trust preflight"
+
+for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
+  grep -Fq 'export GIT_OPTIONAL_LOCKS=0' "${ROOT_DIR}/${compose_entrypoint}" \
+    || fail "${compose_entrypoint} disables root-owned optional Git index refresh"
+done
+pass "Compose deploy entrypoints preserve checkout Git index ownership"
 for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
     grep -q '/run/hololive-bot/ap-compose.env' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} uses AP compose env"
     if grep -q '/run/hololive-bot/env' "${ROOT_DIR}/${ap_script}"; then
