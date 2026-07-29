@@ -59,7 +59,7 @@ Package refactors must preserve `go.work`, Docker Compose build targets, runtime
 
 - Root packages that are part of an existing import contract should remain small facades or entrypoint wiring when their implementation grows beyond a single responsibility.
 - Implementation files belong under role-specific internal packages such as `delivery`, `polling`, `scraping`, `model`, `settings`, `httpserver`, `botruntime`, `workerapp`, or `reports`.
-- Generic buckets are not allowed for new or moved Go code: do not use `internal/core`, `servicecore`, `package core`, or `import core "..."`.
+- New or moved Go code uses behavior-named packages instead of generic buckets: `scripts/architecture/check-go-generic-internal-package-names.sh` fails on `core`/`servicecore` directories, `package core`/`package servicecore`, and `import core "..."` under `hololive/` and `shared-go/`.
 - Further nested packages should be created by behavior family only when the new package has a stable contract and package-local tests.
 
 ## Validation
