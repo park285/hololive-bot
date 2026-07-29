@@ -39,6 +39,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type Renderer struct {
@@ -175,6 +176,7 @@ var templateFuncs = template.FuncMap{
 	"nl2br":          nl2br,
 	"stripTags":      stripTags,
 	"urlEncode":      urlEncode,
+	"mdsafe":         util.MarkdownNeutralize,
 	"add":            func(a, b int) int { return a + b },
 	"dict": func(values ...any) (map[string]any, error) {
 		if len(values)%2 != 0 {

@@ -18,37 +18,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package util
+package template
 
 import (
 	"strings"
-	"unicode/utf8"
+	"testing"
+	"text/template"
+
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// 카카오 메시지 관련 상수 목록.
-const (
-	// KakaoSeeMorePadding: 카카오톡 '전체 보기' 기능을 위한 패딩 길이
-	KakaoSeeMorePadding   = 500
-	KakaoSeeMoreThreshold = 250
-	KakaoZeroWidthSpace   = "\u200b"
-)
+func TestTemplateFuncs_MdSafe(t *testing.T) {
+	t.Parallel()
 
-// FoldForSeeMore는 첫 줄 뒤에 zero-width space 패딩을 삽입해 KakaoTalk이
-// 본문을 '전체보기'로 접게 만든다. 임계 이하·한 줄짜리·이미 패딩된 텍스트는
-// 그대로 반환한다(멱등).
-func FoldForSeeMore(text string, threshold int) string {
-	if threshold <= 0 || utf8.RuneCountInString(text) <= threshold {
-		return text
-	}
-	// 단발 ZWSP는 MarkdownNeutralize가 남긴 것이므로, 패딩 판정은 연속 2개 이상으로만 한다.
-	if strings.Contains(text, KakaoZeroWidthSpace+KakaoZeroWidthSpace) {
-		return text
+	tmpl, err := template.New("mdsafe").Funcs(templateFuncs).Parse("제목: {{mdsafe .Title}}")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
 	}
 
-	head, rest, found := strings.Cut(text, "\n")
-	if !found || strings.TrimSpace(rest) == "" {
-		return text
+	data := struct {
+		Title string
+	}{
+		Title: "**긴급** [공지](https://example.com)",
 	}
 
-	return head + "\n" + strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding) + "\n" + rest
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, data); err != nil {
+		t.Fatalf("failed to execute template: %v", err)
+	}
+
+	got := buf.String()
+	if strings.Contains(got, "**") || strings.Contains(got, "](") {
+		t.Errorf("markdown 마커가 무력화되지 않음: %q", got)
+	}
+	if want := "제목: " + util.MarkdownNeutralize(data.Title); got != want {
+		t.Errorf("mdsafe 출력 = %q, want %q", got, want)
+	}
+	if stripped := strings.ReplaceAll(got, util.KakaoZeroWidthSpace, ""); stripped != "제목: "+data.Title {
+		t.Errorf("가시 문자 변형됨: %q", stripped)
+	}
 }

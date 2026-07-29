@@ -20,35 +20,51 @@
 
 package util
 
-import (
-	"strings"
-	"unicode/utf8"
-)
+import "strings"
 
-// 카카오 메시지 관련 상수 목록.
-const (
-	// KakaoSeeMorePadding: 카카오톡 '전체 보기' 기능을 위한 패딩 길이
-	KakaoSeeMorePadding   = 500
-	KakaoSeeMoreThreshold = 250
-	KakaoZeroWidthSpace   = "\u200b"
-)
-
-// FoldForSeeMore는 첫 줄 뒤에 zero-width space 패딩을 삽입해 KakaoTalk이
-// 본문을 '전체보기'로 접게 만든다. 임계 이하·한 줄짜리·이미 패딩된 텍스트는
-// 그대로 반환한다(멱등).
-func FoldForSeeMore(text string, threshold int) string {
-	if threshold <= 0 || utf8.RuneCountInString(text) <= threshold {
-		return text
-	}
-	// 단발 ZWSP는 MarkdownNeutralize가 남긴 것이므로, 패딩 판정은 연속 2개 이상으로만 한다.
-	if strings.Contains(text, KakaoZeroWidthSpace+KakaoZeroWidthSpace) {
-		return text
+// 이미 ZWSP가 따라오는 마커를 건너뛰어야 재적용 시 연속 ZWSP가 생기지 않고, FoldForSeeMore의 연속-ZWSP 패딩 판정과 충돌하지 않는다.
+func MarkdownNeutralize(s string) string {
+	inserts := markdownMarkerCount(s)
+	if inserts == 0 {
+		return s
 	}
 
-	head, rest, found := strings.Cut(text, "\n")
-	if !found || strings.TrimSpace(rest) == "" {
-		return text
-	}
+	var b strings.Builder
+	b.Grow(len(s) + inserts*len(KakaoZeroWidthSpace))
 
-	return head + "\n" + strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding) + "\n" + rest
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if !needsZeroWidthAfter(s, i) {
+			continue
+		}
+		b.WriteString(s[start : i+1])
+		b.WriteString(KakaoZeroWidthSpace)
+		start = i + 1
+	}
+	b.WriteString(s[start:])
+
+	return b.String()
+}
+
+func markdownMarkerCount(s string) int {
+	count := 0
+	for i := 0; i < len(s); i++ {
+		if needsZeroWidthAfter(s, i) {
+			count++
+		}
+	}
+	return count
+}
+
+func needsZeroWidthAfter(s string, i int) bool {
+	return isMarkdownMarker(s[i]) && !strings.HasPrefix(s[i+1:], KakaoZeroWidthSpace)
+}
+
+func isMarkdownMarker(c byte) bool {
+	switch c {
+	case '*', '_', '`', '~', ']', '#':
+		return true
+	default:
+		return false
+	}
 }
