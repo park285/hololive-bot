@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-dbtest v0.0.0
-	github.com/park285/shared-go v1.37.0
+	github.com/park285/shared-go v1.37.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
@@ -28,7 +28,7 @@ replace github.com/kapu/hololive-dbtest => ../hololive-dbtest
 require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v1.2.2
+	github.com/park285/iris-client-go v1.2.4
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.61.0
 	gopkg.in/yaml.v3 v3.0.1

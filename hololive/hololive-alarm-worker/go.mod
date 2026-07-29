@@ -9,8 +9,8 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v1.2.2
-	github.com/park285/shared-go v1.37.0
+	github.com/park285/iris-client-go v1.2.4
+	github.com/park285/shared-go v1.37.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.76
