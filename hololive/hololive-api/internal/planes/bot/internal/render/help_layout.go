@@ -106,7 +106,7 @@ func loadHelpCardFace(name string, size float64, bold bool) (font.Face, error) {
 	return face, nil
 }
 
-func parseHelpCardDocument(ctx context.Context, text string, faces helpCardFonts) (helpCardDocument, error) {
+func parseHelpCardDocument(ctx context.Context, text string, faces *helpCardFonts) (helpCardDocument, error) {
 	source := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	if len(source) == 0 || len(source) > helpCardMaxSourceLines {
 		return helpCardDocument{}, fmt.Errorf("help source line count %d is outside 1..%d", len(source), helpCardMaxSourceLines)
@@ -125,7 +125,7 @@ func parseHelpCardDocument(ctx context.Context, text string, faces helpCardFonts
 	return helpCardDocument{title: title, sections: sections}, nil
 }
 
-func parseHelpSections(ctx context.Context, source []string, faces helpCardFonts) ([]helpCardSection, error) {
+func parseHelpSections(ctx context.Context, source []string, faces *helpCardFonts) ([]helpCardSection, error) {
 	builder := helpSectionBuilder{faces: faces, sections: make([]helpCardSection, 0, 8)}
 	for _, raw := range source {
 		if err := ctx.Err(); err != nil {
@@ -143,7 +143,7 @@ func parseHelpSections(ctx context.Context, source []string, faces helpCardFonts
 }
 
 type helpSectionBuilder struct {
-	faces    helpCardFonts
+	faces    *helpCardFonts
 	sections []helpCardSection
 	rowCount int
 }
@@ -204,7 +204,7 @@ func helpSectionLabel(line string) (string, bool) {
 	return "", false
 }
 
-func layoutHelpRow(line string, faces helpCardFonts) (helpCardRow, error) {
+func layoutHelpRow(line string, faces *helpCardFonts) (helpCardRow, error) {
 	if utf8.RuneCountInString(line) > helpCardMaxLineRunes {
 		return helpCardRow{}, fmt.Errorf("help line exceeds %d runes", helpCardMaxLineRunes)
 	}
@@ -231,12 +231,12 @@ func layoutHelpRow(line string, faces helpCardFonts) (helpCardRow, error) {
 	}, nil
 }
 
-func splitHelpColumns(line string) (string, string) {
-	if command, description, ok := strings.Cut(line, " - "); ok {
-		return strings.TrimSpace(command), strings.TrimSpace(description)
+func splitHelpColumns(line string) (command, description string) {
+	if head, rest, ok := strings.Cut(line, " - "); ok {
+		return strings.TrimSpace(head), strings.TrimSpace(rest)
 	}
-	if label, description, ok := strings.Cut(line, ":"); ok && !strings.HasPrefix(strings.TrimSpace(label), "!") {
-		return strings.TrimSpace(label), strings.TrimSpace(description)
+	if label, rest, ok := strings.Cut(line, ":"); ok && !strings.HasPrefix(strings.TrimSpace(label), "!") {
+		return strings.TrimSpace(label), strings.TrimSpace(rest)
 	}
 	return strings.TrimSpace(line), ""
 }

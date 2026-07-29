@@ -104,7 +104,10 @@ func TestHelpCardRendererMatchesChatBotGoQuestionFrame(t *testing.T) {
 
 func assertHelpPixel(t *testing.T, image interface{ At(int, int) color.Color }, x, y int, want color.RGBA) {
 	t.Helper()
-	got := color.RGBAModel.Convert(image.At(x, y)).(color.RGBA)
+	got, ok := color.RGBAModel.Convert(image.At(x, y)).(color.RGBA)
+	if !ok {
+		t.Fatalf("pixel (%d,%d) is not convertible to RGBA", x, y)
+	}
 	if got != want {
 		t.Fatalf("pixel (%d,%d) = %#v, want %#v", x, y, got, want)
 	}
@@ -118,7 +121,7 @@ func TestHelpCardPaginationPreservesEveryCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadHelpCardFonts() error = %v", err)
 	}
-	document, err := parseHelpCardDocument(t.Context(), helpCardTestText, faces)
+	document, err := parseHelpCardDocument(t.Context(), helpCardTestText, &faces)
 	if err != nil {
 		t.Fatalf("parseHelpCardDocument() error = %v", err)
 	}

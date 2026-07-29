@@ -52,7 +52,7 @@ func renderHelpCards(ctx context.Context, text string) ([][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	document, err := parseHelpCardDocument(ctx, text, faces)
+	document, err := parseHelpCardDocument(ctx, text, &faces)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func renderHelpCards(ctx context.Context, text string) ([][]byte, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		imageData, err := renderHelpPage(ctx, page, faces)
+		imageData, err := renderHelpPage(ctx, page, &faces)
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +75,7 @@ func renderHelpCards(ctx context.Context, text string) ([][]byte, error) {
 	return images, nil
 }
 
-func renderHelpPage(ctx context.Context, page helpCardPage, faces helpCardFonts) ([]byte, error) {
+func renderHelpPage(ctx context.Context, page helpCardPage, faces *helpCardFonts) ([]byte, error) {
 	if page.contentHeight > helpCardMaxContentH {
 		return nil, fmt.Errorf("help card content height %d exceeds %d", page.contentHeight, helpCardMaxContentH)
 	}
@@ -115,7 +115,7 @@ func drawHelpFrame(canvas *image.RGBA) {
 	cardkit.FillRoundedRect(canvas, inner, helpCardFrameRadius-helpCardFrameInset, helpColorSurface)
 }
 
-func drawHelpHeader(canvas *image.RGBA, faces helpCardFonts, page helpCardPage) {
+func drawHelpHeader(canvas *image.RGBA, faces *helpCardFonts, page helpCardPage) {
 	cardkit.DrawText(canvas, faces.title, 64, 96, helpColorTitle, page.title)
 	cardkit.DrawText(canvas, faces.subtitle, 67, 136, helpColorMuted, page.subtitle)
 	cardkit.FillRoundedRect(canvas, image.Rect(64, 151, 1384, 157), 3, helpColorBorder)
@@ -143,7 +143,7 @@ func pageFraction(subtitle string) string {
 	return ""
 }
 
-func drawHelpTable(ctx context.Context, canvas *image.RGBA, faces helpCardFonts, page helpCardPage) error {
+func drawHelpTable(ctx context.Context, canvas *image.RGBA, faces *helpCardFonts, page helpCardPage) error {
 	cardkit.FillRoundedRect(
 		canvas,
 		image.Rect(helpCardContentX, helpCardTableHeaderY, helpCardContentX+helpCardContentWidth, helpCardTableHeaderY+helpCardTableHeaderH),
@@ -180,7 +180,7 @@ func drawHelpTable(ctx context.Context, canvas *image.RGBA, faces helpCardFonts,
 	return nil
 }
 
-func drawHelpCommandRow(canvas *image.RGBA, faces helpCardFonts, row helpCardRow, y int, alternate bool) {
+func drawHelpCommandRow(canvas *image.RGBA, faces *helpCardFonts, row helpCardRow, y int, alternate bool) {
 	background := helpColorRowPrimary
 	if alternate {
 		background = helpColorRowAlternate

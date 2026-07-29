@@ -105,6 +105,10 @@ func (c *HelpCommand) sendHelpImages(ctx context.Context, room, text string) err
 	if len(images) == 0 {
 		return errors.New("render help images: empty result")
 	}
+	return c.sendHelpImagePayloads(ctx, room, images)
+}
+
+func (c *HelpCommand) sendHelpImagePayloads(ctx context.Context, room string, images [][]byte) error {
 	for index, imageData := range images {
 		if len(imageData) == 0 {
 			return fmt.Errorf("render help image %d/%d: empty payload", index+1, len(images))
