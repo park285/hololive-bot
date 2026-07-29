@@ -44,7 +44,7 @@ func buildNotificationEgress(
 	if err != nil {
 		return nil, fmt.Errorf("init alarm-worker notification egress iris client: %w", err)
 	}
-	irisSender := egress.NewIrisMessageSender(irisClient)
+	irisSender := egress.NewIrisMessageSender(irisClient, egress.WithMarkdownReplies(appConfig.Bot.MarkdownReplies))
 
 	alarmDispatchRunner, err := buildAlarmDispatchRunner(infra, irisSender, logger)
 	if err != nil {

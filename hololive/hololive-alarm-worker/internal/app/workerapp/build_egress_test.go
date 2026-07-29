@@ -12,19 +12,25 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// NewIrisMessageSender가 any를 받아 type switch로 판별하므로, 이 단언이 없으면 SDK 시그니처가
+// 어긋나도 컴파일이 통과하고 런타임에 client=nil sender로 조용히 전락한다.
+var _ egress.IrisClient = (*delivery.RuntimeIrisClient)(nil)
 
 type youtubeOutboxKaringCapableSender interface {
 	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
 }
 
 type clientRequestIDRecordingIrisSender struct {
-	roomID  string
-	message string
-	opts    int
+	roomID       string
+	message      string
+	opts         int
+	markdownSent bool
 }
 
 func (s *clientRequestIDRecordingIrisSender) SendMessage(_ context.Context, roomID, message string, opts ...iris.SendOption) error {
@@ -32,6 +38,14 @@ func (s *clientRequestIDRecordingIrisSender) SendMessage(_ context.Context, room
 	s.message = message
 	s.opts = len(opts)
 	return nil
+}
+
+func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	s.roomID = roomID
+	s.message = markdown
+	s.opts = len(opts)
+	s.markdownSent = true
+	return &iris.ReplyAcceptedResponse{}, nil
 }
 
 func (*clientRequestIDRecordingIrisSender) SendKaringContentList(context.Context, *iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
@@ -81,6 +95,22 @@ func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t 
 
 	assert.Equal(t, "room-1", stub.roomID)
 	assert.Equal(t, "hello", stub.message)
+	assert.Equal(t, 1, stub.opts)
+	assert.False(t, stub.markdownSent)
+}
+
+func TestYouTubeOutboxKaringSenderUsesMarkdownLaneWhenEnabled(t *testing.T) {
+	stub := &clientRequestIDRecordingIrisSender{}
+	sender := dispatchrun.NewYouTubeOutboxKaringSender(
+		egress.NewIrisMessageSender(stub, egress.WithMarkdownReplies(true)),
+		nil,
+	)
+
+	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), "room-1", "**hello**", "req-1"))
+
+	assert.True(t, stub.markdownSent)
+	assert.Equal(t, "room-1", stub.roomID)
+	assert.Equal(t, "**hello**", stub.message)
 	assert.Equal(t, 1, stub.opts)
 }
 
