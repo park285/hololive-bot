@@ -11,6 +11,7 @@ Root is reserved for repository entrypoints, workspace wiring, and repository-le
 Allowed at root:
 
 - Entrypoints and readme: `README.md`, `AGENTS.md`, `LICENSE`
+- Release versioning: `VERSION` (release SSOT read by `scripts/check-release-version.sh`), `CHANGELOG.md`
 - Go workspace: `go.work`, `go.work.sum`, root `go.mod`/`go.sum`, and `doc.go` (the root `package workspace` anchor)
 - Repository config: `.gitignore`, `.golangci.yml`, `.go-version`, `.tool-versions`, `.dockerignore`
 - Build entry script: `build-all.sh`
