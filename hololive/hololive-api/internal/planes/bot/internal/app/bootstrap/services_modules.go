@@ -40,7 +40,7 @@ func BuildBotDependencyModules(
 ) BotDependencyModules {
 	return BotDependencyModules{
 		Core:      buildBotCoreModule(appConfig, logger),
-		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter, messageStrings),
+		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter, messageStrings, appConfig.Bot.MarkdownReplies),
 		Data:      buildBotDataModule(infra, alarmYouTubeStack.AlarmMode, foundation.ProfileService),
 		Stream:    buildBotStreamModule(alarmYouTubeStack.AlarmMode, foundation.HolodexService, alarmYouTubeStack.Matcher, alarmYouTubeStack.YouTubeStack),
 		Support:   buildBotSupportModule(alarmYouTubeStack.ActivityLogger, alarmYouTubeStack.SettingsService, integrationServices.ACLService, integrationServices.WorkerPool),
@@ -64,12 +64,14 @@ func buildBotMessagingModule(
 	messageAdapter *messaging.MessageAdapter,
 	formatter *messageformatter.ResponseFormatter,
 	messageStrings *messagestrings.Store,
+	markdownReplies bool,
 ) BotMessagingModule {
 	return BotMessagingModule{
-		Client:         irisClient,
-		MessageAdapter: messageAdapter,
-		Formatter:      formatter,
-		MessageStrings: messageStrings,
+		Client:          irisClient,
+		MessageAdapter:  messageAdapter,
+		Formatter:       formatter,
+		MessageStrings:  messageStrings,
+		MarkdownReplies: markdownReplies,
 	}
 }
 

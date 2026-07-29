@@ -56,16 +56,39 @@ type acceptedMessageSender interface {
 	replyStatusGetter
 }
 
-type CommandTransport struct {
-	irisClient iris.BotClient
-	formatter  *messageformatter.ResponseFormatter
+type replySendFunc func(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+
+type replyLane struct {
+	send   replySendFunc
+	getter replyStatusGetter
 }
 
-func NewCommandTransport(irisClient iris.BotClient, formatter *messageformatter.ResponseFormatter) *CommandTransport {
-	return &CommandTransport{
+type CommandTransport struct {
+	irisClient      iris.BotClient
+	formatter       *messageformatter.ResponseFormatter
+	markdownReplies bool
+}
+
+type Option func(*CommandTransport)
+
+func WithMarkdownReplies(enabled bool) Option {
+	return func(t *CommandTransport) {
+		t.markdownReplies = enabled
+	}
+}
+
+func NewCommandTransport(irisClient iris.BotClient, formatter *messageformatter.ResponseFormatter, opts ...Option) *CommandTransport {
+	t := &CommandTransport{
 		irisClient: irisClient,
 		formatter:  formatter,
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(t)
+		}
+	}
+
+	return t
 }
 
 func (t *CommandTransport) SendMessage(ctx context.Context, room, message string) error {
@@ -94,15 +117,25 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 }
 
 func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestIDBase string, opts ...iris.SendOption) error {
+	if t.markdownReplies {
+		lane := replyLane{send: t.irisClient.SendMarkdown, getter: t.irisClient}
+		return sendReplyWithAttempts(ctx, lane, room, message, clientRequestIDBase, opts)
+	}
+
 	acceptedSender, ok := t.irisClient.(acceptedMessageSender)
 	if !ok {
 		return t.irisClient.SendMessage(ctx, room, message, appendReplyClientRequestID(opts, clientRequestIDBase, 1)...)
 	}
 
+	lane := replyLane{send: acceptedSender.SendMessageAccepted, getter: acceptedSender}
+	return sendReplyWithAttempts(ctx, lane, room, message, clientRequestIDBase, opts)
+}
+
+func sendReplyWithAttempts(ctx context.Context, lane replyLane, room, message, clientRequestIDBase string, opts []iris.SendOption) error {
 	var lastErr error
 	for attempt := 1; attempt <= replySendMaxAttempts; attempt++ {
 		attemptOpts := appendReplyClientRequestID(opts, clientRequestIDBase, attempt)
-		done, err := sendAcceptedMessageAttempt(ctx, acceptedSender, room, message, attemptOpts...)
+		done, err := sendReplyAttempt(ctx, lane, room, message, attemptOpts...)
 		if err != nil && !isReplyStatusFailed(err) {
 			return err
 		}
@@ -145,13 +178,13 @@ func commandReplyIdentity(ctx context.Context) string {
 	return ""
 }
 
-func sendAcceptedMessageAttempt(ctx context.Context, sender acceptedMessageSender, room, message string, opts ...iris.SendOption) (bool, error) {
-	accepted, err := sender.SendMessageAccepted(ctx, room, message, opts...)
+func sendReplyAttempt(ctx context.Context, lane replyLane, room, message string, opts ...iris.SendOption) (bool, error) {
+	accepted, err := lane.send(ctx, room, message, opts...)
 	if err != nil {
 		return false, err
 	}
 
-	err = waitForAcceptedReplyHandoff(ctx, sender, accepted)
+	err = waitForAcceptedReplyHandoff(ctx, lane.getter, accepted)
 	if err == nil {
 		return true, nil
 	}

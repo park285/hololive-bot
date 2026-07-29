@@ -65,6 +65,7 @@ type Bot struct {
 	messageAdapter        *messagingadapter.MessageAdapter
 	formatter             *formatter.ResponseFormatter
 	messageStrings        *messagestrings.Store
+	markdownReplies       bool
 	cache                 cache.Client
 	postgres              database.Client
 	holodex               streamRuntime
@@ -109,6 +110,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		messageAdapter:       messaging.messageAdapter,
 		formatter:            messaging.formatter,
 		messageStrings:       messaging.messageStrings,
+		markdownReplies:      messaging.markdownReplies,
 		cache:                data.cache,
 		postgres:             data.postgres,
 		holodex:              holodexRuntime,
@@ -130,7 +132,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	}
 	bot.initImageRenderers(core.calendarImageCacheDir, messaging.messageStrings)
 
-	bot.transport = transport.NewCommandTransport(bot.irisClient, bot.formatter)
+	bot.transport = bot.newCommandTransport()
 	bot.ingress = ingress.NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender)
 	bot.lifecycle = lifecycle.NewBotLifecycle(
 		bot.logger,

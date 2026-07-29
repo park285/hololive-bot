@@ -60,6 +60,7 @@ func ProvideBotDependencies(modules *BotDependencyModules) *orchestration.Depend
 		MessageAdapter:        modules.Messaging.MessageAdapter,
 		Formatter:             modules.Messaging.Formatter,
 		MessageStrings:        modules.Messaging.MessageStrings,
+		MarkdownReplies:       modules.Messaging.MarkdownReplies,
 		Cache:                 modules.Data.Cache,
 		Postgres:              modules.Data.Postgres,
 		MemberRepository:      modules.Data.MemberRepository,

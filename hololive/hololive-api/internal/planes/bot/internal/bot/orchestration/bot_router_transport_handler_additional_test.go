@@ -73,6 +73,7 @@ type testIrisClient struct {
 	lastImageRoom   string
 	lastImage       []byte
 	lastMultiImages [][]byte
+	markdownCalls   int
 }
 
 type sentMessage struct {
@@ -136,8 +137,16 @@ func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, imag
 	return nil, c.sendMultipleImagesErr
 }
 
-func (c *testIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+func (c *testIrisClient) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.mu.Lock()
+	c.markdownCalls++
+	c.mu.Unlock()
+
+	if err := c.SendMessage(ctx, room, markdown, opts...); err != nil {
+		return nil, err
+	}
+
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-markdown", Delivery: "queued", Room: room, Type: "markdown"}, nil
 }
 
 func (c *testIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
@@ -283,6 +292,16 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		assert.Contains(t, err.Error(), "send message to room room")
 	})
 
+	t.Run("markdown replies option routes through SendMarkdown", func(t *testing.T) {
+		client := &acceptedTestIrisClient{}
+		transport := bottransport.NewCommandTransport(client, nil, bottransport.WithMarkdownReplies(true))
+
+		require.NoError(t, transport.SendMessage(ctx, "room", "hello"))
+		assert.Equal(t, 1, client.markdownCalls)
+		assert.Equal(t, 0, client.acceptedCalls)
+		assert.Equal(t, "hello", client.lastMessage)
+	})
+
 	t.Run("send message retries failed accepted reply once", func(t *testing.T) {
 		failedDetail := "callback failed"
 		client := &acceptedTestIrisClient{
@@ -363,6 +382,39 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 		require.NoError(t, transport.SendError(ctx, "room", "totally_unknown_key"))
 		assert.Equal(t, messagestrings.FallbackSentinel, client.lastMessage)
+	})
+}
+
+func TestEnsureTransportFollowsMarkdownRepliesFlag(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	t.Run("enabled flag reaches the markdown lane", func(t *testing.T) {
+		client := &acceptedTestIrisClient{}
+		b := &Bot{
+			logger:          newBotTestLogger(),
+			irisClient:      client,
+			formatter:       messageformatter.NewResponseFormatter("!", nil),
+			markdownReplies: true,
+		}
+
+		require.NoError(t, b.ensureTransport().SendMessage(ctx, "room", "hello"))
+		assert.Equal(t, 1, client.markdownCalls)
+		assert.Equal(t, 0, client.acceptedCalls)
+	})
+
+	t.Run("disabled flag keeps the accepted lane", func(t *testing.T) {
+		client := &acceptedTestIrisClient{}
+		b := &Bot{
+			logger:     newBotTestLogger(),
+			irisClient: client,
+			formatter:  messageformatter.NewResponseFormatter("!", nil),
+		}
+
+		require.NoError(t, b.ensureTransport().SendMessage(ctx, "room", "hello"))
+		assert.Equal(t, 0, client.markdownCalls)
+		assert.Equal(t, 1, client.acceptedCalls)
 	})
 }
 

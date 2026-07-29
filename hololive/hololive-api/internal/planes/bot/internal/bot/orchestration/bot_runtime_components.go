@@ -43,9 +43,13 @@ func (b *Bot) ensureIngress() *ingress.MessageIngress {
 	return b.ingress
 }
 
+func (b *Bot) newCommandTransport() *transport.CommandTransport {
+	return transport.NewCommandTransport(b.irisClient, b.formatter, transport.WithMarkdownReplies(b.markdownReplies))
+}
+
 func (b *Bot) ensureTransport() *transport.CommandTransport {
 	if b.transport == nil {
-		b.transport = transport.NewCommandTransport(b.irisClient, b.formatter)
+		b.transport = b.newCommandTransport()
 	}
 
 	return b.transport
