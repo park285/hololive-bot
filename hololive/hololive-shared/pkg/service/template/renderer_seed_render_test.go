@@ -137,6 +137,64 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 	}
 }
 
+func TestSeedTemplates_AlarmListNextStreamLiveBranch(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	const (
+		markerTitle = "**콜라보**_[게릴라]"
+		streamURL   = "https://youtu.be/a_b#c"
+	)
+
+	body := seedBody(t, pool, domain.TemplateKeyCmdAlarmList)
+	out := renderSeedBody(t, domain.TemplateKeyCmdAlarmList, body, map[string]any{
+		"Count":  3,
+		"Prefix": "!",
+		"Alarms": []map[string]any{
+			{"MemberName": "사쿠라 미코", "TypesLabel": "라이브", "NextStream": liveNextStreamSample(markerTitle, streamURL)},
+			{"MemberName": "호시마치 스이세이", "TypesLabel": "", "NextStream": liveNextStreamSample(markerTitle, "")},
+			{"MemberName": "시라카미 후부키", "TypesLabel": "", "NextStream": liveNextStreamSample("", streamURL)},
+		},
+	})
+
+	safeTitle := util.MarkdownNeutralize(markerTitle)
+	lines := strings.Split(out, "\n")
+	hasLine := func(want string) bool {
+		for _, line := range lines {
+			if line == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !hasLine("   🔴 방송 중") {
+		t.Fatalf("CMD_ALARM_LIST: live 분기가 렌더되지 않음: %q", out)
+	}
+	if !hasLine("   [" + safeTitle + "](" + streamURL + ")") {
+		t.Errorf("CMD_ALARM_LIST: 라벨 링크 분기 없음: %q", out)
+	}
+	if !hasLine("   " + safeTitle) {
+		t.Errorf("CMD_ALARM_LIST: Title-only fallback 없음: %q", out)
+	}
+	if !hasLine("   " + streamURL) {
+		t.Errorf("CMD_ALARM_LIST: URL-only fallback 없음: %q", out)
+	}
+	if strings.Contains(out, markerTitle) {
+		t.Errorf("CMD_ALARM_LIST: 원본 마커가 그대로 노출: %q", out)
+	}
+}
+
+func liveNextStreamSample(title, url string) map[string]any {
+	return map[string]any{
+		"Status":       string(domain.NextStreamStatusLive),
+		"Title":        title,
+		"URL":          url,
+		"ScheduledKST": "",
+		"TimeDetail":   "",
+		"StartingSoon": false,
+	}
+}
+
 func seedBody(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey) string {
 	t.Helper()
 

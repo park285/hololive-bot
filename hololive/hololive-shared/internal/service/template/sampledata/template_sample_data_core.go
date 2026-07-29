@@ -284,7 +284,7 @@ func templateAlarmListItem() map[string]any {
 
 func templateNextStreamSample() map[string]any {
 	return map[string]any{
-		"Status":       "예정",
+		"Status":       string(domain.NextStreamStatusUpcoming),
 		fieldTitle:     "마인크래프트",
 		fieldURL:       "https://youtu.be/upcoming123",
 		"ScheduledKST": "22:00",

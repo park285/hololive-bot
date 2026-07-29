@@ -7,7 +7,13 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 ## 🔴 라이브 ({{.Count}})
 {{range .Streams}}
 - **{{mdsafe .ChannelName}}**{{if gt .ViewerCount 0}} ({{formatNumberKR .ViewerCount}}명){{end}}
+{{- if and .Title .URL}}
   [{{mdsafe .Title}}]({{.URL}})
+{{- else if .Title}}
+  {{mdsafe .Title}}
+{{- else if .URL}}
+  {{.URL}}
+{{- end}}
 {{- end -}}
 {{- end -}}')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
@@ -20,7 +26,13 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 {{range .Streams}}
 - **{{mdsafe .ChannelName}}**
   ⏰ {{.TimeInfo}}
+{{- if and .Title .URL}}
   [{{mdsafe .Title}}]({{.URL}})
+{{- else if .Title}}
+  {{mdsafe .Title}}
+{{- else if .URL}}
+  {{.URL}}
+{{- end}}
 {{- end -}}
 {{- end -}}')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
@@ -39,7 +51,13 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 {{- else}}
 - ⏰ {{.TimeInfo}}
 {{- end}}
+{{- if and .Title .URL}}
   [{{mdsafe .Title}}]({{.URL}})
+{{- else if .Title}}
+  {{mdsafe .Title}}
+{{- else if .URL}}
+  {{.URL}}
+{{- end}}
 {{- end -}}
 {{- end -}}')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
@@ -304,10 +322,12 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 {{- else }}
 {{range $index, $item := .TopItems}}
 {{add $index 1}}. {{$item.DateText}} · **{{mdsafe $item.Member}}** · {{mdsafe $item.Category}}
-{{- if $item.SourceURL}}
+{{- if and $item.Title $item.SourceURL}}
    [{{mdsafe $item.Title}}]({{$item.SourceURL}})
-{{- else}}
+{{- else if $item.Title}}
    {{mdsafe $item.Title}}
+{{- else if $item.SourceURL}}
+   {{$item.SourceURL}}
 {{- end}}
 {{- if $item.Summary}}
    {{mdsafe $item.Summary}}
