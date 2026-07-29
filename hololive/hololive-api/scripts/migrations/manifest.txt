@@ -108,3 +108,4 @@
 108 112_major_events_status_not_null.sql
 109 113_add_vocab_checks_acl_watermarks.sql
 110 114_drop_unused_indexes.sql
+111 115_markdown_command_templates.sql

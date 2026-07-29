@@ -27,9 +27,12 @@ import (
 	"testing"
 	texttemplate "text/template"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 // 런타임 renderer는 missingkey 옵션 없이 파싱해 map 데이터의 키 누락이 `<no value>`로
@@ -95,6 +98,71 @@ func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 			t.Errorf("시드 키 %s가 GetAllTemplateKeys()에 없음 — 렌더 게이트 밖 키 금지", key)
 		}
 	}
+}
+
+func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	const (
+		markerName = "**미코**_[테스트]"
+		markerURL  = "https://youtu.be/a_b#c"
+	)
+
+	notFoundBody := seedBody(t, pool, domain.TemplateKeyCmdMemberNotFound)
+	notFound := renderSeedBody(t, domain.TemplateKeyCmdMemberNotFound, notFoundBody, map[string]any{
+		"MemberName": markerName,
+	})
+
+	if !strings.Contains(notFound, util.MarkdownNeutralize(markerName)) {
+		t.Errorf("CMD_MEMBER_NOT_FOUND: mdsafe 미적용: %q", notFound)
+	}
+	if strings.Contains(notFound, markerName) {
+		t.Errorf("CMD_MEMBER_NOT_FOUND: 원본 마커가 그대로 노출: %q", notFound)
+	}
+
+	liveBody := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
+	live := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, liveBody, map[string]any{
+		"Count": 1,
+		"Streams": []map[string]any{
+			{"ChannelName": markerName, "Title": markerName, "URL": markerURL, "ViewerCount": 0},
+		},
+	})
+
+	wantLink := "[" + util.MarkdownNeutralize(markerName) + "](" + markerURL + ")"
+	if !strings.Contains(live, wantLink) {
+		t.Errorf("CMD_LIVE_STREAMS: 라벨 링크 %q 없음: %q", wantLink, live)
+	}
+	if !strings.Contains(live, markerURL) {
+		t.Errorf("CMD_LIVE_STREAMS: URL이 변형됨(ZWSP 삽입 금지): %q", live)
+	}
+}
+
+func seedBody(t *testing.T, pool *pgxpool.Pool, key domain.TemplateKey) string {
+	t.Helper()
+
+	var body string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT body FROM notification_templates WHERE template_key = $1 AND channel_id IS NULL`,
+		key,
+	).Scan(&body); err != nil {
+		t.Fatalf("query %s seed: %v", key, err)
+	}
+	return body
+}
+
+func renderSeedBody(t *testing.T, key domain.TemplateKey, body string, data any) string {
+	t.Helper()
+
+	tmpl, err := texttemplate.New(string(key)).Funcs(templateFuncs).Option("missingkey=error").Parse(body)
+	if err != nil {
+		t.Fatalf("%s: parse 실패: %v", key, err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		t.Fatalf("%s: 렌더 실패: %v", key, err)
+	}
+	return buf.String()
 }
 
 func TestSeedTemplates_CommandHelpMentionsBroadcastHistory(t *testing.T) {
