@@ -22,9 +22,8 @@ package util
 
 import "strings"
 
-// 입력의 기존 ZWSP를 모두 제거한 뒤 자기 ZWSP만 삽입한다. 외부 유입 ZWSP를 남기면
-// FoldForSeeMore의 연속-ZWSP 패딩 판정이 오작동하고, 결과가 ZWSP로 시작할 수 있어
-// 조각을 이어붙일 때(`{{mdsafe .A}}{{mdsafe .B}}`) 경계에 연속 ZWSP가 생긴다.
+// 외부 유입 ZWSP를 남기면 FoldForSeeMore의 연속-ZWSP 패딩 판정이 오작동하고, 결과가 ZWSP로
+// 시작할 수 있어 조각 연결(`{{mdsafe .A}}{{mdsafe .B}}`) 경계에 연속 ZWSP가 생기므로 전부 제거한다.
 func MarkdownNeutralize(s string) string {
 	inserts, hasZeroWidth := markdownScan(s)
 	if inserts == 0 && !hasZeroWidth {
