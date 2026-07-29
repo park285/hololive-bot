@@ -33,45 +33,56 @@ INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
 
 INSERT INTO notification_templates(template_key, channel_id, body) VALUES
-('OUTBOX_MILESTONE', NULL, '🎉 **{{mdsafe .MemberName}}** {{.Milestone}} 달성')
+('OUTBOX_MILESTONE', NULL, '🎉 **{{mdsafe .MemberName}}** {{mdsafe .Milestone}} 달성')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
 
 INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 ('OUTBOX_VIDEO_GROUP', NULL, '## {{if eq .Kind "LIVE_STREAM"}}🔴 {{mdsafe .MemberName}} 방송 시작 ({{.Count}}){{else if eq .Kind "NEW_VIDEO"}}🔔 {{mdsafe .MemberName}} 새 영상 ({{.Count}}){{else}}🔔 {{mdsafe .MemberName}} 알림 ({{.Count}}){{end}}
-{{- range $idx, $item := .Items}}
+{{- $n := 0}}
+{{- range $item := .Items}}
 {{- if and $item.Title $item.URL}}
-{{add $idx 1}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
+{{- $n = add $n 1}}
+{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
 {{- else if $item.Title}}
-{{add $idx 1}}. {{mdsafe (truncate 40 $item.Title)}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
 {{- else if $item.URL}}
-{{add $idx 1}}. {{$item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. {{$item.URL}}
 {{- end}}
 {{- end}}')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
 
 INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 ('OUTBOX_SHORTS_GROUP', NULL, '## 🔔 {{mdsafe .MemberName}} 새 쇼츠 ({{.Count}})
-{{- range $idx, $item := .Items}}
+{{- $n := 0}}
+{{- range $item := .Items}}
 {{- if and $item.Title $item.URL}}
-{{add $idx 1}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
+{{- $n = add $n 1}}
+{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
 {{- else if $item.Title}}
-{{add $idx 1}}. {{mdsafe (truncate 40 $item.Title)}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
 {{- else if $item.URL}}
-{{add $idx 1}}. {{$item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. {{$item.URL}}
 {{- end}}
 {{- end}}')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();
 
 INSERT INTO notification_templates(template_key, channel_id, body) VALUES
 ('OUTBOX_COMMUNITY_GROUP', NULL, '## 🔔 {{mdsafe .MemberName}} 커뮤니티 글 ({{.Count}})
-{{- range $idx, $item := .Items}}
+{{- $n := 0}}
+{{- range $item := .Items}}
 {{- if $item.ContentText}}
-{{add $idx 1}}. {{mdsafe (truncate 40 $item.ContentText)}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.ContentText)}}
 {{- if $item.URL}}
    {{$item.URL}}
 {{- end}}
 {{- else if $item.URL}}
-{{add $idx 1}}. {{$item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. {{$item.URL}}
 {{- end}}
 {{- end}}')
 ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now();

@@ -52,37 +52,48 @@ const (
 {{- if .URL}}
 {{.URL}}
 {{- end}}`
-	outboxBodyMilestone = `🎉 **{{mdsafe .MemberName}}** {{.Milestone}} 달성`
+	outboxBodyMilestone = `🎉 **{{mdsafe .MemberName}}** {{mdsafe .Milestone}} 달성`
 
 	outboxBodyVideoGroup = `## {{if eq .Kind "LIVE_STREAM"}}🔴 {{mdsafe .MemberName}} 방송 시작 ({{.Count}}){{else if eq .Kind "NEW_VIDEO"}}🔔 {{mdsafe .MemberName}} 새 영상 ({{.Count}}){{else}}🔔 {{mdsafe .MemberName}} 알림 ({{.Count}}){{end}}
-{{- range $idx, $item := .Items}}
+{{- $n := 0}}
+{{- range $item := .Items}}
 {{- if and $item.Title $item.URL}}
-{{add $idx 1}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
+{{- $n = add $n 1}}
+{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
 {{- else if $item.Title}}
-{{add $idx 1}}. {{mdsafe (truncate 40 $item.Title)}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
 {{- else if $item.URL}}
-{{add $idx 1}}. {{$item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. {{$item.URL}}
 {{- end}}
 {{- end}}`
 	outboxBodyShortsGroup = `## 🔔 {{mdsafe .MemberName}} 새 쇼츠 ({{.Count}})
-{{- range $idx, $item := .Items}}
+{{- $n := 0}}
+{{- range $item := .Items}}
 {{- if and $item.Title $item.URL}}
-{{add $idx 1}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
+{{- $n = add $n 1}}
+{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
 {{- else if $item.Title}}
-{{add $idx 1}}. {{mdsafe (truncate 40 $item.Title)}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
 {{- else if $item.URL}}
-{{add $idx 1}}. {{$item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. {{$item.URL}}
 {{- end}}
 {{- end}}`
 	outboxBodyCommunityGroup = `## 🔔 {{mdsafe .MemberName}} 커뮤니티 글 ({{.Count}})
-{{- range $idx, $item := .Items}}
+{{- $n := 0}}
+{{- range $item := .Items}}
 {{- if $item.ContentText}}
-{{add $idx 1}}. {{mdsafe (truncate 40 $item.ContentText)}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.ContentText)}}
 {{- if $item.URL}}
    {{$item.URL}}
 {{- end}}
 {{- else if $item.URL}}
-{{add $idx 1}}. {{$item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. {{$item.URL}}
 {{- end}}
 {{- end}}`
 )
@@ -115,15 +126,63 @@ func sampleWithKind(t *testing.T, key domain.TemplateKey, kind string) map[strin
 func TestOutboxVideoGroupBodySkipsEmptyItems(t *testing.T) {
 	t.Parallel()
 
-	got := renderOutboxBody(t, outboxBodyVideoGroup, GroupedTemplateData{
+	allEmpty := renderOutboxBody(t, outboxBodyVideoGroup, GroupedTemplateData{
 		MemberName: "사쿠라 미코",
 		Kind:       string(domain.OutboxKindMilestone),
 		Count:      2,
 		Items:      []GroupedItemData{{}, {}},
 	})
-	want := "## 🔔 사쿠라 미코 알림 (2)"
-	if got != want {
-		t.Fatalf("render mismatch\n got=%q\nwant=%q", got, want)
+	if want := "## 🔔 사쿠라 미코 알림 (2)"; allEmpty != want {
+		t.Fatalf("all-empty render mismatch\n got=%q\nwant=%q", allEmpty, want)
+	}
+
+	mixed := renderOutboxBody(t, outboxBodyVideoGroup, GroupedTemplateData{
+		MemberName: "사쿠라 미코",
+		Kind:       string(domain.OutboxKindNewVideo),
+		Count:      3,
+		Items: []GroupedItemData{
+			{},
+			{Title: "제목1", URL: "https://youtu.be/v1"},
+			{Title: "제목2", URL: "https://youtu.be/v2"},
+		},
+	})
+	wantMixed := "## 🔔 사쿠라 미코 새 영상 (3)\n1. [제목1](https://youtu.be/v1)\n2. [제목2](https://youtu.be/v2)"
+	if mixed != wantMixed {
+		t.Fatalf("mixed render mismatch\n got=%q\nwant=%q", mixed, wantMixed)
+	}
+}
+
+func TestOutboxGroupBodiesNumberRenderedItemsConsecutively(t *testing.T) {
+	t.Parallel()
+
+	shorts := renderOutboxBody(t, outboxBodyShortsGroup, GroupedTemplateData{
+		MemberName: "사쿠라 미코",
+		Kind:       string(domain.OutboxKindNewShort),
+		Count:      3,
+		Items: []GroupedItemData{
+			{},
+			{Title: "쇼츠1", URL: "https://www.youtube.com/shorts/s1"},
+			{Title: "쇼츠2", URL: "https://www.youtube.com/shorts/s2"},
+		},
+	})
+	wantShorts := "## 🔔 사쿠라 미코 새 쇼츠 (3)\n1. [쇼츠1](https://www.youtube.com/shorts/s1)\n2. [쇼츠2](https://www.youtube.com/shorts/s2)"
+	if shorts != wantShorts {
+		t.Fatalf("shorts group render mismatch\n got=%q\nwant=%q", shorts, wantShorts)
+	}
+
+	community := renderOutboxBody(t, outboxBodyCommunityGroup, GroupedTemplateData{
+		MemberName: "사쿠라 미코",
+		Kind:       string(domain.OutboxKindCommunityPost),
+		Count:      3,
+		Items: []GroupedItemData{
+			{},
+			{ContentText: "공지1", URL: "https://www.youtube.com/post/p1"},
+			{ContentText: "공지2", URL: "https://www.youtube.com/post/p2"},
+		},
+	})
+	wantCommunity := "## 🔔 사쿠라 미코 커뮤니티 글 (3)\n1. 공지1\n   https://www.youtube.com/post/p1\n2. 공지2\n   https://www.youtube.com/post/p2"
+	if community != wantCommunity {
+		t.Fatalf("community group render mismatch\n got=%q\nwant=%q", community, wantCommunity)
 	}
 }
 

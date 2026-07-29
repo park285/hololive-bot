@@ -242,6 +242,27 @@ func TestSeedTemplates_OutboxVideoLabelLinkBranches(t *testing.T) {
 	}
 }
 
+func TestSeedTemplates_OutboxVideoGroupNumbersRenderedItems(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	body := seedBody(t, pool, domain.TemplateKeyOutboxVideoGroup)
+	out := renderSeedBody(t, domain.TemplateKeyOutboxVideoGroup, body, map[string]any{
+		"MemberName": "사쿠라 미코",
+		"Kind":       "NEW_VIDEO",
+		"Count":      3,
+		"Items": []map[string]any{
+			{"Title": "", "URL": ""},
+			{"Title": "제목1", "URL": "https://youtu.be/v1"},
+			{"Title": "제목2", "URL": "https://youtu.be/v2"},
+		},
+	})
+
+	want := "## 🔔 사쿠라 미코 새 영상 (3)\n1. [제목1](https://youtu.be/v1)\n2. [제목2](https://youtu.be/v2)"
+	if out != want {
+		t.Errorf("OUTBOX_VIDEO_GROUP: skip 항목 뒤 번호가 연속되지 않음\n got=%q\nwant=%q", out, want)
+	}
+}
+
 func TestSeedTemplates_AlarmNotificationGroupEntryLabelLink(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
