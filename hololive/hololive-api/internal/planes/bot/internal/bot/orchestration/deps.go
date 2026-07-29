@@ -59,6 +59,7 @@ type Dependencies struct {
 	MessageAdapter        *messaging.MessageAdapter
 	Formatter             *formatter.ResponseFormatter
 	MessageStrings        *messagestrings.Store
+	MarkdownReplies       bool
 	Cache                 cache.Client
 	Postgres              database.Client
 	MemberRepository      *member.Repository
@@ -90,10 +91,11 @@ type coreDependencies struct {
 }
 
 type messagingDependencies struct {
-	client         iris.BotClient
-	messageAdapter *messaging.MessageAdapter
-	formatter      *formatter.ResponseFormatter
-	messageStrings *messagestrings.Store
+	client          iris.BotClient
+	messageAdapter  *messaging.MessageAdapter
+	formatter       *formatter.ResponseFormatter
+	messageStrings  *messagestrings.Store
+	markdownReplies bool
 }
 
 type dataDependencies struct {
@@ -148,10 +150,11 @@ func (d *Dependencies) messagingDeps() messagingDependencies {
 	}
 
 	return messagingDependencies{
-		client:         d.Client,
-		messageAdapter: d.MessageAdapter,
-		formatter:      d.Formatter,
-		messageStrings: d.MessageStrings,
+		client:          d.Client,
+		messageAdapter:  d.MessageAdapter,
+		formatter:       d.Formatter,
+		messageStrings:  d.MessageStrings,
+		markdownReplies: d.MarkdownReplies,
 	}
 }
 

@@ -61,6 +61,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 			MentionPrefix:         "@bot",
 			CalendarImageCacheDir: "data/test-calendar-cache",
 			CalendarEntryCacheTTL: time.Hour,
+			MarkdownReplies:       true,
 		},
 		Iris: configsettings.IrisConfig{
 			BaseURL: "http://iris.local",
@@ -147,6 +148,9 @@ func assertBotDependencyModulesWireRuntimeObjects(
 	if modules.Messaging.Formatter != formatter {
 		t.Fatal("Messaging.Formatter did not preserve the formatter")
 	}
+	if !modules.Messaging.MarkdownReplies {
+		t.Fatal("Messaging.MarkdownReplies did not preserve the bot markdown replies flag")
+	}
 	assertCommandBuilderPointers(t, modules.Feature.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }
 
@@ -189,6 +193,9 @@ func assertBotDependenciesWireRuntimeObjects(
 	}
 	if deps.Settings != settingsService {
 		t.Fatal("Dependencies.Settings did not preserve the settings service")
+	}
+	if !deps.MarkdownReplies {
+		t.Fatal("Dependencies.MarkdownReplies did not preserve the module markdown replies flag")
 	}
 	assertCommandBuilderPointers(t, deps.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }

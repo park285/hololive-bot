@@ -96,10 +96,11 @@ type BotCoreModule struct {
 }
 
 type BotMessagingModule struct {
-	Client         iris.BotClient
-	MessageAdapter *messaging.MessageAdapter
-	Formatter      *formatter.ResponseFormatter
-	MessageStrings *messagestrings.Store
+	Client          iris.BotClient
+	MessageAdapter  *messaging.MessageAdapter
+	Formatter       *formatter.ResponseFormatter
+	MessageStrings  *messagestrings.Store
+	MarkdownReplies bool
 }
 
 type BotDataModule struct {
