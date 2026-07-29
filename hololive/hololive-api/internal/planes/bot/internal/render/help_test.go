@@ -90,7 +90,7 @@ func TestHelpCardRendererMatchesChatBotGoQuestionFrame(t *testing.T) {
 	assertHelpPixel(t, decoded, 0, 0, helpColorOuter)
 	assertHelpPixel(t, decoded, helpCardCanvasWidth/2, helpCardFrameY, helpColorBorder)
 	assertHelpPixel(t, decoded, helpCardCanvasWidth/2, helpCardFrameY+helpCardFrameInset, helpColorSurface)
-	assertHelpPixel(t, decoded, 100, helpCardTableHeaderY+20, helpColorHeader)
+	assertHelpPixel(t, decoded, (helpCardCommandX+helpCardColumnDividerX)/2, helpCardTableHeaderY+20, helpColorHeader)
 
 	images[0][0] ^= 0xff
 	cached, err := renderer.RenderHelpImages(t.Context(), helpCardTestText)
