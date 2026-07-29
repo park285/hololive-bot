@@ -22,10 +22,12 @@ package util
 
 import "strings"
 
-// 이미 ZWSP가 따라오는 마커를 건너뛰어야 재적용 시 연속 ZWSP가 생기지 않고, FoldForSeeMore의 연속-ZWSP 패딩 판정과 충돌하지 않는다.
+// 입력의 기존 ZWSP를 모두 제거한 뒤 자기 ZWSP만 삽입한다. 외부 유입 ZWSP를 남기면
+// FoldForSeeMore의 연속-ZWSP 패딩 판정이 오작동하고, 결과가 ZWSP로 시작할 수 있어
+// 조각을 이어붙일 때(`{{mdsafe .A}}{{mdsafe .B}}`) 경계에 연속 ZWSP가 생긴다.
 func MarkdownNeutralize(s string) string {
-	inserts := markdownMarkerCount(s)
-	if inserts == 0 {
+	inserts, hasZeroWidth := markdownScan(s)
+	if inserts == 0 && !hasZeroWidth {
 		return s
 	}
 
@@ -33,31 +35,39 @@ func MarkdownNeutralize(s string) string {
 	b.Grow(len(s) + inserts*len(KakaoZeroWidthSpace))
 
 	start := 0
-	for i := 0; i < len(s); i++ {
-		if !needsZeroWidthAfter(s, i) {
-			continue
+	for i := 0; i < len(s); {
+		switch {
+		case strings.HasPrefix(s[i:], KakaoZeroWidthSpace):
+			b.WriteString(s[start:i])
+			i += len(KakaoZeroWidthSpace)
+			start = i
+		case isMarkdownMarker(s[i]):
+			b.WriteString(s[start : i+1])
+			b.WriteString(KakaoZeroWidthSpace)
+			i++
+			start = i
+		default:
+			i++
 		}
-		b.WriteString(s[start : i+1])
-		b.WriteString(KakaoZeroWidthSpace)
-		start = i + 1
 	}
 	b.WriteString(s[start:])
 
 	return b.String()
 }
 
-func markdownMarkerCount(s string) int {
-	count := 0
-	for i := 0; i < len(s); i++ {
-		if needsZeroWidthAfter(s, i) {
-			count++
+func markdownScan(s string) (inserts int, hasZeroWidth bool) {
+	for i := 0; i < len(s); {
+		if strings.HasPrefix(s[i:], KakaoZeroWidthSpace) {
+			hasZeroWidth = true
+			i += len(KakaoZeroWidthSpace)
+			continue
 		}
+		if isMarkdownMarker(s[i]) {
+			inserts++
+		}
+		i++
 	}
-	return count
-}
-
-func needsZeroWidthAfter(s string, i int) bool {
-	return isMarkdownMarker(s[i]) && !strings.HasPrefix(s[i+1:], KakaoZeroWidthSpace)
+	return inserts, hasZeroWidth
 }
 
 func isMarkdownMarker(c byte) bool {

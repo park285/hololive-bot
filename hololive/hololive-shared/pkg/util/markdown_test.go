@@ -128,6 +128,66 @@ func TestMarkdownNeutralize_Idempotent(t *testing.T) {
 	}
 }
 
+func TestMarkdownNeutralize_StripsIncomingZeroWidth(t *testing.T) {
+	t.Parallel()
+
+	run2 := KakaoZeroWidthSpace + KakaoZeroWidthSpace
+
+	inputs := []string{
+		"제목" + run2 + "스타일링",
+		run2 + "선행 런",
+		"마커 없는 본문" + run2,
+		"**굵게**" + run2 + "[제목](https://example.com)",
+		strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding),
+	}
+
+	for _, in := range inputs {
+		got := MarkdownNeutralize(in)
+		if strings.Contains(got, run2) {
+			t.Errorf("MarkdownNeutralize(%q) 통과 후에도 연속 ZWSP 잔존: %q", in, got)
+		}
+	}
+}
+
+func TestMarkdownNeutralize_StrippedBodyStillFolds(t *testing.T) {
+	t.Parallel()
+
+	title := "라이브" + strings.Repeat(KakaoZeroWidthSpace, 4) + "제목"
+	body := title + "\n" + strings.Repeat("가나다라마바사아자차카타파하", 25)
+
+	folded := FoldForSeeMore(MarkdownNeutralize(body), KakaoSeeMoreThreshold)
+	if !strings.Contains(folded, strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding)) {
+		t.Errorf("외부 유입 ZWSP run 때문에 fold가 억제됨: %q", folded[:60])
+	}
+}
+
+func TestMarkdownNeutralize_ConcatenationClosed(t *testing.T) {
+	t.Parallel()
+
+	fields := []string{
+		"끝이 마커*",
+		KakaoZeroWidthSpace + "선행 ZWSP로 시작",
+		"**굵게**",
+		"평범한 제목",
+		"",
+		"#",
+		"끝이 ZWSP" + KakaoZeroWidthSpace,
+	}
+
+	outs := make([]string, 0, len(fields))
+	for _, f := range fields {
+		outs = append(outs, MarkdownNeutralize(f))
+	}
+
+	for i, a := range outs {
+		for j, b := range outs {
+			if strings.Contains(a+b, KakaoZeroWidthSpace+KakaoZeroWidthSpace) {
+				t.Errorf("연결 [%d]+[%d]에서 연속 ZWSP 발생: %q + %q", i, j, a, b)
+			}
+		}
+	}
+}
+
 func TestFoldSurvivesNeutralizedBody(t *testing.T) {
 	t.Parallel()
 
