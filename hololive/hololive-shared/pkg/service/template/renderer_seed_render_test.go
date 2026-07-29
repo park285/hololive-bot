@@ -23,6 +23,7 @@ package template
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	texttemplate "text/template"
@@ -159,12 +160,7 @@ func TestSeedTemplates_AlarmListNextStreamLiveBranch(t *testing.T) {
 	safeTitle := util.MarkdownNeutralize(markerTitle)
 	lines := strings.Split(out, "\n")
 	hasLine := func(want string) bool {
-		for _, line := range lines {
-			if line == want {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(lines, want)
 	}
 
 	if !hasLine("   🔴 방송 중") {
@@ -311,12 +307,7 @@ func TestSeedTemplates_AlarmNotificationGroupEntryLabelLink(t *testing.T) {
 }
 
 func hasSeedLine(out, want string) bool {
-	for _, line := range strings.Split(out, "\n") {
-		if line == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(out, "\n"), want)
 }
 
 func liveNextStreamSample(title, url string) map[string]any {
