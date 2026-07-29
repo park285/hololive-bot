@@ -100,9 +100,9 @@ func (f *fakeMemberEpochAuthority) Subscribe(ctx context.Context, onSubscribed f
 	}
 }
 
-func (f *fakeMemberEpochAuthority) setEpoch(epoch uint64) {
+func (f *fakeMemberEpochAuthority) setEpochTwo() {
 	f.mu.Lock()
-	f.epoch = epoch
+	f.epoch = 2
 	f.mu.Unlock()
 }
 
@@ -149,7 +149,7 @@ func TestCacheEpoch_InFlightOldLoaderCannotPublishAfterRemoteBump(t *testing.T) 
 		done <- loadResult{members: members, err: err}
 	}()
 	<-firstStarted
-	authority.setEpoch(2)
+	authority.setEpochTwo()
 	if err := c.reconcileEpoch(t.Context(), epochReconcileSubscription); err != nil {
 		t.Fatalf("reconcileEpoch() error = %v", err)
 	}
@@ -202,10 +202,34 @@ func TestCacheEpoch_PeriodicReconciliationRecoversMissedNotification(t *testing.
 	defer cancel()
 	go c.runEpochReconcileWorker(ctx, nil)
 
-	authority.setEpoch(2)
+	authority.setEpochTwo()
 	assertEventually(t, func() bool {
 		return c.authorityEpoch.Load() == 2 && c.allMembersSnapshot.Load() == nil
 	})
+}
+
+func TestCacheEpoch_ReconciliationOutlivesBootstrapContext(t *testing.T) {
+	authority := &fakeMemberEpochAuthority{
+		epoch:       1,
+		subscribed:  make(chan struct{}, 1),
+		messages:    make(chan string, 1),
+		disconnects: make(chan error),
+	}
+	c := newEpochTestCache(authority)
+	bootstrapCtx, cancelBootstrap := context.WithCancel(t.Context())
+	runtimeCtx, stopRuntime := context.WithCancel(memberEpochRuntimeContext(bootstrapCtx))
+	defer stopRuntime()
+	go c.runEpochReconciliation(runtimeCtx)
+
+	select {
+	case <-authority.subscribed:
+	case <-time.After(time.Second):
+		t.Fatal("subscriber did not start")
+	}
+	cancelBootstrap()
+	authority.setEpochTwo()
+	authority.messages <- `{"version":2,"epoch":2}`
+	assertEventually(t, func() bool { return c.authorityEpoch.Load() == 2 })
 }
 
 func TestCacheEpoch_SubscriptionConfirmationReconcilesMissedEpoch(t *testing.T) {
@@ -247,7 +271,7 @@ func TestCacheEpoch_ReconnectReconcilesBeforeRetry(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("subscriber did not start")
 	}
-	authority.setEpoch(2)
+	authority.setEpochTwo()
 	authority.disconnects <- errors.New("connection lost")
 	assertEventually(t, func() bool { return c.authorityEpoch.Load() == 2 })
 }
@@ -360,7 +384,7 @@ func TestCacheEpoch_PointLookupsNeverReadPriorEpochKeys(t *testing.T) {
 	}
 }
 
-func TestCacheEpoch_TwoProcessesReconcileThroughPubSub(t *testing.T) {
+func TestCacheEpoch_TwoProcessesConvergeAcrossValkey(t *testing.T) {
 	host, port, mini := testredis.StartMiniRedis(t)
 	t.Cleanup(mini.Close)
 	newService := func() *sharedcache.Service {
@@ -380,21 +404,27 @@ func TestCacheEpoch_TwoProcessesReconcileThroughPubSub(t *testing.T) {
 		return service
 	}
 
-	first, err := NewMemberCache(t.Context(), nil, newService(), slog.New(slog.NewTextHandler(io.Discard, nil)), CacheConfig{})
+	config := CacheConfig{EpochReconcileInterval: 10 * time.Millisecond}
+	first, err := NewMemberCache(t.Context(), nil, newService(), slog.New(slog.NewTextHandler(io.Discard, nil)), config)
 	if err != nil {
 		t.Fatalf("first NewMemberCache() error = %v", err)
 	}
-	second, err := NewMemberCache(t.Context(), nil, newService(), slog.New(slog.NewTextHandler(io.Discard, nil)), CacheConfig{})
+	second, err := NewMemberCache(t.Context(), nil, newService(), slog.New(slog.NewTextHandler(io.Discard, nil)), config)
 	if err != nil {
 		t.Fatalf("second NewMemberCache() error = %v", err)
 	}
 	assertEventually(t, func() bool { return mini.PubSubNumSub(memberEpochChannel)[memberEpochChannel] == 2 })
 
-	if err := first.InvalidateAll(t.Context()); err != nil {
+	// miniredis의 RESP2 Pub/Sub 연결 제약이 subscriber 자신의 mutation 명령을 간헐적으로 오염시키므로
+	// 실제 multi-process topology처럼 별도 command client에서 mutation을 발행한다.
+	publisherService := newService()
+	publisher := newEpochTestCache(newValkeyMemberEpochAuthority(publisherService.GetClient()))
+	publisher.cache = publisherService
+	if err := publisher.InvalidateAll(t.Context()); err != nil {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
 	assertEventually(t, func() bool {
-		return first.authorityEpoch.Load() == 2 && second.authorityEpoch.Load() == 2
+		return publisher.authorityEpoch.Load() == 2 && first.authorityEpoch.Load() == 2 && second.authorityEpoch.Load() == 2
 	})
 }
 
