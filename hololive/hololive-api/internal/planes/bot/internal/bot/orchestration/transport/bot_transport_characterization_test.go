@@ -98,7 +98,7 @@ func capturedSendOptions(t *testing.T, opts []iris.SendOption) (clientRequestID,
 	}
 
 	// iris.SendOption이 적용하는 구조체가 비공개라 리플렉션 외에는 적용값을 읽을 수 없다.
-	box := reflect.New(reflect.TypeOf(opts[0]).In(0).Elem())
+	box := reflect.New(reflect.TypeFor[iris.SendOption]().In(0).Elem())
 	for _, opt := range opts {
 		reflect.ValueOf(opt).Call([]reflect.Value{box})
 	}
