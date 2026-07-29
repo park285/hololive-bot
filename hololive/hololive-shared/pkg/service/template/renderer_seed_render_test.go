@@ -184,6 +184,120 @@ func TestSeedTemplates_AlarmListNextStreamLiveBranch(t *testing.T) {
 	}
 }
 
+func TestSeedTemplates_OutboxVideoLabelLinkBranches(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	const (
+		markerMember = "**미코**_[테스트]"
+		markerTitle  = "~~신작~~ #미코라이브"
+		videoURL     = "https://youtu.be/a_b#c"
+	)
+
+	body := seedBody(t, pool, domain.TemplateKeyOutboxVideo)
+	render := func(title, url string) string {
+		return renderSeedBody(t, domain.TemplateKeyOutboxVideo, body, map[string]any{
+			"Kind":       "NEW_VIDEO",
+			"MemberName": markerMember,
+			"Title":      title,
+			"URL":        url,
+		})
+	}
+
+	safeMember := util.MarkdownNeutralize(markerMember)
+	safeTitle := util.MarkdownNeutralize(markerTitle)
+	wantHeader := "🔔 **" + safeMember + "** 새 영상"
+
+	both := render(markerTitle, videoURL)
+	if !hasSeedLine(both, wantHeader) {
+		t.Errorf("OUTBOX_VIDEO: 헤더 라인 %q 없음: %q", wantHeader, both)
+	}
+	if !hasSeedLine(both, "["+safeTitle+"]("+videoURL+")") {
+		t.Errorf("OUTBOX_VIDEO: 라벨 링크 분기 없음: %q", both)
+	}
+	if !strings.Contains(both, videoURL) {
+		t.Errorf("OUTBOX_VIDEO: URL이 변형됨(ZWSP 삽입 금지): %q", both)
+	}
+	if strings.Contains(both, markerTitle) || strings.Contains(both, markerMember) {
+		t.Errorf("OUTBOX_VIDEO: 원본 마커가 그대로 노출: %q", both)
+	}
+
+	titleOnly := render(markerTitle, "")
+	if !hasSeedLine(titleOnly, safeTitle) {
+		t.Errorf("OUTBOX_VIDEO: Title-only fallback 없음: %q", titleOnly)
+	}
+	if strings.Contains(titleOnly, "](") {
+		t.Errorf("OUTBOX_VIDEO: URL 없이 라벨 링크가 생성됨: %q", titleOnly)
+	}
+
+	urlOnly := render("", videoURL)
+	if !hasSeedLine(urlOnly, videoURL) {
+		t.Errorf("OUTBOX_VIDEO: URL-only fallback 없음: %q", urlOnly)
+	}
+	if strings.Contains(urlOnly, "](") {
+		t.Errorf("OUTBOX_VIDEO: Title 없이 라벨 링크가 생성됨: %q", urlOnly)
+	}
+
+	if got := render("", ""); got != wantHeader {
+		t.Errorf("OUTBOX_VIDEO: Title/URL 모두 없을 때 = %q, want %q", got, wantHeader)
+	}
+}
+
+func TestSeedTemplates_AlarmNotificationGroupEntryLabelLink(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	const (
+		markerChannel = "**스이세이**_[EN]"
+		markerTitle   = "~~재방송~~ #노래방송"
+		streamURL     = "https://youtu.be/a_b#c"
+	)
+
+	body := seedBody(t, pool, domain.TemplateKeyCmdAlarmNotificationGroup)
+	out := renderSeedBody(t, domain.TemplateKeyCmdAlarmNotificationGroup, body, map[string]any{
+		"Count":          3,
+		"MinutesUntil":   5,
+		"ScheduledTimes": []string{"21:00"},
+		"Entries": []map[string]any{
+			{"Index": 1, "ChannelName": markerChannel, "ScheduledKST": "21:00", "Title": markerTitle, "URL": streamURL},
+			{"Index": 2, "ChannelName": markerChannel, "ScheduledKST": "", "Title": markerTitle, "URL": ""},
+			{"Index": 3, "ChannelName": "", "ScheduledKST": "", "Title": "", "URL": streamURL},
+		},
+	})
+
+	safeChannel := util.MarkdownNeutralize(markerChannel)
+	safeTitle := util.MarkdownNeutralize(markerTitle)
+
+	for _, want := range []string{
+		"## 🔔 방송 알림 (3)",
+		"⏰ 21:00",
+		"1. **" + safeChannel + "** (21:00)",
+		"   [" + safeTitle + "](" + streamURL + ")",
+		"2. **" + safeChannel + "**",
+		"   " + safeTitle,
+		"3. **알 수 없는 채널**",
+		"   " + streamURL,
+	} {
+		if !hasSeedLine(out, want) {
+			t.Errorf("CMD_ALARM_NOTIFICATION_GROUP: 라인 %q 없음: %q", want, out)
+		}
+	}
+
+	if strings.Contains(out, markerChannel) || strings.Contains(out, markerTitle) {
+		t.Errorf("CMD_ALARM_NOTIFICATION_GROUP: 원본 마커가 그대로 노출: %q", out)
+	}
+	if !strings.Contains(out, streamURL) {
+		t.Errorf("CMD_ALARM_NOTIFICATION_GROUP: URL이 변형됨(ZWSP 삽입 금지): %q", out)
+	}
+}
+
+func hasSeedLine(out, want string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if line == want {
+			return true
+		}
+	}
+	return false
+}
+
 func liveNextStreamSample(title, url string) map[string]any {
 	return map[string]any{
 		"Status":       string(domain.NextStreamStatusLive),

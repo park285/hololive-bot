@@ -109,3 +109,4 @@
 109 113_add_vocab_checks_acl_watermarks.sql
 110 114_drop_unused_indexes.sql
 111 115_markdown_command_templates.sql
+112 116_markdown_notification_templates.sql

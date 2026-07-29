@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,24 +61,26 @@ func goldenAlarmDispatchNotificationIsStarting(n *domain.AlarmNotification) bool
 }
 
 func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int) string {
-	member := goldenAlarmDispatchMember(n)
-	title := goldenAlarmDispatchTitle(n)
+	member := util.MarkdownNeutralize(goldenAlarmDispatchMember(n))
+	title := util.MarkdownNeutralize(goldenAlarmDispatchTitle(n))
 	url := resolveAlarmDispatchURL(n)
 	var b strings.Builder
 	switch {
 	case goldenAlarmDispatchNotificationIsStarting(n):
-		fmt.Fprintf(&b, "🔴 %s 방송 시작", member)
+		fmt.Fprintf(&b, "🔴 **%s** 방송 시작", member)
 	case groupMinutesUntil > 0 && n.MinutesUntil == groupMinutesUntil:
-		fmt.Fprintf(&b, "⏰ %s 방송 예정", member)
+		fmt.Fprintf(&b, "⏰ **%s** 방송 예정", member)
 	default:
-		fmt.Fprintf(&b, "⏰ %s 방송 %d분 전", member, n.MinutesUntil)
+		fmt.Fprintf(&b, "⏰ **%s** 방송 %d분 전", member, n.MinutesUntil)
 	}
-	fmt.Fprintf(&b, "\n  %s", title)
+	if title != "" {
+		fmt.Fprintf(&b, "\n- %s", title)
+	}
 	if scheduleMessage := strings.TrimSpace(n.ScheduleChangeMessage); scheduleMessage != "" {
-		fmt.Fprintf(&b, "\n  %s", scheduleMessage)
+		fmt.Fprintf(&b, "\n- %s", util.MarkdownNeutralize(scheduleMessage))
 	}
 	if url != "" {
-		fmt.Fprintf(&b, "\n  %s", url)
+		fmt.Fprintf(&b, "\n- %s", url)
 	}
 	return b.String()
 }
@@ -97,9 +100,9 @@ func goldenAlarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
 func goldenAlarmDispatchGroup(group alarmDispatchGroup) string {
 	var b strings.Builder
 	if goldenAlarmDispatchGroupAllStarting(group) {
-		b.WriteString("🔴 방송 시작")
+		b.WriteString("## 🔴 방송 시작")
 	} else {
-		fmt.Fprintf(&b, "⏰ 방송 %d분 전", group.minutesUntil)
+		fmt.Fprintf(&b, "## ⏰ 방송 %d분 전", group.minutesUntil)
 	}
 	for i := range group.notifications {
 		b.WriteString("\n\n")
