@@ -134,7 +134,7 @@ func drawHelpPageBadge(canvas *image.RGBA, face font.Face, subtitle string) {
 }
 
 func pageFraction(subtitle string) string {
-	for _, field := range strings.Fields(subtitle) {
+	for field := range strings.FieldsSeq(subtitle) {
 		parts := strings.Split(field, "/")
 		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
 			return field
