@@ -32,21 +32,33 @@ func (r *HelpCardRenderer) RenderHelpImages(ctx context.Context, text string) ([
 	if ctx == nil {
 		return nil, errors.New("help card render context is nil")
 	}
-	if err := ctx.Err(); err != nil {
+	normalized, err := normalizeHelpCardText(ctx, text)
+	if err != nil {
 		return nil, err
-	}
-
-	text = strings.TrimRight(text, "\r\n")
-	if strings.TrimSpace(text) == "" {
-		return nil, errors.New("help card text is empty")
-	}
-	if len(text) > helpCardMaxTextBytes {
-		return nil, fmt.Errorf("help card text size %d exceeds %d", len(text), helpCardMaxTextBytes)
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	return r.renderHelpImagesLocked(ctx, normalized)
+}
+
+func normalizeHelpCardText(ctx context.Context, text string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	text = strings.TrimRight(text, "\r\n")
+	if strings.TrimSpace(text) == "" {
+		return "", errors.New("help card text is empty")
+	}
+	if len(text) > helpCardMaxTextBytes {
+		return "", fmt.Errorf("help card text size %d exceeds %d", len(text), helpCardMaxTextBytes)
+	}
+	return text, nil
+}
+
+func (r *HelpCardRenderer) renderHelpImagesLocked(ctx context.Context, text string) ([][]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

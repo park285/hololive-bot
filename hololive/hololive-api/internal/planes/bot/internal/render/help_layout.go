@@ -65,46 +65,45 @@ type helpCardPage struct {
 }
 
 func loadHelpCardFonts() (helpCardFonts, error) {
-	load := func(name string, size float64, bold bool) (font.Face, error) {
-		var (
-			face font.Face
-			err  error
-		)
-		if bold {
-			face, err = fonts.CaptionBoldFaceSized(size)
-		} else {
-			face, err = fonts.CaptionFaceSized(size)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("load help %s font: %w", name, err)
-		}
-		return face, nil
-	}
-
 	var faces helpCardFonts
-	var err error
-	if faces.title, err = load("title", 48, true); err != nil {
-		return faces, err
+	specs := []struct {
+		target *font.Face
+		name   string
+		size   float64
+		bold   bool
+	}{
+		{&faces.title, "title", 48, true},
+		{&faces.subtitle, "subtitle", 23, false},
+		{&faces.header, "header", 23, true},
+		{&faces.section, "section", 22, true},
+		{&faces.command, "command", 25, true},
+		{&faces.description, "description", 22, false},
+		{&faces.footer, "footer", 19, false},
 	}
-	if faces.subtitle, err = load("subtitle", 23, false); err != nil {
-		return faces, err
-	}
-	if faces.header, err = load("header", 23, true); err != nil {
-		return faces, err
-	}
-	if faces.section, err = load("section", 22, true); err != nil {
-		return faces, err
-	}
-	if faces.command, err = load("command", 25, true); err != nil {
-		return faces, err
-	}
-	if faces.description, err = load("description", 22, false); err != nil {
-		return faces, err
-	}
-	if faces.footer, err = load("footer", 19, false); err != nil {
-		return faces, err
+	for _, spec := range specs {
+		face, err := loadHelpCardFace(spec.name, spec.size, spec.bold)
+		if err != nil {
+			return faces, err
+		}
+		*spec.target = face
 	}
 	return faces, nil
+}
+
+func loadHelpCardFace(name string, size float64, bold bool) (font.Face, error) {
+	var (
+		face font.Face
+		err  error
+	)
+	if bold {
+		face, err = fonts.CaptionBoldFaceSized(size)
+	} else {
+		face, err = fonts.CaptionFaceSized(size)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load help %s font: %w", name, err)
+	}
+	return face, nil
 }
 
 func parseHelpCardDocument(ctx context.Context, text string, faces helpCardFonts) (helpCardDocument, error) {
@@ -127,8 +126,7 @@ func parseHelpCardDocument(ctx context.Context, text string, faces helpCardFonts
 }
 
 func parseHelpSections(ctx context.Context, source []string, faces helpCardFonts) ([]helpCardSection, error) {
-	sections := make([]helpCardSection, 0, 8)
-	rowCount := 0
+	builder := helpSectionBuilder{faces: faces, sections: make([]helpCardSection, 0, 8)}
 	for _, raw := range source {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -137,41 +135,66 @@ func parseHelpSections(ctx context.Context, source []string, faces helpCardFonts
 		if trimmed == "" {
 			continue
 		}
-		if label, ok := helpSectionLabel(trimmed); ok {
-			if len(sections) >= helpCardMaxSections {
-				return nil, fmt.Errorf("help section count exceeds %d", helpCardMaxSections)
-			}
-			label = renderableHelpText(faces.section, label)
-			if label == "" {
-				return nil, fmt.Errorf("help section cannot be rendered")
-			}
-			sections = append(sections, helpCardSection{label: label, height: helpCardSectionHeight})
-			continue
-		}
-		if len(sections) == 0 {
-			sections = append(sections, helpCardSection{label: "명령어", height: helpCardSectionHeight})
-		}
-		if rowCount >= helpCardMaxRows {
-			return nil, fmt.Errorf("help row count exceeds %d", helpCardMaxRows)
-		}
-		row, err := layoutHelpRow(trimmed, faces)
-		if err != nil {
+		if err := builder.addLine(trimmed); err != nil {
 			return nil, err
 		}
-		last := len(sections) - 1
-		sections[last].rows = append(sections[last].rows, row)
-		sections[last].height += row.height
-		rowCount++
 	}
-	if len(sections) == 0 || rowCount == 0 {
+	return builder.build()
+}
+
+type helpSectionBuilder struct {
+	faces    helpCardFonts
+	sections []helpCardSection
+	rowCount int
+}
+
+func (b *helpSectionBuilder) addLine(line string) error {
+	if label, ok := helpSectionLabel(line); ok {
+		return b.appendSection(label)
+	}
+	return b.appendRow(line)
+}
+
+func (b *helpSectionBuilder) appendSection(label string) error {
+	if len(b.sections) >= helpCardMaxSections {
+		return fmt.Errorf("help section count exceeds %d", helpCardMaxSections)
+	}
+	label = renderableHelpText(b.faces.section, label)
+	if label == "" {
+		return fmt.Errorf("help section cannot be rendered")
+	}
+	b.sections = append(b.sections, helpCardSection{label: label, height: helpCardSectionHeight})
+	return nil
+}
+
+func (b *helpSectionBuilder) appendRow(line string) error {
+	if len(b.sections) == 0 {
+		b.sections = append(b.sections, helpCardSection{label: "명령어", height: helpCardSectionHeight})
+	}
+	if b.rowCount >= helpCardMaxRows {
+		return fmt.Errorf("help row count exceeds %d", helpCardMaxRows)
+	}
+	row, err := layoutHelpRow(line, b.faces)
+	if err != nil {
+		return err
+	}
+	last := len(b.sections) - 1
+	b.sections[last].rows = append(b.sections[last].rows, row)
+	b.sections[last].height += row.height
+	b.rowCount++
+	return nil
+}
+
+func (b *helpSectionBuilder) build() ([]helpCardSection, error) {
+	if len(b.sections) == 0 || b.rowCount == 0 {
 		return nil, fmt.Errorf("help card has no renderable commands")
 	}
-	for _, section := range sections {
+	for _, section := range b.sections {
 		if len(section.rows) == 0 {
 			return nil, fmt.Errorf("help section %q has no commands", section.label)
 		}
 	}
-	return sections, nil
+	return b.sections, nil
 }
 
 func helpSectionLabel(line string) (string, bool) {
@@ -218,95 +241,6 @@ func splitHelpColumns(line string) (string, string) {
 	return strings.TrimSpace(line), ""
 }
 
-func paginateHelpDocument(document helpCardDocument) ([]helpCardPage, error) {
-	pages := make([]helpCardPage, 0, 3)
-	current := make([]helpCardSection, 0, 4)
-	currentHeight := 0
-	flush := func() {
-		if len(current) == 0 {
-			return
-		}
-		pages = append(pages, newHelpCardPage(document.title, current, currentHeight))
-		current = nil
-		currentHeight = 0
-	}
-
-	for _, section := range document.sections {
-		if section.height > helpCardMaxContentH {
-			flush()
-			fragments, err := splitHelpSection(section)
-			if err != nil {
-				return nil, err
-			}
-			for _, fragment := range fragments {
-				pages = append(pages, newHelpCardPage(document.title, []helpCardSection{fragment}, fragment.height))
-			}
-			continue
-		}
-		if len(current) > 0 && currentHeight+section.height > helpCardTargetContentH {
-			flush()
-		}
-		current = append(current, section)
-		currentHeight += section.height
-	}
-	flush()
-
-	if len(pages) == 0 || len(pages) > helpCardMaxImages {
-		return nil, fmt.Errorf("help page count %d is outside 1..%d", len(pages), helpCardMaxImages)
-	}
-	for index := range pages {
-		pages[index].subtitle = helpPageSubtitle(pages[index].sections, index+1, len(pages))
-	}
-	return pages, nil
-}
-
-func splitHelpSection(section helpCardSection) ([]helpCardSection, error) {
-	fragments := make([]helpCardSection, 0, 2)
-	rows := section.rows
-	continued := false
-	for len(rows) > 0 {
-		label := section.label
-		if continued {
-			label += " · 계속"
-		}
-		fragment := helpCardSection{label: label, height: helpCardSectionHeight}
-		for len(rows) > 0 && fragment.height+rows[0].height <= helpCardMaxContentH {
-			fragment.rows = append(fragment.rows, rows[0])
-			fragment.height += rows[0].height
-			rows = rows[1:]
-		}
-		if len(fragment.rows) == 0 {
-			return nil, fmt.Errorf("help section %q contains a row larger than the page budget", section.label)
-		}
-		fragments = append(fragments, fragment)
-		continued = true
-	}
-	return fragments, nil
-}
-
-func newHelpCardPage(title string, sections []helpCardSection, contentHeight int) helpCardPage {
-	return helpCardPage{
-		title:         title,
-		sections:      append([]helpCardSection(nil), sections...),
-		contentHeight: contentHeight,
-	}
-}
-
-func helpPageSubtitle(sections []helpCardSection, page, total int) string {
-	labels := make([]string, 0, len(sections))
-	for _, section := range sections {
-		label := strings.TrimSuffix(section.label, " · 계속")
-		if len(labels) == 0 || labels[len(labels)-1] != label {
-			labels = append(labels, label)
-		}
-	}
-	subtitle := strings.Join(labels, " · ")
-	if total > 1 {
-		subtitle = fmt.Sprintf("%s · %d/%d", subtitle, page, total)
-	}
-	return subtitle
-}
-
 func renderableHelpText(face font.Face, text string) string {
 	return cardkit.DropUncoveredRunes(face, strings.TrimSpace(text))
 }
@@ -322,20 +256,26 @@ func wrapHelpLine(face font.Face, text string, maxWidth int) []string {
 	runes := []rune(text)
 	lines := make([]string, 0, helpCardMaxWrappedLines)
 	for len(runes) > 0 {
-		end := fittingHelpPrefix(face, runes, maxWidth)
-		if end < len(runes) {
-			end = preferredHelpBreak(runes, end)
-		}
-		line := strings.TrimSpace(string(runes[:end]))
+		line, rest := nextHelpWrappedLine(face, runes, maxWidth)
 		if line != "" {
 			lines = append(lines, line)
 		}
-		runes = runes[end:]
-		for len(runes) > 0 && runes[0] == ' ' {
-			runes = runes[1:]
-		}
+		runes = rest
 	}
 	return lines
+}
+
+func nextHelpWrappedLine(face font.Face, runes []rune, maxWidth int) (line string, rest []rune) {
+	end := fittingHelpPrefix(face, runes, maxWidth)
+	if end < len(runes) {
+		end = preferredHelpBreak(runes, end)
+	}
+	line = strings.TrimSpace(string(runes[:end]))
+	rest = runes[end:]
+	for len(rest) > 0 && rest[0] == ' ' {
+		rest = rest[1:]
+	}
+	return line, rest
 }
 
 func fittingHelpPrefix(face font.Face, runes []rune, maxWidth int) int {
