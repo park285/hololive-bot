@@ -108,6 +108,10 @@ func memberCacheContext(ctx context.Context) context.Context {
 	return ctx
 }
 
+func memberEpochRuntimeContext(ctx context.Context) context.Context {
+	return context.WithoutCancel(memberCacheContext(ctx))
+}
+
 func normalizeMemberCacheConfig(config CacheConfig) CacheConfig {
 	if config.ValkeyTTL == 0 {
 		config.ValkeyTTL = constants.MemberCacheDefaults.ValkeyTTL
@@ -152,7 +156,7 @@ func (c *Cache) configureEpoch(ctx context.Context, cacheService cache.KeyValueC
 		c.logger.Warn("member cache epoch unavailable at startup; cache bypass enabled", slog.Any("error", err))
 	}
 	panicguard.Go(c.logger, "member-cache-epoch-subscription", func() {
-		c.runEpochReconciliation(ctx)
+		c.runEpochReconciliation(memberEpochRuntimeContext(ctx))
 	})
 	return nil
 }
