@@ -165,7 +165,9 @@ func TestIrisMessageSenderNilClientGuardsBothLanes(t *testing.T) {
 }
 
 func TestIrisMessageSenderUnsupportedClientGuardsBothLanes(t *testing.T) {
-	sender := NewIrisMessageSender(struct{}{}, WithMarkdownReplies(true))
+	for _, markdown := range []bool{true, false} {
+		sender := NewIrisMessageSender(struct{}{}, WithMarkdownReplies(markdown))
 
-	require.ErrorContains(t, sender.SendMessage(t.Context(), "room-1", "hello"), "iris message sender: client is nil")
+		require.ErrorContains(t, sender.SendMessage(t.Context(), "room-1", "hello"), "iris message sender: client is nil")
+	}
 }
