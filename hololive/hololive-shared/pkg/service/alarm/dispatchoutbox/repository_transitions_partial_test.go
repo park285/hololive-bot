@@ -162,22 +162,22 @@ func TestUnappliedFailureIDsPreservesInputOrder(t *testing.T) {
 	}
 }
 
-func TestPartialFailureRoutingError_MetricOnlyOnPostSendVariant(t *testing.T) {
+func TestPartialFailureRoutingError_EmitsMetricOnBothVariants(t *testing.T) {
 	repository := &PgxRepository{}
 	updates := []FailureUpdate{{ID: 1}, {ID: 2}}
 	before := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal)
 
-	if err := repository.partialFailureRoutingError(updates, []int64{1}, "route dispatch delivery failures", false); err == nil {
+	if err := repository.partialFailureRoutingError(updates, []int64{1}, "route dispatch delivery failures"); err == nil {
 		t.Fatal("pre-send partial routing error = nil")
 	}
-	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before {
-		t.Errorf("pre-send variant incremented transition_partial: got %v, want %v", got, before)
+	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before+1 {
+		t.Errorf("pre-send variant did not increment transition_partial: got %v, want %v", got, before+1)
 	}
 
-	if err := repository.partialFailureRoutingError(updates, []int64{1}, "route dispatch delivery sending failures", true); err == nil {
+	if err := repository.partialFailureRoutingError(updates, []int64{1}, "route dispatch delivery sending failures"); err == nil {
 		t.Fatal("post-send partial routing error = nil")
 	}
-	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before+1 {
-		t.Errorf("post-send variant did not increment transition_partial: got %v, want %v", got, before+1)
+	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before+2 {
+		t.Errorf("post-send variant did not increment transition_partial: got %v, want %v", got, before+2)
 	}
 }

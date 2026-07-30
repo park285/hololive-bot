@@ -2,6 +2,7 @@ package dispatchoutbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -258,22 +259,45 @@ func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQ
 
 func (c *Consumer) RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
 	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
-	if err := c.repository.RouteFailures(ctx, updates, c.workerID); err != nil {
-		return err
-	}
-	observePGRetryScheduled(retryCount)
-	observePGDLQ(dlqCount)
-	return nil
+	return observeRoutedFailures(c.repository.RouteFailures(ctx, updates, c.workerID), updates, retryCount, dlqCount)
 }
 
 func (c *Consumer) RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
 	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
-	if err := c.repository.RouteSendingFailures(ctx, updates, c.workerID); err != nil {
-		return err
+	return observeRoutedFailures(c.repository.RouteSendingFailures(ctx, updates, c.workerID), updates, retryCount, dlqCount)
+}
+
+func observeRoutedFailures(err error, updates []FailureUpdate, retryCount, dlqCount int) error {
+	if err == nil {
+		observePGRetryScheduled(retryCount)
+		observePGDLQ(dlqCount)
+		return nil
 	}
-	observePGRetryScheduled(retryCount)
-	observePGDLQ(dlqCount)
-	return nil
+	var partial *PartialTransitionError
+	if errors.As(err, &partial) {
+		retryApplied, dlqApplied := appliedFailureCounts(updates, partial.UnappliedIDs)
+		observePGRetryScheduled(retryApplied)
+		observePGDLQ(dlqApplied)
+	}
+	return err
+}
+
+func appliedFailureCounts(updates []FailureUpdate, unappliedIDs []int64) (retryApplied, dlqApplied int) {
+	unapplied := make(map[int64]struct{}, len(unappliedIDs))
+	for _, id := range unappliedIDs {
+		unapplied[id] = struct{}{}
+	}
+	for i := range updates {
+		if _, ok := unapplied[updates[i].ID]; ok {
+			continue
+		}
+		if updates[i].TargetStatus == StatusRetry {
+			retryApplied++
+		} else {
+			dlqApplied++
+		}
+	}
+	return retryApplied, dlqApplied
 }
 
 func failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) (updates []FailureUpdate, retryCount, dlqCount int) {
