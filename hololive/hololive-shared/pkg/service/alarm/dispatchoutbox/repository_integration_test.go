@@ -1399,3 +1399,44 @@ func TestPgxRepositoryRouteFailures_RejectsUnsupportedTargetStatus(t *testing.T)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unsupported target status")
 }
+
+func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseSendingToDLQRecordsTerminalFields(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	workerID := "worker-sending-dlq"
+	id := insertAndClaimRoutingRow(t, repository, workerID, "room-sending-dlq", "stream-sending-dlq")
+	require.NoError(t, repository.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+
+	_, err := pool.Exec(ctx, `
+		UPDATE alarm_dispatch_deliveries
+		SET attempt_count = 2,
+			lock_expires_at = NOW() - INTERVAL '10 seconds'
+		WHERE id = $1`, id)
+	require.NoError(t, err)
+
+	var nextAttemptBefore time.Time
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT next_attempt_at FROM alarm_dispatch_deliveries WHERE id=$1", id,
+	).Scan(&nextAttemptBefore))
+
+	require.NoError(t, repository.RouteSendingFailures(ctx, []FailureUpdate{
+		{ID: id, AttemptCount: 3, NextAttemptAt: time.Now().UTC().Add(time.Hour), Error: "sending retry exhausted", TargetStatus: StatusDLQ},
+	}, workerID), "소유 worker의 sending→dlq 전이는 만료된 lease에서도 적용돼야 한다")
+
+	var status, lastError string
+	var attemptCount int
+	var dlqAt *time.Time
+	var lockedBy *string
+	var nextAttemptAfter time.Time
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT status, last_error, attempt_count, dlq_at, locked_by, next_attempt_at
+		FROM alarm_dispatch_deliveries WHERE id=$1`, id,
+	).Scan(&status, &lastError, &attemptCount, &dlqAt, &lockedBy, &nextAttemptAfter))
+	require.Equal(t, string(StatusDLQ), status)
+	require.Equal(t, "sending retry exhausted", lastError)
+	require.Equal(t, 3, attemptCount, "DLQ terminal row must record the final attempt count")
+	require.NotNil(t, dlqAt, "dlq_at=NOW() must be recorded by the dlq CASE branch")
+	require.Nil(t, lockedBy)
+	require.True(t, nextAttemptAfter.Equal(nextAttemptBefore),
+		"dlq branch must keep next_attempt_at untouched (input value applies to retry rows only)")
+}

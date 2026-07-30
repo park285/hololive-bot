@@ -185,7 +185,7 @@ func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []domain.A
 			return fmt.Errorf("route alarm dispatch failure: %w", err)
 		}
 		return nil
-	})
+	}, r.consumer.Requeue)
 }
 
 func (r *Runner) finalizeDispatchFailure(
@@ -193,13 +193,14 @@ func (r *Runner) finalizeDispatchFailure(
 	retryEnvelopes []domain.AlarmQueueEnvelope,
 	dlqEnvelopes []domain.AlarmQueueEnvelope,
 	routeFn func(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error,
+	requeueFn func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error,
 ) error {
 	routeErr := routeFn(retryEnvelopes, dlqEnvelopes)
 	releasable := dlqEnvelopes
 	if routeErr != nil {
 		unapplied, partial := unappliedFailureRoutingIDs(routeErr)
 		if !partial {
-			return r.preserveAfterPersistenceFailure(ctx, combineEnvelopes(retryEnvelopes, dlqEnvelopes), routeErr)
+			return r.preserveAfterPersistenceFailure(ctx, combineEnvelopes(retryEnvelopes, dlqEnvelopes), requeueFn, routeErr)
 		}
 		// 부분 적용의 미적용 행은 recovery/quarantine 경로 소유 — requeue로 덮어쓰지 않고,
 		// claim key는 실제 dlq로 전이된 부분집합만 해제한다.
@@ -253,6 +254,11 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.Ala
 			return fmt.Errorf("route alarm dispatch sending failure: %w", err)
 		}
 		return nil
+	}, func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+		// 'sending' 잔류 행은 leased 전용 Requeue(RouteFailures fence)에 매칭되지 않아
+		// 일시적 infra 오류가 QuarantineStaleSending의 terminal quarantine으로 굳는다.
+		// fallback도 sending fence로 전량 retry 복원한다.
+		return consumer.RouteSendingFailures(ctx, envelopes, nil)
 	})
 }
 
@@ -270,12 +276,13 @@ func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
 func (r *Runner) preserveAfterPersistenceFailure(
 	ctx context.Context,
 	envelopes []domain.AlarmQueueEnvelope,
+	requeueFn func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error,
 	persistErr error,
 ) error {
 	if len(envelopes) == 0 {
 		return persistErr
 	}
-	if err := r.consumer.Requeue(ctx, envelopes); err != nil {
+	if err := requeueFn(ctx, envelopes); err != nil {
 		return fmt.Errorf("%w: fallback requeue: %w", persistErr, err)
 	}
 	return persistErr

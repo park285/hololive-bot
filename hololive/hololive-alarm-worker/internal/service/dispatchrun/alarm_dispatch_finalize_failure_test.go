@@ -22,10 +22,10 @@ type finalizeFailureCall struct {
 type finalizeFailureRecordingConsumer struct {
 	calls []finalizeFailureCall
 
-	routeFailuresErr        error
-	routeSendingFailuresErr error
-	releaseClaimErr         error
-	requeueErr              error
+	routeFailuresErr         error
+	routeSendingFailuresErrs []error
+	releaseClaimErr          error
+	requeueErr               error
 }
 
 func (c *finalizeFailureRecordingConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
@@ -61,7 +61,12 @@ type finalizeFailureSendingRetryConsumer struct {
 
 func (c *finalizeFailureSendingRetryConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: "RouteSendingFailures", retry: retryEnvelopes, dlq: dlqEnvelopes})
-	return c.routeSendingFailuresErr
+	if len(c.routeSendingFailuresErrs) == 0 {
+		return nil
+	}
+	err := c.routeSendingFailuresErrs[0]
+	c.routeSendingFailuresErrs = c.routeSendingFailuresErrs[1:]
+	return err
 }
 
 func finalizeFailureOps(calls []finalizeFailureCall) []string {
@@ -197,9 +202,9 @@ func TestPersistSendingRetryCallSequenceHappyPath(t *testing.T) {
 	assert.Equal(t, []string{"claim:room-2"}, consumer.calls[1].claimKeys)
 }
 
-func TestPersistSendingRetryRouteFailureFallsBackToRequeueWithPinnedWrap(t *testing.T) {
+func TestPersistSendingRetryInfraFailureFallsBackToSendingFenceRequeue(t *testing.T) {
 	routeErr := errors.New("sending route down")
-	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{routeSendingFailuresErr: routeErr}}
+	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{routeErr}}}
 	runner := Runner{consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 
@@ -208,10 +213,28 @@ func TestPersistSendingRetryRouteFailureFallsBackToRequeueWithPinnedWrap(t *test
 	require.Error(t, err)
 	assert.ErrorIs(t, err, routeErr)
 	assert.Contains(t, err.Error(), "route alarm dispatch sending failure:")
-	require.Equal(t, []string{"RouteSendingFailures", "Requeue"}, finalizeFailureOps(consumer.calls))
-	require.Len(t, consumer.calls[1].envelopes, 2)
-	assert.Equal(t, "room-1", consumer.calls[1].envelopes[0].Notification.RoomID)
-	assert.Equal(t, "room-2", consumer.calls[1].envelopes[1].Notification.RoomID)
+	require.Equal(t, []string{"RouteSendingFailures", "RouteSendingFailures"}, finalizeFailureOps(consumer.calls),
+		"sending 경로 fallback은 leased 전용 Requeue가 아니라 sending fence 전량-retry로 복원해야 한다")
+	require.Len(t, consumer.calls[1].retry, 2)
+	assert.Equal(t, "room-1", consumer.calls[1].retry[0].Notification.RoomID)
+	assert.Equal(t, "room-2", consumer.calls[1].retry[1].Notification.RoomID)
+	assert.Empty(t, consumer.calls[1].dlq, "fallback requeue는 전량 retry로 복원한다")
+}
+
+func TestPersistSendingRetryFallbackRequeueFailureWrapPinned(t *testing.T) {
+	routeErr := errors.New("sending route down")
+	requeueErr := errors.New("sending requeue down")
+	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{routeErr, requeueErr}}}
+	runner := Runner{consumer: consumer}
+	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
+
+	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, routeErr)
+	assert.ErrorIs(t, err, requeueErr)
+	assert.Contains(t, err.Error(), "fallback requeue:")
+	require.Equal(t, []string{"RouteSendingFailures", "RouteSendingFailures"}, finalizeFailureOps(consumer.calls))
 }
 
 func TestPersistSendingRetryPartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *testing.T) {
@@ -221,7 +244,7 @@ func TestPersistSendingRetryPartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *t
 		Expected:     2,
 		UnappliedIDs: []int64{finalizeFailureRetryDeliveryID},
 	}
-	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{routeSendingFailuresErr: partialErr}}
+	consumer := &finalizeFailureSendingRetryConsumer{finalizeFailureRecordingConsumer: &finalizeFailureRecordingConsumer{routeSendingFailuresErrs: []error{partialErr}}}
 	runner := Runner{consumer: consumer}
 	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
 

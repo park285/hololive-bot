@@ -310,26 +310,6 @@ func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, now time.Tim
 	return update, true
 }
 
-func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	updates := make([]TerminalUpdate, 0, len(envelopes))
-	for i := range envelopes {
-		envelope := &envelopes[i]
-		if envelope.DispatchOutboxID <= 0 {
-			continue
-		}
-		update := TerminalUpdate{ID: envelope.DispatchOutboxID}
-		if envelope.Retry != nil {
-			update.Error = envelope.Retry.LastError
-		}
-		updates = append(updates, update)
-	}
-	if err := c.repository.MoveToDLQ(ctx, updates, c.workerID); err != nil {
-		return err
-	}
-	observePGDLQ(len(updates))
-	return nil
-}
-
 func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	return c.RouteFailures(ctx, envelopes, nil)
 }
