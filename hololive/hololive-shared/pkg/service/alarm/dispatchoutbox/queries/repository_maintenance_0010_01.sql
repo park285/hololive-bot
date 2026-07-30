@@ -13,6 +13,7 @@
 			locked_at=NULL,
 			lock_expires_at=NULL,
 			last_error='lease expired before external send',
+			last_error_code='lease_expired',
 			updated_at=NOW()
 		FROM picked
 		WHERE d.id = picked.id

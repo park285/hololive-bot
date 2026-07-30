@@ -54,6 +54,14 @@ type AlarmQueueEnvelope struct {
     SourceKind    domain.AlarmDispatchSourceKind    `json:"source_kind,omitempty"`
     YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
 }
+
+type AlarmQueueRetryMetadata struct {
+    Attempt       int    `json:"attempt,omitempty"`
+    RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
+    NextVisibleAt string `json:"next_visible_at,omitempty"`
+    LastError     string `json:"last_error,omitempty"`
+    LastErrorCode string `json:"last_error_code,omitempty"`
+}
 ```
 
 Live alarm notifications keep using `Notification` and `ValidateLiveDispatchRoute`.
@@ -95,7 +103,8 @@ Queue success has no response body; delivery outcome is represented by queue mov
 
 - HTTP client timeout: 10 seconds for alarm client.
 - Queue drain: first item blocks up to consumer block timeout, then drains batches.
-- Retry queue: delayed retry uses `alarm:dispatch:retry` sorted set and retry metadata (`attempt`, `retry_after_ms`, `next_visible_at`, `last_error`).
+- Retry queue: delayed retry uses `alarm:dispatch:retry` sorted set and retry metadata (`attempt`, `retry_after_ms`, `next_visible_at`, `last_error`, optional `last_error_code`).
+- `last_error_code` is one of `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, or the recovery codes `lease_expired`, `stale_sending`, and `lease_released`. Existing consumers may ignore this optional field.
 - DLQ: invalid raw payloads and moved envelopes are preserved in `alarm:dispatch:dlq`.
 
 ## Compatibility policy

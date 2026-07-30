@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesScheduleSendingRetry(t *testing.T) {
+func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures(t *testing.T) {
 	karingErr := &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"}
 
 	consumer := &alarmDispatchRunnerSendingRetryTestConsumer{
@@ -31,16 +31,16 @@ func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesScheduleSendingRetry
 	require.NoError(t, err)
 	assert.True(t, processed)
 	require.Len(t, consumer.markSending, 1)
-	require.Len(t, consumer.scheduledSendingRetry, 1, "502 post-send failure must route through ScheduleSendingRetry, not ScheduleRetry")
+	require.Len(t, consumer.scheduledSendingRetry, 1, "502 post-send failure must route through RouteSendingFailures, not RouteFailures")
 	require.NotNil(t, consumer.scheduledSendingRetry[0].Retry)
 	assert.Equal(t, 1, consumer.scheduledSendingRetry[0].Retry.Attempt)
-	assert.Empty(t, consumer.scheduledRetry, "ScheduleRetry must not be called for post-send failure when row is already 'sending'")
+	assert.Empty(t, consumer.scheduledRetry, "RouteFailures must not be called for post-send failure when row is already 'sending'")
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markDispatched)
 }
 
-func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesScheduleSendingRetry(t *testing.T) {
+func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesRouteSendingFailures(t *testing.T) {
 	karingErr := &iris.HTTPError{StatusCode: 503}
 
 	consumer := &alarmDispatchRunnerSendingRetryTestConsumer{
@@ -59,7 +59,7 @@ func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesScheduleSendingRetry
 
 	require.NoError(t, err)
 	assert.True(t, processed)
-	require.Len(t, consumer.scheduledSendingRetry, 1, "503 post-send failure must route through ScheduleSendingRetry")
+	require.Len(t, consumer.scheduledSendingRetry, 1, "503 post-send failure must route through RouteSendingFailures")
 	assert.Empty(t, consumer.scheduledRetry)
 	assert.Empty(t, consumer.quarantined)
 }
@@ -156,18 +156,15 @@ func (c *alarmDispatchRunnerSendingRetryTestConsumer) ReleaseClaimKeys(_ context
 	return nil
 }
 
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) ScheduleRetry(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.scheduledRetry = append(c.scheduledRetry, envelopes...)
+func (c *alarmDispatchRunnerSendingRetryTestConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+	c.scheduledRetry = append(c.scheduledRetry, retryEnvelopes...)
+	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
 	return nil
 }
 
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) ScheduleSendingRetry(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.scheduledSendingRetry = append(c.scheduledSendingRetry, envelopes...)
-	return nil
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) MoveToDLQ(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.movedDLQ = append(c.movedDLQ, envelopes...)
+func (c *alarmDispatchRunnerSendingRetryTestConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+	c.scheduledSendingRetry = append(c.scheduledSendingRetry, retryEnvelopes...)
+	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
 	return nil
 }
 
@@ -176,8 +173,10 @@ func (c *alarmDispatchRunnerSendingRetryTestConsumer) Requeue(_ context.Context,
 	return nil
 }
 
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
+func (c *alarmDispatchRunnerSendingRetryTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	c.quarantined = append(c.quarantined, envelopes...)
-	c.quarantineReason = reason
+	if cause != nil {
+		c.quarantineReason = cause.Error()
+	}
 	return nil
 }

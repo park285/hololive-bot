@@ -729,8 +729,8 @@ lock_expires_at > NOW()
 파일:
 
 - `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_transitions_0040_02.sql`
-- `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_transitions_0066_03.sql`
-- `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_transitions_0111_04.sql`
+- `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_transitions_0160_06.sql`
+- `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_transitions_0170_07.sql`
 - `hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_maintenance_0035_02.sql`
 
 상태 전이:
@@ -745,12 +745,14 @@ sending -> quarantined (stale/unknown external outcome)
 leased/sending -> dlq  (retry exhausted or terminal failure)
 ```
 
-`ScheduleSendingRetry`는 post-send retryable failure에서 사용한다. `status IN ('leased', 'sending')`을 허용하고 `lock_expires_at` 조건을 제거한다. 코드 주석은 이유를 명시한다.
+retry/DLQ 라우팅은 `RouteFailures`(0160_06, pre-send)와 `RouteSendingFailures`(0170_07, post-send)가 단일 `UPDATE ... FROM jsonb_to_recordset` statement로 원자 적용한다. 입력 행마다 `target_status ∈ ('retry','dlq')`를 담고, retry 행은 `next_attempt_at`, dlq 행은 `dlq_at=NOW()`와 최종 `attempt_count`를 기록한다. attempt CAS(`input.attempt_count = attempt_count + 1`)가 역행·건너뛰기 입력을 행 단위로 fail-closed 차단하며, 미적용 행은 `PartialTransitionError.UnappliedIDs`로 반환되고 재시도 없이 recovery/quarantine 경로에 위임된다.
+
+`RouteSendingFailures`는 post-send failure에서 사용한다. `status IN ('leased', 'sending')`을 허용하고 `lock_expires_at` 조건을 제거한다. 코드 주석은 이유를 명시한다.
 
 ```text
 RecoverExpiredLeased는 leased만 만지고,
 sending은 QuarantineStaleSending이 담당하므로,
-locked_by + status 조건으로 소유 worker의 reschedule은 안전하다.
+locked_by + status 조건으로 소유 worker의 보상 전이는 안전하다.
 ```
 
 stale sending은 maintenance query가 `quarantined`로 보낸다. reason은 외부 발송 결과를 알 수 없다는 의미다.
@@ -759,11 +761,11 @@ stale sending은 maintenance query가 `quarantined`로 보낸다. reason은 외�
 
 파일:
 
-- `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_runner.go`
-- `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_group.go`
-- `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_render.go`
+- `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_runner.go`
+- `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go`
+- `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_render.go`
 
-`alarmDispatchRunner.runOnce` 흐름:
+`dispatchrun.Runner.runOnce` 흐름:
 
 ```text
 consumer.DrainBatch(ctx, maxBatch)
@@ -798,19 +800,21 @@ MarkDispatched
 
 ```text
 render/build 실패
-  -> ScheduleRetry 또는 MoveToDLQ
+  -> RouteFailures (retry+dlq 단일 원자 호출, DLQ claim key는 전이 성공 후 해제)
 ```
 
 발송 후 실패:
 
 ```text
 HTTP 429/502/503
-  -> ScheduleSendingRetry
+  -> RouteSendingFailures
 기타 post-send failure + quarantine enabled
   -> Quarantine
 그 외
-  -> ScheduleRetry
+  -> RouteFailures
 ```
+
+MarkSending 실패는 발송 전이지만 UPDATE가 이미 커밋된 'sending' 잔류 행이므로 `RouteSendingFailures`로 보상한다. sending 경로의 라우팅이 infra 오류로 실패하면 fallback도 sending fence(`RouteSendingFailures` 전량 retry)로 복원한다 — leased 전용 fence는 'sending' 행에 매칭되지 않는다.
 
 ## 10. 그룹핑과 렌더링
 

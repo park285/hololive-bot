@@ -31,11 +31,11 @@ func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithSendingRetry(t *tes
 	assert.True(t, processed)
 	assert.Empty(t, sender.messages, "메시지는 발송되면 안 된다")
 	require.Len(t, consumer.scheduledSendingRetry, 1,
-		"MarkSending 실패는 이미 커밋된 sending 행을 복원할 수 있는 ScheduleSendingRetry로 보상해야 한다")
+		"MarkSending 실패는 이미 커밋된 sending 행을 복원할 수 있는 RouteSendingFailures로 보상해야 한다")
 	require.NotNil(t, consumer.scheduledSendingRetry[0].Retry)
 	assert.Equal(t, 1, consumer.scheduledSendingRetry[0].Retry.Attempt)
 	assert.Contains(t, consumer.scheduledSendingRetry[0].Retry.LastError, errAlarmDispatchRunnerTestMarkSending.Error())
-	assert.Empty(t, consumer.scheduledRetry, "leased 전용 ScheduleRetry로 보상하면 sending 행이 잔류한다")
+	assert.Empty(t, consumer.scheduledRetry, "leased 전용 RouteFailures로 보상하면 sending 행이 잔류한다")
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markDispatched)
@@ -109,6 +109,6 @@ func TestAlarmDispatchRunnerMarkSendingFailureWithoutSendingRetryConsumerReturns
 	assert.True(t, processed)
 	assert.ErrorIs(t, err, errAlarmDispatchRunnerTestMarkSending)
 	assert.Empty(t, consumer.scheduledRetry,
-		"ScheduleSendingRetry 없는 소비자는 leased 전용 ScheduleRetry로 잘못 보상하지 않고 에러를 그대로 반환해야 한다")
+		"RouteSendingFailures 없는 소비자는 leased 전용 RouteFailures로 잘못 보상하지 않고 에러를 그대로 반환해야 한다")
 	assert.Empty(t, consumer.movedDLQ)
 }
