@@ -180,9 +180,11 @@ func (c *stubBotClient) SendImage(_ context.Context, room string, imageData []by
 	return c.imageAccepted, nil
 }
 
-func (c *stubBotClient) SendMultipleImages(_ context.Context, room string, images [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+func (c *stubBotClient) SendMultipleImages(_ context.Context, room string, images [][]byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.lastImageRoom = room
 	c.lastImages = images
+	c.lastOptsLen = len(opts)
+	c.lastOpts = append([]iris.SendOption(nil), opts...)
 	if c.multiErr != nil {
 		return nil, c.multiErr
 	}
@@ -801,6 +803,69 @@ func TestCommandTransportSendImage(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send image to room room")
 		assert.Contains(t, err.Error(), "image lease last modified mismatch")
+	})
+}
+
+func TestCommandTransportSendImages(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("multiple images are sent as one album", func(t *testing.T) {
+		c := &stubBotClient{}
+		images := [][]byte{[]byte("one"), []byte("two"), []byte("three")}
+
+		require.NoError(t, tr(c).SendImages(ctx, "room-1", images))
+		assert.Equal(t, "room-1", c.lastImageRoom)
+		assert.Equal(t, images, c.lastImages)
+		assert.Nil(t, c.lastImage)
+	})
+
+	t.Run("single image preserves the single image lane", func(t *testing.T) {
+		c := &stubBotClient{}
+
+		require.NoError(t, tr(c).SendImages(ctx, "room-1", [][]byte{[]byte("one")}))
+		assert.Equal(t, []byte("one"), c.lastImage)
+		assert.Nil(t, c.lastImages)
+	})
+
+	t.Run("thread and deterministic request id are forwarded", func(t *testing.T) {
+		c := &stubBotClient{}
+		images := [][]byte{[]byte("one"), []byte("two")}
+		ctx := WithReplyIdentity(WithThreadID(ctx, "t-1"), "reply-1")
+
+		require.NoError(t, tr(c).SendImages(ctx, "room-1", images))
+		assert.Equal(t, 2, c.lastOptsLen)
+		requestID, threadID := capturedSendOptions(t, c.lastOpts)
+		assert.Equal(t, "t-1", threadID)
+		assert.True(t, strings.HasSuffix(requestID, ":a1"), "request id %q", requestID)
+
+		firstRequestID := requestID
+		require.NoError(t, tr(c).SendImages(ctx, "room-1", images))
+		requestID, _ = capturedSendOptions(t, c.lastOpts)
+		assert.Equal(t, firstRequestID, requestID)
+	})
+
+	t.Run("client error is wrapped with room", func(t *testing.T) {
+		c := &stubBotClient{multiErr: errors.New("album down")}
+
+		err := tr(c).SendImages(ctx, "room", [][]byte{[]byte("one"), []byte("two")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send images to room room")
+		assert.Contains(t, err.Error(), "album down")
+	})
+
+	t.Run("failed reply status is wrapped with detail", func(t *testing.T) {
+		detail := "album lease last modified mismatch"
+		c := &stubBotClient{
+			multiAccepted: &iris.ReplyAcceptedResponse{RequestID: "r-images"},
+			statuses:      []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}}},
+		}
+
+		err := tr(c).SendImages(ctx, "room", [][]byte{[]byte("one"), []byte("two")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send images to room room")
+		assert.Contains(t, err.Error(), "album lease last modified mismatch")
 	})
 }
 

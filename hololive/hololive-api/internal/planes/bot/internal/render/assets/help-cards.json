@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "cards": [
+    {
+      "id": "broadcast",
+      "title": "방송 · 일정",
+      "asset": "help-broadcast.png",
+      "sha256": "36edca8bdeead4383115ca8f5abd623fa4e9da4b72a3701e9952b0de03a05820",
+      "entries": [
+        {"syntax": "!라이브 [멤버명]", "description": "현재 방송 · 멤버 방송"},
+        {"syntax": "!예정 [멤버명]", "description": "예정 방송 · 멤버 예정"},
+        {"syntax": "!멤버 [이름]", "description": "최근 방송 일정"},
+        {"syntax": "!방송이력 [멤버명] [타입]", "description": "종료된 방송 이력"},
+        {"syntax": "!방송이력 카테고리:<타입>", "description": "기간 · 개수 상세 필터"},
+        {"syntax": "!방송이력 썸네일 <video_id>", "description": "종료 방송 썸네일"}
+      ]
+    },
+    {
+      "id": "member-alarm-news",
+      "title": "멤버 · 알람 · 뉴스",
+      "asset": "help-member-alarm-news.png",
+      "sha256": "2ec2be240d1a72e44d25f0b28b7a5c5a45882f7a7696dd3217c296ec810d998b",
+      "entries": [
+        {"syntax": "!멤버", "description": "전체 멤버 목록"},
+        {"syntax": "!정보 [멤버명]", "description": "멤버 프로필 조회"},
+        {"syntax": "!알람 추가 [멤버명]", "description": "방송 알람 추가"},
+        {"syntax": "!알람 제거 [멤버명]", "description": "방송 알람 제거"},
+        {"syntax": "!알람 목록", "description": "내 알람 목록"},
+        {"syntax": "!알람 초기화", "description": "모든 알람 삭제"},
+        {"syntax": "!뉴스", "description": "주간 뉴스 요약"},
+        {"syntax": "!뉴스알림 켜기 · 끄기 · 상태", "description": "뉴스 알림 설정"}
+      ]
+    },
+    {
+      "id": "events-more",
+      "title": "행사 · 기념일 · 기타",
+      "asset": "help-events-more.png",
+      "sha256": "02c1e9daad244c42471e0c0cdacd96d612d8d94430c2655d223835f509cf7461",
+      "entries": [
+        {"syntax": "!행사", "description": "행사 알림 상태"},
+        {"syntax": "!행사 켜기 · 끄기", "description": "행사 알림 설정"},
+        {"syntax": "!기념일", "description": "이번 달 생일 · 주년"},
+        {"syntax": "!기념일 다음달 · 저번달", "description": "월별 기념일 조회"},
+        {"syntax": "!구독자 [멤버명]", "description": "현재 구독자 수"},
+        {"syntax": "!도움말", "description": "전체 명령어 안내"}
+      ]
+    }
+  ]
+}

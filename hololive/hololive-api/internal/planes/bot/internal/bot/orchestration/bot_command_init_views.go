@@ -55,6 +55,7 @@ type commandInitView struct {
 	formatter             *formatter.ResponseFormatter
 	sendMessage           func(ctx context.Context, room, message string) error
 	sendImage             func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
+	sendImages            func(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error
 	sendError             func(ctx context.Context, room, message string) error
 	logger                *slog.Logger
 	majorEventRepository  handlercore.MajorEventRepository
@@ -81,6 +82,7 @@ func (b *Bot) commandInitView() commandInitView {
 		formatter:             b.formatter,
 		sendMessage:           b.sendMessage,
 		sendImage:             b.sendImage,
+		sendImages:            b.sendImages,
 		sendError:             b.sendError,
 		logger:                b.logger,
 		majorEventRepository:  b.majorEventRepository,
@@ -103,9 +105,10 @@ func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *ha
 		ThumbnailDownloader: handlers.NewYouTubeThumbnailDownloader(nil),
 		MembersData:         v.membersData,
 		Formatter:           v.formatter,
-		HelpImageRenderer:   render.NewHelpCardRenderer(),
+		HelpImageProvider:   render.NewHelpCardProvider(),
 		SendMessage:         v.sendMessage,
 		SendImage:           v.sendImage,
+		SendImages:          v.sendImages,
 		SendError:           v.sendError,
 		Logger:              v.logger,
 	}

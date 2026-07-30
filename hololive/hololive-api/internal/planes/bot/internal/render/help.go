@@ -3,101 +3,190 @@ package render
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	_ "embed"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"strings"
-	"sync"
 )
 
 const (
-	helpCardMaxTextBytes = 16 << 10
-	helpCardMaxPNGBytes  = 4 << 20
-	helpCardMaxImages    = 6
+	helpCardWidth  = 1448
+	helpCardHeight = 1086
 )
 
-type HelpCardRenderer struct {
-	mu           sync.Mutex
-	cachedText   string
-	cachedImages [][]byte
+//go:embed assets/help-cards.json
+var helpCatalogJSON []byte
+
+//go:embed assets/help-broadcast.png
+var helpBroadcastPNG []byte
+
+//go:embed assets/help-member-alarm-news.png
+var helpMemberAlarmNewsPNG []byte
+
+//go:embed assets/help-events-more.png
+var helpEventsMorePNG []byte
+
+type helpCatalog struct {
+	SchemaVersion int               `json:"schema_version"`
+	Cards         []helpCatalogCard `json:"cards"`
 }
 
-func NewHelpCardRenderer() *HelpCardRenderer {
-	return &HelpCardRenderer{}
+type helpCatalogCard struct {
+	ID      string             `json:"id"`
+	Title   string             `json:"title"`
+	Asset   string             `json:"asset"`
+	SHA256  string             `json:"sha256"`
+	Entries []helpCatalogEntry `json:"entries"`
 }
 
-func (r *HelpCardRenderer) RenderHelpImages(ctx context.Context, text string) ([][]byte, error) {
-	if r == nil {
-		return nil, errors.New("help card renderer is nil")
-	}
-	if ctx == nil {
-		return nil, errors.New("help card render context is nil")
-	}
-	normalized, err := normalizeHelpCardText(ctx, text)
-	if err != nil {
-		return nil, err
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	return r.renderHelpImagesLocked(ctx, normalized)
+type helpCatalogEntry struct {
+	Syntax      string `json:"syntax"`
+	Description string `json:"description"`
 }
 
-func normalizeHelpCardText(ctx context.Context, text string) (string, error) {
+type helpCard struct {
+	id     string
+	asset  string
+	sha256 string
+	data   []byte
+}
+
+type HelpCardProvider struct{}
+
+var embeddedHelpAssets = map[string][]byte{
+	"help-broadcast.png":         helpBroadcastPNG,
+	"help-member-alarm-news.png": helpMemberAlarmNewsPNG,
+	"help-events-more.png":       helpEventsMorePNG,
+}
+
+var approvedHelpCards = mustLoadHelpCards(helpCatalogJSON, embeddedHelpAssets)
+
+func NewHelpCardProvider() *HelpCardProvider {
+	return &HelpCardProvider{}
+}
+
+func (p *HelpCardProvider) HelpImages(ctx context.Context) ([][]byte, error) {
+	if p == nil {
+		return nil, errors.New("help card provider is nil")
+	}
 	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
-	text = strings.TrimRight(text, "\r\n")
-	if strings.TrimSpace(text) == "" {
-		return "", errors.New("help card text is empty")
-	}
-	if len(text) > helpCardMaxTextBytes {
-		return "", fmt.Errorf("help card text size %d exceeds %d", len(text), helpCardMaxTextBytes)
-	}
-	return text, nil
-}
-
-func (r *HelpCardRenderer) renderHelpImagesLocked(ctx context.Context, text string) ([][]byte, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if text == r.cachedText && len(r.cachedImages) != 0 {
-		return cloneHelpImages(r.cachedImages), nil
-	}
-
-	images, err := renderHelpCards(ctx, text)
-	if err != nil {
-		return nil, fmt.Errorf("render help cards: %w", err)
-	}
-	if err := validateRenderedHelpImages(images); err != nil {
 		return nil, err
 	}
 
-	r.cachedText = text
-	r.cachedImages = cloneHelpImages(images)
-	return cloneHelpImages(images), nil
+	images := make([][]byte, len(approvedHelpCards))
+	for index, card := range approvedHelpCards {
+		images[index] = bytes.Clone(card.data)
+	}
+	return images, nil
 }
 
-func validateRenderedHelpImages(images [][]byte) error {
-	if len(images) == 0 || len(images) > helpCardMaxImages {
-		return fmt.Errorf("render help cards: image count %d is outside 1..%d", len(images), helpCardMaxImages)
+func mustLoadHelpCards(data []byte, assets map[string][]byte) []helpCard {
+	var catalog helpCatalog
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		panic(fmt.Sprintf("parse help card catalog: %v", err))
 	}
-	for index, imageData := range images {
-		if len(imageData) == 0 {
-			return fmt.Errorf("render help card %d: empty png", index+1)
+	if err := validateHelpCatalog(catalog, assets); err != nil {
+		panic(err)
+	}
+
+	cards := make([]helpCard, 0, len(catalog.Cards))
+	for _, source := range catalog.Cards {
+		imageData := assets[source.Asset]
+		cards = append(cards, helpCard{
+			id:     source.ID,
+			asset:  source.Asset,
+			sha256: source.SHA256,
+			data:   imageData,
+		})
+	}
+	return cards
+}
+
+func validateHelpCatalog(catalog helpCatalog, assets map[string][]byte) error {
+	if catalog.SchemaVersion != 1 {
+		return fmt.Errorf("help card schema_version = %d, want 1", catalog.SchemaVersion)
+	}
+	if len(catalog.Cards) == 0 || len(catalog.Cards) != len(assets) {
+		return fmt.Errorf("help catalog cards = %d, embedded assets = %d", len(catalog.Cards), len(assets))
+	}
+	return validateHelpCatalogCards(catalog.Cards, assets)
+}
+
+func validateHelpCatalogCards(cards []helpCatalogCard, assets map[string][]byte) error {
+	seenIDs := make(map[string]struct{}, len(cards))
+	seenAssets := make(map[string]struct{}, len(cards))
+	for index := range cards {
+		card := &cards[index]
+		if err := validateHelpCatalogCard(index, card, assets); err != nil {
+			return err
 		}
-		if len(imageData) > helpCardMaxPNGBytes {
-			return fmt.Errorf("render help card %d: png size %d exceeds %d", index+1, len(imageData), helpCardMaxPNGBytes)
+		if err := recordHelpCatalogCard(card, seenIDs, seenAssets); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func cloneHelpImages(images [][]byte) [][]byte {
-	cloned := make([][]byte, len(images))
-	for index, imageData := range images {
-		cloned[index] = bytes.Clone(imageData)
+func validateHelpCatalogCard(index int, card *helpCatalogCard, assets map[string][]byte) error {
+	if err := validateHelpCatalogCardMetadata(index, card); err != nil {
+		return err
 	}
-	return cloned
+	if err := validateHelpCatalogEntries(card); err != nil {
+		return err
+	}
+	return validateHelpCatalogAsset(card, assets)
+}
+
+func validateHelpCatalogCardMetadata(index int, card *helpCatalogCard) error {
+	if strings.TrimSpace(card.ID) == "" || strings.TrimSpace(card.Title) == "" || strings.TrimSpace(card.Asset) == "" || strings.TrimSpace(card.SHA256) == "" {
+		return fmt.Errorf("help card %d metadata must not be blank", index)
+	}
+	return nil
+}
+
+func validateHelpCatalogEntries(card *helpCatalogCard) error {
+	if len(card.Entries) == 0 {
+		return fmt.Errorf("help card %q must include entries", card.ID)
+	}
+	for entryIndex, entry := range card.Entries {
+		if strings.TrimSpace(entry.Syntax) == "" || strings.TrimSpace(entry.Description) == "" {
+			return fmt.Errorf("help card %q entry %d must not be blank", card.ID, entryIndex)
+		}
+	}
+	return nil
+}
+
+func validateHelpCatalogAsset(card *helpCatalogCard, assets map[string][]byte) error {
+	imageData, ok := assets[card.Asset]
+	if !ok {
+		return fmt.Errorf("help card %q references unknown asset %q", card.ID, card.Asset)
+	}
+	sum := sha256.Sum256(imageData)
+	if actual := hex.EncodeToString(sum[:]); actual != card.SHA256 {
+		return fmt.Errorf("help card %q SHA-256 = %q, want approved %q", card.ID, actual, card.SHA256)
+	}
+	config, err := png.DecodeConfig(bytes.NewReader(imageData))
+	if err != nil {
+		return fmt.Errorf("decode help card %q PNG: %w", card.ID, err)
+	}
+	if config.Width != helpCardWidth || config.Height != helpCardHeight {
+		return fmt.Errorf("help card %q dimensions = %dx%d, want %dx%d", card.ID, config.Width, config.Height, helpCardWidth, helpCardHeight)
+	}
+	return nil
+}
+
+func recordHelpCatalogCard(card *helpCatalogCard, seenIDs, seenAssets map[string]struct{}) error {
+	if _, exists := seenIDs[card.ID]; exists {
+		return fmt.Errorf("help card id %q is duplicated", card.ID)
+	}
+	if _, exists := seenAssets[card.Asset]; exists {
+		return fmt.Errorf("help card asset %q is duplicated", card.Asset)
+	}
+	seenIDs[card.ID] = struct{}{}
+	seenAssets[card.Asset] = struct{}{}
+	return nil
 }
