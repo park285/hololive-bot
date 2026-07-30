@@ -293,6 +293,30 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	return nil
 }
 
+func (t *CommandTransport) SendImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error {
+	if len(images) == 1 {
+		return t.SendImage(ctx, room, images[0], opts...)
+	}
+	if t == nil || t.irisClient == nil {
+		return errors.New("send images: iris client is not configured")
+	}
+
+	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
+	defer cancel()
+
+	opts = appendMediaClientRequestOptions(sendCtx, opts, "image_multiple", room, imageBatchPayload(images))
+	accepted, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...)
+	if err == nil {
+		err = waitForAcceptedReplyHandoff(sendCtx, t.irisClient, accepted)
+	}
+	if err != nil {
+		serviceErr := appErrors.NewServiceError("failed to send images", serviceNameIris, "send_images", err)
+		return fmt.Errorf("send images to room %s: %w", room, serviceErr)
+	}
+
+	return nil
+}
+
 func appendMediaClientRequestOptions(ctx context.Context, opts []iris.SendOption, kind, room string, payload []byte) []iris.SendOption {
 	threadID, _ := ThreadIDFromContext(ctx)
 	base := commandReplyClientRequestIDBase(
@@ -312,6 +336,15 @@ func appendMediaClientRequestOptions(ctx context.Context, opts []iris.SendOption
 func mediaPayloadDigest(kind string, payload []byte) []byte {
 	sum := sha256.Sum256(append([]byte(kind+"\x00"), payload...))
 	return sum[:]
+}
+
+func imageBatchPayload(images [][]byte) []byte {
+	payload := make([]byte, 0, len(images)*sha256.Size)
+	for _, imageData := range images {
+		sum := sha256.Sum256(imageData)
+		payload = append(payload, sum[:]...)
+	}
+	return payload
 }
 
 func (t *CommandTransport) SendError(ctx context.Context, room, key string) error {

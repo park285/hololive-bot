@@ -34,7 +34,6 @@ type helpTemplateData struct {
 }
 
 type HelpContent struct {
-	ImageText    string
 	TextFallback string
 }
 
@@ -48,7 +47,6 @@ func (f *ResponseFormatter) FormatHelpContent(ctx context.Context) (HelpContent,
 		return HelpContent{}, errors.New("help template rendered empty")
 	}
 	return HelpContent{
-		ImageText:    rendered,
 		TextFallback: f.foldSeeMore(rendered),
 	}, nil
 }

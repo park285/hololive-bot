@@ -35,16 +35,14 @@ func setupHelpTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	return serviceTemplate.NewRenderer(pool, slog.New(slog.DiscardHandler))
 }
 
-type stubHelpImageRenderer struct {
+type stubHelpImageProvider struct {
 	images [][]byte
 	err    error
 	calls  int
-	text   string
 }
 
-func (s *stubHelpImageRenderer) RenderHelpImages(_ context.Context, text string) ([][]byte, error) {
+func (s *stubHelpImageProvider) HelpImages(_ context.Context) ([][]byte, error) {
 	s.calls++
-	s.text = text
 	cloned := make([][]byte, len(s.images))
 	for index, imageData := range s.images {
 		cloned[index] = bytes.Clone(imageData)
@@ -66,23 +64,27 @@ func TestHelpCommand_Description(t *testing.T) {
 	}
 }
 
-func TestHelpCommand_Execute_GoldenPathSendsImagesInOrder(t *testing.T) {
-	renderer := &stubHelpImageRenderer{images: [][]byte{[]byte("one"), []byte("two"), []byte("three")}}
+func TestHelpCommand_Execute_GoldenPathSendsImageAlbum(t *testing.T) {
+	provider := &stubHelpImageProvider{images: [][]byte{[]byte("one"), []byte("two"), []byte("three")}}
 	var sent [][]byte
+	albumCalls := 0
 	textCalls := 0
 
 	deps := &handlercore.Dependencies{
 		Formatter:         formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
-		HelpImageRenderer: renderer,
+		HelpImageProvider: provider,
 		SendMessage: func(_ context.Context, _, _ string) error {
 			textCalls++
 			return nil
 		},
-		SendImage: func(_ context.Context, room string, imageData []byte, _ ...iris.SendOption) error {
+		SendImages: func(_ context.Context, room string, images [][]byte, _ ...iris.SendOption) error {
 			if room != "room-1" {
 				t.Fatalf("image room = %q, want room-1", room)
 			}
-			sent = append(sent, bytes.Clone(imageData))
+			albumCalls++
+			for _, imageData := range images {
+				sent = append(sent, bytes.Clone(imageData))
+			}
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
@@ -94,26 +96,29 @@ func TestHelpCommand_Execute_GoldenPathSendsImagesInOrder(t *testing.T) {
 	if len(sent) != 3 || string(sent[0]) != "one" || string(sent[1]) != "two" || string(sent[2]) != "three" {
 		t.Fatalf("sent images = %q", sent)
 	}
+	if albumCalls != 1 {
+		t.Fatalf("image album calls = %d, want 1", albumCalls)
+	}
 	if textCalls != 0 {
 		t.Fatalf("text fallback calls = %d, want 0", textCalls)
 	}
-	if renderer.calls != 1 || !strings.Contains(renderer.text, "명령어: !도움말") {
-		t.Fatalf("renderer calls=%d text=%q", renderer.calls, renderer.text)
+	if provider.calls != 1 {
+		t.Fatalf("help image provider calls = %d, want 1", provider.calls)
 	}
 }
 
-func TestHelpCommand_Execute_RenderFailureFallsBackToText(t *testing.T) {
-	renderErr := errors.New("render failed")
+func TestHelpCommand_Execute_ImageProviderFailureFallsBackToText(t *testing.T) {
+	providerErr := errors.New("load images failed")
 	var fallback string
 	deps := &handlercore.Dependencies{
 		Formatter:         formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
-		HelpImageRenderer: &stubHelpImageRenderer{err: renderErr},
+		HelpImageProvider: &stubHelpImageProvider{err: providerErr},
 		SendMessage: func(_ context.Context, _ string, message string) error {
 			fallback = message
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
-			t.Fatal("SendImage must not be called after render failure")
+		SendImages: func(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) error {
+			t.Fatal("SendImages must not be called after image provider failure")
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
@@ -127,25 +132,22 @@ func TestHelpCommand_Execute_RenderFailureFallsBackToText(t *testing.T) {
 	}
 }
 
-func TestHelpCommand_Execute_PartialImageFailureFallsBackToText(t *testing.T) {
+func TestHelpCommand_Execute_AlbumFailureFallsBackToText(t *testing.T) {
 	imageErr := errors.New("image failed")
 	var fallback string
 	imageCalls := 0
 	deps := &handlercore.Dependencies{
 		Formatter: formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
-		HelpImageRenderer: &stubHelpImageRenderer{
+		HelpImageProvider: &stubHelpImageProvider{
 			images: [][]byte{[]byte("one"), []byte("two"), []byte("three")},
 		},
 		SendMessage: func(_ context.Context, _ string, message string) error {
 			fallback = message
 			return nil
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+		SendImages: func(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) error {
 			imageCalls++
-			if imageCalls == 2 {
-				return imageErr
-			}
-			return nil
+			return imageErr
 		},
 		Logger: slog.New(slog.DiscardHandler),
 	}
@@ -153,11 +155,11 @@ func TestHelpCommand_Execute_PartialImageFailureFallsBackToText(t *testing.T) {
 	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, nil); err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
-	if imageCalls != 2 {
-		t.Fatalf("image calls = %d, want 2", imageCalls)
+	if imageCalls != 1 {
+		t.Fatalf("image album calls = %d, want 1", imageCalls)
 	}
 	if fallback == "" {
-		t.Fatal("expected text fallback after partial image failure")
+		t.Fatal("expected text fallback after image album failure")
 	}
 }
 
@@ -166,11 +168,11 @@ func TestHelpCommand_Execute_JoinsImageAndTextFailures(t *testing.T) {
 	textErr := errors.New("text failed")
 	deps := &handlercore.Dependencies{
 		Formatter:         formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
-		HelpImageRenderer: &stubHelpImageRenderer{images: [][]byte{[]byte("one")}},
+		HelpImageProvider: &stubHelpImageProvider{images: [][]byte{[]byte("one")}},
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return textErr
 		},
-		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+		SendImages: func(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) error {
 			return imageErr
 		},
 		Logger: slog.New(slog.DiscardHandler),

@@ -156,7 +156,7 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 		t.Fatal("dispatcher must be initialized")
 	}
 
-	if deps.SendMessage == nil || deps.SendImage == nil || deps.SendError == nil {
+	if deps.SendMessage == nil || deps.SendImage == nil || deps.SendImages == nil || deps.SendError == nil {
 		t.Fatal("send function mappings must not be nil")
 	}
 }
