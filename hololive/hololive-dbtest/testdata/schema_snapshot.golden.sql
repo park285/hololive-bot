@@ -168,6 +168,91 @@ TABLE auth_users
   CONSTRAINT auth_users_pkey PRIMARY KEY (id)
   CONSTRAINT auth_users_email_key UNIQUE (email)
 
+TABLE bot_command_executions
+  COLUMN id bigint NOT NULL DEFAULT nextval('bot_command_executions_id_seq'::regclass)
+  COLUMN message_id text NOT NULL
+  COLUMN command_kind text NOT NULL DEFAULT ''::text
+  COLUMN status text NOT NULL DEFAULT 'claimed'::text
+  COLUMN result_summary text NOT NULL DEFAULT ''::text
+  COLUMN claimed_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN completed_at timestamp with time zone
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_bot_command_executions_command_kind_size CHECK ((length(command_kind) <= 128))
+  CONSTRAINT chk_bot_command_executions_message_id_size CHECK (((length(message_id) > 0) AND (length(message_id) <= 512)))
+  CONSTRAINT chk_bot_command_executions_result_summary_size CHECK ((octet_length(result_summary) <= 2048))
+  CONSTRAINT chk_bot_command_executions_state_shape CHECK (((status = 'claimed'::text) OR (completed_at IS NOT NULL)))
+  CONSTRAINT chk_bot_command_executions_status_vocab CHECK ((status = ANY (ARRAY['claimed'::text, 'succeeded'::text, 'failed'::text])))
+  CONSTRAINT bot_command_executions_pkey PRIMARY KEY (id)
+  CONSTRAINT bot_command_executions_message_id_key UNIQUE (message_id)
+  INDEX CREATE INDEX idx_bot_command_executions_status_claimed ON public.bot_command_executions USING btree (claimed_at, id) WHERE (status = 'claimed'::text)
+
+TABLE bot_reply_outbox
+  COLUMN id bigint NOT NULL DEFAULT nextval('bot_reply_outbox_id_seq'::regclass)
+  COLUMN message_id text NOT NULL
+  COLUMN phase text NOT NULL
+  COLUMN ordinal bigint NOT NULL
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN payload jsonb NOT NULL
+  COLUMN payload_hash character(64) NOT NULL
+  COLUMN client_request_id text NOT NULL
+  COLUMN status text NOT NULL DEFAULT 'pending'::text
+  COLUMN attempts integer NOT NULL DEFAULT 0
+  COLUMN first_attempt_at timestamp with time zone
+  COLUMN iris_request_id text NOT NULL DEFAULT ''::text
+  COLUMN claim_token text
+  COLUMN lease_until timestamp with time zone
+  COLUMN last_error text NOT NULL DEFAULT ''::text
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_bot_reply_outbox_attempts CHECK ((attempts >= 0))
+  CONSTRAINT chk_bot_reply_outbox_client_request_id CHECK ((client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text))
+  CONSTRAINT chk_bot_reply_outbox_iris_request_id_size CHECK ((length(iris_request_id) <= 256))
+  CONSTRAINT chk_bot_reply_outbox_last_error_size CHECK ((octet_length(last_error) <= 8192))
+  CONSTRAINT chk_bot_reply_outbox_message_id_size CHECK (((length(message_id) > 0) AND (length(message_id) <= 512)))
+  CONSTRAINT chk_bot_reply_outbox_ordinal CHECK ((ordinal >= 0))
+  CONSTRAINT chk_bot_reply_outbox_payload_hash CHECK ((payload_hash ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_bot_reply_outbox_phase_size CHECK (((length(phase) > 0) AND (length(phase) <= 32)))
+  CONSTRAINT chk_bot_reply_outbox_room_id_size CHECK ((length((room_id)::text) > 0))
+  CONSTRAINT chk_bot_reply_outbox_state_shape CHECK ((((status <> ALL (ARRAY['submitting'::text, 'accepted'::text])) OR ((claim_token IS NOT NULL) AND (lease_until IS NOT NULL) AND (first_attempt_at IS NOT NULL))) AND ((status <> 'accepted'::text) OR (length(iris_request_id) > 0))))
+  CONSTRAINT chk_bot_reply_outbox_status_vocab CHECK ((status = ANY (ARRAY['pending'::text, 'submitting'::text, 'accepted'::text, 'handoff_completed'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text, 'dead'::text, 'permanent_conflict'::text, 'manual_review'::text])))
+  CONSTRAINT bot_reply_outbox_pkey PRIMARY KEY (id)
+  CONSTRAINT bot_reply_outbox_client_request_id_key UNIQUE (client_request_id)
+  CONSTRAINT bot_reply_outbox_message_id_phase_ordinal_key UNIQUE (message_id, phase, ordinal)
+  INDEX CREATE INDEX idx_bot_reply_outbox_due ON public.bot_reply_outbox USING btree (created_at, id) WHERE (status = ANY (ARRAY['pending'::text, 'retryable_pre_dispatch'::text]))
+  INDEX CREATE INDEX idx_bot_reply_outbox_lease_expiry ON public.bot_reply_outbox USING btree (lease_until, id) WHERE (status = ANY (ARRAY['submitting'::text, 'accepted'::text]))
+  INDEX CREATE INDEX idx_bot_reply_outbox_message ON public.bot_reply_outbox USING btree (message_id, ordinal)
+
+TABLE bot_webhook_inbox
+  COLUMN id bigint NOT NULL DEFAULT nextval('bot_webhook_inbox_id_seq'::regclass)
+  COLUMN message_id text NOT NULL
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN ordering_key text NOT NULL
+  COLUMN payload jsonb NOT NULL
+  COLUMN status text NOT NULL DEFAULT 'pending'::text
+  COLUMN attempts integer NOT NULL DEFAULT 0
+  COLUMN claim_token text
+  COLUMN lease_until timestamp with time zone
+  COLUMN available_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN terminal_reason text NOT NULL DEFAULT ''::text
+  COLUMN terminal_at timestamp with time zone
+  COLUMN last_error text NOT NULL DEFAULT ''::text
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_bot_webhook_inbox_attempts CHECK ((attempts >= 0))
+  CONSTRAINT chk_bot_webhook_inbox_last_error_size CHECK ((octet_length(last_error) <= 8192))
+  CONSTRAINT chk_bot_webhook_inbox_message_id_size CHECK (((length(message_id) > 0) AND (length(message_id) <= 512)))
+  CONSTRAINT chk_bot_webhook_inbox_ordering_key_size CHECK (((length(ordering_key) > 0) AND (length(ordering_key) <= 512)))
+  CONSTRAINT chk_bot_webhook_inbox_room_id_size CHECK ((length((room_id)::text) > 0))
+  CONSTRAINT chk_bot_webhook_inbox_state_shape CHECK ((((status <> 'processing'::text) OR ((claim_token IS NOT NULL) AND (lease_until IS NOT NULL))) AND ((status <> ALL (ARRAY['dead'::text, 'stale'::text])) OR (terminal_at IS NOT NULL))))
+  CONSTRAINT chk_bot_webhook_inbox_status_vocab CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text, 'dead'::text, 'succeeded'::text, 'stale'::text])))
+  CONSTRAINT chk_bot_webhook_inbox_terminal_reason_size CHECK ((length(terminal_reason) <= 512))
+  CONSTRAINT bot_webhook_inbox_pkey PRIMARY KEY (id)
+  CONSTRAINT bot_webhook_inbox_message_id_key UNIQUE (message_id)
+  INDEX CREATE INDEX idx_bot_webhook_inbox_due ON public.bot_webhook_inbox USING btree (available_at, id) WHERE (status = ANY (ARRAY['pending'::text, 'retry'::text]))
+  INDEX CREATE INDEX idx_bot_webhook_inbox_lease_expiry ON public.bot_webhook_inbox USING btree (lease_until, id) WHERE (status = 'processing'::text)
+  INDEX CREATE INDEX idx_bot_webhook_inbox_ordering_partition ON public.bot_webhook_inbox USING btree (ordering_key, id) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]))
+
 TABLE major_event_subscriptions
   COLUMN id integer NOT NULL DEFAULT nextval('major_event_subscriptions_id_seq'::regclass)
   COLUMN room_id character varying(100) NOT NULL

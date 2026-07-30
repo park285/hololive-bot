@@ -18,30 +18,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package domain
+package transport
 
-import "time"
+import "context"
 
-type CommandContext struct {
-	Room        string // 숫자 Room ID
-	RoomName    string // 한글 방 이름
-	ThreadID    *string
-	UserID      string // 숫자 User ID
-	UserName    string // 한글 유저 이름
-	IsGroupChat bool
-	Message     string
-	MessageID   string
-	Timestamp   time.Time
+const ReplyPhase = replyPhaseReply
+
+type ReplyOutboxEntry struct {
+	MessageID       string
+	Phase           string
+	Ordinal         uint64
+	Room            string
+	Payload         string
+	ClientRequestID string
 }
 
-func NewCommandContext(room, roomName, userID, userName, message string, isGroupChat bool) *CommandContext {
-	return &CommandContext{
-		Room:        room,
-		RoomName:    roomName,
-		UserID:      userID,
-		UserName:    userName,
-		IsGroupChat: isGroupChat,
-		Message:     message,
-		Timestamp:   time.Now(),
+type ReplyOutboxWriter interface {
+	RecordReply(ctx context.Context, entry *ReplyOutboxEntry) error
+}
+
+func WithReplyOutboxWriter(writer ReplyOutboxWriter) Option {
+	return func(t *CommandTransport) {
+		t.replyOutbox = writer
 	}
+}
+
+func (t *CommandTransport) replyOutboxWriter() ReplyOutboxWriter {
+	if t == nil {
+		return nil
+	}
+
+	return t.replyOutbox
+}
+
+func ReplyClientRequestID(identity string, ordinal uint64) string {
+	return replyClientRequestID(identity, ordinal)
 }

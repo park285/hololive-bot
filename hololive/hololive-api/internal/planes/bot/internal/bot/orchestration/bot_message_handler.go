@@ -56,6 +56,7 @@ func (b *Bot) HandleMessage(ctx context.Context, message *webhook.Message) {
 
 	cmdCtx := newCommandContextFromIngress(envelope)
 	cmdCtx.ThreadID = messageThreadID(message)
+	cmdCtx.MessageID = messageReplyIdentity(message)
 	reqCtx := commandRequestContext(ctx, cmdCtx, message)
 
 	if orchcmd.ShouldExecuteAsync(envelope.Parsed.Type) {
@@ -92,13 +93,23 @@ func messageThreadID(message *webhook.Message) *string {
 }
 
 func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext, message *webhook.Message) context.Context {
-	if identity := messageReplyIdentity(message); identity != "" {
+	if identity := commandReplyIdentity(cmdCtx, message); identity != "" {
 		ctx = transport.WithReplyIdentity(ctx, identity)
 	}
 	if cmdCtx.ThreadID != nil {
 		ctx = transport.WithThreadID(ctx, *cmdCtx.ThreadID)
 	}
 	return ctx
+}
+
+func commandReplyIdentity(cmdCtx *domain.CommandContext, message *webhook.Message) string {
+	if cmdCtx != nil {
+		if trimmed := strings.TrimSpace(cmdCtx.MessageID); trimmed != "" {
+			return trimmed
+		}
+	}
+
+	return messageReplyIdentity(message)
 }
 
 func messageReplyIdentity(message *webhook.Message) string {

@@ -18,30 +18,50 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package domain
+package durability
 
-import "time"
+import (
+	"embed"
+	"errors"
+	"strings"
+	"time"
 
-type CommandContext struct {
-	Room        string // 숫자 Room ID
-	RoomName    string // 한글 방 이름
-	ThreadID    *string
-	UserID      string // 숫자 User ID
-	UserName    string // 한글 유저 이름
-	IsGroupChat bool
-	Message     string
-	MessageID   string
-	Timestamp   time.Time
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kapu/hololive-shared/pkg/sqlassets"
+)
+
+//go:embed queries/*
+var sqlAssets embed.FS
+
+var mustSQL = sqlassets.MustReader(sqlAssets, "queries")
+
+var (
+	ErrPoolNotConfigured = errors.New("durability: postgres pool is not configured")
+	ErrInvalidArgument   = errors.New("durability: invalid argument")
+)
+
+func ensurePool(pool *pgxpool.Pool) error {
+	if pool == nil {
+		return ErrPoolNotConfigured
+	}
+
+	return nil
 }
 
-func NewCommandContext(room, roomName, userID, userName, message string, isGroupChat bool) *CommandContext {
-	return &CommandContext{
-		Room:        room,
-		RoomName:    roomName,
-		UserID:      userID,
-		UserName:    userName,
-		IsGroupChat: isGroupChat,
-		Message:     message,
-		Timestamp:   time.Now(),
+func requireIdentity(name, value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", errors.Join(ErrInvalidArgument, errors.New(name+" must not be empty"))
 	}
+
+	return trimmed, nil
+}
+
+func leaseMilliseconds(lease time.Duration) (int64, error) {
+	if lease <= 0 {
+		return 0, errors.Join(ErrInvalidArgument, errors.New("lease duration must be positive"))
+	}
+
+	return lease.Milliseconds(), nil
 }

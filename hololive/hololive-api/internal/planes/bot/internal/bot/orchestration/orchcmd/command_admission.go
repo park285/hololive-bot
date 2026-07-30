@@ -84,7 +84,7 @@ return {1, 0}
 `
 
 type commandAdmissionLimiter interface {
-	Admit(ctx context.Context, checks []commandAdmissionCheck) (commandAdmissionDecision, error)
+	Admit(ctx context.Context, member string, checks []commandAdmissionCheck) (commandAdmissionDecision, error)
 }
 
 type commandAdmissionDecision struct {
@@ -120,11 +120,16 @@ func (p *commandAdmissionPolicy) Admit(ctx context.Context, cmdCtx *domain.Comma
 		return err
 	}
 
+	member, err := commandAdmissionMember(cmdCtx.MessageID)
+	if err != nil {
+		return fmt.Errorf("%w: generate admission member: %w", errCommandAdmissionUnavailable, err)
+	}
+
 	checks := []commandAdmissionCheck{
 		{bucket: commandAdmissionBucket("history:room", cmdCtx.Room), limit: expensiveHistoryRoomLimit},
 		{bucket: commandAdmissionBucket("history:user", cmdCtx.UserID), limit: expensiveHistoryUserLimit},
 	}
-	decision, err := p.limiter.Admit(ctx, checks)
+	decision, err := p.limiter.Admit(ctx, member, checks)
 	if err != nil {
 		return fmt.Errorf("%w: evaluate command rate limit: %w", errCommandAdmissionUnavailable, err)
 	}
@@ -156,15 +161,14 @@ func newAtomicCommandAdmissionLimiter(cacheClient cache.LowLevelCache) (*atomicC
 	return &atomicCommandAdmissionLimiter{cacheClient: cacheClient, now: time.Now}, nil
 }
 
-func (l *atomicCommandAdmissionLimiter) Admit(ctx context.Context, checks []commandAdmissionCheck) (commandAdmissionDecision, error) {
+func (l *atomicCommandAdmissionLimiter) Admit(ctx context.Context, member string, checks []commandAdmissionCheck) (commandAdmissionDecision, error) {
 	if err := l.validateChecks(checks); err != nil {
 		return commandAdmissionDecision{}, err
 	}
-
-	member, err := commandAdmissionMember()
-	if err != nil {
-		return commandAdmissionDecision{}, fmt.Errorf("generate admission member: %w", err)
+	if strings.TrimSpace(member) == "" {
+		return commandAdmissionDecision{}, errors.New("admission member must not be empty")
 	}
+
 	now := l.nowFunc()()
 	cmd := l.cacheClient.B().Eval().
 		Script(commandAdmissionScript).
@@ -215,7 +219,14 @@ func (l *atomicCommandAdmissionLimiter) cacheKey(bucket string) string {
 	return commandAdmissionKeyPrefix + ":" + bucket
 }
 
-func commandAdmissionMember() (string, error) {
+// member는 rate-limit ZSET의 원소다. 같은 inbound가 재처리될 때 random 값을 쓰면 원소가
+// 새로 쌓여 quota를 중복 소모하므로, message identity가 있으면 그것에서 결정적으로 유도한다.
+func commandAdmissionMember(messageID string) (string, error) {
+	if trimmed := strings.TrimSpace(messageID); trimmed != "" {
+		digest := sha256.Sum256([]byte(trimmed))
+		return hex.EncodeToString(digest[:]), nil
+	}
+
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return "", err

@@ -48,11 +48,13 @@ type admissionLimiterCall struct {
 
 type stubCommandRateLimiter struct {
 	calls     []admissionLimiterCall
+	members   []string
 	decisions []commandAdmissionDecision
 	err       error
 }
 
-func (s *stubCommandRateLimiter) Admit(_ context.Context, checks []commandAdmissionCheck) (commandAdmissionDecision, error) {
+func (s *stubCommandRateLimiter) Admit(_ context.Context, member string, checks []commandAdmissionCheck) (commandAdmissionDecision, error) {
+	s.members = append(s.members, member)
 	for _, check := range checks {
 		s.calls = append(s.calls, admissionLimiterCall{bucket: check.bucket, limit: check.limit, window: expensiveHistoryWindow})
 	}

@@ -62,6 +62,7 @@ type CommandTransport struct {
 	irisClient      iris.BotClient
 	formatter       *messageformatter.ResponseFormatter
 	markdownReplies bool
+	replyOutbox     ReplyOutboxWriter
 }
 
 type Option func(*CommandTransport)
