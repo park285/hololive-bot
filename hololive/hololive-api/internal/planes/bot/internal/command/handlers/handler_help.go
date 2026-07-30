@@ -74,6 +74,10 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	}
 
 	c.logImageFallback(ctx, imageErr)
+	if handlercore.IsReplyOutcomeUnknown(imageErr) {
+		return nil
+	}
+
 	if err := c.deps.SendMessage(ctx, cmdCtx.Room, fallback); err != nil {
 		return errors.Join(imageErr, fmt.Errorf("send help text fallback: %w", err))
 	}

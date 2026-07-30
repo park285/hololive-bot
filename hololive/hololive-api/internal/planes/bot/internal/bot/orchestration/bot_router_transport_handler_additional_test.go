@@ -126,7 +126,11 @@ func (c *testIrisClient) SendImage(ctx context.Context, room string, imageData [
 	c.lastImage = imageData
 	c.mu.Unlock()
 
-	return nil, c.sendImageErr
+	if c.sendImageErr != nil {
+		return nil, c.sendImageErr
+	}
+
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-image-test", Delivery: "queued", Room: room, Type: "image"}, nil
 }
 
 func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, images [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -134,7 +138,11 @@ func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, imag
 	c.lastMultiImages = images
 	c.mu.Unlock()
 
-	return nil, c.sendMultipleImagesErr
+	if c.sendMultipleImagesErr != nil {
+		return nil, c.sendMultipleImagesErr
+	}
+
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-test", Delivery: "queued", Room: room, Type: "image_multiple"}, nil
 }
 
 func (c *testIrisClient) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -149,8 +157,8 @@ func (c *testIrisClient) SendMarkdown(ctx context.Context, room, markdown string
 	return &iris.ReplyAcceptedResponse{RequestID: "reply-markdown", Delivery: "queued", Room: room, Type: "markdown"}, nil
 }
 
-func (c *testIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, nil
+func (c *testIrisClient) GetReplyStatus(_ context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
+	return &iris.ReplyStatusSnapshot{RequestID: requestID, State: "handoff_completed"}, nil
 }
 
 func (c *acceptedTestIrisClient) SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -302,7 +310,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		assert.Equal(t, "hello", client.lastMessage)
 	})
 
-	t.Run("send message retries failed accepted reply once", func(t *testing.T) {
+	t.Run("send message treats a failed accepted reply as terminal", func(t *testing.T) {
 		failedDetail := "callback failed"
 		client := &acceptedTestIrisClient{
 			statuses: []*iris.ReplyStatusSnapshot{
@@ -313,8 +321,9 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		transport := bottransport.NewCommandTransport(client, nil)
 
 		err := transport.SendMessage(ctx, "room", "hello")
-		require.NoError(t, err)
-		assert.Equal(t, 2, client.acceptedCalls)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "callback failed")
+		assert.Equal(t, 1, client.acceptedCalls, "explicit iris failure must not be re-posted")
 		assert.Equal(t, "hello", client.lastMessage)
 	})
 

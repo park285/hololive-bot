@@ -99,6 +99,13 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 	}
 
 	if err := c.Deps().SendImage(ctx, room, data); err != nil {
+		if handlercore.IsReplyOutcomeUnknown(err) {
+			c.Deps().Logger.Warn("calendar image outcome unknown, suppressing text fallback",
+				slog.Any("error", err),
+			)
+			return true
+		}
+
 		c.Deps().Logger.Warn("calendar image send failed, falling back to text",
 			slog.Any("error", err),
 		)

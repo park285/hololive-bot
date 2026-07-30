@@ -100,6 +100,9 @@ func (b *Bot) handleAsyncCommandError(ctx context.Context, err error, commandTyp
 	if chatID == "" {
 		return
 	}
+	if b.skipErrorResponseOnUnknownOutcome(ctx, chatID, commandType, err) {
+		return
+	}
 
 	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
 		errorAttrs := sharedlog.ErrorAttrs(sendErr)

@@ -28,10 +28,16 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
 
 var ErrMemberLookupHandled = errors.New("member lookup handled")
+
+// 전송 결과가 unknown이면 이미 전달됐을 수 있으므로, 호출자는 대체 응답을 추가로 보내면 안 된다.
+func IsReplyOutcomeUnknown(err error) bool {
+	return errors.Is(err, transport.ErrReplyOutcomeUnknown)
+}
 
 // 성공 시 (*domain.Channel, nil)을, 사용자-facing 응답을 보낸 경우 ErrMemberLookupHandled를 반환한다.
 func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {

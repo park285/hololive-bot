@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -160,6 +162,36 @@ func TestHelpCommand_Execute_AlbumFailureFallsBackToText(t *testing.T) {
 	}
 	if fallback == "" {
 		t.Fatal("expected text fallback after image album failure")
+	}
+}
+
+func TestHelpCommand_Execute_AlbumOutcomeUnknownSuppressesTextFallback(t *testing.T) {
+	var fallback string
+	imageCalls := 0
+	deps := &handlercore.Dependencies{
+		Formatter: formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+		HelpImageProvider: &stubHelpImageProvider{
+			images: [][]byte{[]byte("one"), []byte("two")},
+		},
+		SendMessage: func(_ context.Context, _ string, message string) error {
+			fallback = message
+			return nil
+		},
+		SendImages: func(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) error {
+			imageCalls++
+			return fmt.Errorf("send help album: %w", transport.ErrReplyOutcomeUnknown)
+		},
+		Logger: slog.New(slog.DiscardHandler),
+	}
+
+	if err := NewHelpCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, nil); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if imageCalls != 1 {
+		t.Fatalf("image album calls = %d, want 1", imageCalls)
+	}
+	if fallback != "" {
+		t.Fatalf("album outcome was unknown, so the text fallback must be suppressed; got %q", fallback)
 	}
 }
 

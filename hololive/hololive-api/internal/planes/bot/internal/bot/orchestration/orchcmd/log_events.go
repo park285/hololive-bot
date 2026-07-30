@@ -5,4 +5,5 @@ const (
 	EventBotCommandUnknown          = "bot.command.unknown"
 	EventBotCommandExecuteFailed    = "bot.command.execute.failed"
 	EventBotCommandExecuteSucceeded = "bot.command.execute.succeeded"
+	EventBotReplyOutcomeUnknown     = "bot.reply.outcome_unknown"
 )

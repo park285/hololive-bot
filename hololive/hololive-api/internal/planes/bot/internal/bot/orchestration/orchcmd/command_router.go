@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
 
@@ -86,7 +87,7 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 		failedAttrs := append([]slog.Attr{}, attrs...)
 		failedAttrs = append(failedAttrs, sharedlog.SinceMS(started))
 		failedAttrs = append(failedAttrs, sharedlog.ErrorAttrs(err)...)
-		sharedlog.Error(ctx, r.logger, EventBotCommandExecuteFailed, "command execution failed", failedAttrs...)
+		r.logExecutionFailure(ctx, err, failedAttrs)
 
 		return fmt.Errorf("execute command: %w", err)
 	}
@@ -96,6 +97,16 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 	sharedlog.Info(ctx, r.logger, EventBotCommandExecuteSucceeded, "command execution succeeded", successAttrs...)
 
 	return nil
+}
+
+// outcome unknown은 실패가 아니라 미확정이므로 Error 집계에서 분리한다.
+func (r *CommandRouter) logExecutionFailure(ctx context.Context, err error, attrs []slog.Attr) {
+	if errors.Is(err, transport.ErrReplyOutcomeUnknown) {
+		sharedlog.Warn(ctx, r.logger, EventBotReplyOutcomeUnknown, "command reply outcome unknown", attrs...)
+		return
+	}
+
+	sharedlog.Error(ctx, r.logger, EventBotCommandExecuteFailed, "command execution failed", attrs...)
 }
 
 func (r *CommandRouter) handleAdmissionError(ctx context.Context, cmdCtx *domain.CommandContext, err error) error {

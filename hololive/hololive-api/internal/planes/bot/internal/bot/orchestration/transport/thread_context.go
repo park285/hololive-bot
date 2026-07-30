@@ -23,10 +23,16 @@ package transport
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 )
 
 type threadIDContextKey struct{}
 type replyIdentityContextKey struct{}
+
+type replyIdentityState struct {
+	id      string
+	ordinal atomic.Uint64
+}
 
 func WithThreadID(ctx context.Context, threadID string) context.Context {
 	id := strings.TrimSpace(threadID)
@@ -63,25 +69,36 @@ func WithReplyIdentity(ctx context.Context, identity string) context.Context {
 		return ctx
 	}
 
-	return context.WithValue(ctx, replyIdentityContextKey{}, id)
+	return context.WithValue(ctx, replyIdentityContextKey{}, &replyIdentityState{id: id})
 }
 
 func ReplyIdentityFromContext(ctx context.Context) (string, bool) {
+	state := replyIdentityStateFromContext(ctx)
+	if state == nil {
+		return "", false
+	}
+
+	return state.id, true
+}
+
+func replyIdentityStateFromContext(ctx context.Context) *replyIdentityState {
 	if ctx == nil {
-		return "", false
+		return nil
 	}
 
-	raw := ctx.Value(replyIdentityContextKey{})
-
-	id, ok := raw.(string)
+	state, ok := ctx.Value(replyIdentityContextKey{}).(*replyIdentityState)
 	if !ok {
-		return "", false
+		return nil
 	}
 
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return "", false
+	return state
+}
+
+func nextReplyEmission(ctx context.Context) (identity string, ordinal uint64, ok bool) {
+	state := replyIdentityStateFromContext(ctx)
+	if state == nil {
+		return "", 0, false
 	}
 
-	return id, true
+	return state.id, state.ordinal.Add(1) - 1, true
 }

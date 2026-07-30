@@ -22,12 +22,9 @@ package transport
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -41,11 +38,9 @@ import (
 const serviceNameIris = "iris"
 
 const (
-	replyStatusPollInterval = 250 * time.Millisecond
-	replySendMaxAttempts    = 2
+	replyStatusPollInterval   = 250 * time.Millisecond
+	replyAdmissionMaxAttempts = 2
 )
-
-var replyClientRequestSequence atomic.Uint64
 
 type replyStatusGetter interface {
 	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
@@ -100,15 +95,12 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	defer cancel()
 
 	var opts []iris.SendOption
-	threadID := ""
-
 	if id, ok := ThreadIDFromContext(sendCtx); ok {
-		threadID = id
-		opts = append(opts, iris.WithThreadID(threadID))
+		opts = append(opts, iris.WithThreadID(id))
 	}
 
-	clientRequestIDBase := commandReplyClientRequestIDBase(room, message, commandReplyIdentity(sendCtx))
-	if err := t.sendMessage(sendCtx, room, message, clientRequestIDBase, opts...); err != nil {
+	clientRequestID := nextReplyClientRequestID(sendCtx)
+	if err := t.sendMessage(sendCtx, room, message, clientRequestID, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message to room %s: %w", room, serviceErr)
 	}
@@ -116,143 +108,167 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	return nil
 }
 
-func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestIDBase string, opts ...iris.SendOption) error {
+func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestID string, opts ...iris.SendOption) error {
+	sendOpts := appendReplyClientRequestID(opts, clientRequestID)
+
 	if t.markdownReplies {
 		lane := replyLane{send: t.irisClient.SendMarkdown, getter: t.irisClient}
-		return sendReplyWithAttempts(ctx, lane, room, message, clientRequestIDBase, opts)
+		return sendReply(ctx, lane, room, message, clientRequestID, sendOpts)
 	}
 
 	acceptedSender, ok := t.irisClient.(acceptedMessageSender)
 	if !ok {
-		return t.irisClient.SendMessage(ctx, room, message, appendReplyClientRequestID(opts, clientRequestIDBase, 1)...)
+		return fmt.Errorf("send reply: iris client %T cannot report reply admission or status", t.irisClient)
 	}
 
 	lane := replyLane{send: acceptedSender.SendMessageAccepted, getter: acceptedSender}
-	return sendReplyWithAttempts(ctx, lane, room, message, clientRequestIDBase, opts)
+	return sendReply(ctx, lane, room, message, clientRequestID, sendOpts)
 }
 
-func sendReplyWithAttempts(ctx context.Context, lane replyLane, room, message, clientRequestIDBase string, opts []iris.SendOption) error {
+func sendReply(ctx context.Context, lane replyLane, room, message, clientRequestID string, opts []iris.SendOption) error {
+	accepted, err := postReply(ctx, lane.send, room, message, clientRequestID, opts)
+	if err != nil {
+		return err
+	}
+
+	return waitForAcceptedReplyHandoff(ctx, lane.getter, accepted)
+}
+
+func postReply(
+	ctx context.Context,
+	send replySendFunc,
+	room, message, clientRequestID string,
+	opts []iris.SendOption,
+) (*iris.ReplyAcceptedResponse, error) {
 	var lastErr error
-	for attempt := 1; attempt <= replySendMaxAttempts; attempt++ {
-		attemptOpts := appendReplyClientRequestID(opts, clientRequestIDBase, attempt)
-		done, err := sendReplyAttempt(ctx, lane, room, message, attemptOpts...)
-		if err != nil && !isReplyStatusFailed(err) {
-			return err
-		}
-		if done {
-			return nil
+	admissionMayHaveLanded := false
+
+	for attempt := 1; attempt <= replyAdmissionMaxAttempts; attempt++ {
+		accepted, err := send(ctx, room, message, opts...)
+		if err == nil {
+			return accepted, nil
 		}
 
 		lastErr = err
+		if !admissionResponseLost(err) {
+			// 앞선 attempt가 유실됐다면 그 요청이 admit됐을 수 있어 거절 응답도 결과를 확정하지 못한다.
+			if admissionMayHaveLanded {
+				break
+			}
+			return nil, err
+		}
+
+		admissionMayHaveLanded = true
+		if clientRequestID == "" || ctx.Err() != nil {
+			break
+		}
 	}
 
-	return lastErr
+	return nil, replyOutcomeUnknownError{reason: "reply admission response was not received", cause: lastErr}
 }
 
-func appendReplyClientRequestID(opts []iris.SendOption, base string, attempt int) []iris.SendOption {
+func admissionResponseLost(err error) bool {
+	return errors.Is(err, iris.ErrTransport)
+}
+
+func classifyAdmissionError(err error) error {
+	if !admissionResponseLost(err) {
+		return err
+	}
+
+	return replyOutcomeUnknownError{reason: "reply admission response was not received", cause: err}
+}
+
+func appendReplyClientRequestID(opts []iris.SendOption, clientRequestID string) []iris.SendOption {
 	next := make([]iris.SendOption, 0, len(opts)+1)
 	next = append(next, opts...)
-	next = append(next, iris.WithClientRequestID(fmt.Sprintf("%s:a%d", base, attempt)))
+	if clientRequestID != "" {
+		next = append(next, iris.WithClientRequestID(clientRequestID))
+	}
+
 	return next
 }
 
-func commandReplyClientRequestIDBase(room, message, replyIdentity string) string {
-	identity := strings.TrimSpace(replyIdentity)
-	if identity == "" {
-		sequence := replyClientRequestSequence.Add(1)
-		identity = fmt.Sprintf("local:%d:%d", time.Now().UnixNano(), sequence)
-	}
-	sum := sha256.Sum256([]byte(strings.Join([]string{
-		"hololive-bot-command-reply-v1",
-		strings.TrimSpace(room),
-		identity,
-		message,
-	}, "\x00")))
-	return "hololive-bot:reply:" + hex.EncodeToString(sum[:16])
-}
-
-func commandReplyIdentity(ctx context.Context) string {
-	if id, ok := ReplyIdentityFromContext(ctx); ok {
-		return id
-	}
-	return ""
-}
-
-func sendReplyAttempt(ctx context.Context, lane replyLane, room, message string, opts ...iris.SendOption) (bool, error) {
-	accepted, err := lane.send(ctx, room, message, opts...)
-	if err != nil {
-		return false, err
-	}
-
-	err = waitForAcceptedReplyHandoff(ctx, lane.getter, accepted)
-	if err == nil {
-		return true, nil
-	}
-	if isReplyStatusFailed(err) {
-		return false, err
-	}
-	return true, nil
-}
-
 func waitForAcceptedReplyHandoff(ctx context.Context, getter replyStatusGetter, accepted *iris.ReplyAcceptedResponse) error {
-	if accepted == nil || strings.TrimSpace(accepted.RequestID) == "" {
-		return nil
+	if accepted == nil {
+		return replyOutcomeUnknownError{reason: "iris returned no admission response"}
 	}
-	return waitForReplyHandoff(ctx, getter, accepted.RequestID)
-}
 
-type replyStatusFailedError struct {
-	requestID string
-	detail    string
-}
-
-func (e replyStatusFailedError) Error() string {
-	if strings.TrimSpace(e.detail) == "" {
-		return fmt.Sprintf("iris reply %s failed", e.requestID)
+	requestID := strings.TrimSpace(accepted.RequestID)
+	if requestID == "" {
+		return replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
 	}
-	return fmt.Sprintf("iris reply %s failed: %s", e.requestID, e.detail)
-}
 
-func isReplyStatusFailed(err error) bool {
-	var failed replyStatusFailedError
-	return errors.As(err, &failed)
+	return waitForReplyHandoff(ctx, getter, requestID)
 }
 
 func waitForReplyHandoff(ctx context.Context, client replyStatusGetter, requestID string) error {
 	ticker := time.NewTicker(replyStatusPollInterval)
 	defer ticker.Stop()
 
+	var lastQueryErr error
+
 	for {
-		done, err := checkReplyHandoffStatus(ctx, client, requestID)
-		if err != nil {
+		outcome, err := checkReplyHandoffStatus(ctx, client, requestID)
+		if outcome != replyOutcomeInFlight {
 			return err
 		}
-		if done {
-			return nil
+		if err != nil {
+			lastQueryErr = err
 		}
 
 		if waitReplyStatusPoll(ctx, ticker.C) {
-			return nil
+			return replyOutcomeUnknownError{
+				requestID: requestID,
+				reason:    "reply status polling ended before handoff",
+				detail:    lastReplyQueryErrorDetail(lastQueryErr),
+				cause:     ctx.Err(),
+			}
 		}
 	}
 }
 
-func checkReplyHandoffStatus(ctx context.Context, client replyStatusGetter, requestID string) (bool, error) {
-	status, err := client.GetReplyStatus(ctx, requestID)
-	if err != nil || status == nil {
-		return err != nil, nil
+func lastReplyQueryErrorDetail(err error) string {
+	if err == nil {
+		return ""
 	}
+
+	return "last status query error: " + err.Error()
+}
+
+// 조회 실패는 reply의 결과가 아니라 관측 실패다. deadline까지는 in-flight로 두고 폴링을 이어간다.
+func checkReplyHandoffStatus(ctx context.Context, client replyStatusGetter, requestID string) (replyOutcome, error) {
+	status, err := client.GetReplyStatus(ctx, requestID)
+	if err != nil {
+		return replyOutcomeInFlight, err
+	}
+	if status == nil {
+		return replyOutcomeUnknown, replyOutcomeUnknownError{
+			requestID: requestID,
+			reason:    "reply status response was empty",
+		}
+	}
+
 	return replyHandoffStatusResult(requestID, status)
 }
 
-func replyHandoffStatusResult(requestID string, status *iris.ReplyStatusSnapshot) (bool, error) {
-	switch strings.ToLower(strings.TrimSpace(status.State)) {
-	case "handoff_completed", "delivered", "sent":
-		return true, nil
-	case "failed":
-		return true, replyStatusFailedError{requestID: requestID, detail: replyStatusDetail(status)}
-	default:
-		return false, nil
+func replyHandoffStatusResult(requestID string, status *iris.ReplyStatusSnapshot) (replyOutcome, error) {
+	outcome := classifyReplyState(status.State)
+
+	switch outcome {
+	case replyOutcomeHandoffCompleted:
+		return outcome, nil
+	case replyOutcomeInFlight:
+		return outcome, nil
+	case replyOutcomeFailed:
+		return outcome, replyStatusFailedError{requestID: requestID, detail: replyStatusDetail(status)}
+	case replyOutcomeUnknown:
+	}
+
+	return replyOutcomeUnknown, replyOutcomeUnknownError{
+		requestID: requestID,
+		reason:    fmt.Sprintf("iris reported state %q", strings.TrimSpace(status.State)),
+		detail:    replyStatusDetail(status),
 	}
 }
 
@@ -260,6 +276,7 @@ func replyStatusDetail(status *iris.ReplyStatusSnapshot) string {
 	if status.Detail == nil {
 		return ""
 	}
+
 	return *status.Detail
 }
 
@@ -280,9 +297,11 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	opts = appendMediaClientRequestOptions(sendCtx, opts, "image", room, imageData)
+	opts = appendMediaClientRequestOptions(sendCtx, opts)
 	accepted, err := t.irisClient.SendImage(sendCtx, room, imageData, opts...)
-	if err == nil {
+	if err != nil {
+		err = classifyAdmissionError(err)
+	} else {
 		err = waitForAcceptedReplyHandoff(sendCtx, t.irisClient, accepted)
 	}
 	if err != nil {
@@ -304,9 +323,11 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	opts = appendMediaClientRequestOptions(sendCtx, opts, "image_multiple", room, imageBatchPayload(images))
+	opts = appendMediaClientRequestOptions(sendCtx, opts)
 	accepted, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...)
-	if err == nil {
+	if err != nil {
+		err = classifyAdmissionError(err)
+	} else {
 		err = waitForAcceptedReplyHandoff(sendCtx, t.irisClient, accepted)
 	}
 	if err != nil {
@@ -317,34 +338,17 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 	return nil
 }
 
-func appendMediaClientRequestOptions(ctx context.Context, opts []iris.SendOption, kind, room string, payload []byte) []iris.SendOption {
-	threadID, _ := ThreadIDFromContext(ctx)
-	base := commandReplyClientRequestIDBase(
-		room,
-		string(mediaPayloadDigest(kind, payload)),
-		commandReplyIdentity(ctx),
-	)
+func appendMediaClientRequestOptions(ctx context.Context, opts []iris.SendOption) []iris.SendOption {
 	next := make([]iris.SendOption, 0, len(opts)+2)
-	next = append(next, iris.WithClientRequestID(fmt.Sprintf("%s:a1", base)))
-	if threadID != "" {
+
+	if clientRequestID := nextReplyClientRequestID(ctx); clientRequestID != "" {
+		next = append(next, iris.WithClientRequestID(clientRequestID))
+	}
+	if threadID, ok := ThreadIDFromContext(ctx); ok {
 		next = append(next, iris.WithThreadID(threadID))
 	}
-	next = append(next, opts...)
-	return next
-}
 
-func mediaPayloadDigest(kind string, payload []byte) []byte {
-	sum := sha256.Sum256(append([]byte(kind+"\x00"), payload...))
-	return sum[:]
-}
-
-func imageBatchPayload(images [][]byte) []byte {
-	payload := make([]byte, 0, len(images)*sha256.Size)
-	for _, imageData := range images {
-		sum := sha256.Sum256(imageData)
-		payload = append(payload, sum[:]...)
-	}
-	return payload
+	return append(next, opts...)
 }
 
 func (t *CommandTransport) SendError(ctx context.Context, room, key string) error {

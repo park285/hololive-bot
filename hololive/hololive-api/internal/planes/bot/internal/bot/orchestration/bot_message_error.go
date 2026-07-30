@@ -23,10 +23,13 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/park285/iris-client-go/iris"
+	sharedlog "github.com/park285/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
@@ -44,6 +47,24 @@ func (b *Bot) sendImages(ctx context.Context, room string, images [][]byte, opts
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {
 	return b.ensureTransport().SendError(ctx, room, errorMsg)
+}
+
+// outcome이 unknown이면 reply가 이미 전달됐을 수 있어, 오류 응답을 덧붙이면 중복 발화가 된다.
+func (b *Bot) skipErrorResponseOnUnknownOutcome(ctx context.Context, chatID, commandType string, err error) bool {
+	if !errors.Is(err, transport.ErrReplyOutcomeUnknown) {
+		return false
+	}
+
+	errorAttrs := sharedlog.ErrorAttrs(err)
+	attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
+	attrs = append(attrs,
+		slog.String("chat_id", chatID),
+		slog.String("command", commandType),
+	)
+	attrs = append(attrs, errorAttrs...)
+	sharedlog.Warn(ctx, b.logger, EventBotReplyOutcomeUnknown, "iris reply outcome unknown; suppressing error response", attrs...)
+
+	return true
 }
 
 func (b *Bot) getErrorMessage(err error) string {

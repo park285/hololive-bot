@@ -122,6 +122,9 @@ func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandTy
 	if chatID == "" {
 		return
 	}
+	if b.skipErrorResponseOnUnknownOutcome(ctx, chatID, commandType, err) {
+		return
+	}
 	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
 		errorAttrs := sharedlog.ErrorAttrs(sendErr)
 		attrs := make([]slog.Attr, 0, 2+len(errorAttrs))

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
@@ -337,6 +339,40 @@ func TestCalendarCommand_Execute_ImageSendFailureFallsBackToText(t *testing.T) {
 
 	if sentMessage == "" {
 		t.Error("expected text fallback message to be sent")
+	}
+}
+
+func TestCalendarCommand_Execute_ImageOutcomeUnknownSuppressesTextFallback(t *testing.T) {
+	var sentMessage string
+	deps := &handlercore.Dependencies{
+		Formatter: formatter.NewResponseFormatter("!", setupCalendarTestRenderer(t)),
+		SendMessage: func(_ context.Context, _, msg string) error {
+			sentMessage = msg
+			return nil
+		},
+		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
+			return fmt.Errorf("send image: %w", transport.ErrReplyOutcomeUnknown)
+		},
+		SendError: func(_ context.Context, _, _ string) error { return nil },
+		Logger:    slog.Default(),
+	}
+
+	repo := &calendarRepoStub{
+		entries: []domain.CalendarEntry{
+			{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 5},
+		},
+	}
+	renderer := &calendarImageRendererStub{data: []byte("png-data")}
+
+	cmd := NewCalendarCommand(deps, repo, renderer)
+	cmdCtx := &domain.CommandContext{Room: "test-room"}
+
+	if err := cmd.Execute(context.Background(), cmdCtx, map[string]any{"month": 3}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if sentMessage != "" {
+		t.Errorf("image outcome was unknown, so the text fallback must be suppressed; got %q", sentMessage)
 	}
 }
 

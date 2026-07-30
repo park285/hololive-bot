@@ -49,7 +49,7 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 		require.NotNil(t, req.ThreadID)
 		require.Equal(t, threadID, *req.ThreadID)
 		require.NotNil(t, req.ClientRequestID)
-		require.Contains(t, *req.ClientRequestID, "hololive-bot:reply:")
+		require.Equal(t, "hololive:v1:message:stable-message-1:reply:0", *req.ClientRequestID)
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive /reply request in time")
 	}
@@ -72,7 +72,8 @@ func TestBotHandleMessage_UsesInboundIDForThreadedReplyIdentity(t *testing.T) {
 	require.Equal(t, first.Data, second.Data)
 	require.NotNil(t, first.ClientRequestID)
 	require.NotNil(t, second.ClientRequestID)
-	require.NotEqual(t, *first.ClientRequestID, *second.ClientRequestID)
+	require.Equal(t, "hololive:v1:message:stable-message-1:reply:0", *first.ClientRequestID)
+	require.Equal(t, "hololive:v1:message:stable-message-2:reply:0", *second.ClientRequestID)
 }
 
 func TestBotHandleMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T) {
@@ -92,7 +93,9 @@ func TestBotHandleMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T)
 	require.Equal(t, threadID, *second.ThreadID)
 	require.NotNil(t, first.ClientRequestID)
 	require.NotNil(t, second.ClientRequestID)
-	require.Equal(t, *first.ClientRequestID, *second.ClientRequestID)
+	require.Equal(t, "hololive:v1:message:stable-message-1:reply:0", *first.ClientRequestID)
+	require.Equal(t, *first.ClientRequestID, *second.ClientRequestID,
+		"a redelivered inbound message must reuse the same clientRequestId so iris can dedup it")
 }
 
 func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan iris.ReplyRequest) {

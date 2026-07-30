@@ -10,6 +10,7 @@ const (
 	EventBotCommandAsyncRejected       = "bot.command.async.rejected"
 	EventBotCommandPanic               = "bot.command.panic"
 	EventBotCommandErrorResponseFailed = "bot.command.error_response.failed"
+	EventBotReplyOutcomeUnknown        = "bot.reply.outcome_unknown"
 
 	EventBotLifecycleStarting          = "bot.lifecycle.starting"
 	EventBotLifecycleStarted           = "bot.lifecycle.started"
