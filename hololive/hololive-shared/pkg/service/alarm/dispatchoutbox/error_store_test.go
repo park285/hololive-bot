@@ -47,67 +47,73 @@ func TestSanitizeStoredError_RedactsSensitiveSpans(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name        string
-		input       string
-		wantContain []string
-		wantAbsent  []string
+		name  string
+		input string
+		want  string
 	}{
 		{
-			name:        "bearer token",
-			input:       "iris request failed: Authorization: Bearer eyJhbGciOi.secret-part after",
-			wantContain: []string{"[redacted]", "after"},
-			wantAbsent:  []string{"eyJhbGciOi", "secret-part"},
+			name:  "bearer token after auth header",
+			input: "iris request failed: Authorization: Bearer eyJhbGciOi.secret-part after",
+			want:  "iris request failed: Authorization: [redacted] after",
 		},
 		{
-			name:        "key value token",
-			input:       "config invalid: auth_token=supervalue rest",
-			wantContain: []string{"auth_token=[redacted]", "rest"},
-			wantAbsent:  []string{"supervalue"},
+			name:  "bearer token with percent encoding",
+			input: "iris auth failed: Bearer ab%2Fcd!xyz tail",
+			want:  "iris auth failed: [redacted] tail",
 		},
 		{
-			name:        "api key header",
-			input:       `header rejected: X-Api-Key: abc123 tail`,
-			wantContain: []string{"[redacted]", "tail"},
-			wantAbsent:  []string{"abc123"},
+			name:  "key value token",
+			input: "config invalid: auth_token=supervalue rest",
+			want:  "config invalid: auth_token=[redacted] rest",
 		},
 		{
-			name:        "url query string",
-			input:       "post https://iris.internal/reply?auth=abc&room=123 returned 500",
-			wantContain: []string{"?[redacted]", "returned 500"},
-			wantAbsent:  []string{"auth=abc", "room=123"},
+			name:  "api key header",
+			input: "header rejected: X-Api-Key: abc123 tail",
+			want:  "header rejected: X-Api-Key=[redacted] tail",
 		},
 		{
-			name:        "long quoted payload",
-			input:       `decode failed for "` + strings.Repeat("페이로드", 30) + `" at offset 3`,
-			wantContain: []string{`"[redacted]"`, "at offset 3"},
-			wantAbsent:  []string{"페이로드"},
+			name:  "url query string",
+			input: "post https://iris.internal/reply?auth=abc&room=123 returned 500",
+			want:  "post https://iris.internal/reply?[redacted] returned 500",
 		},
 		{
-			name:        "plain message unchanged",
-			input:       "iris https://iris.internal/reply returned 502",
-			wantContain: []string{"iris https://iris.internal/reply returned 502"},
+			name:  "long quoted payload",
+			input: `decode failed for "` + strings.Repeat("x", 70) + `" at offset 3`,
+			want:  `decode failed for "[redacted]" at offset 3`,
+		},
+		{
+			name:  "plain span between two quoted strings survives",
+			input: `decode "alpha" failed: ` + strings.Repeat("y", 70) + ` near "beta"`,
+			want:  `decode "alpha" failed: ` + strings.Repeat("y", 70) + ` near "beta"`,
+		},
+		{
+			name:  "invalid utf8 replaced before storage",
+			input: "payload \xff\xfe broken",
+			want:  "payload � broken",
+		},
+		{
+			name:  "plain message unchanged",
+			input: "iris https://iris.internal/reply returned 502",
+			want:  "iris https://iris.internal/reply returned 502",
 		},
 		{
 			name:  "empty stays empty",
 			input: "",
+			want:  "",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := sanitizeStoredError(tc.input)
-			for _, want := range tc.wantContain {
-				if !strings.Contains(got, want) {
-					t.Fatalf("sanitizeStoredError(%q) = %q, missing %q", tc.input, got, want)
-				}
+			if got != tc.want {
+				t.Fatalf("sanitizeStoredError(%q) = %q, want %q", tc.input, got, tc.want)
 			}
-			for _, absent := range tc.wantAbsent {
-				if strings.Contains(got, absent) {
-					t.Fatalf("sanitizeStoredError(%q) = %q, leaked %q", tc.input, got, absent)
-				}
+			if again := sanitizeStoredError(got); again != got {
+				t.Fatalf("sanitize is not idempotent: first %q, second %q", got, again)
 			}
-			if tc.input == "" && got != "" {
-				t.Fatalf("sanitizeStoredError(\"\") = %q, want empty", got)
+			if !utf8.ValidString(got) {
+				t.Fatalf("sanitizeStoredError(%q) produced invalid UTF-8", tc.input)
 			}
 		})
 	}

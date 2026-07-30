@@ -670,14 +670,16 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 		t.Fatalf("ReleaseLeased() error = %v", err)
 	}
 
-	var status string
+	var status, lastError, lastErrorCode string
 	var expiresAt *time.Time
-	if err := pool.QueryRow(ctx, "SELECT status, lock_expires_at FROM alarm_dispatch_deliveries WHERE id=$1", claimed[0].ID).Scan(&status, &expiresAt); err != nil {
+	if err := pool.QueryRow(ctx, "SELECT status, lock_expires_at, last_error, last_error_code FROM alarm_dispatch_deliveries WHERE id=$1", claimed[0].ID).Scan(&status, &expiresAt, &lastError, &lastErrorCode); err != nil {
 		t.Fatalf("load delivery after release: %v", err)
 	}
 	if status != string(StatusRetry) || expiresAt != nil {
 		t.Fatalf("released row status=%q lock_expires_at=%v, want retry/nil", status, expiresAt)
 	}
+	require.Equal(t, "lease released before external send", lastError)
+	require.Equal(t, "lease_released", lastErrorCode, "ReleaseLeased must pair its static error code")
 }
 
 func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.T) {

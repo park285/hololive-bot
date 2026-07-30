@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"regexp"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -25,18 +26,22 @@ const (
 const maxStoredErrorBytes = 2048
 
 // bearer 패턴이 kv 패턴보다 먼저 돌아야 "Authorization: Bearer x"에서 값 잔여물이 남지 않는다.
+// kv 값 클래스의 `[` 제외는 치환 산출물 [redacted]의 재매칭을 막는 멱등성 조건이고,
+// quoted 패턴의 opener 앞글자 제한은 닫는 quote를 여는 quote로 오인해
+// 두 인용구 사이 평문까지 지우는 것을 막는다.
 var (
-	storedErrorBearerPattern = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+`)
-	storedErrorKVPattern     = regexp.MustCompile(`(?i)\b([\w.-]*(?:authorization|token|secret|password|passwd|credential|cookie|signature)|api[-_]?key|apikey)["']?\s*[:=]\s*["']?[^\s"',;)\]}]+`)
+	storedErrorBearerPattern = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=%!-]+`)
+	storedErrorKVPattern     = regexp.MustCompile(`(?i)\b([\w.-]*(?:authorization|token|secret|password|passwd|credential|cookie|signature)|api[-_]?key|apikey)["']?\s*[:=]\s*["']?[^\s"',;)\[\]}]+`)
 	storedErrorQueryPattern  = regexp.MustCompile(`\?[^?\s"']*=[^?\s"']*`)
-	storedErrorQuotedPattern = regexp.MustCompile(`"[^"]{65,}"`)
+	storedErrorQuotedPattern = regexp.MustCompile(`(^|[\s:=,(\[])"[^"]{65,}"`)
 )
 
 func sanitizeStoredError(message string) string {
+	message = strings.ToValidUTF8(message, "�")
 	message = storedErrorBearerPattern.ReplaceAllString(message, "[redacted]")
 	message = storedErrorKVPattern.ReplaceAllString(message, "${1}=[redacted]")
 	message = storedErrorQueryPattern.ReplaceAllString(message, "?[redacted]")
-	message = storedErrorQuotedPattern.ReplaceAllString(message, `"[redacted]"`)
+	message = storedErrorQuotedPattern.ReplaceAllString(message, `${1}"[redacted]"`)
 	return truncateStoredError(message)
 }
 
