@@ -162,7 +162,6 @@ func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness
 	return sharedreadiness.NewProbe("alarm-worker",
 		sharedreadiness.PostgresCheck(postgres),
 		sharedreadiness.ValkeyCheck(cacheClient),
-		readiness.BoolEnvNotFalseCheck("notification_egress_lease_enabled", "ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
 		readiness.BoolEnvNotFalseCheck("delivery_dispatcher_enabled", "DELIVERY_DISPATCHER_ENABLED", true),
 		readiness.BoolEnvNotFalseCheck("alarm_dispatch_consumer_enabled", "ALARM_DISPATCH_CONSUMER_ENABLED", true),
 		readiness.ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),

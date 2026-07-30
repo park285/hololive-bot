@@ -90,11 +90,40 @@ alarm_worker_block="$(awk '
   in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}
   in_block {print}
 ' "${compose}")"
-if ! grep -Fq 'ALARM_WORKER_EGRESS_LEASE_ENABLED: ${ALARM_WORKER_EGRESS_LEASE_ENABLED:-true}' <<< "${alarm_worker_block}"; then
-  echo "[FAIL] alarm-worker must enable the notification egress lease by default" >&2
+lease_env_hits="$(rg -n 'ALARM_WORKER_EGRESS_LEASE_ENABLED' "${ROOT_DIR}/deploy" "${ROOT_DIR}/hololive" || true)"
+if [[ -n "${lease_env_hits}" ]]; then
+  echo "[FAIL] ALARM_WORKER_EGRESS_LEASE_ENABLED was removed; no runtime reads it, so reintroducing it under deploy/ or hololive/ only re-adds a Valkey availability dependency to proactive egress" >&2
+  echo "${lease_env_hits}" >&2
   fail=1
 else
-  echo "[PASS] alarm-worker egress lease is enabled by default"
+  echo "[PASS] ALARM_WORKER_EGRESS_LEASE_ENABLED is absent from deploy/ and hololive/"
+fi
+if ! grep -Fq 'NOTIFICATION_SCHEDULER_ROLE: "worker"' <<< "${alarm_worker_block}"; then
+  echo "[FAIL] alarm-worker must pin NOTIFICATION_SCHEDULER_ROLE: \"worker\" in docker-compose.prod.yml; the runtime validator also accepts off, so this literal is the deploy-layer guard that keeps the single alarm-worker instance from starting without the alarm checker/scheduler" >&2
+  fail=1
+else
+  echo "[PASS] alarm-worker pins NOTIFICATION_SCHEDULER_ROLE to worker"
+fi
+if ! grep -Fq 'container_name: hololive-alarm-worker' <<< "${alarm_worker_block}"; then
+  echo "[FAIL] alarm-worker must keep container_name: hololive-alarm-worker; the fixed container name is one half of the single-instance guarantee that now carries proactive egress exclusivity in place of the removed Valkey lease" >&2
+  fail=1
+else
+  echo "[PASS] alarm-worker pins container_name"
+fi
+for port_binding in '"127.0.0.1:30007:30007"' '"127.0.0.1:30007:30007/udp"'; do
+  if ! grep -Fq "${port_binding}" <<< "${alarm_worker_block}"; then
+    echo "[FAIL] alarm-worker must keep the fixed loopback host port binding ${port_binding}; the fixed host port is the other half of the single-instance guarantee, because a second instance cannot bind the same host port and would otherwise start silently" >&2
+    fail=1
+  else
+    echo "[PASS] alarm-worker keeps fixed loopback host port binding ${port_binding}"
+  fi
+done
+if grep -Eq '^[[:space:]]*replicas:' <<< "${alarm_worker_block}"; then
+  echo "[FAIL] alarm-worker must not declare replicas; proactive egress exclusivity relies on exactly one instance. ClaimDue is row-exclusive only, so a second instance can split one canonical (room, minute-bucket) group, produce a different ClientRequestID per fragment, and duplicate-send past Iris idempotency. Resolve the D-002 gate list in docs/current/architecture/alarm-egress-scale-out-decisions-20260730.md before scaling out" >&2
+  grep -En '^[[:space:]]*replicas:' <<< "${alarm_worker_block}" >&2
+  fail=1
+else
+  echo "[PASS] alarm-worker declares no replicas"
 fi
 if ! grep -Fq 'DELIVERY_DISPATCHER_ENABLED: ${DELIVERY_DISPATCHER_ENABLED:-true}' <<< "${alarm_worker_block}"; then
   echo "[FAIL] alarm-worker must enable the notification delivery outbox dispatcher by default" >&2

@@ -20,11 +20,10 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Alarm HTTP provider route registration for `/internal/alarm/*` during the staged provider migration
 - Alarm checking and scheduling loops
 - Dispatch queue publish path
-- Dispatch queue consume/render/send path under the notification egress lease
+- Dispatch queue consume/render/send path, serialized by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims and the single Compose instance
 - Generic `notification_delivery_outbox` consume/send path for major event/member news notification rows
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send when `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`
-- Notification egress lease `notification:egress-owner:alarm-worker` when `ALARM_WORKER_EGRESS_LEASE_ENABLED=true`
 
 ## Provides
 
@@ -43,7 +42,6 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 | PostgreSQL | alarm/member/channel state and notification delivery outbox | alarm evaluation, alarm HTTP CRUD/query, or generic notification delivery fails |
 | PostgreSQL YouTube outbox | claim, render, per-room delivery, and final send state | YouTube notification dispatch pauses |
 | Valkey | queue, cache, Pub/Sub | dispatch publishing and config updates fail |
-| Valkey egress lease | single active proactive egress owner | dispatch queue and YouTube outbox egress do not start if held or unavailable |
 | Settings Pub/Sub | config update handling | runtime settings may become stale |
 
 ## Must not own
@@ -55,8 +53,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 ## Startup requirements
 
 - PostgreSQL and Valkey availability
-- `NOTIFICATION_SCHEDULER_ROLE=worker`
-- `ALARM_WORKER_EGRESS_LEASE_ENABLED=true` for production proactive egress
+- `NOTIFICATION_SCHEDULER_ROLE=worker` in the current deployment; the production validator accepts `worker|off`, and Compose pins `worker` so the single instance always runs the alarm checker/scheduler
+- A single running instance: proactive egress exclusivity comes from PostgreSQL `FOR UPDATE SKIP LOCKED` row claims plus the Compose `container_name`/fixed host port, not from a Valkey lease
 - `DELIVERY_DISPATCHER_ENABLED=true` for production generic notification delivery outbox egress
 - `ALARM_DISPATCH_CONSUMER_ENABLED=true` for production alarm dispatch outbox egress
 - `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true` for production YouTube outbox egress

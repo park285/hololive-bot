@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1186,6 +1187,189 @@ func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
 	}
 	if status != string(StatusLeased) || lockedBy != "worker-1" {
 		t.Fatalf("release attempt status=%q locked_by=%q, want leased/worker-1", status, lockedBy)
+	}
+}
+
+func TestPgxRepositoryClaimDue_ConcurrentWorkersClaimDisjointRows(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	start := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
+
+	const totalDeliveries = 10
+	envelopes := make([]domain.AlarmQueueEnvelope, 0, totalDeliveries)
+	for i := range totalDeliveries {
+		envelopes = append(envelopes, domain.AlarmQueueEnvelope{
+			Notification: domain.AlarmNotification{
+				AlarmType: domain.AlarmTypeLive,
+				RoomID:    fmt.Sprintf("room-concurrent-%02d", i),
+				Channel:   &domain.Channel{ID: "channel-concurrent"},
+				Stream: &domain.Stream{
+					ID:             fmt.Sprintf("stream-concurrent-%02d", i),
+					ChannelID:      "channel-concurrent",
+					StartScheduled: &start,
+				},
+			},
+			ClaimKeys: []string{fmt.Sprintf("claim-concurrent-%02d", i)},
+			Version:   1,
+		})
+	}
+
+	insertResult, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: envelopes, Status: StatusPending})
+	require.NoError(t, err)
+	require.Equal(t, totalDeliveries, insertResult.InsertedDeliveries)
+
+	workerIDs := []string{"worker-1", "worker-2"}
+	claimedByWorker := make([][]*Record, len(workerIDs))
+	claimErrByWorker := make([]error, len(workerIDs))
+
+	release := make(chan struct{})
+	var ready, done sync.WaitGroup
+	ready.Add(len(workerIDs))
+	done.Add(len(workerIDs))
+	for index, workerID := range workerIDs {
+		go func() {
+			defer done.Done()
+			ready.Done()
+			<-release
+			claimedByWorker[index], claimErrByWorker[index] = repository.ClaimDue(ctx, workerID, totalDeliveries, time.Minute)
+		}()
+	}
+	ready.Wait()
+	close(release)
+	done.Wait()
+
+	ownerByDeliveryID := make(map[int64]string, totalDeliveries)
+	for index, workerID := range workerIDs {
+		require.NoErrorf(t, claimErrByWorker[index], "%s ClaimDue must not fail under concurrent claiming", workerID)
+		for _, record := range claimedByWorker[index] {
+			previousOwner, alreadyClaimed := ownerByDeliveryID[record.ID]
+			require.Falsef(t, alreadyClaimed,
+				"delivery %d claimed by both %s and %s — each row must be claimed by exactly one worker",
+				record.ID, previousOwner, workerID)
+			ownerByDeliveryID[record.ID] = workerID
+			require.Equal(t, workerID, record.LockedBy, "returned record must carry the claiming worker as owner")
+			require.Equal(t, StatusLeased, record.Status)
+		}
+	}
+	require.Len(t, ownerByDeliveryID, totalDeliveries,
+		"concurrent workers must jointly claim every due row exactly once (union of claimed IDs)")
+
+	var leasedCount int
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT count(*) FROM alarm_dispatch_deliveries WHERE status=$1", string(StatusLeased),
+	).Scan(&leasedCount))
+	require.Equal(t, totalDeliveries, leasedCount)
+
+	for deliveryID, workerID := range ownerByDeliveryID {
+		var storedStatus, storedLockedBy string
+		require.NoError(t, pool.QueryRow(ctx,
+			"SELECT status, locked_by FROM alarm_dispatch_deliveries WHERE id=$1", deliveryID,
+		).Scan(&storedStatus, &storedLockedBy))
+		require.Equal(t, string(StatusLeased), storedStatus)
+		require.Equalf(t, workerID, storedLockedBy,
+			"delivery %d locked_by must match the worker whose ClaimDue returned it", deliveryID)
+	}
+}
+
+func TestPgxRepositoryClaimDue_ConcurrentWorkersSplitOneCanonicalGroup(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	const roomID = "room-canonical-group"
+	starts := []time.Time{
+		time.Date(2026, 6, 1, 12, 30, 0, 0, time.UTC),
+		time.Date(2026, 6, 1, 12, 30, 20, 0, time.UTC),
+		time.Date(2026, 6, 1, 12, 30, 41, 0, time.UTC),
+	}
+	minuteBucket := starts[0].UTC().Truncate(time.Minute)
+	for _, start := range starts {
+		require.Equal(t, minuteBucket, start.UTC().Truncate(time.Minute),
+			"fixture must keep every delivery inside one minute bucket")
+	}
+
+	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(starts))
+	dedupeKeys := make(map[string]struct{}, len(starts))
+	for i, start := range starts {
+		envelope := domain.AlarmQueueEnvelope{
+			Notification: domain.AlarmNotification{
+				AlarmType: domain.AlarmTypeLive,
+				RoomID:    roomID,
+				Channel:   &domain.Channel{ID: fmt.Sprintf("channel-group-%d", i)},
+				Stream: &domain.Stream{
+					ID:             fmt.Sprintf("stream-group-%d", i),
+					ChannelID:      fmt.Sprintf("channel-group-%d", i),
+					StartScheduled: &start,
+				},
+			},
+			Version: 1,
+		}
+		dedupeKeys[BuildDedupeKeyFromEnvelope(&envelope)] = struct{}{}
+		envelopes = append(envelopes, envelope)
+	}
+	require.Len(t, dedupeKeys, len(starts), "fixture rows must not dedupe into each other")
+
+	insertResult, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: envelopes, Status: StatusPending})
+	require.NoError(t, err)
+	require.Equal(t, len(starts), insertResult.InsertedDeliveries)
+
+	const perWorkerLimit = 2
+	workerIDs := []string{"worker-1", "worker-2"}
+	claimedByWorker := make([][]*Record, len(workerIDs))
+	claimErrByWorker := make([]error, len(workerIDs))
+
+	release := make(chan struct{})
+	var ready, done sync.WaitGroup
+	ready.Add(len(workerIDs))
+	done.Add(len(workerIDs))
+	for index, workerID := range workerIDs {
+		go func() {
+			defer done.Done()
+			ready.Done()
+			<-release
+			claimedByWorker[index], claimErrByWorker[index] = repository.ClaimDue(ctx, workerID, perWorkerLimit, time.Minute)
+		}()
+	}
+	ready.Wait()
+	close(release)
+	done.Wait()
+
+	ownerByDeliveryID := make(map[int64]string, len(starts))
+	for index, workerID := range workerIDs {
+		require.NoErrorf(t, claimErrByWorker[index], "%s ClaimDue must not fail under concurrent claiming", workerID)
+		require.NotEmptyf(t, claimedByWorker[index],
+			"%s claimed nothing: %d rows of one canonical group against a per-worker limit of %d must leave work for both workers",
+			workerID, len(starts), perWorkerLimit)
+		for _, record := range claimedByWorker[index] {
+			previousOwner, alreadyClaimed := ownerByDeliveryID[record.ID]
+			require.Falsef(t, alreadyClaimed,
+				"delivery %d claimed by both %s and %s — each row must be claimed by exactly one worker",
+				record.ID, previousOwner, workerID)
+			ownerByDeliveryID[record.ID] = workerID
+			require.Equal(t, workerID, record.LockedBy, "returned record must carry the claiming worker as owner")
+			require.Equal(t, StatusLeased, record.Status)
+		}
+	}
+	require.Len(t, ownerByDeliveryID, len(starts),
+		"concurrent workers must jointly claim every row of the canonical group exactly once")
+
+	claimedIDs := make([]int64, 0, len(ownerByDeliveryID))
+	for deliveryID := range ownerByDeliveryID {
+		claimedIDs = append(claimedIDs, deliveryID)
+	}
+	var groupRows int
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT count(*) FROM alarm_dispatch_deliveries WHERE id = ANY($1) AND room_id = $2", claimedIDs, roomID,
+	).Scan(&groupRows))
+	require.Equal(t, len(starts), groupRows,
+		"the rows split across workers must all belong to the single (room, minute-bucket) group under test")
+
+	for deliveryID, workerID := range ownerByDeliveryID {
+		var storedStatus, storedLockedBy string
+		require.NoError(t, pool.QueryRow(ctx,
+			"SELECT status, locked_by FROM alarm_dispatch_deliveries WHERE id=$1", deliveryID,
+		).Scan(&storedStatus, &storedLockedBy))
+		require.Equal(t, string(StatusLeased), storedStatus)
+		require.Equalf(t, workerID, storedLockedBy,
+			"delivery %d locked_by must match the worker whose ClaimDue returned it", deliveryID)
 	}
 }
 

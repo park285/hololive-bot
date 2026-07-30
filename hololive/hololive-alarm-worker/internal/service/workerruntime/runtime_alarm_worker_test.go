@@ -2,64 +2,103 @@ package workerruntime
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNotificationEgressRunnerRetriesHeldLeaseUntilAcquired(t *testing.T) {
-	var setNXCalls atomic.Int32
-	var schedulerStarts atomic.Int32
-	cache := &cachemocks.Client{
-		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
-			return setNXCalls.Add(1) > 1, nil
-		},
-		CompareAndDeleteFunc: func(context.Context, string, string) (bool, error) {
-			return true, nil
-		},
-	}
-	runner := notificationEgressRunner{
-		leaseCache:         cache,
-		leaseEnabled:       true,
-		leaseRetryInterval: time.Millisecond,
-	}
+func TestNotificationEgressRunnerStartsAllActiveRunners(t *testing.T) {
+	var firstStarts, secondStarts atomic.Int32
+	runner := notificationEgressRunner{runners: []NamedScheduler{
+		{Name: "first", Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
+			firstStarts.Add(1)
+			return nil
+		})},
+		{Name: "second", Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
+			secondStarts.Add(1)
+			return nil
+		})},
+	}}
 
-	err := runner.startWithLease(t.Context(), []NamedScheduler{{
-		Name:      "test",
-		Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error { schedulerStarts.Add(1); return nil }),
-	}})
+	require.NoError(t, runner.Start(t.Context()))
 
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, setNXCalls.Load(), int32(2))
-	assert.Equal(t, int32(1), schedulerStarts.Load())
+	assert.Equal(t, int32(1), firstStarts.Load())
+	assert.Equal(t, int32(1), secondStarts.Load())
 }
 
-func TestNotificationEgressRunnerReleaseLeaseIgnoresCanceledParentContext(t *testing.T) {
-	var releaseSawCanceledContext bool
-	cache := &cachemocks.Client{
-		SetNXFunc: func(_ context.Context, _ string, _ string, _ time.Duration) (bool, error) {
-			return true, nil
-		},
-		CompareAndDeleteFunc: func(ctx context.Context, _ string, _ string) (bool, error) {
-			releaseSawCanceledContext = ctx.Err() != nil
-			return true, nil
-		},
-	}
-	lease, err := egress.AcquireNotificationEgressLease(t.Context(), cache, nil)
-	require.NoError(t, err)
+func TestNotificationEgressRunnerSkipsNilSchedulers(t *testing.T) {
+	var starts atomic.Int32
+	runner := notificationEgressRunner{runners: []NamedScheduler{
+		{Name: "nil-runner", Scheduler: nil},
+		{Name: "active", Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
+			starts.Add(1)
+			return nil
+		})},
+	}}
 
-	parent, cancel := context.WithCancel(t.Context())
+	require.NoError(t, runner.Start(t.Context()))
+
+	assert.Equal(t, int32(1), starts.Load())
+}
+
+func TestNotificationEgressRunnerReturnsNilWhenNoActiveRunners(t *testing.T) {
+	runner := notificationEgressRunner{runners: []NamedScheduler{
+		{Name: "nil-runner", Scheduler: nil},
+	}}
+
+	done := make(chan error, 1)
+	go func() { done <- runner.Start(t.Context()) }()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start blocked with no active runners")
+	}
+}
+
+func TestNotificationEgressRunnerReturnsNilOnContextCancel(t *testing.T) {
+	started := make(chan struct{})
+	runner := notificationEgressRunner{runners: []NamedScheduler{
+		{Name: "long-running", Scheduler: runtimeAlarmSchedulerFunc(func(runnerCtx context.Context) error {
+			close(started)
+			<-runnerCtx.Done()
+			return nil
+		})},
+	}}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- runner.Start(ctx) }()
+
+	<-started
 	cancel()
 
-	runner := notificationEgressRunner{leaseEnabled: true}
-	runner.releaseLease(parent, lease)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not return after context cancel")
+	}
+}
 
-	assert.False(t, releaseSawCanceledContext)
+func TestNotificationEgressRunnerWrapsRunnerFailure(t *testing.T) {
+	sentinel := errors.New("runner boom")
+	runner := notificationEgressRunner{runners: []NamedScheduler{
+		{Name: "failing", Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error { return sentinel })},
+	}}
+
+	err := runner.Start(t.Context())
+
+	if err == nil {
+		t.Fatal("Start() error = nil, want wrapped runner failure")
+	}
+	require.ErrorIs(t, err, sentinel)
+	assert.Contains(t, err.Error(), "notification egress runner stopped")
 }
 
 type runtimeAlarmSchedulerFunc func(context.Context) error
