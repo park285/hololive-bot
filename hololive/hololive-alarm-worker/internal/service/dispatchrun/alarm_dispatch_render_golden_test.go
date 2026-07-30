@@ -65,6 +65,9 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	title := util.MarkdownNeutralize(goldenAlarmDispatchTitle(n))
 	url := resolveAlarmDispatchURL(n)
 	var b strings.Builder
+	if groupMinutesUntil < 0 {
+		b.WriteString("## ")
+	}
 	switch {
 	case goldenAlarmDispatchNotificationIsStarting(n):
 		fmt.Fprintf(&b, "🔴 **%s** 방송 시작", member)
@@ -75,15 +78,15 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	}
 	linkable := title != "" && url != "" && !strings.Contains(url, " | ")
 	if linkable {
-		fmt.Fprintf(&b, "\n- [%s](%s)", title, url)
+		fmt.Fprintf(&b, "\n[%s](%s)", title, url)
 	} else if title != "" {
-		fmt.Fprintf(&b, "\n- %s", title)
+		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, title)
 	}
 	if scheduleMessage := strings.TrimSpace(n.ScheduleChangeMessage); scheduleMessage != "" {
-		fmt.Fprintf(&b, "\n- %s", util.MarkdownNeutralize(scheduleMessage))
+		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(scheduleMessage))
 	}
 	if url != "" && !linkable {
-		fmt.Fprintf(&b, "\n- %s", url)
+		fmt.Fprintf(&b, "\n%s", url)
 	}
 	return b.String()
 }
