@@ -18,8 +18,7 @@ type Consumer interface {
 	MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
-	ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error
 	Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
 
@@ -27,8 +26,8 @@ type alarmDispatchQuarantineConsumer interface {
 	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error
 }
 
-type alarmDispatchSendingRetryConsumer interface {
-	ScheduleSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+type alarmDispatchSendingFailureConsumer interface {
+	RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error
 }
 
 type IdleWaiter interface {
@@ -181,9 +180,9 @@ func (r *Runner) dispatchKaringContentListGroup(ctx context.Context, group alarm
 
 func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
-	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(scheduleEnvelopes []domain.AlarmQueueEnvelope) error {
-		if err := r.consumer.ScheduleRetry(ctx, scheduleEnvelopes); err != nil {
-			return fmt.Errorf("schedule alarm dispatch retry: %w", err)
+	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []domain.AlarmQueueEnvelope) error {
+		if err := r.consumer.RouteFailures(ctx, retry, dlq); err != nil {
+			return fmt.Errorf("route alarm dispatch failure: %w", err)
 		}
 		return nil
 	})
@@ -193,24 +192,32 @@ func (r *Runner) finalizeDispatchFailure(
 	ctx context.Context,
 	retryEnvelopes []domain.AlarmQueueEnvelope,
 	dlqEnvelopes []domain.AlarmQueueEnvelope,
-	scheduleFn func(envelopes []domain.AlarmQueueEnvelope) error,
+	routeFn func(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error,
 ) error {
-	if err := scheduleFn(retryEnvelopes); err != nil {
-		return r.preserveAfterPersistenceFailure(ctx, retryEnvelopes, err)
+	routeErr := routeFn(retryEnvelopes, dlqEnvelopes)
+	releasable := dlqEnvelopes
+	if routeErr != nil {
+		unapplied, partial := unappliedFailureRoutingIDs(routeErr)
+		if !partial {
+			return r.preserveAfterPersistenceFailure(ctx, combineEnvelopes(retryEnvelopes, dlqEnvelopes), routeErr)
+		}
+		// 부분 적용의 미적용 행은 recovery/quarantine 경로 소유 — requeue로 덮어쓰지 않고,
+		// claim key는 실제 dlq로 전이된 부분집합만 해제한다.
+		releasable = envelopesExcludingIDs(dlqEnvelopes, unapplied)
 	}
-	if err := r.consumer.MoveToDLQ(ctx, dlqEnvelopes); err != nil {
-		return r.preserveAfterPersistenceFailure(ctx, dlqEnvelopes, fmt.Errorf("move alarm dispatch dlq: %w", err))
-	}
-	if err := r.consumer.ReleaseClaimKeys(ctx, claimKeysForAlarmDispatchEnvelopes(dlqEnvelopes)); err != nil {
+	if err := r.consumer.ReleaseClaimKeys(ctx, claimKeysForAlarmDispatchEnvelopes(releasable)); err != nil {
+		if routeErr != nil {
+			return fmt.Errorf("%w: release alarm dispatch dlq claim keys: %w", routeErr, err)
+		}
 		return fmt.Errorf("release alarm dispatch dlq claim keys: %w", err)
 	}
-	return nil
+	return routeErr
 }
 
-// MarkSending 에러 시 UPDATE는 이미 커밋된 뒤라 'sending' 잔류 행은 leased 전용 ScheduleRetry로
-// 복원 불가 — status IN ('leased','sending')을 덮는 ScheduleSendingRetry로 보상한다(발송 전이라 중복 없음).
+// MarkSending 에러 시 UPDATE는 이미 커밋된 뒤라 'sending' 잔류 행은 leased 전용 RouteFailures로
+// 복원 불가 — status IN ('leased','sending')을 덮는 RouteSendingFailures로 보상한다(발송 전이라 중복 없음).
 func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	if _, ok := r.consumer.(alarmDispatchSendingRetryConsumer); !ok {
+	if _, ok := r.consumer.(alarmDispatchSendingFailureConsumer); !ok {
 		return fmt.Errorf("mark alarm dispatch sending: %w", cause)
 	}
 	return r.persistSendingRetry(ctx, envelopes, cause)
@@ -236,14 +243,14 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []doma
 }
 
 func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	consumer, ok := r.consumer.(alarmDispatchSendingRetryConsumer)
+	consumer, ok := r.consumer.(alarmDispatchSendingFailureConsumer)
 	if !ok {
 		return r.persistPreSendFailure(ctx, envelopes, cause)
 	}
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
-	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(scheduleEnvelopes []domain.AlarmQueueEnvelope) error {
-		if err := consumer.ScheduleSendingRetry(ctx, scheduleEnvelopes); err != nil {
-			return fmt.Errorf("schedule alarm dispatch sending retry: %w", err)
+	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []domain.AlarmQueueEnvelope) error {
+		if err := consumer.RouteSendingFailures(ctx, retry, dlq); err != nil {
+			return fmt.Errorf("route alarm dispatch sending failure: %w", err)
 		}
 		return nil
 	})
@@ -280,6 +287,43 @@ func claimKeysForAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) [
 		claimKeys = append(claimKeys, envelopes[i].ClaimKeys...)
 	}
 	return claimKeys
+}
+
+type partialFailureRouting interface {
+	error
+	UnappliedDeliveryIDs() []int64
+}
+
+func unappliedFailureRoutingIDs(err error) ([]int64, bool) {
+	var partial partialFailureRouting
+	if !errors.As(err, &partial) {
+		return nil, false
+	}
+	return partial.UnappliedDeliveryIDs(), true
+}
+
+func combineEnvelopes(a, b []domain.AlarmQueueEnvelope) []domain.AlarmQueueEnvelope {
+	combined := make([]domain.AlarmQueueEnvelope, 0, len(a)+len(b))
+	combined = append(combined, a...)
+	return append(combined, b...)
+}
+
+func envelopesExcludingIDs(envelopes []domain.AlarmQueueEnvelope, ids []int64) []domain.AlarmQueueEnvelope {
+	if len(ids) == 0 {
+		return envelopes
+	}
+	excluded := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		excluded[id] = struct{}{}
+	}
+	kept := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	for i := range envelopes {
+		if _, ok := excluded[envelopes[i].DispatchOutboxID]; ok {
+			continue
+		}
+		kept = append(kept, envelopes[i])
+	}
+	return kept
 }
 
 func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) (retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) {

@@ -94,11 +94,15 @@ func processedPublishBatchResult(result *PublishBatchResult) PublishBatchResult 
 	return *result
 }
 
-type RetryUpdate struct {
+// FailureUpdate의 AttemptCount는 기대 next 값이다. SQL CAS
+// (input.attempt_count = attempt_count + 1)와 일치하지 않는 행은 미적용으로 남는다.
+// NextAttemptAt은 TargetStatus가 StatusRetry일 때만 기록된다.
+type FailureUpdate struct {
 	ID            int64     `json:"id"`
 	AttemptCount  int       `json:"attempt_count"`
 	NextAttemptAt time.Time `json:"next_attempt_at"`
 	Error         string    `json:"error"`
+	TargetStatus  Status    `json:"target_status"`
 }
 
 type TerminalUpdate struct {
@@ -117,8 +121,8 @@ type Repository interface {
 	LoadEventsByID(ctx context.Context, eventIDs []int64) (map[int64]EventRecord, error)
 	MarkSending(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error
 	MarkSent(ctx context.Context, ids []int64, workerID string) error
-	ScheduleRetry(ctx context.Context, updates []RetryUpdate, workerID string) error
-	ScheduleSendingRetry(ctx context.Context, updates []RetryUpdate, workerID string) error
+	RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error
+	RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error
 	MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error
 	Quarantine(ctx context.Context, updates []TerminalUpdate, workerID string) error
 	ReleaseLeased(ctx context.Context, ids []int64, workerID string) error

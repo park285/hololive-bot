@@ -94,7 +94,7 @@ func registerPGDispatchMetrics() {
 	alarmDispatchPGTransitionPartialTotal = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "alarm_dispatch_pg_transition_partial_total",
-			Help: "Total PG dispatch mark-sending/mark-sent operations where RowsAffected < expected (concurrent worker overlap or quarantine preemption).",
+			Help: "Total PG dispatch mark-sent/route-sending-failures operations where applied rows < expected (concurrent worker overlap or quarantine preemption).",
 		},
 	)
 	alarmDispatchPGClaimReleasedTotal = promauto.NewCounter(
