@@ -61,6 +61,7 @@ type BotConfig struct {
 	CalendarImageCacheDir string
 	CalendarEntryCacheTTL time.Duration
 	SeeMoreFold           bool
+	MarkdownReplies       bool
 }
 
 type ServicesConfig struct {

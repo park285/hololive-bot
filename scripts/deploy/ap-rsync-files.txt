@@ -660,6 +660,7 @@ hololive/hololive-shared/pkg/testutil/cache.go
 hololive/hololive-shared/pkg/util/breaker.go
 hololive/hololive-shared/pkg/util/instance.go
 hololive/hololive-shared/pkg/util/kakao.go
+hololive/hololive-shared/pkg/util/markdown.go
 hololive/hololive-shared/pkg/util/math.go
 hololive/hololive-shared/pkg/util/string.go
 hololive/hololive-shared/pkg/util/time.go
