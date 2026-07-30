@@ -23,6 +23,7 @@ package template
 import (
 	"bytes"
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -410,6 +411,22 @@ func TestSeedTemplates_KnownSingleURLsUseLabelLinks(t *testing.T) {
 			},
 			rawURLs: []string{"https://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg"},
 		},
+		{
+			name: "alarm dispatch link",
+			key:  domain.TemplateKeyAlarmDispatchNotification,
+			wantLines: []string{
+				"- [마인크래프트 건축](https://youtu.be/stream123)",
+			},
+			rawURLs: []string{"https://youtu.be/stream123"},
+		},
+		{
+			name: "alarm dispatch group link",
+			key:  domain.TemplateKeyAlarmDispatchNotificationGroup,
+			wantLines: []string{
+				"- [마인크래프트 건축](https://youtu.be/stream123)",
+			},
+			rawURLs: []string{"https://youtu.be/stream123"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -427,6 +444,101 @@ func TestSeedTemplates_KnownSingleURLsUseLabelLinks(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSeedTemplates_AlarmDispatchPreservesRawURLFallbacks(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	body := seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotification)
+	base := map[string]any{
+		"IsStarting":      false,
+		"IsScheduled":     false,
+		"MemberName":      "비비",
+		"MinutesUntil":    5,
+		"ScheduleMessage": "",
+	}
+
+	for _, tt := range []struct {
+		name  string
+		title string
+		url   string
+		want  []string
+		avoid []string
+	}{
+		{
+			name:  "integrated stream",
+			title: "동시송출 방송",
+			url:   "https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
+			want: []string{
+				"- 동시송출 방송",
+				"- https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
+			},
+		},
+		{
+			name: "url only",
+			url:  "https://youtube.com/watch?v=url-only",
+			want: []string{"- https://youtube.com/watch?v=url-only"},
+		},
+		{
+			name:  "unexpected host",
+			title: "의심 링크",
+			url:   "https://evil.example/watch?v=malicious",
+			want:  []string{"- 의심 링크", "- https://evil.example/watch?v=malicious"},
+			avoid: []string{"[의심 링크]("},
+		},
+		{
+			name:  "markdown injection",
+			title: "위험 링크",
+			url:   "https://www.youtube.com/watch?v=bad)\n[bad](https://evil.example)",
+			want:  []string{"- 위험 링크"},
+			avoid: []string{"[위험 링크](", "[bad]("},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := maps.Clone(base)
+			data["Title"] = tt.title
+			data["URL"] = tt.url
+			out := renderSeedBody(t, domain.TemplateKeyAlarmDispatchNotification, body, data)
+			for _, want := range tt.want {
+				if !hasSeedLine(out, want) {
+					t.Errorf("ALARM_DISPATCH_NOTIFICATION: fallback line %q 없음: %q", want, out)
+				}
+			}
+			for _, avoid := range tt.avoid {
+				if strings.Contains(out, avoid) {
+					t.Errorf("ALARM_DISPATCH_NOTIFICATION: unsafe markdown %q 노출: %q", avoid, out)
+				}
+			}
+		})
+	}
+}
+
+func TestSeedTemplates_AlarmDispatchGroupPreservesCompositeURLs(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	body := seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotificationGroup)
+	out := renderSeedBody(t, domain.TemplateKeyAlarmDispatchNotificationGroup, body, map[string]any{
+		"IsStarting":   false,
+		"MinutesUntil": 5,
+		"Entries": []map[string]any{
+			{
+				"IsStarting":      false,
+				"IsScheduled":     false,
+				"MemberName":      "비비",
+				"MinutesUntil":    5,
+				"Title":           "동시송출 방송",
+				"ScheduleMessage": "",
+				"URL":             "https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
+			},
+		},
+	})
+
+	for _, want := range []string{
+		"- 동시송출 방송",
+		"- https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
+	} {
+		if !hasSeedLine(out, want) {
+			t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: composite line %q 없음: %q", want, out)
+		}
 	}
 }
 
