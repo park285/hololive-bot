@@ -415,7 +415,8 @@ func TestSeedTemplates_KnownSingleURLsUseLabelLinks(t *testing.T) {
 			name: "alarm dispatch link",
 			key:  domain.TemplateKeyAlarmDispatchNotification,
 			wantLines: []string{
-				"- [마인크래프트 건축](https://youtu.be/stream123)",
+				"## ⏰ **사쿠라 미코** 방송 5분 전",
+				"[마인크래프트 건축](https://youtu.be/stream123)",
 			},
 			rawURLs: []string{"https://youtu.be/stream123"},
 		},
@@ -423,7 +424,8 @@ func TestSeedTemplates_KnownSingleURLsUseLabelLinks(t *testing.T) {
 			name: "alarm dispatch group link",
 			key:  domain.TemplateKeyAlarmDispatchNotificationGroup,
 			wantLines: []string{
-				"- [마인크래프트 건축](https://youtu.be/stream123)",
+				"## ⏰ 방송 5분 전",
+				"[마인크래프트 건축](https://youtu.be/stream123)",
 			},
 			rawURLs: []string{"https://youtu.be/stream123"},
 		},
@@ -470,28 +472,55 @@ func TestSeedTemplates_AlarmDispatchPreservesRawURLFallbacks(t *testing.T) {
 			title: "동시송출 방송",
 			url:   "https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
 			want: []string{
-				"- 동시송출 방송",
-				"- https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
+				util.KakaoZeroWidthSpace + "동시송출 방송",
+				"https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
 			},
 		},
 		{
 			name: "url only",
 			url:  "https://youtube.com/watch?v=url-only",
-			want: []string{"- https://youtube.com/watch?v=url-only"},
+			want: []string{"https://youtube.com/watch?v=url-only"},
 		},
 		{
 			name:  "unexpected host",
 			title: "의심 링크",
 			url:   "https://evil.example/watch?v=malicious",
-			want:  []string{"- 의심 링크", "- https://evil.example/watch?v=malicious"},
+			want: []string{
+				util.KakaoZeroWidthSpace + "의심 링크",
+				util.KakaoZeroWidthSpace + "https://evil.example/watch?v=malicious",
+			},
 			avoid: []string{"[의심 링크]("},
 		},
 		{
 			name:  "markdown injection",
 			title: "위험 링크",
 			url:   "https://www.youtube.com/watch?v=bad)\n[bad](https://evil.example)",
-			want:  []string{"- 위험 링크"},
+			want:  []string{util.KakaoZeroWidthSpace + "위험 링크"},
 			avoid: []string{"[위험 링크](", "[bad]("},
+		},
+		{
+			name:  "dash-prefixed title",
+			title: "- 목록형 제목",
+			want:  []string{util.KakaoZeroWidthSpace + "- 목록형 제목"},
+			avoid: []string{"\n- 목록형 제목"},
+		},
+		{
+			name:  "plus-prefixed title",
+			title: "+ 목록형 제목",
+			want:  []string{util.KakaoZeroWidthSpace + "+ 목록형 제목"},
+			avoid: []string{"\n+ 목록형 제목"},
+		},
+		{
+			name:  "quote-prefixed title",
+			title: "> 인용형 제목",
+			want:  []string{util.KakaoZeroWidthSpace + "> 인용형 제목"},
+			avoid: []string{"\n> 인용형 제목"},
+		},
+		{
+			name:  "ordered-list-prefixed title",
+			title: "1. 목록형 제목",
+			want:  []string{util.KakaoZeroWidthSpace + "1. 목록형 제목"},
+			avoid: []string{"\n1. 목록형 제목"},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -525,7 +554,7 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesCompositeURLs(t *testing.T) {
 				"IsScheduled":     false,
 				"MemberName":      "비비",
 				"MinutesUntil":    5,
-				"Title":           "동시송출 방송",
+				"Title":           "- 동시송출 방송",
 				"ScheduleMessage": "",
 				"URL":             "https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
 			},
@@ -533,8 +562,8 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesCompositeURLs(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"- 동시송출 방송",
-		"- https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
+		util.KakaoZeroWidthSpace + "- 동시송출 방송",
+		"https://youtube.com/watch?v=integrated | https://chzzk.naver.com/live/integrated",
 	} {
 		if !hasSeedLine(out, want) {
 			t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: composite line %q 없음: %q", want, out)

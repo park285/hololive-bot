@@ -810,8 +810,8 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 	require.NoError(t, err)
 	assert.Equal(t, "## ⏰ 방송 1분 전\n\n"+
-		"⏰ **Member1** 방송 3분 전\n- [Title1](https://youtube.com/watch?v=abc)\n\n"+
-		"⏰ **Member2** 방송 예정\n- [Title2](https://youtube.com/watch?v=def)", message)
+		"⏰ **Member1** 방송 3분 전\n[Title1](https://youtube.com/watch?v=abc)\n\n"+
+		"⏰ **Member2** 방송 예정\n[Title2](https://youtube.com/watch?v=def)", message)
 }
 
 func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t *testing.T) {
@@ -838,8 +838,8 @@ func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t 
 
 	require.NoError(t, err)
 	assert.Equal(t, "## 🔴 방송 시작\n\n"+
-		"🔴 **Member1** 방송 시작\n- [Title1](https://youtube.com/watch?v=abc)\n\n"+
-		"🔴 **Member2** 방송 시작\n- [Title2](https://youtube.com/watch?v=def)", message)
+		"🔴 **Member1** 방송 시작\n[Title1](https://youtube.com/watch?v=abc)\n\n"+
+		"🔴 **Member2** 방송 시작\n[Title2](https://youtube.com/watch?v=def)", message)
 }
 
 func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader(t *testing.T) {
@@ -866,8 +866,8 @@ func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader
 
 	require.NoError(t, err)
 	assert.Equal(t, "## ⏰ 방송 5분 전\n\n"+
-		"🔴 **LiveMember** 방송 시작\n- [Live Title](https://youtube.com/watch?v=live)\n\n"+
-		"⏰ **UpcomingMember** 방송 예정\n- [Upcoming Title](https://youtube.com/watch?v=upcoming)", message)
+		"🔴 **LiveMember** 방송 시작\n[Live Title](https://youtube.com/watch?v=live)\n\n"+
+		"⏰ **UpcomingMember** 방송 예정\n[Upcoming Title](https://youtube.com/watch?v=upcoming)", message)
 }
 
 func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(t *testing.T) {
@@ -884,7 +884,7 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(
 
 	require.NoError(t, err)
 	assert.Equal(t,
-		"🔴 **Member** 방송 시작\n- [Live Title](https://youtube.com/watch?v=live-1)",
+		"## 🔴 **Member** 방송 시작\n[Live Title](https://youtube.com/watch?v=live-1)",
 		got,
 	)
 }
@@ -901,7 +901,7 @@ func TestRenderAlarmDispatchNotificationLiveStatusUsesStartingMessage(t *testing
 
 	require.NoError(t, err)
 	assert.Equal(t,
-		"🔴 **Member** 방송 시작\n- [Live Title](https://youtube.com/watch?v=live-status-1)",
+		"## 🔴 **Member** 방송 시작\n[Live Title](https://youtube.com/watch?v=live-status-1)",
 		got,
 	)
 }
@@ -918,7 +918,7 @@ func TestRenderAlarmDispatchNotificationUpcomingKeepsPreliveMessage(t *testing.T
 
 	require.NoError(t, err)
 	assert.Equal(t,
-		"⏰ **Member** 방송 5분 전\n- [Upcoming Title](https://youtube.com/watch?v=upcoming-1)",
+		"## ⏰ **Member** 방송 5분 전\n[Upcoming Title](https://youtube.com/watch?v=upcoming-1)",
 		got,
 	)
 }
@@ -943,7 +943,7 @@ func TestRenderAlarmDispatchNotificationLinksSingleStreamTitle(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t,
-		fmt.Sprintf("⏰ **비비** 방송 5분 전\n- [%s](%s)", util.MarkdownNeutralize(title), streamURL),
+		fmt.Sprintf("## ⏰ **비비** 방송 5분 전\n[%s](%s)", util.MarkdownNeutralize(title), streamURL),
 		got,
 	)
 }
@@ -961,7 +961,8 @@ func TestRenderAlarmDispatchNotificationKeepsIntegratedURLsReadable(t *testing.T
 
 	require.NoError(t, err)
 	assert.Equal(t,
-		"⏰ **비비** 방송 5분 전\n- 동시송출 방송\n- https://youtube.com/watch?v=integrated-1 | https://chzzk.naver.com/live/integrated-1",
+		"## ⏰ **비비** 방송 5분 전\n"+util.KakaoZeroWidthSpace+
+			"동시송출 방송\nhttps://youtube.com/watch?v=integrated-1 | https://chzzk.naver.com/live/integrated-1",
 		got,
 	)
 }
@@ -978,7 +979,7 @@ func TestRenderAlarmDispatchNotificationLinksDirectPlatformTitles(t *testing.T) 
 				stream.IsTwitchOnly = true
 				stream.TwitchLiveURL = "https://www.twitch.tv/holomember"
 			},
-			want: "⏰ **비비** 방송 5분 전\n- [플랫폼 방송](https://www.twitch.tv/holomember)",
+			want: "## ⏰ **비비** 방송 5분 전\n[플랫폼 방송](https://www.twitch.tv/holomember)",
 		},
 		{
 			name: "chzzk",
@@ -986,7 +987,7 @@ func TestRenderAlarmDispatchNotificationLinksDirectPlatformTitles(t *testing.T) 
 				stream.IsChzzkOnly = true
 				stream.ChzzkLiveURL = "https://chzzk.naver.com/live/abcdef"
 			},
-			want: "⏰ **비비** 방송 5분 전\n- [플랫폼 방송](https://chzzk.naver.com/live/abcdef)",
+			want: "## ⏰ **비비** 방송 5분 전\n[플랫폼 방송](https://chzzk.naver.com/live/abcdef)",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
