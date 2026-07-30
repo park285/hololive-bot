@@ -45,7 +45,7 @@ func TestPgxRepositoryMoveToDLQ_AcceptsSendingRows(t *testing.T) {
 	err := repository.MoveToDLQ(ctx, []TerminalUpdate{{ID: record.ID, Error: "sending retry exhausted"}}, workerID)
 
 	require.NoError(t, err,
-		"persistSendingRetry/MarkSending 보상의 attempt 소진 분기는 'sending' 행을 DLQ로 옮길 수 있어야 한다")
+		"MoveToDLQ의 status IN ('leased','sending') 필터는 'sending' 행도 DLQ로 옮길 수 있어야 한다")
 	var status string
 	require.NoError(t, pool.QueryRow(ctx,
 		"SELECT status FROM alarm_dispatch_deliveries WHERE id = $1", record.ID,

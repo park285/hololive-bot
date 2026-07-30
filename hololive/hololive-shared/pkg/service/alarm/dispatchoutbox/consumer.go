@@ -168,8 +168,9 @@ func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 	envelope.ClaimKeys = record.ClaimKeys
 	if record.AttemptCount > 0 {
 		envelope.Retry = &domain.AlarmQueueRetryMetadata{
-			Attempt:   record.AttemptCount,
-			LastError: record.Error,
+			Attempt:       record.AttemptCount,
+			LastError:     record.Error,
+			LastErrorCode: record.ErrorCode,
 		}
 	}
 }
@@ -198,7 +199,8 @@ func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error
 }
 
 func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError, action string) error {
-	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{{ID: id, Error: terminalError}}, c.workerID); err != nil {
+	update := TerminalUpdate{ID: id, Error: sanitizeStoredError(terminalError), ErrorCode: ErrorCodePayload}
+	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{update}, c.workerID); err != nil {
 		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
 	}
 	observePGDLQ(1)
@@ -254,86 +256,74 @@ func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQ
 	return nil
 }
 
-func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	updates := make([]RetryUpdate, 0, len(envelopes))
+func (c *Consumer) RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
+	if err := c.repository.RouteFailures(ctx, updates, c.workerID); err != nil {
+		return err
+	}
+	observePGRetryScheduled(retryCount)
+	observePGDLQ(dlqCount)
+	return nil
+}
+
+func (c *Consumer) RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
+	if err := c.repository.RouteSendingFailures(ctx, updates, c.workerID); err != nil {
+		return err
+	}
+	observePGRetryScheduled(retryCount)
+	observePGDLQ(dlqCount)
+	return nil
+}
+
+func failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) (updates []FailureUpdate, retryCount, dlqCount int) {
 	now := time.Now().UTC()
+	updates = make([]FailureUpdate, 0, len(retryEnvelopes)+len(dlqEnvelopes))
+	updates = appendFailureUpdates(updates, retryEnvelopes, StatusRetry, now)
+	retryCount = len(updates)
+	updates = appendFailureUpdates(updates, dlqEnvelopes, StatusDLQ, now)
+	return updates, retryCount, len(updates) - retryCount
+}
+
+func appendFailureUpdates(updates []FailureUpdate, envelopes []domain.AlarmQueueEnvelope, target Status, now time.Time) []FailureUpdate {
 	for i := range envelopes {
-		update, ok := retryUpdateFromEnvelope(&envelopes[i], now)
+		update, ok := failureUpdateFromEnvelope(&envelopes[i], now, target)
 		if !ok {
 			continue
 		}
 		updates = append(updates, update)
 	}
-	if err := c.repository.ScheduleRetry(ctx, updates, c.workerID); err != nil {
-		return err
-	}
-	observePGRetryScheduled(len(updates))
-	return nil
+	return updates
 }
 
-func (c *Consumer) ScheduleSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	updates := make([]RetryUpdate, 0, len(envelopes))
-	now := time.Now().UTC()
-	for i := range envelopes {
-		update, ok := retryUpdateFromEnvelope(&envelopes[i], now)
-		if !ok {
-			continue
-		}
-		updates = append(updates, update)
-	}
-	if err := c.repository.ScheduleSendingRetry(ctx, updates, c.workerID); err != nil {
-		return err
-	}
-	observePGRetryScheduled(len(updates))
-	return nil
-}
-
-func retryUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, now time.Time) (RetryUpdate, bool) {
+func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, now time.Time, target Status) (FailureUpdate, bool) {
 	if envelope.DispatchOutboxID <= 0 {
-		return RetryUpdate{}, false
+		return FailureUpdate{}, false
 	}
-	update := RetryUpdate{ID: envelope.DispatchOutboxID, NextAttemptAt: now}
+	update := FailureUpdate{ID: envelope.DispatchOutboxID, NextAttemptAt: now, TargetStatus: target}
 	if envelope.Retry == nil {
 		return update, true
 	}
 	update.AttemptCount = envelope.Retry.Attempt
-	update.Error = envelope.Retry.LastError
+	update.Error = sanitizeStoredError(envelope.Retry.LastError)
+	update.ErrorCode = envelope.Retry.LastErrorCode
 	if parsed, err := time.Parse(time.RFC3339Nano, envelope.Retry.NextVisibleAt); err == nil {
 		update.NextAttemptAt = parsed.UTC()
 	}
 	return update, true
 }
 
-func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	updates := make([]TerminalUpdate, 0, len(envelopes))
-	for i := range envelopes {
-		envelope := &envelopes[i]
-		if envelope.DispatchOutboxID <= 0 {
-			continue
-		}
-		update := TerminalUpdate{ID: envelope.DispatchOutboxID}
-		if envelope.Retry != nil {
-			update.Error = envelope.Retry.LastError
-		}
-		updates = append(updates, update)
-	}
-	if err := c.repository.MoveToDLQ(ctx, updates, c.workerID); err != nil {
-		return err
-	}
-	observePGDLQ(len(updates))
-	return nil
-}
-
 func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	return c.ScheduleRetry(ctx, envelopes)
+	return c.RouteFailures(ctx, envelopes, nil)
 }
 
-func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
+func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	message, code := storedErrorFromCause(cause)
 	updates := make([]TerminalUpdate, 0, len(envelopes))
 	for i := range envelopes {
 		envelope := &envelopes[i]
 		if envelope.DispatchOutboxID > 0 {
-			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: reason})
+			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: message, ErrorCode: code})
 		}
 	}
 	if err := c.repository.Quarantine(ctx, updates, c.workerID); err != nil {

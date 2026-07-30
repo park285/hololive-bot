@@ -885,6 +885,7 @@ github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/k
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/util
+github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/park285/iris-client-go/iris
 github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/alarm/keys -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/alarm/keys -> github.com/park285/shared-go/pkg/stringutil

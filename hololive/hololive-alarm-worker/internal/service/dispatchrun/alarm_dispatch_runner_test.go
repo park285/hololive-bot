@@ -30,8 +30,7 @@ type alarmDispatchRunnerTestConsumer struct {
 	releasedClaims    []string
 	markDispatchedErr error
 	quarantineErr     error
-	scheduleRetryErr  error
-	moveDLQErr        error
+	routeFailuresErr  error
 }
 
 func (c *alarmDispatchRunnerTestConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
@@ -59,9 +58,11 @@ func (c *alarmDispatchRunnerTestConsumer) MarkDispatched(_ context.Context, enve
 	return c.markDispatchedErr
 }
 
-func (c *alarmDispatchRunnerTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
+func (c *alarmDispatchRunnerTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	c.quarantined = append(c.quarantined, envelopes...)
-	c.quarantineReason = reason
+	if cause != nil {
+		c.quarantineReason = cause.Error()
+	}
 	return c.quarantineErr
 }
 
@@ -70,14 +71,10 @@ func (c *alarmDispatchRunnerTestConsumer) ReleaseClaimKeys(_ context.Context, cl
 	return nil
 }
 
-func (c *alarmDispatchRunnerTestConsumer) ScheduleRetry(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.scheduledRetry = append(c.scheduledRetry, envelopes...)
-	return c.scheduleRetryErr
-}
-
-func (c *alarmDispatchRunnerTestConsumer) MoveToDLQ(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.movedDLQ = append(c.movedDLQ, envelopes...)
-	return c.moveDLQErr
+func (c *alarmDispatchRunnerTestConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+	c.scheduledRetry = append(c.scheduledRetry, retryEnvelopes...)
+	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
+	return c.routeFailuresErr
 }
 
 func (c *alarmDispatchRunnerTestConsumer) Requeue(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
@@ -536,6 +533,7 @@ func TestAlarmDispatchRunnerRunOnceSchedulesRetryOnSendFailure(t *testing.T) {
 	require.NotNil(t, consumer.scheduledRetry[0].Retry)
 	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
 	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, errAlarmDispatchRunnerTestSend.Error())
+	assert.Equal(t, dispatchoutbox.ErrorCodeUnknown, consumer.scheduledRetry[0].Retry.LastErrorCode)
 	assert.Empty(t, consumer.markDispatched)
 	assert.Empty(t, consumer.movedDLQ)
 }
@@ -558,8 +556,8 @@ func TestAlarmDispatchRunnerQuarantinesPGSendFailureAfterMarkSending(t *testing.
 }
 
 func TestAlarmDispatchRunnerRetriesKaringBadGatewayAfterMarkSending(t *testing.T) {
-	// alarmDispatchRunnerTestConsumer는 alarmDispatchSendingRetryConsumer를 구현하지 않으므로
-	// persistSendingRetry가 persistPreSendFailure로 폴백하여 ScheduleRetry를 호출한다.
+	// alarmDispatchRunnerTestConsumer는 alarmDispatchSendingFailureConsumer를 구현하지 않으므로
+	// persistSendingRetry가 persistPreSendFailure로 폴백하여 RouteFailures를 호출한다.
 	karingErr := fmt.Errorf("iris send karing content list: %w", &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"})
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
@@ -574,6 +572,7 @@ func TestAlarmDispatchRunnerRetriesKaringBadGatewayAfterMarkSending(t *testing.T
 	require.NotNil(t, consumer.scheduledRetry[0].Retry)
 	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
 	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, "returned 502")
+	assert.Equal(t, dispatchoutbox.ErrorCodeHTTP5xx, consumer.scheduledRetry[0].Retry.LastErrorCode)
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markDispatched)
@@ -960,8 +959,7 @@ type alarmDispatchRunnerLegacyTestConsumer struct {
 	requeued          []domain.AlarmQueueEnvelope
 	releasedClaims    []string
 	markDispatchedErr error
-	scheduleRetryErr  error
-	moveDLQErr        error
+	routeFailuresErr  error
 }
 
 func (c *alarmDispatchRunnerLegacyTestConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
@@ -988,14 +986,10 @@ func (c *alarmDispatchRunnerLegacyTestConsumer) ReleaseClaimKeys(_ context.Conte
 	return nil
 }
 
-func (c *alarmDispatchRunnerLegacyTestConsumer) ScheduleRetry(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.scheduledRetry = append(c.scheduledRetry, envelopes...)
-	return c.scheduleRetryErr
-}
-
-func (c *alarmDispatchRunnerLegacyTestConsumer) MoveToDLQ(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.movedDLQ = append(c.movedDLQ, envelopes...)
-	return c.moveDLQErr
+func (c *alarmDispatchRunnerLegacyTestConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+	c.scheduledRetry = append(c.scheduledRetry, retryEnvelopes...)
+	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
+	return c.routeFailuresErr
 }
 
 func (c *alarmDispatchRunnerLegacyTestConsumer) Requeue(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {

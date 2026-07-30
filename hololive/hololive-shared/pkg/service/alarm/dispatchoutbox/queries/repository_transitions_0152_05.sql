@@ -6,6 +6,7 @@
 			locked_at=NULL,
 			lock_expires_at=NULL,
 			last_error='lease released before external send',
+			last_error_code='lease_released',
 			updated_at=NOW()
 		WHERE id = ANY($1)
 		  AND status = 'leased'

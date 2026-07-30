@@ -20,15 +20,25 @@ type PgxRepository struct {
 	logger *slog.Logger
 }
 
-// PartialTransitionError는 외부 발송 뒤 ownership fence가 일부 행과 일치하지 않았음을 나타낸다.
+// PartialTransitionError는 ownership fence 또는 attempt CAS가 일부 행과 일치하지
+// 않았음을 나타낸다. UnappliedIDs의 행은 recovery/quarantine 경로 소유이므로
+// 호출자가 재시도하거나 덮어쓰면 안 된다.
 type PartialTransitionError struct {
-	Action   string
-	Updated  int64
-	Expected int64
+	Action       string
+	Updated      int64
+	Expected     int64
+	UnappliedIDs []int64
 }
 
 func (e *PartialTransitionError) Error() string {
+	if len(e.UnappliedIDs) > 0 {
+		return fmt.Sprintf("%s: partial transition: updated %d of %d rows, unapplied ids %v", e.Action, e.Updated, e.Expected, e.UnappliedIDs)
+	}
 	return fmt.Sprintf("%s: ownership changed after external send: updated %d of %d rows", e.Action, e.Updated, e.Expected)
+}
+
+func (e *PartialTransitionError) UnappliedDeliveryIDs() []int64 {
+	return e.UnappliedIDs
 }
 
 func NewPgxRepository(postgres database.Client, logger *slog.Logger) *PgxRepository {
@@ -77,6 +87,7 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 		&record.DLQAt,
 		&record.QuarantinedAt,
 		&record.CancelledAt,
+		&record.ErrorCode,
 		&record.Error,
 		&record.CreatedAt,
 		&record.UpdatedAt,

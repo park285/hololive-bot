@@ -30,6 +30,14 @@ type AlarmQueueEnvelope struct {
     SourceKind    domain.AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
     YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
 }
+
+type AlarmQueueRetryMetadata struct {
+    Attempt       int    `json:"attempt,omitempty"`
+    RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
+    NextVisibleAt string `json:"next_visible_at,omitempty"`
+    LastError     string `json:"last_error,omitempty"`
+    LastErrorCode string `json:"last_error_code,omitempty"`
+}
 ```
 
 Consumer behavior:
@@ -41,7 +49,8 @@ Consumer behavior:
 - Invalid delayed retry wrapper payload is preserved raw in `alarm:dispatch:dlq`.
 - `MoveToDLQ` preserves original legacy raw payload when available.
 - Retry scheduling stores wrapped members in `alarm:dispatch:retry`.
-- Retry metadata fields are `attempt`, `retry_after_ms`, `next_visible_at`, and `last_error`; consumers must round-trip unknown envelope fields when possible.
+- Retry metadata fields are `attempt`, `retry_after_ms`, `next_visible_at`, `last_error`, and optional `last_error_code`; consumers must round-trip unknown envelope fields when possible.
+- `last_error_code` values are `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, `lease_expired`, `stale_sending`, and `lease_released`.
 
 ## Settings Pub/Sub
 

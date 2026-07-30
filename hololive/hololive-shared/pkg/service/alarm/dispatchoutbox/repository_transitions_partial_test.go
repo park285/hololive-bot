@@ -1,7 +1,9 @@
 package dispatchoutbox
 
 import (
+	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -110,5 +112,72 @@ func requireNoError(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRouteFailures_ValidatesTargetStatusBeforeSQL(t *testing.T) {
+	t.Parallel()
+
+	repository := &PgxRepository{}
+	err := repository.RouteFailures(context.Background(), []FailureUpdate{
+		{ID: 5, AttemptCount: 1, TargetStatus: StatusSending},
+	}, "worker-1")
+	if err == nil || !strings.Contains(err.Error(), "unsupported target status") {
+		t.Fatalf("RouteFailures() error = %v, want unsupported target status rejection", err)
+	}
+
+	requireNoError(t, repository.RouteFailures(context.Background(), nil, "worker-1"))
+	requireNoError(t, repository.RouteSendingFailures(context.Background(), nil, "worker-1"))
+}
+
+func TestPartialTransitionErrorExposesUnappliedIDs(t *testing.T) {
+	t.Parallel()
+
+	partialErr := &PartialTransitionError{
+		Action:       "route dispatch delivery failures",
+		Updated:      1,
+		Expected:     3,
+		UnappliedIDs: []int64{7, 9},
+	}
+
+	var exposed interface{ UnappliedDeliveryIDs() []int64 }
+	if !errors.As(error(partialErr), &exposed) {
+		t.Fatalf("PartialTransitionError must expose UnappliedDeliveryIDs via errors.As")
+	}
+	if got := exposed.UnappliedDeliveryIDs(); len(got) != 2 || got[0] != 7 || got[1] != 9 {
+		t.Fatalf("UnappliedDeliveryIDs() = %v, want [7 9]", got)
+	}
+	if !strings.Contains(partialErr.Error(), "unapplied ids [7 9]") {
+		t.Fatalf("Error() = %q, want unapplied ids in message", partialErr.Error())
+	}
+}
+
+func TestUnappliedFailureIDsPreservesInputOrder(t *testing.T) {
+	t.Parallel()
+
+	updates := []FailureUpdate{{ID: 3}, {ID: 1}, {ID: 2}}
+	got := unappliedFailureIDs(updates, []int64{1})
+	if len(got) != 2 || got[0] != 3 || got[1] != 2 {
+		t.Fatalf("unappliedFailureIDs() = %v, want [3 2]", got)
+	}
+}
+
+func TestPartialFailureRoutingError_MetricOnlyOnPostSendVariant(t *testing.T) {
+	repository := &PgxRepository{}
+	updates := []FailureUpdate{{ID: 1}, {ID: 2}}
+	before := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal)
+
+	if err := repository.partialFailureRoutingError(updates, []int64{1}, "route dispatch delivery failures", false); err == nil {
+		t.Fatal("pre-send partial routing error = nil")
+	}
+	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before {
+		t.Errorf("pre-send variant incremented transition_partial: got %v, want %v", got, before)
+	}
+
+	if err := repository.partialFailureRoutingError(updates, []int64{1}, "route dispatch delivery sending failures", true); err == nil {
+		t.Fatal("post-send partial routing error = nil")
+	}
+	if got := testutil.ToFloat64(alarmDispatchPGTransitionPartialTotal); got != before+1 {
+		t.Errorf("post-send variant did not increment transition_partial: got %v, want %v", got, before+1)
 	}
 }
