@@ -115,3 +115,4 @@
 115 119_alarm_dispatch_title_links.sql
 116 120_restore_alarm_dispatch_admin_actions_delivery_idx.sql
 117 121_alarm_dispatch_markdown_layout.sql
+118 121_alarm_dispatch_last_error_size_check.sql
