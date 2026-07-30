@@ -23,6 +23,7 @@ package dispatchrun
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,8 +43,33 @@ func TestInitAlarmDispatchRunnerMetricsIsIdempotent(t *testing.T) {
 	assert.NotNil(t, alarmDispatchRunnerPostSendQuarantinedTotal)
 	assert.NotNil(t, alarmDispatchPGRetentionDeletedRowsTotal)
 	assert.NotNil(t, alarmDispatchPGRetentionFailedTotal)
+	assert.NotNil(t, alarmDispatchPGBacklogObservationFailedTotal)
 	assert.NotNil(t, alarmDispatchPGBacklogRows)
 	assert.NotNil(t, alarmDispatchPGOldestPendingAgeSeconds)
 	assert.NotNil(t, alarmDispatchPGOldestRetryAgeSeconds)
 	assert.NotNil(t, alarmDispatchPGOldestSendingAgeSeconds)
+}
+
+func TestObserveAlarmDispatchBacklogObservationFailureIncrementsCounter(t *testing.T) {
+	initAlarmDispatchRunnerMetrics()
+	before := alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total")
+
+	observeAlarmDispatchBacklogObservationFailure()
+
+	assert.Equal(t, before+1, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total"))
+}
+
+func alarmDispatchCounterMetricValue(t *testing.T, name string) float64 {
+	t.Helper()
+	initAlarmDispatchRunnerMetrics()
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, family := range families {
+		if family.GetName() == name {
+			require.Len(t, family.Metric, 1)
+			return family.Metric[0].GetCounter().GetValue()
+		}
+	}
+	require.FailNow(t, "alarm dispatch counter metric not found", name)
+	return 0
 }

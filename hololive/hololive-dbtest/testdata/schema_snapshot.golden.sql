@@ -39,6 +39,7 @@ TABLE alarm_dispatch_admin_actions
   CONSTRAINT alarm_dispatch_admin_actions_reason_check CHECK (((length(reason) > 0) AND (length(reason) <= 1024)))
   CONSTRAINT alarm_dispatch_admin_actions_delivery_id_fkey FOREIGN KEY (delivery_id) REFERENCES alarm_dispatch_deliveries(id) ON DELETE SET NULL
   CONSTRAINT alarm_dispatch_admin_actions_pkey PRIMARY KEY (id)
+  INDEX CREATE INDEX idx_alarm_dispatch_admin_actions_delivery ON public.alarm_dispatch_admin_actions USING btree (delivery_id)
 
 TABLE alarm_dispatch_deliveries
   COLUMN id bigint NOT NULL DEFAULT nextval('alarm_dispatch_deliveries_id_seq'::regclass)
