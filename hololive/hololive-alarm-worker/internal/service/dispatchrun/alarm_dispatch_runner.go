@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
@@ -23,7 +24,7 @@ type Consumer interface {
 }
 
 type alarmDispatchQuarantineConsumer interface {
-	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error
+	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error
 }
 
 type alarmDispatchSendingFailureConsumer interface {
@@ -235,8 +236,7 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []doma
 	if !ok {
 		return r.persistPreSendFailure(ctx, envelopes, cause)
 	}
-	reason := cause.Error()
-	if err := consumer.Quarantine(ctx, envelopes, reason); err != nil {
+	if err := consumer.Quarantine(ctx, envelopes, cause); err != nil {
 		return fmt.Errorf("quarantine alarm dispatch after send failure: %w", err)
 	}
 	observeAlarmDispatchRunnerPostSendQuarantined(len(envelopes))
@@ -357,6 +357,7 @@ func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *d
 	}
 	retry.Attempt++
 	retry.LastError = cause.Error()
+	retry.LastErrorCode = dispatchoutbox.ClassifyErrorCode(cause)
 	retryAfter := time.Duration(retry.Attempt) * 5 * time.Second
 	var httpErr *iris.HTTPError
 	if errors.As(cause, &httpErr) && httpErr.RetryAfter > retryAfter {

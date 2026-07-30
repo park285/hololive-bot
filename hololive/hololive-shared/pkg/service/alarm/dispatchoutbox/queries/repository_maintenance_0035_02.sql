@@ -14,6 +14,7 @@
 			locked_at=NULL,
 			lock_expires_at=NULL,
 			last_error='stale sending; external send outcome unknown',
+			last_error_code='stale_sending',
 			updated_at=NOW()
 		FROM picked
 		WHERE d.id = picked.id

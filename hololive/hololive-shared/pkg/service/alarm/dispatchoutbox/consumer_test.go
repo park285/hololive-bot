@@ -3,10 +3,13 @@ package dispatchoutbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/shared-go/pkg/json"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
@@ -390,6 +393,8 @@ type consumerTestRepository struct {
 	routeFailuresFunc           func(context.Context, []FailureUpdate, string) error
 	routeSendingFailuresFunc    func(context.Context, []FailureUpdate, string) error
 	routedFailureUpdates        []FailureUpdate
+	quarantineUpdates           []TerminalUpdate
+	movedDLQUpdates             []TerminalUpdate
 	routeFailuresCalls          int
 	routeSendingFailuresCalls   int
 	events                      map[int64]EventRecord
@@ -459,11 +464,13 @@ func (r *consumerTestRepository) RouteSendingFailures(ctx context.Context, updat
 	return nil
 }
 
-func (r *consumerTestRepository) MoveToDLQ(context.Context, []TerminalUpdate, string) error {
+func (r *consumerTestRepository) MoveToDLQ(_ context.Context, updates []TerminalUpdate, _ string) error {
+	r.movedDLQUpdates = append(r.movedDLQUpdates, updates...)
 	return nil
 }
 
-func (r *consumerTestRepository) Quarantine(context.Context, []TerminalUpdate, string) error {
+func (r *consumerTestRepository) Quarantine(_ context.Context, updates []TerminalUpdate, _ string) error {
+	r.quarantineUpdates = append(r.quarantineUpdates, updates...)
 	return nil
 }
 
@@ -593,5 +600,86 @@ func TestConsumerRouteFailuresPropagatesRepositoryError(t *testing.T) {
 	err := consumer.RouteFailures(context.Background(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 1, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}}}, nil)
 	if !errors.Is(err, repositoryErr) {
 		t.Fatalf("RouteFailures() error = %v, want %v", err, repositoryErr)
+	}
+}
+
+func TestConsumerRouteFailuresSanitizesErrorAndPassesCodeThrough(t *testing.T) {
+	t.Parallel()
+
+	repository := &consumerTestRepository{}
+	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	envelope := domain.AlarmQueueEnvelope{
+		DispatchOutboxID: 5,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			LastError:     "post https://iris.internal/reply?auth=abc123 failed: Bearer tok456",
+			LastErrorCode: ErrorCodeHTTP5xx,
+		},
+	}
+
+	if err := consumer.RouteFailures(context.Background(), []domain.AlarmQueueEnvelope{envelope}, nil); err != nil {
+		t.Fatalf("RouteFailures() error = %v", err)
+	}
+
+	if len(repository.routedFailureUpdates) != 1 {
+		t.Fatalf("updates = %d, want 1", len(repository.routedFailureUpdates))
+	}
+	update := repository.routedFailureUpdates[0]
+	if update.ErrorCode != ErrorCodeHTTP5xx {
+		t.Fatalf("ErrorCode = %q, want %q (metadata code must pass through unre-classified)", update.ErrorCode, ErrorCodeHTTP5xx)
+	}
+	if strings.Contains(update.Error, "abc123") || strings.Contains(update.Error, "tok456") {
+		t.Fatalf("Error = %q, credential leaked through chokepoint", update.Error)
+	}
+	if !strings.Contains(update.Error, "[redacted]") {
+		t.Fatalf("Error = %q, want redaction marker", update.Error)
+	}
+}
+
+func TestConsumerQuarantineStoresSanitizedCauseAndCode(t *testing.T) {
+	t.Parallel()
+
+	repository := &consumerTestRepository{}
+	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	cause := fmt.Errorf("send karing content list: %w", &iris.HTTPError{StatusCode: 500, URL: "https://iris.internal/reply?auth=abc123"})
+
+	if err := consumer.Quarantine(context.Background(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 9}}, cause); err != nil {
+		t.Fatalf("Quarantine() error = %v", err)
+	}
+
+	if len(repository.quarantineUpdates) != 1 {
+		t.Fatalf("updates = %d, want 1", len(repository.quarantineUpdates))
+	}
+	update := repository.quarantineUpdates[0]
+	if update.ID != 9 {
+		t.Fatalf("ID = %d, want 9", update.ID)
+	}
+	if update.ErrorCode != ErrorCodeHTTP5xx {
+		t.Fatalf("ErrorCode = %q, want %q", update.ErrorCode, ErrorCodeHTTP5xx)
+	}
+	if strings.Contains(update.Error, "auth=abc123") {
+		t.Fatalf("Error = %q, query string leaked", update.Error)
+	}
+}
+
+func TestConsumerMoveRecordToDLQUsesPayloadCode(t *testing.T) {
+	t.Parallel()
+
+	repository := &consumerTestRepository{}
+	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+
+	if err := consumer.moveRecordToDLQ(context.Background(), 3, "invalid payload: unexpected EOF", "move invalid payload to dlq"); err != nil {
+		t.Fatalf("moveRecordToDLQ() error = %v", err)
+	}
+
+	if len(repository.movedDLQUpdates) != 1 {
+		t.Fatalf("updates = %d, want 1", len(repository.movedDLQUpdates))
+	}
+	update := repository.movedDLQUpdates[0]
+	if update.ErrorCode != ErrorCodePayload {
+		t.Fatalf("ErrorCode = %q, want %q", update.ErrorCode, ErrorCodePayload)
+	}
+	if update.Error != "invalid payload: unexpected EOF" {
+		t.Fatalf("Error = %q, want original message preserved", update.Error)
 	}
 }

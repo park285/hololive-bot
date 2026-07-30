@@ -1,11 +1,12 @@
 
 		WITH input AS (
-			SELECT id, attempt_count, next_attempt_at, error, target_status
+			SELECT id, attempt_count, next_attempt_at, error, error_code, target_status
 			FROM jsonb_to_recordset($1::jsonb) AS x(
 				id BIGINT,
 				attempt_count INT,
 				next_attempt_at TIMESTAMPTZ,
 				error TEXT,
+				error_code TEXT,
 				target_status TEXT
 			)
 		)
@@ -18,6 +19,7 @@
 			locked_at=NULL,
 			lock_expires_at=NULL,
 			last_error=input.error,
+			last_error_code=input.error_code,
 			updated_at=NOW()
 		FROM input
 		WHERE d.id=input.id

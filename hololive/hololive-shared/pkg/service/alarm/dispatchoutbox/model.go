@@ -53,6 +53,7 @@ type Record struct {
 	QuarantinedAt    *time.Time
 	CancelledAt      *time.Time
 	Error            string
+	ErrorCode        string
 	EnqueuedAt       time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -102,12 +103,14 @@ type FailureUpdate struct {
 	AttemptCount  int       `json:"attempt_count"`
 	NextAttemptAt time.Time `json:"next_attempt_at"`
 	Error         string    `json:"error"`
+	ErrorCode     string    `json:"error_code"`
 	TargetStatus  Status    `json:"target_status"`
 }
 
 type TerminalUpdate struct {
-	ID    int64  `json:"id"`
-	Error string `json:"error"`
+	ID        int64  `json:"id"`
+	Error     string `json:"error"`
+	ErrorCode string `json:"error_code"`
 }
 
 type Writer interface {

@@ -173,8 +173,10 @@ func (c *alarmDispatchRunnerSendingRetryTestConsumer) Requeue(_ context.Context,
 	return nil
 }
 
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
+func (c *alarmDispatchRunnerSendingRetryTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	c.quarantined = append(c.quarantined, envelopes...)
-	c.quarantineReason = reason
+	if cause != nil {
+		c.quarantineReason = cause.Error()
+	}
 	return nil
 }

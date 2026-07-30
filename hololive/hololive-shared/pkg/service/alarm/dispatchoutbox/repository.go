@@ -87,6 +87,7 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 		&record.DLQAt,
 		&record.QuarantinedAt,
 		&record.CancelledAt,
+		&record.ErrorCode,
 		&record.Error,
 		&record.CreatedAt,
 		&record.UpdatedAt,

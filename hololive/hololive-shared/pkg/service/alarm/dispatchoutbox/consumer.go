@@ -168,8 +168,9 @@ func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 	envelope.ClaimKeys = record.ClaimKeys
 	if record.AttemptCount > 0 {
 		envelope.Retry = &domain.AlarmQueueRetryMetadata{
-			Attempt:   record.AttemptCount,
-			LastError: record.Error,
+			Attempt:       record.AttemptCount,
+			LastError:     record.Error,
+			LastErrorCode: record.ErrorCode,
 		}
 	}
 }
@@ -198,7 +199,8 @@ func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error
 }
 
 func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError, action string) error {
-	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{{ID: id, Error: terminalError}}, c.workerID); err != nil {
+	update := TerminalUpdate{ID: id, Error: sanitizeStoredError(terminalError), ErrorCode: ErrorCodePayload}
+	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{update}, c.workerID); err != nil {
 		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
 	}
 	observePGDLQ(1)
@@ -303,7 +305,8 @@ func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, now time.Tim
 		return update, true
 	}
 	update.AttemptCount = envelope.Retry.Attempt
-	update.Error = envelope.Retry.LastError
+	update.Error = sanitizeStoredError(envelope.Retry.LastError)
+	update.ErrorCode = envelope.Retry.LastErrorCode
 	if parsed, err := time.Parse(time.RFC3339Nano, envelope.Retry.NextVisibleAt); err == nil {
 		update.NextAttemptAt = parsed.UTC()
 	}
@@ -314,12 +317,13 @@ func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnv
 	return c.RouteFailures(ctx, envelopes, nil)
 }
 
-func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
+func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	message, code := storedErrorFromCause(cause)
 	updates := make([]TerminalUpdate, 0, len(envelopes))
 	for i := range envelopes {
 		envelope := &envelopes[i]
 		if envelope.DispatchOutboxID > 0 {
-			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: reason})
+			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: message, ErrorCode: code})
 		}
 	}
 	if err := c.repository.Quarantine(ctx, updates, c.workerID); err != nil {

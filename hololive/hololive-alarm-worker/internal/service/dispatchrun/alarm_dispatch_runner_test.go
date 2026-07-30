@@ -58,9 +58,11 @@ func (c *alarmDispatchRunnerTestConsumer) MarkDispatched(_ context.Context, enve
 	return c.markDispatchedErr
 }
 
-func (c *alarmDispatchRunnerTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
+func (c *alarmDispatchRunnerTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	c.quarantined = append(c.quarantined, envelopes...)
-	c.quarantineReason = reason
+	if cause != nil {
+		c.quarantineReason = cause.Error()
+	}
 	return c.quarantineErr
 }
 
@@ -531,6 +533,7 @@ func TestAlarmDispatchRunnerRunOnceSchedulesRetryOnSendFailure(t *testing.T) {
 	require.NotNil(t, consumer.scheduledRetry[0].Retry)
 	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
 	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, errAlarmDispatchRunnerTestSend.Error())
+	assert.Equal(t, dispatchoutbox.ErrorCodeUnknown, consumer.scheduledRetry[0].Retry.LastErrorCode)
 	assert.Empty(t, consumer.markDispatched)
 	assert.Empty(t, consumer.movedDLQ)
 }
@@ -569,6 +572,7 @@ func TestAlarmDispatchRunnerRetriesKaringBadGatewayAfterMarkSending(t *testing.T
 	require.NotNil(t, consumer.scheduledRetry[0].Retry)
 	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
 	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, "returned 502")
+	assert.Equal(t, dispatchoutbox.ErrorCodeHTTP5xx, consumer.scheduledRetry[0].Retry.LastErrorCode)
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markDispatched)
