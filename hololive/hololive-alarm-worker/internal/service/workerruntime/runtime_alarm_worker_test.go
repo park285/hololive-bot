@@ -94,6 +94,9 @@ func TestNotificationEgressRunnerWrapsRunnerFailure(t *testing.T) {
 
 	err := runner.Start(t.Context())
 
+	if err == nil {
+		t.Fatal("Start() error = nil, want wrapped runner failure")
+	}
 	require.ErrorIs(t, err, sentinel)
 	assert.Contains(t, err.Error(), "notification egress runner stopped")
 }
