@@ -73,13 +73,16 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	default:
 		fmt.Fprintf(&b, "⏰ **%s** 방송 %d분 전", member, n.MinutesUntil)
 	}
-	if title != "" {
+	linkable := title != "" && url != "" && !strings.Contains(url, " | ")
+	if linkable {
+		fmt.Fprintf(&b, "\n- [%s](%s)", title, url)
+	} else if title != "" {
 		fmt.Fprintf(&b, "\n- %s", title)
 	}
 	if scheduleMessage := strings.TrimSpace(n.ScheduleChangeMessage); scheduleMessage != "" {
 		fmt.Fprintf(&b, "\n- %s", util.MarkdownNeutralize(scheduleMessage))
 	}
-	if url != "" {
+	if url != "" && !linkable {
 		fmt.Fprintf(&b, "\n- %s", url)
 	}
 	return b.String()
@@ -129,7 +132,7 @@ func alarmGoldenNotification(name string, minutesUntil int, stream *domain.Strea
 	}
 }
 
-func TestRenderAlarmDispatchNotificationByteEqualsLegacyHardcoded(t *testing.T) {
+func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
@@ -184,7 +187,7 @@ func TestRenderAlarmDispatchNotificationByteEqualsLegacyHardcoded(t *testing.T) 
 	}
 }
 
-func TestRenderAlarmDispatchNotificationScheduleMessageByteEqualsLegacy(t *testing.T) {
+func TestRenderAlarmDispatchNotificationPreservesScheduleMessageFormatting(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
 
 	with := alarmGoldenNotification("멤버", 5, alarmGoldenStream("yt-4", "방송 제목"))
@@ -212,7 +215,7 @@ func TestRenderAlarmDispatchNotificationScheduleMessageByteEqualsLegacy(t *testi
 	}
 }
 
-func TestRenderAlarmDispatchNotificationGroupByteEqualsLegacyHardcoded(t *testing.T) {
+func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
 
 	scheduled := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
