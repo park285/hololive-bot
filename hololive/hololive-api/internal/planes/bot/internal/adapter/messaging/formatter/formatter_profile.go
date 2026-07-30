@@ -22,6 +22,7 @@ package formatter
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -163,13 +164,14 @@ func (f *ResponseFormatter) profileSocialLinks(ctx context.Context, raw *domain.
 
 	for i := range maxLinks {
 		link := raw.SocialLinks[i]
-		if stringutil.TrimSpace(link.Label) == "" || stringutil.TrimSpace(link.URL) == "" {
+		linkURL := profileLinkURL(link.URL)
+		if stringutil.TrimSpace(link.Label) == "" || linkURL == "" {
 			continue
 		}
 
 		links = append(links, profileSocialLink{
 			Label: f.socialLinkLabel(ctx, link.Label),
-			URL:   stringutil.TrimSpace(link.URL),
+			URL:   linkURL,
 		})
 	}
 
@@ -181,7 +183,19 @@ func profileOfficialURL(raw *domain.TalentProfile) string {
 		return ""
 	}
 
-	return stringutil.TrimSpace(raw.OfficialURL)
+	return profileLinkURL(raw.OfficialURL)
+}
+
+func profileLinkURL(raw string) string {
+	value := stringutil.TrimSpace(raw)
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return ""
+	}
+	return parsed.String()
 }
 
 func (f *ResponseFormatter) FormatTalentProfile(ctx context.Context, raw *domain.TalentProfile, translated *domain.Translated) string {

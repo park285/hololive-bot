@@ -110,3 +110,4 @@
 110 114_drop_unused_indexes.sql
 111 115_markdown_command_templates.sql
 112 116_markdown_notification_templates.sql
+113 117_markdown_remaining_templates.sql

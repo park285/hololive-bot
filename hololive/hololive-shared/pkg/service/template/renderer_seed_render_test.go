@@ -306,6 +306,130 @@ func TestSeedTemplates_AlarmNotificationGroupEntryLabelLink(t *testing.T) {
 	}
 }
 
+func TestSeedTemplates_RemainingMarkdownOutputs(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	tests := []struct {
+		name string
+		key  domain.TemplateKey
+		data any
+		want string
+	}{
+		{
+			name: "member news subscribed",
+			key:  domain.TemplateKeyCmdMemberNewsSubscribed,
+			data: map[string]any{},
+			want: "✅ 뉴스 알림을 켰습니다.\n- 발송: **매주 월요일 09:00 KST**",
+		},
+		{
+			name: "major event subscribed",
+			key:  domain.TemplateKeyCmdMajorEventSubscribed,
+			data: map[string]any{},
+			want: "✅ 행사 알림을 켰습니다.\n- 발송: **매주 행사 요약**",
+		},
+		{
+			name: "alarm cleared zero",
+			key:  domain.TemplateKeyCmdAlarmCleared,
+			data: map[string]any{"Count": 0},
+			want: "🔔 설정된 알람이 없습니다.",
+		},
+		{
+			name: "alarm cleared success",
+			key:  domain.TemplateKeyCmdAlarmCleared,
+			data: map[string]any{"Count": 3},
+			want: "✅ 알람 **3개**를 모두 해제했습니다.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := seedBody(t, pool, tt.key)
+			if got := renderSeedBody(t, tt.key, body, tt.data); got != tt.want {
+				t.Errorf("%s 렌더 결과 = %q, want %q", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSeedTemplates_KnownSingleURLsUseLabelLinks(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	tests := []struct {
+		name      string
+		key       domain.TemplateKey
+		wantLines []string
+		rawURLs   []string
+	}{
+		{
+			name: "profile links",
+			key:  domain.TemplateKeyCmdProfile,
+			wantLines: []string{
+				"- [음악 플레이리스트](https://www.youtube.com/playlist?list=example)",
+				"- [Twitter](https://x.com/shirakamifubuki)",
+				"[공식 프로필](https://hololive.hololivepro.com/talents/shirakami-fubuki)",
+			},
+			rawURLs: []string{
+				"https://www.youtube.com/playlist?list=example",
+				"https://x.com/shirakamifubuki",
+				"https://hololive.hololivepro.com/talents/shirakami-fubuki",
+			},
+		},
+		{
+			name: "community post link",
+			key:  domain.TemplateKeyOutboxCommunity,
+			wantLines: []string{
+				"[커뮤니티 글 보기](https://www.youtube.com/post/Ugkxyz123)",
+			},
+			rawURLs: []string{"https://www.youtube.com/post/Ugkxyz123"},
+		},
+		{
+			name: "community group links",
+			key:  domain.TemplateKeyOutboxCommunityGroup,
+			wantLines: []string{
+				"   [커뮤니티 글 보기](https://www.youtube.com/post/group-community-1)",
+				"   [커뮤니티 글 보기](https://www.youtube.com/post/group-community-2)",
+			},
+			rawURLs: []string{
+				"https://www.youtube.com/post/group-community-1",
+				"https://www.youtube.com/post/group-community-2",
+			},
+		},
+		{
+			name: "birthday channel link",
+			key:  domain.TemplateKeyCelebrationBirthday,
+			wantLines: []string{
+				"[YouTube 채널 보기](https://youtube.com/channel/UCdn5BQ06XqgXoAxIhbqw5Rg)",
+			},
+			rawURLs: []string{"https://youtube.com/channel/UCdn5BQ06XqgXoAxIhbqw5Rg"},
+		},
+		{
+			name: "anniversary channel link",
+			key:  domain.TemplateKeyCelebrationAnniversary,
+			wantLines: []string{
+				"[YouTube 채널 보기](https://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg)",
+			},
+			rawURLs: []string{"https://youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := seedBody(t, pool, tt.key)
+			out := renderSeedBody(t, tt.key, body, sampledata.GetTemplateSampleData(tt.key))
+			for _, want := range tt.wantLines {
+				if !hasSeedLine(out, want) {
+					t.Errorf("%s: label link line %q 없음: %q", tt.key, want, out)
+				}
+			}
+			for _, rawURL := range tt.rawURLs {
+				if hasSeedLine(out, rawURL) {
+					t.Errorf("%s: raw URL line %q 노출: %q", tt.key, rawURL, out)
+				}
+			}
+		})
+	}
+}
+
 func hasSeedLine(out, want string) bool {
 	return slices.Contains(strings.Split(out, "\n"), want)
 }
