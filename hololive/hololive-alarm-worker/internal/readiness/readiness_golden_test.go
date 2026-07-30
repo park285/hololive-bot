@@ -15,9 +15,9 @@ import (
 )
 
 func TestGoldenInternalReadyAllHealthy(t *testing.T) {
-	t.Setenv("ALARM_WORKER_EGRESS_LEASE_ENABLED", "true")
+	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
-	probe := sharedreadiness.NewProbe("alarm-worker", sharedreadiness.PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}), sharedreadiness.ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}), BoolEnvNotFalseCheck("notification_egress_lease_enabled", "ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
+	probe := sharedreadiness.NewProbe("alarm-worker", sharedreadiness.PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}), sharedreadiness.ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}), BoolEnvNotFalseCheck("delivery_dispatcher_enabled", "DELIVERY_DISPATCHER_ENABLED", true),
 		ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),
 	)
 
@@ -26,7 +26,7 @@ func TestGoldenInternalReadyAllHealthy(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("/internal/ready status = %d, want %d", code, http.StatusOK)
 	}
-	want := `{"dependencies":{"postgres":true,"valkey":true},"egress_flags":{"notification_egress_lease_enabled":true,"youtube_outbox_dispatcher_enabled":true},"goroutines":0,"runtime":"alarm-worker","status":"ready","uptime":"UPTIME","version":"VERSION"}`
+	want := `{"dependencies":{"postgres":true,"valkey":true},"egress_flags":{"delivery_dispatcher_enabled":true,"youtube_outbox_dispatcher_enabled":true},"goroutines":0,"runtime":"alarm-worker","status":"ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/internal/ready body = %s, want %s", body, want)
 	}

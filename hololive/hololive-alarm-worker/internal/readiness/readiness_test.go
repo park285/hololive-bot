@@ -12,8 +12,9 @@ import (
 )
 
 func TestInternalResponseReportsDependenciesAndEgressFlags(t *testing.T) {
+	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
-	probe := sharedreadiness.NewProbe("alarm-worker", sharedreadiness.PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}), sharedreadiness.ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}), BoolEnvNotFalseCheck("notification_egress_lease_enabled", "ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
+	probe := sharedreadiness.NewProbe("alarm-worker", sharedreadiness.PostgresCheck(&databasemocks.Client{PingFunc: func(context.Context) error { return nil }}), sharedreadiness.ValkeyCheck(&cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }}), BoolEnvNotFalseCheck("delivery_dispatcher_enabled", "DELIVERY_DISPATCHER_ENABLED", true),
 		ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),
 	)
 
@@ -30,8 +31,11 @@ func TestInternalResponseReportsDependenciesAndEgressFlags(t *testing.T) {
 		t.Fatalf("dependencies = %v, want postgres and valkey ready", dependencies)
 	}
 	flags := boolGroup(t, payload, "egress_flags")
-	if !flags["notification_egress_lease_enabled"] || !flags["youtube_outbox_dispatcher_enabled"] {
-		t.Fatalf("egress_flags = %v, want all ready", flags)
+	if len(flags) != 2 {
+		t.Fatalf("egress_flags = %v, want exactly 2 keys", flags)
+	}
+	if !flags["delivery_dispatcher_enabled"] || !flags["youtube_outbox_dispatcher_enabled"] {
+		t.Fatalf("egress_flags = %v, want delivery_dispatcher_enabled and youtube_outbox_dispatcher_enabled ready", flags)
 	}
 }
 

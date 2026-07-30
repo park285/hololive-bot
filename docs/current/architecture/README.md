@@ -13,6 +13,7 @@
 - `h3-runtime-smoke-cross-debate-20260630.md` - H3 runtime smoke cross-debate result and remaining closure checklist
 - `hololive-api-trust-domain.md` - consolidated bot/admin/LLM process boundary, controls, and split trigger
 - `non-secret-history-risk-decisions-20260713.md` - separate #087/#088 current-tree and Git-history risk decisions
+- `alarm-egress-scale-out-decisions-20260730.md` - alarm-worker egress lease removal, production role profiles, and the replica>1 gate list
 
 ## Gate Assets
 

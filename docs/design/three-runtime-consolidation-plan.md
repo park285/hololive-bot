@@ -195,7 +195,7 @@ group := applifecycle.NewGroupRuntime(logger,
 
 - alarm domain owner가 scheduler/checker/dispatch/eject path와 같은 process에 있어야 합니다.
 - bot/admin 배포가 alarm API provider availability를 흔들면 안 됩니다.
-- proactive egress lease와 alarm write path의 상태 판단 기준을 한 runtime 안에 모으는 편이 장애 원인 분석이 쉽습니다.
+- proactive egress row-claim과 alarm write path의 상태 판단 기준을 한 runtime 안에 모으는 편이 장애 원인 분석이 쉽습니다.
 
 migration 순서는 다음입니다.
 

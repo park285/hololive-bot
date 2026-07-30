@@ -19,7 +19,6 @@ const (
 	deliveryDispatcherEnabledEnv      = "DELIVERY_DISPATCHER_ENABLED"
 	youTubeOutboxDispatcherEnabledEnv = "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"
 	alarmDispatchConsumerEnabledEnv   = "ALARM_DISPATCH_CONSUMER_ENABLED"
-	alarmWorkerEgressLeaseEnabledEnv  = "ALARM_WORKER_EGRESS_LEASE_ENABLED"
 
 	notificationEgressRoleOwner     = "owner"
 	notificationEgressRoleProducer  = "producer"
@@ -33,8 +32,6 @@ func LoadBotRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateBotRuntime, configLoadOptions{FetchIrisWorkerProfile: true})
 }
 
-// alarm-worker config를 로드하고, production runtime이 유일한 notification egress
-// owner인지 검증한다.
 func LoadAlarmWorkerRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateAlarmWorkerRuntime, configLoadOptions{FetchIrisWorkerProfile: true})
 }
@@ -71,10 +68,10 @@ func validateNotificationRoleEnvValues() error {
 }
 
 func rejectReservedEgressRoles(runtime string) error {
-	if strings.EqualFold(trimmedEnv(notificationEgressRoleEnv), notificationEgressRoleOwner) {
+	if matchesNotificationRole(trimmedEnv(notificationEgressRoleEnv), notificationEgressRoleOwner) {
 		return fmt.Errorf("%s must not own proactive notification egress; %s=%s is reserved for alarm-worker", runtime, notificationEgressRoleEnv, notificationEgressRoleOwner)
 	}
-	if strings.EqualFold(trimmedEnv(notificationSchedulerRoleEnv), notificationSchedulerRoleWorker) {
+	if matchesNotificationRole(trimmedEnv(notificationSchedulerRoleEnv), notificationSchedulerRoleWorker) {
 		return fmt.Errorf("%s must not run the alarm scheduler role; %s=%s is reserved for alarm-worker", runtime, notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
 	}
 	return nil
@@ -85,7 +82,6 @@ func rejectReservedDispatchers(runtime string) error {
 		deliveryDispatcherEnabledEnv,
 		youTubeOutboxDispatcherEnabledEnv,
 		alarmDispatchConsumerEnabledEnv,
-		alarmWorkerEgressLeaseEnabledEnv,
 	} {
 		if err := rejectExplicitTrueEnv(runtime, key); err != nil {
 			return err
@@ -108,10 +104,7 @@ func validateProductionAlarmWorkerOwnership() error {
 	if err := requireNotificationRoleEnv(notificationEgressRoleEnv, notificationEgressRoleOwner); err != nil {
 		return err
 	}
-	if err := requireNotificationRoleEnv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker); err != nil {
-		return err
-	}
-	if err := requireBoolEnvNotFalse(alarmWorkerEgressLeaseEnabledEnv, "proactive egress has a single owner lease"); err != nil {
+	if err := requireNotificationRoleEnv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker, notificationSchedulerRoleOff); err != nil {
 		return err
 	}
 	if err := requireBoolEnvNotFalse(deliveryDispatcherEnabledEnv, "generic notification delivery outbox egress runs"); err != nil {
@@ -132,19 +125,26 @@ func validateKnownNotificationRoleEnv(key string, allowed ...string) error {
 	if value == "" {
 		return nil
 	}
-	for _, candidate := range allowed {
-		if strings.EqualFold(value, candidate) {
-			return nil
-		}
+	if matchesNotificationRole(value, allowed...) {
+		return nil
 	}
 	return fmt.Errorf("unsupported %s=%s", key, value)
 }
 
-func requireNotificationRoleEnv(key, expected string) error {
-	if strings.EqualFold(trimmedEnv(key), expected) {
+func requireNotificationRoleEnv(key string, allowed ...string) error {
+	if matchesNotificationRole(trimmedEnv(key), allowed...) {
 		return nil
 	}
-	return fmt.Errorf("%s production requires %s=%s", runtimeAlarmWorker, key, expected)
+	return fmt.Errorf("%s production requires %s=%s", runtimeAlarmWorker, key, strings.Join(allowed, "|"))
+}
+
+func matchesNotificationRole(value string, allowed ...string) bool {
+	for _, candidate := range allowed {
+		if strings.EqualFold(value, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func rejectExplicitTrueEnv(runtime, key string) error {

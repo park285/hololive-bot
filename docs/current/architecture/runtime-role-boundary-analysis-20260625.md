@@ -1,5 +1,7 @@
 # Hololive Bot runtime role boundary analysis — 2026-06-25
 
+> Superseded in part by the 2026-07-30 decision to remove the broad Valkey egress lease. Every statement below about `ALARM_WORKER_EGRESS_LEASE_ENABLED` and the `notification:egress-owner:alarm-worker` lease records the 2026-06-25 state and no longer describes the runtime: that env var and its Go code path are gone, and proactive egress exclusivity is now owned by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims plus the single Compose alarm-worker instance. The remaining role-boundary analysis is unchanged. Current source of truth: [`alarm-egress-scale-out-decisions-20260730.md`](./alarm-egress-scale-out-decisions-20260730.md).
+
 ## Scope
 
 This analysis covers the `hololive-bot` repository as a whole runtime system, not only the Kakao bot package.

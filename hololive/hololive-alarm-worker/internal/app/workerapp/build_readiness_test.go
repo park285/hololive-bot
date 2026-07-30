@@ -15,7 +15,6 @@ import (
 )
 
 func TestAlarmWorkerReadyProbeRequiresYouTubeDispatcherFlag(t *testing.T) {
-	t.Setenv("ALARM_WORKER_EGRESS_LEASE_ENABLED", "true")
 	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
 	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
 	infra := &sharedmodules.InfraModule{
@@ -36,7 +35,6 @@ func TestAlarmWorkerReadyProbeRequiresYouTubeDispatcherFlag(t *testing.T) {
 }
 
 func TestAlarmWorkerReadyProbeReportsReadyWhenDependenciesAndFlagsReady(t *testing.T) {
-	t.Setenv("ALARM_WORKER_EGRESS_LEASE_ENABLED", "true")
 	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
 	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")

@@ -65,12 +65,7 @@ func buildNotificationEgress(
 		{Name: "youtube-outbox", Scheduler: youtubeOutboxDispatcher},
 		{Name: "notification-delivery-outbox", Scheduler: deliveryOutboxDispatcher},
 	}
-	return workerruntime.NewNotificationEgressRunner(
-		runners,
-		infra.Cache,
-		envutil.Bool("ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
-		logger,
-	), nil
+	return workerruntime.NewNotificationEgressRunner(runners, logger), nil
 }
 
 func buildDeliveryOutboxDispatcher(
