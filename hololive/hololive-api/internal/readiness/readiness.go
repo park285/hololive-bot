@@ -9,28 +9,9 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-type (
-	Check = sharedreadiness.Check
-	Probe = sharedreadiness.Probe
-)
-
-func PostgresCheck(db database.Client) Check {
-	return sharedreadiness.PostgresCheck(db)
-}
-
-func ValkeyCheck(client cache.Client) Check {
-	return sharedreadiness.ValkeyCheck(client)
-}
-
-func NewProbe(plane string, checks ...Check) *Probe {
-	return sharedreadiness.NewProbe(plane, checks...)
-}
-
-func Pick(probes ...*Probe) *Probe {
+func Pick(probes ...*sharedreadiness.Probe) *sharedreadiness.Probe {
 	for _, p := range probes {
 		if p != nil {
 			return p
@@ -39,7 +20,7 @@ func Pick(probes ...*Probe) *Probe {
 	return nil
 }
 
-func GinHandler(ctx context.Context, p *Probe) gin.HandlerFunc {
+func GinHandler(ctx context.Context, p *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if p == nil {
 			c.JSON(http.StatusOK, map[string]any{"status": "ready", "health": health.Get()})
@@ -50,7 +31,7 @@ func GinHandler(ctx context.Context, p *Probe) gin.HandlerFunc {
 	}
 }
 
-func evaluate(ctx context.Context, p *Probe) (statusCode int, payload map[string]any) {
+func evaluate(ctx context.Context, p *sharedreadiness.Probe) (statusCode int, payload map[string]any) {
 	base := health.Get()
 	ready, groups := p.Evaluate(ctx)
 	dependencies := map[string]bool{}

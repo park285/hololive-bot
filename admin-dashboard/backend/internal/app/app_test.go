@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/json"
 	"github.com/park285/shared-go/pkg/logging"
 	"github.com/stretchr/testify/require"
@@ -131,7 +132,7 @@ func newTestRuntime(t *testing.T, store sessionStore, mutate func(*config.Config
 		cfg:             cfg,
 		logger:          logging.NewTestLogger(),
 		sessions:        store,
-		rateLimiter:     auth.NewLoginRateLimiter(),
+		rateLimiter:     httputil.NewDefaultLoginFailureRateLimiter(),
 		statusCollector: status.NewCollector(nil, "test"),
 		statsHub:        status.NewHub(nil),
 		static:          static.NewHandler(),

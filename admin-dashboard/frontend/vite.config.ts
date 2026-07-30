@@ -50,7 +50,7 @@ export default defineConfig({
           groups: [
             {
               name: 'vendor-router',
-              test: /react-router-dom/,
+              test: /react-router/,
             },
             {
               name: 'vendor-query',

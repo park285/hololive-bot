@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	model "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -62,7 +63,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("official domain validate error: %v", err)
 	}
-	if tier != SourceTierOfficial {
+	if tier != model.SourceTierOfficial {
 		t.Fatalf("expected official tier, got %s", tier)
 	}
 
@@ -70,7 +71,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("media domain validate error: %v", err)
 	}
-	if tier != SourceTierMedia {
+	if tier != model.SourceTierMedia {
 		t.Fatalf("expected media tier, got %s", tier)
 	}
 
@@ -83,7 +84,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("allowed x account validate error: %v", err)
 	}
-	if tier != SourceTierOfficial {
+	if tier != model.SourceTierOfficial {
 		t.Fatalf("expected x account to be official, got %s", tier)
 	}
 }
@@ -99,7 +100,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("youtube official validate error: %v", err)
 	}
-	if tier != SourceTierOfficial {
+	if tier != model.SourceTierOfficial {
 		t.Fatalf("expected official tier for allowed channel, got %s", tier)
 	}
 
@@ -107,7 +108,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("youtube unknown channel validate error: %v", err)
 	}
-	if tier != SourceTierCommunity {
+	if tier != model.SourceTierCommunity {
 		t.Fatalf("expected community tier for unknown channel, got %s", tier)
 	}
 
@@ -116,7 +117,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("youtu.be validate error: %v", err)
 	}
-	if tier != SourceTierCommunity {
+	if tier != model.SourceTierCommunity {
 		t.Fatalf("expected community tier for youtu.be short link (unverifiable channel), got %s", tier)
 	}
 
@@ -124,7 +125,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("youtube watch validate error: %v", err)
 	}
-	if tier != SourceTierCommunity {
+	if tier != model.SourceTierCommunity {
 		t.Fatalf("expected community tier for youtube watch link (unverifiable channel), got %s", tier)
 	}
 }

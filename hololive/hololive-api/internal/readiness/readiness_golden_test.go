@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
 func TestGoldenReadyAllHealthy(t *testing.T) {
 	t.Parallel()
 
-	code, body := serveReadyGolden(t, GinHandler(t.Context(), NewProbe("bot", okCheck("postgres"), okCheck("valkey"))))
+	code, body := serveReadyGolden(t, GinHandler(t.Context(), sharedreadiness.NewProbe("bot", okCheck("postgres"), okCheck("valkey"))))
 
 	if code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
@@ -27,7 +28,7 @@ func TestGoldenReadyAllHealthy(t *testing.T) {
 func TestGoldenReadyDependencyDown(t *testing.T) {
 	t.Parallel()
 
-	code, body := serveReadyGolden(t, GinHandler(t.Context(), NewProbe("admin",
+	code, body := serveReadyGolden(t, GinHandler(t.Context(), sharedreadiness.NewProbe("admin",
 		okCheck("postgres"),
 		failCheck("valkey", errors.New("connection refused")),
 	)))

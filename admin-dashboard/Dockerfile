@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.24.0@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89
 # Copyright 2025 Kapu
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,10 +21,10 @@ FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58
 WORKDIR /app/frontend
 
 COPY admin-dashboard/frontend/package.json admin-dashboard/frontend/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm corepack npm ci --no-audit --no-fund
 
 COPY admin-dashboard/frontend/ .
-RUN npm run build
+RUN corepack npm run build
 
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
 
@@ -77,7 +77,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
     if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/admin-dashboard /dist/bin/healthcheck; fi
 
-FROM gcr.io/distroless/static-debian12@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd
+FROM gcr.io/distroless/static-debian13@sha256:9197324ba51d9cd071af8505989365c006adf9d6d2067eada25aef00abbb5278
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="admin-dashboard" \

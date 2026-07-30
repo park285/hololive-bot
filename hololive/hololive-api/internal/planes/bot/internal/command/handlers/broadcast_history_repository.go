@@ -74,7 +74,7 @@ type broadcastHistoryDB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-func NewPgBroadcastHistoryRepository(postgres database.Client) BroadcastHistoryRepository {
+func NewPgBroadcastHistoryRepository(postgres database.Client) handlercore.BroadcastHistoryRepository {
 	if postgres == nil || postgres.GetPool() == nil {
 		return nil
 	}

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.24.0@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89
 # Copyright 2025 Kapu
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -74,7 +74,7 @@ RUN \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 
-FROM gcr.io/distroless/static-debian12@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd
+FROM gcr.io/distroless/static-debian13@sha256:9197324ba51d9cd071af8505989365c006adf9d6d2067eada25aef00abbb5278
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="hololive-alarm-worker" \

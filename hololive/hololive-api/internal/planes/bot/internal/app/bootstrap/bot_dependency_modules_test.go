@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -22,9 +23,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t *testing.T) {
@@ -36,8 +40,8 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	memberData := &membermocks.DataProvider{}
 	alarmCRUD := &stubAlarmCRUD{targetMinutes: []int{15, 3, 1}}
 	irisClient := &stubBotIrisClient{}
-	messageAdapter := adapter.NewMessageAdapter("!", "@bot")
-	formatter := adapter.NewResponseFormatter("!", nil)
+	messageAdapter := messaging.NewMessageAdapter("!", "@bot")
+	formatter := messageformatter.NewResponseFormatter("!", nil)
 	activityLogger := ProvideActivityLogger(logger)
 	settingsService := &settingsmocks.ReadWriter{
 		GetFunc: func() settings.Settings {
@@ -48,20 +52,20 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		},
 	}
 	youTubeService := &stubYouTubeService{}
-	commandBuilders := []bot.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo}
+	commandBuilders := []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo}
 
-	appConfig := &config.Config{
-		Bot: config.BotConfig{
+	appConfig := &configsettings.Config{
+		Bot: configsettings.BotConfig{
 			SelfUser:              "bot-self",
 			Prefix:                "!",
 			MentionPrefix:         "@bot",
 			CalendarImageCacheDir: "data/test-calendar-cache",
 			CalendarEntryCacheTTL: time.Hour,
 		},
-		Iris: config.IrisConfig{
+		Iris: configsettings.IrisConfig{
 			BaseURL: "http://iris.local",
 		},
-		Notification: config.NotificationConfig{
+		Notification: configsettings.NotificationConfig{
 			AdvanceMinutes: []int{15, 3, 1},
 		},
 	}
@@ -102,8 +106,8 @@ func assertBotDependencyModulesWireRuntimeObjects(
 	memberData *membermocks.DataProvider,
 	alarmCRUD *stubAlarmCRUD,
 	irisClient *stubBotIrisClient,
-	messageAdapter *adapter.MessageAdapter,
-	formatter *adapter.ResponseFormatter,
+	messageAdapter *messaging.MessageAdapter,
+	formatter *messageformatter.ResponseFormatter,
 ) {
 	t.Helper()
 
@@ -143,12 +147,12 @@ func assertBotDependencyModulesWireRuntimeObjects(
 	if modules.Messaging.Formatter != formatter {
 		t.Fatal("Messaging.Formatter did not preserve the formatter")
 	}
-	assertCommandBuilderPointers(t, modules.Feature.CommandBuilders, []bot.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
+	assertCommandBuilderPointers(t, modules.Feature.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }
 
 func assertBotDependenciesWireRuntimeObjects(
 	t *testing.T,
-	deps *bot.Dependencies,
+	deps *orchestration.Dependencies,
 	cacheClient *cachemocks.Client,
 	postgres *databasemocks.Client,
 	memberData *membermocks.DataProvider,
@@ -186,7 +190,7 @@ func assertBotDependenciesWireRuntimeObjects(
 	if deps.Settings != settingsService {
 		t.Fatal("Dependencies.Settings did not preserve the settings service")
 	}
-	assertCommandBuilderPointers(t, deps.CommandBuilders, []bot.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
+	assertCommandBuilderPointers(t, deps.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }
 
 func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
@@ -203,7 +207,7 @@ func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
 func TestProvideAlarmWorkerPoolUsesDispatchCapacity(t *testing.T) {
 	t.Parallel()
 
-	pool := ProvideAlarmWorkerPool(config.WorkerPoolConfig{Workers: 10, QueueSize: 100})
+	pool := ProvideAlarmWorkerPool(configsettings.WorkerPoolConfig{Workers: 10, QueueSize: 100})
 	t.Cleanup(pool.StopAndWait)
 
 	if pool.Workers() != 10 {
@@ -355,19 +359,19 @@ func (s *stubAlarmCRUD) WarmCacheFromDB(context.Context) error {
 	return nil
 }
 
-func stubCommandBuilderOne(*command.Dependencies) command.Command {
+func stubCommandBuilderOne(*handlercore.Dependencies) handlercore.Command {
 	return nil
 }
 
-func stubCommandBuilderTwo(*command.Dependencies) command.Command {
+func stubCommandBuilderTwo(*handlercore.Dependencies) handlercore.Command {
 	return nil
 }
 
-func stubCommandBuilderThree(*command.Dependencies) command.Command {
+func stubCommandBuilderThree(*handlercore.Dependencies) handlercore.Command {
 	return nil
 }
 
-func assertCommandBuilderPointers(t *testing.T, got, want []bot.CommandBuilder) {
+func assertCommandBuilderPointers(t *testing.T, got, want []orchcmd.CommandBuilder) {
 	t.Helper()
 
 	if len(got) != len(want) {

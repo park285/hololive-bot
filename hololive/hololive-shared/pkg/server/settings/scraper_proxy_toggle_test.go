@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 type scraperProxyTestYouTubeService struct {
@@ -50,14 +50,14 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 
 	t.Run("applies to youtube service and scheduler", func(t *testing.T) {
 		youtubeService := &scraperProxyTestYouTubeService{}
-		scheduler := poller.NewScheduler(&poller.SchedulerConfig{
+		pollScheduler := scheduler.NewScheduler(&scheduler.SchedulerConfig{
 			WorkerCount:     1,
 			RequestInterval: 0,
 		})
 		trackingPoller := &scraperProxyTogglePoller{}
-		scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
+		pollScheduler.Register("channel-1", trackingPoller, scheduler.PriorityNormal, time.Minute)
 
-		ApplyScraperProxyToggle(true, youtubeService, nil, scheduler, slog.New(slog.DiscardHandler))
+		ApplyScraperProxyToggle(true, youtubeService, nil, pollScheduler, slog.New(slog.DiscardHandler))
 		if youtubeService.setCalls != 1 {
 			t.Fatalf("SetScraperProxyEnabled calls = %d, want 1", youtubeService.setCalls)
 		}
@@ -65,7 +65,7 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 			t.Fatal("youtube proxy not enabled")
 		}
 
-		enabled, known := scheduler.ProxyEnabled()
+		enabled, known := pollScheduler.ProxyEnabled()
 		if !known {
 			t.Fatal("scheduler proxy state unknown, want known")
 		}
@@ -73,14 +73,14 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 			t.Fatal("scheduler proxy not enabled")
 		}
 
-		ApplyScraperProxyToggle(false, youtubeService, nil, scheduler, slog.New(slog.DiscardHandler))
+		ApplyScraperProxyToggle(false, youtubeService, nil, pollScheduler, slog.New(slog.DiscardHandler))
 		if youtubeService.setCalls != 2 {
 			t.Fatalf("SetScraperProxyEnabled calls = %d, want 2", youtubeService.setCalls)
 		}
 		if youtubeService.ScraperProxyEnabled() {
 			t.Fatal("youtube proxy still enabled")
 		}
-		enabled, known = scheduler.ProxyEnabled()
+		enabled, known = pollScheduler.ProxyEnabled()
 		if !known {
 			t.Fatal("scheduler proxy state unknown after disable")
 		}

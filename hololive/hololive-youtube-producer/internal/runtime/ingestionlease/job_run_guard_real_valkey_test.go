@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,12 +44,12 @@ func TestJobRunGuardRealValkeyIntegration(t *testing.T) {
 
 	status, claim, err := winner.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAcquired, status.Result)
+	require.Equal(t, polling.JobClaimAcquired, status.Result)
 	require.NotNil(t, claim)
 
 	status, peerClaim, err := peer.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimPeerOwned, status.Result)
+	require.Equal(t, polling.JobClaimPeerOwned, status.Result)
 	require.Nil(t, peerClaim)
 
 	completed, err := claim.MarkCompleted(ctx, identity.Interval)
@@ -57,6 +58,6 @@ func TestJobRunGuardRealValkeyIntegration(t *testing.T) {
 
 	status, peerClaim, err = peer.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAlreadyCompleted, status.Result)
+	require.Equal(t, polling.JobClaimAlreadyCompleted, status.Result)
 	require.Nil(t, peerClaim)
 }

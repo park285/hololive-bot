@@ -3,14 +3,13 @@ package adapter_test
 import (
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/webhook"
-
-	adapter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 func TestMessageAdapterParsesHelpCommand(t *testing.T) {
-	messageAdapter := adapter.NewMessageAdapter("!", "")
+	messageAdapter := messaging.NewMessageAdapter("!", "")
 
 	for _, tc := range []struct {
 		name    string
@@ -40,7 +39,7 @@ func TestMessageAdapterParsesHelpCommand(t *testing.T) {
 }
 
 func TestMessageAdapterReturnsUnknownForNonCommandInput(t *testing.T) {
-	messageAdapter := adapter.NewMessageAdapter("!", "")
+	messageAdapter := messaging.NewMessageAdapter("!", "")
 
 	for _, tc := range []struct {
 		name    string
@@ -64,7 +63,7 @@ func TestMessageAdapterReturnsUnknownForNonCommandInput(t *testing.T) {
 }
 
 func TestMessageAdapterBlankPrefixDefaultsToExclamation(t *testing.T) {
-	messageAdapter := adapter.NewMessageAdapter("   ", "")
+	messageAdapter := messaging.NewMessageAdapter("   ", "")
 
 	parsed := messageAdapter.ParseMessage(&webhook.Message{Msg: "!help"})
 	if parsed.Type != domain.CommandHelp {

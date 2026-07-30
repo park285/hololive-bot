@@ -8,18 +8,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/config"
+	dbtest "github.com/kapu/hololive-dbtest"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *testing.T) {
@@ -35,8 +38,8 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		&config.ScraperConfig{
-			Poll: config.ScraperPoll{
+		&settings.ScraperConfig{
+			Poll: settings.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
 				Community: 13 * time.Minute,
@@ -44,7 +47,7 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 				Live:      3 * time.Minute,
 			},
 		},
-		scraper.NewRateLimiter(time.Second),
+		ratelimiter.New(time.Second),
 		cache,
 		[]string{"UC_OLD"},
 		[]string{"UC_STATS"},
@@ -60,7 +63,7 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{
+		[]communityshorts.OperationalChannel{
 			{ChannelID: "UC_NEW", Enabled: true},
 			{ChannelID: "UC_STATS", Enabled: true},
 		},
@@ -103,11 +106,11 @@ func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		&config.ScraperConfig{Poll: config.ScraperPoll{
+		&settings.ScraperConfig{Poll: settings.ScraperPoll{
 			Videos: 7 * time.Minute, Shorts: 11 * time.Minute, Community: 13 * time.Minute,
 			Stats: 4 * time.Hour, Live: 3 * time.Minute,
 		}},
-		scraper.NewRateLimiter(time.Second),
+		ratelimiter.New(time.Second),
 		cache,
 		[]string{"UC_OLD"},
 		[]string{"UC_VERSIONED"},
@@ -122,7 +125,7 @@ func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{{ChannelID: "UC_VERSIONED", Enabled: true}},
+		[]communityshorts.OperationalChannel{{ChannelID: "UC_VERSIONED", Enabled: true}},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
 	)
@@ -154,18 +157,18 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		return []string{"UC_TIER"}, nil
 	}
 
-	appConfig := config.ScraperConfig{
-		Poll: config.ScraperPoll{
+	appConfig := settings.ScraperConfig{
+		Poll: settings.ScraperPoll{
 			Videos:    10 * time.Minute,
 			Shorts:    10 * time.Minute,
 			Community: 10 * time.Minute,
 			Stats:     6 * time.Hour,
 			Live:      10 * time.Minute,
 		},
-		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
+		PollTiering: settings.ScraperPollTieringConfig{Enabled: true},
 	}
 	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
-	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, &appConfig, scraper.NewRateLimiter(time.Second), cache, []string{"UC_TIER"}, []string{"UC_TIER"})
+	registrations := buildYouTubeProducerChannelPollerRegistrations(postgres, &appConfig, ratelimiter.New(time.Second), cache, []string{"UC_TIER"}, []string{"UC_TIER"})
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -176,7 +179,7 @@ func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{{ChannelID: "UC_TIER", Enabled: true}},
+		[]communityshorts.OperationalChannel{{ChannelID: "UC_TIER", Enabled: true}},
 		func(context.Context) ([]string, error) { return []string{"UC_TIER"}, nil },
 		newYouTubePollTargetTestLogger(),
 	).withTieringDB(pool)
@@ -232,11 +235,11 @@ func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T)
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		&config.ScraperConfig{Poll: config.ScraperPoll{
+		&settings.ScraperConfig{Poll: settings.ScraperPoll{
 			Videos: 7 * time.Minute, Shorts: 11 * time.Minute, Community: 13 * time.Minute,
 			Stats: 4 * time.Hour, Live: 3 * time.Minute,
 		}},
-		scraper.NewRateLimiter(time.Second),
+		ratelimiter.New(time.Second),
 		cache,
 		[]string{"UC_OLD"},
 		[]string{"UC_VERSIONED"},
@@ -251,7 +254,7 @@ func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T)
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{{ChannelID: "UC_VERSIONED", Enabled: true}},
+		[]communityshorts.OperationalChannel{{ChannelID: "UC_VERSIONED", Enabled: true}},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
 	)
@@ -274,10 +277,10 @@ func TestYouTubePollTargetRefresher_SkipsImplicitGlobalRegistrationsDuringRefres
 	}
 
 	registrations := []providers.ChannelPollerRegistration{
-		providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+		providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Minute).
 			WithChannelIDs([]string{"UC_OLD"}).
 			WithTargetGroup(providers.ChannelTargetGroupNotification),
-		providers.NewChannelPollerRegistration(refreshTestPoller{name: "global_resolver"}, poller.PriorityLow, time.Minute),
+		providers.NewChannelPollerRegistration(refreshTestPoller{name: "global_resolver"}, pollscheduler.PriorityLow, time.Minute),
 	}
 
 	scheduler := providers.ProvideScraperScheduler(
@@ -289,7 +292,7 @@ func TestYouTubePollTargetRefresher_SkipsImplicitGlobalRegistrationsDuringRefres
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
+		[]communityshorts.OperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
 	)
@@ -315,12 +318,12 @@ func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRe
 	const globalPollerName = "global_job"
 
 	registrations := []providers.ChannelPollerRegistration{
-		providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+		providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Minute).
 			WithChannelIDs([]string{"UC_OLD"}).
 			WithTargetGroup(providers.ChannelTargetGroupNotification),
 		providers.NewGlobalPollerRegistration(
 			refreshTestPoller{name: globalPollerName},
-			poller.PriorityLow,
+			pollscheduler.PriorityLow,
 			3*time.Minute,
 		),
 	}
@@ -334,7 +337,7 @@ func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRe
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
+		[]communityshorts.OperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
 	)
@@ -360,8 +363,8 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		&config.ScraperConfig{
-			Poll: config.ScraperPoll{
+		&settings.ScraperConfig{
+			Poll: settings.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
 				Community: 13 * time.Minute,
@@ -369,7 +372,7 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 				Live:      3 * time.Minute,
 			},
 		},
-		scraper.NewRateLimiter(time.Second),
+		ratelimiter.New(time.Second),
 		cache,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_NOTIFY", "UC_STATS_A"},
@@ -385,14 +388,14 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{
+		[]communityshorts.OperationalChannel{
 			{ChannelID: "UC_NOTIFY", Enabled: true},
 			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		newYouTubePollTargetTestLogger(),
-	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
-		return []communityShortsOperationalChannel{
+	).withOperationalChannelLoader(func(context.Context) ([]communityshorts.OperationalChannel, error) {
+		return []communityshorts.OperationalChannel{
 			{ChannelID: "UC_NOTIFY", Enabled: true},
 			{ChannelID: "UC_STATS_B", Enabled: true},
 		}, nil
@@ -418,10 +421,10 @@ func TestYouTubePollTargetRefresherCreatesSeparatePrimaryAndBackfillJobs(t *test
 	}
 
 	registrations := []providers.ChannelPollerRegistration{
-		providers.NewChannelPollerRegistration(refreshTestPoller{name: "shorts"}, poller.PriorityLow, 6*time.Minute).
+		providers.NewChannelPollerRegistration(refreshTestPoller{name: "shorts"}, pollscheduler.PriorityLow, 6*time.Minute).
 			WithChannelIDs([]string{"UC_OLD"}).
 			WithTargetGroup(providers.ChannelTargetGroupNotification),
-		providers.NewChannelPollerRegistration(refreshTestPoller{name: "shorts_backfill"}, poller.PriorityLow, 5*time.Minute).
+		providers.NewChannelPollerRegistration(refreshTestPoller{name: "shorts_backfill"}, pollscheduler.PriorityLow, 5*time.Minute).
 			WithChannelIDs([]string{"UC_OLD"}).
 			WithTargetGroup(providers.ChannelTargetGroupNotification),
 	}
@@ -435,7 +438,7 @@ func TestYouTubePollTargetRefresherCreatesSeparatePrimaryAndBackfillJobs(t *test
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
+		[]communityshorts.OperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		newYouTubePollTargetTestLogger(),
 	)
@@ -462,8 +465,8 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		&config.ScraperConfig{
-			Poll: config.ScraperPoll{
+		&settings.ScraperConfig{
+			Poll: settings.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
 				Community: 13 * time.Minute,
@@ -471,7 +474,7 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 				Live:      3 * time.Minute,
 			},
 		},
-		scraper.NewRateLimiter(time.Second),
+		ratelimiter.New(time.Second),
 		cache,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
@@ -489,16 +492,16 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{
+		[]communityshorts.OperationalChannel{
 			{ChannelID: "UC_NOTIFY", Enabled: true},
 			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		newYouTubePollTargetTestLogger(),
-	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
+	).withOperationalChannelLoader(func(context.Context) ([]communityshorts.OperationalChannel, error) {
 		loadCalls++
 		if loadCalls == 1 {
-			return []communityShortsOperationalChannel{
+			return []communityshorts.OperationalChannel{
 				{ChannelID: "UC_NOTIFY", Enabled: true},
 				{ChannelID: "UC_STATS_B", Enabled: true},
 			}, nil
@@ -528,8 +531,8 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		&config.ScraperConfig{
-			Poll: config.ScraperPoll{
+		&settings.ScraperConfig{
+			Poll: settings.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
 				Community: 13 * time.Minute,
@@ -537,7 +540,7 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 				Live:      3 * time.Minute,
 			},
 		},
-		scraper.NewRateLimiter(time.Second),
+		ratelimiter.New(time.Second),
 		cache,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
@@ -556,16 +559,16 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{
+		[]communityshorts.OperationalChannel{
 			{ChannelID: "UC_NOTIFY", Enabled: true},
 			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		logger,
-	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
+	).withOperationalChannelLoader(func(context.Context) ([]communityshorts.OperationalChannel, error) {
 		loadCalls++
 		if loadCalls == 1 {
-			return []communityShortsOperationalChannel{
+			return []communityshorts.OperationalChannel{
 				{ChannelID: "UC_NOTIFY", Enabled: true},
 				{ChannelID: "UC_STATS_B", Enabled: true},
 			}, nil
@@ -593,8 +596,8 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		&config.ScraperConfig{
-			Poll: config.ScraperPoll{
+		&settings.ScraperConfig{
+			Poll: settings.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
 				Community: 13 * time.Minute,
@@ -602,7 +605,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 				Live:      3 * time.Minute,
 			},
 		},
-		scraper.NewRateLimiter(time.Second),
+		ratelimiter.New(time.Second),
 		cache,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
@@ -620,7 +623,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{
+		[]communityshorts.OperationalChannel{
 			{ChannelID: "UC_NOTIFY", Enabled: true},
 			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
@@ -648,8 +651,8 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 
 	registrations := buildYouTubeProducerChannelPollerRegistrations(
 		&databasemocks.Client{},
-		&config.ScraperConfig{
-			Poll: config.ScraperPoll{
+		&settings.ScraperConfig{
+			Poll: settings.ScraperPoll{
 				Videos:    7 * time.Minute,
 				Shorts:    11 * time.Minute,
 				Community: 13 * time.Minute,
@@ -657,7 +660,7 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 				Live:      3 * time.Minute,
 			},
 		},
-		scraper.NewRateLimiter(time.Second),
+		ratelimiter.New(time.Second),
 		cache,
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS_A"},
@@ -676,21 +679,21 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 		cache,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{
+		[]communityshorts.OperationalChannel{
 			{ChannelID: "UC_NOTIFY", Enabled: true},
 			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		logger,
-	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
+	).withOperationalChannelLoader(func(context.Context) ([]communityshorts.OperationalChannel, error) {
 		loadCalls++
 		if loadCalls == 1 {
-			return []communityShortsOperationalChannel{
+			return []communityshorts.OperationalChannel{
 				{ChannelID: "UC_NOTIFY", Enabled: true},
 				{ChannelID: "UC_STATS_A", Enabled: true},
 			}, nil
 		}
-		return []communityShortsOperationalChannel{
+		return []communityshorts.OperationalChannel{
 			{ChannelID: "UC_STATS_A", Enabled: true},
 			{ChannelID: "UC_NOTIFY", Enabled: true},
 		}, nil

@@ -26,18 +26,18 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/stringutil"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 type SubscriberCommand struct {
-	BaseCommand
+	handlercore.BaseCommand
 }
 
-func NewSubscriberCommand(deps *Dependencies) *SubscriberCommand {
-	return &SubscriberCommand{BaseCommand: NewBaseCommand(deps)}
+func NewSubscriberCommand(deps *handlercore.Dependencies) *SubscriberCommand {
+	return &SubscriberCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
 }
 
 func (c *SubscriberCommand) Name() string {
@@ -59,10 +59,10 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 
 	// 멤버 이름 필수
 	if memberQuery == "" {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrSubscriberNeedMemberName)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrSubscriberNeedMemberName)
 	}
 
-	matchedChannel, err := FindMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberQuery, "구독자")
+	matchedChannel, err := handlercore.FindMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberQuery, "구독자")
 	if memberLookupHandled(err) {
 		return nil
 	}
@@ -75,14 +75,14 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 
 	channel, err := c.getSubscriberChannel(ctx, matchedChannel.ID)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrSubscriberQueryFailed)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrSubscriberQueryFailed)
 	}
 
 	if !hasSubscriberCount(channel) {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.MsgNoSubscriberData)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.MsgNoSubscriberData)
 	}
 	if *channel.SubscriberCount < 0 {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.MsgNoSubscriberData)
+		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.MsgNoSubscriberData)
 	}
 
 	memberName := c.subscriberMemberName(ctx, channel)

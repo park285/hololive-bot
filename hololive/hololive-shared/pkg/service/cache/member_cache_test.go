@@ -25,74 +25,61 @@ import (
 	"testing"
 )
 
-func TestInitializeMemberDatabaseAndGetMemberChannelID(t *testing.T) {
+func TestInitializeMemberDatabaseCanonicalFields(t *testing.T) {
 	t.Parallel()
-
-	tests := []struct {
-		name       string
-		memberData map[string]string
-		lookupKey  string
-		wantID     string
-	}{
-		{
-			name: "org 키 형식(name:Hololive)으로 저장 후 조회 - 성공",
-			memberData: map[string]string{
-				"Aqua:Hololive": "UCOyYb1c43VlX9rc_lT6NKQw",
-			},
-			lookupKey: "Aqua",
-			wantID:    "UCOyYb1c43VlX9rc_lT6NKQw",
-		},
-		{
-			name: "레거시 키 형식(name만)으로 저장 후 조회 - 성공",
-			memberData: map[string]string{
-				"Shion": "UCXTpFs_3PqI41qX2d9tL2Rg",
-			},
-			lookupKey: "Shion",
-			wantID:    "UCXTpFs_3PqI41qX2d9tL2Rg",
-		},
-		{
-			name: "존재하지 않는 멤버 조회 - 빈 문자열 반환",
-			memberData: map[string]string{
-				"Aqua:Hololive": "UCOyYb1c43VlX9rc_lT6NKQw",
-			},
-			lookupKey: "Pekora",
-			wantID:    "",
-		},
+	service, _ := newTestCacheService(t)
+	ctx := context.Background()
+	members := map[string]string{"Aqua:Hololive": "UCOyYb1c43VlX9rc_lT6NKQw"}
+	if err := service.InitializeMemberDatabase(ctx, members); err != nil {
+		t.Fatalf("InitializeMemberDatabase() error = %v", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			service, _ := newTestCacheService(t)
-			ctx := context.Background()
-
-			if err := service.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
-				t.Fatalf("InitializeMemberDatabase() error = %v", err)
-			}
-
-			gotID, err := service.GetMemberChannelID(ctx, tt.lookupKey)
-			if err != nil {
-				t.Fatalf("GetMemberChannelID() error = %v", err)
-			}
-			if gotID != tt.wantID {
-				t.Errorf("GetMemberChannelID(%q) = %q, want %q", tt.lookupKey, gotID, tt.wantID)
-			}
-		})
+	got, err := service.GetAllMembers(ctx)
+	if err != nil {
+		t.Fatalf("GetAllMembers() error = %v", err)
+	}
+	if got["Aqua:Hololive"] != members["Aqua:Hololive"] {
+		t.Fatalf("GetAllMembers() = %#v", got)
 	}
 }
 
-func TestGetMemberChannelID_EmptyName(t *testing.T) {
+func TestInitializeMemberDatabaseRejectsOldFieldShape(t *testing.T) {
 	t.Parallel()
-
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
 
-	gotID, err := service.GetMemberChannelID(ctx, "")
-	if err != nil {
-		t.Fatalf("GetMemberChannelID(\"\") error = %v", err)
+	err := service.InitializeMemberDatabase(t.Context(), map[string]string{"Miko": "channel"})
+	if err == nil {
+		t.Fatal("InitializeMemberDatabase() error = nil")
 	}
-	if gotID != "" {
-		t.Errorf("GetMemberChannelID(\"\") = %q, want %q", gotID, "")
+	if got, want := err.Error(), "initialize member database: member field must use name:org format"; got != want {
+		t.Fatalf("InitializeMemberDatabase() error = %q, want %q", got, want)
+	}
+}
+
+func TestGetAllMembersIgnoresOldOnlyField(t *testing.T) {
+	t.Parallel()
+	service, mini := newTestCacheService(t)
+	mini.HSet(memberHashKey, "Miko", "old-channel")
+
+	got, err := service.GetAllMembers(t.Context())
+	if err != nil {
+		t.Fatalf("GetAllMembers() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("GetAllMembers() = %#v, want empty", got)
+	}
+}
+
+func TestGetMemberChannelIDWithOrgDoesNotReadBareField(t *testing.T) {
+	t.Parallel()
+	service, mini := newTestCacheService(t)
+	mini.HSet(memberHashKey, "Miko", "old-channel")
+
+	got, err := service.GetMemberChannelIDWithOrg(t.Context(), "Miko", "")
+	if err != nil {
+		t.Fatalf("GetMemberChannelIDWithOrg() error = %v", err)
+	}
+	if got != "" {
+		t.Fatalf("GetMemberChannelIDWithOrg() = %q, want empty", got)
 	}
 }
 

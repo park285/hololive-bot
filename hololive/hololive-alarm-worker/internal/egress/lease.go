@@ -18,8 +18,6 @@ const (
 	NotificationEgressLeaseAcquireRetrySeconds = 5
 )
 
-var ErrNotificationEgressLeaseHeld = lease.ErrHeld
-
 type NotificationEgressLease struct {
 	inner  *lease.Lease
 	logger *slog.Logger

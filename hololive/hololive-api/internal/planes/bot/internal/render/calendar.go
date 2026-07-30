@@ -9,8 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/sync/singleflight"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render/cardkit"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -20,7 +18,6 @@ type CalendarCardRenderer struct {
 	cacheMu      sync.Mutex
 	cache        map[calendarCacheKey][]byte
 	cacheOrder   []calendarCacheKey
-	rendering    singleflight.Group
 	diskMu       sync.Mutex
 	diskCacheDir string
 	strings      *messagestrings.Store
@@ -62,22 +59,6 @@ func NewCalendarCardRenderer(options ...CalendarCardRendererOption) *CalendarCar
 	return r
 }
 
-func (r *CalendarCardRenderer) RenderCalendarImage(month, year int, entries []domain.CalendarEntry) ([]byte, error) {
-	cacheKey := newCalendarCacheKey(month, year, entries)
-	if data, ok := r.cachedImage(cacheKey); ok {
-		return data, nil
-	}
-
-	result, err, _ := r.rendering.Do(cacheKey.string(), func() (any, error) {
-		return r.renderCalendarImageOnce(context.Background(), cacheKey, month, year, entries)
-	})
-	return calendarRenderResult(result, err)
-}
-
-// RenderCalendarImageContext binds remote photo retrieval and cache admission to
-// the caller lifetime. Context-aware calls intentionally do not join the legacy
-// singleflight group: cancelling one request must never cancel or poison another
-// request that happens to render the same calendar key.
 func (r *CalendarCardRenderer) RenderCalendarImageContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("calendar render context is nil")

@@ -6,7 +6,7 @@ import Lock from "lucide-react/dist/esm/icons/lock.mjs";
 import Play from "lucide-react/dist/esm/icons/play.mjs";
 import User from "lucide-react/dist/esm/icons/user.mjs";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { authApi } from "@/api/core";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";

@@ -3,12 +3,12 @@
 INTEGRATION_TEST_PACKAGES=(
     ./hololive/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer
     ./hololive/hololive-api/internal/planes/llm/internal/service/membernews/summarizer
-    ./hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch
+    ./hololive/hololive-shared/pkg/service/youtube/outbox/dispatch
     ./hololive/hololive-youtube-producer/internal/runtime/ingestionlease
 )
 INTEGRATION_TAG_PACKAGES=(
     ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
-    ./hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo
+    ./hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo
 )
 INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}"
 INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-valkey/valkey:9.1.1-alpine3.24@sha256:ee91f7a174ac4d6a6b0685b3a60e321f0a9dbbb691f9b0e285be2ba1d1be8328}"

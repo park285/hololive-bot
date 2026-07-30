@@ -1,0 +1,61 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package botruntime
+
+import (
+	"log/slog"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/park285/iris-client-go/iris"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
+)
+
+func buildBotDependencyModules(
+	appConfig *settings.Config,
+	infra *sharedmodules.InfraModule,
+	foundation *appbootstrap.ScraperHolodexProfileFoundation,
+	alarmYouTubeStack *appbootstrap.AlarmYouTubeStackComponents,
+	integrationServices *appbootstrap.CoreIntegrationServices,
+	messageAdapter *messaging.MessageAdapter,
+	formatter *messageformatter.ResponseFormatter,
+	messageStrings *messagestrings.Store,
+	irisClient iris.BotClient,
+	logger *slog.Logger,
+) appbootstrap.BotDependencyModules {
+	return appbootstrap.BuildBotDependencyModules(
+		appConfig,
+		infra,
+		foundation,
+		alarmYouTubeStack,
+		integrationServices,
+		messageAdapter,
+		formatter,
+		messageStrings,
+		irisClient,
+		logger,
+	)
+}

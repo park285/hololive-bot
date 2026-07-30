@@ -1,9 +1,7 @@
 package communityshorts
 
 const (
-	LegacyDeliveryPath          = "legacy_alarm_queue"
-	NewDeliveryPath             = "youtube_outbox_dispatcher"
-	LegacyStatus                = "blocked"
+	DeliveryPathYouTubeOutbox   = "youtube_outbox_dispatcher"
 	DeliveryModeNew             = "new_only"
 	DeliveryModeOff             = "disabled"
 	DeliveryModePending         = "pending_cutover"

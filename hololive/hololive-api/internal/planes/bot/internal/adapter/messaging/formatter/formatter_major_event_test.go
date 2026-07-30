@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )

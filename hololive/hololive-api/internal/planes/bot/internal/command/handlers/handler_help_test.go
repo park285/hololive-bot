@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
 )
 
 func setupHelpTestRenderer(t *testing.T) *serviceTemplate.Renderer {
@@ -71,8 +71,8 @@ func TestHelpCommand_Execute_GoldenPathSendsImagesInOrder(t *testing.T) {
 	var sent [][]byte
 	textCalls := 0
 
-	deps := &Dependencies{
-		Formatter:         adapter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+	deps := &handlercore.Dependencies{
+		Formatter:         formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
 		HelpImageRenderer: renderer,
 		SendMessage: func(_ context.Context, _, _ string) error {
 			textCalls++
@@ -105,8 +105,8 @@ func TestHelpCommand_Execute_GoldenPathSendsImagesInOrder(t *testing.T) {
 func TestHelpCommand_Execute_RenderFailureFallsBackToText(t *testing.T) {
 	renderErr := errors.New("render failed")
 	var fallback string
-	deps := &Dependencies{
-		Formatter:         adapter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+	deps := &handlercore.Dependencies{
+		Formatter:         formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
 		HelpImageRenderer: &stubHelpImageRenderer{err: renderErr},
 		SendMessage: func(_ context.Context, _ string, message string) error {
 			fallback = message
@@ -131,8 +131,8 @@ func TestHelpCommand_Execute_PartialImageFailureFallsBackToText(t *testing.T) {
 	imageErr := errors.New("image failed")
 	var fallback string
 	imageCalls := 0
-	deps := &Dependencies{
-		Formatter: adapter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+	deps := &handlercore.Dependencies{
+		Formatter: formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
 		HelpImageRenderer: &stubHelpImageRenderer{
 			images: [][]byte{[]byte("one"), []byte("two"), []byte("three")},
 		},
@@ -164,8 +164,8 @@ func TestHelpCommand_Execute_PartialImageFailureFallsBackToText(t *testing.T) {
 func TestHelpCommand_Execute_JoinsImageAndTextFailures(t *testing.T) {
 	imageErr := errors.New("image failed")
 	textErr := errors.New("text failed")
-	deps := &Dependencies{
-		Formatter:         adapter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+	deps := &handlercore.Dependencies{
+		Formatter:         formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
 		HelpImageRenderer: &stubHelpImageRenderer{images: [][]byte{[]byte("one")}},
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return textErr
@@ -184,8 +184,8 @@ func TestHelpCommand_Execute_JoinsImageAndTextFailures(t *testing.T) {
 
 func TestHelpCommand_Execute_MissingImageCapabilityUsesTextFallback(t *testing.T) {
 	var sentMessage string
-	deps := &Dependencies{
-		Formatter: adapter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
+	deps := &handlercore.Dependencies{
+		Formatter: formatter.NewResponseFormatter("!", setupHelpTestRenderer(t)),
 		SendMessage: func(_ context.Context, _ string, message string) error {
 			sentMessage = message
 			return nil
@@ -205,25 +205,35 @@ func TestHelpCommand_Execute_NilDependencies(t *testing.T) {
 	if err := NewHelpCommand(nil).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, nil); err == nil {
 		t.Fatal("expected error for nil deps")
 	}
-	if err := NewHelpCommand(&Dependencies{Formatter: adapter.NewResponseFormatter("!", nil)}).Execute(
-		t.Context(),
-		&domain.CommandContext{Room: "room-1"},
-		nil,
-	); err == nil {
+}
+
+func TestHelpCommand_Execute_NilSendMessage(t *testing.T) {
+	deps := &handlercore.Dependencies{
+		Formatter: formatter.NewResponseFormatter("!", nil),
+	}
+	cmd := NewHelpCommand(deps)
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, nil)
+	if err == nil {
 		t.Fatal("expected error for nil SendMessage")
 	}
-	if err := NewHelpCommand(&Dependencies{SendMessage: func(_ context.Context, _, _ string) error { return nil }}).Execute(
-		t.Context(),
-		&domain.CommandContext{Room: "room-1"},
-		nil,
-	); err == nil {
+}
+
+func TestHelpCommand_Execute_NilFormatter(t *testing.T) {
+	deps := &handlercore.Dependencies{
+		SendMessage: func(_ context.Context, _, _ string) error { return nil },
+	}
+	cmd := NewHelpCommand(deps)
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, nil)
+	if err == nil {
 		t.Fatal("expected error for nil Formatter")
 	}
 }
 
 func TestHelpCommand_Execute_NilContexts(t *testing.T) {
-	deps := &Dependencies{
-		Formatter:   adapter.NewResponseFormatter("!", nil),
+	deps := &handlercore.Dependencies{
+		Formatter:   formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error { return nil },
 	}
 	if err := NewHelpCommand(deps).Execute(t.Context(), nil, nil); err == nil {

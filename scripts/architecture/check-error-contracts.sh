@@ -13,7 +13,7 @@ required_files=(
   docs/current/contracts/membernews.md
   docs/current/contracts/trigger.md
   docs/current/contracts/alarm.md
-  hololive/hololive-shared/pkg/server/internal/httpserver/response.go
+  hololive/hololive-shared/pkg/server/httpserver/response.go
   hololive/hololive-shared/pkg/contracts/common/errors.go
   ../shared-go/pkg/httputil/response.go
   hololive/hololive-shared/pkg/contracts/trigger/errors.go
@@ -56,7 +56,7 @@ for token in "${required_tokens[@]}"; do
   fi
 done
 
-if ! grep -Fq 'RespondError' "${ROOT_DIR}/hololive/hololive-shared/pkg/server/internal/httpserver/response.go"; then
+if ! grep -Fq 'RespondError' "${ROOT_DIR}/hololive/hololive-shared/pkg/server/httpserver/response.go"; then
   echo "[FAIL] RespondError helper missing from shared server response"
   missing=1
 fi

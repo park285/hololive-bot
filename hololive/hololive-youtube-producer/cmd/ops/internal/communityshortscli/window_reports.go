@@ -3,8 +3,10 @@ package communityshortscli
 import (
 	"time"
 
+	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/channelsummary"
+	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/routereport"
+
 	"github.com/kapu/hololive-youtube-producer/cmd/ops/internal/reportcli"
-	opsapp "github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts"
 )
 
 func runChannelSummaryCommand(ctx commandContext, args []string) error {
@@ -17,14 +19,14 @@ func runChannelSummaryCommand(ctx commandContext, args []string) error {
 
 	return reportcli.RunWindowReport(
 		reportcli.WindowParams{Window: *window, Format: *format},
-		reportcli.WindowCommand[time.Time, opsapp.CommunityShortsChannelSummaryReport]{
+		reportcli.WindowCommand[time.Time, channelsummary.Report]{
 			Stdout: ctx.stdout,
 			Stderr: ctx.stderr,
 			BuildOptions: func(now time.Time, window time.Duration) (time.Time, error) {
 				return now.Add(-window), nil
 			},
-			Collect:            opsapp.CollectCommunityShortsChannelSummaryReport,
-			RenderMarkdown:     opsapp.RenderCommunityShortsChannelSummaryMarkdown,
+			Collect:            channelsummary.Collect,
+			RenderMarkdown:     channelsummary.RenderMarkdown,
 			LoadConfigError:    "Failed to load community/shorts channel-summary config",
 			CollectError:       "Failed to collect community/shorts channel summary",
 			MarkdownWriteError: "Failed to write community/shorts channel-summary markdown",
@@ -43,14 +45,14 @@ func runRouteReportCommand(ctx commandContext, args []string) error {
 
 	return reportcli.RunWindowReport(
 		reportcli.WindowParams{Window: *window, Format: *format},
-		reportcli.WindowCommand[time.Time, opsapp.CommunityShortsRouteVerificationReport]{
+		reportcli.WindowCommand[time.Time, routereport.Report]{
 			Stdout: ctx.stdout,
 			Stderr: ctx.stderr,
 			BuildOptions: func(now time.Time, window time.Duration) (time.Time, error) {
 				return now.Add(-window), nil
 			},
-			Collect:            opsapp.CollectCommunityShortsRouteVerificationReport,
-			RenderMarkdown:     opsapp.RenderCommunityShortsRouteVerificationMarkdown,
+			Collect:            routereport.Collect,
+			RenderMarkdown:     routereport.RenderMarkdown,
 			LoadConfigError:    "Failed to load community/shorts route verification config",
 			CollectError:       "Failed to collect community/shorts route verification report",
 			MarkdownWriteError: "Failed to write community/shorts route verification report",

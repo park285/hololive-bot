@@ -33,6 +33,7 @@ import (
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+	alarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/testutil"
@@ -48,7 +49,7 @@ func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {
 	t.Helper()
 
-	return queueItemsByKeyOrEmpty(t, mini, AlarmDispatchQueue)
+	return queueItemsByKeyOrEmpty(t, mini, alarmkeys.DispatchQueueKey)
 }
 
 func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string) []string {

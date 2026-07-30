@@ -18,25 +18,25 @@ require_command() {
 }
 
 require_command node
-require_command npm
+require_command corepack
 
 node - <<'NODE'
-const [major, minor] = process.versions.node.split('.').map(Number)
-const supported = major > 22 || (major === 22 && minor >= 12) || (major === 20 && minor >= 19)
+const [major, minor, patch] = process.versions.node.split('.').map(Number)
+const supported = major > 22 || (major === 22 && (minor > 22 || (minor === 22 && patch >= 2)))
 if (!supported) {
-  console.error(`unsupported Node.js ${process.versions.node}; expected >=20.19 or >=22.12`)
+  console.error(`unsupported Node.js ${process.versions.node}; expected >=22.22.2`)
   process.exit(1)
 }
-console.log(`[public-pr] Node.js ${process.versions.node}, npm runtime available`)
+console.log(`[public-pr] Node.js ${process.versions.node}, Corepack-managed npm available`)
 NODE
 
 cd "${FRONTEND_DIR}"
 
-echo "[public-pr] npm ci"
-npm ci
+echo "[public-pr] corepack npm ci"
+corepack npm ci
 
 echo "[public-pr] generate API client"
-npm run generate:api
+corepack npm run generate:api
 
 generated_status="$(git -C "${ROOT_DIR}" status --porcelain -- \
   admin-dashboard/backend/docs/swagger.json \
@@ -46,15 +46,15 @@ if [[ -n "${generated_status}" ]]; then
     admin-dashboard/backend/docs/swagger.json \
     admin-dashboard/frontend/src/api/generated || true
   printf '%s\n' "${generated_status}" >&2
-  echo "generated OpenAPI artifacts are stale; run npm run generate:api and commit the result" >&2
+  echo "generated OpenAPI artifacts are stale; run corepack npm run generate:api and commit the result" >&2
   exit 1
 fi
 
 echo "[public-pr] frontend tests"
-npm test
+corepack npm test
 
 echo "[public-pr] frontend lint"
-npm run lint
+corepack npm run lint
 
 echo "[public-pr] frontend build"
-npm run build
+corepack npm run build

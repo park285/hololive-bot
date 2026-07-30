@@ -1,9 +1,8 @@
 package apiservice
 
 import (
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 func TestRecentScraperVideoIDs(t *testing.T) {
@@ -11,7 +10,7 @@ func TestRecentScraperVideoIDs(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		videos []*scraper.Video
+		videos []*parser.Video
 		want   []string
 	}{
 		{
@@ -21,12 +20,12 @@ func TestRecentScraperVideoIDs(t *testing.T) {
 		},
 		{
 			name:   "empty slice yields empty non-nil slice",
-			videos: []*scraper.Video{},
+			videos: []*parser.Video{},
 			want:   []string{},
 		},
 		{
 			name: "preserves order of video IDs",
-			videos: []*scraper.Video{
+			videos: []*parser.Video{
 				{VideoID: "aaa"},
 				{VideoID: "bbb"},
 				{VideoID: "ccc"},
@@ -35,7 +34,7 @@ func TestRecentScraperVideoIDs(t *testing.T) {
 		},
 		{
 			name: "passes through empty video IDs verbatim",
-			videos: []*scraper.Video{
+			videos: []*parser.Video{
 				{VideoID: ""},
 				{VideoID: "xyz"},
 			},

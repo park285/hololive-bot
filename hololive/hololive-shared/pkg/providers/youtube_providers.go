@@ -24,13 +24,15 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+
+	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper"
+	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 func schedulerLogger(logger *slog.Logger) *slog.Logger {
@@ -44,21 +46,21 @@ func schedulerLogger(logger *slog.Logger) *slog.Logger {
 // ProvideScraperService - 스크래퍼 서비스 생성
 func ProvideScraperService(
 	cacheClient cache.Client,
-	members member.DataProvider,
+	members domain.MemberDataProvider,
 	proxyConfig scraper.ProxyConfig,
-	sharedRL *scraper.RateLimiter,
+	sharedRL *ratelimiter.RateLimiter,
 	logger *slog.Logger,
-) *holodex.ScraperService {
-	return holodex.NewScraperService(cacheClient, members, proxyConfig, sharedRL, logger)
+) *htmlscraper.Service {
+	return htmlscraper.NewService(cacheClient, members, proxyConfig, sharedRL, logger)
 }
 
 func ProvideScraperServiceWithYouTubeProducer(
 	cacheClient cache.Client,
-	members member.DataProvider,
+	members domain.MemberDataProvider,
 	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
-) *holodex.ScraperService {
-	return holodex.NewScraperServiceWithYouTubeProducer(cacheClient, members, youtubeProducer, logger)
+) *htmlscraper.Service {
+	return htmlscraper.NewServiceWithYouTubeProducer(cacheClient, members, youtubeProducer, logger)
 }
 
 // ProvideScraperScheduler - YouTube HTML 스크래퍼 기반 폴러 스케줄러 생성
@@ -67,7 +69,7 @@ func ProvideScraperScheduler(
 	membersData domain.MemberDataProvider,
 	logger *slog.Logger,
 	opts ...ScraperSchedulerOption,
-) *poller.Scheduler {
+) *pollscheduler.Scheduler {
 	log := schedulerLogger(logger)
 	resolvedOpts := resolveScraperSchedulerOptions(opts...)
 	scheduler := newScraperScheduler(&resolvedOpts, log)
@@ -103,7 +105,7 @@ func ProvideScraperScheduler(
 		slog.Float64("expected_total_rpm", totalRPM),
 		slog.Float64("expected_total_retry_amplified_rpm_max", totalRetryAmplifiedRPM))
 
-	budgetRPM := 60.0 / config.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
+	budgetRPM := 60.0 / settings.DefaultYouTubeOperationalConfig().ProducerRequestInterval.Seconds()
 	if totalRPM > budgetRPM {
 		log.Warn("scraper_poll_budget_exceeds_rate_limit",
 			slog.Float64("expected_total_rpm", totalRPM),
@@ -116,11 +118,11 @@ func ProvideScraperScheduler(
 	return scheduler
 }
 
-func newScraperScheduler(opts *scraperSchedulerOptions, logger *slog.Logger) *poller.Scheduler {
+func newScraperScheduler(opts *scraperSchedulerOptions, logger *slog.Logger) *pollscheduler.Scheduler {
 	if opts == nil {
 		opts = &scraperSchedulerOptions{}
 	}
-	schedulerConfig := poller.DefaultSchedulerConfig()
+	schedulerConfig := pollscheduler.DefaultSchedulerConfig()
 	schedulerConfig.RequestInterval = 0
 	schedulerConfig.Logger = logger
 	if opts.workerCount > 0 {
@@ -141,7 +143,7 @@ func newScraperScheduler(opts *scraperSchedulerOptions, logger *slog.Logger) *po
 	if opts.budgetAcquireTimeout > 0 {
 		schedulerConfig.BudgetAcquireTimeout = opts.budgetAcquireTimeout
 	}
-	return poller.NewScheduler(&schedulerConfig)
+	return pollscheduler.NewScheduler(&schedulerConfig)
 }
 
 func resolveDefaultScraperSchedulerChannels(
@@ -178,7 +180,7 @@ func resolveDefaultScraperSchedulerChannels(
 }
 
 func registerScraperSchedulerPollers(
-	scheduler *poller.Scheduler,
+	scheduler *pollscheduler.Scheduler,
 	logger *slog.Logger,
 	registrations []ChannelPollerRegistration,
 	defaultChannelIDs []string,

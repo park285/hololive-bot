@@ -7,6 +7,7 @@ import (
 	"time"
 
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	leasepkg "github.com/kapu/hololive-shared/pkg/service/lease"
 )
 
 func TestAcquireNotificationEgressLeaseSuccess(t *testing.T) {
@@ -42,7 +43,7 @@ func TestAcquireNotificationEgressLeaseHeld(t *testing.T) {
 	}
 
 	_, err := AcquireNotificationEgressLease(context.Background(), cache, nil)
-	if !errors.Is(err, ErrNotificationEgressLeaseHeld) {
+	if !errors.Is(err, leasepkg.ErrHeld) {
 		t.Fatalf("error = %v, want ErrNotificationEgressLeaseHeld", err)
 	}
 }

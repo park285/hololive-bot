@@ -14,6 +14,7 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 )
 
 func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceEvenWhenCacheSuperset(t *testing.T) {
@@ -206,7 +207,7 @@ func TestResolveYouTubePollTargetsFromAlarmChannelIDs(t *testing.T) {
 
 	targets := resolveYouTubePollTargetsFromAlarmChannelIDs(
 		[]string{"UCmiko", "UCunknown", "UCmiko"},
-		[]communityShortsOperationalChannel{
+		[]communityshorts.OperationalChannel{
 			{OwnerLabel: "Pekora", ChannelID: "UCpekora", Enabled: true},
 			{OwnerLabel: "Miko", ChannelID: "UCmiko", Enabled: true},
 			{OwnerLabel: "Missing", ChannelID: "", Enabled: false},
@@ -218,8 +219,8 @@ func TestResolveYouTubePollTargetsFromAlarmChannelIDs(t *testing.T) {
 	assert.Equal(t, 1, targets.DroppedAlarmTargets)
 }
 
-func testYouTubePollTargetsOperationalChannels() []communityShortsOperationalChannel {
-	return []communityShortsOperationalChannel{
+func testYouTubePollTargetsOperationalChannels() []communityshorts.OperationalChannel {
+	return []communityshorts.OperationalChannel{
 		{OwnerLabel: "Pekora", ChannelID: "UCpekora", Enabled: true},
 		{OwnerLabel: "Miko", ChannelID: "UCmiko", Enabled: true},
 		{OwnerLabel: "Missing", ChannelID: "", Enabled: false},

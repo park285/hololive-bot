@@ -122,7 +122,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	}
 
 	// org/sync_source 기본값 설정 (Task 1 요구사항)
-	org := "Hololive" // 기존 API 호환을 위한 기본값
+	org := "Hololive" // org가 없는 생성 요청의 canonical 기본값
 	syncSource := "manual"
 	status := "active"
 	if member.IsGraduated {

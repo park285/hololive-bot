@@ -7,19 +7,20 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/park285/iris-client-go/webhook"
 	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	"github.com/quic-go/quic-go/http3"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
-	"github.com/kapu/hololive-api/internal/readiness"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
 func BuildBotServer(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
@@ -36,25 +37,25 @@ func BuildBotServer(
 
 func BuildBotHTTP3Server(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
-	readyProbe ...*readiness.Probe,
+	readyProbe ...*sharedreadiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
 	return buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, irisRoomLister, logger, reloadingTLSCertificateOptions{}, readyProbe...)
 }
 
 func buildBotHTTP3ServerWithReloaderOptions(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
 	reloaderOptions reloadingTLSCertificateOptions,
-	readyProbe ...*readiness.Probe,
+	readyProbe ...*sharedreadiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
 	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, irisRoomLister, readyProbe...)
 	if err != nil {

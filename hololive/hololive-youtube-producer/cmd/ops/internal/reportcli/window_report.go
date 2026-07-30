@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 type WindowParams struct {
@@ -20,12 +20,12 @@ type WindowParams struct {
 type WindowCommand[Options any, Report any] struct {
 	Stdout             io.Writer
 	Stderr             io.Writer
-	LoadConfig         func() (*config.Config, error)
+	LoadConfig         func() (*settings.Config, error)
 	NewLogger          func(io.Writer) *slog.Logger
 	Now                func() time.Time
 	Timeout            time.Duration
 	BuildOptions       func(time.Time, time.Duration) (Options, error)
-	Collect            func(context.Context, *config.Config, *slog.Logger, time.Time, Options) (Report, error)
+	Collect            func(context.Context, *settings.Config, *slog.Logger, time.Time, Options) (Report, error)
 	RenderMarkdown     func(*Report) string
 	LoadConfigError    string
 	CollectError       string

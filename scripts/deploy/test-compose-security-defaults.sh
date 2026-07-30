@@ -18,6 +18,15 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 0
 fi
 
+if docker compose \
+  --env-file "${COMPOSE_DIR}/build-only.env.sample" \
+  -f "${COMPOSE_DIR}/docker-compose.prod.yml" \
+  config --quiet >/dev/null 2>&1; then
+  pass "build-only compose render does not read live runtime env files"
+else
+  fail "build-only compose render must use committed runtime env placeholders"
+fi
+
 merged="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml docker compose config --no-interpolate --format json 2>/dev/null)" \
   || fail "prod compose failed to render"
 

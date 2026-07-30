@@ -33,10 +33,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	json "github.com/park285/shared-go/pkg/json"
 
-	"github.com/kapu/hololive-shared/pkg/apperrors"
+	errors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
 func writeJSONResponse(t testing.TB, w http.ResponseWriter, response any) {
@@ -816,7 +817,7 @@ func TestGetLivesByChannelIDs_PageScanStopsAfterPageCap(t *testing.T) {
 }
 
 func largeChzzkTargetIDs(extra int) []string {
-	threshold := config.DefaultChzzkOperationalConfig().BatchLookupThreshold
+	threshold := settings.DefaultChzzkOperationalConfig().BatchLookupThreshold
 	channelIDs := make([]string, 0, threshold+extra)
 	for i := 0; i < threshold+extra; i++ {
 		channelIDs = append(channelIDs, fmt.Sprintf("target-%d", i+1))
@@ -934,8 +935,8 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 
 	client.openAPIBaseURL = server.URL
 
-	channelIDs := make([]string, 0, config.DefaultChzzkOperationalConfig().BatchLookupThreshold+1)
-	for i := range config.DefaultChzzkOperationalConfig().BatchLookupThreshold + 1 {
+	channelIDs := make([]string, 0, settings.DefaultChzzkOperationalConfig().BatchLookupThreshold+1)
+	for i := range settings.DefaultChzzkOperationalConfig().BatchLookupThreshold + 1 {
 		channelIDs = append(channelIDs, fmt.Sprintf("target-%d", i+1))
 	}
 
@@ -958,9 +959,9 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 }
 
 func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing.T) {
-	channelIDs := make([]string, 0, config.DefaultChzzkOperationalConfig().BatchLookupThreshold+2)
+	channelIDs := make([]string, 0, settings.DefaultChzzkOperationalConfig().BatchLookupThreshold+2)
 	channelIDs = append(channelIDs, "target-2", "target-1")
-	for i := 0; i < config.DefaultChzzkOperationalConfig().BatchLookupThreshold; i++ {
+	for i := 0; i < settings.DefaultChzzkOperationalConfig().BatchLookupThreshold; i++ {
 		channelIDs = append(channelIDs, fmt.Sprintf("filler-%d", i))
 	}
 

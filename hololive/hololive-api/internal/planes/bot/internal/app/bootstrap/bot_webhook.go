@@ -3,14 +3,15 @@ package bootstrap
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/iris-client-go/valkeydedup"
 	"github.com/park285/iris-client-go/webhook"
 )
 
 func BuildBotWebhookHandler(
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	messageHandler webhook.MessageHandler,
 	deps BotWebhookRuntimeDependencies,
 	webhookPool webhook.TaskPool,

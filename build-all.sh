@@ -15,6 +15,8 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
+# root 배포에서도 BuildKit의 optional Git refresh가 checkout index 소유권을 바꾸지 않게 한다.
+export GIT_OPTIONAL_LOCKS=0
 . "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/removed-runtimes.sh"

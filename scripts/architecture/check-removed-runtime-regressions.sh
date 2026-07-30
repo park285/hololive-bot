@@ -28,7 +28,7 @@ references_globs=(
   '!scripts/deploy/test-removed-runtimes.sh'
   '!docs/current/architecture/repo-refactor-audit.md'
   '!hololive/hololive-shared/pkg/config/repo_security_contract_test.go'
-  '!hololive/hololive-shared/pkg/config/internal/settings/repo_security_contract_test.go'
+  '!hololive/hololive-shared/pkg/config/settings/repo_security_contract_test.go'
   '!.tasklists/**'
   '!repo_full_scope_diff_blueprint*.md'
   '!.worktrees/**'

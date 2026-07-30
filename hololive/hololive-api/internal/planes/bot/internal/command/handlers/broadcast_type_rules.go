@@ -56,7 +56,7 @@ func validateBroadcastRules(rules *broadcastTypeRules) error {
 	return validateBroadcastRuleSet("generic title rule", rules.Generic)
 }
 
-func validateBroadcastTopics(topics map[string]BroadcastType) error {
+func validateBroadcastTopics(topics map[string]broadcasttype.Type) error {
 	for topic, typ := range topics {
 		if !knownBroadcastType(typ) {
 			return fmt.Errorf("topic %q uses unknown type %q", topic, typ)
@@ -78,7 +78,7 @@ func validateBroadcastRuleSet(kind string, rules []broadcastTitleRule) error {
 }
 
 func normalizeBroadcastRules(rules *broadcastTypeRules) {
-	topics := make(map[string]BroadcastType, len(rules.Topics))
+	topics := make(map[string]broadcasttype.Type, len(rules.Topics))
 	for topic, typ := range rules.Topics {
 		topics[normalizeBroadcastTopic(topic)] = typ
 	}
@@ -124,6 +124,6 @@ func normalizeBroadcastTitleTags(values []string) []string {
 	return normalized
 }
 
-func knownBroadcastType(typ BroadcastType) bool {
+func knownBroadcastType(typ broadcasttype.Type) bool {
 	return broadcasttype.Known(typ)
 }

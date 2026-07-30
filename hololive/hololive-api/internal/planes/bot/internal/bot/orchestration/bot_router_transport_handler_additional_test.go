@@ -36,9 +36,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	bottransport "github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
@@ -260,12 +262,12 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 	t.Run("constructor", func(t *testing.T) {
 		client := &testIrisClient{}
-		transport := NewCommandTransport(client, nil)
+		transport := bottransport.NewCommandTransport(client, nil)
 		require.NotNil(t, transport)
 	})
 
 	t.Run("send message with nil client", func(t *testing.T) {
-		var transport *CommandTransport
+		var transport *bottransport.CommandTransport
 
 		err := transport.SendMessage(ctx, "room", "hello")
 		require.Error(t, err)
@@ -274,7 +276,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 	t.Run("send message wraps iris error", func(t *testing.T) {
 		client := &testIrisClient{sendMessageErr: errors.New("iris unavailable")}
-		transport := NewCommandTransport(client, nil)
+		transport := bottransport.NewCommandTransport(client, nil)
 
 		err := transport.SendMessage(ctx, "room", "hello")
 		require.Error(t, err)
@@ -289,7 +291,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 				{State: "handoff_completed"},
 			},
 		}
-		transport := NewCommandTransport(client, nil)
+		transport := bottransport.NewCommandTransport(client, nil)
 
 		err := transport.SendMessage(ctx, "room", "hello")
 		require.NoError(t, err)
@@ -299,7 +301,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 	t.Run("send image wraps iris error", func(t *testing.T) {
 		client := &testIrisClient{sendImageErr: errors.New("image failed")}
-		transport := NewCommandTransport(client, nil)
+		transport := bottransport.NewCommandTransport(client, nil)
 
 		err := transport.SendImage(ctx, "room", []byte("img"))
 		require.Error(t, err)
@@ -313,7 +315,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 				statuses: []*iris.ReplyStatusSnapshot{{State: "failed", Detail: &failedDetail}},
 			},
 		}
-		transport := NewCommandTransport(client, nil)
+		transport := bottransport.NewCommandTransport(client, nil)
 
 		err := transport.SendImage(ctx, "room", []byte("img"))
 		require.Error(t, err)
@@ -324,7 +326,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 	t.Run("send image forwards byte data to client", func(t *testing.T) {
 		client := &testIrisClient{}
-		transport := NewCommandTransport(client, nil)
+		transport := bottransport.NewCommandTransport(client, nil)
 
 		imageData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG 매직 바이트
 		err := transport.SendImage(ctx, "room-1", imageData)
@@ -334,7 +336,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 	})
 
 	t.Run("send image with nil client returns error", func(t *testing.T) {
-		var transport *CommandTransport
+		var transport *bottransport.CommandTransport
 		err := transport.SendImage(ctx, "room", []byte("data"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "iris client is not configured")
@@ -344,10 +346,10 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		client := &testIrisClient{}
 		store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler)) //nolint:contextcheck,nolintlint // dbtest 전용 pool 생성자라 t.Cleanup으로 자체 lifecycle을 관리하며 prod ctx 경로와 무관(호출처 69곳). 멀티모듈 게이트 스코프에서만 발화하는 call-graph 아티팩트라 발화가 환경 의존적이고, 미발화 환경의 nolintlint 미사용 오탐도 함께 억제한다.
 		require.NoError(t, store.Load(ctx))
-		formatter := adapter.NewResponseFormatter("!", nil, adapter.WithMessageStrings(store))
-		transport := NewCommandTransport(client, formatter)
+		formatter := messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(store))
+		transport := bottransport.NewCommandTransport(client, formatter)
 
-		require.NoError(t, transport.SendError(ctx, "room", adapter.ErrAlarmAddFailed))
+		require.NoError(t, transport.SendError(ctx, "room", messaging.ErrAlarmAddFailed))
 		assert.Equal(t, "room", client.lastMessageRoom)
 		want := store.GetContext(ctx, messagestrings.NamespaceError, "alarm_add_failed")
 		require.NotEmpty(t, want)
@@ -356,8 +358,8 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 	t.Run("send error fails closed to sentinel on unknown key", func(t *testing.T) {
 		client := &testIrisClient{}
-		formatter := adapter.NewResponseFormatter("!", nil)
-		transport := NewCommandTransport(client, formatter)
+		formatter := messageformatter.NewResponseFormatter("!", nil)
+		transport := bottransport.NewCommandTransport(client, formatter)
 
 		require.NoError(t, transport.SendError(ctx, "room", "totally_unknown_key"))
 		assert.Equal(t, messagestrings.FallbackSentinel, client.lastMessage)
@@ -373,9 +375,9 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 	b := &Bot{
 		logger:          logger,
 		commandRegistry: command.NewRegistry(),
-		messageAdapter:  adapter.NewMessageAdapter("!", ""),
+		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
-		formatter:       adapter.NewResponseFormatter("!", nil),
+		formatter:       messageformatter.NewResponseFormatter("!", nil),
 	}
 
 	commandExecutor := b.ensureCommandExecutor()
@@ -429,9 +431,9 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	b := &Bot{
 		logger:          logger,
 		commandRegistry: registry,
-		messageAdapter:  adapter.NewMessageAdapter("!", ""),
+		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
-		formatter:       adapter.NewResponseFormatter("!", nil),
+		formatter:       messageformatter.NewResponseFormatter("!", nil),
 	}
 
 	sender := "user"
@@ -457,20 +459,20 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		assert.Empty(t, b.getErrorMessage(nil))
 
 		irisServiceErr := appErrors.NewServiceError("msg", serviceNameIris, "send_message", errors.New("down"))
-		assert.Equal(t, adapter.ErrIrisConnectionFailed, b.getErrorMessage(irisServiceErr))
+		assert.Equal(t, messaging.ErrIrisConnectionFailed, b.getErrorMessage(irisServiceErr))
 
-		apiErr := appErrors.NewAPIError("api", 500, map[string]any{"operation": "fetch"})
-		assert.Equal(t, adapter.ErrExternalAPICallFailed, b.getErrorMessage(apiErr))
+		apiErr := appErrors.NewAPIError("api", 500, "fetch")
+		assert.Equal(t, messaging.ErrExternalAPICallFailed, b.getErrorMessage(apiErr))
 
-		keyRotationErr := appErrors.NewKeyRotationError("key", 429, map[string]any{"url": "https://example.com"})
-		assert.Equal(t, adapter.ErrExternalAPICallFailed, b.getErrorMessage(keyRotationErr))
+		keyRotationErr := appErrors.NewKeyRotationError("https://example.com", 429)
+		assert.Equal(t, messaging.ErrExternalAPICallFailed, b.getErrorMessage(keyRotationErr))
 
 		cacheErr := appErrors.NewCacheError("cache", "get", "k1", errors.New("down"))
-		assert.Equal(t, adapter.ErrCacheConnectionFailed, b.getErrorMessage(cacheErr))
+		assert.Equal(t, messaging.ErrCacheConnectionFailed, b.getErrorMessage(cacheErr))
 
 		validationErr := appErrors.NewValidationError("invalid input", "field", "v")
-		assert.Equal(t, adapter.ErrCommandProcessingFailed, b.getErrorMessage(validationErr))
+		assert.Equal(t, messaging.ErrCommandProcessingFailed, b.getErrorMessage(validationErr))
 
-		assert.Equal(t, adapter.ErrCommandProcessingFailed, b.getErrorMessage(errors.New("generic error")))
+		assert.Equal(t, messaging.ErrCommandProcessingFailed, b.getErrorMessage(errors.New("generic error")))
 	})
 }

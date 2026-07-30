@@ -1,6 +1,6 @@
 # GORM 제거 플랜 (2026-06-02)
 
-> 관련: `REFACTORING_PLAN_20260602.md`(P1/P2 domain persistence 누수), cross-cutting 마스터 `iris-stack/docs/REFACTORING_PLAN_20260602.md`
+> 관련: `REFACTORING_PLAN_20260602.md`(P1/P2 domain persistence 누수), cross-cutting 마스터 `iris-stack/docs/archive/REFACTORING_PLAN_20260602.md`
 > 범위: **hololive-bot 전용**(cbgk·iris-client-go·shared-go는 GORM 미사용 — 검증). 데이터 접근을 `pgx`로 단일화.
 
 ## 0. 권고 (TL;DR)

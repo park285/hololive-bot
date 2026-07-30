@@ -3,6 +3,8 @@ package member
 import (
 	"errors"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestCollectJoinedRows_HappyPath(t *testing.T) {
@@ -11,7 +13,7 @@ func TestCollectJoinedRows_HappyPath(t *testing.T) {
 		{scan: func(dest ...any) error { return nil }},
 	}}
 
-	got, err := collectJoinedRows(rows, "iter", func(r pgxRows) (int, error) {
+	got, err := collectJoinedRows(rows, "iter", func(r pgx.Rows) (int, error) {
 		return rows.index, nil
 	})
 	if err != nil {
@@ -29,7 +31,7 @@ func TestCollectJoinedRows_JoinsRowErrorsAndKeepsPartial(t *testing.T) {
 		{scan: func(dest ...any) error { return nil }},
 	}}
 
-	got, err := collectJoinedRows(rows, "iter", func(r pgxRows) (int, error) {
+	got, err := collectJoinedRows(rows, "iter", func(r pgx.Rows) (int, error) {
 		if rows.index == 2 {
 			return 0, errors.New("scan boom")
 		}
@@ -54,7 +56,7 @@ func TestCollectJoinedRows_JoinsRowsErrWithLabel(t *testing.T) {
 		},
 	}
 
-	got, err := collectJoinedRows(rows, "widget rows iteration", func(r pgxRows) (int, error) {
+	got, err := collectJoinedRows(rows, "widget rows iteration", func(r pgx.Rows) (int, error) {
 		return rows.index, nil
 	})
 	if err == nil {

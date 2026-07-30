@@ -30,7 +30,9 @@ import (
 	"github.com/park285/shared-go/pkg/stringutil"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	newssummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -109,7 +111,7 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 		memberProvider = memberProvider.WithContext(ctx)
 	}
 
-	filtered := FilterCandidates(candidates, normalizedPeriod, s.now(), members, memberProvider, s.sourceValidator)
+	filtered := filter.FilterCandidates(candidates, normalizedPeriod, s.now(), members, memberProvider, s.sourceValidator)
 	filtered, err = filterPromptCandidates(filtered, s.promptGuard, s.logger)
 	if err != nil {
 		return nil, fmt.Errorf("guard member news candidates: %w", err)
@@ -150,7 +152,7 @@ func emptyDigest(period model.Period) *model.Digest {
 
 func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate) *model.Digest {
 	if s.summarizer == nil {
-		digest := BuildDeterministicFallback(period, filtered)
+		digest := newssummarizer.BuildDeterministicFallback(period, filtered)
 		digest.TotalCount = len(filtered)
 		return digest
 	}
@@ -168,11 +170,11 @@ func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period
 			slog.String("period", string(period)),
 			slog.String("error", err.Error()),
 		)
-		digest = BuildDeterministicFallback(period, filtered)
+		digest = newssummarizer.BuildDeterministicFallback(period, filtered)
 	}
 
 	if digest == nil || len(digest.TopItems) == 0 {
-		digest = BuildDeterministicFallback(period, filtered)
+		digest = newssummarizer.BuildDeterministicFallback(period, filtered)
 	}
 
 	return digest

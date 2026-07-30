@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -20,7 +21,7 @@ type InfraModule struct {
 	Cleanup          func()
 }
 
-func BuildInfraModule(ctx context.Context, appConfig *config.Config, logger *slog.Logger) (_ *InfraModule, retErr error) {
+func BuildInfraModule(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *InfraModule, retErr error) {
 	if appConfig == nil {
 		return nil, fmt.Errorf("build infra module: config is nil")
 	}
@@ -54,7 +55,7 @@ func BuildInfraModule(ctx context.Context, appConfig *config.Config, logger *slo
 
 func buildInfraCacheResources(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	logger *slog.Logger,
 ) (*providers.CacheResources, func(), error) {
 	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, appConfig.Valkey, logger)
@@ -66,7 +67,7 @@ func buildInfraCacheResources(
 
 func buildInfraDatabaseResources(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	logger *slog.Logger,
 ) (*providers.DatabaseResources, func(), error) {
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)

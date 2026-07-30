@@ -22,6 +22,7 @@ package membernews
 
 import (
 	"context"
+	model "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 		t.Parallel()
 
 		var service *Service
-		digest, err := service.GenerateRoomDigest(context.Background(), "room-1", PeriodWeekly)
+		digest, err := service.GenerateRoomDigest(context.Background(), "room-1", model.PeriodWeekly)
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}
@@ -47,7 +48,7 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 		t.Parallel()
 
 		service := &Service{}
-		digest, err := service.GenerateRoomDigest(context.Background(), "room-1", PeriodWeekly)
+		digest, err := service.GenerateRoomDigest(context.Background(), "room-1", model.PeriodWeekly)
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}
@@ -60,7 +61,7 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 		t.Parallel()
 
 		service := &Service{repository: &Repository{}}
-		digest, err := service.GenerateRoomDigest(context.Background(), "   ", PeriodWeekly)
+		digest, err := service.GenerateRoomDigest(context.Background(), "   ", model.PeriodWeekly)
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}

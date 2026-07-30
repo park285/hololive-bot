@@ -28,9 +28,10 @@ import (
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
+
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 // buildYouTubeProducerConfigSubscriber: youtube-producer 전용 ConfigSubscriber를 구성한다.
@@ -38,9 +39,9 @@ import (
 func buildYouTubeProducerConfigSubscriber(
 	cacheService cache.Client,
 	settingsService settings.ReadWriter,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	ytStack *providers.YouTubeStack,
-	scraperScheduler *poller.Scheduler,
+	scraperScheduler *scheduler.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
 	return configsub.New(cacheService.GetClient(), buildYouTubeProducerConfigApplyFn(settingsService, holodexService, ytStack, scraperScheduler, logger), logger)
@@ -48,11 +49,11 @@ func buildYouTubeProducerConfigSubscriber(
 
 func buildYouTubeProducerConfigApplyFn(
 	settingsService settings.ReadWriter,
-	holodexService *holodex.Service,
+	holodexService *holodexprovider.Service,
 	ytStack *providers.YouTubeStack,
-	scraperScheduler *poller.Scheduler,
+	scraperScheduler *scheduler.Scheduler,
 	logger *slog.Logger,
-) func(configsub.ConfigUpdate) {
+) func(contractssettings.ConfigUpdateV1) {
 	return configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
 			sharedsettings.ApplyScraperProxyToggle(payload.Enabled, ytStack.GetService(), holodexService, scraperScheduler, logger)

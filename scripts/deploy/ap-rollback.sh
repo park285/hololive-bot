@@ -62,6 +62,7 @@ PROD_BACKUP_FILE="$BACKUP_DIR/$PROD_COMPOSE_FILE.prechange"
 PROD_BACKUP_LEGACY_FILE="$BACKUP_DIR/$PROD_COMPOSE_LEGACY_FILE.prechange"
 AP_BACKUP_FILE="$BACKUP_DIR/$AP_COMPOSE_FILE.prechange"
 AP_BACKUP_LEGACY_FILE="$BACKUP_DIR/$(basename "$AP_COMPOSE_FILE").prechange"
+AP_COMPOSE_BASENAME="$(basename "$AP_COMPOSE_FILE")"
 
 remote "set -euo pipefail
 cd ~/hololive-bot
@@ -78,10 +79,18 @@ test -r \"\$ap_backup_file\"
 sudo -n test -r /run/hololive-bot/ap-compose.env
 sudo -n test -r /run/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
+preflight_root=\$(mktemp -d)
+trap 'rm -rf \"\$preflight_root\"' EXIT
+preflight_compose_dir=\"\$preflight_root/deploy/compose\"
+mkdir -p \"\$preflight_compose_dir\"
+prod_preflight_file=\"\$preflight_compose_dir/docker-compose.prod.yml\"
+ap_preflight_file=\"\$preflight_compose_dir/$AP_COMPOSE_BASENAME\"
+cp \"\$prod_backup_file\" \"\$prod_preflight_file\"
+cp \"\$ap_backup_file\" \"\$ap_preflight_file\"
 echo backup_dir='$BACKUP_DIR'
 echo would_restore=\"\$prod_backup_file\"
 echo would_restore=\"\$ap_backup_file\"
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_backup_file\" -f \"\$ap_backup_file\" config --quiet"
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet"
 
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "[DRY-RUN] Rollback preflight passed; no remote files or containers changed."

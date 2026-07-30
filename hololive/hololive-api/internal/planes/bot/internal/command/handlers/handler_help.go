@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
@@ -33,10 +34,10 @@ import (
 var errHelpImageUnavailable = errors.New("help image capability is unavailable")
 
 type HelpCommand struct {
-	deps *Dependencies
+	deps *handlercore.Dependencies
 }
 
-func NewHelpCommand(deps *Dependencies) *HelpCommand {
+func NewHelpCommand(deps *handlercore.Dependencies) *HelpCommand {
 	return &HelpCommand{deps: deps}
 }
 

@@ -4,29 +4,28 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"io"
 	"log/slog"
 	"strings"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 type stubScraper struct {
-	recentVideos map[string][]*scraper.Video
+	recentVideos map[string][]*parser.Video
 	recentErr    map[string]error
-	channelStats map[string]*scraper.ChannelStats
+	channelStats map[string]*parser.ChannelStats
 	statsErr     map[string]error
 }
 
-func (s *stubScraper) GetRecentVideos(_ context.Context, channelID string, _ int) ([]*scraper.Video, error) {
+func (s *stubScraper) GetRecentVideos(_ context.Context, channelID string, _ int) ([]*parser.Video, error) {
 	if err := s.recentErr[channelID]; err != nil {
 		return nil, err
 	}
 	return s.recentVideos[channelID], nil
 }
 
-func (s *stubScraper) GetChannelStats(_ context.Context, channelID string) (*scraper.ChannelStats, error) {
+func (s *stubScraper) GetChannelStats(_ context.Context, channelID string) (*parser.ChannelStats, error) {
 	if err := s.statsErr[channelID]; err != nil {
 		return nil, err
 	}
@@ -53,7 +52,7 @@ func TestGetRecentVideos_ScraperPaths(t *testing.T) {
 	t.Run("returns video IDs on scraper success", func(t *testing.T) {
 		t.Parallel()
 		ys := newScraperPathService(&stubScraper{
-			recentVideos: map[string][]*scraper.Video{
+			recentVideos: map[string][]*parser.Video{
 				"UC1": {{VideoID: "v1"}, {VideoID: "v2"}},
 			},
 		})
@@ -69,7 +68,7 @@ func TestGetRecentVideos_ScraperPaths(t *testing.T) {
 	t.Run("empty scraper result returns empty slice without error", func(t *testing.T) {
 		t.Parallel()
 		ys := newScraperPathService(&stubScraper{
-			recentVideos: map[string][]*scraper.Video{"UC1": {}},
+			recentVideos: map[string][]*parser.Video{"UC1": {}},
 		})
 		got, err := ys.GetRecentVideos(context.Background(), "UC1", 10)
 		if err != nil {
@@ -103,7 +102,7 @@ func TestGetChannelStatistics_ScraperPaths(t *testing.T) {
 	t.Run("all channels succeed returns full map", func(t *testing.T) {
 		t.Parallel()
 		ys := newScraperPathService(&stubScraper{
-			channelStats: map[string]*scraper.ChannelStats{
+			channelStats: map[string]*parser.ChannelStats{
 				"UC1": {ChannelID: "UC1", SubscriberCount: 100, VideoCount: 10, ViewCount: 1000},
 				"UC2": {ChannelID: "UC2", SubscriberCount: 200, VideoCount: 20, ViewCount: 2000},
 			},
@@ -120,7 +119,7 @@ func TestGetChannelStatistics_ScraperPaths(t *testing.T) {
 	t.Run("partial failure returns partial map without error", func(t *testing.T) {
 		t.Parallel()
 		ys := newScraperPathService(&stubScraper{
-			channelStats: map[string]*scraper.ChannelStats{
+			channelStats: map[string]*parser.ChannelStats{
 				"UC1": {ChannelID: "UC1", SubscriberCount: 100, VideoCount: 10, ViewCount: 1000},
 			},
 			statsErr: map[string]error{"UC2": errors.New("scrape fail")},

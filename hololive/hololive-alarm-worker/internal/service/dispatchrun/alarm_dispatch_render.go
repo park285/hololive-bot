@@ -8,7 +8,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatch"
 )
 
 func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, group alarmDispatchGroup) (string, error) {
@@ -28,7 +28,7 @@ func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Re
 	if envelope.YouTubeOutbox == nil {
 		return "", fmt.Errorf("render youtube outbox dispatch: payload is nil")
 	}
-	return outbox.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, envelope.YouTubeOutbox)
+	return dispatch.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, envelope.YouTubeOutbox)
 }
 
 type alarmDispatchItemView struct {

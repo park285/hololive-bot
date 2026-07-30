@@ -5,24 +5,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
 	"github.com/stretchr/testify/require"
 )
 
-var _ poller.JobClaimer = (*ingestionlease.JobRunGuard)(nil)
+var _ polling.JobClaimer = (*ingestionlease.JobRunGuard)(nil)
 
 func TestBuildJobRunGuardClaimerRequiresCacheWhenActiveActiveEnabled(t *testing.T) {
-	claimer, err := BuildJobRunGuardClaimer(nil, config.ScraperActiveActiveConfig{Enabled: true})
+	claimer, err := BuildJobRunGuardClaimer(nil, settings.ScraperActiveActiveConfig{Enabled: true})
 
 	require.Error(t, err)
 	require.Nil(t, claimer)
 }
 
 func TestBuildJobRunGuardClaimerDisabledAllowsNilCache(t *testing.T) {
-	claimer, err := BuildJobRunGuardClaimer(nil, config.ScraperActiveActiveConfig{})
+	claimer, err := BuildJobRunGuardClaimer(nil, settings.ScraperActiveActiveConfig{})
 
 	require.NoError(t, err)
 	require.Nil(t, claimer)
@@ -31,7 +32,7 @@ func TestBuildJobRunGuardClaimerDisabledAllowsNilCache(t *testing.T) {
 func TestBuildJobRunGuardClaimerReturnsPollerClaims(t *testing.T) {
 	ctx := context.Background()
 	cache := sharedtestutil.NewTestCacheService(t, ctx)
-	claimer, err := BuildJobRunGuardClaimer(cache, config.ScraperActiveActiveConfig{
+	claimer, err := BuildJobRunGuardClaimer(cache, settings.ScraperActiveActiveConfig{
 		Enabled:    true,
 		Namespace:  "test",
 		InstanceID: "ap-a",
@@ -49,7 +50,7 @@ func TestBuildJobRunGuardClaimerReturnsPollerClaims(t *testing.T) {
 func TestBuildJobRunGuardClaimerPreservesDeferCapability(t *testing.T) {
 	ctx := context.Background()
 	cache := sharedtestutil.NewTestCacheService(t, ctx)
-	claimer, err := BuildJobRunGuardClaimer(cache, config.ScraperActiveActiveConfig{
+	claimer, err := BuildJobRunGuardClaimer(cache, settings.ScraperActiveActiveConfig{
 		Enabled:    true,
 		Namespace:  "test",
 		InstanceID: "ap-a",
@@ -59,7 +60,7 @@ func TestBuildJobRunGuardClaimerPreservesDeferCapability(t *testing.T) {
 
 	status, claim, err := claimer.TryClaim(ctx, "videos", "UC_DEFER", testLeaseTTL, testCooldownTTL)
 	require.NoError(t, err)
-	require.Equal(t, poller.JobClaimAcquired, status.Result)
+	require.Equal(t, polling.JobClaimAcquired, status.Result)
 
 	deferrer, ok := claim.(interface {
 		Defer(context.Context, time.Duration) (bool, error)
@@ -72,7 +73,7 @@ func TestBuildJobRunGuardClaimerPreservesDeferCapability(t *testing.T) {
 
 	status, peerClaim, err := claimer.TryClaim(ctx, "videos", "UC_DEFER", testLeaseTTL, testCooldownTTL)
 	require.NoError(t, err)
-	require.Equal(t, poller.JobClaimAlreadyCompleted, status.Result)
+	require.Equal(t, polling.JobClaimAlreadyCompleted, status.Result)
 	require.Nil(t, peerClaim)
 	require.Greater(t, status.RetryAfter, time.Duration(0))
 }

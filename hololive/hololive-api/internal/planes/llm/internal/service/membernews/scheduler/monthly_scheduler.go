@@ -29,10 +29,11 @@ import (
 	"github.com/park285/shared-go/pkg/outputguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 const (
@@ -111,11 +112,11 @@ func (s *MonthlyScheduler) Stop() {
 }
 
 func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
-	nowKST := now.In(model.KST)
+	nowKST := now.In(util.KSTZone)
 
 	target := time.Date(
 		nowKST.Year(), nowKST.Month(), MonthlyScheduleDay,
-		MonthlyScheduleHourKST, monthlyScheduleMinuteKST, 0, 0, model.KST,
+		MonthlyScheduleHourKST, monthlyScheduleMinuteKST, 0, 0, util.KSTZone,
 	)
 
 	if !target.After(nowKST) {
@@ -150,6 +151,6 @@ func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, monthKey, room
 }
 
 func (s *MonthlyScheduler) getMonthKey() string {
-	now := s.digest.Clock().In(model.KST)
+	now := s.digest.Clock().In(util.KSTZone)
 	return fmt.Sprintf("%d-%02d", now.Year(), now.Month())
 }

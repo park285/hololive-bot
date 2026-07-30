@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
 
@@ -78,9 +80,9 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 		},
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Formatter: adapter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
+		Formatter: formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -110,9 +112,9 @@ func TestUpcomingCommand_Execute_AllUpcoming_WithOverflow(t *testing.T) {
 
 	holodex := &upcomingStreamProviderStub{upcomingStreams: streams}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Formatter: adapter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
+		Formatter: formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -141,9 +143,9 @@ func TestUpcomingCommand_Execute_AllUpcoming_QueryError(t *testing.T) {
 		upcomingErr: errors.New("holodex api down"),
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -160,8 +162,8 @@ func TestUpcomingCommand_Execute_AllUpcoming_QueryError(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	if sentError != adapter.ErrUpcomingStreamQueryFailed {
-		t.Fatalf("sent error %q, want %q", sentError, adapter.ErrUpcomingStreamQueryFailed)
+	if sentError != messaging.ErrUpcomingStreamQueryFailed {
+		t.Fatalf("sent error %q, want %q", sentError, messaging.ErrUpcomingStreamQueryFailed)
 	}
 }
 
@@ -180,10 +182,10 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 		},
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
+		Formatter: formatter.NewResponseFormatter("!", setupUpcomingTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -219,10 +221,10 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 		},
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
 			return nil
@@ -256,10 +258,10 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 		upcomingErr: errors.New("api error"),
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   holodex,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			return nil
 		},
@@ -278,8 +280,8 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	if sentError != adapter.ErrUpcomingStreamQueryFailed {
-		t.Fatalf("sent error %q, want %q", sentError, adapter.ErrUpcomingStreamQueryFailed)
+	if sentError != messaging.ErrUpcomingStreamQueryFailed {
+		t.Fatalf("sent error %q, want %q", sentError, messaging.ErrUpcomingStreamQueryFailed)
 	}
 }
 
@@ -288,10 +290,10 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 
 	memberProvider := newContextAwareMemberProvider(nil)
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Holodex:   &upcomingStreamProviderStub{},
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, _ string) error {
 			sendMessageCalled = true
 			return nil

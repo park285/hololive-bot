@@ -26,28 +26,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/producerruntime"
 	"github.com/park285/shared-go/pkg/envutil"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
-
-	runtimeapp "github.com/kapu/hololive-youtube-producer/internal/runtime"
 )
 
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *runtimeapp.YouTubeProducerRuntime]{
+	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *producerruntime.YouTubeProducerRuntime]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             config.LoadYouTubeProducerRuntime,
+		LoadConfig:             settings.LoadYouTubeProducerRuntime,
 		LoadConfigErrorMessage: "Failed to load youtube producer config",
-		LoggerConfig: func(appConfig *config.Config) sharedlogging.Config {
+		LoggerConfig: func(appConfig *settings.Config) sharedlogging.Config {
 			return sharedlogging.Config{
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
@@ -57,15 +57,15 @@ func main() {
 			}
 		},
 		LoggerFileName: youtubeProducerLogFileName(),
-		LoggerLevel: func(appConfig *config.Config) string {
+		LoggerLevel: func(appConfig *settings.Config) string {
 			return appConfig.Logging.Level
 		},
 		StartupMessage: "YouTube Producer starting...",
-		StartupFields: func(appConfig *config.Config) []any {
+		StartupFields: func(appConfig *settings.Config) []any {
 			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
 		BuildTimeout:      time.Minute,
-		BuildRuntime:      runtimeapp.BuildYouTubeProducerRuntime,
+		BuildRuntime:      producerruntime.BuildYouTubeProducerRuntime,
 		BuildErrorMessage: "Failed to build youtube producer runtime",
 	}))
 }

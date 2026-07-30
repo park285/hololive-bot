@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-const AlarmDispatchQueue = contractsalarm.DispatchQueueKey
 const AlarmDispatchWakeupQueue = "alarm:dispatch:wakeup"
 const alarmDispatchWakeupGuardKey = "alarm:dispatch:wakeup:guard"
 const defaultPublishBatchDeliveryLimit = 1000

@@ -6,12 +6,12 @@ import (
 	"strings"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 )
 
 type BudgetEstimate struct {
-	SustainedRPMBySource  map[poller.BudgetSource]float64
-	BurstInflightBySource map[poller.BudgetSource]int
+	SustainedRPMBySource  map[polling.BudgetSource]float64
+	BurstInflightBySource map[polling.BudgetSource]int
 }
 
 func validateRegistrationBudgetProfiles(registrations []providers.ChannelPollerRegistration) error {
@@ -37,8 +37,8 @@ func validateRegistrationBudgetProfiles(registrations []providers.ChannelPollerR
 
 func estimateYouTubeProducerSourceBudget(registrations []providers.ChannelPollerRegistration, activeAPCount, perAPWorkerCount int) BudgetEstimate {
 	estimate := BudgetEstimate{
-		SustainedRPMBySource:  make(map[poller.BudgetSource]float64),
-		BurstInflightBySource: make(map[poller.BudgetSource]int),
+		SustainedRPMBySource:  make(map[polling.BudgetSource]float64),
+		BurstInflightBySource: make(map[polling.BudgetSource]int),
 	}
 	burstInflight := activeAPCount * perAPWorkerCount
 	for i := range registrations {
@@ -98,10 +98,10 @@ func validateYouTubeProducerAggregateBudget(summary youtubeProducerBudgetSummary
 	)
 }
 
-func estimateBudgetSources(estimate BudgetEstimate) []poller.BudgetSource {
+func estimateBudgetSources(estimate BudgetEstimate) []polling.BudgetSource {
 	sourceCount := len(estimate.SustainedRPMBySource) + len(estimate.BurstInflightBySource)
-	seen := make(map[poller.BudgetSource]struct{}, sourceCount)
-	sources := make([]poller.BudgetSource, 0, sourceCount)
+	seen := make(map[polling.BudgetSource]struct{}, sourceCount)
+	sources := make([]polling.BudgetSource, 0, sourceCount)
 	for source := range estimate.SustainedRPMBySource {
 		if _, ok := seen[source]; ok {
 			continue

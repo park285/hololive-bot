@@ -15,14 +15,19 @@
 - 따라서: ① 모든 문장은 멱등이어야 한다(`IF [NOT] EXISTS`, `NOT VALID` 재적용 가드, 조건부 DO 블록).
   ② `CREATE/DROP INDEX CONCURRENTLY` 사용 가능(autocommit 문장). ③ `BEGIN;/COMMIT;` 블록 안에는
   CONCURRENTLY를 넣을 수 없다 — 러너와 `check-migration-manifest.sh`가 명시적 에러로 거부한다.
+- 기존 ledger가 있는 DB에서는 plain `DROP INDEX`를 SQL 실행 전에 거부한다. 새 migration은
+  `DROP INDEX CONCURRENTLY`를 사용한다. 이미 존재하는 maintenance-only migration을 적용해야 할 때만
+  서비스 quiescence를 확인한 전용 점검 창에서 `MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true`를 명시한다.
+  빈 DB의 fresh bootstrap은 전체 manifest 재생을 위해 plain drop을 허용한다.
 - 과거에 적용된 파일의 수정은 프로덕션에 영향이 없고(ledger skip) fresh bootstrap/dbtest 경로만 바꾼다.
   프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다.
 - 레거시 수동 경로 `apply-all.sh`(파일 단위 `psql -f`, `-1` 미사용)는 psql 세션이 `BEGIN;/COMMIT;`을
-  그대로 실행하므로 위와 동일 의미론이다.
+  그대로 실행하므로 위와 동일 의미론이다. 단, blocking index-drop guard는 Go 러너 소유이므로
+  프로덕션과 복구 적용은 `db-migrate`를 사용한다.
 
 ## 번호
 
-- 새 파일은 `max(기존 번호)+1`. 번호 프리픽스 중복 금지(045/051/053은 병행 브랜치 유산으로 예외 — lint가 강제).
+- 새 파일은 `max(기존 번호)+1`. 번호 프리픽스가 중복되면 `check-migration-manifest.sh`가 거부한다(045/051/053은 병행 브랜치 유산으로 예외).
 - 실행 순서의 SSOT는 manifest.txt이며 파일명 정렬이 아니다.
 
 ## 락과 시간복잡도 (문장 품질)
@@ -31,7 +36,7 @@ DB에서 문장 비용은 세 축으로 본다: 읽기 복잡도(몇 행을 만�
 인덱스 포함 몇 번의 쓰기가 되나) / **락 보유 시간**(다른 트랜잭션을 얼마나 세워두나).
 마이그레이션에서는 셋째가 가장 치명적이다.
 
-### SET NOT NULL — 무방비 사용 금지 (lint 강제)
+### SET NOT NULL — NOT VALID CHECK + VALIDATE CONSTRAINT 선행 (무방비 사용은 `check-migration-manifest.sh`가 거부)
 
 `ALTER COLUMN … SET NOT NULL`은 ACCESS EXCLUSIVE 락(모든 접근 차단)을 쥔 채 전 행을 스캔한다.
 유효한 CHECK가 선재하면 PG가 스캔을 생략하므로 다음 레시피를 쓴다:
@@ -89,7 +94,7 @@ members 시드의 arbiter는 `idx_members_slug`(UNIQUE, 097 복원)다.
 
 ## 스키마 문서
 
-통합 스키마 문서는 손으로 쓰지 않는다. `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`
+통합 스키마 문서는 생성물이다. `hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql`
 (pg_catalog 직렬화 골든 — enum·table·column·constraint·index)이 문서이며 `TestSchemaSnapshotGolden`이
 manifest 전체 적용 결과와의 드리프트를 차단한다. pg_dump 출력이 아니라 catalog 직렬화인 이유:
 dbtest가 PG18→16 폴백을 갖는데 pg_dump 텍스트는 버전 간 비결정적이다.

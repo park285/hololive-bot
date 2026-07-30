@@ -30,7 +30,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 

@@ -2,12 +2,11 @@ package apiservice
 
 import (
 	"context"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"io"
 	"log/slog"
 	"strings"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 func newTestService(t *testing.T, channelToName map[string]string) *serviceImpl {
@@ -103,7 +102,7 @@ func TestValidatedScrapedChannelCounts(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		stats   scraper.ChannelStats
+		stats   parser.ChannelStats
 		wantSub uint64
 		wantVid uint64
 		wantViw uint64
@@ -111,27 +110,27 @@ func TestValidatedScrapedChannelCounts(t *testing.T) {
 	}{
 		{
 			name:    "all non-negative pass through",
-			stats:   scraper.ChannelStats{SubscriberCount: 100, VideoCount: 20, ViewCount: 3000},
+			stats:   parser.ChannelStats{SubscriberCount: 100, VideoCount: 20, ViewCount: 3000},
 			wantSub: 100, wantVid: 20, wantViw: 3000,
 		},
 		{
 			name:    "all zero pass through",
-			stats:   scraper.ChannelStats{},
+			stats:   parser.ChannelStats{},
 			wantSub: 0, wantVid: 0, wantViw: 0,
 		},
 		{
 			name:    "negative subscriber rejected first",
-			stats:   scraper.ChannelStats{SubscriberCount: -1, VideoCount: -2, ViewCount: -3},
+			stats:   parser.ChannelStats{SubscriberCount: -1, VideoCount: -2, ViewCount: -3},
 			wantErr: "subscriber",
 		},
 		{
 			name:    "negative video rejected when subscriber ok",
-			stats:   scraper.ChannelStats{SubscriberCount: 10, VideoCount: -2, ViewCount: 3},
+			stats:   parser.ChannelStats{SubscriberCount: 10, VideoCount: -2, ViewCount: 3},
 			wantErr: "video",
 		},
 		{
 			name:    "negative view rejected when others ok",
-			stats:   scraper.ChannelStats{SubscriberCount: 10, VideoCount: 2, ViewCount: -3},
+			stats:   parser.ChannelStats{SubscriberCount: 10, VideoCount: 2, ViewCount: -3},
 			wantErr: "view",
 		},
 	}
@@ -147,7 +146,7 @@ func TestValidatedScrapedChannelCounts(t *testing.T) {
 	}
 }
 
-func assertValidatedScrapedChannelCounts(t *testing.T, stats *scraper.ChannelStats, sub, vid, viw uint64, err error, wantSub, wantVid, wantViw uint64, wantErr string) {
+func assertValidatedScrapedChannelCounts(t *testing.T, stats *parser.ChannelStats, sub, vid, viw uint64, err error, wantSub, wantVid, wantViw uint64, wantErr string) {
 	t.Helper()
 
 	if wantErr != "" {
@@ -174,7 +173,7 @@ func TestChannelStatsFromScraped_MapsFieldsAndUsesScrapedChannelID(t *testing.T)
 	t.Parallel()
 
 	ys := newTestService(t, nil)
-	scraped := &scraper.ChannelStats{
+	scraped := &parser.ChannelStats{
 		ChannelID:       "UC_scraped",
 		SubscriberCount: 1000,
 		VideoCount:      50,
@@ -201,7 +200,7 @@ func TestChannelStatsFromScraped_FallsBackToHandleWhenChannelNameUnknown(t *test
 	t.Parallel()
 
 	ys := newTestService(t, nil)
-	got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{Handle: "@onlyhandle"})
+	got, err := ys.channelStatsFromScraped("UC_lookup", &parser.ChannelStats{Handle: "@onlyhandle"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -214,7 +213,7 @@ func TestChannelStatsFromScraped_PrefersCachedMemberNameOverHandle(t *testing.T)
 	t.Parallel()
 
 	ys := newTestService(t, map[string]string{"UC_lookup": "ときのそら"})
-	got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{Handle: "@handle"})
+	got, err := ys.channelStatsFromScraped("UC_lookup", &parser.ChannelStats{Handle: "@handle"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -227,7 +226,7 @@ func TestChannelStatsFromScraped_RejectsNegativeCounts(t *testing.T) {
 	t.Parallel()
 
 	ys := newTestService(t, nil)
-	got, err := ys.channelStatsFromScraped("UC_lookup", &scraper.ChannelStats{SubscriberCount: -1})
+	got, err := ys.channelStatsFromScraped("UC_lookup", &parser.ChannelStats{SubscriberCount: -1})
 	if err == nil {
 		t.Fatalf("expected error for negative subscriber count, got %+v", got)
 	}

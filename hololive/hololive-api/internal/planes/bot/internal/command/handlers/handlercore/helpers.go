@@ -27,7 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
 
@@ -123,7 +123,7 @@ func sendMemberNotFound(ctx context.Context, deps *Dependencies, room, memberNam
 }
 
 func sendGraduatedMemberBlocked(ctx context.Context, deps *Dependencies, room string) error {
-	if err := deps.SendError(ctx, room, adapter.ErrGraduatedMemberBlocked); err != nil {
+	if err := deps.SendError(ctx, room, messaging.ErrGraduatedMemberBlocked); err != nil {
 		return fmt.Errorf("send graduated member blocked response: %w", err)
 	}
 	return ErrMemberLookupHandled

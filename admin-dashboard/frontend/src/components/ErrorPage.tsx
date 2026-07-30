@@ -4,7 +4,7 @@ import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
 import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert.mjs";
 import Terminal from "lucide-react/dist/esm/icons/terminal.mjs";
 import { useEffect } from "react";
-import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router-dom";
+import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router";
 import { extractErrorMessage } from "@/lib/typeUtils";
 
 const ErrorPage = () => {

@@ -50,7 +50,7 @@ func TestNewApplyFn_ScraperProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
-	applyFn(ConfigUpdate{Type: contractssettings.UpdateTypeScraperProxy, Payload: payload})
+	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeScraperProxy, Payload: payload})
 
 	assert.True(t, called)
 	assert.Equal(t, contractssettings.ScraperProxyPayloadV1{Enabled: true}, got)
@@ -71,7 +71,7 @@ func TestNewApplyFn_AlarmAdvanceMinutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
-	applyFn(ConfigUpdate{Type: contractssettings.UpdateTypeAlarmAdvanceMinutes, Payload: payload})
+	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeAlarmAdvanceMinutes, Payload: payload})
 
 	assert.True(t, called)
 	assert.Equal(t, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 15}, got)
@@ -85,7 +85,7 @@ func TestNewApplyFn_DecodeErrorDoesNotInvokeHandler(t *testing.T) {
 		},
 	})
 
-	applyFn(ConfigUpdate{
+	applyFn(contractssettings.ConfigUpdateV1{
 		Type:    contractssettings.UpdateTypeScraperProxy,
 		Payload: []byte(`{"enabled":"not-bool"}`),
 	})
@@ -104,7 +104,7 @@ func TestNewApplyFn_Unknown(t *testing.T) {
 			},
 		})
 
-		applyFn(ConfigUpdate{Type: "unknown"})
+		applyFn(contractssettings.ConfigUpdateV1{Type: "unknown"})
 
 		assert.True(t, called)
 		assert.Equal(t, "unknown", got)
@@ -113,7 +113,7 @@ func TestNewApplyFn_Unknown(t *testing.T) {
 	t.Run("default unknown logger path", func(t *testing.T) {
 		applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{})
 		assert.NotPanics(t, func() {
-			applyFn(ConfigUpdate{Type: "unknown"})
+			applyFn(contractssettings.ConfigUpdateV1{Type: "unknown"})
 		})
 	})
 }

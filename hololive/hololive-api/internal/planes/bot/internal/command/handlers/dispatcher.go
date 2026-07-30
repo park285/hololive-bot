@@ -25,19 +25,20 @@ import (
 	"errors"
 	"maps"
 
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type sequentialDispatcher struct {
 	registry  *Registry
-	normalize NormalizeFunc
+	normalize handlercore.NormalizeFunc
 }
 
-func NewSequentialDispatcher(registry *Registry, normalize NormalizeFunc) Dispatcher {
+func NewSequentialDispatcher(registry *Registry, normalize handlercore.NormalizeFunc) handlercore.Dispatcher {
 	return &sequentialDispatcher{registry: registry, normalize: normalize}
 }
 
-func (d *sequentialDispatcher) Publish(ctx context.Context, cmdCtx *domain.CommandContext, events ...Event) (int, error) {
+func (d *sequentialDispatcher) Publish(ctx context.Context, cmdCtx *domain.CommandContext, events ...handlercore.Event) (int, error) {
 	if d == nil || d.registry == nil || d.normalize == nil {
 		return 0, errors.New("dispatcher not configured")
 	}

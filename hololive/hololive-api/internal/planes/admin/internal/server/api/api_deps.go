@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func loggerOrDefault(logger *slog.Logger) *slog.Logger {

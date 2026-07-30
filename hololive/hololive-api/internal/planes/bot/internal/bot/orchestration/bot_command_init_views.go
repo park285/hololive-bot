@@ -31,8 +31,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
@@ -46,16 +50,16 @@ type commandInitView struct {
 	alarm                 domain.AlarmCRUD
 	matcher               *matcher.Matcher
 	officialProfiles      *member.ProfileService
-	memberNews            command.MemberNewsService
-	membersData           member.DataProvider
-	formatter             *adapter.ResponseFormatter
+	memberNews            handlercore.MemberNewsService
+	membersData           domain.MemberDataProvider
+	formatter             *formatter.ResponseFormatter
 	sendMessage           func(ctx context.Context, room, message string) error
 	sendImage             func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
 	sendError             func(ctx context.Context, room, message string) error
 	logger                *slog.Logger
-	majorEventRepository  command.MajorEventRepository
-	memberRepository      command.CelebrationCalendarFinder
-	calendarImageRenderer command.CalendarImageRenderer
+	majorEventRepository  handlercore.MajorEventRepository
+	memberRepository      handlercore.CelebrationCalendarFinder
+	calendarImageRenderer handlercore.CalendarImageRenderer
 	commandBuilders       []orchcmd.CommandBuilder
 }
 
@@ -86,8 +90,8 @@ func (b *Bot) commandInitView() commandInitView {
 	}
 }
 
-func (v *commandInitView) toCommandDependencies(registry *command.Registry) *command.Dependencies {
-	deps := &command.Dependencies{
+func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *handlercore.Dependencies {
+	deps := &handlercore.Dependencies{
 		Holodex:             v.holodex,
 		Chzzk:               v.chzzk,
 		Cache:               v.cache,
@@ -95,8 +99,8 @@ func (v *commandInitView) toCommandDependencies(registry *command.Registry) *com
 		Matcher:             v.matcher,
 		OfficialProfiles:    v.officialProfiles,
 		MemberNews:          v.memberNews,
-		BroadcastHistory:    command.NewPgBroadcastHistoryRepository(v.postgres),
-		ThumbnailDownloader: command.NewYouTubeThumbnailDownloader(nil),
+		BroadcastHistory:    handlers.NewPgBroadcastHistoryRepository(v.postgres),
+		ThumbnailDownloader: handlers.NewYouTubeThumbnailDownloader(nil),
 		MembersData:         v.membersData,
 		Formatter:           v.formatter,
 		HelpImageRenderer:   render.NewHelpCardRenderer(),
@@ -106,39 +110,39 @@ func (v *commandInitView) toCommandDependencies(registry *command.Registry) *com
 		Logger:              v.logger,
 	}
 
-	deps.Dispatcher = command.NewSequentialDispatcher(registry, orchcmd.NormalizeCommandKey)
+	deps.Dispatcher = handlers.NewSequentialDispatcher(registry, orchcmd.NormalizeCommandKey)
 
 	return deps
 }
 
-func (v *commandInitView) buildCommands(deps *command.Dependencies) []command.Command {
-	commands := []command.Command{
-		command.NewHelpCommand(deps),
-		command.NewLiveCommand(deps),
-		command.NewUpcomingCommand(deps),
-		command.NewScheduleCommand(deps),
-		command.NewAlarmCommand(deps),
-		command.NewMemberInfoCommand(deps),
-		command.NewSubscriberCommand(deps),
-		command.NewBroadcastHistoryCommand(deps),
-		command.NewBroadcastThumbnailCommand(deps),
+func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handlercore.Command {
+	commands := []handlercore.Command{
+		handlers.NewHelpCommand(deps),
+		handlers.NewLiveCommand(deps),
+		handlers.NewUpcomingCommand(deps),
+		handlers.NewScheduleCommand(deps),
+		alarmcmd.NewAlarmCommand(deps),
+		info.NewMemberInfoCommand(deps),
+		handlers.NewSubscriberCommand(deps),
+		handlers.NewBroadcastHistoryCommand(deps),
+		handlers.NewBroadcastThumbnailCommand(deps),
 	}
 
 	if v.memberRepository != nil {
-		commands = append(commands, command.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer))
+		commands = append(commands, handlers.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer))
 	}
 	if v.majorEventRepository != nil {
 		v.logInfo("MajorEvent command enabled")
 
-		commands = append(commands, command.NewMajorEventCommand(deps, v.majorEventRepository))
+		commands = append(commands, handlers.NewMajorEventCommand(deps, v.majorEventRepository))
 	}
 
 	if v.memberNews != nil {
 		v.logInfo("MemberNews commands enabled")
 
 		commands = append(commands,
-			command.NewMemberNewsCommand(deps),
-			command.NewMemberNewsSubscriptionCommand(deps),
+			news.NewMemberNewsCommand(deps),
+			news.NewMemberNewsSubscriptionCommand(deps),
 		)
 	}
 
@@ -146,7 +150,7 @@ func (v *commandInitView) buildCommands(deps *command.Dependencies) []command.Co
 	return compactCommands(commands)
 }
 
-func (v *commandInitView) appendExternalCommands(commands []command.Command, deps *command.Dependencies) []command.Command {
+func (v *commandInitView) appendExternalCommands(commands []handlercore.Command, deps *handlercore.Dependencies) []handlercore.Command {
 	if len(v.commandBuilders) == 0 {
 		return commands
 	}
@@ -159,8 +163,8 @@ func (v *commandInitView) appendExternalCommands(commands []command.Command, dep
 	return commands
 }
 
-func compactCommands(commands []command.Command) []command.Command {
-	compacted := make([]command.Command, 0, len(commands))
+func compactCommands(commands []handlercore.Command) []handlercore.Command {
+	compacted := make([]handlercore.Command, 0, len(commands))
 	for _, cmd := range commands {
 		if cmd == nil {
 			continue

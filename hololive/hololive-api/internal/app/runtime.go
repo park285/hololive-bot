@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"os"
 
-	adminruntime "github.com/kapu/hololive-api/internal/planes/admin/runtime"
-	botruntime "github.com/kapu/hololive-api/internal/planes/bot/runtime"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
+	"github.com/kapu/hololive-api/internal/planes/admin/app"
+	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
+
 	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedlifecycle "github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
@@ -19,17 +21,17 @@ import (
 // Runtime은 bot ingress, admin API, LLM scheduler plane을 하나의 Go 프로세스에서
 // 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
 type Runtime struct {
-	Config *config.HololiveAPIConfig
+	Config *settings.HololiveAPIConfig
 	Logger *slog.Logger
 
-	Bot   *botruntime.Runtime
-	Admin *adminruntime.Runtime
-	LLM   *llmruntime.Runtime
+	Bot   *botruntime2.BotRuntime
+	Admin *app.AdminAPIRuntime
+	LLM   *llmruntime.LLMSchedulerRuntime
 
 	group *applifecycle.GroupRuntime
 }
 
-func BuildRuntime(ctx context.Context, appConfig *config.HololiveAPIConfig, logger *slog.Logger) (*Runtime, error) {
+func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (*Runtime, error) {
 	if appConfig == nil {
 		return nil, errors.New("hololive-api config must not be nil")
 	}
@@ -37,18 +39,18 @@ func BuildRuntime(ctx context.Context, appConfig *config.HololiveAPIConfig, logg
 		return nil, errors.New("logger must not be nil")
 	}
 
-	llm, err := llmruntime.Build(ctx, appConfig.LLM, logger.With(slog.String("plane", "llm")))
+	llm, err := llmruntime.BuildLLMSchedulerRuntime(ctx, appConfig.LLM, logger.With(slog.String("plane", "llm")))
 	if err != nil {
 		return nil, fmt.Errorf("build llm plane: %w", err)
 	}
 
-	admin, err := adminruntime.Build(ctx, appConfig.Admin, logger.With(slog.String("plane", "admin")))
+	admin, err := app.BuildAdminAPIRuntime(ctx, appConfig.Admin, logger.With(slog.String("plane", "admin")))
 	if err != nil {
 		llm.Close()
 		return nil, fmt.Errorf("build admin plane: %w", err)
 	}
 
-	bot, err := botruntime.Build(ctx, appConfig.Bot, logger.With(slog.String("plane", "bot")))
+	bot, err := botruntime2.BuildRuntime(ctx, appConfig.Bot, logger.With(slog.String("plane", "bot")))
 	if err != nil {
 		admin.Close()
 		llm.Close()

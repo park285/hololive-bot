@@ -9,8 +9,9 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	bot "github.com/kapu/hololive-api/internal/planes/bot/internal/bot"
-	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	handlers "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 type stubBotCommand struct {
@@ -31,7 +32,7 @@ func discardLogger() *slog.Logger {
 }
 
 func TestCloneCommandBuildersNilSourceReturnsNil(t *testing.T) {
-	if got := bot.CloneCommandBuilders(nil); got != nil {
+	if got := orchcmd.CloneCommandBuilders(nil); got != nil {
 		t.Fatalf("CloneCommandBuilders(nil) = %v, want nil", got)
 	}
 }
@@ -39,27 +40,27 @@ func TestCloneCommandBuildersNilSourceReturnsNil(t *testing.T) {
 func TestCloneCommandBuildersProducesIndependentSlice(t *testing.T) {
 	first := &stubBotCommand{name: "first"}
 	second := &stubBotCommand{name: "second"}
-	src := []bot.CommandBuilder{
-		func(*command.Dependencies) command.Command { return first },
-		func(*command.Dependencies) command.Command { return second },
+	src := []orchcmd.CommandBuilder{
+		func(*handlercore.Dependencies) handlercore.Command { return first },
+		func(*handlercore.Dependencies) handlercore.Command { return second },
 	}
 
-	clone := bot.CloneCommandBuilders(src)
+	clone := orchcmd.CloneCommandBuilders(src)
 	if len(clone) != len(src) {
 		t.Fatalf("clone len = %d, want %d", len(clone), len(src))
 	}
-	if got := clone[1](nil); got != command.Command(second) {
+	if got := clone[1](nil); got != handlercore.Command(second) {
 		t.Fatalf("clone[1]() = %v, want the original second builder result", got)
 	}
 
-	clone[0] = func(*command.Dependencies) command.Command { return second }
-	if got := src[0](nil); got != command.Command(first) {
+	clone[0] = func(*handlercore.Dependencies) handlercore.Command { return second }
+	if got := src[0](nil); got != handlercore.Command(first) {
 		t.Fatal("mutating the clone changed the source builders")
 	}
 }
 
 func TestCommandRouterExecuteWithoutRegistryFails(t *testing.T) {
-	router := bot.NewCommandRouter(nil, discardLogger(), nil, nil, nil)
+	router := orchcmd.NewCommandRouter(nil, discardLogger(), nil, nil, nil)
 
 	err := router.Execute(context.Background(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil)
 	if err == nil {
@@ -71,8 +72,8 @@ func TestCommandRouterExecuteWithoutRegistryFails(t *testing.T) {
 }
 
 func TestCommandRouterExecutesRegisteredCommand(t *testing.T) {
-	registry := command.NewRegistry()
-	router := bot.NewCommandRouter(registry, discardLogger(), nil, nil, nil)
+	registry := handlers.NewRegistry()
+	router := orchcmd.NewCommandRouter(registry, discardLogger(), nil, nil, nil)
 
 	key, _ := router.NormalizeCommand(domain.CommandHelp, nil)
 	if key == "" {

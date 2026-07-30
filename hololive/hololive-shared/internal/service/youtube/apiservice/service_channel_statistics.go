@@ -29,20 +29,18 @@ import (
 
 	"github.com/kapu/hololive-shared/internal/service/fallback"
 	ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
-type ChannelStats = ytcontract.ChannelStats
-
 type channelStatsScrapeResult struct {
-	stats     map[string]*ChannelStats
+	stats     map[string]*ytcontract.ChannelStats
 	failedIDs []string
 	scraped   int
 }
 
-func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
+func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ytcontract.ChannelStats, error) {
 	if len(channelIDs) == 0 {
-		return make(map[string]*ChannelStats), nil
+		return make(map[string]*ytcontract.ChannelStats), nil
 	}
 
 	scrapeResult := ys.scrapeChannelStatistics(ctx, channelIDs)
@@ -61,7 +59,7 @@ func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []st
 
 func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs []string) channelStatsScrapeResult {
 	result := channelStatsScrapeResult{
-		stats: make(map[string]*ChannelStats),
+		stats: make(map[string]*ytcontract.ChannelStats),
 	}
 	var mu sync.Mutex
 
@@ -92,7 +90,7 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 	return result
 }
 
-func (ys *serviceImpl) scrapeSingleChannelStatistics(ctx context.Context, channelID string) (*ChannelStats, error) {
+func (ys *serviceImpl) scrapeSingleChannelStatistics(ctx context.Context, channelID string) (*ytcontract.ChannelStats, error) {
 	stats, err := ys.scraper.GetChannelStats(ctx, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("scraper channel stats for %s: %w", channelID, err)
@@ -100,12 +98,12 @@ func (ys *serviceImpl) scrapeSingleChannelStatistics(ctx context.Context, channe
 	return ys.channelStatsFromScraped(channelID, stats)
 }
 
-func (ys *serviceImpl) channelStatsFromScraped(channelID string, stats *scraper.ChannelStats) (*ChannelStats, error) {
+func (ys *serviceImpl) channelStatsFromScraped(channelID string, stats *parser.ChannelStats) (*ytcontract.ChannelStats, error) {
 	subscriberCount, videoCount, viewCount, err := validatedScrapedChannelCounts(channelID, stats)
 	if err != nil {
 		return nil, err
 	}
-	return &ChannelStats{
+	return &ytcontract.ChannelStats{
 		ChannelID:       stats.ChannelID,
 		ChannelTitle:    ys.resolveChannelTitle(channelID, stats.Handle),
 		SubscriberCount: subscriberCount,
@@ -115,7 +113,7 @@ func (ys *serviceImpl) channelStatsFromScraped(channelID string, stats *scraper.
 	}, nil
 }
 
-func validatedScrapedChannelCounts(channelID string, stats *scraper.ChannelStats) (subscriberCount, videoCount, viewCount uint64, err error) {
+func validatedScrapedChannelCounts(channelID string, stats *parser.ChannelStats) (subscriberCount, videoCount, viewCount uint64, err error) {
 	subscriberCount, err = validatedScrapedChannelCount(channelID, "subscriber", stats.SubscriberCount)
 	if err != nil {
 		return 0, 0, 0, err

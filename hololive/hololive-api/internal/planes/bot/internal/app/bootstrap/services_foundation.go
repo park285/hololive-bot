@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
 func InitScraperHolodexFoundation(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*ScraperHolodexFoundation, error) {
@@ -55,7 +56,7 @@ func InitScraperHolodexFoundation(
 
 func InitScraperHolodexProfileFoundation(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*ScraperHolodexProfileFoundation, error) {
@@ -77,6 +78,6 @@ func InitScraperHolodexProfileFoundation(
 	}, nil
 }
 
-func providersScraperProxyConfig(appConfig *config.Config) scraper.ProxyConfig {
+func providersScraperProxyConfig(appConfig *settings.Config) scraper.ProxyConfig {
 	return scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL}
 }

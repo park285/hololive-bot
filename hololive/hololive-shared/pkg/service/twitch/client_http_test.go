@@ -30,7 +30,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/pkg/httputil"
 
@@ -85,8 +86,8 @@ func TestClient_RefreshToken_Success(t *testing.T) {
 			t.Fatalf("method=%s want=POST", req.Method)
 		}
 
-		if req.URL.String() != config.DefaultTwitchOperationalConfig().AuthURL {
-			t.Fatalf("url=%s want=%s", req.URL.String(), config.DefaultTwitchOperationalConfig().AuthURL)
+		if req.URL.String() != settings.DefaultTwitchOperationalConfig().AuthURL {
+			t.Fatalf("url=%s want=%s", req.URL.String(), settings.DefaultTwitchOperationalConfig().AuthURL)
 		}
 
 		return httpResponse(http.StatusOK, `{"access_token":"tok-1","expires_in":3600,"token_type":"bearer"}`), nil
@@ -262,7 +263,7 @@ func TestClient_GetStreams_ChunksLargeUserLoginSets(t *testing.T) {
 	)
 
 	c.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if !strings.Contains(req.URL.String(), config.DefaultTwitchOperationalConfig().BaseURL+"/streams") {
+		if !strings.Contains(req.URL.String(), settings.DefaultTwitchOperationalConfig().BaseURL+"/streams") {
 			return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
 		}
 
@@ -360,9 +361,9 @@ func handle401RefreshRetryRequest(t *testing.T, req *http.Request, tokenCalls, s
 	t.Helper()
 
 	switch {
-	case req.URL.String() == config.DefaultTwitchOperationalConfig().AuthURL:
+	case req.URL.String() == settings.DefaultTwitchOperationalConfig().AuthURL:
 		return twitchRefreshTokenResponse(tokenCalls), nil
-	case strings.Contains(req.URL.String(), config.DefaultTwitchOperationalConfig().BaseURL+"/streams"):
+	case strings.Contains(req.URL.String(), settings.DefaultTwitchOperationalConfig().BaseURL+"/streams"):
 		return twitchRefreshStreamResponse(t, req, streamCalls), nil
 	default:
 		return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
@@ -407,10 +408,10 @@ func TestClient_GetStreams_Repeated401StopsAfterSingleRefresh(t *testing.T) {
 		defer mu.Unlock()
 
 		switch {
-		case req.URL.String() == config.DefaultTwitchOperationalConfig().AuthURL:
+		case req.URL.String() == settings.DefaultTwitchOperationalConfig().AuthURL:
 			tokenCalls++
 			return httpResponse(http.StatusOK, `{"access_token":"tok-1","expires_in":3600,"token_type":"bearer"}`), nil
-		case strings.Contains(req.URL.String(), config.DefaultTwitchOperationalConfig().BaseURL+"/streams"):
+		case strings.Contains(req.URL.String(), settings.DefaultTwitchOperationalConfig().BaseURL+"/streams"):
 			streamCalls++
 			return httpResponse(http.StatusUnauthorized, `{"error":"unauthorized"}`), nil
 		default:
@@ -456,8 +457,8 @@ func TestNewClient_UsesSharedHTTPClientWhenConfigOmitsOne(t *testing.T) {
 		t.Fatal("httpClient is nil")
 	}
 
-	if client.httpClient.Timeout != config.DefaultTwitchOperationalConfig().Timeout {
-		t.Fatalf("timeout=%s want=%s", client.httpClient.Timeout, config.DefaultTwitchOperationalConfig().Timeout)
+	if client.httpClient.Timeout != settings.DefaultTwitchOperationalConfig().Timeout {
+		t.Fatalf("timeout=%s want=%s", client.httpClient.Timeout, settings.DefaultTwitchOperationalConfig().Timeout)
 	}
 
 	transport, ok := client.httpClient.Transport.(*http.Transport)
@@ -465,7 +466,7 @@ func TestNewClient_UsesSharedHTTPClientWhenConfigOmitsOne(t *testing.T) {
 		t.Fatalf("transport type = %T, want *http.Transport", client.httpClient.Transport)
 	}
 
-	shared := httputil.NewExternalAPIClient(config.DefaultTwitchOperationalConfig().Timeout)
+	shared := httputil.NewExternalAPIClient(settings.DefaultTwitchOperationalConfig().Timeout)
 
 	sharedTransport, ok := shared.Transport.(*http.Transport)
 	if !ok {
@@ -499,7 +500,7 @@ func TestClient_GetStreams_ErrorStatusBranches(t *testing.T) {
 			c.tokenExpiry.Store(time.Now().Add(1 * time.Hour))
 
 			c.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				if strings.Contains(req.URL.String(), config.DefaultTwitchOperationalConfig().BaseURL+"/streams") {
+				if strings.Contains(req.URL.String(), settings.DefaultTwitchOperationalConfig().BaseURL+"/streams") {
 					return httpResponse(tt.statusCode, `{}`), nil
 				}
 

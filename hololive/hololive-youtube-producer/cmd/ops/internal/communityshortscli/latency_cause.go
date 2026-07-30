@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	opsapp "github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/latencycause"
 )
 
 func runLatencyCauseCommand(ctx commandContext, args []string) error {
@@ -26,7 +26,7 @@ func runLatencyCauseCommand(ctx commandContext, args []string) error {
 		return fmt.Errorf("invalid period flag: %w", err)
 	}
 
-	appConfig, err := config.Load()
+	appConfig, err := settings.LoadYouTubeProducerRuntime()
 	if err != nil {
 		return fmt.Errorf("failed to load community/shorts latency-cause config: %w", err)
 	}
@@ -36,12 +36,12 @@ func runLatencyCauseCommand(ctx commandContext, args []string) error {
 	reqCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	report, err := opsapp.CollectCommunityShortsLatencyCauseReportWithOptions(
+	report, err := latencycause.CollectWithOptions(
 		reqCtx,
 		appConfig,
 		logger,
 		now,
-		opsapp.CommunityShortsLatencyCauseCollectOptions{PeriodSpecs: specs},
+		latencycause.CollectOptions{PeriodSpecs: specs},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to collect community/shorts latency cause report: %w", err)
@@ -50,7 +50,7 @@ func runLatencyCauseCommand(ctx commandContext, args []string) error {
 	return writeLatencyCauseReport(ctx, *format, &report)
 }
 
-func writeLatencyCauseReport(ctx commandContext, format string, report *opsapp.CommunityShortsLatencyCauseReport) error {
+func writeLatencyCauseReport(ctx commandContext, format string, report *latencycause.Report) error {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "markdown":
 		return writeLatencyCauseMarkdown(ctx, report)
@@ -61,14 +61,14 @@ func writeLatencyCauseReport(ctx commandContext, format string, report *opsapp.C
 	}
 }
 
-func writeLatencyCauseMarkdown(ctx commandContext, report *opsapp.CommunityShortsLatencyCauseReport) error {
-	if _, err := fmt.Fprint(ctx.stdout, opsapp.RenderCommunityShortsLatencyCauseMarkdown(report)); err != nil {
+func writeLatencyCauseMarkdown(ctx commandContext, report *latencycause.Report) error {
+	if _, err := fmt.Fprint(ctx.stdout, latencycause.RenderMarkdown(report)); err != nil {
 		return fmt.Errorf("failed to write community/shorts latency-cause markdown: %w", err)
 	}
 	return nil
 }
 
-func writeLatencyCauseJSON(ctx commandContext, report *opsapp.CommunityShortsLatencyCauseReport) error {
+func writeLatencyCauseJSON(ctx commandContext, report *latencycause.Report) error {
 	encoder := json.NewEncoder(ctx.stdout)
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
@@ -78,12 +78,12 @@ func writeLatencyCauseJSON(ctx commandContext, report *opsapp.CommunityShortsLat
 	return nil
 }
 
-func parseLatencyPeriodSpecs(values []string) ([]opsapp.CommunityShortsLatencyPeriodSpec, error) {
+func parseLatencyPeriodSpecs(values []string) ([]latencycause.PeriodSpec, error) {
 	if len(values) == 0 {
-		return opsapp.DefaultCommunityShortsLatencyPeriodSpecs(), nil
+		return latencycause.DefaultPeriodSpecs(), nil
 	}
 
-	specs := make([]opsapp.CommunityShortsLatencyPeriodSpec, 0, len(values))
+	specs := make([]latencycause.PeriodSpec, 0, len(values))
 	for i := range values {
 		spec, err := parseLatencyPeriodSpec(values[i])
 		if err != nil {
@@ -95,21 +95,21 @@ func parseLatencyPeriodSpecs(values []string) ([]opsapp.CommunityShortsLatencyPe
 	return specs, nil
 }
 
-func parseLatencyPeriodSpec(value string) (opsapp.CommunityShortsLatencyPeriodSpec, error) {
+func parseLatencyPeriodSpec(value string) (latencycause.PeriodSpec, error) {
 	label, rawDuration, ok := strings.Cut(value, "=")
 	if !ok {
-		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q must use label=duration", value)
+		return latencycause.PeriodSpec{}, fmt.Errorf("%q must use label=duration", value)
 	}
 	label = strings.TrimSpace(label)
 	if label == "" {
-		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q has empty label", value)
+		return latencycause.PeriodSpec{}, fmt.Errorf("%q has empty label", value)
 	}
 	duration, err := time.ParseDuration(strings.TrimSpace(rawDuration))
 	if err != nil {
-		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q has invalid duration: %w", value, err)
+		return latencycause.PeriodSpec{}, fmt.Errorf("%q has invalid duration: %w", value, err)
 	}
 	if duration <= 0 {
-		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q must be greater than zero", value)
+		return latencycause.PeriodSpec{}, fmt.Errorf("%q must be greater than zero", value)
 	}
-	return opsapp.CommunityShortsLatencyPeriodSpec{Label: label, Window: duration}, nil
+	return latencycause.PeriodSpec{Label: label, Window: duration}, nil
 }

@@ -27,13 +27,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	"github.com/kapu/hololive-shared/pkg/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
 type alarmListViewerStub struct {
@@ -208,10 +211,10 @@ func (s *alarmAddRecorder) WarmCacheFromDB(context.Context) error { return nil }
 func TestAlarmCommand_InvalidAction(t *testing.T) {
 	var sentError string
 
-	deps := &Dependencies{
-		Alarm:     &notification.AlarmService{},
+	deps := &handlercore.Dependencies{
+		Alarm:     &alarmservice.AlarmService{},
 		Matcher:   &matcher.Matcher{},
-		Formatter: adapter.NewResponseFormatter("!", nil),
+		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(ctx context.Context, room, message string) error {
 			return nil
 		},
@@ -222,7 +225,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 		Logger: slog.Default(),
 	}
 
-	cmd := NewAlarmCommand(deps)
+	cmd := alarmcmd.NewAlarmCommand(deps)
 	params := map[string]any{
 		"action":      "invalid",
 		"sub_command": "설정123",
@@ -238,7 +241,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 		t.Fatalf("execute returned error: %v", err)
 	}
 
-	expectedMessage := adapter.ErrInvalidAlarmUsage
+	expectedMessage := messaging.ErrInvalidAlarmUsage
 	if sentError != expectedMessage {
 		t.Fatalf("expected error message %q, got %q", expectedMessage, sentError)
 	}
@@ -263,10 +266,10 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 		},
 	}
 
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
 		Matcher:   &matcher.Matcher{},
-		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(ctx context.Context, room, message string) error {
 			sentMessage = message
 			return nil
@@ -275,7 +278,7 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 		Logger:    slog.Default(),
 	}
 
-	cmd := NewAlarmCommand(deps)
+	cmd := alarmcmd.NewAlarmCommand(deps)
 
 	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{"action": "list"})
 	if err != nil {
@@ -297,10 +300,10 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 		Name:      "Aqua",
 	}})
 	alarm := &alarmAddRecorder{}
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
 		},
@@ -313,7 +316,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 
 	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "alarm-propagation")
 
-	err := NewAlarmCommand(deps).Execute(ctx, &domain.CommandContext{
+	err := alarmcmd.NewAlarmCommand(deps).Execute(ctx, &domain.CommandContext{
 		Room:     "room-1",
 		RoomName: "room-name",
 		UserID:   "user-1",
@@ -339,10 +342,10 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	memberProvider := newContextAwareMemberProvider(nil)
 	alarm := &alarmAddRecorder{}
 	sendMessageCalled := false
-	deps := &Dependencies{
+	deps := &handlercore.Dependencies{
 		Alarm:     alarm,
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			sendMessageCalled = true
 			return nil
@@ -353,7 +356,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{
+	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{
 		Room:     "room-1",
 		RoomName: "room-name",
 		UserID:   "user-1",

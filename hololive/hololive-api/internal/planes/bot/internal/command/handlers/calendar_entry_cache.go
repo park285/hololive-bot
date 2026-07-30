@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -23,7 +24,7 @@ const (
 )
 
 type cachedCelebrationCalendarFinder struct {
-	base CelebrationCalendarFinder
+	base handlercore.CelebrationCalendarFinder
 	dir  string
 	ttl  time.Duration
 	now  func() time.Time
@@ -37,16 +38,16 @@ type calendarEntriesSnapshot struct {
 	Entries  []domain.CalendarEntry `json:"entries"`
 }
 
-func NewCachedCelebrationCalendarFinder(base CelebrationCalendarFinder, dir string, ttl time.Duration) CelebrationCalendarFinder {
+func NewCachedCelebrationCalendarFinder(base handlercore.CelebrationCalendarFinder, dir string, ttl time.Duration) handlercore.CelebrationCalendarFinder {
 	return newCachedCelebrationCalendarFinder(base, dir, ttl, time.Now)
 }
 
 func newCachedCelebrationCalendarFinder(
-	base CelebrationCalendarFinder,
+	base handlercore.CelebrationCalendarFinder,
 	dir string,
 	ttl time.Duration,
 	now func() time.Time,
-) CelebrationCalendarFinder {
+) handlercore.CelebrationCalendarFinder {
 	if isNilCelebrationCalendarFinder(base) {
 		return nil
 	}
@@ -197,7 +198,7 @@ func cloneCalendarMember(member *domain.Member) *domain.Member {
 	return &cloned
 }
 
-func isNilCelebrationCalendarFinder(base CelebrationCalendarFinder) bool {
+func isNilCelebrationCalendarFinder(base handlercore.CelebrationCalendarFinder) bool {
 	if base == nil {
 		return true
 	}

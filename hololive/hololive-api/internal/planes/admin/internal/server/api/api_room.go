@@ -27,7 +27,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/ginjson"

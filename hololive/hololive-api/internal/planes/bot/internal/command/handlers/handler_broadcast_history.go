@@ -30,16 +30,17 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
 
 type BroadcastHistoryCommand struct {
-	BaseCommand
+	handlercore.BaseCommand
 }
 
 type BroadcastThumbnailCommand struct {
-	BaseCommand
+	handlercore.BaseCommand
 }
 
 const (
@@ -47,12 +48,12 @@ const (
 	maxBroadcastHistoryDays     = 365
 )
 
-func NewBroadcastHistoryCommand(deps *Dependencies) *BroadcastHistoryCommand {
-	return &BroadcastHistoryCommand{BaseCommand: NewBaseCommand(deps)}
+func NewBroadcastHistoryCommand(deps *handlercore.Dependencies) *BroadcastHistoryCommand {
+	return &BroadcastHistoryCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
 }
 
-func NewBroadcastThumbnailCommand(deps *Dependencies) *BroadcastThumbnailCommand {
-	return &BroadcastThumbnailCommand{BaseCommand: NewBaseCommand(deps)}
+func NewBroadcastThumbnailCommand(deps *handlercore.Dependencies) *BroadcastThumbnailCommand {
+	return &BroadcastThumbnailCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
 }
 
 func (c *BroadcastHistoryCommand) Name() string {
@@ -90,7 +91,7 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.Co
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
-func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) (*handlercore.BroadcastHistoryQuery, *adapter.BroadcastHistoryFilter, error) {
+func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) (*handlercore.BroadcastHistoryQuery, *formatter.BroadcastHistoryFilter, error) {
 	query, filter := newBroadcastHistoryQuery(params)
 	if handled, err := c.applyBroadcastHistoryType(ctx, cmdCtx, params, &query, &filter); handled || err != nil {
 		return nil, nil, err
@@ -101,7 +102,7 @@ func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *domain
 	return &query, &filter, nil
 }
 
-func newBroadcastHistoryQuery(params map[string]any) (query handlercore.BroadcastHistoryQuery, filter adapter.BroadcastHistoryFilter) {
+func newBroadcastHistoryQuery(params map[string]any) (query handlercore.BroadcastHistoryQuery, filter formatter.BroadcastHistoryFilter) {
 	days := normalizeBroadcastHistoryDays(intBroadcastHistoryParam(params, "days", defaultBroadcastHistoryDays))
 	if boolParam(params, "all") {
 		days = maxBroadcastHistoryDays
@@ -112,19 +113,19 @@ func newBroadcastHistoryQuery(params map[string]any) (query handlercore.Broadcas
 		TopicID: stringParam(params, "topic"),
 	}
 	query.Since = time.Now().AddDate(0, 0, -days)
-	return query, adapter.BroadcastHistoryFilter{
+	return query, formatter.BroadcastHistoryFilter{
 		TopicID: query.TopicID,
 		Days:    days,
 		Limit:   limit,
 	}
 }
 
-func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *adapter.BroadcastHistoryFilter) (bool, error) {
+func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) (bool, error) {
 	rawType := stringParam(params, "type")
 	if rawType == "" {
 		return false, nil
 	}
-	typ, ok := ParseBroadcastType(rawType)
+	typ, ok := broadcasttype.Parse(rawType)
 	if !ok {
 		return true, c.Deps().SendMessage(ctx, cmdCtx.Room, "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류")
 	}
@@ -133,7 +134,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context,
 	return false, nil
 }
 
-func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *adapter.BroadcastHistoryFilter) (bool, error) {
+func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) (bool, error) {
 	memberName := stringParam(params, "member")
 	if memberName == "" {
 		return false, nil
@@ -142,7 +143,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Contex
 		return false, errors.New("broadcast history matcher not configured")
 	}
 
-	channel, err := FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "방송 이력")
+	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "방송 이력")
 	if memberLookupHandled(err) {
 		return true, nil
 	}
@@ -238,15 +239,15 @@ func (c *BroadcastThumbnailCommand) ensureDeps() error {
 	return nil
 }
 
-func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntry) []adapter.BroadcastHistoryEntry {
-	result := make([]adapter.BroadcastHistoryEntry, 0, len(entries))
+func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntry) []formatter.BroadcastHistoryEntry {
+	result := make([]formatter.BroadcastHistoryEntry, 0, len(entries))
 	for i := range entries {
 		entry := &entries[i]
-		result = append(result, adapter.BroadcastHistoryEntry{
+		result = append(result, formatter.BroadcastHistoryEntry{
 			VideoID:      entry.VideoID,
 			MemberName:   entry.MemberName,
 			Type:         entry.BroadcastType,
-			TypeLabel:    BroadcastType(entry.BroadcastType).Label(),
+			TypeLabel:    broadcasttype.Type(entry.BroadcastType).Label(),
 			TopicID:      entry.TopicID,
 			Title:        entry.Title,
 			Time:         broadcastHistoryEntryTime(entry),

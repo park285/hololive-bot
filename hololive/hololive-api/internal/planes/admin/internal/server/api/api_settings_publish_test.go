@@ -15,7 +15,6 @@ import (
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -44,7 +43,7 @@ func newCacheBackedSettingsPublisherTest(
 
 	mini := miniredis.RunT(t)
 	subscriber := mini.NewSubscriber()
-	subscriber.Subscribe(configsub.DefaultChannel)
+	subscriber.Subscribe(contractssettings.PubSubChannelV1)
 	t.Cleanup(subscriber.Close)
 	receivedMessages := make(chan miniredis.PubsubMessage, 2)
 	go func() {
@@ -117,14 +116,14 @@ func collectPublishedConfigUpdates(
 	t *testing.T,
 	receivedMessages <-chan miniredis.PubsubMessage,
 	want int,
-) map[string]configsub.ConfigUpdate {
+) map[string]contractssettings.ConfigUpdateV1 {
 	t.Helper()
 
-	updates := map[string]configsub.ConfigUpdate{}
+	updates := map[string]contractssettings.ConfigUpdateV1{}
 	for range want {
 		select {
 		case message := <-receivedMessages:
-			var update configsub.ConfigUpdate
+			var update contractssettings.ConfigUpdateV1
 			if err := json.Unmarshal([]byte(message.Message), &update); err != nil {
 				t.Fatalf("decode published update: %v", err)
 			}
@@ -137,7 +136,7 @@ func collectPublishedConfigUpdates(
 	return updates
 }
 
-func assertScraperProxyConfigUpdate(t *testing.T, updates map[string]configsub.ConfigUpdate) {
+func assertScraperProxyConfigUpdate(t *testing.T, updates map[string]contractssettings.ConfigUpdateV1) {
 	t.Helper()
 
 	scraperUpdate, ok := updates[contractssettings.UpdateTypeScraperProxy]
@@ -153,7 +152,7 @@ func assertScraperProxyConfigUpdate(t *testing.T, updates map[string]configsub.C
 	}
 }
 
-func assertAlarmAdvanceConfigUpdate(t *testing.T, updates map[string]configsub.ConfigUpdate) {
+func assertAlarmAdvanceConfigUpdate(t *testing.T, updates map[string]contractssettings.ConfigUpdateV1) {
 	t.Helper()
 
 	alarmUpdate, ok := updates[contractssettings.UpdateTypeAlarmAdvanceMinutes]

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
 func discardLogger() *slog.Logger {

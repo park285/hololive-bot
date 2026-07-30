@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
 
 func TestExecuteCommandAsync_RunsSynchronouslyWhenWorkerPoolMissing(t *testing.T) {
@@ -85,7 +85,7 @@ func TestExecuteCommandAsync_RejectsImmediatelyOnWorkerPoolBackpressure(t *testi
 		commandRegistry: registry,
 		workerPool:      pool,
 		irisClient:      &testIrisClient{messageCh: msgCh},
-		formatter:       adapter.NewResponseFormatter("!", nil),
+		formatter:       formatter.NewResponseFormatter("!", nil),
 	}
 
 	b.executeCommandAsync(t.Context(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil, "help", "room-1")

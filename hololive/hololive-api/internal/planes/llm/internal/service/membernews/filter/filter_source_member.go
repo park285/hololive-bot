@@ -26,7 +26,7 @@ import (
 
 	"github.com/park285/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 

@@ -24,7 +24,7 @@ import (
 	"fmt"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/internal/model"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 )
 
 func reviewSystemPrompt() string {

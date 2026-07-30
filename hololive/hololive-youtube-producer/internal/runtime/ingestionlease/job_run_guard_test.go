@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -23,18 +24,18 @@ func TestJobRunGuardClaimBlocksSameJobAndAllowsDifferentChannels(t *testing.T) {
 	identity := JobIdentity{PollerName: "videos", ChannelID: "UC_A", Interval: time.Minute}
 	first, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAcquired, first.Result)
+	require.Equal(t, polling.JobClaimAcquired, first.Result)
 	require.NotNil(t, claim)
 
 	second, peerClaim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimPeerOwned, second.Result)
+	require.Equal(t, polling.JobClaimPeerOwned, second.Result)
 	require.Nil(t, peerClaim)
 	require.Greater(t, second.RetryAfter, time.Duration(0))
 
 	other, otherClaim, err := guard.TryLease(ctx, JobIdentity{PollerName: "videos", ChannelID: "UC_B", Interval: time.Minute}, time.Minute, time.Minute)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAcquired, other.Result)
+	require.Equal(t, polling.JobClaimAcquired, other.Result)
 	require.NotNil(t, otherClaim)
 }
 
@@ -51,7 +52,7 @@ func TestJobRunGuardMarkCompletedCreatesCooldown(t *testing.T) {
 
 	status, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAcquired, status.Result)
+	require.Equal(t, polling.JobClaimAcquired, status.Result)
 
 	completed, err := claim.MarkCompleted(ctx, identity.Interval)
 	require.NoError(t, err)
@@ -59,7 +60,7 @@ func TestJobRunGuardMarkCompletedCreatesCooldown(t *testing.T) {
 
 	next, nextClaim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAlreadyCompleted, next.Result)
+	require.Equal(t, polling.JobClaimAlreadyCompleted, next.Result)
 	require.Nil(t, nextClaim)
 	require.Greater(t, next.RetryAfter, time.Duration(0))
 }
@@ -77,7 +78,7 @@ func TestJobRunGuardDeferCreatesCooldown(t *testing.T) {
 
 	status, claim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAcquired, status.Result)
+	require.Equal(t, polling.JobClaimAcquired, status.Result)
 
 	deferred, err := claim.Defer(ctx, 5*time.Second)
 	require.NoError(t, err)
@@ -85,7 +86,7 @@ func TestJobRunGuardDeferCreatesCooldown(t *testing.T) {
 
 	next, nextClaim, err := guard.TryLease(ctx, identity, time.Minute, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAlreadyCompleted, next.Result)
+	require.Equal(t, polling.JobClaimAlreadyCompleted, next.Result)
 	require.Nil(t, nextClaim)
 	require.Greater(t, next.RetryAfter, time.Duration(0))
 	require.LessOrEqual(t, next.RetryAfter, 5*time.Second)
@@ -102,11 +103,11 @@ func TestJobRunGuardWinnerCompleteMakesPeerAlreadyCompleted(t *testing.T) {
 
 	status, claim, err := winner.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAcquired, status.Result)
+	require.Equal(t, polling.JobClaimAcquired, status.Result)
 
 	status, peerClaim, err := peer.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimPeerOwned, status.Result)
+	require.Equal(t, polling.JobClaimPeerOwned, status.Result)
 	require.Nil(t, peerClaim)
 
 	completed, err := claim.MarkCompleted(ctx, identity.Interval)
@@ -115,7 +116,7 @@ func TestJobRunGuardWinnerCompleteMakesPeerAlreadyCompleted(t *testing.T) {
 
 	status, peerClaim, err = peer.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAlreadyCompleted, status.Result)
+	require.Equal(t, polling.JobClaimAlreadyCompleted, status.Result)
 	require.Nil(t, peerClaim)
 }
 
@@ -130,13 +131,13 @@ func TestJobRunGuardExpiredLeaseCanFailOverToPeer(t *testing.T) {
 
 	status, claim, err := first.TryLease(ctx, identity, 20*time.Millisecond, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAcquired, status.Result)
+	require.Equal(t, polling.JobClaimAcquired, status.Result)
 	require.NotNil(t, claim)
 
 	mini.FastForward(21 * time.Millisecond)
 	status, claim, err = second.TryLease(ctx, identity, time.Second, identity.Interval)
 	require.NoError(t, err)
-	require.Equal(t, JobClaimAcquired, status.Result)
+	require.Equal(t, polling.JobClaimAcquired, status.Result)
 	require.NotNil(t, claim)
 }
 

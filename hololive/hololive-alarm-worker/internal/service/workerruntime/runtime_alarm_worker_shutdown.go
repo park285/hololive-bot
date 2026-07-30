@@ -24,7 +24,7 @@ import (
 	"context"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
-	"github.com/kapu/hololive-shared/pkg/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
 func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) {
@@ -36,7 +36,7 @@ func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) {
 		Logger:                r.Logger,
 		ClearAlarmScheduler:   r.clearAlarmSchedulerCancel,
 		ShutdownHTTPServer:    r.ShutdownHTTPServer,
-		ShutdownAlarmServices: notification.CloseAllAlarmServices,
+		ShutdownAlarmServices: alarmservice.CloseAllAlarmServices,
 	})
 }
 

@@ -93,12 +93,12 @@ func (f *ResponseFormatter) Prefix() string {
 	return "!"
 }
 
-func (f *ResponseFormatter) ResolveError(key string) string {
-	return f.messageStrings.GetOr(messagestrings.NamespaceError, key, messagestrings.FallbackSentinel)
+func (f *ResponseFormatter) ResolveError(ctx context.Context, key string) string {
+	return f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceError, key, messagestrings.FallbackSentinel)
 }
 
-func (f *ResponseFormatter) GraduatedMemberWarning() string {
-	return f.messageStrings.Get(messagestrings.NamespaceNotify, "graduated_member_warning")
+func (f *ResponseFormatter) GraduatedMemberWarning(ctx context.Context) string {
+	return f.messageStrings.GetContext(ctx, messagestrings.NamespaceNotify, "graduated_member_warning")
 }
 
 type memberNotFoundTemplateData struct {

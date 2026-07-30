@@ -25,7 +25,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
@@ -37,8 +38,8 @@ func TestInitCoreIntegrationServicesReturnsACLInitializationError(t *testing.T) 
 
 	services, err := InitCoreIntegrationServices(
 		context.Background(),
-		&config.Config{
-			Kakao: config.KakaoConfig{
+		&settings.Config{
+			Kakao: settings.KakaoConfig{
 				ACLEnabled: true,
 				ACLMode:    "whitelist",
 				Rooms:      []string{"room-a"},
@@ -65,14 +66,14 @@ func TestInitCoreIntegrationServicesCreatesWorkerPool(t *testing.T) {
 
 	services, err := InitCoreIntegrationServices(
 		ctx,
-		&config.Config{
-			Kakao: config.KakaoConfig{
+		&settings.Config{
+			Kakao: settings.KakaoConfig{
 				ACLEnabled: true,
 				ACLMode:    "whitelist",
 				Rooms:      []string{"room-a"},
 			},
-			Server:     config.ServerConfig{APIKey: "test-api-key"},
-			WorkerPool: config.WorkerPoolConfig{Workers: 10, QueueSize: 100},
+			Server:     settings.ServerConfig{APIKey: "test-api-key"},
+			WorkerPool: settings.WorkerPoolConfig{Workers: 10, QueueSize: 100},
 		},
 		&sharedmodules.InfraModule{
 			Cache:    cacheClient,

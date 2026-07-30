@@ -58,8 +58,8 @@ bash scripts/architecture/check-admin-dashboard-go-only.sh
 
 ```bash
 cd admin-dashboard/frontend
-npm ci
-npm run generate:api   # backend spec에서 swagger.json + generated client 재생성
-npm run lint
-npm run build
+corepack npm ci
+corepack npm run generate:api   # backend spec에서 swagger.json + generated client 재생성
+corepack npm run lint
+corepack npm run build
 ```

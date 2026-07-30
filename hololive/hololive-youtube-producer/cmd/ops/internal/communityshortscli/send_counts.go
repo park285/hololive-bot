@@ -4,8 +4,9 @@ import (
 	"errors"
 	"time"
 
+	"github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/sendcounts"
+
 	"github.com/kapu/hololive-youtube-producer/cmd/ops/internal/reportcli"
-	opsapp "github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts"
 )
 
 type sendCountsFlags struct {
@@ -38,18 +39,18 @@ func parseSendCountsFlags(ctx commandContext, args []string) (sendCountsFlags, e
 }
 
 func sendCountsReportCommand(ctx commandContext, flags sendCountsFlags) reportcli.WindowCommand[
-	opsapp.CommunityShortsSendCountCollectOptions,
-	opsapp.CommunityShortsSendCountReport,
+	sendcounts.CollectOptions,
+	sendcounts.Report,
 ] {
 	return reportcli.WindowCommand[
-		opsapp.CommunityShortsSendCountCollectOptions,
-		opsapp.CommunityShortsSendCountReport,
+		sendcounts.CollectOptions,
+		sendcounts.Report,
 	]{
 		Stdout:             ctx.stdout,
 		Stderr:             ctx.stderr,
 		BuildOptions:       buildSendCountsOptions(flags),
-		Collect:            opsapp.CollectCommunityShortsSendCountReportWithOptions,
-		RenderMarkdown:     opsapp.RenderCommunityShortsSendCountMarkdown,
+		Collect:            sendcounts.CollectWithOptions,
+		RenderMarkdown:     sendcounts.RenderMarkdown,
 		LoadConfigError:    "Failed to load community/shorts send-count config",
 		CollectError:       "Failed to collect community/shorts send counts",
 		MarkdownWriteError: "Failed to write community/shorts send-count markdown",
@@ -60,12 +61,12 @@ func sendCountsReportCommand(ctx commandContext, flags sendCountsFlags) reportcl
 func buildSendCountsOptions(_ sendCountsFlags) func(
 	time.Time,
 	time.Duration,
-) (opsapp.CommunityShortsSendCountCollectOptions, error) {
-	return func(now time.Time, window time.Duration) (opsapp.CommunityShortsSendCountCollectOptions, error) {
+) (sendcounts.CollectOptions, error) {
+	return func(now time.Time, window time.Duration) (sendcounts.CollectOptions, error) {
 		if window <= 0 {
-			return opsapp.CommunityShortsSendCountCollectOptions{}, errors.New("window must be greater than zero")
+			return sendcounts.CollectOptions{}, errors.New("window must be greater than zero")
 		}
 		since := now.Add(-window)
-		return opsapp.CommunityShortsSendCountCollectOptions{Since: &since}, nil
+		return sendcounts.CollectOptions{Since: &since}, nil
 	}
 }

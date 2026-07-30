@@ -99,6 +99,12 @@ grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILE
 pass "ap active-active syncs Iris H3 trust preflight"
 grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
 pass "ap active-active deploy runs Iris H3 trust preflight"
+
+for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
+  grep -Fq 'export GIT_OPTIONAL_LOCKS=0' "${ROOT_DIR}/${compose_entrypoint}" \
+    || fail "${compose_entrypoint} disables root-owned optional Git index refresh"
+done
+pass "Compose deploy entrypoints preserve checkout Git index ownership"
 for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
     grep -q '/run/hololive-bot/ap-compose.env' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} uses AP compose env"
     if grep -q '/run/hololive-bot/env' "${ROOT_DIR}/${ap_script}"; then
@@ -184,3 +190,39 @@ expect_fail "seoul active-active apply requires explicit env approval" "${ROOT_D
 expect_fail "osaka active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka --apply
 expect_fail "osaka2 active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka2 --apply
 expect_fail "seoul active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --apply
+
+rollback_fixture_root="$(mktemp -d)"
+trap 'rm -rf "${rollback_fixture_root}"; rm -f "${SSH_KEY}"' EXIT
+mkdir -p "${rollback_fixture_root}/bin"
+rollback_capture="${rollback_fixture_root}/ssh-command"
+cat > "${rollback_fixture_root}/bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "${!#}" > "${AP_ROLLBACK_SSH_CAPTURE}"
+EOF
+chmod +x "${rollback_fixture_root}/bin/ssh"
+
+AP_ROLLBACK_SSH_CAPTURE="${rollback_capture}" \
+PATH="${rollback_fixture_root}/bin:${PATH}" \
+SSH_KEY="${SSH_KEY}" \
+BACKUP_DIR="backups/seoul-active-active-fixture" \
+    "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --dry-run >/dev/null \
+    || fail "seoul rollback dry-run emits a backup compose preflight"
+
+grep -Fq "preflight_compose_dir=\"\$preflight_root/deploy/compose\"" "${rollback_capture}" \
+    || fail "seoul rollback preflight stages backup files under the canonical compose directory"
+grep -Fq "prod_preflight_file=\"\$preflight_compose_dir/docker-compose.prod.yml\"" "${rollback_capture}" \
+    || fail "seoul rollback preflight restores the canonical prod compose filename"
+grep -Fq "ap_preflight_file=\"\$preflight_compose_dir/docker-compose.seoul.yml\"" "${rollback_capture}" \
+    || fail "seoul rollback preflight restores the canonical AP compose filename"
+grep -Fq "cp \"\$prod_backup_file\" \"\$prod_preflight_file\"" "${rollback_capture}" \
+    || fail "seoul rollback preflight stages the prod backup"
+grep -Fq "cp \"\$ap_backup_file\" \"\$ap_preflight_file\"" "${rollback_capture}" \
+    || fail "seoul rollback preflight stages the AP backup"
+grep -Fq "./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet" "${rollback_capture}" \
+    || fail "seoul rollback preflight validates the staged compose pair"
+pass "seoul rollback dry-run preserves Compose extends relative paths for .prechange backups"
+
+rm -rf "${rollback_fixture_root}"
+rm -f "${SSH_KEY}"
+trap - EXIT

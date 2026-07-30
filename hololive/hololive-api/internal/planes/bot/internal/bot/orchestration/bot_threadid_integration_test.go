@@ -26,14 +26,15 @@ import (
 	"testing"
 	"time"
 
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/iris-client-go/webhook"
 	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
 
 func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
@@ -127,9 +128,9 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ir
 	b := &Bot{
 		logger:          newBotTestLogger(),
 		commandRegistry: command.NewRegistry(),
-		messageAdapter:  adapter.NewMessageAdapter("!", ""),
+		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
-		formatter:       adapter.NewResponseFormatter("!", nil),
+		formatter:       formatter.NewResponseFormatter("!", nil),
 	}
 
 	return b, reqCh

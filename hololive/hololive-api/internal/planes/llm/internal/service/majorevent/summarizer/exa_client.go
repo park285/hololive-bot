@@ -30,13 +30,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/park285/shared-go/pkg/httputil"
 	json "github.com/park285/shared-go/pkg/json"
 	"github.com/park285/shared-go/pkg/jsonutil"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-
-	"github.com/kapu/hololive-shared/pkg/config"
 )
 
 type ExaMCPClient struct {
@@ -154,7 +154,7 @@ func (c *ExaMCPClient) doSearchRequest(req *http.Request) ([]byte, error) {
 		return nil, fmt.Errorf("exa request: %w", checkErr)
 	}
 
-	respBody, err := jsonutil.ReadAllLimit(resp.Body, config.DefaultMaxResponseBodyBytes)
+	respBody, err := jsonutil.ReadAllLimit(resp.Body, settings.DefaultMaxResponseBodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read exa response: %w", err)
 	}

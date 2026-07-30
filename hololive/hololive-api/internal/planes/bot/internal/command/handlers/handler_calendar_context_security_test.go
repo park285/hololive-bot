@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -10,10 +9,6 @@ import (
 
 type contextCalendarRendererStub struct {
 	seenContext context.Context
-}
-
-func (*contextCalendarRendererStub) RenderCalendarImage(int, int, []domain.CalendarEntry) ([]byte, error) {
-	return nil, errors.New("legacy render path must not be used when context capability is available")
 }
 
 func (s *contextCalendarRendererStub) RenderCalendarImageContext(ctx context.Context, _, _ int, _ []domain.CalendarEntry) ([]byte, error) {

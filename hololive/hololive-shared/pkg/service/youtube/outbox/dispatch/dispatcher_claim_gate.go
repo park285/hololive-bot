@@ -1,0 +1,245 @@
+package dispatch
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/kapu/hololive-shared/internal/dbx"
+	"github.com/kapu/hololive-shared/internal/service/cache/claim"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
+	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
+	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
+)
+
+const (
+	deliveryFailureReasonPreSendClaim = "pre-send claim"
+	maxCommunityShortsClaimHold       = 2 * time.Minute
+)
+
+type deliveryClaimDecision int
+
+const (
+	deliveryClaimDecisionProceed deliveryClaimDecision = iota
+	deliveryClaimDecisionAlreadySent
+	deliveryClaimDecisionRetryLater
+)
+
+type deliveryClaimSelection struct {
+	sendRows               []domain.YouTubeNotificationDelivery
+	sendOutboxes           []domain.YouTubeNotificationOutbox
+	claimTokens            []dispatchstate.ClaimToken
+	rowClaimTokens         [][]dispatchstate.ClaimToken
+	alreadySentDeliveryIDs []int64
+	alreadySentOutboxIDs   []int64
+	retryDeliveryIDs       []int64
+	retryOutboxIDs         []int64
+}
+
+func (d *ClaimManager) selectClaimedDeliveries(
+	ctx context.Context,
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+	reuseCache claim.DecisionCache,
+) deliveryClaimSelection {
+	safeRows := make([]domain.YouTubeNotificationDelivery, len(rows))
+	copy(safeRows, rows)
+	safeOutboxes := make([]domain.YouTubeNotificationOutbox, len(outboxes))
+	copy(safeOutboxes, outboxes)
+	selection := deliveryClaimSelection{
+		sendRows:       make([]domain.YouTubeNotificationDelivery, 0, len(safeRows)),
+		sendOutboxes:   make([]domain.YouTubeNotificationOutbox, 0, len(safeOutboxes)),
+		claimTokens:    make([]dispatchstate.ClaimToken, 0, len(safeOutboxes)),
+		rowClaimTokens: make([][]dispatchstate.ClaimToken, 0, len(safeRows)),
+	}
+	limit := min(len(safeOutboxes), len(safeRows))
+	if limit == 0 {
+		return selection
+	}
+
+	for i := range limit {
+		d.applyDeliveryClaimSelection(ctx, &selection, &safeRows[i], &safeOutboxes[i], reuseCache)
+	}
+
+	return selection
+}
+
+func (d *ClaimManager) applyDeliveryClaimSelection(
+	ctx context.Context,
+	selection *deliveryClaimSelection,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+	reuseCache claim.DecisionCache,
+) {
+	claimIdentity, err := deliveryClaimIdentityForOutbox(outbox)
+	if err != nil {
+		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve community/shorts delivery claim identity before send", err)
+		return
+	}
+
+	type claimResult struct {
+		decision   deliveryClaimDecision
+		claimToken *dispatchstate.ClaimToken
+	}
+
+	result, err := reuseCache.ResolveClaim(ctx, claimIdentity, func(ctx context.Context) (claim.Decision, *claim.Token, error) {
+		decision, claimToken, claimErr := d.tryClaimDelivery(ctx, row, outbox)
+		if claimErr != nil {
+			return claim.Decision{}, nil, claimErr
+		}
+		var token *claim.Token
+		if claimToken != nil {
+			token = &claim.Token{AuthorizedAt: claimToken.AuthorizedAt}
+		}
+		return claim.Decision{Value: claimResult{decision: decision, claimToken: claimToken}}, token, nil
+	})
+	if err != nil {
+		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to claim community/shorts alarm state before send", err)
+		return
+	}
+
+	cr, ok := result.Decision.Value.(claimResult)
+	if !ok {
+		d.retryDeliveryClaimSelection(selection, row, outbox, "Unexpected community/shorts claim result type before send", fmt.Errorf("claim result type %T", result.Decision.Value))
+		return
+	}
+	d.applyDeliveryClaimDecision(selection, row, outbox, cr.decision, cr.claimToken, result.Hit)
+}
+
+func (d *ClaimManager) retryDeliveryClaimSelection(
+	selection *deliveryClaimSelection,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+	message string,
+	err error,
+) {
+	d.logClaimIssue(message, row, outbox, slog.LevelWarn, slog.Any("error", err))
+	selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
+	selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+}
+
+func (d *ClaimManager) applyDeliveryClaimDecision(
+	selection *deliveryClaimSelection,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+	decision deliveryClaimDecision,
+	claimToken *dispatchstate.ClaimToken,
+	reused bool,
+) {
+	switch decision {
+	case deliveryClaimDecisionProceed:
+		appendProceedingDeliveryClaim(selection, row, outbox, claimToken, reused)
+	case deliveryClaimDecisionAlreadySent:
+		d.logClaimIssue("Skipped community/shorts delivery because the post was already sent", row, outbox, slog.LevelInfo)
+		selection.alreadySentDeliveryIDs = append(selection.alreadySentDeliveryIDs, row.ID)
+		selection.alreadySentOutboxIDs = append(selection.alreadySentOutboxIDs, outbox.ID)
+	case deliveryClaimDecisionRetryLater:
+		d.logClaimIssue("Skipped community/shorts delivery because another execution owns the post claim", row, outbox, slog.LevelInfo)
+		selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
+		selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+	}
+}
+
+func appendProceedingDeliveryClaim(
+	selection *deliveryClaimSelection,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+	claimToken *dispatchstate.ClaimToken,
+	reused bool,
+) {
+	rowClaimTokens := []dispatchstate.ClaimToken(nil)
+	if claimToken != nil && !reused {
+		token := *claimToken
+		selection.claimTokens = append(selection.claimTokens, token)
+		rowClaimTokens = []dispatchstate.ClaimToken{token}
+	}
+	selection.sendRows = append(selection.sendRows, *row)
+	selection.sendOutboxes = append(selection.sendOutboxes, *outbox)
+	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
+}
+
+func (d *ClaimManager) applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection *deliveryClaimSelection) {
+	if len(selection.alreadySentDeliveryIDs) > 0 {
+		mu.Lock()
+		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, selection.alreadySentDeliveryIDs...)
+		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, selection.alreadySentOutboxIDs...)
+		mu.Unlock()
+	}
+
+	for i := range selection.retryDeliveryIDs {
+		outboxID := int64(0)
+		if i < len(selection.retryOutboxIDs) {
+			outboxID = selection.retryOutboxIDs[i]
+		}
+		d.recordDeliveryFailure(result, mu, deliveryFailureReasonPreSendClaim, selection.retryDeliveryIDs[i], outboxID)
+	}
+}
+
+func (d *ClaimManager) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
+	uniqueIDs := deliverysql.UniqueInt64s(deliveryIDs)
+	if d == nil || d.db == nil || len(uniqueIDs) == 0 {
+		return nil
+	}
+
+	sentAt := dispatchstate.CanonicalSentAtNow()
+	if err := deliverysql.InDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
+		return recoverSuccessfulCommunityShortsSentStateTx(ctx, tx, uniqueIDs, sentAt)
+	}); err != nil {
+		return fmt.Errorf("recover successful community/shorts sent state transaction: %w", err)
+	}
+
+	return nil
+}
+
+func recoverSuccessfulCommunityShortsSentStateTx(
+	ctx context.Context,
+	tx dbx.Querier,
+	uniqueIDs []int64,
+	sentAt time.Time,
+) error {
+	marks, err := store.LoadAlarmSentMarksForDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
+	if err != nil {
+		return fmt.Errorf("load sent-state recovery marks: %w", err)
+	}
+	if len(marks) > 0 {
+		if err := observation.NewRepositoryContext(ctx, tx).MarkAlarmSentBatch(ctx, marks); err != nil {
+			return fmt.Errorf("persist sent-state recovery marks: %w", err)
+		}
+
+		identities := alarmSentMarkIdentities(marks)
+		if err := telemetry.NewRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+			return fmt.Errorf("persist sent-state recovery latency classifications: %w", err)
+		}
+	}
+
+	if err := markRecoveredSentDeliveryRows(ctx, tx, uniqueIDs, sentAt); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func markRecoveredSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) error {
+	args := []any{domain.OutboxStatusSent, sentAt}
+	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+	args = append(args, store.DeliveryStatusSending)
+	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "mark recovered sent delivery rows", mustSQL("dispatcher_claim_gate_0230_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
+	`, args...); err != nil {
+		return fmt.Errorf("mark recovered sent delivery rows: %w", err)
+	}
+	return nil
+}
+
+func alarmSentMarkIdentities(marks []observation.AlarmSentMark) []timeline.PostTrackingIdentity {
+	identities := make([]timeline.PostTrackingIdentity, 0, len(marks))
+	for i := range marks {
+		identities = append(identities, timeline.PostTrackingIdentity{Kind: marks[i].Kind, ContentID: marks[i].ContentID})
+	}
+	return identities
+}

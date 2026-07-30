@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -464,7 +463,7 @@ func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesD
 
 	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-orphan"), []string{"UC_ORPHAN"})
 	require.NoError(t, err)
-	require.NoError(t, cacheClient.Set(ctx, contractsalarm.DispatchQueueKey, "queue-marker", 0))
+	require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.DispatchQueueKey, "queue-marker", 0))
 	require.NoError(t, cacheClient.Set(ctx, "alarm:chzzk_channels", "mapping-marker", 0))
 	require.NoError(t, cacheClient.Set(ctx, "alarm:next_stream:UC_KEEP", "stream-marker", 0))
 
@@ -476,7 +475,7 @@ func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesD
 	require.NoError(t, err)
 	assert.Empty(t, orphanRoomChannels)
 
-	dispatchQueueExists, err := cacheClient.Exists(ctx, contractsalarm.DispatchQueueKey)
+	dispatchQueueExists, err := cacheClient.Exists(ctx, sharedalarmkeys.DispatchQueueKey)
 	require.NoError(t, err)
 	assert.True(t, dispatchQueueExists)
 

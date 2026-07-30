@@ -8,21 +8,22 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	json "github.com/park285/shared-go/pkg/json"
 )
 
-func okCheck(name string) Check {
-	return Check{Name: name, Probe: func(context.Context) error { return nil }}
+func okCheck(name string) sharedreadiness.Check {
+	return sharedreadiness.Check{Name: name, Probe: func(context.Context) error { return nil }}
 }
 
-func failCheck(name string, err error) Check {
-	return Check{Name: name, Probe: func(context.Context) error { return err }}
+func failCheck(name string, err error) sharedreadiness.Check {
+	return sharedreadiness.Check{Name: name, Probe: func(context.Context) error { return err }}
 }
 
 func TestEvaluate_AllHealthyReady(t *testing.T) {
 	t.Parallel()
 
-	code, payload := evaluate(t.Context(), NewProbe("bot", okCheck("postgres"), okCheck("valkey")))
+	code, payload := evaluate(t.Context(), sharedreadiness.NewProbe("bot", okCheck("postgres"), okCheck("valkey")))
 
 	if code != http.StatusOK {
 		t.Fatalf("evaluate status = %d, want %d", code, http.StatusOK)
@@ -42,7 +43,7 @@ func TestEvaluate_AllHealthyReady(t *testing.T) {
 func TestEvaluate_DependencyDownNotReady(t *testing.T) {
 	t.Parallel()
 
-	code, payload := evaluate(t.Context(), NewProbe("admin",
+	code, payload := evaluate(t.Context(), sharedreadiness.NewProbe("admin",
 		okCheck("postgres"),
 		failCheck("valkey", errors.New("connection refused")),
 	))
@@ -68,7 +69,7 @@ func TestEvaluate_DependencyDownNotReady(t *testing.T) {
 func TestGinHandler_HealthyReturns200(t *testing.T) {
 	t.Parallel()
 
-	code, payload := serveReady(t, GinHandler(t.Context(), NewProbe("bot", okCheck("postgres"))))
+	code, payload := serveReady(t, GinHandler(t.Context(), sharedreadiness.NewProbe("bot", okCheck("postgres"))))
 
 	if code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
@@ -84,7 +85,7 @@ func TestGinHandler_HealthyReturns200(t *testing.T) {
 func TestGinHandler_DegradedReturns503(t *testing.T) {
 	t.Parallel()
 
-	code, payload := serveReady(t, GinHandler(t.Context(), NewProbe("bot",
+	code, payload := serveReady(t, GinHandler(t.Context(), sharedreadiness.NewProbe("bot",
 		okCheck("postgres"),
 		failCheck("valkey", errors.New("ping failed")),
 	)))
@@ -116,7 +117,7 @@ func TestPick_FirstNonNil(t *testing.T) {
 	if got := Pick(); got != nil {
 		t.Fatalf("Pick() = %v, want nil", got)
 	}
-	probe := NewProbe("bot")
+	probe := sharedreadiness.NewProbe("bot")
 	if got := Pick(nil, probe); got != probe {
 		t.Fatalf("Pick(nil, probe) did not return probe")
 	}
@@ -125,10 +126,10 @@ func TestPick_FirstNonNil(t *testing.T) {
 func TestDependencyChecks_NilClientsFailClosed(t *testing.T) {
 	t.Parallel()
 
-	if err := PostgresCheck(nil).Probe(t.Context()); err == nil {
+	if err := sharedreadiness.PostgresCheck(nil).Probe(t.Context()); err == nil {
 		t.Fatal("PostgresCheck(nil) probe error = nil, want non-nil")
 	}
-	if err := ValkeyCheck(nil).Probe(t.Context()); err == nil {
+	if err := sharedreadiness.ValkeyCheck(nil).Probe(t.Context()); err == nil {
 		t.Fatal("ValkeyCheck(nil) probe error = nil, want non-nil")
 	}
 }

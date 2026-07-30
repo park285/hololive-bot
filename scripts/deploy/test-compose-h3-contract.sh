@@ -5,12 +5,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # 렌더 전용 더미 env — 필수 보간 변수(:?)만 채운다. live 값과 무관.
 STUB_COMPOSE_ENV="$(mktemp)"
+STUB_MIGRATION_OVERRIDE_ENV="$(mktemp)"
 STUB_AP_COMPOSE_ENV="$(mktemp)"
 STUB_APP_ENV="$(mktemp)"
 STUB_YOUTUBE_PRODUCER_ENV="$(mktemp)"
 STUB_ADMIN_DASHBOARD_ENV="$(mktemp)"
 cleanup() {
-    rm -f "${STUB_COMPOSE_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}" "${STUB_ADMIN_DASHBOARD_ENV}"
+    rm -f "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}" "${STUB_ADMIN_DASHBOARD_ENV}"
 }
 trap cleanup EXIT
 cat >"${STUB_COMPOSE_ENV}" <<'EOF'
@@ -19,6 +20,10 @@ DB_PASSWORD=stub
 IRIS_BOT_TOKEN=stub
 IRIS_WEBHOOK_TOKEN=stub
 LIVE_LOGS_PATH=/srv/hololive-logs-stub
+EOF
+cp "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}"
+cat >>"${STUB_MIGRATION_OVERRIDE_ENV}" <<'EOF'
+MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true
 EOF
 cat >"${STUB_AP_COMPOSE_ENV}" <<'EOF'
 CACHE_PASSWORD=stub
@@ -80,12 +85,13 @@ render() {
 }
 
 main_render="$(render oracle "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
+migration_override_render="$(render oracle "${STUB_MIGRATION_OVERRIDE_ENV}" "${PROD_OVERLAYS[@]}")"
 ap_render="$(render main-ap "${STUB_COMPOSE_ENV}" "${MAIN_AP_OVERLAYS[@]}")"
 osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
 osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka2.yml)")"
 seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
 
-MAIN_RENDER="${main_render}" AP_RENDER="${ap_render}" \
+MAIN_RENDER="${main_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" AP_RENDER="${ap_render}" \
     OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'
 import json
 import os
@@ -107,6 +113,10 @@ def healthcheck_url(svc):
     return test[-1] if test else ""
 
 
+def healthcheck_timeout(svc):
+    return (svc.get("healthcheck") or {}).get("timeout")
+
+
 def has_udp_published(svc, target_port):
     for p in svc.get("ports") or []:
         if str(p.get("target")) == str(target_port) and p.get("protocol") == "udp":
@@ -115,7 +125,19 @@ def has_udp_published(svc, target_port):
 
 
 main = json.loads(os.environ["MAIN_RENDER"])["services"]
+migration_override = json.loads(os.environ["MIGRATION_OVERRIDE_RENDER"])["services"]
 ap = json.loads(os.environ["AP_RENDER"])["services"]
+
+migration_env = (main.get("hololive-db-migrate") or {}).get("environment") or {}
+check(
+    "hololive-db-migrate blocking index-drop override defaults to false",
+    migration_env.get("MIGRATION_ALLOW_BLOCKING_INDEX_DROP") == "false",
+)
+override_env = (migration_override.get("hololive-db-migrate") or {}).get("environment") or {}
+check(
+    "hololive-db-migrate receives explicit blocking index-drop override",
+    override_env.get("MIGRATION_ALLOW_BLOCKING_INDEX_DROP") == "true",
+)
 
 H3_HEALTH = {
     "hololive-api": (
@@ -138,6 +160,8 @@ for name, (urls, udp_port) in H3_HEALTH.items():
     test = (svc.get("healthcheck") or {}).get("test") or []
     for url in urls:
         check(f"{name} healthcheck includes {url}", url in test)
+    expected_timeout = "20s" if len(urls) == 3 else "7s"
+    check(f"{name} healthcheck timeout is {expected_timeout}", healthcheck_timeout(svc) == expected_timeout)
     if udp_port is not None:
         check(f"{name} publishes {udp_port}/udp", has_udp_published(svc, udp_port))
 
@@ -147,6 +171,10 @@ for name in ("hololive-api", "hololive-alarm-worker"):
 
 admin_env = (main.get("admin-dashboard") or {}).get("environment") or {}
 check("admin-dashboard receives ADMIN_PASS_HASH from scoped env_file", admin_env.get("ADMIN_PASS_HASH") == "stub")
+check(
+    "admin-dashboard single-target healthcheck timeout is 7s",
+    healthcheck_timeout(main.get("admin-dashboard") or {}) == "7s",
+)
 
 def h3_addr_aligned(svc, port):
     return (svc.get("environment") or {}).get("HOLOLIVE_H3_ADDR") == f":{port}"
@@ -175,6 +203,7 @@ if pc is not None:
         "youtube-producer-c healthcheck is https://127.0.0.1:30025/health",
         healthcheck_url(pc) == "https://127.0.0.1:30025/health",
     )
+    check("youtube-producer-c healthcheck timeout is 7s", healthcheck_timeout(pc) == "7s")
     check("youtube-producer-c publishes 30025/udp", has_udp_published(pc, 30025))
     check("youtube-producer-c HOLOLIVE_H3_ADDR is :30025", h3_addr_aligned(pc, 30025))
     check("youtube-producer-c HOLOLIVE_METRICS_ADDR is :30095", metrics_addr_aligned(pc))
@@ -206,6 +235,7 @@ for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
         continue
     url = f"https://127.0.0.1:{port}/health"
     check(f"{name} healthcheck is {url}", healthcheck_url(svc) == url)
+    check(f"{name} healthcheck timeout is 7s", healthcheck_timeout(svc) == "7s")
     check(f"{name} publishes {port}/udp", has_udp_published(svc, port))
     check(f"{name} HOLOLIVE_H3_ADDR is :{port}", h3_addr_aligned(svc, port))
     check(f"{name} HOLOLIVE_METRICS_ADDR is :30095", metrics_addr_aligned(svc))

@@ -23,9 +23,8 @@ package apiservice
 import (
 	"context"
 	"fmt"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"log/slog"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
@@ -41,7 +40,7 @@ func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, ma
 	return videoIDs, nil
 }
 
-func recentScraperVideoIDs(videos []*scraper.Video) []string {
+func recentScraperVideoIDs(videos []*parser.Video) []string {
 	videoIDs := make([]string, 0, len(videos))
 	for _, v := range videos {
 		videoIDs = append(videoIDs, v.VideoID)

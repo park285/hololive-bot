@@ -9,7 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 	"github.com/park285/iris-client-go/iris"
@@ -37,8 +38,8 @@ func TestProvideBotRouterIrisRoomsRequiresAPIKey(t *testing.T) {
 	lister := &stubIrisRoomLister{resp: &iris.RoomListResponse{Rooms: []iris.RoomSummary{
 		{ChatID: 123, Type: &roomType, LinkName: &name},
 	}}}
-	router, err := ProvideBotRouter(t.Context(), &config.Config{
-		Server: config.ServerConfig{APIKey: "secret"},
+	router, err := ProvideBotRouter(t.Context(), &settings.Config{
+		Server: settings.ServerConfig{APIKey: "secret"},
 	}, slog.New(slog.DiscardHandler), nil, nil, lister)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
@@ -72,8 +73,8 @@ func TestProvideBotRouterIrisRoomsRequiresAPIKey(t *testing.T) {
 func TestProvideBotRouterIrisRoomsFailure(t *testing.T) {
 	t.Parallel()
 
-	router, err := ProvideBotRouter(t.Context(), &config.Config{
-		Server: config.ServerConfig{APIKey: "secret"},
+	router, err := ProvideBotRouter(t.Context(), &settings.Config{
+		Server: settings.ServerConfig{APIKey: "secret"},
 	}, slog.New(slog.DiscardHandler), nil, nil, &stubIrisRoomLister{err: errors.New("iris down")})
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
@@ -91,8 +92,8 @@ func TestProvideBotRouterIrisRoomsFailure(t *testing.T) {
 func TestProvideBotRouterIrisRoomsNilListerDoesNotRegisterRoute(t *testing.T) {
 	t.Parallel()
 
-	router, err := ProvideBotRouter(t.Context(), &config.Config{
-		Server: config.ServerConfig{APIKey: "secret"},
+	router, err := ProvideBotRouter(t.Context(), &settings.Config{
+		Server: settings.ServerConfig{APIKey: "secret"},
 	}, slog.New(slog.DiscardHandler), nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)

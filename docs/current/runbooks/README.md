@@ -18,6 +18,7 @@
 - `release.md` - release checklist
 - `rollback.md` - rollback 기준
 - `integration-tests.md` - opt-in integration 테스트 주기 실행 경로
+- `member-cache-v2-rollout.md` - durable epoch 기반 member cache expand/rollback 절차
 - `../../runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md` - release notes template
 - `host-migration-root-to-kapu.md` - root → kapu 호스트 계정 풀 마이그레이션 절차
 

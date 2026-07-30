@@ -23,28 +23,29 @@ package main
 import (
 	"os"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
+	"github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
+	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
-
-	"github.com/kapu/hololive-alarm-worker/internal/app"
 )
 
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *app.AlarmWorkerRuntime]{
+	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *workerruntime.AlarmWorkerRuntime]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             config.LoadAlarmWorkerRuntime,
+		LoadConfig:             settings.LoadAlarmWorkerRuntime,
 		LoadConfigErrorMessage: "Failed to load config",
-		LoggerConfig: func(appConfig *config.Config) sharedlogging.Config {
+		LoggerConfig: func(appConfig *settings.Config) sharedlogging.Config {
 			return sharedlogging.Config{
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
@@ -54,12 +55,12 @@ func main() {
 			}
 		},
 		LoggerFileName: "alarm-worker.log",
-		LoggerLevel: func(appConfig *config.Config) string {
+		LoggerLevel: func(appConfig *settings.Config) string {
 			return appConfig.Logging.Level
 		},
 		StartupMessage:    "Hololive Alarm Worker starting...",
 		BuildTimeout:      constants.AppTimeout.Build,
-		BuildRuntime:      app.BuildAlarmWorkerRuntime,
+		BuildRuntime:      workerapp.BuildAlarmWorkerRuntime,
 		BuildErrorMessage: "Failed to assemble alarm worker runtime",
 	}))
 }

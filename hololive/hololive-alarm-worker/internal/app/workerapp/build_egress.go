@@ -5,27 +5,31 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	youtubeoutbox "github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+
 	"github.com/park285/iris-client-go/iris"
+	envutil "github.com/park285/shared-go/pkg/envutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatch"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
 func buildNotificationEgress(
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
-) (runtimeAlarmScheduler, error) {
+) (workerruntime.Scheduler, error) {
 	if appConfig == nil {
 		return nil, fmt.Errorf("config is required")
 	}
@@ -64,7 +68,7 @@ func buildNotificationEgress(
 	return workerruntime.NewNotificationEgressRunner(
 		runners,
 		infra.Cache,
-		envconfig.ParseBool("ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
+		envutil.Bool("ALARM_WORKER_EGRESS_LEASE_ENABLED", true),
 		logger,
 	), nil
 }
@@ -73,8 +77,8 @@ func buildDeliveryOutboxDispatcher(
 	infra *sharedmodules.InfraModule,
 	sender delivery.MessageSender,
 	logger *slog.Logger,
-) (runtimeAlarmScheduler, error) {
-	if !envconfig.ParseBool("DELIVERY_DISPATCHER_ENABLED", true) {
+) (workerruntime.Scheduler, error) {
+	if !envutil.Bool("DELIVERY_DISPATCHER_ENABLED", true) {
 		if logger != nil {
 			logger.Info("Notification delivery outbox dispatcher disabled")
 		}
@@ -97,8 +101,8 @@ func buildAlarmDispatchRunner(
 	infra *sharedmodules.InfraModule,
 	sender dispatchrun.Sender,
 	logger *slog.Logger,
-) (runtimeAlarmScheduler, error) {
-	if !envconfig.ParseBool("ALARM_DISPATCH_CONSUMER_ENABLED", true) {
+) (workerruntime.Scheduler, error) {
+	if !envutil.Bool("ALARM_DISPATCH_CONSUMER_ENABLED", true) {
 		if logger != nil {
 			logger.Info("Alarm dispatch consumer disabled")
 		}
@@ -151,7 +155,7 @@ func alarmDispatchRunnerConfig() dispatchrun.RunnerConfig {
 }
 
 func parseAlarmDispatchKaringEnabled() bool {
-	return envconfig.ParseBool("ALARM_DISPATCH_KARING_ENABLED", false)
+	return envutil.Bool("ALARM_DISPATCH_KARING_ENABLED", false)
 }
 
 func alarmDispatchMessageStrings(infra *sharedmodules.InfraModule, logger *slog.Logger) *messagestrings.Store {
@@ -166,7 +170,7 @@ func alarmDispatchMessageStrings(infra *sharedmodules.InfraModule, logger *slog.
 }
 
 func buildYouTubeOutboxSender(irisSender *egress.IrisMessageSender, messageStrings *messagestrings.Store) delivery.MessageSender {
-	if !envconfig.ParseBool("YOUTUBE_OUTBOX_KARING_ENABLED", false) {
+	if !envutil.Bool("YOUTUBE_OUTBOX_KARING_ENABLED", false) {
 		return irisSender
 	}
 	return dispatchrun.NewYouTubeOutboxKaringSender(irisSender, messageStrings)
@@ -176,8 +180,8 @@ func buildYouTubeOutboxDispatcher(
 	infra *sharedmodules.InfraModule,
 	sender delivery.MessageSender,
 	logger *slog.Logger,
-) (runtimeAlarmScheduler, error) {
-	if !envconfig.ParseBool("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", false) {
+) (workerruntime.Scheduler, error) {
+	if !envutil.Bool("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", false) {
 		if logger != nil {
 			logger.Info("YouTube outbox dispatcher disabled")
 		}
@@ -187,8 +191,8 @@ func buildYouTubeOutboxDispatcher(
 		return nil, fmt.Errorf("postgres is required")
 	}
 
-	dispatchConfig := youtubeoutbox.DefaultConfig()
-	dispatcher := youtubeoutbox.NewDispatcher(
+	dispatchConfig := dispatchstate.DefaultConfig()
+	dispatcher := dispatch.NewDispatcher(
 		infra.Postgres.GetPool(),
 		infra.Cache,
 		sender,

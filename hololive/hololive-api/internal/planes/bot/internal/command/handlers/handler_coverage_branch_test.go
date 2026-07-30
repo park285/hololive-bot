@@ -26,7 +26,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
 
@@ -253,7 +254,7 @@ func TestShouldSuppressSchedulePrompt(t *testing.T) {
 func TestValidateMemberLookupDependencies(t *testing.T) {
 	tests := []struct {
 		name    string
-		deps    *Dependencies
+		deps    *handlercore.Dependencies
 		wantErr string
 	}{
 		{
@@ -263,29 +264,29 @@ func TestValidateMemberLookupDependencies(t *testing.T) {
 		},
 		{
 			name:    "nil matcher",
-			deps:    &Dependencies{},
+			deps:    &handlercore.Dependencies{},
 			wantErr: "matcher is nil",
 		},
 		{
 			name: "nil formatter",
-			deps: &Dependencies{
+			deps: &handlercore.Dependencies{
 				Matcher: &matcher.Matcher{},
 			},
 			wantErr: "formatter is nil",
 		},
 		{
 			name: "nil send error callback",
-			deps: &Dependencies{
+			deps: &handlercore.Dependencies{
 				Matcher:   &matcher.Matcher{},
-				Formatter: adapter.NewResponseFormatter("!", nil),
+				Formatter: formatter.NewResponseFormatter("!", nil),
 			},
 			wantErr: "send error callback is nil",
 		},
 		{
 			name: "all dependencies configured",
-			deps: &Dependencies{
+			deps: &handlercore.Dependencies{
 				Matcher:   &matcher.Matcher{},
-				Formatter: adapter.NewResponseFormatter("!", nil),
+				Formatter: formatter.NewResponseFormatter("!", nil),
 				SendError: func(_ context.Context, _, _ string) error {
 					return nil
 				},
@@ -317,7 +318,7 @@ func TestValidateMemberLookupDependencies(t *testing.T) {
 
 func TestUpcomingCommandEnsureDeps(t *testing.T) {
 	t.Run("base dependency error", func(t *testing.T) {
-		cmd := NewUpcomingCommand(&Dependencies{})
+		cmd := NewUpcomingCommand(&handlercore.Dependencies{})
 
 		err := cmd.ensureDeps()
 		if err == nil {
@@ -330,7 +331,7 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 	})
 
 	t.Run("service dependency error", func(t *testing.T) {
-		deps := &Dependencies{
+		deps := &handlercore.Dependencies{
 			SendMessage: func(_ context.Context, _, _ string) error { return nil },
 			SendError:   func(_ context.Context, _, _ string) error { return nil },
 		}
@@ -347,9 +348,9 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 	})
 
 	t.Run("success", func(t *testing.T) {
-		deps := &Dependencies{
+		deps := &handlercore.Dependencies{
 			Holodex:   &stubCoverageStreamProvider{},
-			Formatter: adapter.NewResponseFormatter("!", nil),
+			Formatter: formatter.NewResponseFormatter("!", nil),
 			SendMessage: func(_ context.Context, _, _ string) error {
 				return nil
 			},
@@ -371,7 +372,7 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 
 func TestScheduleCommandEnsureDeps(t *testing.T) {
 	t.Run("base dependency error", func(t *testing.T) {
-		cmd := NewScheduleCommand(&Dependencies{})
+		cmd := NewScheduleCommand(&handlercore.Dependencies{})
 
 		err := cmd.ensureDeps()
 		if err == nil {
@@ -384,7 +385,7 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 	})
 
 	t.Run("service dependency error", func(t *testing.T) {
-		deps := &Dependencies{
+		deps := &handlercore.Dependencies{
 			SendMessage: func(_ context.Context, _, _ string) error { return nil },
 			SendError:   func(_ context.Context, _, _ string) error { return nil },
 		}
@@ -401,10 +402,10 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 	})
 
 	t.Run("success", func(t *testing.T) {
-		deps := &Dependencies{
+		deps := &handlercore.Dependencies{
 			Matcher:   &matcher.Matcher{},
 			Holodex:   &stubCoverageStreamProvider{},
-			Formatter: adapter.NewResponseFormatter("!", nil),
+			Formatter: formatter.NewResponseFormatter("!", nil),
 			SendMessage: func(_ context.Context, _, _ string) error {
 				return nil
 			},

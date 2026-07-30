@@ -27,17 +27,19 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/gin-gonic/gin"
-	"github.com/kapu/hololive-shared/pkg/config"
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 	"github.com/kapu/hololive-shared/pkg/health"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/iris-client-go/webhook"
 	"github.com/park285/shared-go/pkg/ginjson"
 
 	"github.com/kapu/hololive-api/internal/readiness"
+	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
 type IrisRoomLister interface {
@@ -47,12 +49,12 @@ type IrisRoomLister interface {
 // Admin API 라우트(members, alarms, rooms, stats, settings 등)는 이 라우터에서 제외합니다.
 func ProvideBotRouter(
 	ctx context.Context,
-	appConfig *config.Config,
+	appConfig *settings.Config,
 	logger *slog.Logger,
 	webhookHandler *webhook.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
-	readyProbe ...*readiness.Probe,
+	readyProbe ...*sharedreadiness.Probe,
 ) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:                 appConfig.Server.APIKey,
@@ -61,7 +63,7 @@ func ProvideBotRouter(
 	})
 }
 
-func botReadyResponder(ctx context.Context, probe *readiness.Probe) func(*gin.Context) {
+func botReadyResponder(ctx context.Context, probe *sharedreadiness.Probe) func(*gin.Context) {
 	if probe != nil {
 		return readiness.GinHandler(ctx, probe)
 	}

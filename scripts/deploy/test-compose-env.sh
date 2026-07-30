@@ -143,3 +143,52 @@ pass "allowed shell control key passes"
 
 COMPOSE_ENV_FILE="$env_file" expect_fail_with_stderr "Use COMPOSE_ENV_FILE" env CONTAINER_CLI=not-installed "${ROOT_DIR}/scripts/deploy/compose.sh" --env-file "$env_file" -f "$compose_file" config
 pass "compose wrapper rejects direct --env-file before CLI probing"
+
+fakebin="$tmpdir/fakebin"
+mkdir -p "$fakebin"
+cat >"$fakebin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "compose" && "${2:-}" == "version" ]]; then
+    exit 0
+fi
+printf '%s\n' "$@" >"${MOCK_DOCKER_LOG:?}"
+EOF
+chmod +x "$fakebin/docker"
+
+docker_log="$tmpdir/docker.log"
+wrapper_out="$tmpdir/wrapper.out"
+wrapper_err="$tmpdir/wrapper.err"
+if ! PATH="$fakebin:$PATH" MOCK_DOCKER_LOG="$docker_log" COMPOSE_ENV_FILE="$env_file" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" --project-name holo -f "$compose_file" rm -f app \
+    >"$wrapper_out" 2>"$wrapper_err"; then
+    cat "$wrapper_out"
+    cat "$wrapper_err" >&2
+    fail "compose wrapper command failed"
+fi
+[[ ! -s "$wrapper_err" ]] || {
+    cat "$wrapper_err" >&2
+    fail "compose wrapper treated subcommand -f as a compose file"
+}
+mapfile -t docker_args <"$docker_log"
+expected_args=(compose --env-file "$env_file" --project-name holo -f "$compose_file" rm -f app)
+[[ "${docker_args[*]}" == "${expected_args[*]}" ]] || fail "compose wrapper rewrote subcommand -f: ${docker_args[*]}"
+pass "compose wrapper preserves subcommand -f after the command"
+
+equal_file_log="$tmpdir/docker-equal-file.log"
+equal_file_err="$tmpdir/wrapper-equal-file.err"
+if ! PATH="$fakebin:$PATH" MOCK_DOCKER_LOG="$equal_file_log" COMPOSE_ENV_FILE="$env_file" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f="$compose_file" config \
+    >"$wrapper_out" 2>"$equal_file_err"; then
+    cat "$wrapper_out"
+    cat "$equal_file_err" >&2
+    fail "compose wrapper -f=FILE command failed"
+fi
+[[ ! -s "$equal_file_err" ]] || {
+    cat "$equal_file_err" >&2
+    fail "compose wrapper did not track -f=FILE as a compose file"
+}
+mapfile -t equal_file_args <"$equal_file_log"
+expected_equal_file_args=(compose --env-file "$env_file" -f="$compose_file" config)
+[[ "${equal_file_args[*]}" == "${expected_equal_file_args[*]}" ]] || fail "compose wrapper rewrote -f=FILE: ${equal_file_args[*]}"
+pass "compose wrapper tracks -f=FILE without adding the default file"

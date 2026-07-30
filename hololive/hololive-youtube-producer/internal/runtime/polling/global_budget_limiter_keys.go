@@ -5,19 +5,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"maps"
 	"strings"
 	"time"
-
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
 
 const globalBudgetReservationMemberSeparator = "|"
 
-func globalBudgetReservationMember(class poller.BudgetBurstClass, ownerToken string) string {
+func globalBudgetReservationMember(class polling.BudgetBurstClass, ownerToken string) string {
 	className := strings.TrimSpace(string(class))
 	if className == "" {
-		className = string(poller.BudgetBurstPrimary)
+		className = string(polling.BudgetBurstPrimary)
 	}
 	return className + globalBudgetReservationMemberSeparator + ownerToken
 }
@@ -35,11 +34,11 @@ type globalBudgetKeys struct {
 	FallbackInflight  string
 }
 
-func (l *globalBudgetLimiter) keys(source poller.BudgetSource, class poller.BudgetBurstClass, ownerToken string) globalBudgetKeys {
+func (l *globalBudgetLimiter) keys(source polling.BudgetSource, class polling.BudgetBurstClass, ownerToken string) globalBudgetKeys {
 	return buildGlobalBudgetKeys(l.namespace, source, class, ownerToken)
 }
 
-func buildGlobalBudgetKeys(namespace string, source poller.BudgetSource, class poller.BudgetBurstClass, ownerToken string) globalBudgetKeys {
+func buildGlobalBudgetKeys(namespace string, source polling.BudgetSource, class polling.BudgetBurstClass, ownerToken string) globalBudgetKeys {
 	sourceTag := string(source)
 	budgetPrefix := fmt.Sprintf("hololive:%s:youtube-producer:budget:{%s}:", namespace, sourceTag)
 	reservationPrefix := budgetPrefix + "reservation:"
@@ -51,14 +50,14 @@ func buildGlobalBudgetKeys(namespace string, source poller.BudgetSource, class p
 		Reservations:      budgetPrefix + "reservations",
 		Reservation:       reservationPrefix + ownerToken,
 		SourceCooldown:    fmt.Sprintf("hololive:%s:youtube-producer:source-cooldown:{%s}", namespace, sourceTag),
-		PrimaryInflight:   budgetPrefix + string(poller.BudgetBurstPrimary) + ":inflight",
-		BackfillInflight:  budgetPrefix + string(poller.BudgetBurstBackfill) + ":inflight",
-		FallbackInflight:  budgetPrefix + string(poller.BudgetBurstFallback) + ":inflight",
+		PrimaryInflight:   budgetPrefix + string(polling.BudgetBurstPrimary) + ":inflight",
+		BackfillInflight:  budgetPrefix + string(polling.BudgetBurstBackfill) + ":inflight",
+		FallbackInflight:  budgetPrefix + string(polling.BudgetBurstFallback) + ":inflight",
 	}
 }
 
-func sortedBudgetSources(sourceUnits map[poller.BudgetSource]float64) []poller.BudgetSource {
-	sources := make([]poller.BudgetSource, 0, len(sourceUnits))
+func sortedBudgetSources(sourceUnits map[polling.BudgetSource]float64) []polling.BudgetSource {
+	sources := make([]polling.BudgetSource, 0, len(sourceUnits))
 	for source := range sourceUnits {
 		sources = append(sources, source)
 	}
@@ -66,7 +65,7 @@ func sortedBudgetSources(sourceUnits map[poller.BudgetSource]float64) []poller.B
 	return sources
 }
 
-func sortBudgetSources(sources []poller.BudgetSource) {
+func sortBudgetSources(sources []polling.BudgetSource) {
 	for i := 1; i < len(sources); i++ {
 		current := sources[i]
 		j := i - 1
@@ -78,7 +77,7 @@ func sortBudgetSources(sources []poller.BudgetSource) {
 	}
 }
 
-func (l *globalBudgetLimiter) newOwnerToken(job *poller.BudgetJob) (string, error) {
+func (l *globalBudgetLimiter) newOwnerToken(job *polling.BudgetJob) (string, error) {
 	var randomBytes [16]byte
 	if _, err := rand.Read(randomBytes[:]); err != nil {
 		return "", err
@@ -136,14 +135,14 @@ func normalizeGlobalBudgetInstanceID(instanceID string) string {
 	return normalized
 }
 
-func copySourceMaxInflight(source map[poller.BudgetSource]int) map[poller.BudgetSource]int {
-	copied := make(map[poller.BudgetSource]int, len(source))
+func copySourceMaxInflight(source map[polling.BudgetSource]int) map[polling.BudgetSource]int {
+	copied := make(map[polling.BudgetSource]int, len(source))
 	maps.Copy(copied, source)
 	return copied
 }
 
-func copyClassMaxInflight(class map[poller.BudgetBurstClass]int) map[poller.BudgetBurstClass]int {
-	copied := make(map[poller.BudgetBurstClass]int, len(class))
+func copyClassMaxInflight(class map[polling.BudgetBurstClass]int) map[polling.BudgetBurstClass]int {
+	copied := make(map[polling.BudgetBurstClass]int, len(class))
 	maps.Copy(copied, class)
 	return copied
 }

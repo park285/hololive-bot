@@ -4,7 +4,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +21,7 @@ func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
 	assert.Nil(t, runtime)
 	assert.Equal(t, "config must not be nil", err.Error())
 
-	runtime, err = BuildAlarmWorkerRuntime(t.Context(), &config.Config{}, nil)
+	runtime, err = BuildAlarmWorkerRuntime(t.Context(), &settings.Config{}, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Equal(t, "logger must not be nil", err.Error())

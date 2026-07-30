@@ -17,7 +17,7 @@ import (
 
 const (
 	alarmDispatchKaringMaxItemsPerRequest = 4
-	// Iris admission dedup의 기존 idempotency key namespace 호환을 위해 이 값은 변경하지 않는다.
+	// Iris admission dedup의 canonical idempotency namespace다. 재시도 identity bytes를 유지한다.
 	alarmDispatchClientRequestIDNamespace = "hololive-alarm:"
 )
 

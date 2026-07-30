@@ -26,16 +26,20 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	youtube "github.com/kapu/hololive-shared/pkg/service/youtube"
+	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
-var ytDefaults = config.DefaultYouTubeOperationalConfig()
+var ytDefaults = settings.DefaultYouTubeOperationalConfig()
 
 type scraperClient interface {
-	GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*scraper.Video, error)
-	GetChannelStats(ctx context.Context, channelID string) (*scraper.ChannelStats, error)
+	GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error)
+	GetChannelStats(ctx context.Context, channelID string) (*parser.ChannelStats, error)
 	SetProxyEnabled(enabled bool) bool
 	ProxyEnabled() bool
 }
@@ -52,9 +56,9 @@ func New(
 	ctx context.Context,
 	cacheClient cache.Client,
 	scraperProxyConfig scraper.ProxyConfig,
-	sharedRL *scraper.RateLimiter,
+	sharedRL *ratelimiter.RateLimiter,
 	logger *slog.Logger,
-) (Service, error) {
+) (youtube.Service, error) {
 	ys := &serviceImpl{
 		scraper:       scraper.NewClient(scraper.WithProxy(scraperProxyConfig), scraper.WithRateLimiter(sharedRL)),
 		cache:         cacheClient,
