@@ -75,8 +75,8 @@ func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.
 	messages := append([]string(nil), sender.messages...)
 	sender.mu.Unlock()
 	require.Len(t, messages, 1)
-	assert.Contains(t, messages[0], "room-shorts:🔔 VTuber 새 쇼츠")
-	assert.Contains(t, messages[0], "restart title")
+	assert.Contains(t, messages[0], "room-shorts:🔔 **VTuber** 새 쇼츠")
+	assert.Contains(t, messages[0], "[restart title](https://www.youtube.com/shorts/short-restart-retry)")
 }
 
 func TestProcessOnce_ReconcilesOutboxStatusFromPersistedDeliveryRows(t *testing.T) {

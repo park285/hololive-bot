@@ -45,7 +45,7 @@ func TestDependenciesViews_NilSafety(t *testing.T) {
 	if got := deps.coreDeps(); got.logger != nil || got.botSelfUser != "" || got.irisBaseURL != "" {
 		t.Fatal("coreDeps nil-safety failed")
 	}
-	if got := deps.messagingDeps(); got.client != nil || got.messageAdapter != nil || got.formatter != nil {
+	if got := deps.messagingDeps(); got.client != nil || got.messageAdapter != nil || got.formatter != nil || got.markdownReplies {
 		t.Fatal("messagingDeps nil-safety failed")
 	}
 	if got := deps.dataDeps(); got.cache != nil || got.postgres != nil || got.memberRepository != nil || got.memberCache != nil {
@@ -86,6 +86,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 		Client:                &fakeIrisClient{},
 		MessageAdapter:        messageAdapter,
 		Formatter:             formatter,
+		MarkdownReplies:       true,
 		Cache:                 cacheService,
 		Postgres:              postgresService,
 		MemberRepository:      memberRepository,
@@ -106,6 +107,9 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	messaging := deps.messagingDeps()
 	if messaging.client != deps.Client || messaging.messageAdapter != messageAdapter || messaging.formatter != formatter {
 		t.Fatal("messagingDeps mapping mismatch")
+	}
+	if !messaging.markdownReplies {
+		t.Fatal("messagingDeps markdownReplies mapping mismatch")
 	}
 
 	data := deps.dataDeps()

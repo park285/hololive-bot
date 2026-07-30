@@ -269,6 +269,7 @@ func loadBotConfig() BotConfig {
 		CalendarImageCacheDir: sharedenv.String("BOT_CALENDAR_IMAGE_CACHE_DIR", "data/calendar-cache"),
 		CalendarEntryCacheTTL: time.Duration(sharedenv.Int("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", 86400)) * time.Second,
 		SeeMoreFold:           sharedenv.Bool("BOT_SEE_MORE_FOLD", false),
+		MarkdownReplies:       sharedenv.Bool("BOT_MARKDOWN_REPLIES", true),
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -74,10 +75,55 @@ func (s *stubAcceptedSender) SendMessageAccepted(_ context.Context, _, _ string,
 	return &iris.ReplyAcceptedResponse{RequestID: "r-accepted"}, nil
 }
 
+func (s *stubAcceptedSender) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return s.SendMessageAccepted(ctx, room, markdown, opts...)
+}
+
+func replyLanesUnderTest() map[string]func(*stubAcceptedSender) replyLane {
+	return map[string]func(*stubAcceptedSender) replyLane{
+		"accepted": func(s *stubAcceptedSender) replyLane {
+			return replyLane{send: s.SendMessageAccepted, getter: s}
+		},
+		"markdown": func(s *stubAcceptedSender) replyLane {
+			return replyLane{send: s.SendMarkdown, getter: s}
+		},
+	}
+}
+
+func capturedSendOptions(t *testing.T, opts []iris.SendOption) (clientRequestID, threadID string) {
+	t.Helper()
+
+	if len(opts) == 0 {
+		return "", ""
+	}
+
+	// iris.SendOption이 적용하는 구조체가 비공개라 리플렉션 외에는 적용값을 읽을 수 없다.
+	box := reflect.New(reflect.TypeFor[iris.SendOption]().In(0).Elem())
+	for _, opt := range opts {
+		reflect.ValueOf(opt).Call([]reflect.Value{box})
+	}
+
+	return sendOptionStringField(t, box, "ClientRequestID"), sendOptionStringField(t, box, "ThreadID")
+}
+
+func sendOptionStringField(t *testing.T, box reflect.Value, name string) string {
+	t.Helper()
+
+	field := box.Elem().FieldByName(name)
+	require.True(t, field.IsValid(), "send option field %s is missing", name)
+	value, ok := field.Interface().(*string)
+	require.True(t, ok, "send option field %s is not *string", name)
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 type stubBotClient struct {
-	acceptErr error
-	sendErr   error
-	accepted  *iris.ReplyAcceptedResponse
+	acceptErr   error
+	sendErr     error
+	markdownErr error
+	accepted    *iris.ReplyAcceptedResponse
 
 	imageErr      error
 	imageAccepted *iris.ReplyAcceptedResponse
@@ -88,27 +134,34 @@ type stubBotClient struct {
 	pingResult bool
 
 	acceptCalls   int
+	markdownCalls int
 	statusCalls   int
 	lastRoom      string
 	lastMessage   string
 	lastOptsLen   int
+	lastOpts      []iris.SendOption
+	optsByAttempt [][]iris.SendOption
 	lastImageRoom string
 	lastImage     []byte
 	lastImages    [][]byte
 }
 
-func (c *stubBotClient) SendMessage(_ context.Context, room, message string, opts ...iris.SendOption) error {
+func (c *stubBotClient) recordSend(room, message string, opts []iris.SendOption) {
 	c.lastRoom = room
 	c.lastMessage = message
 	c.lastOptsLen = len(opts)
+	c.lastOpts = append([]iris.SendOption(nil), opts...)
+	c.optsByAttempt = append(c.optsByAttempt, c.lastOpts)
+}
+
+func (c *stubBotClient) SendMessage(_ context.Context, room, message string, opts ...iris.SendOption) error {
+	c.recordSend(room, message, opts)
 	return c.sendErr
 }
 
 func (c *stubBotClient) SendMessageAccepted(_ context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.acceptCalls++
-	c.lastRoom = room
-	c.lastMessage = message
-	c.lastOptsLen = len(opts)
+	c.recordSend(room, message, opts)
 	if c.acceptErr != nil {
 		return nil, c.acceptErr
 	}
@@ -136,8 +189,16 @@ func (c *stubBotClient) SendMultipleImages(_ context.Context, room string, image
 	return c.multiAccepted, nil
 }
 
-func (c *stubBotClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+func (c *stubBotClient) SendMarkdown(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.markdownCalls++
+	c.recordSend(room, markdown, opts)
+	if c.markdownErr != nil {
+		return nil, c.markdownErr
+	}
+	if c.accepted != nil {
+		return c.accepted, nil
+	}
+	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
 }
 
 func (c *stubBotClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
@@ -464,48 +525,52 @@ func TestWaitForAcceptedReplyHandoff(t *testing.T) {
 	})
 }
 
-func TestSendAcceptedMessageAttempt(t *testing.T) {
+func TestSendReplyAttempt(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 
-	t.Run("accept error returns not done with error", func(t *testing.T) {
-		s := &stubAcceptedSender{acceptErr: errors.New("nope")}
-		done, err := sendAcceptedMessageAttempt(ctx, s, "room", "msg")
-		assert.False(t, done)
-		require.Error(t, err)
-		assert.Equal(t, 0, s.calls)
-	})
+	for laneName, newLane := range replyLanesUnderTest() {
+		t.Run(laneName+" lane", func(t *testing.T) {
+			t.Run("accept error returns not done with error", func(t *testing.T) {
+				s := &stubAcceptedSender{acceptErr: errors.New("nope")}
+				done, err := sendReplyAttempt(ctx, newLane(s), "room", "msg")
+				assert.False(t, done)
+				require.Error(t, err)
+				assert.Equal(t, 0, s.calls)
+			})
 
-	t.Run("accepted and completed returns done without error", func(t *testing.T) {
-		s := &stubAcceptedSender{
-			accepted:         &iris.ReplyAcceptedResponse{RequestID: "r-1"},
-			stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "sent"}},
-		}
-		done, err := sendAcceptedMessageAttempt(ctx, s, "room", "msg")
-		assert.True(t, done)
-		require.NoError(t, err)
-	})
+			t.Run("accepted and completed returns done without error", func(t *testing.T) {
+				s := &stubAcceptedSender{
+					accepted:         &iris.ReplyAcceptedResponse{RequestID: "r-1"},
+					stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "sent"}},
+				}
+				done, err := sendReplyAttempt(ctx, newLane(s), "room", "msg")
+				assert.True(t, done)
+				require.NoError(t, err)
+			})
 
-	t.Run("accepted then failed returns not done with failed error", func(t *testing.T) {
-		detail := "boom"
-		s := &stubAcceptedSender{
-			accepted:         &iris.ReplyAcceptedResponse{RequestID: "r-1"},
-			stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
-		}
-		done, err := sendAcceptedMessageAttempt(ctx, s, "room", "msg")
-		assert.False(t, done)
-		require.Error(t, err)
-		assert.True(t, isReplyStatusFailed(err))
-	})
+			t.Run("accepted then failed returns not done with failed error", func(t *testing.T) {
+				detail := "boom"
+				s := &stubAcceptedSender{
+					accepted:         &iris.ReplyAcceptedResponse{RequestID: "r-1"},
+					stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
+				}
+				done, err := sendReplyAttempt(ctx, newLane(s), "room", "msg")
+				assert.False(t, done)
+				require.Error(t, err)
+				assert.True(t, isReplyStatusFailed(err))
+			})
 
-	t.Run("blank request id skips polling and returns done", func(t *testing.T) {
-		s := &stubAcceptedSender{accepted: &iris.ReplyAcceptedResponse{RequestID: ""}}
-		done, err := sendAcceptedMessageAttempt(ctx, s, "room", "msg")
-		assert.True(t, done)
-		require.NoError(t, err)
-		assert.Equal(t, 0, s.calls)
-	})
+			t.Run("blank request id skips polling and returns done", func(t *testing.T) {
+				s := &stubAcceptedSender{accepted: &iris.ReplyAcceptedResponse{RequestID: ""}}
+				done, err := sendReplyAttempt(ctx, newLane(s), "room", "msg")
+				assert.True(t, done)
+				require.NoError(t, err)
+				assert.Equal(t, 0, s.calls)
+			})
+		})
+	}
 }
 
 func TestCommandTransportSendMessage(t *testing.T) {
@@ -542,6 +607,7 @@ func TestCommandTransportSendMessage(t *testing.T) {
 		tr := NewCommandTransport(c, nil)
 		require.NoError(t, tr.SendMessage(ctx, "room", "hi"))
 		assert.Equal(t, 1, c.acceptCalls)
+		assert.Equal(t, 0, c.markdownCalls)
 		assert.Equal(t, "hi", c.lastMessage)
 	})
 
@@ -582,6 +648,110 @@ func TestCommandTransportSendMessage(t *testing.T) {
 		tr := NewCommandTransport(c, nil)
 		require.NoError(t, tr.SendMessage(ctx, "room", "hi"))
 		assert.Equal(t, 1, c.lastOptsLen)
+	})
+}
+
+func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	const requestIDPrefix = "hololive-bot:reply:"
+
+	t.Run("markdown lane sends through SendMarkdown with first attempt request id", func(t *testing.T) {
+		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}}}
+		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
+
+		require.NoError(t, tr.SendMessage(ctx, "room-md", "**hi**"))
+		assert.Equal(t, 1, c.markdownCalls)
+		assert.Equal(t, 0, c.acceptCalls)
+		assert.Equal(t, "room-md", c.lastRoom)
+		assert.Equal(t, "**hi**", c.lastMessage)
+		assert.Equal(t, 1, c.lastOptsLen)
+
+		requestID, threadID := capturedSendOptions(t, c.lastOpts)
+		assert.True(t, strings.HasPrefix(requestID, requestIDPrefix), "request id %q", requestID)
+		assert.True(t, strings.HasSuffix(requestID, ":a1"), "request id %q", requestID)
+		assert.Len(t, requestID, len(requestIDPrefix)+32+len(":a1"))
+		assert.Empty(t, threadID)
+	})
+
+	t.Run("disabled flag keeps the accepted lane", func(t *testing.T) {
+		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}}}
+		tr := NewCommandTransport(c, nil, WithMarkdownReplies(false))
+
+		require.NoError(t, tr.SendMessage(ctx, "room", "hi"))
+		assert.Equal(t, 1, c.acceptCalls)
+		assert.Equal(t, 0, c.markdownCalls)
+
+		requestID, _ := capturedSendOptions(t, c.lastOpts)
+		assert.True(t, strings.HasPrefix(requestID, requestIDPrefix), "request id %q", requestID)
+		assert.True(t, strings.HasSuffix(requestID, ":a1"), "request id %q", requestID)
+	})
+
+	t.Run("failed handoff retries the markdown lane with the second attempt id", func(t *testing.T) {
+		detail := "cb failed"
+		c := &stubBotClient{statuses: []statusResult{
+			{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
+			{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}},
+		}}
+		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
+
+		require.NoError(t, tr.SendMessage(ctx, "room", "hi"))
+		assert.Equal(t, 2, c.markdownCalls)
+		assert.Equal(t, 0, c.acceptCalls)
+		require.Len(t, c.optsByAttempt, 2)
+
+		first, _ := capturedSendOptions(t, c.optsByAttempt[0])
+		second, _ := capturedSendOptions(t, c.optsByAttempt[1])
+		assert.True(t, strings.HasSuffix(first, ":a1"), "first attempt id %q", first)
+		assert.True(t, strings.HasSuffix(second, ":a2"), "second attempt id %q", second)
+		assert.Equal(t, strings.TrimSuffix(first, ":a1"), strings.TrimSuffix(second, ":a2"))
+	})
+
+	t.Run("failed handoff on both attempts returns wrapped failed error", func(t *testing.T) {
+		detail := "cb failed"
+		c := &stubBotClient{statuses: []statusResult{
+			{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
+			{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
+		}}
+		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
+
+		err := tr.SendMessage(ctx, "room", "hi")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send message to room room")
+		assert.Contains(t, err.Error(), "cb failed")
+		assert.Equal(t, 2, c.markdownCalls)
+	})
+
+	t.Run("send error returns after a single markdown attempt", func(t *testing.T) {
+		c := &stubBotClient{markdownErr: errors.New("iris down")}
+		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
+
+		err := tr.SendMessage(ctx, "room-x", "hi")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send message to room room-x")
+		assert.Contains(t, err.Error(), "iris down")
+		assert.Equal(t, 1, c.markdownCalls)
+	})
+
+	t.Run("thread id is forwarded on the markdown lane", func(t *testing.T) {
+		c := &stubBotClient{}
+		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
+
+		require.NoError(t, tr.SendMessage(WithThreadID(ctx, "t-1"), "room", "hi"))
+		assert.Equal(t, 2, c.lastOptsLen)
+
+		requestID, threadID := capturedSendOptions(t, c.lastOpts)
+		assert.Equal(t, "t-1", threadID)
+		assert.True(t, strings.HasSuffix(requestID, ":a1"), "request id %q", requestID)
+	})
+
+	t.Run("nil option is ignored", func(t *testing.T) {
+		c := &stubBotClient{}
+		tr := NewCommandTransport(c, nil, nil, WithMarkdownReplies(true))
+
+		require.NoError(t, tr.SendMessage(ctx, "room", "hi"))
+		assert.Equal(t, 1, c.markdownCalls)
 	})
 }
 

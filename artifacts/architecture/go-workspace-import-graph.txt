@@ -1051,6 +1051,7 @@ github.com/kapu/hololive-shared/pkg/service/template -> github.com/kapu/hololive
 github.com/kapu/hololive-shared/pkg/service/template -> github.com/kapu/hololive-shared/pkg/repository
 github.com/kapu/hololive-shared/pkg/service/template -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-shared/pkg/service/template -> github.com/kapu/hololive-shared/pkg/sqlassets
+github.com/kapu/hololive-shared/pkg/service/template -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/kapu/hololive-shared/pkg/apperrors
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/kapu/hololive-shared/pkg/constants
@@ -1100,6 +1101,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format -> github.com/
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format -> github.com/kapu/hololive-shared/pkg/service/template
+github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store -> github.com/kapu/hololive-shared/internal/dbx
