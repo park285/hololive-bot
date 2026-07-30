@@ -59,27 +59,42 @@ func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []Failu
 	if len(updates) == 0 {
 		return nil
 	}
-	for i := range updates {
-		if updates[i].TargetStatus != StatusRetry && updates[i].TargetStatus != StatusDLQ {
-			return fmt.Errorf("%s: unsupported target status %q for delivery %d", action, updates[i].TargetStatus, updates[i].ID)
-		}
+	if err := validateFailureUpdates(updates, action); err != nil {
+		return err
 	}
-	raw, err := json.Marshal(updates)
+	applied, err := r.applyFailureUpdates(ctx, updates, workerID, queryFile, action)
 	if err != nil {
-		return fmt.Errorf("%s: marshal batch: %w", action, err)
-	}
-	rows, err := r.pool.Query(ctx, mustSQL(queryFile), jsonbRecordsetParam(raw), workerID)
-	if err != nil {
-		return fmt.Errorf("%s: %w", action, err)
-	}
-	applied, err := pgx.CollectRows(rows, pgx.RowTo[int64])
-	if err != nil {
-		return fmt.Errorf("%s: collect applied ids: %w", action, err)
+		return err
 	}
 	if len(applied) == len(updates) {
 		return nil
 	}
 	return r.partialFailureRoutingError(updates, applied, action, observePartial)
+}
+
+func validateFailureUpdates(updates []FailureUpdate, action string) error {
+	for i := range updates {
+		if updates[i].TargetStatus != StatusRetry && updates[i].TargetStatus != StatusDLQ {
+			return fmt.Errorf("%s: unsupported target status %q for delivery %d", action, updates[i].TargetStatus, updates[i].ID)
+		}
+	}
+	return nil
+}
+
+func (r *PgxRepository) applyFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, queryFile, action string) ([]int64, error) {
+	raw, err := json.Marshal(updates)
+	if err != nil {
+		return nil, fmt.Errorf("%s: marshal batch: %w", action, err)
+	}
+	rows, err := r.pool.Query(ctx, mustSQL(queryFile), jsonbRecordsetParam(raw), workerID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", action, err)
+	}
+	applied, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return nil, fmt.Errorf("%s: collect applied ids: %w", action, err)
+	}
+	return applied, nil
 }
 
 func (r *PgxRepository) partialFailureRoutingError(updates []FailureUpdate, applied []int64, action string, observePartial bool) error {
