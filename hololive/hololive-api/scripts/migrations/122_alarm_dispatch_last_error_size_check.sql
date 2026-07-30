@@ -1,4 +1,4 @@
--- 121_alarm_dispatch_last_error_size_check.sql
+-- 122_alarm_dispatch_last_error_size_check.sql
 -- 8192는 app chokepoint(error_store.go)의 2048B truncation보다 넓다 —
 -- app 한도를 8KiB까지는 migration 없이 올릴 수 있게 둔 방어선이다.
 
