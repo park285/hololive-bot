@@ -761,11 +761,11 @@ stale sending은 maintenance query가 `quarantined`로 보낸다. reason은 외�
 
 파일:
 
-- `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_runner.go`
-- `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_group.go`
-- `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_render.go`
+- `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_runner.go`
+- `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go`
+- `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_render.go`
 
-`alarmDispatchRunner.runOnce` 흐름:
+`dispatchrun.Runner.runOnce` 흐름:
 
 ```text
 consumer.DrainBatch(ctx, maxBatch)
@@ -813,6 +813,8 @@ HTTP 429/502/503
 그 외
   -> RouteFailures
 ```
+
+MarkSending 실패는 발송 전이지만 UPDATE가 이미 커밋된 'sending' 잔류 행이므로 `RouteSendingFailures`로 보상한다. sending 경로의 라우팅이 infra 오류로 실패하면 fallback도 sending fence(`RouteSendingFailures` 전량 retry)로 복원한다 — leased 전용 fence는 'sending' 행에 매칭되지 않는다.
 
 ## 10. 그룹핑과 렌더링
 

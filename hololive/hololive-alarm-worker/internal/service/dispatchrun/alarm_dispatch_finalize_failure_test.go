@@ -219,6 +219,12 @@ func TestPersistSendingRetryInfraFailureFallsBackToSendingFenceRequeue(t *testin
 	assert.Equal(t, "room-1", consumer.calls[1].retry[0].Notification.RoomID)
 	assert.Equal(t, "room-2", consumer.calls[1].retry[1].Notification.RoomID)
 	assert.Empty(t, consumer.calls[1].dlq, "fallback requeue는 전량 retry로 복원한다")
+	require.NotNil(t, consumer.calls[1].retry[0].Retry)
+	assert.Equal(t, 1, consumer.calls[1].retry[0].Retry.Attempt,
+		"fallback은 이미 증가된 attempt를 그대로 재사용해야 한다 — 재증가는 CAS를 깨뜨린다")
+	require.NotNil(t, consumer.calls[1].retry[1].Retry)
+	assert.Equal(t, 3, consumer.calls[1].retry[1].Retry.Attempt,
+		"dlq-소진 envelope도 fallback에서 attempt 재증가 없이 복원돼야 한다")
 }
 
 func TestPersistSendingRetryFallbackRequeueFailureWrapPinned(t *testing.T) {
