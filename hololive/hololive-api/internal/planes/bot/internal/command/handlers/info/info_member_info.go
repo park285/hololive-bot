@@ -137,7 +137,6 @@ func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englis
 	channel, err := c.Deps().Matcher.FindBestMatch(ctx, trimmed)
 	if err != nil {
 		c.log().Warn("Member match failed",
-			slog.String("query", trimmed),
 			slog.Any("error", err),
 		)
 

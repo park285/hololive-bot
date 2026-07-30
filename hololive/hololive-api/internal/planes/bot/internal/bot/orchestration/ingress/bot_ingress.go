@@ -79,17 +79,17 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 		return nil, false
 	}
 
-	if i.isRoomBlocked(ctx, roomName, chatID, userName) {
+	if i.isRoomBlocked(ctx, roomName, chatID) {
 		return nil, false
 	}
 
-	parsed := i.parseCommand(ctx, message, chatID, userName)
+	parsed := i.parseCommand(ctx, message, chatID)
 	if parsed == nil {
 		return nil, false
 	}
 
 	commandType := parsed.Type.String()
-	i.logCommandReceived(ctx, parsed, commandType, userID, userName, chatID, roomName)
+	i.logCommandReceived(ctx, parsed, commandType, userID, chatID)
 
 	return &Envelope{
 		CommandType: commandType,
@@ -126,43 +126,37 @@ func (i *MessageIngress) shouldSkipSender(ctx context.Context, message *webhook.
 
 	i.logDebug(ctx,
 		"Skipping self-issued message",
-		slog.String("user", userName),
-		slog.String("room", chatID),
+		slog.String("room_id", chatID),
 		slog.Int("message_len", len(strings.TrimSpace(message.Msg))),
 	)
 
 	return true
 }
 
-func (i *MessageIngress) isRoomBlocked(ctx context.Context, roomName, chatID, userName string) bool {
+func (i *MessageIngress) isRoomBlocked(ctx context.Context, roomName, chatID string) bool {
 	if i.acl == nil || i.acl.IsRoomAllowed(roomName, chatID) {
 		return false
 	}
 
 	i.logDebug(ctx,
 		"Room blocked by ACL, ignoring message",
-		slog.String("room", chatID),
-		slog.String("room_name", roomName),
-		slog.String("user_name", userName),
+		slog.String("room_id", chatID),
 	)
 
 	return true
 }
 
-func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Message, chatID, userName string) *messaging.ParsedCommand {
+func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Message, chatID string) *messaging.ParsedCommand {
 	parsed := i.messageAdapter.ParseMessage(message)
 	if parsed == nil {
-		i.logWarn(ctx, "Parsed command is nil", slog.String("room", chatID))
+		i.logWarn(ctx, "Parsed command is nil", slog.String("room_id", chatID))
 		return nil
 	}
 
 	if parsed.Type == domain.CommandUnknown {
 		summaryAttrs := messageSummaryAttrs(message.Msg)
-		attrs := make([]slog.Attr, 0, 2+len(summaryAttrs))
-		attrs = append(attrs,
-			slog.String("room", chatID),
-			slog.String("user_name", userName),
-		)
+		attrs := make([]slog.Attr, 0, 1+len(summaryAttrs))
+		attrs = append(attrs, slog.String("room_id", chatID))
 		attrs = append(attrs, summaryAttrs...)
 		i.logDebug(ctx,
 			"Unknown command ignored",
@@ -180,9 +174,7 @@ func (i *MessageIngress) logCommandReceived(
 	parsed *messaging.ParsedCommand,
 	commandType string,
 	userID string,
-	userName string,
 	chatID string,
-	roomName string,
 ) {
 	if i.logger == nil || parsed == nil {
 		return
@@ -193,7 +185,7 @@ func (i *MessageIngress) logCommandReceived(
 		i.logger,
 		EventCommandReceived,
 		"bot command received",
-		ingressAttrs(commandType, userID, userName, chatID, roomName, parsed.RawMessage)...,
+		ingressAttrs(commandType, userID, chatID, parsed.RawMessage)...,
 	)
 }
 

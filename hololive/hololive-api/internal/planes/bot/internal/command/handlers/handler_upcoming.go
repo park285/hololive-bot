@@ -127,7 +127,7 @@ func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, mem
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("failed to find member %q: %w", memberName, err)
+		return fmt.Errorf("failed to find member: %w", err)
 	}
 	if channel == nil {
 		return nil

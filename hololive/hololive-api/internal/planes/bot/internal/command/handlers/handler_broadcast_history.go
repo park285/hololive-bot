@@ -148,7 +148,7 @@ func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Contex
 		return true, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("failed to find member %q: %w", memberName, err)
+		return false, fmt.Errorf("failed to find member: %w", err)
 	}
 	if channel == nil {
 		return true, nil

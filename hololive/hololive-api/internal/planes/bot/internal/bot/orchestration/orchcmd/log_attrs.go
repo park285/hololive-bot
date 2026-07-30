@@ -1,8 +1,6 @@
 package orchcmd
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"log/slog"
 	"strings"
 
@@ -25,9 +23,7 @@ func commandContextAttrs(cmdCtx *domain.CommandContext, commandKey string) []slo
 
 	attrs = append(attrs,
 		slog.String("room_id", strings.TrimSpace(cmdCtx.Room)),
-		slog.String("room_name", strings.TrimSpace(cmdCtx.RoomName)),
 		slog.String("user_id", strings.TrimSpace(cmdCtx.UserID)),
-		slog.String("user_name", strings.TrimSpace(cmdCtx.UserName)),
 		slog.Bool("group_chat", cmdCtx.IsGroupChat),
 	)
 	if cmdCtx.ThreadID != nil && strings.TrimSpace(*cmdCtx.ThreadID) != "" {
@@ -39,13 +35,5 @@ func commandContextAttrs(cmdCtx *domain.CommandContext, commandKey string) []slo
 }
 
 func messageSummaryAttrs(message string) []slog.Attr {
-	message = strings.TrimSpace(message)
-	if message == "" {
-		return []slog.Attr{slog.Int("message_len", 0)}
-	}
-	sum := sha256.Sum256([]byte(message))
-	return []slog.Attr{
-		slog.Int("message_len", len(message)),
-		slog.String("message_sha256_8", hex.EncodeToString(sum[:8])),
-	}
+	return []slog.Attr{slog.Int("message_len", len(strings.TrimSpace(message)))}
 }

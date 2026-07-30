@@ -102,7 +102,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	clientRequestID := nextReplyClientRequestID(sendCtx)
 	if err := t.sendMessage(sendCtx, room, message, clientRequestID, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
-		return fmt.Errorf("send message to room %s: %w", room, serviceErr)
+		return fmt.Errorf("send message: %w", serviceErr)
 	}
 
 	return nil
@@ -306,7 +306,7 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	}
 	if err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send image", serviceNameIris, "send_image", err)
-		return fmt.Errorf("send image to room %s: %w", room, serviceErr)
+		return fmt.Errorf("send image: %w", serviceErr)
 	}
 
 	return nil
@@ -332,7 +332,7 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 	}
 	if err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send images", serviceNameIris, "send_images", err)
-		return fmt.Errorf("send images to room %s: %w", room, serviceErr)
+		return fmt.Errorf("send images: %w", serviceErr)
 	}
 
 	return nil

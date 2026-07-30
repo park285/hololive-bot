@@ -44,15 +44,6 @@ func NewAlarmCommand(deps *handlercore.Dependencies) *AlarmCommand {
 	return &AlarmCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
 }
 
-func stringParam(params map[string]any, key string) string {
-	value, ok := params[key].(string)
-	if !ok {
-		return ""
-	}
-
-	return value
-}
-
 func (c *AlarmCommand) Name() string {
 	return "alarm"
 }
@@ -112,14 +103,9 @@ func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *domain.Com
 	return c.handleClear(ctx, cmdCtx)
 }
 
-func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-	subCmd := stringParam(params, "sub_command")
-	memberName := stringParam(params, "member")
+func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
 	c.Deps().Logger.Info("Invalid alarm command received",
-		slog.String("room", cmdCtx.Room),
-		slog.String("sender", cmdCtx.UserName),
-		slog.String("sub_command", subCmd),
-		slog.String("member", memberName),
+		slog.String("room_id", cmdCtx.Room),
 	)
 
 	return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrInvalidAlarmUsage)
@@ -146,7 +132,6 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 	alarmTypes := c.parseAlarmTypes(params)
 
 	c.Deps().Logger.Debug("Alarm add requested",
-		slog.String("member", memberName),
 		slog.Any("types", alarmTypes))
 
 	channel, err := c.resolveAlarmMember(ctx, cmdCtx.Room, memberName)
@@ -227,7 +212,6 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 	alarmTypes := c.parseAlarmTypes(params)
 
 	c.Deps().Logger.Debug("Alarm remove requested",
-		slog.String("member", memberName),
 		slog.Any("types", alarmTypes))
 
 	channel, err := c.resolveAlarmMember(ctx, cmdCtx.Room, memberName)

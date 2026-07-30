@@ -297,7 +297,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 		err := transport.SendMessage(ctx, "room", "hello")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send message to room room")
+		assert.Contains(t, err.Error(), "send message: ")
 	})
 
 	t.Run("markdown replies option routes through SendMarkdown", func(t *testing.T) {
@@ -333,7 +333,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 		err := transport.SendImage(ctx, "room", []byte("img"))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send image to room room")
+		assert.Contains(t, err.Error(), "send image: ")
 	})
 
 	t.Run("send image returns failed reply status", func(t *testing.T) {
@@ -347,7 +347,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 		err := transport.SendImage(ctx, "room", []byte("img"))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send image to room room")
+		assert.Contains(t, err.Error(), "send image: ")
 		assert.Contains(t, err.Error(), "image lease last modified mismatch")
 		assert.Equal(t, 1, client.imageAcceptedCalls)
 	})

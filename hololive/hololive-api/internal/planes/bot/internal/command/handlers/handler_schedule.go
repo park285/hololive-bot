@@ -69,7 +69,7 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("failed to find member %q: %w", memberName, err)
+		return fmt.Errorf("failed to find member: %w", err)
 	}
 	if channel == nil {
 		return nil

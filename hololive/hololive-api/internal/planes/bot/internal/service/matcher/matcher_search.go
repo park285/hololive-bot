@@ -23,7 +23,6 @@ package matcher
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -144,7 +143,7 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 		return channel, nil
 	}
 
-	mm.logger.Debug("No match found in internal data", slog.String("query", query))
+	mm.logger.Debug("No match found in internal data")
 
 	return nil, nil
 }

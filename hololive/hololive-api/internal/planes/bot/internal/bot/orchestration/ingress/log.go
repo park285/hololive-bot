@@ -1,36 +1,24 @@
 package ingress
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"log/slog"
 	"strings"
 )
 
 const EventCommandReceived = "bot.command.received"
 
-func ingressAttrs(commandType, userID, userName, chatID, roomName, rawMessage string) []slog.Attr {
+func ingressAttrs(commandType, userID, chatID, rawMessage string) []slog.Attr {
 	summaryAttrs := messageSummaryAttrs(rawMessage)
-	attrs := make([]slog.Attr, 0, 5+len(summaryAttrs))
+	attrs := make([]slog.Attr, 0, 3+len(summaryAttrs))
 	attrs = append(attrs,
 		slog.String("command_type", strings.TrimSpace(commandType)),
 		slog.String("user_id", strings.TrimSpace(userID)),
-		slog.String("user_name", strings.TrimSpace(userName)),
 		slog.String("room_id", strings.TrimSpace(chatID)),
-		slog.String("room_name", strings.TrimSpace(roomName)),
 	)
 	attrs = append(attrs, summaryAttrs...)
 	return attrs
 }
 
 func messageSummaryAttrs(message string) []slog.Attr {
-	message = strings.TrimSpace(message)
-	if message == "" {
-		return []slog.Attr{slog.Int("message_len", 0)}
-	}
-	sum := sha256.Sum256([]byte(message))
-	return []slog.Attr{
-		slog.Int("message_len", len(message)),
-		slog.String("message_sha256_8", hex.EncodeToString(sum[:8])),
-	}
+	return []slog.Attr{slog.Int("message_len", len(strings.TrimSpace(message)))}
 }

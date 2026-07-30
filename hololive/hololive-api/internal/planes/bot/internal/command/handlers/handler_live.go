@@ -71,7 +71,7 @@ func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.Comm
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("failed to find member %q: %w", memberName, err)
+		return fmt.Errorf("failed to find member: %w", err)
 	}
 	if channel == nil {
 		return nil

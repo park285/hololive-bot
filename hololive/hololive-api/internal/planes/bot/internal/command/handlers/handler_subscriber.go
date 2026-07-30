@@ -67,7 +67,7 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("failed to find member %q: %w", memberQuery, err)
+		return fmt.Errorf("failed to find member: %w", err)
 	}
 	if matchedChannel == nil {
 		return nil

@@ -693,7 +693,7 @@ func TestCommandTransportSendMessage(t *testing.T) {
 		tr := NewCommandTransport(c, nil)
 		err := tr.SendMessage(inboundCtx(ctx), "room-x", "hi")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send message to room room-x")
+		assert.Contains(t, err.Error(), "send message: ")
 		assert.Contains(t, err.Error(), "iris down")
 		assert.Equal(t, 1, c.acceptCalls)
 	})
@@ -728,7 +728,7 @@ func TestCommandTransportSendMessage(t *testing.T) {
 		tr := NewCommandTransport(c, nil)
 		err := tr.SendMessage(inboundCtx(ctx), "room", "hi")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send message to room room")
+		assert.Contains(t, err.Error(), "send message: ")
 		assert.Contains(t, err.Error(), "cb failed")
 		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
 		assert.Equal(t, 1, c.acceptCalls)
@@ -815,7 +815,7 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 
 		err := tr.SendMessage(inboundCtx(ctx), "room", "hi")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send message to room room")
+		assert.Contains(t, err.Error(), "send message: ")
 		assert.Contains(t, err.Error(), "cb failed")
 		assert.Equal(t, 1, c.markdownCalls)
 		require.Len(t, c.optsByAttempt, 1)
@@ -830,7 +830,7 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 
 		err := tr.SendMessage(inboundCtx(ctx), "room-x", "hi")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send message to room room-x")
+		assert.Contains(t, err.Error(), "send message: ")
 		assert.Contains(t, err.Error(), "iris down")
 		assert.Equal(t, 1, c.markdownCalls)
 	})
@@ -891,12 +891,12 @@ func TestCommandTransportSendImage(t *testing.T) {
 		assert.Contains(t, err.Error(), "iris client is not configured")
 	})
 
-	t.Run("client error is wrapped with room", func(t *testing.T) {
+	t.Run("client error is wrapped without room id", func(t *testing.T) {
 		c := &stubBotClient{imageErr: errors.New("img down")}
 		tr := NewCommandTransport(c, nil)
 		err := tr.SendImage(ctx, "room", []byte("x"))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send image to room room")
+		assert.Contains(t, err.Error(), "send image: ")
 		assert.Contains(t, err.Error(), "img down")
 	})
 
@@ -916,7 +916,7 @@ func TestCommandTransportSendImage(t *testing.T) {
 		}
 		err := tr(c).SendImage(ctx, "room", []byte("x"))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send image to room room")
+		assert.Contains(t, err.Error(), "send image: ")
 		assert.Contains(t, err.Error(), "image lease last modified mismatch")
 		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
 	})
@@ -985,12 +985,12 @@ func TestCommandTransportSendImages(t *testing.T) {
 		assert.Empty(t, requestID)
 	})
 
-	t.Run("client error is wrapped with room", func(t *testing.T) {
+	t.Run("client error is wrapped without room id", func(t *testing.T) {
 		c := &stubBotClient{multiErr: errors.New("album down")}
 
 		err := tr(c).SendImages(ctx, "room", [][]byte{[]byte("one"), []byte("two")})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send images to room room")
+		assert.Contains(t, err.Error(), "send images: ")
 		assert.Contains(t, err.Error(), "album down")
 		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
 	})
@@ -1012,7 +1012,7 @@ func TestCommandTransportSendImages(t *testing.T) {
 
 		err := tr(c).SendImages(ctx, "room", [][]byte{[]byte("one"), []byte("two")})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "send images to room room")
+		assert.Contains(t, err.Error(), "send images: ")
 		assert.Contains(t, err.Error(), "album lease last modified mismatch")
 	})
 }
