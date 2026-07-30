@@ -110,16 +110,21 @@ func NewMaintenanceRunner(
 func (r *alarmDispatchMaintenanceRunner) Start(ctx context.Context) error {
 	for {
 		if err := r.RunOnce(ctx); err != nil {
-			if ctx.Err() == nil {
-				observeAlarmDispatchRetentionFailure()
-				if r.logger != nil {
-					r.logger.Warn("Alarm dispatch maintenance failed", slog.Any("error", err))
-				}
-			}
+			r.reportFailure(ctx, err)
 		}
 		if !retry.Sleep(ctx, r.effectiveInterval()) {
 			return nil
 		}
+	}
+}
+
+func (r *alarmDispatchMaintenanceRunner) reportFailure(ctx context.Context, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	observeAlarmDispatchRetentionFailure()
+	if r.logger != nil {
+		r.logger.Warn("Alarm dispatch maintenance failed", slog.Any("error", err))
 	}
 }
 
