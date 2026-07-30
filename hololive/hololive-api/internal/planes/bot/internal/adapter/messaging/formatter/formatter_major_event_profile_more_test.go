@@ -160,6 +160,7 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 		SocialLinks: []domain.TalentSocialLink{
 			{Label: "歌の再生リスト", URL: "https://yt.example/playlist"},
 			{Label: "Twitter", URL: "https://x.example/fubuki"},
+			{Label: "invalid", URL: "javascript:alert(1)"},
 		},
 		OfficialURL: "https://hololive.example/fubuki",
 	}
@@ -189,6 +190,10 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 	assert.True(t, rows[1].Multiline)
 	assert.Equal(t, "  노래\n  게임", rows[1].Value)
 	assert.Equal(t, "https://hololive.example/fubuki", profileOfficialURL(raw))
+	assert.Empty(t, profileLinkURL("javascript:alert(1)"))
+	assert.Empty(t, profileLinkURL("/relative/path"))
+	assert.Empty(t, profileLinkURL("https://example.com/path)\n[bad](https://evil.example)"))
+	assert.Equal(t, "https://example.com/path", profileLinkURL(" https://example.com/path "))
 
 	parts := parseDisplayNameComponents("시라카미 후부키 (Shirakami Fubuki) / FBK")
 	require.NotEmpty(t, parts)
