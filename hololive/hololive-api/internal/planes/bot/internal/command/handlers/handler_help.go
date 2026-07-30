@@ -24,10 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
+
+var errHelpImageUnavailable = errors.New("help image capability is unavailable")
 
 type HelpCommand struct {
 	deps *handlercore.Dependencies
@@ -49,28 +53,95 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	if c == nil {
 		return errors.New("help command dependencies not configured")
 	}
-
+	if cmdCtx == nil {
+		return errors.New("help command context is nil")
+	}
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
 
-	message := c.deps.Formatter.FormatHelp(ctx)
+	fallback := messagestrings.FallbackSentinel
+	content, contentErr := c.deps.Formatter.FormatHelpContent(ctx)
+	imageErr := error(nil)
+	if contentErr != nil {
+		imageErr = fmt.Errorf("format help content: %w", contentErr)
+	} else {
+		fallback = content.TextFallback
+		imageErr = c.sendHelpImages(ctx, cmdCtx.Room, content.ImageText)
+	}
+	if imageErr == nil {
+		return nil
+	}
 
-	return c.deps.SendMessage(ctx, cmdCtx.Room, message)
+	c.logImageFallback(ctx, imageErr)
+	if err := c.deps.SendMessage(ctx, cmdCtx.Room, fallback); err != nil {
+		return errors.Join(imageErr, fmt.Errorf("send help text fallback: %w", err))
+	}
+	return nil
+}
+
+type helpImageSendError struct {
+	sent  int
+	total int
+	err   error
+}
+
+func (e *helpImageSendError) Error() string {
+	return fmt.Sprintf("send help image %d/%d: %v", e.sent+1, e.total, e.err)
+}
+
+func (e *helpImageSendError) Unwrap() error {
+	return e.err
+}
+
+func (c *HelpCommand) sendHelpImages(ctx context.Context, room, text string) error {
+	if c.deps.HelpImageRenderer == nil || c.deps.SendImage == nil {
+		return errHelpImageUnavailable
+	}
+
+	images, err := c.deps.HelpImageRenderer.RenderHelpImages(ctx, text)
+	if err != nil {
+		return fmt.Errorf("render help images: %w", err)
+	}
+	if len(images) == 0 {
+		return errors.New("render help images: empty result")
+	}
+	return c.sendHelpImagePayloads(ctx, room, images)
+}
+
+func (c *HelpCommand) sendHelpImagePayloads(ctx context.Context, room string, images [][]byte) error {
+	for index, imageData := range images {
+		if len(imageData) == 0 {
+			return fmt.Errorf("render help image %d/%d: empty payload", index+1, len(images))
+		}
+		if err := c.deps.SendImage(ctx, room, imageData); err != nil {
+			return &helpImageSendError{sent: index, total: len(images), err: err}
+		}
+	}
+	return nil
+}
+
+func (c *HelpCommand) logImageFallback(ctx context.Context, err error) {
+	if c.deps.Logger == nil {
+		return
+	}
+	args := []any{slog.Any("error", err)}
+	var sendErr *helpImageSendError
+	if errors.As(err, &sendErr) {
+		args = append(args, slog.Int("sent_images", sendErr.sent), slog.Int("total_images", sendErr.total))
+	}
+	c.deps.Logger.WarnContext(ctx, "help_image_fallback", args...)
 }
 
 func (c *HelpCommand) ensureDeps() error {
 	if c == nil || c.deps == nil {
 		return errors.New("help command dependencies not configured")
 	}
-
 	if c.deps.SendMessage == nil {
 		return errors.New("message callback not configured")
 	}
-
 	if c.deps.Formatter == nil {
 		return errors.New("formatter not configured")
 	}
-
 	return nil
 }

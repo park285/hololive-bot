@@ -72,6 +72,10 @@ type CalendarImageRenderer interface {
 	RenderCalendarImageContext(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error)
 }
 
+type HelpImageRenderer interface {
+	RenderHelpImages(ctx context.Context, text string) ([][]byte, error)
+}
+
 type BroadcastHistoryQuery struct {
 	ChannelID  string
 	Type       string
@@ -126,6 +130,7 @@ type Dependencies struct {
 	ThumbnailDownloader BroadcastThumbnailDownloader
 	MembersData         domain.MemberDataProvider
 	Formatter           *formatter.ResponseFormatter
+	HelpImageRenderer   HelpImageRenderer
 	SendMessage         func(ctx context.Context, room, message string) error
 	SendImage           func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
 	SendError           func(ctx context.Context, room, message string) error

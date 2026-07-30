@@ -37,6 +37,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
@@ -102,6 +103,7 @@ func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *ha
 		ThumbnailDownloader: handlers.NewYouTubeThumbnailDownloader(nil),
 		MembersData:         v.membersData,
 		Formatter:           v.formatter,
+		HelpImageRenderer:   render.NewHelpCardRenderer(),
 		SendMessage:         v.sendMessage,
 		SendImage:           v.sendImage,
 		SendError:           v.sendError,
