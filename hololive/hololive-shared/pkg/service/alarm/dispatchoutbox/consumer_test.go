@@ -540,6 +540,74 @@ func TestConsumerRouteFailuresConvertsEnvelopesToTargetedUpdates(t *testing.T) {
 	}
 }
 
+func TestConsumerRouteFailuresPartialObservesAppliedSubsets(t *testing.T) {
+	repository := &consumerTestRepository{}
+	repository.routeFailuresFunc = func(context.Context, []FailureUpdate, string) error {
+		return &PartialTransitionError{
+			Action:       "route dispatch delivery failures",
+			Updated:      2,
+			Expected:     3,
+			UnappliedIDs: []int64{22},
+		}
+	}
+	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	nextVisible := time.Date(2026, 7, 30, 10, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	retryApplied := domain.AlarmQueueEnvelope{
+		DispatchOutboxID: 11,
+		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom", NextVisibleAt: nextVisible},
+	}
+	retryUnapplied := domain.AlarmQueueEnvelope{
+		DispatchOutboxID: 22,
+		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom", NextVisibleAt: nextVisible},
+	}
+	dlqApplied := domain.AlarmQueueEnvelope{
+		DispatchOutboxID: 33,
+		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 3, LastError: "exhausted"},
+	}
+
+	retryBefore := testutil.ToFloat64(alarmDispatchPGRetryScheduledTotal)
+	dlqBefore := testutil.ToFloat64(alarmDispatchPGDLQTotal)
+
+	err := consumer.RouteFailures(context.Background(),
+		[]domain.AlarmQueueEnvelope{retryApplied, retryUnapplied},
+		[]domain.AlarmQueueEnvelope{dlqApplied})
+	var partialErr *PartialTransitionError
+	if !errors.As(err, &partialErr) {
+		t.Fatalf("RouteFailures() error = %T %v, want *PartialTransitionError", err, err)
+	}
+	if got := testutil.ToFloat64(alarmDispatchPGRetryScheduledTotal); got != retryBefore+1 {
+		t.Errorf("retry_scheduled = %v, want %v (applied retry subset only)", got, retryBefore+1)
+	}
+	if got := testutil.ToFloat64(alarmDispatchPGDLQTotal); got != dlqBefore+1 {
+		t.Errorf("dlq_total = %v, want %v (applied dlq subset)", got, dlqBefore+1)
+	}
+}
+
+func TestConsumerRouteFailuresInfraErrorObservesNothing(t *testing.T) {
+	repository := &consumerTestRepository{}
+	repository.routeFailuresFunc = func(context.Context, []FailureUpdate, string) error {
+		return errors.New("connection reset")
+	}
+	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	retry := domain.AlarmQueueEnvelope{
+		DispatchOutboxID: 11,
+		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
+	}
+
+	retryBefore := testutil.ToFloat64(alarmDispatchPGRetryScheduledTotal)
+	dlqBefore := testutil.ToFloat64(alarmDispatchPGDLQTotal)
+
+	if err := consumer.RouteFailures(context.Background(), []domain.AlarmQueueEnvelope{retry}, nil); err == nil {
+		t.Fatal("RouteFailures() error = nil, want infra error")
+	}
+	if got := testutil.ToFloat64(alarmDispatchPGRetryScheduledTotal); got != retryBefore {
+		t.Errorf("retry_scheduled moved on infra error: %v -> %v", retryBefore, got)
+	}
+	if got := testutil.ToFloat64(alarmDispatchPGDLQTotal); got != dlqBefore {
+		t.Errorf("dlq_total moved on infra error: %v -> %v", dlqBefore, got)
+	}
+}
+
 func TestConsumerRouteSendingFailuresUsesSendingVariant(t *testing.T) {
 	t.Parallel()
 

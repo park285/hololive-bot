@@ -42,7 +42,7 @@ func (r *PgxRepository) MarkSent(ctx context.Context, ids []int64, workerID stri
 }
 
 func (r *PgxRepository) RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
-	return r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0160_06.sql", "route dispatch delivery failures", false)
+	return r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0160_06.sql", "route dispatch delivery failures")
 }
 
 // RouteSendingFailures는 post-send failure에서 row가 이미 'sending' 상태일 때 쓴다.
@@ -52,10 +52,10 @@ func (r *PgxRepository) RouteFailures(ctx context.Context, updates []FailureUpda
 // RecoverExpiredLeased는 'leased'만 접촉하고 'sending'은 QuarantineStaleSending이
 // 담당하므로 다른 worker의 선점 경쟁이 없다. terminal 상태는 status 조건으로 보호된다.
 func (r *PgxRepository) RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error {
-	return r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0170_07.sql", "route dispatch delivery sending failures", true)
+	return r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0170_07.sql", "route dispatch delivery sending failures")
 }
 
-func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, queryFile, action string, observePartial bool) error {
+func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, queryFile, action string) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -69,7 +69,7 @@ func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []Failu
 	if len(applied) == len(updates) {
 		return nil
 	}
-	return r.partialFailureRoutingError(updates, applied, action, observePartial)
+	return r.partialFailureRoutingError(updates, applied, action)
 }
 
 func validateFailureUpdates(updates []FailureUpdate, action string) error {
@@ -97,11 +97,9 @@ func (r *PgxRepository) applyFailureUpdates(ctx context.Context, updates []Failu
 	return applied, nil
 }
 
-func (r *PgxRepository) partialFailureRoutingError(updates []FailureUpdate, applied []int64, action string, observePartial bool) error {
+func (r *PgxRepository) partialFailureRoutingError(updates []FailureUpdate, applied []int64, action string) error {
 	unapplied := unappliedFailureIDs(updates, applied)
-	if observePartial {
-		observePGTransitionPartial()
-	}
+	observePGTransitionPartial()
 	if r.logger != nil {
 		r.logger.Warn("dispatch delivery partial failure routing",
 			slog.String("action", action),
