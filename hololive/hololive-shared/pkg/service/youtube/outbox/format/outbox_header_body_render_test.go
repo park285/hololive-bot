@@ -50,7 +50,7 @@ const (
 {{mdsafe (truncate 100 .ContentText)}}
 {{- end}}
 {{- if .URL}}
-{{.URL}}
+[커뮤니티 글 보기]({{.URL}})
 {{- end}}`
 	outboxBodyMilestone = `🎉 **{{mdsafe .MemberName}}** {{mdsafe .Milestone}} 달성`
 
@@ -89,11 +89,11 @@ const (
 {{- $n = add $n 1}}
 {{$n}}. {{mdsafe (truncate 40 $item.ContentText)}}
 {{- if $item.URL}}
-   {{$item.URL}}
+   [커뮤니티 글 보기]({{$item.URL}})
 {{- end}}
 {{- else if $item.URL}}
 {{- $n = add $n 1}}
-{{$n}}. {{$item.URL}}
+{{$n}}. [커뮤니티 글 보기]({{$item.URL}})
 {{- end}}
 {{- end}}`
 )
@@ -180,7 +180,7 @@ func TestOutboxGroupBodiesNumberRenderedItemsConsecutively(t *testing.T) {
 			{ContentText: "공지2", URL: "https://www.youtube.com/post/p2"},
 		},
 	})
-	wantCommunity := "## 🔔 사쿠라 미코 커뮤니티 글 (3)\n1. 공지1\n   https://www.youtube.com/post/p1\n2. 공지2\n   https://www.youtube.com/post/p2"
+	wantCommunity := "## 🔔 사쿠라 미코 커뮤니티 글 (3)\n1. 공지1\n   [커뮤니티 글 보기](https://www.youtube.com/post/p1)\n2. 공지2\n   [커뮤니티 글 보기](https://www.youtube.com/post/p2)"
 	if community != wantCommunity {
 		t.Fatalf("community group render mismatch\n got=%q\nwant=%q", community, wantCommunity)
 	}
@@ -217,7 +217,7 @@ func TestOutboxHeaderBodyRenderGoldens(t *testing.T) {
 			name: "single/community",
 			body: outboxBodyCommunity,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxCommunity, "COMMUNITY_POST"),
-			want: "🔔 **사쿠라 미코** 커뮤니티 글\n오늘 밤 10시에 방송합니다! 많이 놀러오세요~" + zwsp + "\nhttps://www.youtube.com/post/Ugkxyz123",
+			want: "🔔 **사쿠라 미코** 커뮤니티 글\n오늘 밤 10시에 방송합니다! 많이 놀러오세요~" + zwsp + "\n[커뮤니티 글 보기](https://www.youtube.com/post/Ugkxyz123)",
 		},
 		{
 			name: "single/milestone",
@@ -253,7 +253,7 @@ func TestOutboxHeaderBodyRenderGoldens(t *testing.T) {
 			name: "group/community",
 			body: outboxBodyCommunityGroup,
 			data: sampleWithKind(t, domain.TemplateKeyOutboxCommunityGroup, "COMMUNITY_POST"),
-			want: "## 🔔 사쿠라 미코 커뮤니티 글 (2)\n1. 오늘 밤 10시 방송 공지\n   https://www.youtube.com/post/group-community-1\n2. 굿즈 판매 시작 안내\n   https://www.youtube.com/post/group-community-2",
+			want: "## 🔔 사쿠라 미코 커뮤니티 글 (2)\n1. 오늘 밤 10시 방송 공지\n   [커뮤니티 글 보기](https://www.youtube.com/post/group-community-1)\n2. 굿즈 판매 시작 안내\n   [커뮤니티 글 보기](https://www.youtube.com/post/group-community-2)",
 		},
 	}
 
