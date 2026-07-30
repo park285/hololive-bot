@@ -11,19 +11,20 @@ import (
 var (
 	alarmDispatchRunnerMetricsOnce sync.Once
 
-	alarmDispatchRunnerEmptyPollsTotal          *prometheus.CounterVec
-	alarmDispatchRunnerIdleWaitSeconds          *prometheus.HistogramVec
-	alarmDispatchRunnerWakeupConsumedTotal      prometheus.Counter
-	alarmDispatchRunnerWakeupTimeoutTotal       prometheus.Counter
-	alarmDispatchRunnerWakeupErrorTotal         prometheus.Counter
-	alarmDispatchRunnerPostSendQuarantinedTotal prometheus.Counter
-	alarmDispatchRetryAfterClampedTotal         prometheus.Counter
-	alarmDispatchPGRetentionDeletedRowsTotal    *prometheus.CounterVec
-	alarmDispatchPGRetentionFailedTotal         prometheus.Counter
-	alarmDispatchPGBacklogRows                  *prometheus.GaugeVec
-	alarmDispatchPGOldestPendingAgeSeconds      prometheus.Gauge
-	alarmDispatchPGOldestRetryAgeSeconds        prometheus.Gauge
-	alarmDispatchPGOldestSendingAgeSeconds      prometheus.Gauge
+	alarmDispatchRunnerEmptyPollsTotal           *prometheus.CounterVec
+	alarmDispatchRunnerIdleWaitSeconds           *prometheus.HistogramVec
+	alarmDispatchRunnerWakeupConsumedTotal       prometheus.Counter
+	alarmDispatchRunnerWakeupTimeoutTotal        prometheus.Counter
+	alarmDispatchRunnerWakeupErrorTotal          prometheus.Counter
+	alarmDispatchRunnerPostSendQuarantinedTotal  prometheus.Counter
+	alarmDispatchRetryAfterClampedTotal          prometheus.Counter
+	alarmDispatchPGRetentionDeletedRowsTotal     *prometheus.CounterVec
+	alarmDispatchPGRetentionFailedTotal          prometheus.Counter
+	alarmDispatchPGBacklogObservationFailedTotal prometheus.Counter
+	alarmDispatchPGBacklogRows                   *prometheus.GaugeVec
+	alarmDispatchPGOldestPendingAgeSeconds       prometheus.Gauge
+	alarmDispatchPGOldestRetryAgeSeconds         prometheus.Gauge
+	alarmDispatchPGOldestSendingAgeSeconds       prometheus.Gauge
 )
 
 func initAlarmDispatchRunnerMetrics() {
@@ -102,6 +103,10 @@ func initAlarmDispatchRetentionMetrics() {
 		Name: "alarm_dispatch_pg_retention_failed_total",
 		Help: "Alarm dispatch PG retention failures.",
 	})
+	alarmDispatchPGBacklogObservationFailedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "alarm_dispatch_pg_backlog_observation_failed_total",
+		Help: "Alarm dispatch PG backlog observation failures.",
+	})
 }
 
 func observeAlarmDispatchRunnerEmptyPoll(consumerMode string) {
@@ -171,6 +176,14 @@ func observeAlarmDispatchRetentionFailure() {
 		return
 	}
 	alarmDispatchPGRetentionFailedTotal.Inc()
+}
+
+func observeAlarmDispatchBacklogObservationFailure() {
+	initAlarmDispatchRunnerMetrics()
+	if alarmDispatchPGBacklogObservationFailedTotal == nil {
+		return
+	}
+	alarmDispatchPGBacklogObservationFailedTotal.Inc()
 }
 
 func observeAlarmDispatchBacklogStatus(status string, rows int64) {
