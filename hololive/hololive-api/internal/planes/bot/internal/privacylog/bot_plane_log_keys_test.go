@@ -17,10 +17,15 @@ import (
 
 // bot plane이 같은 사용자 액션 안에서 호출하는 alarm/notification 모듈까지 포함한다. 모듈 경계를
 // 넘지만 로그 경계는 프로세스 단위라, plane 안에서만 닫으면 한 콜 뒤에서 평문이 그대로 나간다.
+// cache/delivery/lease는 alarm이 부르는 Valkey 하부라, plain string 파라미터를 받는 순간 taint가
+// 끊긴다. 값 추적 대신 "이 root 안에서는 key/field 리터럴 금지"라는 key 이름 규칙으로 닫는다.
 var scannedRoots = []string{
 	"../..",
 	"../../../../../../hololive-shared/pkg/service/alarm",
 	"../../../../../../hololive-shared/pkg/service/notification",
+	"../../../../../../hololive-shared/pkg/service/cache",
+	"../../../../../../hololive-shared/pkg/service/delivery",
+	"../../../../../../hololive-shared/pkg/service/lease",
 }
 
 var bannedLogAttrKeys = map[string]string{
@@ -34,8 +39,10 @@ var bannedLogAttrKeys = map[string]string{
 // 이 key들은 값 자체가 비-canonical일 수 있어 privacylog 헬퍼만 만들 수 있다. key 이름 재도입이
 // 아니라 "허용 key에 실린 raw 값"이 이번 회귀의 본체라, literal key 사용 자체를 금지한다.
 var privacylogOnlyAttrKeys = map[string]string{
-	KeyRoomID: "privacylog.RoomIDAttr/RoomAttr",
-	KeyChatID: "privacylog.ChatIDAttr/ChatAttr",
+	KeyRoomID:     "privacylog.RoomIDAttr/RoomAttr",
+	KeyChatID:     "privacylog.ChatIDAttr/ChatAttr",
+	KeyCacheKey:   "privacylog.CacheKeyAttr",
+	KeyCacheField: "privacylog.CacheFieldAttr",
 }
 
 var slogAttrConstructors = map[string]struct{}{
@@ -77,7 +84,7 @@ func TestBotPlaneLogCallsitesRejectBannedAttrKeys(t *testing.T) {
 		t.Error(report)
 	}
 
-	for _, canary := range []string{"user_id", "command", "message_len", "channel_id"} {
+	for _, canary := range []string{"user_id", "command", "message_len", "channel_id", "pool_size", "lease"} {
 		if _, ok := seen[canary]; !ok {
 			t.Fatalf("canonical key %q was not collected; the scan is not reading log callsites", canary)
 		}
@@ -115,6 +122,17 @@ func attrKeyViolations(uses []logAttrKeyUse) []string {
 	}
 
 	return reports
+}
+
+func TestPrivacylogOwnedAttrKeysStayRestricted(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{KeyRoomID, KeyChatID, KeyCacheKey, KeyCacheField} {
+		if _, restricted := privacylogOnlyAttrKeys[key]; !restricted {
+			t.Errorf("attr key %q is built by a privacylog helper but is absent from privacylogOnlyAttrKeys; "+
+				"a raw literal on this key would carry Kakao plaintext past this gate unreported", key)
+		}
+	}
 }
 
 func TestScannerCatchesEveryBypassShape(t *testing.T) {

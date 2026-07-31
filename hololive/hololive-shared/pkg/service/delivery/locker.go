@@ -28,6 +28,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/park285/shared-go/pkg/json"
+
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 // lockCache: *cache.Service가 만족하는 최소 인터페이스
@@ -70,7 +72,7 @@ func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey strin
 	if err != nil {
 		// Valkey 장애 시 graceful degradation: 락 없이 진행
 		l.logger.Warn("Lock SetNX failed, proceeding without lock",
-			slog.String("key", lockKey),
+			privacylog.CacheKeyAttr(lockKey),
 			slog.String("error", err.Error()))
 		return token, true, nil
 	}
@@ -88,13 +90,13 @@ func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token s
 	deleted, err := l.cache.CompareAndDelete(ctx, lockKey, value)
 	if err != nil {
 		l.logger.Warn("Lock CompareAndDelete failed during release",
-			slog.String("key", lockKey),
+			privacylog.CacheKeyAttr(lockKey),
 			slog.String("error", err.Error()))
 		return nil
 	}
 	if !deleted {
 		l.logger.Debug("Lock owned by another instance, skipping release",
-			slog.String("key", lockKey))
+			privacylog.CacheKeyAttr(lockKey))
 	}
 	return nil
 }
@@ -104,7 +106,7 @@ func (l *valkeyNotificationLocker) ClaimRoom(ctx context.Context, claimKey strin
 	if err != nil {
 		// Valkey 장애 시 graceful degradation: claim 없이 진행
 		l.logger.Warn("Room claim SetNX failed, proceeding",
-			slog.String("key", claimKey),
+			privacylog.CacheKeyAttr(claimKey),
 			slog.String("error", err.Error()))
 		return true, nil
 	}

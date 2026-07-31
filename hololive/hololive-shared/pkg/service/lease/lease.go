@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/park285/shared-go/pkg/retry"
 )
@@ -67,7 +68,7 @@ func Acquire(ctx context.Context, cacheClient cache.Client, spec *Spec, logger *
 		return nil, fmt.Errorf("acquire lease: setnx: %w", err)
 	}
 	if !acquired {
-		return nil, fmt.Errorf("acquire lease: %w: key=%s", ErrHeld, l.key)
+		return nil, fmt.Errorf("acquire lease: %w: key=%s", ErrHeld, privacylog.RedactCacheKey(l.key))
 	}
 	return l, nil
 }
@@ -135,7 +136,7 @@ func (l *Lease) renewOnce(ctx context.Context) error {
 		return fmt.Errorf("renew lease: %w", err)
 	}
 	if !renewed {
-		return fmt.Errorf("renew lease: %w: key=%s", ErrOwnershipLost, l.key)
+		return fmt.Errorf("renew lease: %w: key=%s", ErrOwnershipLost, privacylog.RedactCacheKey(l.key))
 	}
 	return nil
 }
@@ -146,7 +147,7 @@ func (l *Lease) logRenewRetry(attempt int, err error, delay time.Duration) {
 	}
 	l.logger.Warn("lease renew retrying",
 		slog.String("lease", l.name),
-		slog.String("key", l.key),
+		privacylog.CacheKeyAttr(l.key),
 		slog.Int("attempt", attempt),
 		slog.Duration("delay", delay),
 		slog.Any("error", err),
@@ -190,7 +191,7 @@ func (l *Lease) Release(ctx context.Context) error {
 		return fmt.Errorf("release lease: compare-and-delete: %w", err)
 	}
 	if !released {
-		return fmt.Errorf("release lease: ownership mismatch: key=%s", l.key)
+		return fmt.Errorf("release lease: ownership mismatch: key=%s", privacylog.RedactCacheKey(l.key))
 	}
 	return nil
 }

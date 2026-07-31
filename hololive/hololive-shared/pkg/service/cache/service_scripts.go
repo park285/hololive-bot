@@ -7,6 +7,8 @@ import (
 	"math"
 	"strconv"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 // compareAndDeleteScript: 원자적 compare-and-delete Lua 스크립트
@@ -22,7 +24,7 @@ func (c *Service) CompareAndDelete(ctx context.Context, key, expectedValue strin
 	cmd := c.client.B().Eval().Script(compareAndDeleteScript).Numkeys(1).Key(key).Arg(expectedValue).Build()
 	resp := c.client.Do(ctx, cmd)
 	if resp.Error() != nil {
-		c.logger.Error("Cache compare-and-delete failed", slog.String("key", key), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache compare-and-delete failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
 		return false, NewCacheError("cas", key, resp.Error())
 	}
 
@@ -61,7 +63,7 @@ func (c *Service) CompareAndExpire(ctx context.Context, key, expectedValue strin
 		Build()
 	resp := c.client.Do(ctx, cmd)
 	if resp.Error() != nil {
-		c.logger.Error("Cache compare-and-expire failed", slog.String("key", key), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache compare-and-expire failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
 		return false, NewCacheError("cas-expire", key, resp.Error())
 	}
 

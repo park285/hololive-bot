@@ -10,6 +10,7 @@ import (
 	"github.com/park285/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -25,7 +26,7 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 	}
 	if dest != nil {
 		if err := json.Unmarshal([]byte(value), dest); err != nil {
-			c.logger.Error("Cache value unmarshal failed", slog.String("key", key), slog.Any("error", err))
+			c.logger.Error("Cache value unmarshal failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 			return true, NewCacheError("get", key, err)
 		}
 	}
@@ -38,13 +39,13 @@ func (c *Service) GetString(ctx context.Context, key string) (value0 string, ok1
 		return "", false, nil
 	}
 	if resp.Error() != nil {
-		c.logger.Error("Cache get operation failed", slog.String("key", key), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache get operation failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
 		return "", false, NewCacheError("get", key, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
-		c.logger.Error("Cache value conversion failed", slog.String("key", key), slog.Any("error", err))
+		c.logger.Error("Cache value conversion failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 		return "", false, NewCacheError("get", key, err)
 	}
 	return value, true, nil
@@ -111,7 +112,7 @@ func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Durat
 	}
 
 	if err := c.client.Do(ctx, cmd).Error(); err != nil {
-		c.logger.Error("Cache set failed", slog.String("key", key), slog.Any("error", err))
+		c.logger.Error("Cache set failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 		return NewCacheError("set", key, err)
 	}
 
@@ -154,7 +155,7 @@ func (c *Service) msetCommands(pairs map[string]any, ttl time.Duration) ([]valke
 func (c *Service) msetCommand(key string, value any, ttl time.Duration) (valkey.Completed, error) {
 	jsonData, err := json.Marshal(value)
 	if err != nil {
-		c.logger.Error("Failed to marshal value for MSet", slog.String("key", key), slog.Any("error", err))
+		c.logger.Error("Failed to marshal value for MSet", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 		return valkey.Completed{}, NewCacheError("mset", key, err)
 	}
 
@@ -171,7 +172,7 @@ func (c *Service) msetCommand(key string, value any, ttl time.Duration) (valkey.
 
 func (c *Service) Del(ctx context.Context, key string) error {
 	if err := c.client.Do(ctx, c.client.B().Del().Key(key).Build()).Error(); err != nil {
-		c.logger.Error("Cache delete failed", slog.String("key", key), slog.Any("error", err))
+		c.logger.Error("Cache delete failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 		return NewCacheError("del", key, err)
 	}
 	return nil
@@ -245,7 +246,7 @@ func (c *Service) Expire(ctx context.Context, key string, ttl time.Duration) err
 		return NewCacheError("expire", key, err)
 	}
 	if err := c.client.Do(ctx, c.client.B().Expire().Key(key).Seconds(ttlSeconds).Build()).Error(); err != nil {
-		c.logger.Error("Cache expire failed", slog.String("key", key), slog.Any("error", err))
+		c.logger.Error("Cache expire failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 		return NewCacheError("expire", key, err)
 	}
 	return nil
@@ -254,7 +255,7 @@ func (c *Service) Expire(ctx context.Context, key string, ttl time.Duration) err
 func (c *Service) Exists(ctx context.Context, key string) (bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Exists().Key(key).Build())
 	if resp.Error() != nil {
-		c.logger.Error("Cache exists failed", slog.String("key", key), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache exists failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
 		return false, NewCacheError("exists", key, resp.Error())
 	}
 
@@ -284,7 +285,7 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 		return false, nil // 키가 이미 존재 - 락 획득 실패
 	}
 	if resp.Error() != nil {
-		c.logger.Error("Cache setnx failed", slog.String("key", key), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache setnx failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
 		return false, NewCacheError("setnx", key, resp.Error())
 	}
 

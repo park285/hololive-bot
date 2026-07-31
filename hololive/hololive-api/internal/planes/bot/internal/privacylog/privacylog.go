@@ -28,8 +28,10 @@ import (
 )
 
 const (
-	KeyRoomID = sharedprivacylog.KeyRoomID
-	KeyChatID = sharedprivacylog.KeyChatID
+	KeyRoomID     = sharedprivacylog.KeyRoomID
+	KeyChatID     = sharedprivacylog.KeyChatID
+	KeyCacheKey   = sharedprivacylog.KeyCacheKey
+	KeyCacheField = sharedprivacylog.KeyCacheField
 
 	UnknownToken    = sharedprivacylog.UnknownToken
 	PseudonymPrefix = sharedprivacylog.PseudonymPrefix

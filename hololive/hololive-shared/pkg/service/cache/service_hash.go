@@ -7,12 +7,13 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func (c *Service) HSet(ctx context.Context, key, field, value string) error {
 	if err := c.client.Do(ctx, c.client.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()).Error(); err != nil {
-		c.logger.Error("Cache hset failed", slog.String("key", key), slog.String("field", field), slog.Any("error", err))
+		c.logger.Error("Cache hset failed", privacylog.CacheKeyAttr(key), privacylog.CacheFieldAttr(key, field), slog.Any("error", err))
 		return NewCacheError("hset", key, err)
 	}
 	return nil
@@ -29,7 +30,7 @@ func (c *Service) HMSet(ctx context.Context, key string, fields map[string]any) 
 	}
 
 	if err := c.client.Do(ctx, builder.Build()).Error(); err != nil {
-		c.logger.Error("Cache hmset failed", slog.String("key", key), slog.Int("fields", len(fields)), slog.Any("error", err))
+		c.logger.Error("Cache hmset failed", privacylog.CacheKeyAttr(key), slog.Int("fields", len(fields)), slog.Any("error", err))
 		return NewCacheError("hmset", key, err)
 	}
 	return nil
@@ -41,7 +42,7 @@ func (c *Service) HGet(ctx context.Context, key, field string) (string, error) {
 		return "", nil // 필드가 존재하지 않음 - 에러 아님
 	}
 	if resp.Error() != nil {
-		c.logger.Error("Cache hash get failed", slog.String("key", key), slog.String("field", field), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache hash get failed", privacylog.CacheKeyAttr(key), privacylog.CacheFieldAttr(key, field), slog.Any("error", resp.Error()))
 		return "", NewCacheError("hget", key, resp.Error())
 	}
 
@@ -83,7 +84,7 @@ func (c *Service) batchHGetValue(key string, result valkey.ValkeyResult) (value0
 		if util.IsValkeyNil(err) {
 			return "", false, nil
 		}
-		c.logger.Error("Cache batch hget failed", slog.String("key", key), slog.Any("error", err))
+		c.logger.Error("Cache batch hget failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 		return "", false, NewCacheError("hget", key, err)
 	}
 
@@ -100,7 +101,7 @@ func (c *Service) HDel(ctx context.Context, key string, fields ...string) error 
 	}
 	cmd := c.client.B().Hdel().Key(key).Field(fields...).Build()
 	if err := c.client.Do(ctx, cmd).Error(); err != nil {
-		c.logger.Error("Cache hdel failed", slog.String("key", key), slog.Int("fields", len(fields)), slog.Any("error", err))
+		c.logger.Error("Cache hdel failed", privacylog.CacheKeyAttr(key), slog.Int("fields", len(fields)), slog.Any("error", err))
 		return NewCacheError("hdel", key, err)
 	}
 	return nil
@@ -109,7 +110,7 @@ func (c *Service) HDel(ctx context.Context, key string, fields ...string) error 
 func (c *Service) HGetAll(ctx context.Context, key string) (map[string]string, error) {
 	resp := c.client.Do(ctx, c.client.B().Hgetall().Key(key).Build())
 	if resp.Error() != nil {
-		c.logger.Error("Cache hgetall failed", slog.String("key", key), slog.Any("error", resp.Error()))
+		c.logger.Error("Cache hgetall failed", privacylog.CacheKeyAttr(key), slog.Any("error", resp.Error()))
 		return map[string]string{}, NewCacheError("hgetall", key, resp.Error())
 	}
 

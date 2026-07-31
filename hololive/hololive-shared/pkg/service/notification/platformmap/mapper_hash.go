@@ -9,6 +9,8 @@ import (
 
 	"github.com/park285/shared-go/pkg/stringutil"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const platformMapTempKeySeparator = ":tmp:"
@@ -78,7 +80,8 @@ func (m *Mapper) replaceHashMappings(
 
 func (m *Mapper) deleteTempMappingKey(ctx context.Context, tmpKey string) {
 	if err := m.cache.Del(ctx, tmpKey); err != nil && m.logger != nil {
-		m.logger.Warn("delete temp platform mapping key failed", "key", tmpKey, "error", err)
+		m.logger.Warn("delete temp platform mapping key failed",
+			privacylog.CacheKeyAttr(tmpKey), slog.String("error", err.Error()))
 	}
 }
 

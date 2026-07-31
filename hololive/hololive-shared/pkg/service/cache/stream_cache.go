@@ -26,12 +26,13 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (c *Service) GetStreams(ctx context.Context, key string) ([]*domain.Stream, bool) {
 	var streams []*domain.Stream
 	if err := c.Get(ctx, key, &streams); err != nil {
-		c.logger.Debug("Cache miss or error", slog.String("key", key))
+		c.logger.Debug("Cache miss or error", privacylog.CacheKeyAttr(key))
 		return nil, false
 	}
 
@@ -44,6 +45,6 @@ func (c *Service) GetStreams(ctx context.Context, key string) ([]*domain.Stream,
 
 func (c *Service) SetStreams(ctx context.Context, key string, streams []*domain.Stream, ttl time.Duration) {
 	if err := c.Set(ctx, key, streams, ttl); err != nil {
-		c.logger.Error("Failed to cache streams", slog.String("key", key), slog.Any("error", err))
+		c.logger.Error("Failed to cache streams", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 	}
 }

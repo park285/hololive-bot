@@ -20,7 +20,11 @@
 
 package cache
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/kapu/hololive-shared/pkg/privacylog"
+)
 
 type CacheError struct {
 	Operation string // get, set, delete 등
@@ -28,18 +32,22 @@ type CacheError struct {
 	Err       error  // 원인 에러
 }
 
+// Key는 원문을 유지한다. 이 에러는 상위 plane에서 slog.Any("error", …)로 그대로 실려나가므로
+// 문자열 표현만 비식별화한다.
 func (e *CacheError) Error() string {
+	loggableKey := privacylog.RedactCacheKey(e.Key)
+
 	if e.Err == nil {
 		if e.Key == "" {
 			return fmt.Sprintf("cache: %s", e.Operation)
 		}
-		return fmt.Sprintf("cache: %s: key=%s", e.Operation, e.Key)
+		return fmt.Sprintf("cache: %s: key=%s", e.Operation, loggableKey)
 	}
 
 	if e.Key == "" {
 		return fmt.Sprintf("cache: %s: %v", e.Operation, e.Err)
 	}
-	return fmt.Sprintf("cache: %s: key=%s: %v", e.Operation, e.Key, e.Err)
+	return fmt.Sprintf("cache: %s: key=%s: %v", e.Operation, loggableKey, e.Err)
 }
 
 func (e *CacheError) Unwrap() error { return e.Err }
