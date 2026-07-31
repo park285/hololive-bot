@@ -22,11 +22,12 @@ package orchestration
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
@@ -35,8 +36,30 @@ import (
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 )
 
-// HTTP webhook 핸들러에서 호출하기 위해 public으로 노출됩니다.
-func (b *Bot) HandleMessage(ctx context.Context, message *webhook.Message) {
+var ErrCommandOutcomeUnknown = errors.New("command execution outcome unknown")
+
+type commandOutcomeUnknownError struct{ cause error }
+
+func (e commandOutcomeUnknownError) Error() string {
+	return fmt.Sprintf("%s: %v", ErrCommandOutcomeUnknown, e.cause)
+}
+func (e commandOutcomeUnknownError) Unwrap() error        { return e.cause }
+func (e commandOutcomeUnknownError) Is(target error) bool { return target == ErrCommandOutcomeUnknown }
+
+func IsCommandOutcomeUnknown(err error) bool { return errors.Is(err, ErrCommandOutcomeUnknown) }
+
+func commandOutcome(err error) error {
+	if err == nil || IsCommandOutcomeUnknown(err) {
+		return err
+	}
+	if errors.Is(err, transport.ErrReplyStagingFailed) || errors.Is(err, transport.ErrReplyOutcomeUnknown) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return commandOutcomeUnknownError{cause: err}
+	}
+	return err
+}
+
+func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (resultErr error) {
 	commandType := "unknown"
 
 	defer func() {
@@ -45,12 +68,13 @@ func (b *Bot) HandleMessage(ctx context.Context, message *webhook.Message) {
 				slog.Any("panic", r),
 				slog.String("command", commandType),
 			)
+			resultErr = commandOutcomeUnknownError{cause: fmt.Errorf("process bot command: panic: %v", r)}
 		}
 	}()
 
 	envelope, ok := b.ensureIngress().Prepare(ctx, message)
 	if !ok {
-		return
+		return nil
 	}
 
 	commandType = envelope.CommandType
@@ -60,19 +84,23 @@ func (b *Bot) HandleMessage(ctx context.Context, message *webhook.Message) {
 	cmdCtx.MessageID = canonicalReplyIdentity(message)
 	if cmdCtx.MessageID == "" {
 		b.rejectWithoutReplyIdentity(ctx, envelope, commandType)
-		return
+		return nil
 	}
 
 	reqCtx := commandRequestContext(ctx, cmdCtx)
 
-	if orchcmd.ShouldExecuteAsync(envelope.Parsed.Type) {
-		b.executeCommandAsync(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params, commandType, envelope.ChatID)
-		return
-	}
-
 	if err := b.executeCommand(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
-		b.handleCommandExecutionError(reqCtx, envelope.ChatID, commandType, err)
+		responseErr := b.handleCommandExecutionError(reqCtx, envelope.ChatID, commandType, err)
+		if responseErr != nil {
+			return commandOutcomeUnknownError{cause: errors.Join(err, responseErr)}
+		}
+		return commandOutcome(err)
 	}
+	return nil
+}
+
+func (b *Bot) executeCommand(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
+	return b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params)
 }
 
 func newCommandContextFromIngress(envelope *ingress.Envelope) *domain.CommandContext {
@@ -125,13 +153,13 @@ func (b *Bot) rejectWithoutReplyIdentity(ctx context.Context, envelope *ingress.
 	)
 }
 
-func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) {
+func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) error {
 	errorMsg := b.getErrorMessage(err)
 	if chatID == "" {
-		return
+		return nil
 	}
 	if b.skipErrorResponseOnUnknownOutcome(ctx, chatID, commandType, err) {
-		return
+		return nil
 	}
 	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
 		errorAttrs := sharedlog.ErrorAttrs(sendErr)
@@ -142,5 +170,7 @@ func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandTy
 		)
 		attrs = append(attrs, errorAttrs...)
 		sharedlog.Error(ctx, b.logger, EventBotCommandErrorResponseFailed, "failed to send command error response", attrs...)
+		return sendErr
 	}
+	return nil
 }

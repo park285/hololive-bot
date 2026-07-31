@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -35,12 +36,18 @@ import (
 )
 
 var (
-	replyOutboxInsertSQL         = mustSQL("reply_outbox_insert.sql")
-	replyOutboxConflictSQL       = mustSQL("reply_outbox_conflict.sql")
-	replyOutboxClaimSQL          = mustSQL("reply_outbox_claim.sql")
-	replyOutboxMarkAcceptedSQL   = mustSQL("reply_outbox_mark_accepted.sql")
-	replyOutboxSettleSQL         = mustSQL("reply_outbox_settle.sql")
-	replyOutboxReclaimExpiredSQL = mustSQL("reply_outbox_reclaim_expired.sql")
+	replyOutboxInsertSQL             = mustSQL("reply_outbox_insert.sql")
+	replyOutboxConflictSQL           = mustSQL("reply_outbox_conflict.sql")
+	replyOutboxClaimSQL              = mustSQL("reply_outbox_claim.sql")
+	replyOutboxMarkAcceptedSQL       = mustSQL("reply_outbox_mark_accepted.sql")
+	replyOutboxSettleSQL             = mustSQL("reply_outbox_settle.sql")
+	replyOutboxReclaimExpiredSQL     = mustSQL("reply_outbox_reclaim_expired.sql")
+	replyOutboxManualReviewStatsSQL  = mustSQL("reply_outbox_manual_review_stats.sql")
+	replyOutboxReplayManualReviewSQL = strings.NewReplacer(
+		":'outbox_id'", "$1",
+		":'operator_actor'", "$2",
+		":'operator_reason'", "$3",
+	).Replace(mustSQL("reply_outbox_replay_manual_review.sql"))
 )
 
 type ReplyOutboxInsertOutcome int
@@ -67,6 +74,9 @@ func (o ReplyOutboxInsertOutcome) String() string {
 const (
 	replyOutboxStatusSubmitting = "submitting"
 	replyOutboxStatusAccepted   = "accepted"
+
+	ReplyOutboxMaxAttempts            = int32(5)
+	ReplyOutboxAutomaticReplayHorizon = 144 * time.Hour
 )
 
 const (
@@ -115,6 +125,7 @@ type ReplyOutboxSettlement struct {
 	ClaimToken string
 	Status     string
 	LastError  string
+	RetryAfter time.Duration
 }
 
 type ReplyOutboxRepository struct {
@@ -151,7 +162,7 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 		normalized.ClientRequestID,
 	)
 	if err != nil {
-		return ReplyOutboxInserted, fmt.Errorf("insert reply outbox row %q: %w", normalized.ClientRequestID, err)
+		return ReplyOutboxInserted, safeMessageRepositoryError("insert reply outbox row", normalized.MessageID, err)
 	}
 	if tag.RowsAffected() == 1 {
 		return ReplyOutboxInserted, nil
@@ -169,7 +180,7 @@ func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, ent
 		Scan(&recordedHash, &recordedClientRequestID)
 	if err != nil {
 		return ReplyOutboxAlreadyRecorded,
-			fmt.Errorf("inspect reply outbox row %q: %w", entry.ClientRequestID, err)
+			safeMessageRepositoryError("inspect reply outbox row", entry.MessageID, err)
 	}
 
 	if recordedHash != payloadHash || recordedClientRequestID != entry.ClientRequestID {
@@ -194,7 +205,11 @@ func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, le
 	}
 
 	var claim ReplyOutboxClaim
-	row := r.pool.QueryRow(ctx, replyOutboxClaimSQL, token, leaseMS)
+	replayHorizonMS, err := leaseMilliseconds(ReplyOutboxAutomaticReplayHorizon)
+	if err != nil {
+		return nil, err
+	}
+	row := r.pool.QueryRow(ctx, replyOutboxClaimSQL, token, leaseMS, ReplyOutboxMaxAttempts, replayHorizonMS)
 	err = row.Scan(&claim.ID, &claim.MessageID, &claim.Phase, &claim.Ordinal,
 		&claim.RoomID, &claim.Payload, &claim.ClientRequestID, &claim.Attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -243,8 +258,12 @@ func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutb
 		return false, errors.Join(ErrInvalidArgument, fmt.Errorf("unsupported reply outbox settle status %q", settlement.Status))
 	}
 
+	retryMS, err := replyOutboxRetryMilliseconds(settlement)
+	if err != nil {
+		return false, err
+	}
 	tag, err := r.pool.Exec(ctx, replyOutboxSettleSQL, settlement.ID, token, settlement.Status,
-		clampColumnText(settlement.LastError, lastErrorByteLimit), sources)
+		clampColumnText(settlement.LastError, lastErrorByteLimit), sources, retryMS)
 	if err != nil {
 		return false, fmt.Errorf("settle reply outbox row %d: %w", settlement.ID, err)
 	}
@@ -252,9 +271,68 @@ func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutb
 	return tag.RowsAffected() == 1, nil
 }
 
+func replyOutboxRetryMilliseconds(settlement ReplyOutboxSettlement) (int64, error) {
+	if settlement.Status != ReplyOutboxRetryablePreDispatch && settlement.Status != ReplyOutboxOutcomeUnknown {
+		return 0, nil
+	}
+	if settlement.RetryAfter <= 0 {
+		settlement.RetryAfter = time.Millisecond
+	}
+	return leaseMilliseconds(settlement.RetryAfter)
+}
+
+type ReplyOutboxManualReviewStats struct {
+	Backlog   int64
+	OldestAge time.Duration
+}
+
+type ReplyOutboxManualReplay struct {
+	OutboxID int64
+	Actor    string
+	Reason   string
+}
+
+func (r *ReplyOutboxRepository) ReplayManualReview(ctx context.Context, replay ReplyOutboxManualReplay) (string, error) {
+	if err := ensurePool(r.pool); err != nil {
+		return "", err
+	}
+	if replay.OutboxID <= 0 {
+		return "", errors.Join(ErrInvalidArgument, errors.New("outbox id must be positive"))
+	}
+	actor, err := requireOperatorActor(replay.Actor)
+	if err != nil {
+		return "", err
+	}
+	reason, err := requireOperatorReason(replay.Reason)
+	if err != nil {
+		return "", err
+	}
+	var outcome string
+	err = r.pool.QueryRow(ctx, replyOutboxReplayManualReviewSQL, replay.OutboxID, actor, reason).Scan(&outcome)
+	if err != nil {
+		return "", fmt.Errorf("replay manual-review reply outbox row %d: %w", replay.OutboxID, err)
+	}
+	return outcome, nil
+}
+
+func (r *ReplyOutboxRepository) ManualReviewStats(ctx context.Context) (ReplyOutboxManualReviewStats, error) {
+	if err := ensurePool(r.pool); err != nil {
+		return ReplyOutboxManualReviewStats{}, err
+	}
+	var stats ReplyOutboxManualReviewStats
+	var oldestSeconds float64
+	err := r.pool.QueryRow(ctx, replyOutboxManualReviewStatsSQL).Scan(&stats.Backlog, &oldestSeconds)
+	if err != nil {
+		return ReplyOutboxManualReviewStats{}, fmt.Errorf("observe reply outbox manual review backlog: %w", err)
+	}
+	stats.OldestAge = time.Duration(oldestSeconds * float64(time.Second))
+	return stats, nil
+}
+
 type ReplyOutboxReclaim struct {
-	Requeued int64
-	Absorbed int64
+	Requeued             int64
+	AcceptedManualReview int64
+	SafetyManualReview   int64
 }
 
 func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize int32) (ReplyOutboxReclaim, error) {
@@ -266,8 +344,12 @@ func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize in
 	}
 
 	var reclaim ReplyOutboxReclaim
-	err := r.pool.QueryRow(ctx, replyOutboxReclaimExpiredSQL, batchSize).
-		Scan(&reclaim.Requeued, &reclaim.Absorbed)
+	replayHorizonMS, err := leaseMilliseconds(ReplyOutboxAutomaticReplayHorizon)
+	if err != nil {
+		return ReplyOutboxReclaim{}, err
+	}
+	err = r.pool.QueryRow(ctx, replyOutboxReclaimExpiredSQL, batchSize, ReplyOutboxMaxAttempts, replayHorizonMS).
+		Scan(&reclaim.Requeued, &reclaim.AcceptedManualReview, &reclaim.SafetyManualReview)
 	if err != nil {
 		return ReplyOutboxReclaim{}, fmt.Errorf("reclaim expired reply outbox leases: %w", err)
 	}

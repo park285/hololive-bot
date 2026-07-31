@@ -9,6 +9,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
 
 compose_file_resolve_path() {
     local file="$1"
@@ -183,6 +184,7 @@ compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
 compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
+postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}"
 
 HOLO_API_VERSION="$(xargs <hololive/hololive-api/VERSION 2>/dev/null || printf '%s' dev)"
 HOLO_ALARM_WORKER_VERSION="$(xargs <hololive/hololive-alarm-worker/VERSION 2>/dev/null || printf '%s' "${HOLO_API_VERSION}")"

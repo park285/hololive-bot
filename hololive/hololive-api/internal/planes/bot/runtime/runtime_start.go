@@ -30,6 +30,9 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {
 		return
 	}
+	if r.durable != nil {
+		r.durable.Start(ctx)
+	}
 
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:     r.Logger,

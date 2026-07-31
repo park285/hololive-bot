@@ -7,7 +7,6 @@ const (
 	EventBotCommandExecuteStarted      = "bot.command.execute.started"
 	EventBotCommandExecuteSucceeded    = "bot.command.execute.succeeded"
 	EventBotCommandExecuteFailed       = "bot.command.execute.failed"
-	EventBotCommandAsyncRejected       = "bot.command.async.rejected"
 	EventBotCommandPanic               = "bot.command.panic"
 	EventBotCommandErrorResponseFailed = "bot.command.error_response.failed"
 	EventBotReplyOutcomeUnknown        = "bot.reply.outcome_unknown"

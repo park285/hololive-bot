@@ -51,6 +51,12 @@ func TestCommandExecutionRepository(t *testing.T) {
 			"SELECT count(message_id) FROM bot_command_executions WHERE message_id = $1", messageID,
 		).Scan(&count))
 		assert.Equal(t, 1, count)
+
+		state, err := repo.State(ctx, messageID)
+		require.NoError(t, err)
+		require.NotNil(t, state)
+		assert.Equal(t, CommandExecutionClaimed, state.Status)
+		assert.False(t, state.ClaimedAt.IsZero())
 	})
 
 	t.Run("complete transitions a claimed execution exactly once", func(t *testing.T) {
@@ -59,11 +65,11 @@ func TestCommandExecutionRepository(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, claimed)
 
-		applied, err := repo.Complete(ctx, messageID, "token-a", CommandExecutionSucceeded, "ok")
+		applied, err := repo.Complete(ctx, messageID, "token-a", CommandExecutionSucceeded)
 		require.NoError(t, err)
 		assert.True(t, applied)
 
-		applied, err = repo.Complete(ctx, messageID, "token-a", CommandExecutionFailed, "late")
+		applied, err = repo.Complete(ctx, messageID, "token-a", CommandExecutionFailed)
 		require.NoError(t, err)
 		assert.False(t, applied, "terminal execution must not transition twice")
 
@@ -72,13 +78,13 @@ func TestCommandExecutionRepository(t *testing.T) {
 			"SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1", messageID,
 		).Scan(&status, &summary))
 		assert.Equal(t, CommandExecutionSucceeded, status)
-		assert.Equal(t, "ok", summary)
+		assert.Equal(t, CommandExecutionSucceeded, summary)
 	})
 
 	t.Run("complete rejects statuses outside the ledger vocabulary", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 
-		_, err := repo.Complete(ctx, messageID, "token-a", "claimed", "")
+		_, err := repo.Complete(ctx, messageID, "token-a", "claimed")
 		require.ErrorIs(t, err, ErrInvalidArgument)
 	})
 
@@ -92,5 +98,8 @@ func TestCommandExecutionRepositoryWithoutPool(t *testing.T) {
 	repo := NewCommandExecutionRepository(nil)
 
 	_, err := repo.Claim(context.Background(), "message:m-1", "broadcast_history", "token-a")
+	require.ErrorIs(t, err, ErrPoolNotConfigured)
+
+	_, err = repo.State(context.Background(), "message:m-1")
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
 }

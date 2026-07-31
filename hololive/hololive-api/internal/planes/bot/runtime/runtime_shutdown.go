@@ -22,20 +22,17 @@ package botruntime
 
 import (
 	"context"
+	"errors"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
-func (r *BotRuntime) closeWebhook() error {
+func (r *BotRuntime) closeWebhook(ctx context.Context) error {
 	if r.webhookHandlerCloser == nil {
 		return nil
 	}
-	err := r.webhookHandlerCloser.Close()
-	if r.webhookPool != nil {
-		r.webhookPool.StopAndWait()
-	}
-	return err
+	return r.webhookHandlerCloser.CloseContext(ctx)
 }
 
 func (r *BotRuntime) Shutdown(ctx context.Context) {
@@ -46,7 +43,7 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 	applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger:                r.Logger,
 		ShutdownHTTPServer:    r.ShutdownHTTPServer,
-		WebhookHandlerClose:   r.closeWebhook,
+		WebhookHandlerClose:   func() error { return r.shutdownWebhookAndDurability(ctx) },
 		ShutdownAlarmServices: alarmservice.CloseAllAlarmServices,
 		ShutdownBot: func(ctx context.Context) error {
 			if r.Bot == nil {
@@ -55,4 +52,12 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 			return r.Bot.Shutdown(ctx)
 		},
 	})
+}
+
+func (r *BotRuntime) shutdownWebhookAndDurability(ctx context.Context) error {
+	closeErr := r.closeWebhook(ctx)
+	if r.durable == nil {
+		return closeErr
+	}
+	return errors.Join(closeErr, r.durable.Stop(ctx))
 }

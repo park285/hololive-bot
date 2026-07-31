@@ -186,14 +186,12 @@ func TestNextReplyClientRequestID(t *testing.T) {
 		seen := make(map[string]struct{}, emissions)
 
 		for range emissions {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				id := nextReplyClientRequestID(ctx)
 				mu.Lock()
 				defer mu.Unlock()
 				seen[id] = struct{}{}
-			}()
+			})
 		}
 		wg.Wait()
 

@@ -1,6 +1,6 @@
 import Save from "lucide-react/dist/esm/icons/save.mjs";
 import Video from "lucide-react/dist/esm/icons/video.mjs";
-import { type SyntheticEvent, useEffect, useMemo, useState } from "react";
+import { type SyntheticEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -25,6 +25,7 @@ export default function ChannelEditModal({
 }: ChannelEditModalProps) {
 	const [channelId, setChannelId] = useState(currentChannelId);
 	const [error, setError] = useState("");
+	const channelIdInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
 		if (isOpen) {
@@ -43,6 +44,9 @@ export default function ChannelEditModal({
 
 		if (channelId.trim().length < 24) {
 			setError("채널 ID 형식이 올바르지 않습니다 (최소 24자).");
+			queueMicrotask(() => {
+				channelIdInputRef.current?.focus();
+			});
 			return;
 		}
 
@@ -59,7 +63,7 @@ export default function ChannelEditModal({
 
 	return (
 		<BaseModal isOpen={isOpen} onClose={onClose} title={title} showHeaderBorder>
-			<form onSubmit={handleSubmit} className="space-y-4">
+			<form onSubmit={handleSubmit} className="space-y-4" noValidate>
 				<div className="mb-4 space-y-2 rounded-lg border border-border-subtle bg-muted p-3">
 					<div className="flex justify-between text-sm">
 						<span className="text-muted-foreground">멤버 이름</span>
@@ -74,7 +78,11 @@ export default function ChannelEditModal({
 				<div className="space-y-2">
 					<Label htmlFor="channel-edit-input">YouTube 채널 ID</Label>
 					<Input
+						ref={channelIdInputRef}
 						id="channel-edit-input"
+						name="channelId"
+						autoComplete="off"
+						spellCheck={false}
 						value={channelId}
 						onChange={(event) => {
 							setChannelId(event.target.value);
@@ -83,9 +91,16 @@ export default function ChannelEditModal({
 						placeholder="UC…"
 						className="font-mono"
 						hasError={!!error}
+						aria-invalid={!!error}
+						aria-describedby={error ? "channel-edit-error" : undefined}
 					/>
 					{error && (
-						<p className="text-[0.8rem] font-medium text-destructive">
+						<p
+							id="channel-edit-error"
+							role="status"
+							aria-live="polite"
+							className="text-[0.8rem] font-medium text-destructive"
+						>
 							{error}
 						</p>
 					)}

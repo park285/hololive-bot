@@ -100,6 +100,14 @@ func RedactCacheField(key, field string) string {
 }
 
 func matchIdentifierKeyRule(key string) (identifierKeyRule, bool) {
+	matched, found := longestIdentifierKeyRule(key)
+	if !found || hasVerbatimKeyPrefix(key, len(matched.prefix)) {
+		return identifierKeyRule{}, false
+	}
+	return matched, true
+}
+
+func longestIdentifierKeyRule(key string) (identifierKeyRule, bool) {
 	var matched identifierKeyRule
 	found := false
 	for _, rule := range identifierKeyRules {
@@ -107,17 +115,16 @@ func matchIdentifierKeyRule(key string) (identifierKeyRule, bool) {
 			matched, found = rule, true
 		}
 	}
-	if !found {
-		return identifierKeyRule{}, false
-	}
+	return matched, found
+}
 
+func hasVerbatimKeyPrefix(key string, longerThan int) bool {
 	for _, prefix := range verbatimKeyPrefixes {
-		if len(prefix) > len(matched.prefix) && strings.HasPrefix(key, prefix) {
-			return identifierKeyRule{}, false
+		if len(prefix) > longerThan && strings.HasPrefix(key, prefix) {
+			return true
 		}
 	}
-
-	return matched, true
+	return false
 }
 
 func pseudonymizeLeadingSegments(remainder string, keepTrailing int) string {

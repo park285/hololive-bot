@@ -21,6 +21,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/removed-runtimes.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/health-gate.sh"
+. "${REPO_ROOT}/scripts/deploy/lib/postgres-capacity.sh"
 
 resolve_workspace_path() {
     local explicit_value="$1"
@@ -175,6 +176,7 @@ compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
 compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
+postgres_capacity_assert_target "${REPO_ROOT}" "${COMPOSE_ENV_FILE}"
 
 should_bump() {
     local dir_path="$1"

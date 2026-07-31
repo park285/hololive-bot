@@ -29,7 +29,7 @@ func TestAlarmAddedLogNeverCarriesRoomTitleOrNickname(t *testing.T) {
 	}, domain.AlarmTypes{"live"})
 
 	line := buffer.String()
-	for _, plaintext := range []string{roomTitle, nickname} {
+	for _, plaintext := range []string{roomTitle, nickname, "1234567890"} {
 		if strings.Contains(line, plaintext) {
 			t.Fatalf("alarm add log leaked %q: %s", plaintext, line)
 		}

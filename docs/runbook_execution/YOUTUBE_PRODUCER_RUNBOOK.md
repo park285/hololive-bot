@@ -22,7 +22,7 @@
 
 `docker-compose.prod.yml` 기준:
 - `youtube-producer`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`, `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=false`, `SERVER_PORT=30005`
-- `shared_go_workspace`: 기본값 `./shared-go` (필요 시 `SHARED_GO_WORKSPACE_PATH`로 override 가능)
+- container image는 `GOWORK=off`로 `hololive-youtube-producer/go.mod`의 published external pin을 사용합니다. `SHARED_GO_WORKSPACE_PATH`는 local CI source 검증에만 사용합니다.
 
 운영 기준:
 - YouTube 커뮤니티/쇼츠 알람 라우팅은 `youtube-producer` outbox row production과 `alarm-worker` final egress로 고정합니다.

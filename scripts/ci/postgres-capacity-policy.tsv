@@ -1,0 +1,8 @@
+# owner|compose service|service environment key|compose source key|instances|max default
+@server-limit|60
+bot|hololive-api|BOT_POSTGRES_POOL_MAX_CONNS|BOT_POSTGRES_POOL_MAX_CONNS|1|4
+admin-api|hololive-api|ADMIN_API_POSTGRES_POOL_MAX_CONNS|ADMIN_API_POSTGRES_POOL_MAX_CONNS|1|4
+llm-scheduler|hololive-api|LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS|LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS|1|4
+alarm-worker|hololive-alarm-worker|POSTGRES_POOL_MAX_CONNS|ALARM_WORKER_POSTGRES_POOL_MAX_CONNS|1|8
+youtube-producer|youtube-producer|POSTGRES_POOL_MAX_CONNS|YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS|4|8
+db-migrate|hololive-db-migrate|||1|1

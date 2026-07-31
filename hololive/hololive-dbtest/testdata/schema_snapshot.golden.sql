@@ -184,10 +184,12 @@ TABLE bot_command_executions
   CONSTRAINT chk_bot_command_executions_message_id_size CHECK (((length(message_id) > 0) AND (length(message_id) <= 512)))
   CONSTRAINT chk_bot_command_executions_result_summary_size CHECK ((octet_length(result_summary) <= 2048))
   CONSTRAINT chk_bot_command_executions_state_shape CHECK (((status = 'claimed'::text) OR (completed_at IS NOT NULL)))
-  CONSTRAINT chk_bot_command_executions_status_vocab CHECK ((status = ANY (ARRAY['claimed'::text, 'succeeded'::text, 'failed'::text])))
+  CONSTRAINT chk_bot_command_executions_status_vocab CHECK ((status = ANY (ARRAY['claimed'::text, 'succeeded'::text, 'failed'::text, 'outcome_unknown'::text])))
+  CONSTRAINT chk_bot_command_executions_terminal_summary_scrubbed CHECK (((status <> ALL (ARRAY['succeeded'::text, 'failed'::text, 'outcome_unknown'::text])) OR (result_summary = status)))
   CONSTRAINT bot_command_executions_pkey PRIMARY KEY (id)
   CONSTRAINT bot_command_executions_message_id_key UNIQUE (message_id)
   INDEX CREATE INDEX idx_bot_command_executions_status_claimed ON public.bot_command_executions USING btree (claimed_at, id) WHERE (status = 'claimed'::text)
+  INDEX CREATE INDEX idx_bot_command_executions_terminal_updated ON public.bot_command_executions USING btree (updated_at, id) WHERE (status = ANY (ARRAY['succeeded'::text, 'failed'::text, 'outcome_unknown'::text]))
 
 TABLE bot_reply_outbox
   COLUMN id bigint NOT NULL DEFAULT nextval('bot_reply_outbox_id_seq'::regclass)
@@ -207,11 +209,14 @@ TABLE bot_reply_outbox
   COLUMN last_error text NOT NULL DEFAULT ''::text
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN available_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN operator_replay_grants integer NOT NULL DEFAULT 0
   CONSTRAINT chk_bot_reply_outbox_attempts CHECK ((attempts >= 0))
   CONSTRAINT chk_bot_reply_outbox_client_request_id CHECK ((client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text))
   CONSTRAINT chk_bot_reply_outbox_iris_request_id_size CHECK ((length(iris_request_id) <= 256))
   CONSTRAINT chk_bot_reply_outbox_last_error_size CHECK ((octet_length(last_error) <= 8192))
   CONSTRAINT chk_bot_reply_outbox_message_id_size CHECK (((length(message_id) > 0) AND (length(message_id) <= 512)))
+  CONSTRAINT chk_bot_reply_outbox_operator_replay_grants CHECK ((operator_replay_grants >= 0))
   CONSTRAINT chk_bot_reply_outbox_ordinal CHECK ((ordinal >= 0))
   CONSTRAINT chk_bot_reply_outbox_payload_hash CHECK ((payload_hash ~ '^[0-9a-f]{64}$'::text))
   CONSTRAINT chk_bot_reply_outbox_phase_size CHECK (((length(phase) > 0) AND (length(phase) <= 32)))
@@ -221,9 +226,38 @@ TABLE bot_reply_outbox
   CONSTRAINT bot_reply_outbox_pkey PRIMARY KEY (id)
   CONSTRAINT bot_reply_outbox_client_request_id_key UNIQUE (client_request_id)
   CONSTRAINT bot_reply_outbox_message_id_phase_ordinal_key UNIQUE (message_id, phase, ordinal)
-  INDEX CREATE INDEX idx_bot_reply_outbox_due ON public.bot_reply_outbox USING btree (created_at, id) WHERE (status = ANY (ARRAY['pending'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text]))
+  INDEX CREATE INDEX idx_bot_reply_outbox_due_available ON public.bot_reply_outbox USING btree (available_at, id) WHERE (status = ANY (ARRAY['pending'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text]))
   INDEX CREATE INDEX idx_bot_reply_outbox_lease_expiry ON public.bot_reply_outbox USING btree (lease_until, id) WHERE (status = ANY (ARRAY['submitting'::text, 'accepted'::text]))
+  INDEX CREATE INDEX idx_bot_reply_outbox_manual_review_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = 'manual_review'::text)
   INDEX CREATE INDEX idx_bot_reply_outbox_message ON public.bot_reply_outbox USING btree (message_id, ordinal)
+  INDEX CREATE INDEX idx_bot_reply_outbox_room_active ON public.bot_reply_outbox USING btree (room_id, id) WHERE (status = ANY (ARRAY['pending'::text, 'submitting'::text, 'accepted'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text]))
+  INDEX CREATE INDEX idx_bot_reply_outbox_terminal_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = ANY (ARRAY['handoff_completed'::text, 'dead'::text, 'permanent_conflict'::text]))
+
+TABLE bot_reply_outbox_replay_audit
+  COLUMN id bigint NOT NULL DEFAULT nextval('bot_reply_outbox_replay_audit_id_seq'::regclass)
+  COLUMN outbox_id bigint NOT NULL
+  COLUMN grant_number integer NOT NULL
+  COLUMN event_type text NOT NULL
+  COLUMN actor text NOT NULL
+  COLUMN reason text NOT NULL
+  COLUMN recorded_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_bot_reply_outbox_replay_audit_actor CHECK ((actor ~ '^[A-Za-z0-9._:@-]{1,64}$'::text))
+  CONSTRAINT chk_bot_reply_outbox_replay_audit_event_type CHECK ((event_type = ANY (ARRAY['granted'::text, 'replayed'::text])))
+  CONSTRAINT chk_bot_reply_outbox_replay_audit_grant_number CHECK ((grant_number > 0))
+  CONSTRAINT chk_bot_reply_outbox_replay_audit_reason CHECK ((((octet_length(reason) >= 1) AND (octet_length(reason) <= 256)) AND (reason !~ '[[:cntrl:]]'::text)))
+  CONSTRAINT bot_reply_outbox_replay_audit_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES bot_reply_outbox(id) ON DELETE CASCADE
+  CONSTRAINT bot_reply_outbox_replay_audit_pkey PRIMARY KEY (id)
+  CONSTRAINT bot_reply_outbox_replay_audit_outbox_id_grant_number_event__key UNIQUE (outbox_id, grant_number, event_type)
+  INDEX CREATE INDEX idx_bot_reply_outbox_replay_audit_outbox_recorded ON public.bot_reply_outbox_replay_audit USING btree (outbox_id, recorded_at, id)
+
+TABLE bot_webhook_heads
+  COLUMN ordering_key text NOT NULL
+  COLUMN message_id text NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_bot_webhook_heads_ordering_key_size CHECK (((length(ordering_key) > 0) AND (length(ordering_key) <= 512)))
+  CONSTRAINT bot_webhook_heads_message_id_fkey FOREIGN KEY (message_id) REFERENCES bot_webhook_inbox(message_id) ON DELETE CASCADE
+  CONSTRAINT bot_webhook_heads_pkey PRIMARY KEY (ordering_key)
+  CONSTRAINT bot_webhook_heads_message_id_key UNIQUE (message_id)
 
 TABLE bot_webhook_inbox
   COLUMN id bigint NOT NULL DEFAULT nextval('bot_webhook_inbox_id_seq'::regclass)
@@ -248,12 +282,14 @@ TABLE bot_webhook_inbox
   CONSTRAINT chk_bot_webhook_inbox_room_id_size CHECK (((length(room_id) > 0) AND (length(room_id) <= 256)))
   CONSTRAINT chk_bot_webhook_inbox_state_shape CHECK ((((status <> 'processing'::text) OR ((claim_token IS NOT NULL) AND (lease_until IS NOT NULL))) AND ((status <> 'dead'::text) OR ((terminal_at IS NOT NULL) AND (length(terminal_reason) > 0)))))
   CONSTRAINT chk_bot_webhook_inbox_status_vocab CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text, 'dead'::text, 'succeeded'::text])))
+  CONSTRAINT chk_bot_webhook_inbox_terminal_payload_scrubbed CHECK (((status <> ALL (ARRAY['dead'::text, 'succeeded'::text])) OR (payload = '{}'::jsonb)))
   CONSTRAINT chk_bot_webhook_inbox_terminal_reason_size CHECK ((length(terminal_reason) <= 512))
   CONSTRAINT bot_webhook_inbox_pkey PRIMARY KEY (id)
   CONSTRAINT bot_webhook_inbox_message_id_key UNIQUE (message_id)
   INDEX CREATE INDEX idx_bot_webhook_inbox_due ON public.bot_webhook_inbox USING btree (available_at, id) WHERE (status = ANY (ARRAY['pending'::text, 'retry'::text]))
   INDEX CREATE INDEX idx_bot_webhook_inbox_lease_expiry ON public.bot_webhook_inbox USING btree (lease_until, id) WHERE (status = 'processing'::text)
   INDEX CREATE INDEX idx_bot_webhook_inbox_ordering_partition ON public.bot_webhook_inbox USING btree (ordering_key, id) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]))
+  INDEX CREATE INDEX idx_bot_webhook_inbox_terminal_updated ON public.bot_webhook_inbox USING btree (updated_at, id) WHERE (status = ANY (ARRAY['dead'::text, 'succeeded'::text]))
 
 TABLE major_event_subscriptions
   COLUMN id integer NOT NULL DEFAULT nextval('major_event_subscriptions_id_seq'::regclass)

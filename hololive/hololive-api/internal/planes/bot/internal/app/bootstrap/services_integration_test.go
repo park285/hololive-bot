@@ -58,7 +58,7 @@ func TestInitCoreIntegrationServicesReturnsACLInitializationError(t *testing.T) 
 	assert.ErrorContains(t, err, "postgres service is nil")
 }
 
-func TestInitCoreIntegrationServicesCreatesWorkerPool(t *testing.T) {
+func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.WithValue(context.Background(), bootstrapTestContextKey{}, "integration-context")
@@ -72,8 +72,7 @@ func TestInitCoreIntegrationServicesCreatesWorkerPool(t *testing.T) {
 				ACLMode:    "whitelist",
 				Rooms:      []string{"room-a"},
 			},
-			Server:     settings.ServerConfig{APIKey: "test-api-key"},
-			WorkerPool: settings.WorkerPoolConfig{Workers: 10, QueueSize: 100},
+			Server: settings.ServerConfig{APIKey: "test-api-key"},
 		},
 		&sharedmodules.InfraModule{
 			Cache:    cacheClient,
@@ -84,9 +83,6 @@ func TestInitCoreIntegrationServicesCreatesWorkerPool(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, services)
-	require.NotNil(t, services.WorkerPool)
-	t.Cleanup(services.WorkerPool.StopAndWait)
-	assert.Equal(t, 10, services.WorkerPool.Workers())
 	assert.NotNil(t, services.ACLService)
 	assert.Empty(t, services.CommandBuilders)
 	assert.Greater(t, observedCalls.Load(), int64(0))

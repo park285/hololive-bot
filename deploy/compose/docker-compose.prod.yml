@@ -71,9 +71,6 @@ x-go-build-base: &go-build-base
   context: ../..
   provenance: mode=max
   sbom: true
-  additional_contexts:
-    shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-../../../shared-go}
-    iris_client_go_workspace: ${IRIS_CLIENT_GO_WORKSPACE_PATH:-../../../iris-client-go}
 
 x-go-healthcheck: &go-healthcheck
   interval: 30s
@@ -343,6 +340,7 @@ services:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
     container_name: hololive-db-migrate
     restart: "no"
+    stop_grace_period: 10s
     environment:
       PGHOST: holo-postgres
       PGPORT: "5432"

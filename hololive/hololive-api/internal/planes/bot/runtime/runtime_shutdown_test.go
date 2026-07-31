@@ -20,14 +20,63 @@
 
 package botruntime
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+)
 
 type testWebhookCloser struct {
 	calls int
 	err   error
 }
 
-func (c *testWebhookCloser) Close() error {
+func TestShutdownWebhookAndDurabilityAlwaysStopsWorkersAndJoinsErrors(t *testing.T) {
+	closeErr := errors.New("webhook close failed")
+	webhookCloser := &testWebhookCloser{err: closeErr}
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	durable := &durableRuntime{cancel: cancelWorker}
+	durable.wg.Add(1)
+	workerDone := make(chan struct{})
+	go func() { defer durable.wg.Done(); <-workerCtx.Done(); close(workerDone) }()
+	runtime := &BotRuntime{webhookHandlerCloser: webhookCloser, durable: durable}
+	shutdownCtx, cancelShutdown := context.WithCancel(context.Background())
+	cancelShutdown()
+	err := runtime.shutdownWebhookAndDurability(shutdownCtx)
+	if !errors.Is(err, closeErr) {
+		t.Fatalf("joined shutdown error = %v", err)
+	}
+	select {
+	case <-workerDone:
+	case <-time.After(time.Second):
+		t.Fatal("durable worker was not stopped")
+	}
+}
+
+func TestDurableStopReturnsAtDeadlineWhenWorkerDoesNotExit(t *testing.T) {
+	canceled := make(chan struct{})
+	r := &durableRuntime{cancel: func() { close(canceled) }}
+	r.wg.Add(1)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	err := r.Stop(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("Stop() did not honor its deadline")
+	}
+	select {
+	case <-canceled:
+	default:
+		t.Fatal("Stop() did not cancel before waiting")
+	}
+	r.wg.Done()
+}
+
+func (c *testWebhookCloser) CloseContext(context.Context) error {
 	c.calls++
 	return c.err
 }
@@ -39,6 +88,6 @@ func TestBotRuntimeShutdown_ClosesWebhookHandler(t *testing.T) {
 	runtime.Shutdown(t.Context())
 
 	if webhookCloser.calls != 1 {
-		t.Fatalf("webhook Close calls = %d, want %d", webhookCloser.calls, 1)
+		t.Fatalf("webhook CloseContext calls = %d, want %d", webhookCloser.calls, 1)
 	}
 }

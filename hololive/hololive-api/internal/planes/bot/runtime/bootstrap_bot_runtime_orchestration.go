@@ -26,11 +26,11 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/quic-go/quic-go/http3"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
@@ -71,14 +71,17 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
-	webhookPool := workerpool.NewQueued(workerpool.QueuedConfig{
-		Workers:   appConfig.Webhook.WorkerCount,
-		QueueSize: appConfig.Webhook.QueueSize,
-	})
-
-	webhookHandler, err := appbootstrap.BuildBotWebhookHandler(appConfig, botBot, runtimeViews.webhook, webhookPool, logger)
+	durable, err := buildDurableRuntime(infra, botBot, appConfig.Webhook.WorkerCount, appConfig.Webhook.HandlerTimeout, logger)
 	if err != nil {
-		webhookPool.StopAndWait()
+		return nil, err
+	}
+	configureDurableReplyWriter(botBot, durable, logger)
+
+	webhookHandler, err := appbootstrap.BuildDurableBotWebhookHandler(appConfig, durableAdmitter{
+		inbox: durable.inbox,
+		wake:  func() { notifyDurable(durable.inboxWake) },
+	}, runtimeViews.webhook, logger)
+	if err != nil {
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
 	}
 
@@ -108,6 +111,21 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		PprofServer:          pprofServer,
 		h3CertReloadStart:    h3CertReloadStart,
 		webhookHandlerCloser: webhookHandler,
-		webhookPool:          webhookPool,
+		durable:              durable,
 	}, nil
+}
+
+func configureDurableReplyWriter(bot *orchestration.Bot, durable *durableRuntime, logger *slog.Logger) {
+	bot.SetReplyOutboxWriter(durableReplyWriter{
+		outbox: durable.outbox,
+		logger: logger,
+		wake:   func() { notifyDurable(durable.outboxWake) },
+	})
+}
+
+func buildDurableRuntime(infra *appbootstrap.BotInfrastructure, bot *orchestration.Bot, workers int, handlerTimeout time.Duration, logger *slog.Logger) (*durableRuntime, error) {
+	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
+		return nil, fmt.Errorf("build bot runtime: durable postgres pool is nil")
+	}
+	return newDurableRuntime(bot, infra.Deps.Client, infra.Postgres.GetPool(), workers, handlerTimeout, logger), nil
 }

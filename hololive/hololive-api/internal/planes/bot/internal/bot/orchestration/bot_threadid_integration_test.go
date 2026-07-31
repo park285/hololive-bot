@@ -37,7 +37,7 @@ import (
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
 
-func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
+func TestBotProcessMessage_PreservesThreadIDForReply(t *testing.T) {
 	t.Parallel()
 
 	b, reqCh := newReplyCaptureBot(t, 1)
@@ -55,7 +55,7 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 	}
 }
 
-func TestBotHandleMessage_UsesInboundIDForThreadedReplyIdentity(t *testing.T) {
+func TestBotProcessMessage_UsesInboundIDForThreadedReplyIdentity(t *testing.T) {
 	t.Parallel()
 
 	b, reqCh := newReplyCaptureBot(t, 2)
@@ -76,7 +76,7 @@ func TestBotHandleMessage_UsesInboundIDForThreadedReplyIdentity(t *testing.T) {
 	require.Equal(t, "hololive:v1:message:stable-message-2:reply:0", *second.ClientRequestID)
 }
 
-func TestBotHandleMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T) {
+func TestBotProcessMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T) {
 	t.Parallel()
 
 	b, reqCh := newReplyCaptureBot(t, 2)
@@ -113,12 +113,21 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ir
 
 		reqCh <- req
 		if err := json.NewEncoder(w).Encode(iris.ReplyAcceptedResponse{
-			Success:  true,
-			Delivery: "queued",
-			Room:     req.Room,
-			Type:     req.Type,
+			RequestID: "reply-capture",
+			Success:   true,
+			Delivery:  "queued",
+			Room:      req.Room,
+			Type:      req.Type,
 		}); err != nil {
 			t.Fatalf("encode reply response: %v", err)
+		}
+	})
+	mux.HandleFunc("/reply-status/reply-capture", func(w http.ResponseWriter, _ *http.Request) {
+		if err := json.NewEncoder(w).Encode(iris.ReplyStatusSnapshot{
+			RequestID: "reply-capture",
+			State:     "handoff_completed",
+		}); err != nil {
+			t.Fatalf("encode reply status response: %v", err)
 		}
 	})
 
@@ -144,7 +153,7 @@ func handleHelpMessage(t *testing.T, b *Bot, messageID string) {
 
 	threadID := "12345"
 	sender := "user"
-	b.HandleMessage(t.Context(), &webhook.Message{
+	require.NoError(t, b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
@@ -154,7 +163,7 @@ func handleHelpMessage(t *testing.T, b *Bot, messageID string) {
 			MessageID: messageID,
 			ThreadID:  &threadID,
 		},
-	})
+	}))
 }
 
 func receiveReplyRequest(t *testing.T, reqCh <-chan iris.ReplyRequest) iris.ReplyRequest {

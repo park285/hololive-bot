@@ -151,11 +151,9 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 
 	added, err := c.Deps().Alarm.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     cmdCtx.Room,
-		UserID:     cmdCtx.UserID,
 		ChannelID:  channel.ID,
 		MemberName: channel.Name,
 		RoomName:   cmdCtx.RoomName,
-		UserName:   cmdCtx.UserName,
 		AlarmTypes: alarmTypes,
 	})
 	if err != nil {

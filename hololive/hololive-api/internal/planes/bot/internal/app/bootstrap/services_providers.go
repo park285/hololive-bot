@@ -79,6 +79,5 @@ func ProvideBotDependencies(modules *BotDependencyModules) *orchestration.Depend
 		MajorEventRepository:  modules.Feature.MajorEventRepository,
 		MemberNews:            modules.Feature.MemberNews,
 		CommandBuilders:       modules.Feature.CommandBuilders,
-		WorkerPool:            modules.Support.WorkerPool,
 	}
 }

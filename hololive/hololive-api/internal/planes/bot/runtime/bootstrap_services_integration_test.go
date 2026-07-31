@@ -39,7 +39,6 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 	services, err := appbootstrap.InitCoreIntegrationServices(t.Context(), &settings.Config{}, infra, logger)
 	require.NoError(t, err)
 	require.NotNil(t, services)
-	require.NotNil(t, services.WorkerPool)
 	assert.NotNil(t, services.CommandBuilders)
 	assert.Len(t, services.CommandBuilders, 0)
 }

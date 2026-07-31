@@ -48,6 +48,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 	);
 	const [error, setError] = useState("");
 	const previousDefaultRef = useRef(defaultAlarmMinutes);
+	const alarmAdvanceMinutesInputRef = useRef<HTMLInputElement>(null);
 
 	const isDirty = useMemo(
 		() => alarmAdvanceMinutes.trim() !== String(defaultAlarmMinutes),
@@ -83,6 +84,9 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 		const nextError = validateAlarmAdvanceMinutes(alarmAdvanceMinutes);
 		if (nextError) {
 			setError(nextError);
+			queueMicrotask(() => {
+				alarmAdvanceMinutesInputRef.current?.focus();
+			});
 			return;
 		}
 
@@ -100,7 +104,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 			</Card.Header>
 
 			<Card.Body className="space-y-6 pt-6">
-				<form onSubmit={onSubmit} className="space-y-6">
+				<form onSubmit={onSubmit} className="space-y-6" noValidate>
 					<div>
 						<h4 className="mb-4 border-l-4 border-sky-400 pl-3 text-sm font-bold text-foreground">
 							알림 옵션
@@ -113,7 +117,10 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 								</Label>
 								<div className="flex items-center gap-3">
 									<Input
+										ref={alarmAdvanceMinutesInputRef}
 										id="alarm-advance-minutes"
+										name="alarmAdvanceMinutes"
+										autoComplete="off"
 										type="number"
 										min={1}
 										max={60}
@@ -126,16 +133,30 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 										}}
 										className="w-24 bg-card text-center font-bold tabular-nums focus-visible:ring-2 focus-visible:ring-sky-200"
 										hasError={!!error}
+										aria-invalid={!!error}
+										aria-describedby={
+											error
+												? "alarm-advance-minutes-help alarm-advance-minutes-error"
+												: "alarm-advance-minutes-help"
+										}
 									/>
 									<span className="text-sm font-medium text-muted-foreground">
 										분 전 알림
 									</span>
 								</div>
-								<p className="text-[0.8rem] text-muted-foreground">
+								<p
+									id="alarm-advance-minutes-help"
+									className="text-[0.8rem] text-muted-foreground"
+								>
 									방송 시작 몇 분 전에 채팅방으로 알람을 전송할지 설정합니다.
 								</p>
 								{error && (
-									<p className="text-[0.8rem] font-medium text-destructive">
+									<p
+										id="alarm-advance-minutes-error"
+										role="status"
+										aria-live="polite"
+										className="text-[0.8rem] font-medium text-destructive"
+									>
 										{error}
 									</p>
 								)}

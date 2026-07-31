@@ -24,10 +24,13 @@ import (
 	"context"
 	"strings"
 	"sync/atomic"
+
+	"github.com/park285/iris-client-go/iris"
 )
 
 type threadIDContextKey struct{}
 type replyIdentityContextKey struct{}
+type imageContentTypeContextKey struct{}
 
 type replyIdentityState struct {
 	id      string
@@ -61,6 +64,29 @@ func ThreadIDFromContext(ctx context.Context) (string, bool) {
 	}
 
 	return id, true
+}
+
+func appendThreadIDOption(ctx context.Context, opts []iris.SendOption) []iris.SendOption {
+	if id, ok := ThreadIDFromContext(ctx); ok {
+		return append(opts, iris.WithThreadID(id))
+	}
+	return opts
+}
+
+func WithImageContentType(ctx context.Context, contentType string) context.Context {
+	value := strings.TrimSpace(contentType)
+	if value == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, imageContentTypeContextKey{}, value)
+}
+
+func ImageContentTypeFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	value, ok := ctx.Value(imageContentTypeContextKey{}).(string)
+	return value, ok && value != ""
 }
 
 func WithReplyIdentity(ctx context.Context, identity string) context.Context {
@@ -101,4 +127,16 @@ func nextReplyEmission(ctx context.Context) (identity string, ordinal uint64, ok
 	}
 
 	return state.id, state.ordinal.Add(1) - 1, true
+}
+
+func currentReplyEmission(ctx context.Context) (identity string, ordinal uint64, ok bool) {
+	state := replyIdentityStateFromContext(ctx)
+	if state == nil {
+		return "", 0, false
+	}
+	ordinal = state.ordinal.Load()
+	if ordinal == 0 {
+		return state.id, 0, true
+	}
+	return state.id, ordinal - 1, true
 }

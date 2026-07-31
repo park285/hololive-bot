@@ -427,7 +427,7 @@ func TestEnsureTransportFollowsMarkdownRepliesFlag(t *testing.T) {
 	})
 }
 
-func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
+func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
 	t.Parallel()
 
 	logger := newBotTestLogger()
@@ -455,7 +455,7 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 
 	// 알 수 없는 command 경로: fallback 메시지가 전송돼야 한다
 	sender := "user"
-	b.HandleMessage(t.Context(), &webhook.Message{
+	require.NoError(t, b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
@@ -464,7 +464,7 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 			ChatID:    "room-1",
 			MessageID: "m-1",
 		},
-	})
+	}))
 
 	select {
 	case msg := <-msgCh:
@@ -475,7 +475,7 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 	}
 }
 
-func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
+func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	t.Parallel()
 
 	logger := newBotTestLogger()
@@ -499,7 +499,7 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	}
 
 	sender := "user"
-	b.HandleMessage(t.Context(), &webhook.Message{
+	err := b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
@@ -509,6 +509,7 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 			MessageID: "m-1",
 		},
 	})
+	require.EqualError(t, err, "execute command: failed to execute command help: boom")
 
 	select {
 	case msg := <-msgCh:

@@ -1,32 +1,29 @@
 package privacylog
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/printer"
 	"go/token"
-	"io/fs"
+	"go/types"
+	"io"
 	"log/slog"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
-
-// bot plane이 같은 사용자 액션 안에서 호출하는 alarm/notification 모듈까지 포함한다. 모듈 경계를
-// 넘지만 로그 경계는 프로세스 단위라, plane 안에서만 닫으면 한 콜 뒤에서 평문이 그대로 나간다.
-// cache/delivery/lease는 alarm이 부르는 Valkey 하부라, plain string 파라미터를 받는 순간 taint가
-// 끊긴다. 값 추적 대신 "이 root 안에서는 key/field 리터럴 금지"라는 key 이름 규칙으로 닫는다.
-var scannedRoots = []string{
-	"../..",
-	"../../../../../../hololive-shared/pkg/service/alarm",
-	"../../../../../../hololive-shared/pkg/service/notification",
-	"../../../../../../hololive-shared/pkg/service/cache",
-	"../../../../../../hololive-shared/pkg/service/delivery",
-	"../../../../../../hololive-shared/pkg/service/lease",
-}
 
 var bannedLogAttrKeys = map[string]string{
 	"user_name":   "Kakao 닉네임",
@@ -43,6 +40,16 @@ var privacylogOnlyAttrKeys = map[string]string{
 	KeyChatID:     "privacylog.ChatIDAttr/ChatAttr",
 	KeyCacheKey:   "privacylog.CacheKeyAttr",
 	KeyCacheField: "privacylog.CacheFieldAttr",
+}
+
+// 이 package들의 "key"는 Kakao 식별자가 아니라 고정 cache name, Holodex retry/cache
+// identifier, 또는 public YouTube snapshot identifier를 담는다. 다른 attr key는 계속 검사한다.
+var reviewedNonSensitiveRestrictedKeys = map[string][]string{
+	KeyCacheKey: {
+		"pkg/service/holodex/provider",
+		"pkg/service/holodex/provider/htmlscraper",
+		"pkg/service/youtube/scraper/scraping",
+	},
 }
 
 var slogAttrConstructors = map[string]struct{}{
@@ -66,6 +73,208 @@ type logAttrKeyUse struct {
 	key      string
 	expr     string
 	position string
+	scope    string
+}
+
+type listedPackage struct {
+	ImportPath string
+	Dir        string
+	GoFiles    []string
+	Export     string
+	Module     *listedModule
+}
+
+type listedModule struct {
+	Dir     string
+	Replace *listedModule
+}
+
+type scannedSources struct {
+	files             map[string]*ast.File
+	importPathByScope map[string]string
+	exports           map[string]string
+	fileSet           *token.FileSet
+	typesInfo         map[*ast.File]*types.Info
+	sourceImports     bool
+	buildCacheRoot    string
+}
+
+type scannerPackageGraph struct {
+	packages       []listedPackage
+	exports        map[string]string
+	buildCacheRoot string
+}
+
+func TestScannedRootsCoverReachablePrivacylogServices(t *testing.T) {
+	t.Parallel()
+
+	sources := parseScannedRoots(t, token.NewFileSet())
+	const servicePrefix = "github.com/kapu/hololive-shared/pkg/service/"
+	count := 0
+	for _, importPath := range sources.importPathByScope {
+		if strings.HasPrefix(importPath, servicePrefix) {
+			count++
+		}
+	}
+	if count < 38 {
+		t.Fatalf("scanner covers %d production-reachable shared-service packages, want at least 38", count)
+	}
+}
+
+func reachableScannerPackages(t *testing.T) scannerPackageGraph {
+	t.Helper()
+
+	moduleRoot := scannerModuleRoot(t)
+	output := listBotPlaneDependencies(t, moduleRoot)
+	graph := decodeScannerPackageGraph(t, output, moduleRoot)
+	graph.buildCacheRoot = goBuildCacheRoot(t, moduleRoot)
+
+	return graph
+}
+
+func scannerModuleRoot(t *testing.T) string {
+	t.Helper()
+
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate privacylog test package")
+	}
+	packageDir, err := filepath.Abs(filepath.Dir(filename))
+	if err != nil {
+		t.Fatalf("resolve privacylog test package directory: %v", err)
+	}
+	moduleRoot := packageDir
+	for range 5 {
+		moduleRoot = filepath.Dir(moduleRoot)
+	}
+
+	return moduleRoot
+}
+
+func listBotPlaneDependencies(t *testing.T, moduleRoot string) []byte {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "go", "list", "-deps", "-export", "-json", "./internal/planes/bot/...")
+	command.Dir = moduleRoot
+	command.Env = append(os.Environ(), "GOWORK=off")
+	output, err := command.Output()
+	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("list bot plane production dependencies: %v", ctx.Err())
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			t.Fatalf("list bot plane production dependencies: %v: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		t.Fatalf("list bot plane production dependencies: %v", err)
+	}
+
+	return output
+}
+
+func goBuildCacheRoot(t *testing.T, moduleRoot string) string {
+	t.Helper()
+
+	command := exec.CommandContext(t.Context(), "go", "env", "GOCACHE")
+	command.Dir = moduleRoot
+	command.Env = append(os.Environ(), "GOWORK=off")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("resolve go env GOCACHE: %v", err)
+	}
+	value := strings.TrimSpace(string(output))
+	if value == "" || !filepath.IsAbs(value) {
+		t.Fatalf("go env GOCACHE returned invalid path %q", value)
+	}
+
+	return filepath.Clean(value)
+}
+
+func decodeScannerPackageGraph(t *testing.T, output []byte, moduleRoot string) scannerPackageGraph {
+	t.Helper()
+
+	const (
+		botPrefix     = "github.com/kapu/hololive-api/internal/planes/bot"
+		servicePrefix = "github.com/kapu/hololive-shared/pkg/service/"
+	)
+	expectedSharedRoot := filepath.Join(filepath.Dir(moduleRoot), "hololive-shared")
+	packages := make([]listedPackage, 0, 64)
+	exports := make(map[string]string)
+	seen := make(map[string]struct{})
+	decoder := json.NewDecoder(bytes.NewReader(output))
+	for {
+		var pkg listedPackage
+		err := decoder.Decode(&pkg)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("decode bot plane production dependencies: %v", err)
+		}
+		if pkg.Export != "" {
+			exports[pkg.ImportPath] = pkg.Export
+		}
+		if !isScannerPackage(pkg.ImportPath, botPrefix, servicePrefix) {
+			continue
+		}
+		if len(pkg.GoFiles) == 0 {
+			continue
+		}
+		if pkg.Dir == "" {
+			t.Fatalf("production-reachable package %s has no source directory", pkg.ImportPath)
+		}
+		if err := validateScannerPackage(&pkg, servicePrefix, expectedSharedRoot); err != nil {
+			t.Fatal(err)
+		}
+		if _, duplicate := seen[pkg.ImportPath]; duplicate {
+			continue
+		}
+		seen[pkg.ImportPath] = struct{}{}
+		packages = append(packages, pkg)
+	}
+	if len(packages) == 0 {
+		t.Fatal("go list returned no bot-plane scanner packages")
+	}
+	sort.Slice(packages, func(i, j int) bool {
+		return packages[i].ImportPath < packages[j].ImportPath
+	})
+
+	return scannerPackageGraph{packages: packages, exports: exports}
+}
+
+func isScannerPackage(importPath, botPrefix, servicePrefix string) bool {
+	return importPath == botPrefix || strings.HasPrefix(importPath, botPrefix+"/") ||
+		strings.HasPrefix(importPath, servicePrefix)
+}
+
+func validateScannerPackage(pkg *listedPackage, servicePrefix, expectedSharedRoot string) error {
+	if !strings.HasPrefix(pkg.ImportPath, servicePrefix) {
+		return nil
+	}
+	moduleDir := ""
+	if pkg.Module != nil {
+		moduleDir = pkg.Module.Dir
+		if pkg.Module.Replace != nil {
+			moduleDir = pkg.Module.Replace.Dir
+		}
+	}
+	if filepath.Clean(moduleDir) != expectedSharedRoot || !pathWithinRoot(pkg.Dir, expectedSharedRoot) {
+		return fmt.Errorf("%s resolved outside the sibling hololive-shared replace: module=%q dir=%q want root=%q",
+			pkg.ImportPath, moduleDir, pkg.Dir, expectedSharedRoot)
+	}
+
+	return nil
+}
+
+func pathWithinRoot(path, root string) bool {
+	relative, err := filepath.Rel(root, filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func TestBotPlaneLogCallsitesRejectBannedAttrKeys(t *testing.T) {
@@ -84,7 +293,7 @@ func TestBotPlaneLogCallsitesRejectBannedAttrKeys(t *testing.T) {
 		t.Error(report)
 	}
 
-	for _, canary := range []string{"user_id", "command", "message_len", "channel_id", "pool_size", "lease"} {
+	for _, canary := range []string{"user_id", "command", "message_len", "channel_id", "pool_size", "query_token"} {
 		if _, ok := seen[canary]; !ok {
 			t.Fatalf("canonical key %q was not collected; the scan is not reading log callsites", canary)
 		}
@@ -111,7 +320,7 @@ func attrKeyViolations(uses []logAttrKeyUse) []string {
 		if reason, banned := bannedLogAttrKeys[use.key]; banned {
 			reports = append(reports, fmt.Sprintf("%s: log attr key %q is banned (%s)", use.position, use.key, reason))
 		}
-		if helper, restricted := privacylogOnlyAttrKeys[use.key]; restricted {
+		if helper, restricted := privacylogOnlyAttrKeys[use.key]; restricted && !isReviewedNonSensitiveKey(use) {
 			reports = append(reports, fmt.Sprintf(
 				"%s: log attr key %q must be built by %s, not by a literal key", use.position, use.key, helper))
 		}
@@ -122,6 +331,16 @@ func attrKeyViolations(uses []logAttrKeyUse) []string {
 	}
 
 	return reports
+}
+
+func isReviewedNonSensitiveKey(use logAttrKeyUse) bool {
+	for _, suffix := range reviewedNonSensitiveRestrictedKeys[use.key] {
+		if strings.HasSuffix(filepath.ToSlash(use.scope), suffix) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func TestPrivacylogOwnedAttrKeysStayRestricted(t *testing.T) {
@@ -220,7 +439,7 @@ func TestScannerFailsClosedOnUnresolvableKeyExpressions(t *testing.T) {
 func TestLooseKeyValueStartMatchesSlogSignatures(t *testing.T) {
 	t.Parallel()
 
-	loggerType := reflect.TypeOf(&slog.Logger{})
+	loggerType := reflect.TypeFor[*slog.Logger]()
 	for method := range slogLevelMethods {
 		signature, ok := loggerType.MethodByName(method)
 		if !ok {
@@ -306,12 +525,12 @@ func collectBotPlaneLogAttrKeys(t *testing.T) []logAttrKeyUse {
 	sources := parseScannedRoots(t, fileSet)
 
 	constants := map[string]string{}
-	for path, file := range sources {
+	for path, file := range sources.files {
 		collectStringConstants(filepath.Dir(path), file, constants)
 	}
 
 	var uses []logAttrKeyUse
-	for path, file := range sources {
+	for path, file := range sources.files {
 		scope := filepath.Dir(path)
 		ast.Inspect(file, func(node ast.Node) bool {
 			call, ok := node.(*ast.CallExpr)
@@ -327,30 +546,42 @@ func collectBotPlaneLogAttrKeys(t *testing.T) []logAttrKeyUse {
 	return uses
 }
 
-func parseScannedRoots(t *testing.T, fileSet *token.FileSet) map[string]*ast.File {
+func parseScannedRoots(t *testing.T, fileSet *token.FileSet) scannedSources {
 	t.Helper()
 
-	sources := map[string]*ast.File{}
-	for _, root := range scannedRoots {
-		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-
-			file, parseErr := parser.ParseFile(fileSet, path, nil, parser.SkipObjectResolution)
-			if parseErr != nil {
-				return parseErr
-			}
-			sources[path] = file
-
-			return nil
-		})
+	sources := scannedSources{
+		files:             map[string]*ast.File{},
+		importPathByScope: map[string]string{},
+		fileSet:           fileSet,
+	}
+	graph := reachableScannerPackages(t)
+	sources.exports = graph.exports
+	sources.buildCacheRoot = graph.buildCacheRoot
+	for _, pkg := range graph.packages {
+		scope := filepath.Clean(pkg.Dir)
+		sources.importPathByScope[scope] = pkg.ImportPath
+		matches, err := filepath.Glob(filepath.Join(scope, "*.go"))
 		if err != nil {
-			t.Fatalf("walk %s: %v", root, err)
+			t.Fatalf("glob package %s: %v", pkg.ImportPath, err)
 		}
+		parsed := 0
+		for _, path := range matches {
+			if strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+			file, err := parser.ParseFile(fileSet, path, nil, parser.SkipObjectResolution)
+			if err != nil {
+				t.Fatalf("parse %s: %v", path, err)
+			}
+			sources.files[path] = file
+			parsed++
+		}
+		if parsed == 0 {
+			t.Fatalf("production-reachable package %s has no non-test Go source in %s", pkg.ImportPath, scope)
+		}
+	}
+	if err := sources.loadTypes(); err != nil {
+		t.Fatalf("type-check production scanner sources: %v", err)
 	}
 
 	return sources
@@ -462,7 +693,7 @@ func compositeLiteralKeys(scope string, fileSet *token.FileSet, args []ast.Expr,
 					continue
 				}
 				if key, ok := resolveKey(scope, pair.Key, constants); ok {
-					uses = append(uses, logAttrKeyUse{key: key, position: fileSet.Position(pair.Pos()).String()})
+					uses = append(uses, logAttrKeyUse{key: key, position: fileSet.Position(pair.Pos()).String(), scope: scope})
 				}
 			}
 
@@ -476,10 +707,10 @@ func compositeLiteralKeys(scope string, fileSet *token.FileSet, args []ast.Expr,
 func keyUse(scope string, fileSet *token.FileSet, expr ast.Expr, constants map[string]string) logAttrKeyUse {
 	position := fileSet.Position(expr.Pos()).String()
 	if key, ok := resolveKey(scope, expr, constants); ok {
-		return logAttrKeyUse{key: key, position: position}
+		return logAttrKeyUse{key: key, position: position, scope: scope}
 	}
 
-	return logAttrKeyUse{expr: formatExpr(fileSet, expr), position: position}
+	return logAttrKeyUse{expr: formatExpr(fileSet, expr), position: position, scope: scope}
 }
 
 func formatExpr(fileSet *token.FileSet, expr ast.Expr) string {

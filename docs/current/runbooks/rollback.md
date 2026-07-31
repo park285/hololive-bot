@@ -26,13 +26,15 @@ Runtime service names:
 - `hololive-alarm-worker`
 - `youtube-producer`
 
+`hololive-api`가 durable bot admission migration 123~136을 적용하고 traffic을 수락한 뒤에는 이전 image나 구 bot runtime이 `bot_webhook_inbox`/`bot_reply_outbox`를 소비하지 못합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 rollback 절차가 우선하며, ingress quiescence와 zero-backlog preflight가 성공하지 않으면 image rollback 대신 현재 durable runtime을 fix-forward합니다.
+
 ## 5→3 Cutover Emergency Rollback (hololive-api → 구 bot/admin/llm)
 
 통합 `hololive-api`(bot/admin/llm 단일 프로세스) 컷오버 직후 crash-loop / unhealthy / 기능 회귀가 발생해 구 3-runtime로 되돌려야 할 때의 즉시 실행 절차입니다. 이것은 **단순 재시작이 아니라 재생성**입니다 — `compose-redeploy-service.sh hololive-api`의 `removed_runtime_cleanup_before_cutover`가 구 `hololive-kakao-bot-go`/`hololive-admin-api`/`hololive-llm-scheduler` 컨테이너를 `rm -f` 했으므로 구 컨테이너 자체가 존재하지 않습니다. 구 compose 정의 + 보존된 구 이미지로 다시 만들어야 합니다.
 
 ### Confirmed facts (rollback이 안전한 근거)
 
-- **DB schema 호환**: 통합 PR은 신규 migration을 추가하지 않았습니다(`a04f3c54`는 코드 경로 이동만). 따라서 현재 schema == 컷오버 이전 schema이며, 구 bot/admin/llm이 그대로 붙습니다. down-migration 불필요.
+- **DB schema 호환**: 최초 통합 PR은 신규 migration을 추가하지 않았습니다(`a04f3c54`는 코드 경로 이동만). 이후 durable admission migration은 additive라 구 bot/admin/llm 연결을 막지 않지만, 구 runtime이 durable backlog를 소비하지는 못합니다. 따라서 Step 0의 zero-backlog preflight가 별도 필수이며 down-migration은 하지 않습니다.
 - **구 이미지 로컬 보존**: `hololive-kakao-bot-go:prod`, `hololive-admin-api:prod`, `hololive-llm-scheduler:prod`.
 - **데이터 보존**: named volume(`holo-pg-data`)은 컨테이너 재생성과 무관하게 보존됩니다. (`valkey-cache-data`는 2026-07-05에 제거 — valkey는 `appendonly no` 순수 캐시라 영속 볼륨이 없습니다.)
 
@@ -41,9 +43,13 @@ Runtime service names:
 ```bash
 docker images | grep -E 'hololive-kakao-bot-go|hololive-admin-api|hololive-llm-scheduler'
 test -r /run/hololive-bot/compose.env && echo "compose.env OK"
+PGSERVICE=hololive-db-maintenance \
+PGPASSFILE=/run/hololive-bot/postgres/pgpass \
+  env -u PGPASSWORD hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
 ```
 
 - 구 이미지가 보이지 않으면 → 맨 아래 "구 이미지 재build (이미지 부재 시)" 절로. 현 main에서는 rebuild 불가합니다.
+- Durable preflight 전에 Iris webhook ingress를 quiesce하고 현재 `hololive-api`가 backlog를 drain하도록 둡니다. Preflight가 nonzero count로 실패하면 아래 rollback을 진행하지 않고 fix-forward합니다.
 - git writer 단일성(meta-repo AGENTS.md) 확인 후 진행합니다.
 
 ### Step 1 — 구 compose 정의 export (`35dcf0f8^`)

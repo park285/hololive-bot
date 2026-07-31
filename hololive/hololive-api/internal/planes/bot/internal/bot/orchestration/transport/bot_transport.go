@@ -95,12 +95,20 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	var opts []iris.SendOption
-	if id, ok := ThreadIDFromContext(sendCtx); ok {
-		opts = append(opts, iris.WithThreadID(id))
-	}
+	opts := appendThreadIDOption(sendCtx, nil)
 
 	clientRequestID := nextReplyClientRequestID(sendCtx)
+	if t.replyOutboxWriter() != nil {
+		kind := StoredReplyKindText
+		if t.markdownReplies {
+			kind = StoredReplyKindMarkdown
+		}
+		threadID, _ := ThreadIDFromContext(sendCtx)
+		if err := t.recordReply(sendCtx, room, clientRequestID, &StoredReply{Kind: kind, Message: message, ThreadID: threadID}); err != nil {
+			return fmt.Errorf("record reply: %w", err)
+		}
+		return nil
+	}
 	if err := t.sendMessage(sendCtx, room, message, clientRequestID, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message: %w", serviceErr)
@@ -151,21 +159,24 @@ func postReply(
 		}
 
 		lastErr = err
-		if !admissionResponseLost(err) {
-			// 앞선 attempt가 유실됐다면 그 요청이 admit됐을 수 있어 거절 응답도 결과를 확정하지 못한다.
-			if admissionMayHaveLanded {
-				break
-			}
+		stop, definitive := stopReplyAdmissionRetry(ctx, err, admissionMayHaveLanded, clientRequestID)
+		if definitive {
 			return nil, err
 		}
-
-		admissionMayHaveLanded = true
-		if clientRequestID == "" || ctx.Err() != nil {
+		if stop {
 			break
 		}
+		admissionMayHaveLanded = true
 	}
 
 	return nil, replyOutcomeUnknownError{reason: "reply admission response was not received", cause: lastErr}
+}
+
+func stopReplyAdmissionRetry(ctx context.Context, err error, admissionMayHaveLanded bool, clientRequestID string) (stop, definitive bool) {
+	if !admissionResponseLost(err) {
+		return true, !admissionMayHaveLanded
+	}
+	return clientRequestID == "" || ctx.Err() != nil, false
 }
 
 func admissionResponseLost(err error) bool {
@@ -255,17 +266,12 @@ func checkReplyHandoffStatus(ctx context.Context, client replyStatusGetter, requ
 
 func replyHandoffStatusResult(requestID string, status *iris.ReplyStatusSnapshot) (replyOutcome, error) {
 	outcome := classifyReplyState(status.State)
-
-	switch outcome {
-	case replyOutcomeHandoffCompleted:
+	if outcome == replyOutcomeHandoffCompleted || outcome == replyOutcomeInFlight {
 		return outcome, nil
-	case replyOutcomeInFlight:
-		return outcome, nil
-	case replyOutcomeFailed:
-		return outcome, replyStatusFailedError{requestID: requestID, detail: replyStatusDetail(status)}
-	case replyOutcomeUnknown:
 	}
-
+	if outcome == replyOutcomeFailed {
+		return outcome, replyStatusFailedError{requestID: requestID, detail: replyStatusDetail(status)}
+	}
 	return replyOutcomeUnknown, replyOutcomeUnknownError{
 		requestID: requestID,
 		reason:    fmt.Sprintf("iris reported state %q", strings.TrimSpace(status.State)),
@@ -298,6 +304,19 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
+	if t.replyOutboxWriter() != nil {
+		clientRequestID := nextReplyClientRequestID(sendCtx)
+		threadID, _ := ThreadIDFromContext(sendCtx)
+		contentType, _ := ImageContentTypeFromContext(sendCtx)
+		if err := t.recordReply(sendCtx, room, clientRequestID, &StoredReply{Kind: StoredReplyKindImage, Image: imageData, ThreadID: threadID, ImageContentType: contentType}); err != nil {
+			return fmt.Errorf("record image reply: %w", err)
+		}
+		return nil
+	}
+
+	if contentType, ok := ImageContentTypeFromContext(sendCtx); ok {
+		opts = append(opts, iris.WithImageContentType(contentType))
+	}
 	opts = appendMediaClientRequestOptions(sendCtx, opts)
 	accepted, err := t.irisClient.SendImage(sendCtx, room, imageData, opts...)
 	if err != nil {
@@ -323,6 +342,15 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
+
+	if t.replyOutboxWriter() != nil {
+		clientRequestID := nextReplyClientRequestID(sendCtx)
+		threadID, _ := ThreadIDFromContext(sendCtx)
+		if err := t.recordReply(sendCtx, room, clientRequestID, &StoredReply{Kind: StoredReplyKindImages, Images: images, ThreadID: threadID}); err != nil {
+			return fmt.Errorf("record image replies: %w", err)
+		}
+		return nil
+	}
 
 	opts = appendMediaClientRequestOptions(sendCtx, opts)
 	accepted, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...)

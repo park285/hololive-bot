@@ -25,20 +25,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/gin-gonic/gin"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
-
-	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 )
 
 func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
@@ -55,43 +47,6 @@ func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(t, http.StatusServiceUnavailable, res.Code)
-}
-
-func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
-	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-token")
-
-	appConfig := &settings.Config{
-		Iris: settings.IrisConfig{
-			WebhookToken: "test-token",
-		},
-		Webhook: settings.WebhookConfig{
-			WorkerCount:    1,
-			QueueSize:      8,
-			EnqueueTimeout: 10 * time.Millisecond,
-			HandlerTimeout: 50 * time.Millisecond,
-		},
-	}
-	deps := appbootstrap.BotWebhookRuntimeDependencies{
-		Cache: &cachemocks.Client{
-			GetClientFunc: func() valkey.Client { return nil },
-		},
-	}
-	pool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
-	t.Cleanup(pool.StopAndWait)
-	handler, err := appbootstrap.BuildBotWebhookHandler(appConfig, stubWebhookMessageHandler{}, deps, pool, nil)
-	require.NoError(t, err)
-	require.NotNil(t, handler)
-	t.Cleanup(func() {
-		require.NoError(t, handler.Close())
-	})
-
-	router := gin.New()
-	router.Any("/webhook/iris", gin.WrapH(handler))
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/webhook/iris", http.NoBody)
-	res := httptest.NewRecorder()
-	router.ServeHTTP(res, req)
-	assert.Equal(t, http.StatusMethodNotAllowed, res.Code)
 }
 
 func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {

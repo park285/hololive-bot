@@ -2,11 +2,11 @@
 
 ## 현재 정책
 
-`hololive-api`와 `hololive-alarm-worker`의 기본 빌드는 PGO를 사용하지 않습니다.
+`hololive-api`, `hololive-alarm-worker`, `youtube-producer`, `admin-dashboard`의 production 빌드는 PGO를 사용하지 않습니다.
 `scripts/ci/pgo-off-policy.tsv`는 production PGO 정책의 정본이며 `off` 행만 허용하고
 `scripts/ci/check-pgo-default.sh`는 `on` 행을 즉시 거부합니다.
 
-`hololive-api`와 `hololive-alarm-worker` Dockerfile의 모든 Go build는 `-pgo=off`를
+네 production Dockerfile의 모든 Go build는 `-pgo=off`를
 명시합니다. Compose에는 `GO_PGO_FILE` build arg가 없고 환경 변수 override도 제공하지
 않습니다. 게이트는 Dockerfile과 `docker compose config --no-interpolate --format json`
 결과를 구조적으로 검사하여 다음을

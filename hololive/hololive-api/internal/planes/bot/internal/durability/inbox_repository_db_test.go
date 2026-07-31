@@ -44,7 +44,7 @@ func truncateDurabilityTables(ctx context.Context, t *testing.T, pool *pgxpool.P
 	t.Helper()
 
 	_, err := pool.Exec(ctx,
-		"TRUNCATE bot_webhook_inbox, bot_command_executions, bot_reply_outbox RESTART IDENTITY")
+		"TRUNCATE bot_reply_outbox_replay_audit, bot_webhook_heads, bot_webhook_inbox, bot_command_executions, bot_reply_outbox RESTART IDENTITY")
 	require.NoError(t, err)
 }
 
@@ -99,6 +99,10 @@ func TestInboxRepository(t *testing.T) {
 		assert.Equal(t, message.MessageID, claim.MessageID)
 		assert.Equal(t, message.OrderingKey, claim.OrderingKey)
 		assert.Equal(t, int32(1), claim.Attempts)
+		var storedLeaseUntil time.Time
+		require.NoError(t, pool.QueryRow(ctx,
+			"SELECT lease_until FROM bot_webhook_inbox WHERE message_id = $1", message.MessageID).Scan(&storedLeaseUntil))
+		assert.Equal(t, storedLeaseUntil, claim.LeaseUntil)
 
 		second, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 		require.NoError(t, err)
@@ -108,6 +112,23 @@ func TestInboxRepository(t *testing.T) {
 		assert.Equal(t, "processing", status)
 		require.NotNil(t, token)
 		assert.Equal(t, "token-a", *token)
+	})
+
+	t.Run("heartbeat returns the authoritative renewed lease deadline", func(t *testing.T) {
+		truncateDurabilityTables(ctx, t, pool)
+		admitOne(ctx, t, repo, message)
+		claim, err := repo.Claim(ctx, "token-a", durabilityTestLease)
+		require.NoError(t, err)
+		require.NotNil(t, claim)
+
+		renewedUntil, applied, err := repo.Heartbeat(ctx, message.MessageID, "token-a", time.Minute)
+		require.NoError(t, err)
+		require.True(t, applied)
+		assert.Greater(t, renewedUntil, claim.LeaseUntil)
+		var storedLeaseUntil time.Time
+		require.NoError(t, pool.QueryRow(ctx,
+			"SELECT lease_until FROM bot_webhook_inbox WHERE message_id = $1", message.MessageID).Scan(&storedLeaseUntil))
+		assert.Equal(t, storedLeaseUntil, renewedUntil)
 	})
 
 	t.Run("complete is fenced by the claim token", func(t *testing.T) {

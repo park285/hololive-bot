@@ -47,6 +47,15 @@ func (b *Bot) newCommandTransport() *transport.CommandTransport {
 	return transport.NewCommandTransport(b.irisClient, b.formatter, transport.WithMarkdownReplies(b.markdownReplies))
 }
 
+func (b *Bot) SetReplyOutboxWriter(writer transport.ReplyOutboxWriter) {
+	b.transport = transport.NewCommandTransport(
+		b.irisClient,
+		b.formatter,
+		transport.WithMarkdownReplies(b.markdownReplies),
+		transport.WithReplyOutboxWriter(writer),
+	)
+}
+
 func (b *Bot) ensureTransport() *transport.CommandTransport {
 	if b.transport == nil {
 		b.transport = b.newCommandTransport()
@@ -64,7 +73,6 @@ func (b *Bot) ensureLifecycle() *lifecycle.BotLifecycle {
 			b.irisBaseURL,
 			b.stopCh,
 			b.doneCh,
-			b.workerPool,
 			b.holodex,
 			b.postgres,
 		)

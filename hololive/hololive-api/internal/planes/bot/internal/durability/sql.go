@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,12 +55,16 @@ const (
 	commandKindRuneLimit    = 128
 	terminalReasonByteLimit = 512
 	lastErrorByteLimit      = 8192
-	resultSummaryByteLimit  = 2048
+	operatorActorRuneLimit  = 64
+	operatorReasonByteLimit = 256
 )
 
 const inboxStatusDead = "dead"
 
-var clientRequestIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{8,160}$`)
+var (
+	clientRequestIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{8,160}$`)
+	operatorActorPattern   = regexp.MustCompile(`^[A-Za-z0-9._:@-]{1,64}$`)
+)
 
 func ensurePool(pool *pgxpool.Pool) error {
 	if pool == nil {
@@ -129,6 +134,36 @@ func requireClientRequestID(value string) (string, error) {
 	}
 
 	return trimmed, nil
+}
+
+func requireOperatorActor(value string) (string, error) {
+	actor, err := requireBoundedIdentity("operator actor", value, operatorActorRuneLimit)
+	if err != nil {
+		return "", err
+	}
+	if !operatorActorPattern.MatchString(actor) {
+		return "", errors.Join(ErrInvalidArgument,
+			errors.New("operator actor contains unsupported characters"))
+	}
+	return actor, nil
+}
+
+func requireOperatorReason(value string) (string, error) {
+	reason, err := requireIdentity("operator reason", value)
+	if err != nil {
+		return "", err
+	}
+	if len(reason) > operatorReasonByteLimit {
+		return "", errors.Join(ErrInvalidArgument,
+			fmt.Errorf("operator reason must be at most %d bytes", operatorReasonByteLimit))
+	}
+	for _, r := range reason {
+		if unicode.IsControl(r) {
+			return "", errors.Join(ErrInvalidArgument,
+				errors.New("operator reason must not contain control characters"))
+		}
+	}
+	return reason, nil
 }
 
 // lease는 밀리초로 절단돼 SQL에 들어가므로, 1ms 미만은 태어나자마자 만료된 lease가 된다.

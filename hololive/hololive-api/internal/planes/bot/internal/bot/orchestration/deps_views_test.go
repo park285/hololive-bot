@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/shared-go/pkg/workerpool"
 
 	messagingadapter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -54,7 +53,7 @@ func TestDependenciesViews_NilSafety(t *testing.T) {
 	if got := deps.streamDeps(); got.holodex != nil {
 		t.Fatal("streamDeps nil-safety failed")
 	}
-	if got := deps.supportDeps(); got.acl != nil || got.workerPool != nil {
+	if got := deps.supportDeps(); got.acl != nil {
 		t.Fatal("supportDeps nil-safety failed")
 	}
 	if got := deps.featureDeps(); len(got.commandBuilders) != 0 || got.majorEventRepository != nil || got.memberNews != nil {
@@ -70,8 +69,6 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	postgresService := &database.PostgresService{}
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
-	workerPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
-	t.Cleanup(workerPool.StopAndWait)
 	externalBuilder := orchcmd.CommandBuilder(func(_ *handlercore.Dependencies) handlercore.Command {
 		return command.NewHelpCommand(nil)
 	})
@@ -92,7 +89,6 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 		MemberRepository:      memberRepository,
 		MemberCache:           memberCache,
 		CommandBuilders:       []orchcmd.CommandBuilder{externalBuilder},
-		WorkerPool:            workerPool,
 	}
 
 	core := deps.coreDeps()
@@ -120,11 +116,6 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	stream := deps.streamDeps()
 	if stream.service != nil {
 		t.Fatal("streamDeps service mapping mismatch")
-	}
-
-	support := deps.supportDeps()
-	if support.workerPool != workerPool {
-		t.Fatal("supportDeps workerPool mapping mismatch")
 	}
 
 	feature := deps.featureDeps()

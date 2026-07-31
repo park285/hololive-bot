@@ -179,8 +179,10 @@ case_default_policy_has_exact_rows() {
   local expected
   actual="$(awk -F'|' 'NF && $1 !~ /^#/ { print }' "${DEFAULT_POLICY}" | sort)"
   expected="$(printf '%s\n' \
+    'off|admin-dashboard/backend|./cmd/admin-dashboard|admin-dashboard' \
     'off|hololive/hololive-alarm-worker|./cmd/alarm-worker|hololive-alarm-worker' \
-    'off|hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate' | sort)"
+    'off|hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate' \
+    'off|hololive/hololive-youtube-producer|./cmd/runtime/youtube-producer|youtube-producer' | sort)"
   if [[ "${actual}" != "${expected}" ]]; then
     printf 'not ok - production off-only policy rows differ\nexpected:\n%s\nactual:\n%s\n' \
       "${expected}" "${actual}" >&2

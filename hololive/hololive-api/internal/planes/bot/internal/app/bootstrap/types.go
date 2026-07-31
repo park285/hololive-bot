@@ -18,7 +18,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 
 	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
@@ -83,7 +82,6 @@ type CoreIntegrationServices struct {
 	MajorEventRepository handlercore.MajorEventRepository
 	MemberNewsService    handlercore.MemberNewsService
 	CommandBuilders      []orchcmd.CommandBuilder
-	WorkerPool           *workerpool.QueuedPool
 }
 
 type BotCoreModule struct {
@@ -125,7 +123,6 @@ type BotSupportModule struct {
 	ActivityLogger *activity.Logger
 	Settings       settings.ReadWriter
 	ACL            *acl.Service
-	WorkerPool     *workerpool.QueuedPool
 }
 
 type BotFeatureModule struct {

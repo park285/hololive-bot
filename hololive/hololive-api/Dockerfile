@@ -21,53 +21,33 @@ FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e
 ARG VERSION=dev
 ARG TARGETOS
 ARG TARGETARCH
-# GOAMD64/UPX opt-in: 기본은 현 동작(v1, 압축 없음). 배포 호스트가 AVX2(2013+)면
-# --build-arg GOAMD64=v3, 이미지 축소가 필요하면 --build-arg UPX_ENABLE=1 로 활성. 빼면 즉시 비활성.
+# GOAMD64 opt-in: 기본은 v1. 배포 호스트가 AVX2(2013+)면 --build-arg GOAMD64=v3로 활성화한다.
 ARG GOAMD64=v1
-ARG UPX_ENABLE=
 # Release images are PGO-off until a verifiable adoption design is implemented.
 
-RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
 
-# go.work 대신 모듈 단독 빌드(GOWORK=off + replace): 워커/프로듀서/대시보드와 전략을 통일하고,
-# 형제 서비스 소스 변경이 이 이미지의 COPY 레이어 캐시를 무효화하지 않도록 필요한 것만 좁게 복사한다.
-ENV GOWORK=off
+ENV GOWORK=off \
+    GOPROXY=https://proxy.golang.org
 
 WORKDIR /workspace/hololive-bot
 
-COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
-COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
 COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ./hololive/hololive-dbtest/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
 COPY hololive/hololive-api/go.mod hololive/hololive-api/go.sum ./hololive/hololive-api/
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-api
 
-# go.mod의 `replace github.com/kapu/hololive-shared => ../hololive-shared` 상대 경로는
-# 위 COPY 레이아웃으로 그대로 성립한다. 외부 형제 워크스페이스 두 개만 로컬 경로로 치환한다.
-RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
-    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
-
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 WORKDIR /workspace/hololive-bot
 
-COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
-COPY --from=iris_client_go_workspace iris /workspace/iris-client-go/iris
-COPY --from=iris_client_go_workspace internal /workspace/iris-client-go/internal
-COPY --from=iris_client_go_workspace webhook /workspace/iris-client-go/webhook
-# alarm-worker 목록과 달리 valkeydedup이 추가로 필요하다: bot 플레인이 non-test로 import한다.
-COPY --from=iris_client_go_workspace valkeydedup /workspace/iris-client-go/valkeydedup
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-api ./hololive/hololive-api
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-api
-
-RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
-    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -81,7 +61,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
       -o /dist/bin/healthcheck ./cmd/healthcheck && \
-    if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/hololive-api /dist/bin/healthcheck; fi && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 

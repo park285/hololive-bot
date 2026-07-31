@@ -32,37 +32,29 @@ ARG VERSION=dev
 ARG TARGETOS
 ARG TARGETARCH
 ARG GOAMD64=v1
-ARG UPX_ENABLE=
-RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
 
-ENV GOWORK=off
+ENV GOWORK=off \
+    GOPROXY=https://proxy.golang.org
 
 WORKDIR /workspace/hololive-bot
 
-COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
 COPY admin-dashboard/backend/go.mod admin-dashboard/backend/go.sum ./admin-dashboard/backend/
 COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ./hololive/hololive-dbtest/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
 
 WORKDIR /workspace/hololive-bot/admin-dashboard/backend
 
-# Build against the same active shared-go workspace that build-all.sh resolves via additional_contexts.
-RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go
-
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 WORKDIR /workspace/hololive-bot
 
-COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
 COPY admin-dashboard/backend ./admin-dashboard/backend
 COPY hololive/hololive-shared ./hololive/hololive-shared
 
 WORKDIR /workspace/hololive-bot/admin-dashboard/backend
-
-RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go
 
 COPY --from=frontend-builder /app/frontend/dist /frontend-dist
 RUN rm -rf internal/static/static/dist && \
@@ -72,10 +64,9 @@ RUN rm -rf internal/static/static/dist && \
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/admin-dashboard ./cmd/admin-dashboard && \
+    go build -pgo=off -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/admin-dashboard ./cmd/admin-dashboard && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
-    if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/admin-dashboard /dist/bin/healthcheck; fi
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck
 
 FROM gcr.io/distroless/static-debian13@sha256:9197324ba51d9cd071af8505989365c006adf9d6d2067eada25aef00abbb5278
 

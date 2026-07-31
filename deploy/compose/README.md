@@ -50,6 +50,14 @@ monolithic Compose env file as an `env_file`.
 Deploy this repo-side contract after OpenBao Agent has rendered `compose.env` or
 `ap-compose.env` plus the per-service env files for the target host.
 
+`scripts/deploy/lib/postgres-capacity.sh`가 production mutation entrypoint의 공통 owner입니다.
+`scripts/deploy/compose.sh ... up`, `build-all.sh`, `scripts/deploy/compose-redeploy-service.sh`는
+build/migration/up보다 먼저 이 gate를 호출해 `COMPOSE_ENV_FILE`의 PostgreSQL pool override key만 읽고
+stack 전체 connection budget을 다시 계산합니다. Target-rendered allocation이 `max_connections=60`에서 최소 5개
+reserve를 남기지 않으면 어떤 표준 배포 경로도 진행하지 않습니다. Default policy만 확인할 때는
+`scripts/ci/check-postgres-capacity.sh`를, 특정 render 결과를 확인할 때는 세 번째 인자로 해당
+Compose env file을 전달합니다. 이 검사는 다른 env 값이나 secret을 출력하지 않습니다.
+
 ## PostgreSQL TLS
 
 `holo-postgres` serves TLS with `ssl=on`. The central OpenBao Agent renders the
@@ -68,8 +76,10 @@ verified TLS and the CA bundle above.
 ## Requirements
 
 - Docker Compose v2.24.4+ — 오버레이의 `!override` YAML 태그가 이 버전부터 지원된다.
-  (`additional_contexts`는 v2.17+, build `provenance`/`sbom` 속성은 그보다 최신을 요구)
+  build `provenance`/`sbom` 속성도 지원해야 한다.
 - BuildKit 활성 Docker Engine — Dockerfile들의 `# syntax=docker/dockerfile:1.24.0@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89`
   (cache mount, `COPY --link`, per-Dockerfile `.dockerignore`) 전제.
+- production Go build는 `GOWORK=off`로 각 `go.mod`의 stable published external pin만 사용한다.
+  로컬 sibling checkout은 image source가 아니다.
 - 호스트 호환성 확인: `docker compose -f deploy/compose/docker-compose.prod.yml config` 가
   에러 없이 렌더되는지로 검증한다.

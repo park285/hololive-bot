@@ -14,7 +14,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -43,7 +42,7 @@ func BuildBotDependencyModules(
 		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter, messageStrings, appConfig.Bot.MarkdownReplies),
 		Data:      buildBotDataModule(infra, alarmYouTubeStack.AlarmMode, foundation.ProfileService),
 		Stream:    buildBotStreamModule(alarmYouTubeStack.AlarmMode, foundation.HolodexService, alarmYouTubeStack.Matcher, alarmYouTubeStack.YouTubeStack),
-		Support:   buildBotSupportModule(alarmYouTubeStack.ActivityLogger, alarmYouTubeStack.SettingsService, integrationServices.ACLService, integrationServices.WorkerPool),
+		Support:   buildBotSupportModule(alarmYouTubeStack.ActivityLogger, alarmYouTubeStack.SettingsService, integrationServices.ACLService),
 		Feature:   buildBotFeatureModule(integrationServices.MajorEventRepository, integrationServices.MemberNewsService, integrationServices.CommandBuilders),
 	}
 }
@@ -110,13 +109,11 @@ func buildBotSupportModule(
 	activityLogger *activity.Logger,
 	settingsService settings.ReadWriter,
 	aclService *acl.Service,
-	workerPool *workerpool.QueuedPool,
 ) BotSupportModule {
 	return BotSupportModule{
 		ActivityLogger: activityLogger,
 		Settings:       settingsService,
 		ACL:            aclService,
-		WorkerPool:     workerPool,
 	}
 }
 

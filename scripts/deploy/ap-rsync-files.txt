@@ -9,6 +9,9 @@ scripts/deploy/lib/removed-runtimes.sh
 scripts/deploy/lib/health-gate.sh
 scripts/deploy/lib/ap-host.sh
 scripts/deploy/lib/require-quic-udp-buffer.sh
+scripts/deploy/lib/postgres-capacity.sh
+scripts/ci/check-postgres-capacity.sh
+scripts/ci/postgres-capacity-policy.tsv
 scripts/deploy/ap-hosts/osaka.conf
 scripts/deploy/ap-hosts/osaka2.conf
 scripts/deploy/ap-hosts/seoul.conf
@@ -87,6 +90,8 @@ hololive/hololive-youtube-producer/internal/communityshorts/target_baseline_rout
 hololive/hololive-shared/internal/dbx/sqlhelpers.go
 hololive/hololive-shared/internal/dbx/tx.go
 hololive/hololive-shared/pkg/apperrors/errors.go
+hololive/hololive-shared/pkg/privacylog/cachekey.go
+hololive/hololive-shared/pkg/privacylog/privacylog.go
 hololive/hololive-shared/pkg/config/settings/config.go
 hololive/hololive-shared/pkg/config/settings/config_alarm_dispatch.go
 hololive/hololive-shared/pkg/config/settings/config_api_operational.go
@@ -715,6 +720,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/observation/repository_hel
 ../shared-go/pkg/logging/attrs.go
 ../shared-go/pkg/logging/context.go
 ../shared-go/pkg/logging/doc.go
+../shared-go/pkg/logging/format.go
 ../shared-go/pkg/logging/id.go
 ../shared-go/pkg/logging/log.go
 ../shared-go/pkg/logging/log_and_wrap.go

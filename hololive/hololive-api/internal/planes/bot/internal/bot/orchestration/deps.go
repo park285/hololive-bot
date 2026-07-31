@@ -35,7 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -78,7 +77,6 @@ type Dependencies struct {
 	MajorEventRepository  handlercore.MajorEventRepository
 	MemberNews            handlercore.MemberNewsService
 	CommandBuilders       []orchcmd.CommandBuilder
-	WorkerPool            *workerpool.QueuedPool
 }
 
 type coreDependencies struct {
@@ -117,10 +115,9 @@ type streamDependencies struct {
 }
 
 type supportDependencies struct {
-	activity   *activity.Logger
-	settings   settings.ReadWriter
-	acl        *acl.Service
-	workerPool *workerpool.QueuedPool
+	activity *activity.Logger
+	settings settings.ReadWriter
+	acl      *acl.Service
 }
 
 type featureDependencies struct {
@@ -194,10 +191,9 @@ func (d *Dependencies) supportDeps() supportDependencies {
 	}
 
 	return supportDependencies{
-		activity:   d.Activity,
-		settings:   d.Settings,
-		acl:        d.ACL,
-		workerPool: d.WorkerPool,
+		activity: d.Activity,
+		settings: d.Settings,
+		acl:      d.ACL,
 	}
 }
 

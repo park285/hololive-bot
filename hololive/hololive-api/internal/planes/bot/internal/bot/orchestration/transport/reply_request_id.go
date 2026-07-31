@@ -84,13 +84,15 @@ func isValidReplyClientRequestID(id string) bool {
 	}
 
 	for _, r := range id {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-		case r == '.', r == '_', r == ':', r == '-':
-		default:
+		if !isReplyClientRequestIDRune(r) {
 			return false
 		}
 	}
 
 	return true
+}
+
+func isReplyClientRequestIDRune(r rune) bool {
+	const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
+	return strings.ContainsRune(allowed, r)
 }

@@ -33,6 +33,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 )
 
@@ -44,11 +45,11 @@ func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.C
 
 	channels, err := h.fetchHololiveChannelList(ctx)
 	if err != nil {
-		return nil, sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, slog.String("query", query))
+		return nil, sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, searchQueryAttr(query))
 	}
 
 	h.logger.Debug("Holodex API search results",
-		slog.String("query", query),
+		searchQueryAttr(query),
 		slog.Int("total_results", len(channels)),
 	)
 
@@ -59,6 +60,10 @@ func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.C
 	h.cacheManager.SetSearchChannels(ctx, query, filtered)
 
 	return filtered, nil
+}
+
+func searchQueryAttr(query string) slog.Attr {
+	return slog.String("query_token", privacylog.Pseudonym(query))
 }
 
 func buildSearchChannelsCacheKey(query string) string {

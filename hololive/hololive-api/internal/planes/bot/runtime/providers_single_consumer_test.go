@@ -21,11 +21,9 @@
 package botruntime
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
@@ -56,17 +54,9 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 		require.NotNil(t, twitchClient)
 	})
 
-	t.Run("alarm repository and worker pool", func(t *testing.T) {
+	t.Run("alarm repository", func(t *testing.T) {
 		repository := appbootstrap.ProvideAlarmRepository(&dbmocks.Client{}, logger)
 		require.NotNil(t, repository)
-
-		pool := appbootstrap.ProvideAlarmWorkerPool(settings.WorkerPoolConfig{Workers: 2, QueueSize: 10})
-		require.NotNil(t, pool)
-
-		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
-		defer cancel()
-
-		require.NoError(t, pool.StopAndWaitContext(ctx))
 	})
 
 	t.Run("alarm service", func(t *testing.T) {

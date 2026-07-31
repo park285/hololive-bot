@@ -83,6 +83,7 @@ func TestReplyOutboxSettleRejectsPreDispatchAfterAcceptance(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.True(t, applied)
+		time.Sleep(5 * time.Millisecond)
 
 		reclaimed, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 		require.NoError(t, err)
@@ -114,7 +115,7 @@ func TestOversizedDiagnosticsAreTruncatedInsteadOfStrandingTheRow(t *testing.T) 
 	ctx := context.Background()
 	oversized := strings.Repeat("e", 9000)
 
-	t.Run("inbox release truncates last_error and reaches retry", func(t *testing.T) {
+	t.Run("inbox release reduces last_error to a bounded reason and reaches retry", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 		repo := NewInboxRepository(pool)
 		msg := inboxMessage("message:m-clamp", "room-1", "room:room-1")
@@ -132,8 +133,7 @@ func TestOversizedDiagnosticsAreTruncatedInsteadOfStrandingTheRow(t *testing.T) 
 		var stored string
 		require.NoError(t, pool.QueryRow(ctx,
 			"SELECT last_error FROM bot_webhook_inbox WHERE message_id = $1", msg.MessageID).Scan(&stored))
-		assert.LessOrEqual(t, len(stored), 8192)
-		assert.Contains(t, stored, "truncated from 9000 bytes")
+		assert.Equal(t, InboxFailureProcessingFailed, stored)
 	})
 
 	t.Run("outbox settle truncates last_error and reaches the terminal status", func(t *testing.T) {
@@ -156,14 +156,14 @@ func TestOversizedDiagnosticsAreTruncatedInsteadOfStrandingTheRow(t *testing.T) 
 		assert.Nil(t, token)
 	})
 
-	t.Run("command execution truncates result_summary and reaches terminal", func(t *testing.T) {
+	t.Run("command execution scrubs result_summary at the terminal transition", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 		repo := NewCommandExecutionRepository(pool)
 		claimed, err := repo.Claim(ctx, "message:m-clamp", "alarm", "token-a")
 		require.NoError(t, err)
 		require.True(t, claimed)
 
-		applied, err := repo.Complete(ctx, "message:m-clamp", "token-a", CommandExecutionFailed, strings.Repeat("s", 3000))
+		applied, err := repo.Complete(ctx, "message:m-clamp", "token-a", CommandExecutionFailed)
 		require.NoError(t, err)
 		require.True(t, applied)
 
@@ -172,8 +172,15 @@ func TestOversizedDiagnosticsAreTruncatedInsteadOfStrandingTheRow(t *testing.T) 
 			"SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1",
 			"message:m-clamp").Scan(&status, &summary))
 		assert.Equal(t, CommandExecutionFailed, status)
-		assert.LessOrEqual(t, len(summary), 2048)
-		assert.Contains(t, summary, "truncated from 3000 bytes")
+		assert.Equal(t, CommandExecutionFailed, summary)
+
+		_, err = pool.Exec(ctx, `UPDATE bot_command_executions SET result_summary = 'raw diagnostic' WHERE message_id = $1`,
+			"message:m-clamp")
+		require.NoError(t, err)
+		require.NoError(t, pool.QueryRow(ctx,
+			"SELECT result_summary FROM bot_command_executions WHERE message_id = $1",
+			"message:m-clamp").Scan(&summary))
+		assert.Equal(t, CommandExecutionFailed, summary, "the database trigger must preserve the scrub invariant")
 	})
 
 	t.Run("truncation keeps the head valid utf-8", func(t *testing.T) {
@@ -314,11 +321,11 @@ func TestCommandExecutionClaimOwnership(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, claimed)
 
-		applied, err := repo.Complete(ctx, "message:m-own", "token-stale", CommandExecutionSucceeded, "foreign")
+		applied, err := repo.Complete(ctx, "message:m-own", "token-stale", CommandExecutionSucceeded)
 		require.NoError(t, err)
 		assert.False(t, applied)
 
-		applied, err = repo.Complete(ctx, "message:m-own", "token-a", CommandExecutionSucceeded, "ok")
+		applied, err = repo.Complete(ctx, "message:m-own", "token-a", CommandExecutionSucceeded)
 		require.NoError(t, err)
 		assert.True(t, applied)
 	})
@@ -338,14 +345,14 @@ func TestCommandExecutionClaimOwnership(t *testing.T) {
 		require.NoError(t, pool.QueryRow(ctx,
 			"SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1",
 			"message:m-stale").Scan(&status, &summary))
-		assert.Equal(t, CommandExecutionFailed, status)
+		assert.Equal(t, CommandExecutionOutcomeUnknown, status)
 		assert.NotEmpty(t, summary)
 
 		reclaimed, err := repo.Claim(ctx, "message:m-stale", "alarm", "token-b")
 		require.NoError(t, err)
 		assert.False(t, reclaimed, "결과를 모르는 실행을 되살리면 이미 나간 응답이 다시 나간다")
 
-		applied, err := repo.Complete(ctx, "message:m-stale", "token-a", CommandExecutionSucceeded, "late")
+		applied, err := repo.Complete(ctx, "message:m-stale", "token-a", CommandExecutionSucceeded)
 		require.NoError(t, err)
 		assert.False(t, applied)
 	})

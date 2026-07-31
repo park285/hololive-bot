@@ -38,7 +38,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/stringutil"
-	"github.com/park285/shared-go/pkg/workerpool"
 
 	messagingadapter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -85,7 +84,6 @@ type Bot struct {
 	stopCh                chan struct{}
 	doneCh                chan struct{}
 	selfSender            string
-	workerPool            *workerpool.QueuedPool
 	ingress               *ingress.MessageIngress
 	commandExecutor       *orchcmd.CommandRouter
 	transport             *transport.CommandTransport
@@ -125,7 +123,6 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		commandBuilders:      feature.commandBuilders,
 		membersData:          stream.membersData,
 		memberRepository:     newCelebrationCalendarFinder(data, &core),
-		workerPool:           support.workerPool,
 		stopCh:               make(chan struct{}),
 		doneCh:               make(chan struct{}),
 		selfSender:           stringutil.Normalize(core.botSelfUser),
@@ -141,7 +138,6 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		bot.irisBaseURL,
 		bot.stopCh,
 		bot.doneCh,
-		bot.workerPool,
 		bot.holodex,
 		bot.postgres,
 	)

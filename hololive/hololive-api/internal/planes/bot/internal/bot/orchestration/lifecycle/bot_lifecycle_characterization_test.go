@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -142,7 +141,7 @@ func TestNewBotLifecycle(t *testing.T) {
 	cacheClient := &stubCache{}
 	pinger := &stubPinger{}
 
-	l := NewBotLifecycle(discardLogger(), cacheClient, pinger, "http://iris", stopCh, doneCh, nil, nil, nil)
+	l := NewBotLifecycle(discardLogger(), cacheClient, pinger, "http://iris", stopCh, doneCh, nil, nil)
 
 	require.NotNil(t, l)
 	assert.Equal(t, "http://iris", l.irisBaseURL)
@@ -156,14 +155,14 @@ func TestBotLifecycleStart(t *testing.T) {
 	t.Parallel()
 
 	t.Run("cache not configured", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), nil, &stubPinger{}, "", make(chan struct{}), make(chan struct{}), nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, &stubPinger{}, "", make(chan struct{}), make(chan struct{}), nil, nil)
 		err := l.Start(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache is not configured")
 	})
 
 	t.Run("cache readiness failure", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), &stubCache{waitErr: errors.New("down")}, &stubPinger{}, "", make(chan struct{}), make(chan struct{}), nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), &stubCache{waitErr: errors.New("down")}, &stubPinger{}, "", make(chan struct{}), make(chan struct{}), nil, nil)
 		err := l.Start(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "valkey connection timeout")
@@ -172,19 +171,19 @@ func TestBotLifecycleStart(t *testing.T) {
 	t.Run("nil iris client enters degraded mode then honors stop signal", func(t *testing.T) {
 		stopCh := make(chan struct{})
 		close(stopCh)
-		l := NewBotLifecycle(discardLogger(), &stubCache{}, nil, "http://iris", stopCh, make(chan struct{}), nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), &stubCache{}, nil, "http://iris", stopCh, make(chan struct{}), nil, nil)
 		require.NoError(t, l.Start(t.Context()))
 	})
 
 	t.Run("iris ready then honors stop signal", func(t *testing.T) {
 		stopCh := make(chan struct{})
 		close(stopCh)
-		l := NewBotLifecycle(discardLogger(), &stubCache{}, &stubPinger{result: true}, "http://iris", stopCh, make(chan struct{}), nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), &stubCache{}, &stubPinger{result: true}, "http://iris", stopCh, make(chan struct{}), nil, nil)
 		require.NoError(t, l.Start(t.Context()))
 	})
 
 	t.Run("canceled context returns error", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), &stubCache{}, &stubPinger{result: true}, "http://iris", make(chan struct{}), make(chan struct{}), nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), &stubCache{}, &stubPinger{result: true}, "http://iris", make(chan struct{}), make(chan struct{}), nil, nil)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		err := l.Start(ctx)
@@ -198,7 +197,7 @@ func TestBotLifecycleShutdown(t *testing.T) {
 
 	t.Run("all nil components closes done channel", func(t *testing.T) {
 		doneCh := make(chan struct{})
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", make(chan struct{}), doneCh, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", make(chan struct{}), doneCh, nil, nil)
 		require.NoError(t, l.Shutdown(t.Context()))
 		assertChannelClosed(t, doneCh)
 	})
@@ -207,10 +206,9 @@ func TestBotLifecycleShutdown(t *testing.T) {
 		cacheClient := &stubCache{}
 		holodex := &stubStoppable{}
 		postgres := &stubPostgres{}
-		pool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
 		doneCh := make(chan struct{})
 
-		l := NewBotLifecycle(discardLogger(), cacheClient, &stubPinger{}, "http://iris", make(chan struct{}), doneCh, pool, holodex, postgres)
+		l := NewBotLifecycle(discardLogger(), cacheClient, &stubPinger{}, "http://iris", make(chan struct{}), doneCh, holodex, postgres)
 
 		require.NoError(t, l.Shutdown(t.Context()))
 		assert.Equal(t, 1, cacheClient.closeCalls)
@@ -224,7 +222,7 @@ func TestBotLifecycleShutdown(t *testing.T) {
 		postgres := &stubPostgres{closeErr: errors.New("pg boom")}
 		doneCh := make(chan struct{})
 
-		l := NewBotLifecycle(discardLogger(), cacheClient, nil, "", make(chan struct{}), doneCh, nil, nil, postgres)
+		l := NewBotLifecycle(discardLogger(), cacheClient, nil, "", make(chan struct{}), doneCh, nil, postgres)
 
 		require.NoError(t, l.Shutdown(t.Context()))
 		assert.Equal(t, 1, cacheClient.closeCalls)
@@ -235,7 +233,7 @@ func TestBotLifecycleShutdown(t *testing.T) {
 	t.Run("done channel closed only once across repeated shutdowns", func(t *testing.T) {
 		cacheClient := &stubCache{}
 		doneCh := make(chan struct{})
-		l := NewBotLifecycle(discardLogger(), cacheClient, nil, "", make(chan struct{}), doneCh, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), cacheClient, nil, "", make(chan struct{}), doneCh, nil, nil)
 
 		require.NoError(t, l.Shutdown(t.Context()))
 		require.NoError(t, l.Shutdown(t.Context()))
@@ -244,7 +242,7 @@ func TestBotLifecycleShutdown(t *testing.T) {
 	})
 
 	t.Run("nil done channel does not panic", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", make(chan struct{}), nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", make(chan struct{}), nil, nil, nil)
 		require.NoError(t, l.Shutdown(t.Context()))
 	})
 }
@@ -260,7 +258,7 @@ func TestWaitUntilIrisReady(t *testing.T) {
 	})
 
 	t.Run("nil client returns configuration error", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
 		err := l.WaitUntilIrisReady(t.Context(), time.Second, time.Millisecond, time.Millisecond)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "iris client is not configured")
@@ -268,14 +266,14 @@ func TestWaitUntilIrisReady(t *testing.T) {
 
 	t.Run("ping success on first attempt", func(t *testing.T) {
 		p := &stubPinger{result: true}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
 		require.NoError(t, l.WaitUntilIrisReady(t.Context(), time.Second, 10*time.Millisecond, 10*time.Millisecond))
 		assert.Equal(t, 1, p.calls)
 	})
 
 	t.Run("timeout when ping never succeeds", func(t *testing.T) {
 		p := &stubPinger{result: false}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
 		err := l.WaitUntilIrisReady(t.Context(), 40*time.Millisecond, 10*time.Millisecond, 5*time.Millisecond)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "timeout after 40ms")
@@ -287,14 +285,14 @@ func TestRunIrisReadyWaitLoop(t *testing.T) {
 
 	t.Run("ping success on first attempt returns nil", func(t *testing.T) {
 		p := &stubPinger{result: true}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
 		require.NoError(t, l.runIrisReadyWaitLoop(t.Context(), make(chan time.Time), time.Minute, time.Second, time.Second))
 		assert.Equal(t, 1, p.calls)
 	})
 
 	t.Run("ping fails then succeeds after tick", func(t *testing.T) {
 		p := &stubPinger{results: []bool{false, true}}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
 		tick := make(chan time.Time, 1)
 		tick <- time.Now()
 		require.NoError(t, l.runIrisReadyWaitLoop(t.Context(), tick, time.Minute, time.Second, time.Second))
@@ -303,7 +301,7 @@ func TestRunIrisReadyWaitLoop(t *testing.T) {
 
 	t.Run("canceled context returns canceled error", func(t *testing.T) {
 		p := &stubPinger{result: false}
-		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, p, "", nil, nil, nil, nil)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		err := l.runIrisReadyWaitLoop(ctx, make(chan time.Time), time.Minute, time.Second, time.Second)
@@ -318,10 +316,10 @@ func TestValidateIrisReadyWaiter(t *testing.T) {
 	var nilReceiver *BotLifecycle
 	require.Error(t, nilReceiver.validateIrisReadyWaiter())
 
-	nilClient := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil, nil)
+	nilClient := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
 	require.Error(t, nilClient.validateIrisReadyWaiter())
 
-	valid := NewBotLifecycle(discardLogger(), nil, &stubPinger{}, "", nil, nil, nil, nil, nil)
+	valid := NewBotLifecycle(discardLogger(), nil, &stubPinger{}, "", nil, nil, nil, nil)
 	require.NoError(t, valid.validateIrisReadyWaiter())
 }
 
@@ -329,12 +327,12 @@ func TestPingIrisReady(t *testing.T) {
 	t.Parallel()
 
 	up := &stubPinger{result: true}
-	l := NewBotLifecycle(discardLogger(), nil, up, "", nil, nil, nil, nil, nil)
+	l := NewBotLifecycle(discardLogger(), nil, up, "", nil, nil, nil, nil)
 	assert.True(t, l.pingIrisReady(t.Context(), 10*time.Millisecond))
 	assert.Equal(t, 1, up.calls)
 
 	down := &stubPinger{result: false}
-	l2 := NewBotLifecycle(discardLogger(), nil, down, "", nil, nil, nil, nil, nil)
+	l2 := NewBotLifecycle(discardLogger(), nil, down, "", nil, nil, nil, nil)
 	assert.False(t, l2.pingIrisReady(t.Context(), 10*time.Millisecond))
 }
 
@@ -343,14 +341,14 @@ func TestLogIrisReadyAfterRetry(t *testing.T) {
 
 	t.Run("attempt at most one logs nothing", func(t *testing.T) {
 		h := &recordingHandler{}
-		l := NewBotLifecycle(slog.New(h), nil, nil, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(slog.New(h), nil, nil, "", nil, nil, nil, nil)
 		l.logIrisReadyAfterRetry(1, time.Now())
 		assert.Empty(t, h.messages())
 	})
 
 	t.Run("attempt greater than one logs became-ready message", func(t *testing.T) {
 		h := &recordingHandler{}
-		l := NewBotLifecycle(slog.New(h), nil, nil, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(slog.New(h), nil, nil, "", nil, nil, nil, nil)
 		l.logIrisReadyAfterRetry(3, time.Now().Add(-time.Second))
 		require.Len(t, h.messages(), 1)
 		assert.Equal(t, "Iris server became ready after retry", h.messages()[0])
@@ -363,14 +361,14 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 	start := time.Now()
 
 	t.Run("first attempt logs and returns fresh timestamp", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
 		got, ok := l.logIrisNotReadyRetry(1, time.Second, start, time.Time{})
 		assert.True(t, ok)
 		assert.False(t, got.IsZero())
 	})
 
 	t.Run("later attempt within a minute is suppressed", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
 		last := time.Now()
 		got, ok := l.logIrisNotReadyRetry(2, time.Second, start, last)
 		assert.False(t, ok)
@@ -378,7 +376,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 	})
 
 	t.Run("later attempt after a minute logs again", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
 		last := time.Now().Add(-2 * time.Minute)
 		got, ok := l.logIrisNotReadyRetry(2, time.Second, start, last)
 		assert.True(t, ok)
@@ -386,7 +384,7 @@ func TestLogIrisNotReadyRetry(t *testing.T) {
 	})
 
 	t.Run("first attempt bypasses throttle even with recent timestamp", func(t *testing.T) {
-		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil, nil)
+		l := NewBotLifecycle(discardLogger(), nil, nil, "", nil, nil, nil, nil)
 		_, ok := l.logIrisNotReadyRetry(1, time.Second, start, time.Now())
 		assert.True(t, ok)
 	})
@@ -441,7 +439,7 @@ func TestLoggingHelpersAreNilSafe(t *testing.T) {
 		nilReceiver.logWarn("y")
 	})
 
-	nilLogger := NewBotLifecycle(nil, nil, nil, "", nil, nil, nil, nil, nil)
+	nilLogger := NewBotLifecycle(nil, nil, nil, "", nil, nil, nil, nil)
 	require.NotPanics(t, func() {
 		nilLogger.logInfo("x", slog.String("k", "v"))
 		nilLogger.logWarn("y", slog.String("k", "v"))

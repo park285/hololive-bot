@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
@@ -196,7 +196,7 @@ func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *domain.
 		return err
 	}
 
-	return c.Deps().SendImage(ctx, cmdCtx.Room, image, iris.WithImageContentType(contentType))
+	return c.Deps().SendImage(transport.WithImageContentType(ctx, contentType), cmdCtx.Room, image)
 }
 
 func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Context, cmdCtx *domain.CommandContext, videoID string) (*handlercore.BroadcastHistoryEntry, bool, error) {

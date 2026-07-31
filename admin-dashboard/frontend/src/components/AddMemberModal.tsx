@@ -1,6 +1,12 @@
 import Save from "lucide-react/dist/esm/icons/save.mjs";
 import UserPlus from "lucide-react/dist/esm/icons/user-plus.mjs";
-import { type SyntheticEvent, useEffect, useMemo, useState } from "react";
+import {
+	type SyntheticEvent,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -52,6 +58,8 @@ export default function AddMemberModal({
 }: AddMemberModalProps) {
 	const [values, setValues] = useState<AddMemberFormValues>(initialValues);
 	const [errors, setErrors] = useState<AddMemberErrors>({});
+	const nameInputRef = useRef<HTMLInputElement>(null);
+	const channelIdInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
 		if (isOpen) {
@@ -82,6 +90,13 @@ export default function AddMemberModal({
 		const nextErrors = validate(values);
 		if (Object.keys(nextErrors).length > 0) {
 			setErrors(nextErrors);
+			queueMicrotask(() => {
+				if (nextErrors.name) {
+					nameInputRef.current?.focus();
+				} else if (nextErrors.channelId) {
+					channelIdInputRef.current?.focus();
+				}
+			});
 			return;
 		}
 
@@ -109,11 +124,14 @@ export default function AddMemberModal({
 			maxWidth="lg"
 			showHeaderBorder
 		>
-			<form onSubmit={handleSubmit} className="space-y-4">
+			<form onSubmit={handleSubmit} className="space-y-4" noValidate>
 				<div className="space-y-2">
 					<Label htmlFor="add-member-name">멤버 이름 (기본)</Label>
 					<Input
+						ref={nameInputRef}
 						id="add-member-name"
+						name="name"
+						autoComplete="off"
 						value={values.name}
 						onChange={(event) => {
 							handleChange("name", event.target.value);
@@ -121,9 +139,16 @@ export default function AddMemberModal({
 						placeholder="예: Hoshimachi Suisei"
 						className="focus-visible:ring-2 focus-visible:ring-sky-200"
 						hasError={!!errors.name}
+						aria-invalid={!!errors.name}
+						aria-describedby={errors.name ? "add-member-name-error" : undefined}
 					/>
 					{errors.name && (
-						<p className="text-[0.8rem] font-medium text-destructive">
+						<p
+							id="add-member-name-error"
+							role="status"
+							aria-live="polite"
+							className="text-[0.8rem] font-medium text-destructive"
+						>
 							{errors.name}
 						</p>
 					)}
@@ -132,7 +157,11 @@ export default function AddMemberModal({
 				<div className="space-y-2">
 					<Label htmlFor="add-member-channel-id">YouTube 채널 ID</Label>
 					<Input
+						ref={channelIdInputRef}
 						id="add-member-channel-id"
+						name="channelId"
+						autoComplete="off"
+						spellCheck={false}
 						value={values.channelId}
 						onChange={(event) => {
 							handleChange("channelId", event.target.value);
@@ -140,9 +169,16 @@ export default function AddMemberModal({
 						placeholder="UC…"
 						className="font-mono focus-visible:ring-2 focus-visible:ring-sky-200"
 						hasError={!!errors.channelId}
+						aria-invalid={!!errors.channelId}
+						aria-describedby={errors.channelId ? "add-member-channel-id-error" : undefined}
 					/>
 					{errors.channelId && (
-						<p className="text-[0.8rem] font-medium text-destructive">
+						<p
+							id="add-member-channel-id-error"
+							role="status"
+							aria-live="polite"
+							className="text-[0.8rem] font-medium text-destructive"
+						>
 							{errors.channelId}
 						</p>
 					)}
@@ -155,6 +191,8 @@ export default function AddMemberModal({
 						</Label>
 						<Input
 							id="add-member-name-ko"
+							name="nameKo"
+							autoComplete="off"
 							value={values.nameKo ?? ""}
 							onChange={(event) => {
 								handleChange("nameKo", event.target.value);
@@ -170,6 +208,8 @@ export default function AddMemberModal({
 						</Label>
 						<Input
 							id="add-member-name-ja"
+							name="nameJa"
+							autoComplete="off"
 							value={values.nameJa ?? ""}
 							onChange={(event) => {
 								handleChange("nameJa", event.target.value);

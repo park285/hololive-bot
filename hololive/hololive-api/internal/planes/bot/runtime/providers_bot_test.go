@@ -35,7 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
@@ -109,8 +108,6 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	aclService := &acl.Service{}
 	majorEventRepository := &stubMajorEventRepository{}
 	memberNewsService := &stubMemberNewsService{}
-	workerPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
-	t.Cleanup(workerPool.StopAndWait)
 	commandBuilder := orchcmd.CommandBuilder(func(_ *handlercore.Dependencies) handlercore.Command { return nil })
 
 	deps := appbootstrap.ProvideBotDependencies(&appbootstrap.BotDependencyModules{
@@ -145,7 +142,6 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			ActivityLogger: activityLogger,
 			Settings:       settingsService,
 			ACL:            aclService,
-			WorkerPool:     workerPool,
 		},
 		Feature: appbootstrap.BotFeatureModule{
 			MajorEventRepository: majorEventRepository,
@@ -183,9 +179,6 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	}
 	if deps.MajorEventRepository != majorEventRepository || deps.MemberNews != memberNewsService {
 		t.Fatal("event/news wiring mismatch")
-	}
-	if deps.WorkerPool != workerPool {
-		t.Fatal("worker pool wiring mismatch")
 	}
 	if len(deps.CommandBuilders) != 1 || deps.CommandBuilders[0] == nil {
 		t.Fatal("command builder wiring mismatch")

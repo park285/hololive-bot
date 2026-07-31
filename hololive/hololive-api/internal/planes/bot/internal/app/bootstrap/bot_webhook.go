@@ -10,23 +10,19 @@ import (
 	"github.com/park285/iris-client-go/webhook"
 )
 
-func BuildBotWebhookHandler(
+func BuildDurableBotWebhookHandler(
 	appConfig *settings.Config,
-	messageHandler webhook.MessageHandler,
+	admitter webhook.MessageAdmitter,
 	deps BotWebhookRuntimeDependencies,
-	webhookPool webhook.TaskPool,
 	logger *slog.Logger,
 ) (*webhook.Handler, error) {
-	return iris.NewWebhookHandler(messageHandler,
+	deduplicator := valkeydedup.New(deps.Cache.GetClient())
+	return iris.NewDurableWebhookHandler(admitter,
 		webhook.WithWebhookToken(appConfig.Iris.WebhookToken),
 		webhook.WithWebhookLogger(logger),
 		webhook.WithMetrics(defaultWebhookMetrics()),
-		valkeydedup.Option(deps.Cache.GetClient()),
-		webhook.WithTaskPool(webhookPool),
-		webhook.WithWorkerCount(appConfig.Webhook.WorkerCount),
-		webhook.WithQueueSize(appConfig.Webhook.QueueSize),
-		webhook.WithEnqueueTimeout(appConfig.Webhook.EnqueueTimeout),
-		webhook.WithHandlerTimeout(appConfig.Webhook.HandlerTimeout),
+		webhook.WithDeduplicator(deduplicator),
+		webhook.WithNonceCache(deduplicator),
 		webhook.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
 		webhook.WithDedupTTL(appConfig.Webhook.DedupTTL),
 		webhook.WithDedupTimeout(appConfig.Webhook.DedupTimeout),

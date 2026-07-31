@@ -5,14 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-
-	"github.com/park285/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
@@ -51,13 +47,6 @@ func ProvideAlarmService(
 
 func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alarm.Repository {
 	return alarm.NewRepository(postgres, logger)
-}
-
-func ProvideAlarmWorkerPool(cfg settings.WorkerPoolConfig) *workerpool.QueuedPool {
-	return workerpool.NewQueued(workerpool.QueuedConfig{
-		Workers:   cfg.Workers,
-		QueueSize: cfg.QueueSize,
-	})
 }
 
 func ProvideMatcher(

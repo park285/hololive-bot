@@ -22,6 +22,7 @@ package durability
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -67,9 +68,11 @@ func TestReplyOutboxOutcomeUnknownIsResendable(t *testing.T) {
 		ClaimToken: "token-a",
 		Status:     ReplyOutboxOutcomeUnknown,
 		LastError:  "network reset before the outcome was known",
+		RetryAfter: time.Millisecond,
 	})
 	require.NoError(t, err)
 	require.True(t, applied)
+	time.Sleep(5 * time.Millisecond)
 
 	resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 	require.NoError(t, err)
@@ -77,6 +80,137 @@ func TestReplyOutboxOutcomeUnknownIsResendable(t *testing.T) {
 	assert.Equal(t, entry.ClientRequestID, resend.ClientRequestID,
 		"같은 clientRequestId여야 Iris admission dedup이 중복을 흡수한다")
 	assert.JSONEq(t, `{"body":"answer"}`, string(resend.Payload))
+}
+
+func TestReplyOutboxConsecutiveOutcomeUnknownBacksOffThenRequiresManualReview(t *testing.T) {
+	pool := newDurabilityPool(t)
+	repo := NewReplyOutboxRepository(pool)
+	ctx := context.Background()
+	truncateDurabilityTables(ctx, t, pool)
+	entry := newReplyOutboxEntry("message:m-consecutive-unknown", 0, `{"body":"answer"}`)
+	require.Equal(t, ReplyOutboxInserted, mustInsertReply(t, ctx, repo, entry))
+	previousDelay := time.Duration(0)
+
+	for attempt := int32(1); attempt <= 5; attempt++ {
+		claim, err := repo.Claim(ctx, fmt.Sprintf("token-%d", attempt), durabilityTestLease)
+		require.NoError(t, err)
+		require.NotNil(t, claim)
+		assert.Equal(t, attempt, claim.Attempts)
+		status := ReplyOutboxOutcomeUnknown
+		if attempt == 5 {
+			status = ReplyOutboxManualReview
+		}
+		retryAfter := 10 * time.Millisecond * time.Duration(1<<(attempt-1))
+		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
+			ID: claim.ID, ClaimToken: fmt.Sprintf("token-%d", attempt), Status: status,
+			LastError: "outcome remained unknown", RetryAfter: retryAfter,
+		})
+		require.NoError(t, err)
+		require.True(t, applied)
+		if attempt < 5 {
+			var delaySeconds float64
+			require.NoError(t, pool.QueryRow(ctx,
+				"SELECT EXTRACT(EPOCH FROM (available_at - updated_at)) FROM bot_reply_outbox WHERE id = $1", claim.ID,
+			).Scan(&delaySeconds))
+			persistedDelay := time.Duration(delaySeconds * float64(time.Second))
+			assert.Greater(t, persistedDelay, previousDelay, "available_at delay must increase with attempts")
+			previousDelay = persistedDelay
+			immediate, claimErr := repo.Claim(ctx, "too-early", durabilityTestLease)
+			require.NoError(t, claimErr)
+			assert.Nil(t, immediate, "outcome_unknown retry must honor durable backoff")
+			time.Sleep(retryAfter + 5*time.Millisecond)
+		}
+	}
+
+	status, payload, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+	var attempts int32
+	require.NoError(t, pool.QueryRow(ctx, "SELECT attempts FROM bot_reply_outbox WHERE client_request_id = $1", entry.ClientRequestID).Scan(&attempts))
+	assert.Equal(t, ReplyOutboxManualReview, status)
+	assert.Equal(t, int32(5), attempts)
+	assert.NotNil(t, payload, "manual review must preserve the original payload")
+	next, err := repo.Claim(ctx, "token-6", durabilityTestLease)
+	require.NoError(t, err)
+	assert.Nil(t, next)
+}
+
+func TestReplyOutboxAutomaticReplayStopsAtSafetyBoundaries(t *testing.T) {
+	pool := newDurabilityPool(t)
+	repo := NewReplyOutboxRepository(pool)
+	ctx := context.Background()
+
+	t.Run("replay horizon moves an ambiguous row to manual review", func(t *testing.T) {
+		truncateDurabilityTables(ctx, t, pool)
+		entry := newReplyOutboxEntry("message:m-replay-horizon", 0, `{"body":"answer"}`)
+		claim := claimOne(ctx, t, repo, entry)
+		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
+			ID: claim.ID, ClaimToken: "token-a", Status: ReplyOutboxOutcomeUnknown,
+			RetryAfter: time.Millisecond,
+		})
+		require.NoError(t, err)
+		require.True(t, applied)
+		_, err = pool.Exec(ctx, `UPDATE bot_reply_outbox
+			SET first_attempt_at = clock_timestamp() - ($2::bigint * INTERVAL '1 millisecond'),
+			    available_at = clock_timestamp()
+			WHERE id = $1`, claim.ID, int64(ReplyOutboxAutomaticReplayHorizon/time.Millisecond))
+		require.NoError(t, err)
+
+		resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
+		require.NoError(t, err)
+		assert.Nil(t, resend, "the automatic path must fail closed at the replay horizon")
+		status, payload, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+		assert.Equal(t, ReplyOutboxManualReview, status)
+		assert.NotNil(t, payload)
+	})
+
+	t.Run("an ambiguous row before the replay horizon remains claimable", func(t *testing.T) {
+		truncateDurabilityTables(ctx, t, pool)
+		entry := newReplyOutboxEntry("message:m-before-replay-horizon", 0, `{"body":"answer"}`)
+		claim := claimOne(ctx, t, repo, entry)
+		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
+			ID: claim.ID, ClaimToken: "token-a", Status: ReplyOutboxOutcomeUnknown,
+			RetryAfter: time.Millisecond,
+		})
+		require.NoError(t, err)
+		require.True(t, applied)
+		_, err = pool.Exec(ctx, `UPDATE bot_reply_outbox
+			SET first_attempt_at = clock_timestamp() - interval '143 hours',
+			    available_at = clock_timestamp()
+			WHERE id = $1`, claim.ID)
+		require.NoError(t, err)
+
+		resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
+		require.NoError(t, err)
+		require.NotNil(t, resend)
+		assert.Equal(t, int32(2), resend.Attempts)
+	})
+
+	t.Run("the final crashed attempt is not requeued", func(t *testing.T) {
+		truncateDurabilityTables(ctx, t, pool)
+		entry := newReplyOutboxEntry("message:m-attempt-boundary", 0, `{"body":"answer"}`)
+		require.Equal(t, ReplyOutboxInserted, mustInsertReply(t, ctx, repo, entry))
+		_, err := pool.Exec(ctx, `UPDATE bot_reply_outbox SET attempts = $2 - 1 WHERE client_request_id = $1`,
+			entry.ClientRequestID, ReplyOutboxMaxAttempts)
+		require.NoError(t, err)
+		claim, err := repo.Claim(ctx, "token-final", time.Millisecond)
+		require.NoError(t, err)
+		require.NotNil(t, claim)
+		assert.Equal(t, ReplyOutboxMaxAttempts, claim.Attempts)
+		time.Sleep(20 * time.Millisecond)
+
+		reclaim, err := repo.ReclaimExpired(ctx, 100)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), reclaim.Requeued)
+		assert.Equal(t, int64(1), reclaim.SafetyManualReview)
+		status, _, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+		assert.Equal(t, ReplyOutboxManualReview, status)
+	})
+}
+
+func mustInsertReply(t *testing.T, ctx context.Context, repo *ReplyOutboxRepository, entry *ReplyOutboxEntry) ReplyOutboxInsertOutcome {
+	t.Helper()
+	outcome, err := repo.Insert(ctx, entry)
+	require.NoError(t, err)
+	return outcome
 }
 
 func TestReplyOutboxExpiredLeaseRecovers(t *testing.T) {
@@ -106,7 +240,7 @@ func TestReplyOutboxExpiredLeaseRecovers(t *testing.T) {
 		assert.JSONEq(t, `{"body":"answer"}`, string(resend.Payload))
 	})
 
-	t.Run("an expired accepted lease is absorbed as a completed handoff", func(t *testing.T) {
+	t.Run("an expired accepted lease requires manual review", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 		entry := newReplyOutboxEntry("message:m-accepted-expired", 0, `{"body":"answer"}`)
 		claim := claimOneWithLease(ctx, t, repo, entry, time.Millisecond)
@@ -118,11 +252,11 @@ func TestReplyOutboxExpiredLeaseRecovers(t *testing.T) {
 
 		reclaim, err := repo.ReclaimExpired(ctx, 100)
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), reclaim.Absorbed)
+		assert.Equal(t, int64(1), reclaim.AcceptedManualReview)
 		assert.Equal(t, int64(0), reclaim.Requeued)
 
 		status, _, _, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
-		assert.Equal(t, ReplyOutboxHandoffCompleted, status)
+		assert.Equal(t, ReplyOutboxManualReview, status)
 
 		resend, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 		require.NoError(t, err)

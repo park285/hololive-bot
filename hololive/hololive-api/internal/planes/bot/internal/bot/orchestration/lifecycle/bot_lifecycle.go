@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/park285/shared-go/pkg/workerpool"
 )
 
 type BotLifecycle struct {
@@ -41,7 +40,6 @@ type BotLifecycle struct {
 	stopCh      chan struct{}
 	doneCh      chan struct{}
 	doneOnce    sync.Once
-	workerPool  *workerpool.QueuedPool
 	holodex     Stoppable
 	postgres    database.Client
 }
@@ -53,7 +51,6 @@ func NewBotLifecycle(
 	irisBaseURL string,
 	stopCh chan struct{},
 	doneCh chan struct{},
-	workerPool *workerpool.QueuedPool,
 	holodex Stoppable,
 	postgres database.Client,
 ) *BotLifecycle {
@@ -64,7 +61,6 @@ func NewBotLifecycle(
 		irisBaseURL: irisBaseURL,
 		stopCh:      stopCh,
 		doneCh:      doneCh,
-		workerPool:  workerPool,
 		holodex:     holodex,
 		postgres:    postgres,
 	}
@@ -113,7 +109,6 @@ func (l *BotLifecycle) Start(ctx context.Context) error {
 func (l *BotLifecycle) Shutdown(ctx context.Context) error {
 	l.logInfo("Shutting down bot...")
 
-	l.shutdownWorkerPool(ctx)
 	l.stopHolodex()
 	l.closeCache()
 	l.closePostgres()
@@ -122,14 +117,6 @@ func (l *BotLifecycle) Shutdown(ctx context.Context) error {
 	l.logInfo("Bot shutdown complete")
 
 	return nil
-}
-
-func (l *BotLifecycle) shutdownWorkerPool(ctx context.Context) {
-	if l.workerPool != nil {
-		if err := l.workerPool.StopAndWaitContext(ctx); err != nil {
-			l.logWarn("Worker pool shutdown error", slog.Any("error", err))
-		}
-	}
 }
 
 func (l *BotLifecycle) stopHolodex() {

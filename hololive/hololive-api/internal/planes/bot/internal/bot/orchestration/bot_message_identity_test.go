@@ -83,7 +83,7 @@ func TestCanonicalReplyIdentityHasNoFallbackChain(t *testing.T) {
 	}
 }
 
-func TestHandleMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
+func TestProcessMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
 	t.Parallel()
 
 	executed := &replyIdentityProbeCommand{}
@@ -99,12 +99,12 @@ func TestHandleMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
 	}
 
 	sender := "user"
-	bot.HandleMessage(t.Context(), &webhook.Message{
+	require.NoError(t, bot.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "12345",
 		Sender: &sender,
 		JSON:   &webhook.MessageJSON{UserID: "user-1", ChatID: "12345", ChatLogID: "c-1"},
-	})
+	}))
 
 	assert.Zero(t, executed.calls.Load(), "command must not run without a canonical message id")
 	assert.Contains(t, logs.String(), EventBotReplyIdentityMissing)

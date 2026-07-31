@@ -22,6 +22,7 @@ package orchestration
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -33,7 +34,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 )
 
-func TestBotHandleMessageRejectsUnknownIngressUserForExpensiveCommand(t *testing.T) {
+func TestBotProcessMessageRejectsUnknownIngressUserForExpensiveCommand(t *testing.T) {
 	cacheClient := sharedtestutil.NewTestCacheService(t, t.Context())
 	executions := 0
 	registry := handlers.NewRegistry()
@@ -60,13 +61,18 @@ func TestBotHandleMessageRejectsUnknownIngressUserForExpensiveCommand(t *testing
 		JSON:   &webhook.MessageJSON{ChatID: "room-1", MessageID: "m-1"},
 	}
 
-	b.HandleMessage(t.Context(), message)
+	err := b.ProcessMessage(t.Context(), message)
+	if err == nil || !strings.Contains(err.Error(), "stable user and room identities are required") {
+		t.Fatalf("ProcessMessage() with unknown ingress user error = %v", err)
+	}
 	if executions != 0 {
 		t.Fatalf("handler executions with unknown ingress user = %d, want 0", executions)
 	}
 
 	message.JSON.UserID = "user-1"
-	b.HandleMessage(t.Context(), message)
+	if err := b.ProcessMessage(t.Context(), message); err != nil {
+		t.Fatalf("ProcessMessage() with stable ingress user error = %v", err)
+	}
 	if executions != 1 {
 		t.Fatalf("handler executions after stable ingress user = %d, want 1", executions)
 	}

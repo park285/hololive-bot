@@ -8,6 +8,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
 
 compose_file_resolve_path() {
     local file="$1"
@@ -73,7 +74,10 @@ resolve_optional_workspace_path() {
 compose_args=()
 compose_files=()
 compose_invokes_up=false
+compose_requires_capacity=false
 compose_up_build=false
+compose_up_after_separator=false
+compose_scale_overrides=()
 compose_command_seen=false
 previous=""
 previous_option=""
@@ -86,6 +90,13 @@ for arg in "$@"; do
         continue
     fi
     if [[ "${previous}" == "global-option-value" ]]; then
+        compose_args+=("${arg}")
+        previous=""
+        previous_option=""
+        continue
+    fi
+    if [[ "${previous}" == "up-scale-value" ]]; then
+        compose_scale_overrides+=("${arg}")
         compose_args+=("${arg}")
         previous=""
         previous_option=""
@@ -130,11 +141,33 @@ for arg in "$@"; do
     case "${arg}" in
         up)
             compose_invokes_up=true
+            compose_requires_capacity=true
+            ;;
+        start|restart|run)
+            compose_requires_capacity=true
             ;;
         --build)
             if [[ "${compose_invokes_up}" == true ]]; then
                 compose_up_build=true
                 continue
+            fi
+            ;;
+        --)
+            if [[ "${compose_invokes_up}" == true ]]; then
+                compose_up_after_separator=true
+            fi
+            ;;
+        --scale)
+            if [[ "${compose_invokes_up}" == true && "${compose_up_after_separator}" == false ]]; then
+                compose_args+=("${arg}")
+                previous="up-scale-value"
+                previous_option="${arg}"
+                continue
+            fi
+            ;;
+        --scale=*)
+            if [[ "${compose_invokes_up}" == true && "${compose_up_after_separator}" == false ]]; then
+                compose_scale_overrides+=("${arg#*=}")
             fi
             ;;
     esac
@@ -196,6 +229,10 @@ compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${compose_files[@]}"
 compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
+
+if [[ "${compose_requires_capacity}" == true ]]; then
+    postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}" "${compose_scale_overrides[@]}"
+fi
 
 if [[ "${compose_invokes_up}" == true ]]; then
     compose_env_assert_live_compat_for_host_networked_postgres "${compose_files[@]}"

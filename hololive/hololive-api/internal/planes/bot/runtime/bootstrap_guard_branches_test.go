@@ -23,8 +23,6 @@ package botruntime
 import (
 	"context"
 	"log/slog"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -39,8 +37,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/park285/iris-client-go/webhook"
-	"github.com/park285/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -59,10 +55,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
-
-type stubWebhookMessageHandler struct{}
-
-func (stubWebhookMessageHandler) HandleMessage(context.Context, *webhook.Message) {}
 
 func testBootstrapGuardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 func canceledContext() context.Context {
@@ -138,54 +130,6 @@ func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {
 	require.NotNil(t, handler)
 }
 
-func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
-	t.Setenv("IRIS_WEBHOOK_TOKEN", "token")
-
-	appConfig := &configsettings.Config{
-		Iris: configsettings.IrisConfig{WebhookToken: "token"},
-		Webhook: configsettings.WebhookConfig{
-			WorkerCount:    1,
-			QueueSize:      1,
-			EnqueueTimeout: 1,
-			HandlerTimeout: 1,
-		},
-	}
-
-	webhookPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
-	t.Cleanup(webhookPool.StopAndWait)
-
-	handler, err := appbootstrap.BuildBotWebhookHandler(
-		appConfig,
-		stubWebhookMessageHandler{},
-		appbootstrap.BotWebhookRuntimeDependencies{Cache: &cache.Service{}},
-		webhookPool,
-		testBootstrapGuardLogger(),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, handler)
-
-	options := reflect.ValueOf(handler).Elem().FieldByName("options")
-	require.True(t, options.IsValid(), "reflect: field 'options' not found on Handler")
-	assert.Equal(t, int64(appConfig.Webhook.WorkerCount), options.FieldByName("WorkerCount").Int())
-	assert.Equal(t, int64(appConfig.Webhook.QueueSize), options.FieldByName("QueueSize").Int())
-	assert.Equal(t, int64(appConfig.Webhook.EnqueueTimeout), options.FieldByName("EnqueueTimeout").Int())
-	assert.Equal(t, int64(appConfig.Webhook.HandlerTimeout), options.FieldByName("HandlerTimeout").Int())
-
-	taskPoolField := reflect.ValueOf(handler).Elem().FieldByName("taskPool")
-	require.True(t, taskPoolField.IsValid(), "reflect: field 'taskPool' not found on Handler")
-	require.False(t, taskPoolField.IsNil(), "taskPool must not be nil")
-	ownsPoolField := reflect.ValueOf(handler).Elem().FieldByName("ownsPool")
-	require.True(t, ownsPoolField.IsValid(), "reflect: field 'ownsPool' not found on Handler")
-	assert.False(t, ownsPoolField.Bool())
-
-	dedupField := reflect.ValueOf(handler).Elem().FieldByName("dedup")
-	require.True(t, dedupField.IsValid(), "reflect: field 'dedup' not found on Handler")
-	require.False(t, dedupField.IsNil(), "dedup must not be nil")
-	dedupType := dedupField.Elem().Type().String()
-	assert.True(t, strings.Contains(dedupType, "ValkeyDeduplicator"), "dedup type = %s", dedupType)
-	require.NoError(t, handler.Close())
-}
-
 func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 	t.Parallel()
 
@@ -226,8 +170,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	activityLogger := &activity.Logger{}
 	settingsService := &settings.Service{}
 	aclService := &acl.Service{}
-	workerPool := workerpool.NewQueued(workerpool.QueuedConfig{Workers: 1, QueueSize: 1})
-	t.Cleanup(workerPool.StopAndWait)
 	commandBuilder := orchcmd.CommandBuilder(func(_ *handlercore.Dependencies) handlercore.Command { return nil })
 
 	modules := buildBotDependencyModules(
@@ -253,7 +195,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			MajorEventRepository: &stubMajorEventRepository{},
 			MemberNewsService:    &stubMemberNewsService{},
 			CommandBuilders:      []orchcmd.CommandBuilder{commandBuilder},
-			WorkerPool:           workerPool,
 		},
 		&messaging.MessageAdapter{},
 		&formatter.ResponseFormatter{},
@@ -278,7 +219,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	assert.Same(t, aclService, modules.Support.ACL)
 	require.Len(t, modules.Feature.CommandBuilders, 1)
 	assert.NotNil(t, modules.Feature.CommandBuilders[0])
-	assert.Same(t, workerPool, modules.Support.WorkerPool)
 }
 
 func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {

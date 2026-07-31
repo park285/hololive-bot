@@ -50,8 +50,8 @@ type BotRuntime struct {
 
 	h3CertReloadStart func(context.Context)
 
-	webhookHandlerCloser interface{ Close() error }
-	webhookPool          interface{ StopAndWait() }
+	webhookHandlerCloser interface{ CloseContext(context.Context) error }
+	durable              *durableRuntime
 	lifecycle.Managed
 }
 

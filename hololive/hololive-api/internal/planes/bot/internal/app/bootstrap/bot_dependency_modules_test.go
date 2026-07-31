@@ -211,17 +211,6 @@ func TestProvideBotDependenciesAcceptsDisabledYouTubeStack(t *testing.T) {
 	}
 }
 
-func TestProvideAlarmWorkerPoolUsesDispatchCapacity(t *testing.T) {
-	t.Parallel()
-
-	pool := ProvideAlarmWorkerPool(configsettings.WorkerPoolConfig{Workers: 10, QueueSize: 100})
-	t.Cleanup(pool.StopAndWait)
-
-	if pool.Workers() != 10 {
-		t.Fatalf("Workers() = %d, want 10", pool.Workers())
-	}
-}
-
 func TestPersistedTargetMinutesKeepsConfiguredTargetsBeforeRuntimeFallback(t *testing.T) {
 	t.Parallel()
 

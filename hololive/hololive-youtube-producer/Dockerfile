@@ -21,38 +21,29 @@ FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e
 ARG VERSION=dev
 ARG TARGETOS
 ARG TARGETARCH
-# GOAMD64/UPX는 opt-in: 기본은 현 동작과 동일(v1, 압축 없음).
-# 배포 호스트 CPU가 AVX2(Haswell 2013+)면 --build-arg GOAMD64=v3,
-# 이미지 축소가 필요하면 --build-arg UPX_ENABLE=1 로 켠다. 문제 시 인자만 빼면 즉시 비활성.
+# GOAMD64 opt-in: 기본은 v1. 배포 호스트 CPU가 AVX2(Haswell 2013+)면
+# --build-arg GOAMD64=v3로 활성화한다.
 ARG GOAMD64=v1
-ARG UPX_ENABLE=
-# PGO opt-in: 빈 값이면 -pgo 미적용(현 빌드와 동일). 모듈 기준 상대경로 프로파일을 주면
-# --build-arg GO_PGO_FILE=cmd/runtime/youtube-producer/default.pgo 처럼 활성. 빼면 즉시 비활성.
-ARG GO_PGO_FILE=
-RUN apk add --no-cache git
+# Release images are PGO-off until a verifiable adoption design is implemented.
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
-ENV GOWORK=off
+ENV GOWORK=off \
+    GOPROXY=https://proxy.golang.org
 
 WORKDIR /workspace/hololive-bot
 
 COPY scripts/deploy/ap-rsync-files.txt ./scripts/deploy/ap-rsync-files.txt
-COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
 COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ./hololive/hololive-dbtest/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
 COPY hololive/hololive-youtube-producer/go.mod hololive/hololive-youtube-producer/go.sum ./hololive/hololive-youtube-producer/
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-producer
 
-# Build against the same active shared-go workspace that build-all.sh resolves via additional_contexts.
-RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go
-
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 WORKDIR /workspace/hololive-bot
 
-COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-youtube-producer ./hololive/hololive-youtube-producer
 RUN set -eu; \
@@ -63,16 +54,13 @@ RUN set -eu; \
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-producer
 
-RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go
-
 RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build ${GO_PGO_FILE:+-pgo=${GO_PGO_FILE}} -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/youtube-producer ./cmd/runtime/youtube-producer && \
+    go build -pgo=off -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/youtube-producer ./cmd/runtime/youtube-producer && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/runtime/healthcheck && \
-    if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/youtube-producer /dist/bin/healthcheck; fi && \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/runtime/healthcheck && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 

@@ -87,6 +87,261 @@ func TestBeginWrappedFileFailureRollsBackWholeTxBlock(t *testing.T) {
 	assertTableAbsent(t, pool, "tx_atomic_probe")
 }
 
+func TestMigration136LateFailureRollsBackObjectsLedgerAndPrivileges(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	ctx := t.Context()
+	const (
+		migrationName = "136_reply_outbox_manual_replay_audit.sql"
+		replayName    = "136_reply_outbox_manual_replay_audit_replay.sql"
+		runtimeRole   = "pg_monitor"
+	)
+
+	for _, statement := range []string{
+		"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO " + runtimeRole,
+		"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO " + runtimeRole,
+		"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO " + runtimeRole,
+	} {
+		if _, err := pool.Exec(ctx, statement); err != nil {
+			t.Fatalf("configure runtime-equivalent default privileges: %v", err)
+		}
+	}
+
+	entries := manifestEntries(t)
+	manifestSQL, err := fs.ReadFile(migrations.FS, dbmigrate.ManifestName)
+	if err != nil {
+		t.Fatalf("read real migration manifest: %v", err)
+	}
+	failureFS := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: manifestSQL},
+	}
+	var migrationSQL []byte
+	for _, name := range entries {
+		raw, readErr := fs.ReadFile(migrations.FS, name)
+		if readErr != nil {
+			t.Fatalf("read embedded migration %s: %v", name, readErr)
+		}
+		if name == migrationName {
+			migrationSQL = raw
+			raw = injectBeforeFinalCommit(t, raw,
+				"SELECT public.migration_136_injected_late_failure();")
+		}
+		failureFS[name] = &fstest.MapFile{Data: raw}
+	}
+	if len(migrationSQL) == 0 {
+		t.Fatalf("%s missing from real manifest", migrationName)
+	}
+
+	if _, err := Run(ctx, pool, failureFS, Config{}); err == nil {
+		t.Fatal("late-failure migration Run() error = nil")
+	}
+	assertMigration136Absent(t, pool, runtimeRole)
+	assertMigrationNotRecorded(t, pool, migrationName)
+
+	failureFS[migrationName] = &fstest.MapFile{Data: migrationSQL}
+	result, err := Run(ctx, pool, failureFS, Config{})
+	if err != nil {
+		t.Fatalf("rerun migration 136 after rollback: %v", err)
+	}
+	if result.Applied != 1 || result.Skipped != len(entries)-1 || result.Total != len(entries) {
+		t.Fatalf("rerun result = %+v, want applied=1 skipped=%d total=%d", result, len(entries)-1, len(entries))
+	}
+	assertMigration136Sealed(t, pool, runtimeRole)
+
+	replayManifest := append([]byte(nil), manifestSQL...)
+	if len(replayManifest) > 0 && replayManifest[len(replayManifest)-1] != '\n' {
+		replayManifest = append(replayManifest, '\n')
+	}
+	replayManifest = append(replayManifest, []byte("133 "+replayName+"\n")...)
+	failureFS[dbmigrate.ManifestName] = &fstest.MapFile{Data: replayManifest}
+	failureFS[replayName] = &fstest.MapFile{Data: migrationSQL}
+	result, err = Run(ctx, pool, failureFS, Config{})
+	if err != nil {
+		t.Fatalf("idempotent migration 136 replay: %v", err)
+	}
+	if result.Applied != 1 || result.Skipped != len(entries) || result.Total != len(entries)+1 {
+		t.Fatalf("idempotent replay result = %+v, want applied=1 skipped=%d total=%d",
+			result, len(entries), len(entries)+1)
+	}
+	assertMigration136Sealed(t, pool, runtimeRole)
+}
+
+func injectBeforeFinalCommit(t *testing.T, migrationSQL []byte, statement string) []byte {
+	t.Helper()
+	const finalCommit = "\nCOMMIT;"
+	index := strings.LastIndex(string(migrationSQL), finalCommit)
+	if index < 0 {
+		t.Fatal("migration 136 is not wrapped by a final COMMIT")
+	}
+	injected := append([]byte(nil), migrationSQL[:index]...)
+	injected = append(injected, []byte("\n"+statement+"\nCOMMIT;")...)
+	injected = append(injected, migrationSQL[index+len(finalCommit):]...)
+	return injected
+}
+
+func assertMigration136Absent(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
+	t.Helper()
+	ctx := t.Context()
+	var tablePresent, grantFunctionPresent, claimFunctionPresent, mutationFunctionPresent bool
+	if err := pool.QueryRow(ctx, `SELECT
+		to_regclass('public.bot_reply_outbox_replay_audit') IS NOT NULL,
+		to_regprocedure('public.grant_bot_reply_outbox_manual_replay(bigint,text,text)') IS NOT NULL,
+		to_regprocedure('public.append_bot_reply_outbox_replay_claim_audit()') IS NOT NULL,
+		to_regprocedure('public.reject_bot_reply_outbox_replay_audit_mutation()') IS NOT NULL`).Scan(
+		&tablePresent, &grantFunctionPresent, &claimFunctionPresent, &mutationFunctionPresent); err != nil {
+		t.Fatalf("inspect rolled-back migration 136 objects: %v", err)
+	}
+	if tablePresent || grantFunctionPresent || claimFunctionPresent || mutationFunctionPresent {
+		t.Fatalf("migration 136 left partial objects: table=%v grant=%v claim=%v mutation=%v",
+			tablePresent, grantFunctionPresent, claimFunctionPresent, mutationFunctionPresent)
+	}
+
+	var triggerCount, privilegeCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_trigger
+		WHERE tgname IN ('bot_reply_outbox_replay_audit_immutable', 'bot_reply_outbox_replay_claim_audit')`).Scan(&triggerCount); err != nil {
+		t.Fatalf("count rolled-back migration 136 triggers: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM (
+		SELECT 1 FROM information_schema.role_table_grants
+		WHERE grantee = $1 AND table_schema = 'public' AND table_name = 'bot_reply_outbox_replay_audit'
+		UNION ALL
+		SELECT 1 FROM information_schema.role_usage_grants
+		WHERE grantee = $1 AND object_schema = 'public' AND object_name = 'bot_reply_outbox_replay_audit_id_seq'
+		UNION ALL
+		SELECT 1 FROM information_schema.routine_privileges
+		WHERE grantee = $1 AND specific_schema = 'public'
+		  AND routine_name IN (
+		      'grant_bot_reply_outbox_manual_replay',
+		      'append_bot_reply_outbox_replay_claim_audit',
+		      'reject_bot_reply_outbox_replay_audit_mutation'
+		  )
+	) AS exposed`, runtimeRole).Scan(&privilegeCount); err != nil {
+		t.Fatalf("count rolled-back migration 136 privileges: %v", err)
+	}
+	if triggerCount != 0 || privilegeCount != 0 {
+		t.Fatalf("migration 136 left trigger/ACL exposure: triggers=%d privileges=%d", triggerCount, privilegeCount)
+	}
+}
+
+func assertMigrationNotRecorded(t *testing.T, pool *pgxpool.Pool, migrationName string) {
+	t.Helper()
+	var ledgered, checksummed bool
+	if err := pool.QueryRow(t.Context(), `SELECT
+		EXISTS (SELECT 1 FROM schema_migrations WHERE filename = $1),
+		EXISTS (SELECT 1 FROM schema_migration_checksums WHERE filename = $1)`, migrationName).Scan(
+		&ledgered, &checksummed); err != nil {
+		t.Fatalf("inspect failed migration ledger: %v", err)
+	}
+	if ledgered || checksummed {
+		t.Fatalf("failed migration recorded: ledger=%v checksum=%v", ledgered, checksummed)
+	}
+}
+
+func assertMigration136Sealed(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
+	t.Helper()
+	ctx := t.Context()
+	var tablePresent, grantFunctionPresent bool
+	if err := pool.QueryRow(ctx, `SELECT
+		to_regclass('public.bot_reply_outbox_replay_audit') IS NOT NULL,
+		to_regprocedure('public.grant_bot_reply_outbox_manual_replay(bigint,text,text)') IS NOT NULL`).Scan(
+		&tablePresent, &grantFunctionPresent); err != nil {
+		t.Fatalf("inspect migration 136 objects: %v", err)
+	}
+	if !tablePresent || !grantFunctionPresent {
+		t.Fatalf("migration 136 objects missing: table=%v grant_function=%v", tablePresent, grantFunctionPresent)
+	}
+
+	var triggerCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_trigger
+		WHERE tgname IN ('bot_reply_outbox_replay_audit_immutable', 'bot_reply_outbox_replay_claim_audit')`).Scan(&triggerCount); err != nil {
+		t.Fatalf("count migration 136 triggers: %v", err)
+	}
+	if triggerCount != 2 {
+		t.Fatalf("migration 136 trigger count = %d, want 2", triggerCount)
+	}
+
+	for _, privilege := range []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"} {
+		var allowed bool
+		if err := pool.QueryRow(ctx,
+			`SELECT has_table_privilege($1, 'public.bot_reply_outbox_replay_audit', $2)`,
+			runtimeRole, privilege).Scan(&allowed); err != nil {
+			t.Fatalf("inspect runtime table privilege %s: %v", privilege, err)
+		}
+		if allowed {
+			t.Errorf("runtime-equivalent role retained audit table privilege %s", privilege)
+		}
+	}
+	var sequenceAllowed, functionAllowed bool
+	if err := pool.QueryRow(ctx, `SELECT
+		has_sequence_privilege($1, 'public.bot_reply_outbox_replay_audit_id_seq', 'USAGE'),
+		has_function_privilege($1, 'public.grant_bot_reply_outbox_manual_replay(bigint,text,text)', 'EXECUTE')`,
+		runtimeRole).Scan(&sequenceAllowed, &functionAllowed); err != nil {
+		t.Fatalf("inspect runtime sequence/function privileges: %v", err)
+	}
+	if sequenceAllowed || functionAllowed {
+		t.Errorf("runtime-equivalent role retained audit sequence/function privileges: sequence=%v function=%v",
+			sequenceAllowed, functionAllowed)
+	}
+}
+
+func TestDropAndAddConstraintStatementIsAtomicOnAddFailure(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	_, err := pool.Exec(t.Context(), `
+		CREATE TABLE constraint_atomic_probe(status text NOT NULL);
+		ALTER TABLE constraint_atomic_probe ADD CONSTRAINT old_status_check CHECK (status IN ('old'));
+		INSERT INTO constraint_atomic_probe VALUES ('old')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = pool.Exec(t.Context(), `ALTER TABLE constraint_atomic_probe
+		DROP CONSTRAINT old_status_check,
+		ADD CONSTRAINT new_status_check CHECK (status IN ('new'))`)
+	if err == nil {
+		t.Fatal("ALTER TABLE error = nil, want failed validation")
+	}
+	var oldExists, newExists bool
+	err = pool.QueryRow(t.Context(), `SELECT
+		EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'constraint_atomic_probe'::regclass AND conname = 'old_status_check'),
+		EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'constraint_atomic_probe'::regclass AND conname = 'new_status_check')`).Scan(&oldExists, &newExists)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !oldExists || newExists {
+		t.Fatalf("constraints after failure: old=%v new=%v", oldExists, newExists)
+	}
+}
+
+func TestMigration114PreflightIgnoresSameNamedObjectsOutsidePublic(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	_, err := pool.Exec(t.Context(), `
+		CREATE TABLE public.members(slug text);
+		CREATE SCHEMA shadow;
+		CREATE TABLE shadow.members(slug text CONSTRAINT members_slug_key UNIQUE);
+		CREATE INDEX idx_members_name_trgm ON shadow.members(slug)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var indexDefinition *string
+	err = pool.QueryRow(t.Context(), `SELECT pg_get_indexdef(c.oid)
+		FROM (SELECT 'idx_members_name_trgm'::text AS name) e
+		LEFT JOIN pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+		ON c.relkind = 'i' AND c.relname = e.name`).Scan(&indexDefinition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if indexDefinition != nil {
+		t.Fatalf("shadow index satisfied public lookup: %q", *indexDefinition)
+	}
+	var publicConstraint bool
+	err = pool.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_constraint
+		WHERE conname = 'members_slug_key' AND conrelid = 'public.members'::regclass)`).Scan(&publicConstraint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if publicConstraint {
+		t.Fatal("shadow constraint satisfied public lookup")
+	}
+}
+
 func TestAppliedMigrationChecksumMismatchFails(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	first := fstest.MapFS{
@@ -210,6 +465,66 @@ func TestBeginWrappedFileTrailingAutocommitFailureCanBeRerun(t *testing.T) {
 	assertLedger(t, pool, []string{"tx.sql"})
 }
 
+func TestMigration133SupportsPopulatedPreviousSchemaAndLegacyWriter(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	const previousMigrationName = "123_create_bot_durable_admission_tables.sql"
+	const migrationName = "133_webhook_inbox_terminal_payload_check.sql"
+	previousMigrationSQL, err := fs.ReadFile(migrations.FS, previousMigrationName)
+	if err != nil {
+		t.Fatalf("read embedded migration %s: %v", previousMigrationName, err)
+	}
+	migrationSQL, err := fs.ReadFile(migrations.FS, migrationName)
+	if err != nil {
+		t.Fatalf("read embedded migration %s: %v", migrationName, err)
+	}
+	previousFS := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("119 " + previousMigrationName + "\n")},
+		previousMigrationName:  {Data: previousMigrationSQL},
+	}
+	result, err := Run(t.Context(), pool, previousFS, Config{})
+	if err != nil {
+		t.Fatalf("apply previous schema: %v", err)
+	}
+	if result.Applied != 1 || result.Skipped != 0 || result.Total != 1 {
+		t.Fatalf("previous schema result = %+v, want applied=1 skipped=0 total=1", result)
+	}
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO bot_webhook_inbox(message_id, room_id, ordering_key, payload, status)
+		VALUES ('existing-terminal', 'room', 'room', '{"message":"retained"}'::jsonb, 'succeeded')`); err != nil {
+		t.Fatalf("seed previous-schema terminal row: %v", err)
+	}
+
+	fsys := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("119 " + previousMigrationName + "\n129 " + migrationName + "\n")},
+		previousMigrationName:  {Data: previousMigrationSQL},
+		migrationName:          {Data: migrationSQL},
+	}
+
+	result, err = Run(t.Context(), pool, fsys, Config{})
+	if err != nil {
+		t.Fatalf("apply migration 133: %v", err)
+	}
+	if result.Applied != 1 || result.Skipped != 1 || result.Total != 2 {
+		t.Fatalf("migration 133 result = %+v, want applied=1 skipped=1 total=2", result)
+	}
+	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
+	assertTerminalPayloadScrubTrigger(t, pool)
+	assertInboxPayload(t, pool, "existing-terminal", "{}")
+	assertLedger(t, pool, []string{previousMigrationName, migrationName})
+
+	assertLegacyTerminalWriterCompatible(t, pool, "legacy-succeeded", "succeeded")
+	assertLegacyTerminalWriterCompatible(t, pool, "legacy-dead", "dead")
+
+	result, err = Run(t.Context(), pool, fsys, Config{})
+	if err != nil {
+		t.Fatalf("rerun migration 133: %v", err)
+	}
+	if result.Applied != 0 || result.Skipped != 2 || result.Total != 2 {
+		t.Fatalf("rerun result = %+v, want applied=0 skipped=2 total=2", result)
+	}
+}
+
 func TestBeginWrappedFileWithConcurrentlyIsRejected(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 
@@ -298,6 +613,8 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	}
 	assertTablePresent(t, pool, "members")
 	assertTablePresent(t, pool, "alarms")
+	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
+	assertTerminalPayloadScrubTrigger(t, pool)
 }
 
 func TestRealManifestPrefilledLedgerSkipsAll(t *testing.T) {
@@ -392,6 +709,80 @@ func assertLedger(t *testing.T, pool *pgxpool.Pool, want []string) {
 			t.Fatalf("ledger = %v, want %v", got, want)
 		}
 	}
+}
+
+func assertConstraintValidated(t *testing.T, pool *pgxpool.Pool, table, constraint string, want bool) {
+	t.Helper()
+
+	var got bool
+	err := pool.QueryRow(t.Context(), `
+		SELECT convalidated
+		FROM pg_constraint
+		WHERE conrelid = $1::regclass
+		  AND conname = $2`, table, constraint).Scan(&got)
+	if err != nil {
+		t.Fatalf("query constraint %s on %s: %v", constraint, table, err)
+	}
+	if got != want {
+		t.Fatalf("constraint %s on %s convalidated = %v, want %v", constraint, table, got, want)
+	}
+}
+
+func assertTerminalPayloadScrubTrigger(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	var exists bool
+	err := pool.QueryRow(t.Context(), `
+		SELECT EXISTS (
+			SELECT 1
+			FROM pg_trigger t
+			JOIN pg_proc p ON p.oid = t.tgfoid
+			WHERE t.tgrelid = 'bot_webhook_inbox'::regclass
+			  AND t.tgname = 'bot_webhook_inbox_terminal_payload_scrub'
+			  AND NOT t.tgisinternal
+			  AND t.tgenabled = 'O'
+			  AND t.tgqual IS NOT NULL
+			  AND p.proname = 'scrub_bot_webhook_inbox_terminal_payload'
+		)`).Scan(&exists)
+	if err != nil {
+		t.Fatalf("query terminal payload scrub trigger: %v", err)
+	}
+	if !exists {
+		t.Fatal("terminal payload scrub trigger is not installed and enabled")
+	}
+}
+
+func assertInboxPayload(t *testing.T, pool *pgxpool.Pool, messageID, want string) {
+	t.Helper()
+
+	var got string
+	if err := pool.QueryRow(t.Context(), "SELECT payload::text FROM bot_webhook_inbox WHERE message_id = $1", messageID).Scan(&got); err != nil {
+		t.Fatalf("query inbox payload for %s: %v", messageID, err)
+	}
+	if got != want {
+		t.Fatalf("inbox payload for %s = %s, want %s", messageID, got, want)
+	}
+}
+
+func assertLegacyTerminalWriterCompatible(t *testing.T, pool *pgxpool.Pool, messageID, status string) {
+	t.Helper()
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO bot_webhook_inbox(message_id, room_id, ordering_key, payload)
+		VALUES ($1, 'room', 'room', '{"message":"retained"}'::jsonb)`, messageID); err != nil {
+		t.Fatalf("legacy writer insert for %s: %v", status, err)
+	}
+	assertInboxPayload(t, pool, messageID, `{"message": "retained"}`)
+	updateSQL := "UPDATE bot_webhook_inbox SET status = $1 WHERE message_id = $2"
+	if status == "dead" {
+		updateSQL = `UPDATE bot_webhook_inbox
+			SET status = $1, terminal_at = clock_timestamp(), terminal_reason = 'legacy terminal failure'
+			WHERE message_id = $2`
+	}
+	if _, err := pool.Exec(t.Context(), updateSQL, status, messageID); err != nil {
+		t.Fatalf("legacy writer %s update: %v", status, err)
+	}
+	assertInboxPayload(t, pool, messageID, "{}")
 }
 
 func assertTablePresent(t *testing.T, pool *pgxpool.Pool, name string) {

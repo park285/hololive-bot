@@ -26,7 +26,6 @@ import (
 	"strings"
 )
 
-// outcome_unknown은 아직 Iris public status에 없다. 승격 전에 consumer가 먼저 인식해야 한다.
 const (
 	replyStateQueued           = "queued"
 	replyStatePreparing        = "preparing"
@@ -52,6 +51,15 @@ func classifyReplyState(state string) replyOutcome {
 		return replyOutcomeHandoffCompleted
 	case replyStateFailed:
 		return replyOutcomeFailed
+	case replyStateOutcomeUnknown:
+		return replyOutcomeUnknown
+	default:
+		return classifyNonterminalReplyState(state)
+	}
+}
+
+func classifyNonterminalReplyState(state string) replyOutcome {
+	switch strings.ToLower(strings.TrimSpace(state)) {
 	case replyStateQueued, replyStatePreparing, replyStatePrepared, replyStateSending:
 		return replyOutcomeInFlight
 	default:
@@ -59,7 +67,10 @@ func classifyReplyState(state string) replyOutcome {
 	}
 }
 
-var ErrReplyOutcomeUnknown = errors.New("iris reply outcome unknown")
+var (
+	ErrReplyOutcomeUnknown = errors.New("iris reply outcome unknown")
+	ErrReplyStatusFailed   = errors.New("iris reply failed")
+)
 
 type replyOutcomeUnknownError struct {
 	requestID string
@@ -102,9 +113,15 @@ func (e replyStatusFailedError) Error() string {
 	return fmt.Sprintf("iris reply %s failed: %s", e.requestID, e.detail)
 }
 
+func (e replyStatusFailedError) Is(target error) bool { return target == ErrReplyStatusFailed }
+
 func isReplyStatusFailed(err error) bool {
 	var failed replyStatusFailedError
 	return errors.As(err, &failed)
+}
+
+func IsReplyStatusFailed(err error) bool {
+	return errors.Is(err, ErrReplyStatusFailed)
 }
 
 func isReplyOutcomeUnknown(err error) bool {

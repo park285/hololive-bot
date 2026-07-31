@@ -21,47 +21,31 @@ FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e
 ARG VERSION=dev
 ARG TARGETOS
 ARG TARGETARCH
-# GOAMD64/UPX opt-in: 기본은 현 동작(v1, 압축 없음). 배포 호스트가 AVX2(2013+)면
-# --build-arg GOAMD64=v3, 이미지 축소가 필요하면 --build-arg UPX_ENABLE=1 로 활성. 빼면 즉시 비활성.
+# GOAMD64 opt-in: 기본은 v1. 배포 호스트가 AVX2(2013+)면 --build-arg GOAMD64=v3로 활성화한다.
 ARG GOAMD64=v1
-ARG UPX_ENABLE=
 # Release images are PGO-off until a verifiable adoption design is implemented.
-RUN apk add --no-cache git
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
-ENV GOWORK=off
+ENV GOWORK=off \
+    GOPROXY=https://proxy.golang.org
 
 WORKDIR /workspace/hololive-bot
 
-COPY --from=shared_go_workspace go.mod go.sum /workspace/shared-go/
-COPY --from=iris_client_go_workspace go.mod go.sum /workspace/iris-client-go/
 COPY hololive/hololive-dbtest/go.mod hololive/hololive-dbtest/go.sum ./hololive/hololive-dbtest/
 COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
 COPY hololive/hololive-alarm-worker/go.mod hololive/hololive-alarm-worker/go.sum ./hololive/hololive-alarm-worker/
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-alarm-worker
 
-# Build against the same active sibling workspaces that build-all.sh resolves via additional_contexts.
-# This avoids fetching private/local shared modules from the network during container builds.
-RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
-    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
-
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 WORKDIR /workspace/hololive-bot
 
-COPY --from=shared_go_workspace pkg /workspace/shared-go/pkg
-COPY --from=iris_client_go_workspace iris /workspace/iris-client-go/iris
-COPY --from=iris_client_go_workspace internal /workspace/iris-client-go/internal
-COPY --from=iris_client_go_workspace webhook /workspace/iris-client-go/webhook
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-alarm-worker
-
-RUN go mod edit -replace github.com/park285/shared-go=/workspace/shared-go && \
-    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go
 
 RUN \
     --mount=type=cache,target=/go/pkg/mod \
@@ -70,7 +54,6 @@ RUN \
     go build -pgo=off -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/alarm-worker ./cmd/alarm-worker && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
-    if [ -n "${UPX_ENABLE}" ]; then apk add --no-cache upx && upx --best --lzma /dist/bin/alarm-worker /dist/bin/healthcheck; fi && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 

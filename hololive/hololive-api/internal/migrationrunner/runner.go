@@ -22,6 +22,7 @@ const AdvisoryLockKey int64 = 0x484F4C4F41504901
 const (
 	sessionLockTimeout      = 10 * time.Second
 	sessionStatementTimeout = 4 * time.Minute
+	advisoryUnlockTimeout   = 5 * time.Second
 )
 
 type Config struct {
@@ -68,7 +69,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 
 	lockSession := pgxAdvisoryLockSession{conn: conn}
 	var result Result
-	err = dbmigrate.WithAdvisoryLock(ctx, lockSession, dbmigrate.LockConfig{Key: lockKey(cfg)}, func(lockCtx context.Context) error {
+	err = dbmigrate.WithAdvisoryLock(ctx, lockSession, dbmigrate.LockConfig{Key: lockKey(cfg), Release: advisoryUnlockTimeout}, func(lockCtx context.Context) error {
 		var applyErr error
 		result, applyErr = applyLocked(lockCtx, conn, fsys, exec, cfg)
 		return applyErr

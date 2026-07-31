@@ -24,9 +24,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -105,11 +108,65 @@ func TestReplyOutboxRepositoryInsert(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, ReplyOutboxInserted, outcome)
 
-		colliding := newReplyOutboxEntry("message:m-2", 0, `{"body":"y"}`)
+		const rawID = "message:raw-private-outbox-id"
+		colliding := newReplyOutboxEntry(rawID, 0, `{"body":"y"}`)
 		colliding.ClientRequestID = entry.ClientRequestID
 		_, err = repo.Insert(ctx, colliding)
 		require.Error(t, err, "409 계약을 지키려면 같은 client_request_id가 다른 payload를 가리킬 수 없다")
 		assert.Contains(t, err.Error(), "insert reply outbox row")
+		assert.NotContains(t, err.Error(), rawID)
+		assert.NotContains(t, err.Error(), entry.ClientRequestID)
+		assert.Contains(t, err.Error(), "message_token=anon:")
+		assert.Contains(t, err.Error(), "reason=database_operation_failed")
+		var pgErr *pgconn.PgError
+		require.True(t, errors.As(err, &pgErr), "typed database cause must remain available to errors.As")
+		assert.Equal(t, "bot_reply_outbox_client_request_id_key", pgErr.ConstraintName)
+	})
+
+	t.Run("insert trigger failures redact the message and request ids", func(t *testing.T) {
+		truncateDurabilityTables(ctx, t, pool)
+		const rawID = "message:raw-private-trigger-id"
+		entry := newReplyOutboxEntry(rawID, 0, `{"body":"x"}`)
+		_, err := pool.Exec(ctx, `
+			CREATE OR REPLACE FUNCTION fail_reply_insert_for_privacy_test() RETURNS trigger AS $$
+			BEGIN RAISE EXCEPTION 'database rejected % %', NEW.message_id, NEW.client_request_id; END
+			$$ LANGUAGE plpgsql;
+			DROP TRIGGER IF EXISTS fail_reply_insert_for_privacy_test ON bot_reply_outbox;
+			CREATE TRIGGER fail_reply_insert_for_privacy_test
+			BEFORE INSERT ON bot_reply_outbox
+			FOR EACH ROW EXECUTE FUNCTION fail_reply_insert_for_privacy_test()`)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancelCleanup()
+			_, cleanupErr := pool.Exec(cleanupCtx, "DROP TRIGGER IF EXISTS fail_reply_insert_for_privacy_test ON bot_reply_outbox")
+			require.NoError(t, cleanupErr)
+		})
+
+		_, err = repo.Insert(ctx, entry)
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), rawID)
+		assert.NotContains(t, err.Error(), entry.ClientRequestID)
+		assert.Contains(t, err.Error(), "message_token=anon:")
+		assert.Contains(t, err.Error(), "reason=database_operation_failed")
+		var pgErr *pgconn.PgError
+		require.True(t, errors.As(err, &pgErr))
+		assert.Contains(t, pgErr.Error(), rawID)
+		assert.Contains(t, pgErr.Error(), entry.ClientRequestID)
+	})
+
+	t.Run("conflict inspection preserves cancellation without exposing identity", func(t *testing.T) {
+		const rawID = "message:raw-private-conflict-id"
+		entry := newReplyOutboxEntry(rawID, 0, `{"body":"x"}`)
+		canceled, cancel := context.WithCancel(ctx)
+		cancel()
+
+		_, err := repo.classifyRecordedPayload(canceled, entry, "payload-hash")
+		require.ErrorIs(t, err, context.Canceled)
+		assert.NotContains(t, err.Error(), rawID)
+		assert.NotContains(t, err.Error(), entry.ClientRequestID)
+		assert.Contains(t, err.Error(), "message_token=anon:")
+		assert.Contains(t, err.Error(), "reason=context_canceled")
 	})
 
 	t.Run("phase 1a client request ids satisfy the stored iris contract", func(t *testing.T) {
@@ -206,9 +263,11 @@ func TestReplyOutboxRepositoryTransitions(t *testing.T) {
 			ClaimToken: "token-a",
 			Status:     ReplyOutboxRetryablePreDispatch,
 			LastError:  "transport reset",
+			RetryAfter: time.Millisecond,
 		})
 		require.NoError(t, err)
 		require.True(t, applied)
+		time.Sleep(5 * time.Millisecond)
 
 		reclaimed, err := repo.Claim(ctx, "token-b", durabilityTestLease)
 		require.NoError(t, err)
@@ -235,6 +294,11 @@ func TestReplyOutboxRepositoryWithoutPool(t *testing.T) {
 	repo := NewReplyOutboxRepository(nil)
 
 	_, err := repo.Insert(context.Background(), newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`))
+	require.ErrorIs(t, err, ErrPoolNotConfigured)
+
+	_, err = repo.ReplayManualReview(context.Background(), ReplyOutboxManualReplay{
+		OutboxID: 1, Actor: "operator@example.com", Reason: "ticket-1",
+	})
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
 }
 

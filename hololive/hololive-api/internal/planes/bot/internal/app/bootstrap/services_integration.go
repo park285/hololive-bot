@@ -33,13 +33,10 @@ func InitCoreIntegrationServices(
 
 	majorEventRepository, memberNewsService := ResolveLLMSchedulerClients(appConfig, logger)
 
-	workerPool := ProvideAlarmWorkerPool(appConfig.WorkerPool)
-
 	return &CoreIntegrationServices{
 		ACLService:           aclService,
 		MajorEventRepository: majorEventRepository,
 		MemberNewsService:    memberNewsService,
 		CommandBuilders:      []orchcmd.CommandBuilder{},
-		WorkerPool:           workerPool,
 	}, nil
 }

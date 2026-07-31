@@ -180,7 +180,7 @@ func loadTestWorkerProfileDiagnosticsJSON() string {
 					"profileEnabled": true,
 					"profileVersion": 1,
 					"profileId": "hololive-test",
-					"profileHash": "04d9148810ead976c36a40923375b97117bc39f908116dd20660c065b36eacb8",
+					"profileHash": "6cfd26b9d08b5065b3aaf8d1ae320e9205962dead8753ce0ea33de7c7b140f2b",
 					"workerProfile": {
 						"version": 1,
 						"profile_id": "hololive-test",
@@ -202,7 +202,7 @@ func loadTestWorkerProfileDiagnosticsJSON() string {
 							"enqueue_timeout_ms": 50,
 							"handler_timeout_ms": 30000,
 							"max_body_bytes": 65536,
-							"dedup_ttl_ms": 60000,
+							"dedup_ttl_ms": 960000,
 							"dedup_timeout_ms": 200
 						},
 						"validation": {
@@ -1587,7 +1587,7 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 					"profileEnabled": true,
 					"profileVersion": 1,
 					"profileId": "hololive-custom-test",
-					"profileHash": "0f2bc26a3add170e28745b925c7cb0952c4d49f5519358d148157dcb97a4b1ec",
+					"profileHash": "081e2ddfc8d37b5399ff9d81e533b9918aec3ee3d74d1f878c71f99db4ea5855",
 					"workerProfile": {
 						"version": 1,
 						"profile_id": "hololive-custom-test",
@@ -1609,7 +1609,7 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 							"enqueue_timeout_ms": 80,
 							"handler_timeout_ms": 36000,
 							"max_body_bytes": 262144,
-							"dedup_ttl_ms": 120000,
+							"dedup_ttl_ms": 360000,
 							"dedup_timeout_ms": 300
 						},
 						"bot_pool": {
@@ -1646,8 +1646,8 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 	if config.Webhook.MaxBodyBytes != 262144 {
 		t.Fatalf("Webhook.MaxBodyBytes = %d, want 262144", config.Webhook.MaxBodyBytes)
 	}
-	if config.Webhook.DedupTTL != 2*time.Minute || config.Webhook.DedupTimeout != 300*time.Millisecond {
-		t.Fatalf("Webhook dedup = (%v,%v), want (2m,300ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
+	if config.Webhook.DedupTTL != 6*time.Minute || config.Webhook.DedupTimeout != 300*time.Millisecond {
+		t.Fatalf("Webhook dedup = (%v,%v), want (6m,300ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
 	}
 	if !config.Webhook.RequireHMAC {
 		t.Fatalf("Webhook.RequireHMAC = false, want true")

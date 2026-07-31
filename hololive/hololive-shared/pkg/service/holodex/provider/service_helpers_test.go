@@ -20,7 +20,12 @@
 
 package holodexprovider
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/privacylog"
+)
 
 func TestBuildSearchChannelsCacheKey_NormalizesEquivalentQueries(t *testing.T) {
 	t.Parallel()
@@ -40,6 +45,23 @@ func TestBuildSearchChannelsCacheKey_UsesEmptySuffixForBlankQuery(t *testing.T) 
 
 	if got := buildSearchChannelsCacheKey("   "); got != searchChannelsCacheKeyPrefix+"empty" {
 		t.Fatalf("buildSearchChannelsCacheKey(blank) = %q, want %q", got, searchChannelsCacheKeyPrefix+"empty")
+	}
+}
+
+func TestSearchQueryAttrPseudonymizesRawQuery(t *testing.T) {
+	t.Parallel()
+
+	const query = "private room search"
+	attr := searchQueryAttr(query)
+	if attr.Key != "query_token" {
+		t.Fatalf("searchQueryAttr key = %q, want query_token", attr.Key)
+	}
+	value := attr.Value.String()
+	if value != privacylog.Pseudonym(query) {
+		t.Fatalf("searchQueryAttr value = %q, want privacylog pseudonym", value)
+	}
+	if strings.Contains(value, query) {
+		t.Fatalf("searchQueryAttr value contains raw query %q", query)
 	}
 }
 
