@@ -26,6 +26,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -33,10 +35,38 @@ import (
 )
 
 var (
-	replyOutboxInsertSQL       = mustSQL("reply_outbox_insert.sql")
-	replyOutboxClaimSQL        = mustSQL("reply_outbox_claim.sql")
-	replyOutboxMarkAcceptedSQL = mustSQL("reply_outbox_mark_accepted.sql")
-	replyOutboxSettleSQL       = mustSQL("reply_outbox_settle.sql")
+	replyOutboxInsertSQL         = mustSQL("reply_outbox_insert.sql")
+	replyOutboxConflictSQL       = mustSQL("reply_outbox_conflict.sql")
+	replyOutboxClaimSQL          = mustSQL("reply_outbox_claim.sql")
+	replyOutboxMarkAcceptedSQL   = mustSQL("reply_outbox_mark_accepted.sql")
+	replyOutboxSettleSQL         = mustSQL("reply_outbox_settle.sql")
+	replyOutboxReclaimExpiredSQL = mustSQL("reply_outbox_reclaim_expired.sql")
+)
+
+type ReplyOutboxInsertOutcome int
+
+const (
+	ReplyOutboxInserted ReplyOutboxInsertOutcome = iota
+	ReplyOutboxAlreadyRecorded
+	ReplyOutboxPayloadDiverged
+)
+
+func (o ReplyOutboxInsertOutcome) String() string {
+	switch o {
+	case ReplyOutboxInserted:
+		return "inserted"
+	case ReplyOutboxAlreadyRecorded:
+		return "already_recorded"
+	case ReplyOutboxPayloadDiverged:
+		return "payload_diverged"
+	default:
+		return "unknown"
+	}
+}
+
+const (
+	replyOutboxStatusSubmitting = "submitting"
+	replyOutboxStatusAccepted   = "accepted"
 )
 
 const (
@@ -48,13 +78,16 @@ const (
 	ReplyOutboxManualReview         = "manual_review"
 )
 
-var replyOutboxSettleStatuses = map[string]struct{}{
-	ReplyOutboxHandoffCompleted:     {},
-	ReplyOutboxRetryablePreDispatch: {},
-	ReplyOutboxOutcomeUnknown:       {},
-	ReplyOutboxDead:                 {},
-	ReplyOutboxPermanentConflict:    {},
-	ReplyOutboxManualReview:         {},
+// accepted는 Iris가 이미 수리한 뒤라 그 행을 claim 큐로 되돌리면 admission idempotency TTL이 지난
+// 시점에 중복 발화가 된다. accepted에서 갈 수 있는 곳은 재발송 불가한 종단뿐이고, 정산이 없으면
+// reclaim_expired가 흡수한다.
+var replyOutboxSettleSources = map[string][]string{
+	ReplyOutboxHandoffCompleted:     {replyOutboxStatusSubmitting, replyOutboxStatusAccepted},
+	ReplyOutboxRetryablePreDispatch: {replyOutboxStatusSubmitting},
+	ReplyOutboxOutcomeUnknown:       {replyOutboxStatusSubmitting},
+	ReplyOutboxDead:                 {replyOutboxStatusSubmitting, replyOutboxStatusAccepted},
+	ReplyOutboxPermanentConflict:    {replyOutboxStatusSubmitting, replyOutboxStatusAccepted},
+	ReplyOutboxManualReview:         {replyOutboxStatusSubmitting, replyOutboxStatusAccepted},
 }
 
 type ReplyOutboxEntry struct {
@@ -70,7 +103,7 @@ type ReplyOutboxClaim struct {
 	ID              int64
 	MessageID       string
 	Phase           string
-	Ordinal         int64
+	Ordinal         uint64
 	RoomID          string
 	Payload         []byte
 	ClientRequestID string
@@ -92,35 +125,58 @@ func NewReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {
 	return &ReplyOutboxRepository{pool: pool}
 }
 
-func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEntry) (bool, error) {
+func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEntry) (ReplyOutboxInsertOutcome, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, err
+		return ReplyOutboxInserted, err
 	}
 
 	if entry == nil {
-		return false, errors.Join(ErrInvalidArgument, errors.New("entry must not be nil"))
+		return ReplyOutboxInserted, errors.Join(ErrInvalidArgument, errors.New("entry must not be nil"))
 	}
 
 	normalized, err := normalizeReplyOutboxEntry(entry)
 	if err != nil {
-		return false, err
+		return ReplyOutboxInserted, err
 	}
 
 	digest := sha256.Sum256(normalized.Payload)
+	payloadHash := hex.EncodeToString(digest[:])
 	tag, err := r.pool.Exec(ctx, replyOutboxInsertSQL,
 		normalized.MessageID,
 		normalized.Phase,
 		normalized.Ordinal,
 		normalized.RoomID,
 		normalized.Payload,
-		hex.EncodeToString(digest[:]),
+		payloadHash,
 		normalized.ClientRequestID,
 	)
 	if err != nil {
-		return false, fmt.Errorf("insert reply outbox row %q: %w", normalized.ClientRequestID, err)
+		return ReplyOutboxInserted, fmt.Errorf("insert reply outbox row %q: %w", normalized.ClientRequestID, err)
+	}
+	if tag.RowsAffected() == 1 {
+		return ReplyOutboxInserted, nil
 	}
 
-	return tag.RowsAffected() == 1, nil
+	return r.classifyRecordedPayload(ctx, &normalized, payloadHash)
+}
+
+// 재처리는 LLM 출력과 가변 상태에서 바이트를 다시 만들어 내므로 같은 슬롯에 같은 바이트가 온다는
+// 보장이 없다. 불일치를 실패로 돌려주면 저장본 재발송까지 막혀 아무것도 전달되지 않으므로,
+// 여기서는 관측 신호로만 강등하고 발송 권한은 계속 저장본이 갖는다.
+func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, entry *ReplyOutboxEntry, payloadHash string) (ReplyOutboxInsertOutcome, error) {
+	var recordedHash, recordedClientRequestID string
+	err := r.pool.QueryRow(ctx, replyOutboxConflictSQL, entry.MessageID, entry.Phase, entry.Ordinal).
+		Scan(&recordedHash, &recordedClientRequestID)
+	if err != nil {
+		return ReplyOutboxAlreadyRecorded,
+			fmt.Errorf("inspect reply outbox row %q: %w", entry.ClientRequestID, err)
+	}
+
+	if recordedHash != payloadHash || recordedClientRequestID != entry.ClientRequestID {
+		return ReplyOutboxPayloadDiverged, nil
+	}
+
+	return ReplyOutboxAlreadyRecorded, nil
 }
 
 func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, lease time.Duration) (*ReplyOutboxClaim, error) {
@@ -128,7 +184,7 @@ func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, le
 		return nil, err
 	}
 
-	token, err := requireIdentity("claim token", claimToken)
+	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +212,7 @@ func (r *ReplyOutboxRepository) MarkAccepted(ctx context.Context, id int64, clai
 		return false, err
 	}
 
-	token, err := requireIdentity("claim token", claimToken)
+	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
 		return false, err
 	}
@@ -178,15 +234,17 @@ func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutb
 		return false, err
 	}
 
-	token, err := requireIdentity("claim token", settlement.ClaimToken)
+	token, err := requireBoundedIdentity("claim token", settlement.ClaimToken, claimTokenRuneLimit)
 	if err != nil {
 		return false, err
 	}
-	if _, ok := replyOutboxSettleStatuses[settlement.Status]; !ok {
+	sources, ok := replyOutboxSettleSources[settlement.Status]
+	if !ok {
 		return false, errors.Join(ErrInvalidArgument, fmt.Errorf("unsupported reply outbox settle status %q", settlement.Status))
 	}
 
-	tag, err := r.pool.Exec(ctx, replyOutboxSettleSQL, settlement.ID, token, settlement.Status, settlement.LastError)
+	tag, err := r.pool.Exec(ctx, replyOutboxSettleSQL, settlement.ID, token, settlement.Status,
+		clampColumnText(settlement.LastError, lastErrorByteLimit), sources)
 	if err != nil {
 		return false, fmt.Errorf("settle reply outbox row %d: %w", settlement.ID, err)
 	}
@@ -194,22 +252,49 @@ func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutb
 	return tag.RowsAffected() == 1, nil
 }
 
+type ReplyOutboxReclaim struct {
+	Requeued int64
+	Absorbed int64
+}
+
+func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize int32) (ReplyOutboxReclaim, error) {
+	if err := ensurePool(r.pool); err != nil {
+		return ReplyOutboxReclaim{}, err
+	}
+	if batchSize <= 0 {
+		return ReplyOutboxReclaim{}, errors.Join(ErrInvalidArgument, errors.New("batch size must be positive"))
+	}
+
+	var reclaim ReplyOutboxReclaim
+	err := r.pool.QueryRow(ctx, replyOutboxReclaimExpiredSQL, batchSize).
+		Scan(&reclaim.Requeued, &reclaim.Absorbed)
+	if err != nil {
+		return ReplyOutboxReclaim{}, fmt.Errorf("reclaim expired reply outbox leases: %w", err)
+	}
+
+	return reclaim, nil
+}
+
 func normalizeReplyOutboxEntry(entry *ReplyOutboxEntry) (ReplyOutboxEntry, error) {
-	messageID, err := requireIdentity("message id", entry.MessageID)
+	messageID, err := requireMessageIdentity(entry.MessageID)
 	if err != nil {
 		return ReplyOutboxEntry{}, err
 	}
-	phase, err := requireIdentity("phase", entry.Phase)
+	phase, err := requireBoundedIdentity("phase", entry.Phase, phaseRuneLimit)
 	if err != nil {
 		return ReplyOutboxEntry{}, err
 	}
-	roomID, err := requireIdentity("room id", entry.RoomID)
+	roomID, err := requireRoomID(entry.RoomID)
 	if err != nil {
 		return ReplyOutboxEntry{}, err
 	}
-	clientRequestID, err := requireIdentity("client request id", entry.ClientRequestID)
+	clientRequestID, err := requireClientRequestID(entry.ClientRequestID)
 	if err != nil {
 		return ReplyOutboxEntry{}, err
+	}
+	if entry.Ordinal > math.MaxInt64 {
+		return ReplyOutboxEntry{}, errors.Join(ErrInvalidArgument,
+			fmt.Errorf("ordinal %d exceeds the BIGINT ledger domain", entry.Ordinal))
 	}
 	if len(entry.Payload) == 0 {
 		return ReplyOutboxEntry{}, errors.Join(ErrInvalidArgument, errors.New("payload must not be empty"))
@@ -220,7 +305,7 @@ func normalizeReplyOutboxEntry(entry *ReplyOutboxEntry) (ReplyOutboxEntry, error
 		Phase:           phase,
 		Ordinal:         entry.Ordinal,
 		RoomID:          roomID,
-		Payload:         entry.Payload,
+		Payload:         slices.Clone(entry.Payload),
 		ClientRequestID: clientRequestID,
 	}, nil
 }

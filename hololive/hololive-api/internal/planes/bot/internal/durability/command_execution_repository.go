@@ -24,13 +24,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
-	commandExecutionClaimSQL    = mustSQL("command_execution_claim.sql")
-	commandExecutionCompleteSQL = mustSQL("command_execution_complete.sql")
+	commandExecutionClaimSQL       = mustSQL("command_execution_claim.sql")
+	commandExecutionCompleteSQL    = mustSQL("command_execution_complete.sql")
+	commandExecutionExpireStaleSQL = mustSQL("command_execution_expire_stale.sql")
 )
 
 const (
@@ -46,17 +48,25 @@ func NewCommandExecutionRepository(pool *pgxpool.Pool) *CommandExecutionReposito
 	return &CommandExecutionRepository{pool: pool}
 }
 
-func (r *CommandExecutionRepository) Claim(ctx context.Context, messageID, commandKind string) (bool, error) {
+func (r *CommandExecutionRepository) Claim(ctx context.Context, messageID, commandKind, claimToken string) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return false, err
 	}
 
-	id, err := requireIdentity("message id", messageID)
+	id, err := requireMessageIdentity(messageID)
+	if err != nil {
+		return false, err
+	}
+	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
+	if err != nil {
+		return false, err
+	}
+	kind, err := requireBoundedCommandKind(commandKind)
 	if err != nil {
 		return false, err
 	}
 
-	tag, err := r.pool.Exec(ctx, commandExecutionClaimSQL, id, commandKind)
+	tag, err := r.pool.Exec(ctx, commandExecutionClaimSQL, id, kind, token)
 	if err != nil {
 		return false, fmt.Errorf("claim command execution %q: %w", id, err)
 	}
@@ -64,12 +74,16 @@ func (r *CommandExecutionRepository) Claim(ctx context.Context, messageID, comma
 	return tag.RowsAffected() == 1, nil
 }
 
-func (r *CommandExecutionRepository) Complete(ctx context.Context, messageID, status, resultSummary string) (bool, error) {
+func (r *CommandExecutionRepository) Complete(ctx context.Context, messageID, claimToken, status, resultSummary string) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return false, err
 	}
 
-	id, err := requireIdentity("message id", messageID)
+	id, err := requireMessageIdentity(messageID)
+	if err != nil {
+		return false, err
+	}
+	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
 		return false, err
 	}
@@ -77,10 +91,32 @@ func (r *CommandExecutionRepository) Complete(ctx context.Context, messageID, st
 		return false, errors.Join(ErrInvalidArgument, fmt.Errorf("unsupported command execution status %q", status))
 	}
 
-	tag, err := r.pool.Exec(ctx, commandExecutionCompleteSQL, id, status, resultSummary)
+	tag, err := r.pool.Exec(ctx, commandExecutionCompleteSQL, id, token, status,
+		clampColumnText(resultSummary, resultSummaryByteLimit))
 	if err != nil {
 		return false, fmt.Errorf("complete command execution %q: %w", id, err)
 	}
 
 	return tag.RowsAffected() == 1, nil
+}
+
+func (r *CommandExecutionRepository) ExpireStaleClaims(ctx context.Context, olderThan time.Duration, batchSize int32) (int64, error) {
+	if err := ensurePool(r.pool); err != nil {
+		return 0, err
+	}
+
+	ageMS, err := leaseMilliseconds(olderThan)
+	if err != nil {
+		return 0, err
+	}
+	if batchSize <= 0 {
+		return 0, errors.Join(ErrInvalidArgument, errors.New("batch size must be positive"))
+	}
+
+	tag, err := r.pool.Exec(ctx, commandExecutionExpireStaleSQL, ageMS, batchSize)
+	if err != nil {
+		return 0, fmt.Errorf("expire stale command execution claims: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
 }

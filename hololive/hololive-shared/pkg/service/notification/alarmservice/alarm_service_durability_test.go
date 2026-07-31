@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -531,7 +532,7 @@ func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
 			assert.NotContains(t, logRecord, "error")
 			assert.Equal(t, tt.wantErrorTyp, logRecord["error_type"])
 			assert.Equal(t, tt.wantErrorMsg, logRecord["error_message"])
-			assert.Equal(t, "room-1", logRecord["room_id"])
+			assert.Equal(t, privacylog.RoomIDAttr("room-1").Value.String(), logRecord["room_id"])
 			assert.Equal(t, "ch-1", logRecord["channel_id"])
 		})
 	}

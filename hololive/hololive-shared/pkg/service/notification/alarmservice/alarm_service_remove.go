@@ -10,6 +10,7 @@ import (
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
@@ -135,12 +136,12 @@ func (as *AlarmService) afterRemoveAlarm(ctx context.Context, roomID, channelID 
 			"Failed to sync platform alarm mapping after remove",
 			syncErr,
 			slog.String("channel_id", channelID),
-			slog.String("room_id", roomID),
+			privacylog.RoomIDAttr(roomID),
 		)
 	}
 	if as.logger != nil {
 		as.logger.Info("Alarm removed",
-			slog.String("room_id", roomID),
+			privacylog.RoomIDAttr(roomID),
 			slog.String("channel_id", channelID),
 			slog.Any("alarm_types", mutation.effectiveRemovalTypes),
 			slog.Any("remaining_alarm_types", mutation.remainingTypes),

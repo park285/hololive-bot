@@ -139,13 +139,13 @@ func TestInboxRepository(t *testing.T) {
 		_, err := repo.Claim(ctx, "token-a", durabilityTestLease)
 		require.NoError(t, err)
 
-		applied, err := repo.Release(ctx, message.MessageID, "token-stale", time.Minute, "boom")
+		outcome, err := repo.Release(ctx, message.MessageID, "token-stale", 3, time.Minute, "boom")
 		require.NoError(t, err)
-		assert.False(t, applied)
+		assert.Equal(t, InboxReleaseNotOwned, outcome)
 
-		applied, err = repo.Release(ctx, message.MessageID, "token-a", time.Minute, "boom")
+		outcome, err = repo.Release(ctx, message.MessageID, "token-a", 3, time.Minute, "boom")
 		require.NoError(t, err)
-		assert.True(t, applied)
+		assert.Equal(t, InboxReleaseRetried, outcome)
 
 		status, _, attempts, token := inboxRow(ctx, t, pool, message.MessageID)
 		assert.Equal(t, "retry", status)

@@ -28,6 +28,7 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 type Handler struct {
@@ -127,7 +128,7 @@ func (h *Handler) GetRoomAlarmsWithTypes(c *gin.Context) {
 
 	alarms, err := h.alarm.GetRoomAlarmsWithTypes(ctx, roomID)
 	if err != nil {
-		h.logger.Error("방 알람 조회 실패", slog.String("room_id", roomID), slog.Any("error", err))
+		h.logger.Error("방 알람 조회 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
 		c.JSON(http.StatusInternalServerError, alarmAPIError("get_room_alarms_failed", "get room alarms failed"))
 		return
 	}
@@ -141,7 +142,7 @@ func (h *Handler) GetRoomAlarmsView(c *gin.Context) {
 
 	entries, err := h.alarm.ListRoomAlarmsView(ctx, roomID)
 	if err != nil {
-		h.logger.Error("방 알람 표시 조회 실패", slog.String("room_id", roomID), slog.Any("error", err))
+		h.logger.Error("방 알람 표시 조회 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
 		c.JSON(http.StatusInternalServerError, alarmAPIError("get_room_alarms_view_failed", "get room alarms view failed"))
 		return
 	}
@@ -160,7 +161,7 @@ func (h *Handler) ClearRoomAlarms(c *gin.Context) {
 
 	count, err := h.alarm.ClearRoomAlarms(ctx, req.RoomID)
 	if err != nil {
-		h.logger.Error("방 알람 전체 삭제 실패", slog.String("room_id", req.RoomID), slog.Any("error", err))
+		h.logger.Error("방 알람 전체 삭제 실패", privacylog.RoomIDAttr(req.RoomID), slog.Any("error", err))
 		c.JSON(http.StatusInternalServerError, alarmAPIError("clear_room_alarms_failed", "clear room alarms failed"))
 		return
 	}
@@ -208,7 +209,7 @@ func (h *Handler) SetRoomName(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if err := h.alarm.SetRoomName(ctx, req.RoomID, req.RoomName); err != nil {
-		h.logger.Error("방 이름 설정 실패", slog.String("room_id", req.RoomID), slog.Any("error", err))
+		h.logger.Error("방 이름 설정 실패", privacylog.RoomIDAttr(req.RoomID), slog.Any("error", err))
 		c.JSON(http.StatusInternalServerError, alarmAPIError("set_room_name_failed", "set room name failed"))
 		return
 	}

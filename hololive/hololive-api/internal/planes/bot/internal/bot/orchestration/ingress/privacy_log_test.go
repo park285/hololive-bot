@@ -369,3 +369,22 @@ func TestMessageIngressSelfSenderLogOmitsNickname(t *testing.T) {
 	assertNoLogAttrKey(t, records, "user")
 	assertNoLogAttrKey(t, records, "user_name")
 }
+
+func TestRoomLogAttrMatchesTheSharedCorrelationDefinition(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct{ chatID, roomName string }{
+		{"", "상대방닉네임 님과의 대화"},
+		{"   ", "상대방닉네임 님과의 대화"},
+		{"18446744073709551615", "상대방닉네임 님과의 대화"},
+		{"", ""},
+	}
+
+	for _, tc := range cases {
+		got := roomLogAttr(tc.chatID, tc.roomName)
+		want := privacylog.RoomAttr(tc.chatID, tc.roomName)
+		if got.Key != want.Key || got.Value.String() != want.Value.String() {
+			t.Fatalf("roomLogAttr(%q, %q) = %v, want %v", tc.chatID, tc.roomName, got, want)
+		}
+	}
+}

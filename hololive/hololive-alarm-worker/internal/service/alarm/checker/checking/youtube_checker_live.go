@@ -8,6 +8,7 @@ import (
 
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 )
 
@@ -88,7 +89,7 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 				return nil, 0, err
 			}
 			c.logger.Warn("live catchup dedup check failed, skipping room",
-				slog.String("room_id", roomID),
+				privacylog.RoomIDAttr(roomID),
 				slog.String("channel_id", channelID),
 				slog.String("error", err.Error()))
 			continue

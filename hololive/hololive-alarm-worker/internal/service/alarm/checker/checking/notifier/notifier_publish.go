@@ -26,6 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend) (int, error) {
@@ -92,7 +93,7 @@ func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInp
 		payload.notification.Stream,
 	); err != nil {
 		n.logger.Warn("Failed to mark upcoming event notified after publish (non-fatal)",
-			slog.String("room_id", payload.notification.RoomID),
+			privacylog.RoomIDAttr(payload.notification.RoomID),
 			slog.String("channel_id", payload.channelID),
 			slog.Any("error", err),
 		)

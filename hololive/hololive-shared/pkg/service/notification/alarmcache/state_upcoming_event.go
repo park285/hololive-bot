@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/park285/shared-go/pkg/stringutil"
@@ -66,10 +67,10 @@ func (s *State) MarkUpcomingEventNotified(
 	}
 	if err := s.Cache.Set(ctx, key, data, constants.CacheTTL.NotificationSent); err != nil {
 		s.Logger.Warn("Failed to mark upcoming event notified",
-			slog.String("key", key),
-			slog.String("room_id", roomID),
+			privacylog.RoomIDAttr(roomID),
 			slog.String("channel_id", resolvedChannelID),
 			slog.String("stream_id", stream.ID),
+			slog.Int64("scheduled_minute", keys.NormalizeScheduledMinute(*stream.StartScheduled).Unix()),
 			slog.Any("error", err),
 		)
 

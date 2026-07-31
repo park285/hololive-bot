@@ -23,9 +23,9 @@ package alarmservice
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
@@ -90,7 +90,7 @@ func (as *AlarmService) cleanupRoomRegistryAfterRemoval(ctx context.Context, roo
 	}
 
 	if as.logger != nil {
-		as.logger.Info("Room removed from registry (no alarms left)", slog.String("room_id", roomID))
+		as.logger.Info("Room removed from registry (no alarms left)", privacylog.RoomIDAttr(roomID))
 	}
 
 	return nil

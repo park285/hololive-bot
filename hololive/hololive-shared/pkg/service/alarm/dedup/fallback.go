@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 // fallbackEntry: 로컬 dedup 엔트리
@@ -72,7 +73,7 @@ func (f *LocalFallback) TryClaimOnOutage(key string, ttl time.Duration, err erro
 	}
 
 	f.logger.Warn("SETNX claim 실패, 로컬 폴백 사용",
-		slog.String("key", key),
+		slog.String("claim_key_token", privacylog.Pseudonym(key)),
 		slog.Bool("fallback_acquired", acquired),
 		slog.String("error", errMsg),
 	)

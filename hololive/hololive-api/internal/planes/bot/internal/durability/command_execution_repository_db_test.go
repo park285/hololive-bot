@@ -38,11 +38,11 @@ func TestCommandExecutionRepository(t *testing.T) {
 	t.Run("only the first claim for a message id wins", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 
-		claimed, err := repo.Claim(ctx, messageID, "broadcast_history")
+		claimed, err := repo.Claim(ctx, messageID, "broadcast_history", "token-a")
 		require.NoError(t, err)
 		assert.True(t, claimed)
 
-		claimed, err = repo.Claim(ctx, messageID, "broadcast_history")
+		claimed, err = repo.Claim(ctx, messageID, "broadcast_history", "token-a")
 		require.NoError(t, err)
 		assert.False(t, claimed, "재처리 시 두 번째 claim은 0 rows여야 한다")
 
@@ -55,15 +55,15 @@ func TestCommandExecutionRepository(t *testing.T) {
 
 	t.Run("complete transitions a claimed execution exactly once", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
-		claimed, err := repo.Claim(ctx, messageID, "broadcast_history")
+		claimed, err := repo.Claim(ctx, messageID, "broadcast_history", "token-a")
 		require.NoError(t, err)
 		require.True(t, claimed)
 
-		applied, err := repo.Complete(ctx, messageID, CommandExecutionSucceeded, "ok")
+		applied, err := repo.Complete(ctx, messageID, "token-a", CommandExecutionSucceeded, "ok")
 		require.NoError(t, err)
 		assert.True(t, applied)
 
-		applied, err = repo.Complete(ctx, messageID, CommandExecutionFailed, "late")
+		applied, err = repo.Complete(ctx, messageID, "token-a", CommandExecutionFailed, "late")
 		require.NoError(t, err)
 		assert.False(t, applied, "terminal execution must not transition twice")
 
@@ -78,12 +78,12 @@ func TestCommandExecutionRepository(t *testing.T) {
 	t.Run("complete rejects statuses outside the ledger vocabulary", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 
-		_, err := repo.Complete(ctx, messageID, "claimed", "")
+		_, err := repo.Complete(ctx, messageID, "token-a", "claimed", "")
 		require.ErrorIs(t, err, ErrInvalidArgument)
 	})
 
 	t.Run("blank message id is rejected before touching postgres", func(t *testing.T) {
-		_, err := repo.Claim(ctx, "  ", "broadcast_history")
+		_, err := repo.Claim(ctx, "  ", "broadcast_history", "token-a")
 		require.ErrorIs(t, err, ErrInvalidArgument)
 	})
 }
@@ -91,6 +91,6 @@ func TestCommandExecutionRepository(t *testing.T) {
 func TestCommandExecutionRepositoryWithoutPool(t *testing.T) {
 	repo := NewCommandExecutionRepository(nil)
 
-	_, err := repo.Claim(context.Background(), "message:m-1", "broadcast_history")
+	_, err := repo.Claim(context.Background(), "message:m-1", "broadcast_history", "token-a")
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
 }

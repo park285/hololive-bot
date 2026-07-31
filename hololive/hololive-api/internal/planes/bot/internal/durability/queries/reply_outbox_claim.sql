@@ -1,7 +1,7 @@
 WITH candidate AS MATERIALIZED (
     SELECT id
     FROM bot_reply_outbox
-    WHERE status IN ('pending', 'retryable_pre_dispatch')
+    WHERE status IN ('pending', 'retryable_pre_dispatch', 'outcome_unknown')
     ORDER BY created_at ASC, id ASC
     LIMIT 1
     FOR UPDATE SKIP LOCKED

@@ -66,15 +66,15 @@ func TestReplyOutboxRepositoryInsert(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 		entry := newReplyOutboxEntry("message:m-1", 0, `{"body":"first"}`)
 
-		inserted, err := repo.Insert(ctx, entry)
+		outcome, err := repo.Insert(ctx, entry)
 		require.NoError(t, err)
-		assert.True(t, inserted)
+		assert.Equal(t, ReplyOutboxInserted, outcome)
 
 		replayed := *entry
 		replayed.Payload = []byte(`{"body":"rewritten"}`)
-		inserted, err = repo.Insert(ctx, &replayed)
+		outcome, err = repo.Insert(ctx, &replayed)
 		require.NoError(t, err)
-		assert.False(t, inserted)
+		assert.Equal(t, ReplyOutboxPayloadDiverged, outcome)
 
 		_, payload, hash, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
 		assert.JSONEq(t, `{"body":"first"}`, string(payload))
@@ -86,9 +86,9 @@ func TestReplyOutboxRepositoryInsert(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 
 		for ordinal := range uint64(3) {
-			inserted, err := repo.Insert(ctx, newReplyOutboxEntry("message:m-1", ordinal, `{"body":"x"}`))
+			outcome, err := repo.Insert(ctx, newReplyOutboxEntry("message:m-1", ordinal, `{"body":"x"}`))
 			require.NoError(t, err)
-			assert.True(t, inserted)
+			assert.Equal(t, ReplyOutboxInserted, outcome)
 		}
 
 		var count int
@@ -101,9 +101,9 @@ func TestReplyOutboxRepositoryInsert(t *testing.T) {
 	t.Run("a client request id is never reused for another row", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 		entry := newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`)
-		inserted, err := repo.Insert(ctx, entry)
+		outcome, err := repo.Insert(ctx, entry)
 		require.NoError(t, err)
-		require.True(t, inserted)
+		require.Equal(t, ReplyOutboxInserted, outcome)
 
 		colliding := newReplyOutboxEntry("message:m-2", 0, `{"body":"y"}`)
 		colliding.ClientRequestID = entry.ClientRequestID
@@ -117,15 +117,15 @@ func TestReplyOutboxRepositoryInsert(t *testing.T) {
 
 		canonical := newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`)
 		require.Equal(t, "hololive:v1:message:m-1:reply:0", canonical.ClientRequestID)
-		inserted, err := repo.Insert(ctx, canonical)
+		outcome, err := repo.Insert(ctx, canonical)
 		require.NoError(t, err)
-		assert.True(t, inserted)
+		assert.Equal(t, ReplyOutboxInserted, outcome)
 
 		hashed := newReplyOutboxEntry("message:닉네임 with/slash", 7, `{"body":"x"}`)
 		require.NotContains(t, hashed.ClientRequestID, "/")
-		inserted, err = repo.Insert(ctx, hashed)
+		outcome, err = repo.Insert(ctx, hashed)
 		require.NoError(t, err, "해시 폴백 id도 CHECK 정규식을 통과해야 한다")
-		assert.True(t, inserted)
+		assert.Equal(t, ReplyOutboxInserted, outcome)
 	})
 
 	t.Run("invalid entries are rejected before touching postgres", func(t *testing.T) {
@@ -253,9 +253,9 @@ func TestReplyOutboxClientRequestIDMatchesTransportDerivation(t *testing.T) {
 func claimOne(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, entry *ReplyOutboxEntry) *ReplyOutboxClaim {
 	t.Helper()
 
-	inserted, err := repo.Insert(ctx, entry)
+	outcome, err := repo.Insert(ctx, entry)
 	require.NoError(t, err)
-	require.True(t, inserted)
+	require.Equal(t, ReplyOutboxInserted, outcome)
 
 	claim, err := repo.Claim(ctx, "token-a", durabilityTestLease)
 	require.NoError(t, err)

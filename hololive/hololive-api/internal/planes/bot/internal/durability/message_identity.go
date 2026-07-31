@@ -18,45 +18,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package ingress
+package durability
 
-import (
-	"log/slog"
+import "strings"
 
-	"github.com/park285/iris-client-go/webhook"
+const MessageIdentityPrefix = "message:"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
-)
-
-func resolveRoom(message *webhook.Message) (chatID, roomName string) {
-	chatID = message.Room
-	if !privacylog.IsCanonicalRoomID(message.Room) && message.JSON != nil {
-		chatID = message.JSON.ChatID
+// bot_webhook_inbox·bot_command_executions·bot_reply_outbox의 UNIQUE(message_id)는 세 테이블이
+// 같은 키 공간을 쓸 때만 "메시지당 실행 1회"를 뜻한다. 배선 지점마다 SDK raw id(msg.JSON.MessageID)와
+// CommandContext.MessageID가 섞여 들어오므로, 접두 유무와 무관하게 여기서 한 형태로 접는다.
+func MessageIdentity(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.HasPrefix(trimmed, MessageIdentityPrefix) {
+		return trimmed
 	}
 
-	roomName = message.Room
-
-	return chatID, roomName
-}
-
-// chatID가 canonical room id가 아니면 로그에서 방 제목으로 새어 나가므로, 로그 경계에는
-// 원본 대신 이 attr만 전달한다. ACL과 응답 송신은 계속 raw chatID를 쓴다.
-func roomLogAttr(chatID, roomName string) slog.Attr {
-	return privacylog.RoomAttr(chatID, roomName)
-}
-
-func resolveUser(message *webhook.Message) (userID, userName string) {
-	userID = "unknown"
-	userName = userID
-
-	if message.JSON != nil && message.JSON.UserID != "" {
-		userID = message.JSON.UserID
-		userName = userID
-	}
-
-	if message.Sender != nil {
-		userName = *message.Sender
-	}
-
-	return userID, userName
+	return MessageIdentityPrefix + trimmed
 }

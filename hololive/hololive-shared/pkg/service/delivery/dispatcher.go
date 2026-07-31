@@ -34,6 +34,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -292,7 +293,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 	if err := d.sendMessage(ctx, item, p.Message); err != nil {
 		d.logger.Error("Failed to send outbox message",
 			slog.Int64("id", item.ID),
-			slog.String("room_id", item.RoomID),
+			privacylog.RoomIDAttr(item.RoomID),
 			slog.String("error", err.Error()))
 		d.markItemFailed(ctx, item.ID, item.LockedAt.Time, err.Error())
 		return

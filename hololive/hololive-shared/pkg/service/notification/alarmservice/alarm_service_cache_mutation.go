@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/valkey-io/valkey-go"
 )
@@ -176,10 +177,8 @@ func (as *AlarmService) logAlarmAdded(req *domain.AddAlarmRequest, alarmTypes do
 	}
 
 	as.logger.Info("Alarm added",
-		slog.String("room_id", req.RoomID),
-		slog.String("room_name", req.RoomName),
+		privacylog.RoomIDAttr(req.RoomID),
 		slog.String("user_id", req.UserID),
-		slog.String("user_name", req.UserName),
 		slog.String("channel_id", req.ChannelID),
 		slog.String("member_name", req.MemberName),
 		slog.Any("alarm_types", alarmTypes),

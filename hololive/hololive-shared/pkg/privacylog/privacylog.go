@@ -21,50 +21,68 @@
 package privacylog
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"strings"
-
-	sharedprivacylog "github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 const (
-	KeyRoomID = sharedprivacylog.KeyRoomID
-	KeyChatID = sharedprivacylog.KeyChatID
+	KeyRoomID = "room_id"
+	KeyChatID = "chat_id"
 
-	UnknownToken    = sharedprivacylog.UnknownToken
-	PseudonymPrefix = sharedprivacylog.PseudonymPrefix
+	UnknownToken    = "unknown"
+	PseudonymPrefix = "anon:"
+
+	pseudonymBytes = 8
 )
 
+// Kakao 방 제목과 검색어는 엔트로피가 낮아 unsalted digest면 사전 대입으로 원문이 복원된다.
+// 프로세스 밖으로 나가지 않는 key로 HMAC을 걸어, 한 프로세스 수명 안에서만 상관관계가
+// 성립하고 로그 수집기 쪽에서는 원문을 되돌릴 수 없게 한다.
+var pseudonymKey = []byte(rand.Text())
+
 func RoomIDAttr(room string) slog.Attr {
-	return sharedprivacylog.RoomIDAttr(room)
+	return slog.String(KeyRoomID, IdentifierToken(room))
 }
 
 func ChatIDAttr(chatID string) slog.Attr {
-	return sharedprivacylog.ChatIDAttr(chatID)
+	return slog.String(KeyChatID, IdentifierToken(chatID))
 }
 
 func IsCanonicalRoomID(value string) bool {
-	return sharedprivacylog.IsCanonicalRoomID(value)
+	if value == "" {
+		return false
+	}
+
+	for index := range len(value) {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func Pseudonym(value string) string {
-	return sharedprivacylog.Pseudonym(value)
-}
-
-func RoomAttr(chatID, roomName string) slog.Attr {
-	return sharedprivacylog.RoomIDAttr(correlationSource(chatID, roomName))
-}
-
-func ChatAttr(chatID, roomName string) slog.Attr {
-	return sharedprivacylog.ChatIDAttr(correlationSource(chatID, roomName))
-}
-
-// Iris webhook의 chat_id는 JSON 봉투가 없거나 비어서 도달할 수 있고, 그때 ingress가 방 제목을
-// chatID로 승격시킨다. 로그 상관 키가 경로마다 갈리지 않도록 폴백 판정은 여기 한 곳에만 둔다.
-func correlationSource(chatID, roomName string) string {
-	if strings.TrimSpace(chatID) != "" {
-		return chatID
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return UnknownToken
 	}
 
-	return roomName
+	mac := hmac.New(sha256.New, pseudonymKey)
+	_, _ = mac.Write([]byte(trimmed))
+
+	return PseudonymPrefix + hex.EncodeToString(mac.Sum(nil)[:pseudonymBytes])
+}
+
+func IdentifierToken(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if IsCanonicalRoomID(trimmed) {
+		return trimmed
+	}
+
+	return Pseudonym(trimmed)
 }

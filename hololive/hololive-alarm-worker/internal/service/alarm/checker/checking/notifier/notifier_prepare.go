@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -118,9 +119,10 @@ func applyNonSentOutcome(outcome sendOutcome, err error, result *delivery.SendRe
 }
 
 func (n *Notifier) recordPrepareError(notification *domain.AlarmNotification, err error, errs *[]error) {
-	*errs = append(*errs, fmt.Errorf("send notification room=%q stream=%q: %w", notificationRoomID(notification), notificationStreamID(notification), err))
+	*errs = append(*errs, fmt.Errorf("send notification room=%q stream=%q: %w",
+		privacylog.IdentifierToken(notificationRoomID(notification)), notificationStreamID(notification), err))
 	n.logger.Warn("Alarm notification send failed",
-		slog.String("room_id", notificationRoomID(notification)),
+		privacylog.RoomIDAttr(notificationRoomID(notification)),
 		slog.String("stream_id", notificationStreamID(notification)),
 		slog.Any("error", err),
 	)

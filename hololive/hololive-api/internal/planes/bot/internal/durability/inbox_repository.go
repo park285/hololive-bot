@@ -31,11 +31,34 @@ import (
 )
 
 var (
-	inboxAdmitSQL    = mustSQL("inbox_admit.sql")
-	inboxClaimSQL    = mustSQL("inbox_claim.sql")
-	inboxCompleteSQL = mustSQL("inbox_complete.sql")
-	inboxReleaseSQL  = mustSQL("inbox_release.sql")
+	inboxAdmitSQL          = mustSQL("inbox_admit.sql")
+	inboxClaimSQL          = mustSQL("inbox_claim.sql")
+	inboxCompleteSQL       = mustSQL("inbox_complete.sql")
+	inboxReleaseSQL        = mustSQL("inbox_release.sql")
+	inboxAbandonSQL        = mustSQL("inbox_abandon.sql")
+	inboxReclaimExpiredSQL = mustSQL("inbox_reclaim_expired.sql")
 )
+
+type InboxReleaseOutcome int
+
+const (
+	InboxReleaseNotOwned InboxReleaseOutcome = iota
+	InboxReleaseRetried
+	InboxReleaseAbandoned
+)
+
+func (o InboxReleaseOutcome) String() string {
+	switch o {
+	case InboxReleaseNotOwned:
+		return "not_owned"
+	case InboxReleaseRetried:
+		return "retried"
+	case InboxReleaseAbandoned:
+		return "abandoned"
+	default:
+		return "unknown"
+	}
+}
 
 type InboxMessage struct {
 	MessageID   string
@@ -65,15 +88,15 @@ func (r *InboxRepository) Admit(ctx context.Context, msg InboxMessage) (bool, er
 		return false, err
 	}
 
-	messageID, err := requireIdentity("message id", msg.MessageID)
+	messageID, err := requireMessageIdentity(msg.MessageID)
 	if err != nil {
 		return false, err
 	}
-	roomID, err := requireIdentity("room id", msg.RoomID)
+	roomID, err := requireRoomID(msg.RoomID)
 	if err != nil {
 		return false, err
 	}
-	orderingKey, err := requireIdentity("ordering key", msg.OrderingKey)
+	orderingKey, err := requireBoundedIdentity("ordering key", msg.OrderingKey, orderingKeyRuneLimit)
 	if err != nil {
 		return false, err
 	}
@@ -94,7 +117,7 @@ func (r *InboxRepository) Claim(ctx context.Context, claimToken string, lease ti
 		return nil, err
 	}
 
-	token, err := requireIdentity("claim token", claimToken)
+	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +143,46 @@ func (r *InboxRepository) Complete(ctx context.Context, messageID, claimToken st
 	return r.settle(ctx, inboxCompleteSQL, messageID, claimToken)
 }
 
-func (r *InboxRepository) Release(ctx context.Context, messageID, claimToken string, retryAfter time.Duration, lastError string) (bool, error) {
+func (r *InboxRepository) Release(
+	ctx context.Context,
+	messageID, claimToken string,
+	maxAttempts int32,
+	retryAfter time.Duration,
+	lastError string,
+) (InboxReleaseOutcome, error) {
+	if err := ensurePool(r.pool); err != nil {
+		return InboxReleaseNotOwned, err
+	}
+
+	id, token, err := r.fenceArgs(messageID, claimToken)
+	if err != nil {
+		return InboxReleaseNotOwned, err
+	}
+	if maxAttempts <= 0 {
+		return InboxReleaseNotOwned, errors.Join(ErrInvalidArgument, errors.New("max attempts must be positive"))
+	}
+	retryMS, err := leaseMilliseconds(retryAfter)
+	if err != nil {
+		return InboxReleaseNotOwned, err
+	}
+
+	var status string
+	err = r.pool.QueryRow(ctx, inboxReleaseSQL, id, token, retryMS,
+		clampColumnText(lastError, lastErrorByteLimit), maxAttempts).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return InboxReleaseNotOwned, nil
+	}
+	if err != nil {
+		return InboxReleaseNotOwned, fmt.Errorf("release webhook inbox row %q: %w", id, err)
+	}
+	if status == inboxStatusDead {
+		return InboxReleaseAbandoned, nil
+	}
+
+	return InboxReleaseRetried, nil
+}
+
+func (r *InboxRepository) Abandon(ctx context.Context, messageID, claimToken, reason string) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
 		return false, err
 	}
@@ -129,17 +191,46 @@ func (r *InboxRepository) Release(ctx context.Context, messageID, claimToken str
 	if err != nil {
 		return false, err
 	}
-	retryMS, err := leaseMilliseconds(retryAfter)
+	terminalReason, err := requireIdentity("terminal reason", reason)
 	if err != nil {
 		return false, err
 	}
 
-	tag, err := r.pool.Exec(ctx, inboxReleaseSQL, id, token, retryMS, lastError)
+	tag, err := r.pool.Exec(ctx, inboxAbandonSQL, id, token,
+		clampColumnText(terminalReason, terminalReasonByteLimit))
 	if err != nil {
-		return false, fmt.Errorf("release webhook inbox row %q: %w", id, err)
+		return false, fmt.Errorf("abandon webhook inbox row %q: %w", id, err)
 	}
 
 	return tag.RowsAffected() == 1, nil
+}
+
+type InboxReclaim struct {
+	Requeued  int64
+	Abandoned int64
+}
+
+// 만료 lease를 되돌리면서 claim_token을 비우므로, lease를 잃은 워커의 Complete/Release는 token 대조에서
+// 0 rows가 된다 — 전이 쿼리에 lease_until 술어를 따로 두지 않는 이유다.
+func (r *InboxRepository) ReclaimExpired(ctx context.Context, maxAttempts, batchSize int32) (InboxReclaim, error) {
+	if err := ensurePool(r.pool); err != nil {
+		return InboxReclaim{}, err
+	}
+	if maxAttempts <= 0 {
+		return InboxReclaim{}, errors.Join(ErrInvalidArgument, errors.New("max attempts must be positive"))
+	}
+	if batchSize <= 0 {
+		return InboxReclaim{}, errors.Join(ErrInvalidArgument, errors.New("batch size must be positive"))
+	}
+
+	var reclaim InboxReclaim
+	err := r.pool.QueryRow(ctx, inboxReclaimExpiredSQL, maxAttempts, batchSize).
+		Scan(&reclaim.Requeued, &reclaim.Abandoned)
+	if err != nil {
+		return InboxReclaim{}, fmt.Errorf("reclaim expired webhook inbox leases: %w", err)
+	}
+
+	return reclaim, nil
 }
 
 func (r *InboxRepository) settle(ctx context.Context, query, messageID, claimToken string) (bool, error) {
@@ -161,11 +252,11 @@ func (r *InboxRepository) settle(ctx context.Context, query, messageID, claimTok
 }
 
 func (r *InboxRepository) fenceArgs(messageID, claimToken string) (id, token string, err error) {
-	id, err = requireIdentity("message id", messageID)
+	id, err = requireMessageIdentity(messageID)
 	if err != nil {
 		return "", "", err
 	}
-	token, err = requireIdentity("claim token", claimToken)
+	token, err = requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
 		return "", "", err
 	}

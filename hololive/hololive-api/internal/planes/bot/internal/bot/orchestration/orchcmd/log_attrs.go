@@ -24,7 +24,7 @@ func commandContextAttrs(cmdCtx *domain.CommandContext, commandKey string) []slo
 	}
 
 	attrs = append(attrs,
-		privacylog.RoomIDAttr(cmdCtx.Room),
+		privacylog.RoomAttr(cmdCtx.Room, cmdCtx.RoomName),
 		slog.String("user_id", strings.TrimSpace(cmdCtx.UserID)),
 		slog.Bool("group_chat", cmdCtx.IsGroupChat),
 	)

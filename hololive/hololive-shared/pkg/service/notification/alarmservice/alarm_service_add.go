@@ -10,6 +10,7 @@ import (
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
@@ -135,7 +136,7 @@ func (as *AlarmService) afterAddAlarm(ctx context.Context, req *domain.AddAlarmR
 			"Failed to sync platform alarm mapping after add",
 			syncErr,
 			slog.String("channel_id", req.ChannelID),
-			slog.String("room_id", req.RoomID),
+			privacylog.RoomIDAttr(req.RoomID),
 		)
 	}
 }

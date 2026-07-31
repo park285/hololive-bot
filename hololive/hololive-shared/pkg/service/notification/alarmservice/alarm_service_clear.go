@@ -7,6 +7,8 @@ import (
 	"time"
 
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
+
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
@@ -75,7 +77,7 @@ func (as *AlarmService) afterClearRoomAlarms(ctx context.Context, roomID string,
 	}
 	if as.logger != nil {
 		as.logger.Info("All alarms cleared",
-			slog.String("room_id", roomID),
+			privacylog.RoomIDAttr(roomID),
 			slog.Int("count", len(channelIDs)),
 		)
 	}
@@ -87,7 +89,7 @@ func (as *AlarmService) cleanupClearedRoomAlarmChannel(ctx context.Context, room
 			"cleanup channel registry during room alarm clear.failed",
 			"Failed to cleanup channel registry during room alarm clear",
 			err,
-			slog.String("room_id", roomID),
+			privacylog.RoomIDAttr(roomID),
 			slog.String("channel_id", channelID),
 		)
 	}
@@ -97,7 +99,7 @@ func (as *AlarmService) cleanupClearedRoomAlarmChannel(ctx context.Context, room
 			"sync platform alarm mapping after clear.failed",
 			"Failed to sync platform alarm mapping after clear",
 			syncErr,
-			slog.String("room_id", roomID),
+			privacylog.RoomIDAttr(roomID),
 			slog.String("channel_id", channelID),
 		)
 	}

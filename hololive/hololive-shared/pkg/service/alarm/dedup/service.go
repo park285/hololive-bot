@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -79,13 +80,13 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 	acquired, err := s.cache.SetNX(ctx, key, "1", ttl)
 	if err != nil {
 		s.logger.Debug("dedup claim fallback",
-			slog.String("key", key),
+			slog.String("claim_key_token", privacylog.Pseudonym(key)),
 			slog.String("error", err.Error()),
 		)
 		return s.fallback.TryClaimOnOutage(key, ttl, err)
 	}
 	s.logger.Debug("dedup claim result",
-		slog.String("key", key),
+		slog.String("claim_key_token", privacylog.Pseudonym(key)),
 		slog.Bool("acquired", acquired),
 	)
 	return acquired
