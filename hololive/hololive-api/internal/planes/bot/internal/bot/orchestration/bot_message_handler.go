@@ -22,17 +22,22 @@ package orchestration
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/webhook"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 )
+
+// Iris는 blank message id로 payload를 만들지 않고(WebhookPayloadError::BlankMessageId),
+// webhook SDK도 X-Iris-Message-Id 없는 요청을 400으로 막는다. 그래도 식별자 없이 도달하면
+// 재전달마다 다른 응답 id가 생겨 중복 발화가 되므로 폴백 없이 처리를 멈춘다.
+const replyIdentityPrefix = "message:"
 
 // HTTP webhook 핸들러에서 호출하기 위해 public으로 노출됩니다.
 func (b *Bot) HandleMessage(ctx context.Context, message *webhook.Message) {
@@ -56,8 +61,13 @@ func (b *Bot) HandleMessage(ctx context.Context, message *webhook.Message) {
 
 	cmdCtx := newCommandContextFromIngress(envelope)
 	cmdCtx.ThreadID = messageThreadID(message)
-	cmdCtx.MessageID = messageReplyIdentity(message)
-	reqCtx := commandRequestContext(ctx, cmdCtx, message)
+	cmdCtx.MessageID = canonicalReplyIdentity(message)
+	if cmdCtx.MessageID == "" {
+		b.rejectWithoutReplyIdentity(ctx, envelope.ChatID, commandType)
+		return
+	}
+
+	reqCtx := commandRequestContext(ctx, cmdCtx)
 
 	if orchcmd.ShouldExecuteAsync(envelope.Parsed.Type) {
 		b.executeCommandAsync(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params, commandType, envelope.ChatID)
@@ -92,40 +102,33 @@ func messageThreadID(message *webhook.Message) *string {
 	return &trimmed
 }
 
-func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext, message *webhook.Message) context.Context {
-	if identity := commandReplyIdentity(cmdCtx, message); identity != "" {
-		ctx = transport.WithReplyIdentity(ctx, identity)
-	}
+func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext) context.Context {
+	ctx = transport.WithReplyIdentity(ctx, cmdCtx.MessageID)
 	if cmdCtx.ThreadID != nil {
 		ctx = transport.WithThreadID(ctx, *cmdCtx.ThreadID)
 	}
 	return ctx
 }
 
-func commandReplyIdentity(cmdCtx *domain.CommandContext, message *webhook.Message) string {
-	if cmdCtx != nil {
-		if trimmed := strings.TrimSpace(cmdCtx.MessageID); trimmed != "" {
-			return trimmed
-		}
-	}
-
-	return messageReplyIdentity(message)
-}
-
-func messageReplyIdentity(message *webhook.Message) string {
+func canonicalReplyIdentity(message *webhook.Message) string {
 	if message == nil || message.JSON == nil {
 		return ""
 	}
-	if trimmed := strings.TrimSpace(message.JSON.MessageID); trimmed != "" {
-		return "message:" + trimmed
+
+	trimmed := strings.TrimSpace(message.JSON.MessageID)
+	if trimmed == "" {
+		return ""
 	}
-	if trimmed := strings.TrimSpace(message.JSON.ChatLogID); trimmed != "" {
-		return "chat-log:" + trimmed
-	}
-	if message.JSON.SourceLogID != nil {
-		return fmt.Sprintf("source-log:%d", *message.JSON.SourceLogID)
-	}
-	return ""
+
+	return replyIdentityPrefix + trimmed
+}
+
+func (b *Bot) rejectWithoutReplyIdentity(ctx context.Context, chatID, commandType string) {
+	sharedlog.Warn(ctx, b.logger, EventBotReplyIdentityMissing,
+		"refusing command without canonical message id",
+		privacylog.ChatIDAttr(chatID),
+		slog.String("command", commandType),
+	)
 }
 
 func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) {
@@ -140,7 +143,7 @@ func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandTy
 		errorAttrs := sharedlog.ErrorAttrs(sendErr)
 		attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
 		attrs = append(attrs,
-			slog.String("chat_id", chatID),
+			privacylog.ChatIDAttr(chatID),
 			slog.String("command", commandType),
 		)
 		attrs = append(attrs, errorAttrs...)

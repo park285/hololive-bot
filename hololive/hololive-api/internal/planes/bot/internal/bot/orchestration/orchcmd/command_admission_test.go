@@ -89,7 +89,7 @@ func TestCommandRouterAppliesUserAndRoomAdmissionToExpensiveHistory(t *testing.T
 	router := NewCommandRouter(registry, nil, func(context.Context, string, string) error { return nil }, nil, nil)
 	router.admission = &commandAdmissionPolicy{limiter: limiter}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1"}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}, domain.CommandBroadcastHistory, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -124,7 +124,7 @@ func TestCommandRouterRejectsRateLimitedHistoryWithoutExecutingHandler(t *testin
 	}, nil, nil)
 	router.admission = &commandAdmissionPolicy{limiter: limiter}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1"}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}, domain.CommandBroadcastHistory, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -141,12 +141,14 @@ func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 	ctx := t.Context()
 	attacker := &domain.CommandContext{Room: "room-1", UserID: "attacker"}
 
-	for range expensiveHistoryUserLimit {
+	for index := range expensiveHistoryUserLimit {
+		attacker.MessageID = messageIDForIndex(index)
 		if err := policy.Admit(ctx, attacker, "broadcast_history"); err != nil {
 			t.Fatalf("attacker admission error = %v", err)
 		}
 	}
-	for range expensiveHistoryRoomLimit - expensiveHistoryUserLimit {
+	for index := range expensiveHistoryRoomLimit - expensiveHistoryUserLimit {
+		attacker.MessageID = messageIDForIndex(expensiveHistoryUserLimit + index)
 		err := policy.Admit(ctx, attacker, "broadcast_history")
 		if !errors.Is(err, errCommandRateLimited) {
 			t.Fatalf("attacker over-limit error = %v, want rate limit", err)
@@ -158,7 +160,7 @@ func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 	assertSortedSetSize(t, mini, roomKey, expensiveHistoryUserLimit)
 	assertSortedSetSize(t, mini, userKey, expensiveHistoryUserLimit)
 
-	victim := &domain.CommandContext{Room: attacker.Room, UserID: "victim"}
+	victim := &domain.CommandContext{Room: attacker.Room, UserID: "victim", MessageID: "message:victim"}
 	if err := policy.Admit(ctx, victim, "broadcast_thumbnail"); err != nil {
 		t.Fatalf("victim admission error = %v, want allowed", err)
 	}
@@ -170,13 +172,13 @@ func TestCommandAdmissionRoomDenialDoesNotConsumeUserQuota(t *testing.T) {
 	room := "room-1"
 
 	for i := range expensiveHistoryRoomLimit {
-		cmdCtx := &domain.CommandContext{Room: room, UserID: "user-" + strconv.Itoa(i)}
+		cmdCtx := &domain.CommandContext{Room: room, UserID: "user-" + strconv.Itoa(i), MessageID: "message:m-" + strconv.Itoa(i)}
 		if err := policy.Admit(ctx, cmdCtx, "broadcast_history"); err != nil {
 			t.Fatalf("room admission %d error = %v", i, err)
 		}
 	}
 
-	denied := &domain.CommandContext{Room: room, UserID: "room-denied-user"}
+	denied := &domain.CommandContext{Room: room, UserID: "room-denied-user", MessageID: "message:room-denied"}
 	err := policy.Admit(ctx, denied, "broadcast_history")
 	if !errors.Is(err, errCommandRateLimited) {
 		t.Fatalf("room-full admission error = %v, want rate limit", err)
@@ -189,7 +191,7 @@ func TestCommandAdmissionUserDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	now := time.Unix(1_700_000_000, 0)
 	limiter.now = func() time.Time { return now }
-	cmdCtx := &domain.CommandContext{Room: "room-1", UserID: "user-1"}
+	cmdCtx := &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}
 	roomKey := limiter.cacheKey(commandAdmissionBucket("history:room", cmdCtx.Room))
 	userKey := limiter.cacheKey(commandAdmissionBucket("history:user", cmdCtx.UserID))
 	seedAdmissionBucket(t, mini, roomKey, now, 1)
@@ -209,7 +211,7 @@ func TestCommandAdmissionRoomDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	now := time.Unix(1_700_000_000, 0)
 	limiter.now = func() time.Time { return now }
-	cmdCtx := &domain.CommandContext{Room: "room-1", UserID: "user-1"}
+	cmdCtx := &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}
 	roomKey := limiter.cacheKey(commandAdmissionBucket("history:room", cmdCtx.Room))
 	userKey := limiter.cacheKey(commandAdmissionBucket("history:user", cmdCtx.UserID))
 	seedAdmissionBucket(t, mini, roomKey, now, expensiveHistoryRoomLimit)
@@ -231,7 +233,7 @@ func TestCommandAdmissionRejectsUnstableUserIdentityBeforeLimiter(t *testing.T) 
 			limiter := &stubCommandRateLimiter{}
 			policy := &commandAdmissionPolicy{limiter: limiter}
 
-			err := policy.Admit(t.Context(), &domain.CommandContext{Room: "room-1", UserID: userID}, "broadcast_history")
+			err := policy.Admit(t.Context(), &domain.CommandContext{Room: "room-1", UserID: userID, MessageID: "message:" + userID}, "broadcast_history")
 			if !errors.Is(err, errCommandAdmissionUnavailable) {
 				t.Fatalf("Admit() error = %v, want admission unavailable", err)
 			}
@@ -329,7 +331,7 @@ func TestCommandRouterFailsClosedWhenHistoryAdmissionIsUnavailable(t *testing.T)
 	router := NewCommandRouter(registry, nil, func(context.Context, string, string) error { return nil }, nil, nil)
 	router.admission = &commandAdmissionPolicy{limiter: &stubCommandRateLimiter{err: errors.New("cache down")}}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1"}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}, domain.CommandBroadcastHistory, nil)
 	if !errors.Is(err, errCommandAdmissionUnavailable) {
 		t.Fatalf("Execute() error = %v, want admission unavailable", err)
 	}

@@ -7,13 +7,13 @@ import (
 
 const EventCommandReceived = "bot.command.received"
 
-func ingressAttrs(commandType, userID, chatID, rawMessage string) []slog.Attr {
+func ingressAttrs(commandType, userID string, roomAttr slog.Attr, rawMessage string) []slog.Attr {
 	summaryAttrs := messageSummaryAttrs(rawMessage)
 	attrs := make([]slog.Attr, 0, 3+len(summaryAttrs))
 	attrs = append(attrs,
 		slog.String("command_type", strings.TrimSpace(commandType)),
 		slog.String("user_id", strings.TrimSpace(userID)),
-		slog.String("room_id", strings.TrimSpace(chatID)),
+		roomAttr,
 	)
 	attrs = append(attrs, summaryAttrs...)
 	return attrs

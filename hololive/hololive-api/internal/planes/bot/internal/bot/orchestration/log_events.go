@@ -11,6 +11,7 @@ const (
 	EventBotCommandPanic               = "bot.command.panic"
 	EventBotCommandErrorResponseFailed = "bot.command.error_response.failed"
 	EventBotReplyOutcomeUnknown        = "bot.reply.outcome_unknown"
+	EventBotReplyIdentityMissing       = "bot.reply.identity.missing"
 
 	EventBotLifecycleStarting          = "bot.lifecycle.starting"
 	EventBotLifecycleStarted           = "bot.lifecycle.started"

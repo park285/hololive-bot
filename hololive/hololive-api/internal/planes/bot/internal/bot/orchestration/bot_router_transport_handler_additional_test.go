@@ -460,8 +460,9 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 		Room:   "room-name",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID: "user-1",
-			ChatID: "room-1",
+			UserID:    "user-1",
+			ChatID:    "room-1",
+			MessageID: "m-1",
 		},
 	})
 
@@ -503,8 +504,9 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		Room:   "room-name",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID: "user-1",
-			ChatID: "room-1",
+			UserID:    "user-1",
+			ChatID:    "room-1",
+			MessageID: "m-1",
 		},
 	})
 

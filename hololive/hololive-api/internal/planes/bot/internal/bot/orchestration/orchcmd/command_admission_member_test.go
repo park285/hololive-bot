@@ -53,19 +53,25 @@ func TestCommandAdmissionMemberIsDerivedFromMessageID(t *testing.T) {
 	}
 }
 
-func TestCommandAdmissionMemberFallsBackToRandomWithoutMessageID(t *testing.T) {
+func TestCommandAdmissionMemberFailsClosedWithoutMessageID(t *testing.T) {
 	for _, messageID := range []string{"", "   "} {
-		first, err := commandAdmissionMember(messageID)
-		if err != nil {
-			t.Fatalf("commandAdmissionMember(%q) error = %v", messageID, err)
+		member, err := commandAdmissionMember(messageID)
+		if err == nil {
+			t.Fatalf("commandAdmissionMember(%q) = %q, want an error instead of a non-deterministic member", messageID, member)
 		}
-		second, err := commandAdmissionMember(messageID)
-		if err != nil {
-			t.Fatalf("commandAdmissionMember(%q) error = %v", messageID, err)
+		if member != "" {
+			t.Fatalf("commandAdmissionMember(%q) = %q, want an empty member on failure", messageID, member)
 		}
-		if first == second {
-			t.Fatalf("blank message id must keep the random member fallback, got %q twice", first)
-		}
+	}
+}
+
+func TestCommandAdmissionRejectsExpensiveCommandWithoutMessageID(t *testing.T) {
+	policy, _, _ := newTestCommandAdmissionPolicy(t)
+	cmdCtx := &domain.CommandContext{Room: "room-1", UserID: "user-1"}
+
+	err := policy.Admit(t.Context(), cmdCtx, "broadcast_history")
+	if !errors.Is(err, errCommandAdmissionUnavailable) {
+		t.Fatalf("Admit() error = %v, want %v", err, errCommandAdmissionUnavailable)
 	}
 }
 

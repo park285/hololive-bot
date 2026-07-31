@@ -23,11 +23,13 @@ package news
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
 type MemberNewsSubscriptionCommand struct {
@@ -100,7 +102,10 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsAlreadySubscribed(ctx))
 		},
 		OnSubscribeError: func(ctx context.Context, err error) error {
-			c.Deps().Logger.Error("Member news subscribe failed", "room", cmdCtx.Room, "error", err)
+			c.Deps().Logger.Error("Member news subscribe failed",
+				privacylog.RoomIDAttr(cmdCtx.Room),
+				slog.Any("error", err),
+			)
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsSubscriptionFailed)
 		},
 		OnSubscribed: func(ctx context.Context) error {
@@ -110,7 +115,10 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsNotSubscribed(ctx))
 		},
 		OnUnsubscribeError: func(ctx context.Context, err error) error {
-			c.Deps().Logger.Error("Member news unsubscribe failed", "room", cmdCtx.Room, "error", err)
+			c.Deps().Logger.Error("Member news unsubscribe failed",
+				privacylog.RoomIDAttr(cmdCtx.Room),
+				slog.Any("error", err),
+			)
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsSubscriptionFailed)
 		},
 		OnUnsubscribed: func(ctx context.Context) error {

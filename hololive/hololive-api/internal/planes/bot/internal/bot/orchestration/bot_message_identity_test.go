@@ -21,18 +21,37 @@
 package orchestration
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/webhook"
 )
 
-func TestMessageReplyIdentityFallbackChain(t *testing.T) {
+type replyIdentityProbeCommand struct {
+	calls atomic.Int64
+}
+
+func (c *replyIdentityProbeCommand) Name() string        { return "help" }
+func (c *replyIdentityProbeCommand) Description() string { return "help" }
+
+func (c *replyIdentityProbeCommand) Execute(context.Context, *domain.CommandContext, map[string]any) error {
+	c.calls.Add(1)
+
+	return nil
+}
+
+func TestCanonicalReplyIdentityHasNoFallbackChain(t *testing.T) {
 	t.Parallel()
 
 	sourceLogID := int64(42)
@@ -42,15 +61,16 @@ func TestMessageReplyIdentityFallbackChain(t *testing.T) {
 		message *webhook.Message
 		want    string
 	}{
-		{"message id wins", &webhook.Message{JSON: &webhook.MessageJSON{
+		{"canonical message id", &webhook.Message{JSON: &webhook.MessageJSON{
 			MessageID: " m-1 ", ChatLogID: "c-1", SourceLogID: &sourceLogID,
 		}}, "message:m-1"},
-		{"chat log id is the first fallback", &webhook.Message{JSON: &webhook.MessageJSON{
+		{"chat log id is not an identity", &webhook.Message{JSON: &webhook.MessageJSON{
 			ChatLogID: "c-1", SourceLogID: &sourceLogID,
-		}}, "chat-log:c-1"},
-		{"source log id is the last fallback", &webhook.Message{JSON: &webhook.MessageJSON{
+		}}, ""},
+		{"source log id is not an identity", &webhook.Message{JSON: &webhook.MessageJSON{
 			SourceLogID: &sourceLogID,
-		}}, "source-log:42"},
+		}}, ""},
+		{"blank message id", &webhook.Message{JSON: &webhook.MessageJSON{MessageID: "   "}}, ""},
 		{"no identity at all", &webhook.Message{JSON: &webhook.MessageJSON{}}, ""},
 		{"no json envelope", &webhook.Message{}, ""},
 		{"no message", nil, ""},
@@ -58,55 +78,46 @@ func TestMessageReplyIdentityFallbackChain(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, messageReplyIdentity(tc.message))
+			assert.Equal(t, tc.want, canonicalReplyIdentity(tc.message))
 		})
 	}
 }
 
-func TestCommandContextMessageIDTakesPrecedenceOverTheFallbackChain(t *testing.T) {
+func TestHandleMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
 	t.Parallel()
 
-	message := &webhook.Message{JSON: &webhook.MessageJSON{MessageID: "from-webhook"}}
+	executed := &replyIdentityProbeCommand{}
+	registry := command.NewRegistry()
+	registry.Register(executed)
 
-	t.Run("first-class message id is used", func(t *testing.T) {
-		cmdCtx := &domain.CommandContext{Room: "room-1", MessageID: "message:canonical"}
+	var logs bytes.Buffer
+	bot := &Bot{
+		logger:          slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		commandRegistry: registry,
+		messageAdapter:  messaging.NewMessageAdapter("!", ""),
+		formatter:       formatter.NewResponseFormatter("!", nil),
+	}
 
-		identity, ok := transport.ReplyIdentityFromContext(commandRequestContext(context.Background(), cmdCtx, message))
-		require.True(t, ok)
-		assert.Equal(t, "message:canonical", identity)
+	sender := "user"
+	bot.HandleMessage(t.Context(), &webhook.Message{
+		Msg:    "!help",
+		Room:   "12345",
+		Sender: &sender,
+		JSON:   &webhook.MessageJSON{UserID: "user-1", ChatID: "12345", ChatLogID: "c-1"},
 	})
 
-	t.Run("surrounding whitespace does not create an identity", func(t *testing.T) {
-		cmdCtx := &domain.CommandContext{Room: "room-1", MessageID: "   "}
-
-		identity, ok := transport.ReplyIdentityFromContext(commandRequestContext(context.Background(), cmdCtx, message))
-		require.True(t, ok)
-		assert.Equal(t, "message:from-webhook", identity, "blank field must fall back to the webhook chain")
-	})
-
-	t.Run("absent message id falls back to the webhook chain", func(t *testing.T) {
-		cmdCtx := &domain.CommandContext{Room: "room-1"}
-
-		identity, ok := transport.ReplyIdentityFromContext(commandRequestContext(context.Background(), cmdCtx, message))
-		require.True(t, ok)
-		assert.Equal(t, "message:from-webhook", identity)
-	})
-
-	t.Run("no identity anywhere leaves the context untouched", func(t *testing.T) {
-		cmdCtx := &domain.CommandContext{Room: "room-1"}
-
-		_, ok := transport.ReplyIdentityFromContext(commandRequestContext(context.Background(), cmdCtx, nil))
-		assert.False(t, ok)
-	})
+	assert.Zero(t, executed.calls.Load(), "command must not run without a canonical message id")
+	assert.Contains(t, logs.String(), EventBotReplyIdentityMissing)
 }
 
-func TestCommandContextMessageIDDrivesTheReplyClientRequestID(t *testing.T) {
+func TestCommandRequestContextUsesTheCommandContextMessageID(t *testing.T) {
 	t.Parallel()
 
 	cmdCtx := &domain.CommandContext{Room: "room-1", MessageID: "message:canonical"}
-	reqCtx := commandRequestContext(context.Background(), cmdCtx, nil)
+	reqCtx := commandRequestContext(context.Background(), cmdCtx)
 
 	identity, ok := transport.ReplyIdentityFromContext(reqCtx)
 	require.True(t, ok)
+	assert.Equal(t, "message:canonical", identity)
 	assert.Equal(t, "hololive:v1:message:canonical:reply:0", transport.ReplyClientRequestID(identity, 0))
 }

@@ -57,7 +57,7 @@ func TestBotHandleMessageRejectsUnknownIngressUserForExpensiveCommand(t *testing
 		Msg:    "!방송이력",
 		Room:   "room-name",
 		Sender: &sender,
-		JSON:   &webhook.MessageJSON{ChatID: "room-1"},
+		JSON:   &webhook.MessageJSON{ChatID: "room-1", MessageID: "m-1"},
 	}
 
 	b.HandleMessage(t.Context(), message)

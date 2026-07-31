@@ -23,11 +23,14 @@ package matcher
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/pkg/stringutil"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
 func (mm *Matcher) maybeCleanupMatchCache() {
@@ -143,7 +146,9 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 		return channel, nil
 	}
 
-	mm.logger.Debug("No match found in internal data")
+	mm.logger.Debug("No match found in internal data",
+		slog.String("query_token", privacylog.Pseudonym(queryNorm)),
+	)
 
 	return nil, nil
 }

@@ -23,11 +23,11 @@ package domain
 import "time"
 
 type CommandContext struct {
-	Room        string // 숫자 Room ID
-	RoomName    string // 한글 방 이름
+	Room        string
+	RoomName    string
 	ThreadID    *string
-	UserID      string // 숫자 User ID
-	UserName    string // 한글 유저 이름
+	UserID      string
+	UserName    string
 	IsGroupChat bool
 	Message     string
 	MessageID   string

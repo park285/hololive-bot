@@ -74,22 +74,23 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 
 	chatID, roomName := resolveRoom(message)
 	userID, userName := resolveUser(message)
+	roomAttr := roomLogAttr(chatID, roomName)
 
-	if i.shouldSkipSender(ctx, message, chatID, userName) {
+	if i.shouldSkipSender(ctx, message, roomAttr, userName) {
 		return nil, false
 	}
 
-	if i.isRoomBlocked(ctx, roomName, chatID) {
+	if i.isRoomBlocked(ctx, roomName, chatID, roomAttr) {
 		return nil, false
 	}
 
-	parsed := i.parseCommand(ctx, message, chatID)
+	parsed := i.parseCommand(ctx, message, roomAttr)
 	if parsed == nil {
 		return nil, false
 	}
 
 	commandType := parsed.Type.String()
-	i.logCommandReceived(ctx, parsed, commandType, userID, chatID)
+	i.logCommandReceived(ctx, parsed, commandType, userID, roomAttr)
 
 	return &Envelope{
 		CommandType: commandType,
@@ -119,44 +120,44 @@ func (i *MessageIngress) canHandleMessage(ctx context.Context, message *webhook.
 	return true
 }
 
-func (i *MessageIngress) shouldSkipSender(ctx context.Context, message *webhook.Message, chatID, userName string) bool {
+func (i *MessageIngress) shouldSkipSender(ctx context.Context, message *webhook.Message, roomAttr slog.Attr, userName string) bool {
 	if !i.isSelfSender(userName) {
 		return false
 	}
 
 	i.logDebug(ctx,
 		"Skipping self-issued message",
-		slog.String("room_id", chatID),
+		roomAttr,
 		slog.Int("message_len", len(strings.TrimSpace(message.Msg))),
 	)
 
 	return true
 }
 
-func (i *MessageIngress) isRoomBlocked(ctx context.Context, roomName, chatID string) bool {
+func (i *MessageIngress) isRoomBlocked(ctx context.Context, roomName, chatID string, roomAttr slog.Attr) bool {
 	if i.acl == nil || i.acl.IsRoomAllowed(roomName, chatID) {
 		return false
 	}
 
 	i.logDebug(ctx,
 		"Room blocked by ACL, ignoring message",
-		slog.String("room_id", chatID),
+		roomAttr,
 	)
 
 	return true
 }
 
-func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Message, chatID string) *messaging.ParsedCommand {
+func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Message, roomAttr slog.Attr) *messaging.ParsedCommand {
 	parsed := i.messageAdapter.ParseMessage(message)
 	if parsed == nil {
-		i.logWarn(ctx, "Parsed command is nil", slog.String("room_id", chatID))
+		i.logWarn(ctx, "Parsed command is nil", roomAttr)
 		return nil
 	}
 
 	if parsed.Type == domain.CommandUnknown {
 		summaryAttrs := messageSummaryAttrs(message.Msg)
 		attrs := make([]slog.Attr, 0, 1+len(summaryAttrs))
-		attrs = append(attrs, slog.String("room_id", chatID))
+		attrs = append(attrs, roomAttr)
 		attrs = append(attrs, summaryAttrs...)
 		i.logDebug(ctx,
 			"Unknown command ignored",
@@ -174,7 +175,7 @@ func (i *MessageIngress) logCommandReceived(
 	parsed *messaging.ParsedCommand,
 	commandType string,
 	userID string,
-	chatID string,
+	roomAttr slog.Attr,
 ) {
 	if i.logger == nil || parsed == nil {
 		return
@@ -185,7 +186,7 @@ func (i *MessageIngress) logCommandReceived(
 		i.logger,
 		EventCommandReceived,
 		"bot command received",
-		ingressAttrs(commandType, userID, chatID, parsed.RawMessage)...,
+		ingressAttrs(commandType, userID, roomAttr, parsed.RawMessage)...,
 	)
 }
 

@@ -22,7 +22,6 @@ package orchcmd
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -219,19 +218,17 @@ func (l *atomicCommandAdmissionLimiter) cacheKey(bucket string) string {
 	return commandAdmissionKeyPrefix + ":" + bucket
 }
 
-// member는 rate-limit ZSET의 원소다. 같은 inbound가 재처리될 때 random 값을 쓰면 원소가
-// 새로 쌓여 quota를 중복 소모하므로, message identity가 있으면 그것에서 결정적으로 유도한다.
+// member는 rate-limit ZSET의 원소다. 같은 inbound가 재처리될 때 원소가 새로 쌓이면 quota를
+// 중복 소모하므로 message identity에서만 결정적으로 유도한다.
 func commandAdmissionMember(messageID string) (string, error) {
-	if trimmed := strings.TrimSpace(messageID); trimmed != "" {
-		digest := sha256.Sum256([]byte(trimmed))
-		return hex.EncodeToString(digest[:]), nil
+	trimmed := strings.TrimSpace(messageID)
+	if trimmed == "" {
+		return "", errors.New("message identity is required")
 	}
 
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw[:]), nil
+	digest := sha256.Sum256([]byte(trimmed))
+
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func commandAdmissionTTLSeconds() int64 {

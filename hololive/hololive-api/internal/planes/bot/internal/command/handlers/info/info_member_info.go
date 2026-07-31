@@ -31,6 +31,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
 type MemberInfoCommand struct {
@@ -137,6 +138,7 @@ func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englis
 	channel, err := c.Deps().Matcher.FindBestMatch(ctx, trimmed)
 	if err != nil {
 		c.log().Warn("Member match failed",
+			slog.String("query_token", privacylog.Pseudonym(trimmed)),
 			slog.Any("error", err),
 		)
 

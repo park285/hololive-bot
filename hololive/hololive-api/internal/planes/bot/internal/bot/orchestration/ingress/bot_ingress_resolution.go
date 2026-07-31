@@ -21,24 +21,33 @@
 package ingress
 
 import (
-	"regexp"
+	"log/slog"
+	"strings"
 
 	"github.com/park285/iris-client-go/webhook"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
-var numericRoomIDRegex = regexp.MustCompile(`^\d+$`)
-
 func resolveRoom(message *webhook.Message) (chatID, roomName string) {
-	isNumericRoom := message.Room != "" && numericRoomIDRegex.MatchString(message.Room)
-
 	chatID = message.Room
-	if !isNumericRoom && message.JSON != nil {
+	if !privacylog.IsCanonicalRoomID(message.Room) && message.JSON != nil {
 		chatID = message.JSON.ChatID
 	}
 
 	roomName = message.Room
 
 	return chatID, roomName
+}
+
+// chatID가 canonical room id가 아니면 로그에서 방 제목으로 새어 나가므로, 로그 경계에는
+// 원본 대신 이 attr만 전달한다. ACL과 응답 송신은 계속 raw chatID를 쓴다.
+func roomLogAttr(chatID, roomName string) slog.Attr {
+	if strings.TrimSpace(chatID) != "" {
+		return privacylog.RoomIDAttr(chatID)
+	}
+
+	return privacylog.RoomIDAttr(roomName)
 }
 
 func resolveUser(message *webhook.Message) (userID, userName string) {

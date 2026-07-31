@@ -24,12 +24,14 @@ import (
 	"context"
 	stdErrors "errors"
 	"fmt"
+	"log/slog"
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
 type MemberNewsCommand struct {
@@ -69,7 +71,10 @@ func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsNoMembers(ctx))
 		}
 
-		c.Deps().Logger.Error("Member news command failed", "room", cmdCtx.Room, "error", err)
+		c.Deps().Logger.Error("Member news command failed",
+			privacylog.RoomIDAttr(cmdCtx.Room),
+			slog.Any("error", err),
+		)
 
 		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsQueryFailed)
 	}

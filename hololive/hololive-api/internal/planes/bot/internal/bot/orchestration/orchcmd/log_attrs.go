@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
 func commandExecutionAttrs(cmdCtx *domain.CommandContext, commandKey string, cmdType domain.CommandType) []slog.Attr {
@@ -22,7 +24,7 @@ func commandContextAttrs(cmdCtx *domain.CommandContext, commandKey string) []slo
 	}
 
 	attrs = append(attrs,
-		slog.String("room_id", strings.TrimSpace(cmdCtx.Room)),
+		privacylog.RoomIDAttr(cmdCtx.Room),
 		slog.String("user_id", strings.TrimSpace(cmdCtx.UserID)),
 		slog.Bool("group_chat", cmdCtx.IsGroupChat),
 	)

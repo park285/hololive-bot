@@ -27,6 +27,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
 const asyncCommandBackpressureMessage = "async_command_backpressure"
@@ -108,7 +110,7 @@ func (b *Bot) handleAsyncCommandError(ctx context.Context, err error, commandTyp
 		errorAttrs := sharedlog.ErrorAttrs(sendErr)
 		attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
 		attrs = append(attrs,
-			slog.String("chat_id", chatID),
+			privacylog.ChatIDAttr(chatID),
 			slog.String("command", commandType),
 		)
 		attrs = append(attrs, errorAttrs...)
@@ -140,7 +142,7 @@ func (b *Bot) handleAsyncCommandSubmitError(
 	if err := b.sendError(notifyCtx, chatID, asyncCommandBackpressureMessage); err != nil && b.logger != nil {
 		attrs := make([]slog.Attr, 0, 2+len(sharedlog.ErrorAttrs(err)))
 		attrs = append(attrs,
-			slog.String("chat_id", chatID),
+			privacylog.ChatIDAttr(chatID),
 			slog.String("command", commandType),
 		)
 		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)

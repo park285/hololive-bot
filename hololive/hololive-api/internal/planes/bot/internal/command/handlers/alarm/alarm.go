@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 )
 
@@ -105,7 +106,7 @@ func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *domain.Com
 
 func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
 	c.Deps().Logger.Info("Invalid alarm command received",
-		slog.String("room_id", cmdCtx.Room),
+		privacylog.RoomIDAttr(cmdCtx.Room),
 	)
 
 	return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrInvalidAlarmUsage)
@@ -132,6 +133,7 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 	alarmTypes := c.parseAlarmTypes(params)
 
 	c.Deps().Logger.Debug("Alarm add requested",
+		privacylog.RoomIDAttr(cmdCtx.Room),
 		slog.Any("types", alarmTypes))
 
 	channel, err := c.resolveAlarmMember(ctx, cmdCtx.Room, memberName)
@@ -212,6 +214,7 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 	alarmTypes := c.parseAlarmTypes(params)
 
 	c.Deps().Logger.Debug("Alarm remove requested",
+		privacylog.RoomIDAttr(cmdCtx.Room),
 		slog.Any("types", alarmTypes))
 
 	channel, err := c.resolveAlarmMember(ctx, cmdCtx.Room, memberName)

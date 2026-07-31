@@ -24,14 +24,19 @@ type capturedLogRecord struct {
 type capturingHandler struct {
 	mu      *sync.Mutex
 	records *[]capturedLogRecord
+	attrs   []slog.Attr
+	groups  []string
 }
 
 func (h capturingHandler) Enabled(context.Context, slog.Level) bool { return true }
 
 func (h capturingHandler) Handle(_ context.Context, record slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler.Handle 인터페이스가 값 전달 시그니처를 강제
-	captured := capturedLogRecord{message: record.Message, attrs: make(map[string]any, record.NumAttrs())}
+	captured := capturedLogRecord{message: record.Message, attrs: make(map[string]any, record.NumAttrs()+len(h.attrs))}
+	for _, attr := range h.attrs {
+		flattenLogAttr(captured.attrs, nil, attr)
+	}
 	record.Attrs(func(attr slog.Attr) bool {
-		captured.attrs[attr.Key] = attr.Value.Any()
+		flattenLogAttr(captured.attrs, h.groups, attr)
 		return true
 	})
 
@@ -42,9 +47,72 @@ func (h capturingHandler) Handle(_ context.Context, record slog.Record) error { 
 	return nil
 }
 
-func (h capturingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h capturingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	if len(attrs) == 0 {
+		return h
+	}
 
-func (h capturingHandler) WithGroup(string) slog.Handler { return h }
+	next := h
+	next.attrs = make([]slog.Attr, 0, len(h.attrs)+len(attrs))
+	next.attrs = append(next.attrs, h.attrs...)
+	for _, attr := range attrs {
+		next.attrs = append(next.attrs, groupedLogAttr(h.groups, attr))
+	}
+
+	return next
+}
+
+func (h capturingHandler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
+
+	next := h
+	next.groups = appendLogGroup(h.groups, name)
+
+	return next
+}
+
+func appendLogGroup(groups []string, name string) []string {
+	return append(append(make([]string, 0, len(groups)+1), groups...), name)
+}
+
+func groupedLogAttr(groups []string, attr slog.Attr) slog.Attr {
+	for index := len(groups) - 1; index >= 0; index-- {
+		attr = slog.Attr{Key: groups[index], Value: slog.GroupValue(attr)}
+	}
+
+	return attr
+}
+
+func flattenLogAttr(dst map[string]any, groups []string, attr slog.Attr) {
+	value := attr.Value.Resolve()
+	if value.Kind() != slog.KindGroup {
+		dst[logAttrKey(groups, attr.Key)] = value.Any()
+		return
+	}
+
+	members := value.Group()
+	if len(members) == 0 {
+		return
+	}
+
+	nested := groups
+	if attr.Key != "" {
+		nested = appendLogGroup(groups, attr.Key)
+	}
+	for _, member := range members {
+		flattenLogAttr(dst, nested, member)
+	}
+}
+
+func logAttrKey(groups []string, key string) string {
+	if len(groups) == 0 {
+		return key
+	}
+
+	return strings.Join(appendLogGroup(groups, key), ".")
+}
 
 func newCapturingLogger() (logger *slog.Logger, snapshot func() []capturedLogRecord) {
 	var (
@@ -75,16 +143,16 @@ func requireEvent(t *testing.T, records []capturedLogRecord, event string) captu
 	return capturedLogRecord{}
 }
 
-func assertNoLogSubstring(t *testing.T, records []capturedLogRecord, needle string) {
+func assertNoSentinelInLogs(t *testing.T, records []capturedLogRecord) {
 	t.Helper()
 
 	for _, record := range records {
-		if strings.Contains(record.message, needle) {
-			t.Fatalf("log message leaked %q in record %#v", needle, record)
+		if strings.Contains(record.message, privacySentinel) {
+			t.Fatalf("log message leaked %q in record %#v", privacySentinel, record)
 		}
 		for key, value := range record.attrs {
-			if strings.Contains(fmt.Sprint(value), needle) {
-				t.Fatalf("log attr %s leaked %q in record %#v", key, needle, record)
+			if strings.Contains(fmt.Sprint(value), privacySentinel) {
+				t.Fatalf("log attr %s leaked %q in record %#v", key, privacySentinel, record)
 			}
 		}
 	}
@@ -103,7 +171,7 @@ func assertNoLogAttrKey(t *testing.T, records []capturedLogRecord, key string) {
 func newPrivacyCommandContext() *domain.CommandContext {
 	threadID := "thread-1"
 	return &domain.CommandContext{
-		Room:     "room-1",
+		Room:     "123456789",
 		RoomName: "룸이름-" + privacySentinel,
 		UserID:   "user-1",
 		UserName: "닉네임-" + privacySentinel,
@@ -115,8 +183,8 @@ func newPrivacyCommandContext() *domain.CommandContext {
 func assertPrivacyAttrs(t *testing.T, record capturedLogRecord) {
 	t.Helper()
 
-	if record.attrs["room_id"] != "room-1" {
-		t.Fatalf("room_id = %v, want %q", record.attrs["room_id"], "room-1")
+	if record.attrs["room_id"] != "123456789" {
+		t.Fatalf("room_id = %v, want %q", record.attrs["room_id"], "123456789")
 	}
 	if record.attrs["user_id"] != "user-1" {
 		t.Fatalf("user_id = %v, want %q", record.attrs["user_id"], "user-1")
@@ -140,7 +208,7 @@ func TestCommandRouterExecutionLogsKeepEventsWithoutContentOrNickname(t *testing
 	assertPrivacyAttrs(t, requireEvent(t, records, EventBotCommandExecuteStarted))
 	assertPrivacyAttrs(t, requireEvent(t, records, EventBotCommandExecuteSucceeded))
 
-	assertNoLogSubstring(t, records, privacySentinel)
+	assertNoSentinelInLogs(t, records)
 	assertNoLogAttrKey(t, records, "message_sha256_8")
 	assertNoLogAttrKey(t, records, "user_name")
 	assertNoLogAttrKey(t, records, "room_name")
@@ -163,7 +231,7 @@ func TestCommandRouterFailureLogKeepsEventWithoutContentOrNickname(t *testing.T)
 	records := snapshot()
 	assertPrivacyAttrs(t, requireEvent(t, records, EventBotCommandExecuteFailed))
 
-	assertNoLogSubstring(t, records, privacySentinel)
+	assertNoSentinelInLogs(t, records)
 	assertNoLogAttrKey(t, records, "message_sha256_8")
 	assertNoLogAttrKey(t, records, "user_name")
 	assertNoLogAttrKey(t, records, "room_name")
