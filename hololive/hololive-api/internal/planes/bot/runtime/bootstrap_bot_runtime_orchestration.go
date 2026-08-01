@@ -78,8 +78,9 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 	configureDurableReplyWriter(botBot, durable, logger)
 
 	webhookHandler, err := appbootstrap.BuildDurableBotWebhookHandler(appConfig, durableAdmitter{
-		inbox: durable.inbox,
-		wake:  func() { notifyDurable(durable.inboxWake) },
+		inbox:  durable.inbox,
+		wake:   func() { notifyDurable(durable.inboxWake) },
+		logger: logger,
 	}, runtimeViews.webhook, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)

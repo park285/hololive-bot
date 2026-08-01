@@ -38,11 +38,20 @@ const (
 )
 
 type durableAdmitter struct {
-	inbox *durability.InboxRepository
-	wake  func()
+	inbox  *durability.InboxRepository
+	wake   func()
+	logger *slog.Logger
 }
 
 func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message) error {
+	err := a.admit(ctx, msg)
+	if err != nil {
+		logDurableError(a.logger, "admit durable webhook", err)
+	}
+	return err
+}
+
+func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error {
 	if msg == nil || msg.JSON == nil {
 		return errors.New("admit webhook: message identity is missing")
 	}

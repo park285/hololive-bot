@@ -79,18 +79,22 @@ func (r *durableRuntime) observeReplyOutboxManualReview(ctx context.Context) {
 }
 
 func (r *durableRuntime) logError(message string, err error) {
-	if r.logger == nil || err == nil {
+	logDurableError(r.logger, message, err)
+}
+
+func logDurableError(logger *slog.Logger, message string, err error) {
+	if logger == nil || err == nil {
 		return
 	}
 	if status, ok := irisHTTPStatus(err); ok {
-		r.logger.Error(message, slog.Int("http_status", status))
+		logger.Error(message, slog.Int("http_status", status))
 		return
 	}
 	if attrs, ok := safeErrorLogAttrs(err); ok {
-		r.logger.Error(message, attrs...)
+		logger.Error(message, attrs...)
 		return
 	}
-	r.logger.Error(message, slog.String("reason", runtimeErrorReason(err)))
+	logger.Error(message, slog.String("reason", runtimeErrorReason(err)))
 }
 
 func irisHTTPStatus(err error) (int, bool) {
@@ -106,14 +110,22 @@ func safeErrorLogAttrs(err error) ([]any, bool) {
 		SafeMessageToken() string
 		SafeReason() string
 	}
-	if !errors.As(err, &safeErr) {
-		return nil, false
+	if errors.As(err, &safeErr) {
+		attrs := []any{slog.String("reason", safeErr.SafeReason())}
+		if token := safeErr.SafeMessageToken(); token != "" {
+			attrs = append(attrs, slog.String("message_token", token))
+		}
+		return attrs, true
 	}
-	attrs := []any{slog.String("reason", safeErr.SafeReason())}
-	if token := safeErr.SafeMessageToken(); token != "" {
-		attrs = append(attrs, slog.String("message_token", token))
+	// durability의 ErrInvalidArgument 계열은 위반된 필드명과 제약만 담고 메시지 본문·방·발신자 값은
+	// 담지 않는다. 그 불변식 덕분에 원문을 그대로 로그에 실어도 개인정보가 새지 않는다.
+	if errors.Is(err, durability.ErrInvalidArgument) {
+		return []any{
+			slog.String("reason", "invalid_argument"),
+			slog.String("constraint", err.Error()),
+		}, true
 	}
-	return attrs, true
+	return nil, false
 }
 
 func runtimeErrorReason(err error) string {
