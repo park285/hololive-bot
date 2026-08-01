@@ -234,3 +234,20 @@ func TestNewAlarmNotification_UsesExplicitLiveDispatchRoute(t *testing.T) {
 		t.Fatalf("ValidateLiveDispatchRoute() error = %v", err)
 	}
 }
+
+func TestAlarmTypesValueStaysString(t *testing.T) {
+	t.Parallel()
+
+	for name, types := range map[string]domain.AlarmTypes{
+		"empty": nil,
+		"multi": {domain.AlarmTypeLive, domain.AlarmTypeCommunity},
+	} {
+		value, err := types.Value()
+		if err != nil {
+			t.Fatalf("%s: Value() error = %v", name, err)
+		}
+		if _, ok := value.(string); !ok {
+			t.Fatalf("%s: Value() = %T, want string — exec 모드에서 []byte는 bytea(\\x hex)로 인코딩되어 alarm_type[] 파싱이 깨진다", name, value)
+		}
+	}
+}

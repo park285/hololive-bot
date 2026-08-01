@@ -157,7 +157,7 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 		normalized.Phase,
 		normalized.Ordinal,
 		normalized.RoomID,
-		normalized.Payload,
+		jsonbParam(normalized.Payload),
 		payloadHash,
 		normalized.ClientRequestID,
 	)

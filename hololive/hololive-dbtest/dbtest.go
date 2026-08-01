@@ -371,6 +371,8 @@ func poolForDatabase(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool
 		return nil, fmt.Errorf("parse base dsn: %w", err)
 	}
 
+	cfg.ConnConfig.DefaultQueryExecMode = productionQueryExecMode
+
 	if dbName != "" {
 		cfg.ConnConfig.Database = dbName
 	}

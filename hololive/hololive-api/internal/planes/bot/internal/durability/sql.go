@@ -74,6 +74,12 @@ func ensurePool(pool *pgxpool.Pool) error {
 	return nil
 }
 
+// jsonbParam은 $N::jsonb 파라미터용 text JSON을 반환한다. 운영 exec 모드(pg18-tracka A3)에서
+// pgx는 []byte를 bytea로 인코딩해 jsonb 캐스트가 깨진다 — dispatchoutbox jsonbRecordsetParam과 같은 계약.
+func jsonbParam(raw []byte) string {
+	return string(raw)
+}
+
 func requireIdentity(name, value string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
