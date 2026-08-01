@@ -23,8 +23,10 @@ package transport
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
+	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +36,24 @@ type recordingReplyOutbox struct {
 }
 
 type failingReplyOutbox struct{ err error }
+
+type storedReplyReissueClient struct {
+	stubBotClient
+	acceptErrors  []error
+	messages      []string
+	optsByAttempt [][]iris.SendOption
+	acceptedCalls int
+}
+
+func (c *storedReplyReissueClient) SendMessageAccepted(_ context.Context, _, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.acceptedCalls++
+	c.messages = append(c.messages, message)
+	c.optsByAttempt = append(c.optsByAttempt, append([]iris.SendOption(nil), opts...))
+	if len(c.acceptErrors) >= c.acceptedCalls && c.acceptErrors[c.acceptedCalls-1] != nil {
+		return nil, c.acceptErrors[c.acceptedCalls-1]
+	}
+	return &iris.ReplyAcceptedResponse{RequestID: "iris-reissued"}, nil
+}
 
 func (w failingReplyOutbox) RecordReply(context.Context, *ReplyOutboxEntry) error { return w.err }
 
@@ -102,6 +122,34 @@ func TestReplyOutboxPersistsImageContentType(t *testing.T) {
 	require.NoError(t, transport.SendImage(ctx, "room-1", []byte("media")))
 	require.Len(t, writer.entries, 1)
 	assert.Contains(t, writer.entries[0].Payload, `"image_content_type":"video/mp4"`)
+}
+
+func TestDispatchStoredReplyReissuesFailedConflictWithStoredPayload(t *testing.T) {
+	t.Parallel()
+
+	failed := &iris.HTTPError{
+		StatusCode: http.StatusConflict,
+		URL:        "https://iris/reply",
+		Body:       `{"code":"CLIENT_REQUEST_ID_FAILED"}`,
+	}
+	client := &storedReplyReissueClient{acceptErrors: []error{failed, nil}}
+	payload := []byte(`{"kind":"text","message":"persisted payload"}`)
+	originalPayload := append([]byte(nil), payload...)
+	acceptedRequestID := ""
+
+	err := DispatchStoredReply(t.Context(), client, "room-1", payload, "hololive:v1:message:m-1:reply:0", func(_ context.Context, requestID string) error {
+		acceptedRequestID = requestID
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "iris-reissued", acceptedRequestID)
+	assert.Equal(t, originalPayload, payload)
+	assert.Equal(t, []string{"persisted payload", "persisted payload"}, client.messages)
+	require.Len(t, client.optsByAttempt, 2)
+	first, _ := capturedSendOptions(t, client.optsByAttempt[0])
+	second, _ := capturedSendOptions(t, client.optsByAttempt[1])
+	assert.Equal(t, "hololive:v1:message:m-1:reply:0", first)
+	assert.Equal(t, "hololive:v1:message:m-1:reply:0:r1", second)
 }
 
 func TestStoredReplyKindsStayDispatchable(t *testing.T) {

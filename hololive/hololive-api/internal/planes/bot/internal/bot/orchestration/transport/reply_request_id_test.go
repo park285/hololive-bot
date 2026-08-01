@@ -74,6 +74,22 @@ func TestReplyClientRequestIDIsStable(t *testing.T) {
 	})
 }
 
+func TestReissuedReplyClientRequestID(t *testing.T) {
+	t.Parallel()
+
+	const base = "hololive:v1:message:m-1:reply:0"
+	assert.Equal(t, base, reissuedReplyClientRequestID(base, 0))
+	assert.Equal(t, base+":r1", reissuedReplyClientRequestID(base, 1))
+	assert.Equal(t, base+":r2", reissuedReplyClientRequestID(base, 2))
+	assert.Empty(t, reissuedReplyClientRequestID("", 1))
+
+	maxBase := strings.Repeat("a", replyClientRequestIDMaxLen)
+	oversized := reissuedReplyClientRequestID(maxBase, 1)
+	assert.True(t, isValidReplyClientRequestID(oversized))
+	assert.True(t, strings.HasSuffix(oversized, ":r1"))
+	assert.Equal(t, oversized, reissuedReplyClientRequestID(maxBase, 1))
+}
+
 func TestReplyClientRequestIDIgnoresBody(t *testing.T) {
 	t.Parallel()
 

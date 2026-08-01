@@ -65,14 +65,16 @@ func DispatchStoredReply(ctx context.Context, client iris.BotClient, room string
 	if err := json.Unmarshal(payload, &reply); err != nil {
 		return fmt.Errorf("%w: decode: %w", ErrStoredReplyInvalid, err)
 	}
-	opts := []iris.SendOption{iris.WithClientRequestID(clientRequestID)}
+	opts := make([]iris.SendOption, 0, 2)
 	if reply.ThreadID != "" {
 		opts = append(opts, iris.WithThreadID(reply.ThreadID))
 	}
 	if reply.ImageContentType != "" {
 		opts = append(opts, iris.WithImageContentType(reply.ImageContentType))
 	}
-	accepted, err := postStoredReply(ctx, client, room, &reply, opts)
+	accepted, err := postReplyWithReissue(ctx, clientRequestID, func(generationID string) (*iris.ReplyAcceptedResponse, error) {
+		return postStoredReply(ctx, client, room, &reply, appendReplyClientRequestID(opts, generationID))
+	})
 	if err != nil {
 		return classifyAdmissionError(err)
 	}
