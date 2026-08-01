@@ -113,7 +113,7 @@ func (r *InboxRepository) Admit(ctx context.Context, msg InboxMessage) (admitted
 	if err := lockInboxOrderingKey(ctx, tx, normalized.OrderingKey); err != nil {
 		return false, safeMessageRepositoryError("lock webhook admission ordering", normalized.MessageID, err)
 	}
-	err = tx.QueryRow(ctx, inboxAdmitSQL, normalized.MessageID, normalized.RoomID, normalized.OrderingKey, normalized.Payload).Scan(&admitted)
+	err = tx.QueryRow(ctx, inboxAdmitSQL, normalized.MessageID, normalized.RoomID, normalized.OrderingKey, jsonbParam(normalized.Payload)).Scan(&admitted)
 	if err != nil {
 		return false, safeMessageRepositoryError("admit webhook inbox row", normalized.MessageID, err)
 	}

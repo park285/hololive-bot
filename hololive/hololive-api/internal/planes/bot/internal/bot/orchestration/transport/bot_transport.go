@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -52,6 +53,7 @@ type acceptedMessageSender interface {
 }
 
 type replySendFunc func(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+type replyAdmissionFunc func(ctx context.Context, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
 
 type replyLane struct {
 	send   replySendFunc
@@ -118,11 +120,9 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 }
 
 func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestID string, opts ...iris.SendOption) error {
-	sendOpts := appendReplyClientRequestID(opts, clientRequestID)
-
 	if t.markdownReplies {
 		lane := replyLane{send: t.irisClient.SendMarkdown, getter: t.irisClient}
-		return sendReply(ctx, lane, room, message, clientRequestID, sendOpts)
+		return sendReply(ctx, lane, room, message, clientRequestID, opts)
 	}
 
 	acceptedSender, ok := t.irisClient.(acceptedMessageSender)
@@ -131,16 +131,48 @@ func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clien
 	}
 
 	lane := replyLane{send: acceptedSender.SendMessageAccepted, getter: acceptedSender}
-	return sendReply(ctx, lane, room, message, clientRequestID, sendOpts)
+	return sendReply(ctx, lane, room, message, clientRequestID, opts)
 }
 
 func sendReply(ctx context.Context, lane replyLane, room, message, clientRequestID string, opts []iris.SendOption) error {
-	accepted, err := postReply(ctx, lane.send, room, message, clientRequestID, opts)
+	accepted, err := postReplyWithReissue(ctx, clientRequestID, func(generationID string) (*iris.ReplyAcceptedResponse, error) {
+		return postReply(ctx, lane.send, room, message, generationID, appendReplyClientRequestID(opts, generationID))
+	})
 	if err != nil {
 		return err
 	}
 
 	return waitForAcceptedReplyHandoff(ctx, lane.getter, accepted)
+}
+
+func postLiveMediaWithReissue(
+	ctx context.Context,
+	clientRequestID string,
+	opts []iris.SendOption,
+	post replyAdmissionFunc,
+) (*iris.ReplyAcceptedResponse, error) {
+	return postReplyWithReissue(ctx, clientRequestID, func(generationID string) (*iris.ReplyAcceptedResponse, error) {
+		return post(ctx, appendReplyClientRequestID(opts, generationID)...)
+	})
+}
+
+func postReplyWithReissue(
+	ctx context.Context,
+	clientRequestID string,
+	post func(string) (*iris.ReplyAcceptedResponse, error),
+) (*iris.ReplyAcceptedResponse, error) {
+	var lastErr error
+	for generation := 0; generation <= replyReissueMaxGenerations; generation++ {
+		accepted, err := post(reissuedReplyClientRequestID(clientRequestID, generation))
+		if !isReplyReissueConflict(err) {
+			return accepted, err
+		}
+		lastErr = err
+		if clientRequestID == "" || ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, lastErr
 }
 
 func postReply(
@@ -159,8 +191,8 @@ func postReply(
 		}
 
 		lastErr = err
-		stop, definitive := stopReplyAdmissionRetry(ctx, err, admissionMayHaveLanded, clientRequestID)
-		if definitive {
+		abort, stop := replyAdmissionFailureAction(ctx, err, admissionMayHaveLanded, clientRequestID)
+		if abort {
 			return nil, err
 		}
 		if stop {
@@ -170,6 +202,14 @@ func postReply(
 	}
 
 	return nil, replyOutcomeUnknownError{reason: "reply admission response was not received", cause: lastErr}
+}
+
+func replyAdmissionFailureAction(ctx context.Context, err error, admissionMayHaveLanded bool, clientRequestID string) (abort, stop bool) {
+	if isReplyReissueConflict(err) {
+		return true, false
+	}
+	s, definitive := stopReplyAdmissionRetry(ctx, err, admissionMayHaveLanded, clientRequestID)
+	return definitive, s
 }
 
 func stopReplyAdmissionRetry(ctx context.Context, err error, admissionMayHaveLanded bool, clientRequestID string) (stop, definitive bool) {
@@ -191,6 +231,12 @@ func classifyAdmissionError(err error) error {
 	return replyOutcomeUnknownError{reason: "reply admission response was not received", cause: err}
 }
 
+func isReplyReissueConflict(err error) bool {
+	var httpErr *iris.HTTPError
+	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusConflict &&
+		strings.TrimSpace(iris.HTTPErrorCode(err)) == iris.HTTPErrorCodeClientRequestIDFailed
+}
+
 func appendReplyClientRequestID(opts []iris.SendOption, clientRequestID string) []iris.SendOption {
 	next := make([]iris.SendOption, 0, len(opts)+1)
 	next = append(next, opts...)
@@ -199,101 +245,6 @@ func appendReplyClientRequestID(opts []iris.SendOption, clientRequestID string) 
 	}
 
 	return next
-}
-
-func waitForAcceptedReplyHandoff(ctx context.Context, getter replyStatusGetter, accepted *iris.ReplyAcceptedResponse) error {
-	if accepted == nil {
-		return replyOutcomeUnknownError{reason: "iris returned no admission response"}
-	}
-
-	requestID := strings.TrimSpace(accepted.RequestID)
-	if requestID == "" {
-		return replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
-	}
-
-	return waitForReplyHandoff(ctx, getter, requestID)
-}
-
-func waitForReplyHandoff(ctx context.Context, client replyStatusGetter, requestID string) error {
-	ticker := time.NewTicker(replyStatusPollInterval)
-	defer ticker.Stop()
-
-	var lastQueryErr error
-
-	for {
-		outcome, err := checkReplyHandoffStatus(ctx, client, requestID)
-		if outcome != replyOutcomeInFlight {
-			return err
-		}
-		if err != nil {
-			lastQueryErr = err
-		}
-
-		if waitReplyStatusPoll(ctx, ticker.C) {
-			return replyOutcomeUnknownError{
-				requestID: requestID,
-				reason:    "reply status polling ended before handoff",
-				detail:    lastReplyQueryErrorDetail(lastQueryErr),
-				cause:     ctx.Err(),
-			}
-		}
-	}
-}
-
-func lastReplyQueryErrorDetail(err error) string {
-	if err == nil {
-		return ""
-	}
-
-	return "last status query error: " + err.Error()
-}
-
-// 조회 실패는 reply의 결과가 아니라 관측 실패다. deadline까지는 in-flight로 두고 폴링을 이어간다.
-func checkReplyHandoffStatus(ctx context.Context, client replyStatusGetter, requestID string) (replyOutcome, error) {
-	status, err := client.GetReplyStatus(ctx, requestID)
-	if err != nil {
-		return replyOutcomeInFlight, err
-	}
-	if status == nil {
-		return replyOutcomeUnknown, replyOutcomeUnknownError{
-			requestID: requestID,
-			reason:    "reply status response was empty",
-		}
-	}
-
-	return replyHandoffStatusResult(requestID, status)
-}
-
-func replyHandoffStatusResult(requestID string, status *iris.ReplyStatusSnapshot) (replyOutcome, error) {
-	outcome := classifyReplyState(status.State)
-	if outcome == replyOutcomeHandoffCompleted || outcome == replyOutcomeInFlight {
-		return outcome, nil
-	}
-	if outcome == replyOutcomeFailed {
-		return outcome, replyStatusFailedError{requestID: requestID, detail: replyStatusDetail(status)}
-	}
-	return replyOutcomeUnknown, replyOutcomeUnknownError{
-		requestID: requestID,
-		reason:    fmt.Sprintf("iris reported state %q", strings.TrimSpace(status.State)),
-		detail:    replyStatusDetail(status),
-	}
-}
-
-func replyStatusDetail(status *iris.ReplyStatusSnapshot) string {
-	if status.Detail == nil {
-		return ""
-	}
-
-	return *status.Detail
-}
-
-func waitReplyStatusPoll(ctx context.Context, tick <-chan time.Time) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	case <-tick:
-		return false
-	}
 }
 
 func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error {
@@ -317,8 +268,10 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	if contentType, ok := ImageContentTypeFromContext(sendCtx); ok {
 		opts = append(opts, iris.WithImageContentType(contentType))
 	}
-	opts = appendMediaClientRequestOptions(sendCtx, opts)
-	accepted, err := t.irisClient.SendImage(sendCtx, room, imageData, opts...)
+	clientRequestID, opts := liveMediaRequestOptions(sendCtx, opts)
+	accepted, err := postLiveMediaWithReissue(sendCtx, clientRequestID, opts, func(ctx context.Context, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+		return t.irisClient.SendImage(ctx, room, imageData, opts...)
+	})
 	if err != nil {
 		err = classifyAdmissionError(err)
 	} else {
@@ -352,8 +305,10 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 		return nil
 	}
 
-	opts = appendMediaClientRequestOptions(sendCtx, opts)
-	accepted, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...)
+	clientRequestID, opts := liveMediaRequestOptions(sendCtx, opts)
+	accepted, err := postLiveMediaWithReissue(sendCtx, clientRequestID, opts, func(ctx context.Context, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+		return t.irisClient.SendMultipleImages(ctx, room, images, opts...)
+	})
 	if err != nil {
 		err = classifyAdmissionError(err)
 	} else {
@@ -367,17 +322,14 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 	return nil
 }
 
-func appendMediaClientRequestOptions(ctx context.Context, opts []iris.SendOption) []iris.SendOption {
-	next := make([]iris.SendOption, 0, len(opts)+2)
-
-	if clientRequestID := nextReplyClientRequestID(ctx); clientRequestID != "" {
-		next = append(next, iris.WithClientRequestID(clientRequestID))
-	}
+func liveMediaRequestOptions(ctx context.Context, opts []iris.SendOption) (clientRequestID string, next []iris.SendOption) {
+	clientRequestID = nextReplyClientRequestID(ctx)
+	next = make([]iris.SendOption, 0, len(opts)+1)
 	if threadID, ok := ThreadIDFromContext(ctx); ok {
 		next = append(next, iris.WithThreadID(threadID))
 	}
 
-	return append(next, opts...)
+	return clientRequestID, append(next, opts...)
 }
 
 func (t *CommandTransport) SendError(ctx context.Context, room, key string) error {

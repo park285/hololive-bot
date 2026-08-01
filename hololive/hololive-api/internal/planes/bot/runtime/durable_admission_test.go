@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -51,6 +52,7 @@ func TestReplyOutboxSettlementPreservesDispatchCertainty(t *testing.T) {
 		{name: "pre-dispatch", attempts: 1, err: iris.ErrRetryable, want: durability.ReplyOutboxRetryablePreDispatch},
 		{name: "unknown local error", err: errors.New("bug"), want: durability.ReplyOutboxDead},
 		{name: "invalid stored payload", err: transport.ErrStoredReplyInvalid, want: durability.ReplyOutboxManualReview},
+		{name: "reissue ladder exhausted conflict", err: &iris.HTTPError{StatusCode: http.StatusConflict, URL: "https://iris/reply", Body: `{"code":"CLIENT_REQUEST_ID_FAILED"}`}, want: durability.ReplyOutboxPermanentConflict},
 		{name: "retry exhausted", attempts: durableMaxAttempts, err: iris.ErrRetryable, want: durability.ReplyOutboxDead},
 		{name: "unknown", err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxOutcomeUnknown},
 		{name: "unknown exhausted", attempts: durableMaxAttempts, err: transport.ErrReplyOutcomeUnknown, want: durability.ReplyOutboxManualReview},
@@ -767,5 +769,40 @@ func TestReleaseInboxStoresBoundedReasonWithoutCauseText(t *testing.T) {
 	}
 	if strings.Contains(lastError, sentinel) || lastError != "command_claim_failed" {
 		t.Fatalf("last_error = %q, want bounded reason without raw identity", lastError)
+	}
+}
+
+func TestAdmitMessageLogsValidationConstraintOnFailure(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	var logs bytes.Buffer
+	admitter := durableAdmitter{
+		inbox:  durability.NewInboxRepository(pool),
+		logger: slog.New(slog.NewJSONHandler(&logs, nil)),
+	}
+
+	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
+		JSON: &webhook.MessageJSON{MessageID: "message:missing-room", Message: "hello"},
+	})
+	if err == nil {
+		t.Fatal("admission must fail when the room id is missing")
+	}
+
+	logged := logs.String()
+	if !strings.Contains(logged, "invalid_argument") || !strings.Contains(logged, "room id must not be empty") {
+		t.Fatalf("admission failure reason missing from log: %s", logged)
+	}
+	if strings.Contains(logged, "hello") {
+		t.Fatalf("admission log leaked message content: %s", logged)
+	}
+}
+
+func TestAdmitMessageWithoutLoggerReturnsErrorWithoutPanic(t *testing.T) {
+	admitter := durableAdmitter{inbox: durability.NewInboxRepository(nil)}
+
+	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
+		JSON: &webhook.MessageJSON{MessageID: "message:no-logger", ChatID: "room-1"},
+	})
+	if err == nil {
+		t.Fatal("admission must fail when the pool is not configured")
 	}
 }

@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"testing"
 	"time"
@@ -58,14 +59,16 @@ func (s *stubStatusGetter) GetReplyStatus(context.Context, string) (*iris.ReplyS
 
 type stubAcceptedSender struct {
 	stubStatusGetter
-	acceptErr   error
-	accepted    *iris.ReplyAcceptedResponse
-	acceptCalls int
-	onAccept    func(call int)
+	acceptErr     error
+	accepted      *iris.ReplyAcceptedResponse
+	acceptCalls   int
+	onAccept      func(call int)
+	optsByAttempt [][]iris.SendOption
 }
 
-func (s *stubAcceptedSender) SendMessageAccepted(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+func (s *stubAcceptedSender) SendMessageAccepted(_ context.Context, _, _ string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	s.acceptCalls++
+	s.optsByAttempt = append(s.optsByAttempt, append([]iris.SendOption(nil), opts...))
 	if s.onAccept != nil {
 		s.onAccept(s.acceptCalls)
 	}
@@ -84,6 +87,18 @@ func (s *stubAcceptedSender) SendMarkdown(ctx context.Context, room, markdown st
 
 func lostAdmissionResponseError() error {
 	return fmt.Errorf("post /reply: %w", iris.ErrTransport)
+}
+
+func irisConflictWithCode(code string) error {
+	body := "{}"
+	if code != "" {
+		body = fmt.Sprintf(`{"code":%q}`, code)
+	}
+	return &iris.HTTPError{
+		StatusCode: http.StatusConflict,
+		URL:        "https://iris/reply",
+		Body:       body,
+	}
 }
 
 func replyLanesUnderTest() map[string]func(*stubAcceptedSender) replyLane {
@@ -134,24 +149,30 @@ type stubBotClient struct {
 
 	imageErr      error
 	imageAccepted *iris.ReplyAcceptedResponse
+	onImage       func(call int)
 	multiErr      error
 	multiAccepted *iris.ReplyAcceptedResponse
+	onMultiImage  func(call int)
 
 	statuses   []statusResult
 	statusErr  error
 	pingResult bool
 
-	acceptCalls   int
-	markdownCalls int
-	statusCalls   int
-	lastRoom      string
-	lastMessage   string
-	lastOptsLen   int
-	lastOpts      []iris.SendOption
-	optsByAttempt [][]iris.SendOption
-	lastImageRoom string
-	lastImage     []byte
-	lastImages    [][]byte
+	acceptCalls          int
+	markdownCalls        int
+	imageCalls           int
+	multiImageCalls      int
+	statusCalls          int
+	lastRoom             string
+	lastMessage          string
+	lastOptsLen          int
+	lastOpts             []iris.SendOption
+	optsByAttempt        [][]iris.SendOption
+	lastImage            []byte
+	lastImages           [][]byte
+	lastImageRoom        string
+	imagesByAttempt      [][]byte
+	multiImagesByAttempt [][][]byte
 }
 
 func (c *stubBotClient) recordSend(room, message string, opts []iris.SendOption) {
@@ -180,10 +201,16 @@ func (c *stubBotClient) SendMessageAccepted(_ context.Context, room, message str
 }
 
 func (c *stubBotClient) SendImage(_ context.Context, room string, imageData []byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.imageCalls++
 	c.lastImageRoom = room
 	c.lastImage = imageData
+	c.imagesByAttempt = append(c.imagesByAttempt, imageData)
 	c.lastOptsLen = len(opts)
 	c.lastOpts = append([]iris.SendOption(nil), opts...)
+	c.optsByAttempt = append(c.optsByAttempt, c.lastOpts)
+	if c.onImage != nil {
+		c.onImage(c.imageCalls)
+	}
 	if c.imageErr != nil {
 		return nil, c.imageErr
 	}
@@ -194,10 +221,16 @@ func (c *stubBotClient) SendImage(_ context.Context, room string, imageData []by
 }
 
 func (c *stubBotClient) SendMultipleImages(_ context.Context, room string, images [][]byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.multiImageCalls++
 	c.lastImageRoom = room
 	c.lastImages = images
+	c.multiImagesByAttempt = append(c.multiImagesByAttempt, images)
 	c.lastOptsLen = len(opts)
 	c.lastOpts = append([]iris.SendOption(nil), opts...)
+	c.optsByAttempt = append(c.optsByAttempt, c.lastOpts)
+	if c.onMultiImage != nil {
+		c.onMultiImage(c.multiImageCalls)
+	}
 	if c.multiErr != nil {
 		return nil, c.multiErr
 	}
@@ -669,6 +702,114 @@ func TestSendReply(t *testing.T) {
 	}
 }
 
+func TestSendReplyConflictReissue(t *testing.T) {
+	t.Parallel()
+
+	for laneName, newLane := range replyLanesUnderTest() {
+		t.Run(laneName+" lane", func(t *testing.T) {
+			testSendReplyConflictReissue(t, newLane)
+		})
+	}
+}
+
+func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender) replyLane) {
+	t.Helper()
+
+	ctx := context.Background()
+	const clientRequestID = "hololive:v1:message:m-1:reply:0"
+
+	t.Run("failed conflict reissues once and succeeds", func(t *testing.T) {
+		s := &stubAcceptedSender{
+			stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}},
+			acceptErr:        irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed),
+		}
+		s.onAccept = func(call int) {
+			if call == 2 {
+				s.acceptErr = nil
+			}
+		}
+
+		require.NoError(t, sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil))
+		require.Len(t, s.optsByAttempt, 2)
+		first, _ := capturedSendOptions(t, s.optsByAttempt[0])
+		second, _ := capturedSendOptions(t, s.optsByAttempt[1])
+		assert.Equal(t, clientRequestID, first)
+		assert.Equal(t, clientRequestID+":r1", second)
+	})
+
+	t.Run("failed conflict exhausts two reissue generations", func(t *testing.T) {
+		s := &stubAcceptedSender{acceptErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+
+		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+		require.Error(t, err)
+		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
+		require.Len(t, s.optsByAttempt, replyReissueMaxGenerations+1)
+		wantIDs := []string{clientRequestID, clientRequestID + ":r1", clientRequestID + ":r2"}
+		for i, opts := range s.optsByAttempt {
+			got, _ := capturedSendOptions(t, opts)
+			assert.Equal(t, wantIDs[i], got)
+		}
+	})
+
+	t.Run("already exists on a reissued generation is terminal", func(t *testing.T) {
+		s := &stubAcceptedSender{acceptErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+		s.onAccept = func(call int) {
+			if call == 2 {
+				s.acceptErr = irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDAlreadyExists)
+			}
+		}
+
+		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+		require.Error(t, err)
+		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDAlreadyExists, iris.HTTPErrorCode(err))
+		require.Len(t, s.optsByAttempt, 2)
+		last, _ := capturedSendOptions(t, s.optsByAttempt[1])
+		assert.Equal(t, clientRequestID+":r1", last)
+	})
+
+	t.Run("other conflicts remain terminal without reissue", func(t *testing.T) {
+		for _, code := range []string{
+			iris.HTTPErrorCodeClientRequestIDOutcomeUnknown,
+			iris.HTTPErrorCodeClientRequestIDPayloadMismatch,
+			iris.HTTPErrorCodeClientRequestIDAlreadyExists,
+			"IRIS_FUTURE_CONFLICT",
+			"",
+		} {
+			t.Run(code, func(t *testing.T) {
+				s := &stubAcceptedSender{acceptErr: irisConflictWithCode(code)}
+				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+				require.Error(t, err)
+				assert.Equal(t, code, iris.HTTPErrorCode(err))
+				assert.Equal(t, 1, s.acceptCalls)
+			})
+		}
+	})
+
+	t.Run("failed conflict after a lost attempt advances generation", func(t *testing.T) {
+		s := &stubAcceptedSender{
+			stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}},
+			acceptErr:        lostAdmissionResponseError(),
+		}
+		s.onAccept = func(call int) {
+			switch call {
+			case 2:
+				s.acceptErr = irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)
+			case 3:
+				s.acceptErr = nil
+			}
+		}
+
+		require.NoError(t, sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil))
+		require.Len(t, s.optsByAttempt, 3)
+		first, _ := capturedSendOptions(t, s.optsByAttempt[0])
+		second, _ := capturedSendOptions(t, s.optsByAttempt[1])
+		third, _ := capturedSendOptions(t, s.optsByAttempt[2])
+		assert.Equal(t, clientRequestID, first)
+		assert.Equal(t, first, second)
+		assert.Equal(t, clientRequestID+":r1", third)
+	})
+}
+
 func TestCommandTransportSendMessage(t *testing.T) {
 	t.Parallel()
 
@@ -921,11 +1062,62 @@ func TestCommandTransportSendImage(t *testing.T) {
 		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
 	})
 
-	t.Run("lost admission response is outcome unknown", func(t *testing.T) {
+	t.Run("lost admission response does not advance the image generation", func(t *testing.T) {
 		c := &stubBotClient{imageErr: lostAdmissionResponseError()}
-		err := tr(c).SendImage(ctx, "room", []byte("x"))
+		err := tr(c).SendImage(inboundCtx(ctx), "room", []byte("x"))
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrReplyOutcomeUnknown)
+		require.Len(t, c.optsByAttempt, 1)
+		requestID, _ := capturedSendOptions(t, c.optsByAttempt[0])
+		assert.Equal(t, "hololive:v1:message:m-1:reply:0", requestID)
+	})
+
+	t.Run("failed conflict reissues with the same image payload", func(t *testing.T) {
+		data := []byte("image-payload")
+		c := &stubBotClient{imageErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+		c.onImage = func(call int) {
+			if call == 2 {
+				c.imageErr = nil
+			}
+		}
+
+		require.NoError(t, tr(c).SendImage(inboundCtx(ctx), "room", data))
+		require.Len(t, c.optsByAttempt, 2)
+		require.Len(t, c.imagesByAttempt, 2)
+		first, _ := capturedSendOptions(t, c.optsByAttempt[0])
+		second, _ := capturedSendOptions(t, c.optsByAttempt[1])
+		assert.Equal(t, "hololive:v1:message:m-1:reply:0", first)
+		assert.Equal(t, first+":r1", second)
+		assert.Equal(t, data, c.imagesByAttempt[0])
+		assert.Equal(t, data, c.imagesByAttempt[1])
+	})
+
+	t.Run("failed conflict exhausts two image reissue generations", func(t *testing.T) {
+		c := &stubBotClient{imageErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+
+		err := tr(c).SendImage(inboundCtx(ctx), "room", []byte("image-payload"))
+		require.Error(t, err)
+		require.ErrorIs(t, err, iris.ErrPermanent)
+		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
+		require.Len(t, c.optsByAttempt, replyReissueMaxGenerations+1)
+		wantIDs := []string{
+			"hololive:v1:message:m-1:reply:0",
+			"hololive:v1:message:m-1:reply:0:r1",
+			"hololive:v1:message:m-1:reply:0:r2",
+		}
+		for i, opts := range c.optsByAttempt {
+			got, _ := capturedSendOptions(t, opts)
+			assert.Equal(t, wantIDs[i], got)
+		}
+	})
+
+	t.Run("other image conflicts remain terminal without reissue", func(t *testing.T) {
+		c := &stubBotClient{imageErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDOutcomeUnknown)}
+
+		err := tr(c).SendImage(inboundCtx(ctx), "room", []byte("image-payload"))
+		require.Error(t, err)
+		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDOutcomeUnknown, iris.HTTPErrorCode(err))
+		assert.Equal(t, 1, c.imageCalls)
 	})
 
 	t.Run("a plain rejection stays a terminal failure", func(t *testing.T) {
@@ -995,12 +1187,63 @@ func TestCommandTransportSendImages(t *testing.T) {
 		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
 	})
 
-	t.Run("lost admission response is outcome unknown", func(t *testing.T) {
+	t.Run("lost admission response does not advance the album generation", func(t *testing.T) {
 		c := &stubBotClient{multiErr: lostAdmissionResponseError()}
 
-		err := tr(c).SendImages(ctx, "room", [][]byte{[]byte("one"), []byte("two")})
+		err := tr(c).SendImages(inboundCtx(ctx), "room", [][]byte{[]byte("one"), []byte("two")})
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrReplyOutcomeUnknown)
+		require.Len(t, c.optsByAttempt, 1)
+		requestID, _ := capturedSendOptions(t, c.optsByAttempt[0])
+		assert.Equal(t, "hololive:v1:message:m-1:reply:0", requestID)
+	})
+
+	t.Run("failed conflict reissues with the same album payload", func(t *testing.T) {
+		images := [][]byte{[]byte("one"), []byte("two")}
+		c := &stubBotClient{multiErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+		c.onMultiImage = func(call int) {
+			if call == 2 {
+				c.multiErr = nil
+			}
+		}
+
+		require.NoError(t, tr(c).SendImages(inboundCtx(ctx), "room", images))
+		require.Len(t, c.optsByAttempt, 2)
+		require.Len(t, c.multiImagesByAttempt, 2)
+		first, _ := capturedSendOptions(t, c.optsByAttempt[0])
+		second, _ := capturedSendOptions(t, c.optsByAttempt[1])
+		assert.Equal(t, "hololive:v1:message:m-1:reply:0", first)
+		assert.Equal(t, first+":r1", second)
+		assert.Equal(t, images, c.multiImagesByAttempt[0])
+		assert.Equal(t, images, c.multiImagesByAttempt[1])
+	})
+
+	t.Run("failed conflict exhausts two album reissue generations", func(t *testing.T) {
+		c := &stubBotClient{multiErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+
+		err := tr(c).SendImages(inboundCtx(ctx), "room", [][]byte{[]byte("one"), []byte("two")})
+		require.Error(t, err)
+		require.ErrorIs(t, err, iris.ErrPermanent)
+		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
+		require.Len(t, c.optsByAttempt, replyReissueMaxGenerations+1)
+		wantIDs := []string{
+			"hololive:v1:message:m-1:reply:0",
+			"hololive:v1:message:m-1:reply:0:r1",
+			"hololive:v1:message:m-1:reply:0:r2",
+		}
+		for i, opts := range c.optsByAttempt {
+			got, _ := capturedSendOptions(t, opts)
+			assert.Equal(t, wantIDs[i], got)
+		}
+	})
+
+	t.Run("other album conflicts remain terminal without reissue", func(t *testing.T) {
+		c := &stubBotClient{multiErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDPayloadMismatch)}
+
+		err := tr(c).SendImages(inboundCtx(ctx), "room", [][]byte{[]byte("one"), []byte("two")})
+		require.Error(t, err)
+		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDPayloadMismatch, iris.HTTPErrorCode(err))
+		assert.Equal(t, 1, c.multiImageCalls)
 	})
 
 	t.Run("failed reply status is wrapped with detail", func(t *testing.T) {

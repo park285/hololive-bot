@@ -13,8 +13,8 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.4.0
 	github.com/openai/openai-go/v3 v3.46.0
-	github.com/park285/iris-client-go v1.3.0
-	github.com/park285/shared-go v1.39.0
+	github.com/park285/iris-client-go v1.4.0
+	github.com/park285/shared-go v1.40.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/quic-go/quic-go v0.61.0
 	github.com/shirou/gopsutil/v4 v4.26.6
@@ -71,7 +71,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/leodido/go-urn v1.5.0 // indirect
-	github.com/lmittmann/tint v1.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260627054121-477a66015f15 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

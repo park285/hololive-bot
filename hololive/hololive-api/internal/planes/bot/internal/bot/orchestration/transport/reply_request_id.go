@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	replyIDService       = "hololive"
-	replyIDSchemaVersion = "v1"
-	replyPhaseReply      = "reply"
+	replyIDService             = "hololive"
+	replyIDSchemaVersion       = "v1"
+	replyPhaseReply            = "reply"
+	replyReissueMaxGenerations = 2
 )
 
 // iris.WithClientRequestID 계약: 8..160 ASCII, [A-Za-z0-9._:-]만 허용.
@@ -71,6 +72,18 @@ func formatReplyClientRequestID(token string, ordinal uint64) string {
 		replyPhaseReply,
 		strconv.FormatUint(ordinal, 10),
 	}, ":")
+}
+
+func reissuedReplyClientRequestID(clientRequestID string, generation int) string {
+	if clientRequestID == "" || generation <= 0 {
+		return clientRequestID
+	}
+	suffix := ":r" + strconv.Itoa(generation)
+	candidate := clientRequestID + suffix
+	if isValidReplyClientRequestID(candidate) {
+		return candidate
+	}
+	return formatReplyClientRequestID(hashedReplyIDToken(candidate), 0) + suffix
 }
 
 func hashedReplyIDToken(messageID string) string {

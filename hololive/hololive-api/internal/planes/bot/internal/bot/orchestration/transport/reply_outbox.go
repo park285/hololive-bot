@@ -65,33 +65,40 @@ func DispatchStoredReply(ctx context.Context, client iris.BotClient, room string
 	if err := json.Unmarshal(payload, &reply); err != nil {
 		return fmt.Errorf("%w: decode: %w", ErrStoredReplyInvalid, err)
 	}
-	opts := []iris.SendOption{iris.WithClientRequestID(clientRequestID)}
+	opts := make([]iris.SendOption, 0, 2)
 	if reply.ThreadID != "" {
 		opts = append(opts, iris.WithThreadID(reply.ThreadID))
 	}
 	if reply.ImageContentType != "" {
 		opts = append(opts, iris.WithImageContentType(reply.ImageContentType))
 	}
-	accepted, err := postStoredReply(ctx, client, room, &reply, opts)
+	accepted, err := postReplyWithReissue(ctx, clientRequestID, func(generationID string) (*iris.ReplyAcceptedResponse, error) {
+		return postStoredReply(ctx, client, room, &reply, appendReplyClientRequestID(opts, generationID))
+	})
 	if err != nil {
 		return classifyAdmissionError(err)
 	}
-	if err := acceptStoredReply(ctx, accepted, acceptedHook); err != nil {
+	requestID, err := acceptStoredReply(ctx, accepted, acceptedHook)
+	if err != nil {
 		return err
 	}
-	return waitForReplyHandoff(ctx, client, accepted.RequestID)
+	return waitForReplyHandoff(ctx, client, requestID)
 }
 
-func acceptStoredReply(ctx context.Context, accepted *iris.ReplyAcceptedResponse, acceptedHook ReplyAcceptedHook) error {
-	if accepted == nil || strings.TrimSpace(accepted.RequestID) == "" {
-		return replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
+func acceptStoredReply(ctx context.Context, accepted *iris.ReplyAcceptedResponse, acceptedHook ReplyAcceptedHook) (string, error) {
+	if accepted == nil {
+		return "", replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
+	}
+	requestID := strings.TrimSpace(accepted.RequestID)
+	if requestID == "" {
+		return "", replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
 	}
 	if acceptedHook != nil {
-		if err := acceptedHook(ctx, accepted.RequestID); err != nil {
-			return fmt.Errorf("persist accepted reply: %w", err)
+		if err := acceptedHook(ctx, requestID); err != nil {
+			return "", fmt.Errorf("persist accepted reply: %w", err)
 		}
 	}
-	return nil
+	return requestID, nil
 }
 
 func postStoredReply(ctx context.Context, client iris.BotClient, room string, reply *StoredReply, opts []iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
