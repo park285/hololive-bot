@@ -8,6 +8,27 @@
 
 ## 미출시
 
+### 변경
+
+- **service 로그 인코딩이 text에서 JSON으로 바뀝니다.** shared-go 로깅이 text
+  인코더를 제거하고 빈 `Format` 기본값이 JSON이 되면서, `hololive-api`,
+  `hololive-alarm-worker`, `hololive-youtube-producer`, admin-dashboard backend의
+  stdout·파일 로그가 모두 JSON으로 전환됩니다. text 출력을 전제한 로그 수집·grep·
+  알림 규칙은 배포 전에 점검해야 합니다. 사람용 ops CLI의 stderr 출력은 종전
+  그대로입니다.
+
+### 수정
+
+- Iris가 `409` + `CLIENT_REQUEST_ID_FAILED`로 답한 reply를 더 이상 즉시 terminal로
+  종결하지 않고, generation suffix(`:r1`, `:r2`)를 붙인 새 `clientRequestId`로 같은
+  payload를 최대 2세대까지 재전송합니다. 이 code는 durable queue handoff 이전 실패,
+  즉 KakaoTalk 부수효과가 없다는 Iris 계약이므로 재전송이 안전합니다. 적용 범위는
+  reply(text·markdown)·durable outbox dispatch·비-outbox live media
+  (`SendImage`/`SendImages`) 전부입니다. 전송 결과가 불명한 재POST는 동일 id를
+  유지하고 FAILED 확정 응답에서만 세대를 올리므로, a9104260이 제거했던 `:aN` 방식의
+  중복 발화 위험은 재도입되지 않습니다. `OUTCOME_UNKNOWN`/`PAYLOAD_MISMATCH`/
+  `ALREADY_EXISTS`와 code 없는 `409`의 동작은 그대로입니다.
+
 ## v2.0.46 - 2026-08-01
 
 ### 수정
