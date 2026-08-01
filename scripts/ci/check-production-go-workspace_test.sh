@@ -44,7 +44,11 @@ assert_rejects() {
 			printf '\n# additional_contexts:\n#   shared_go_workspace: ../shared-go\n' >>"${destination}/deploy/compose/docker-compose.prod.yml"
 			;;
 		unpublished-pin)
-			sed -i 's#github.com/park285/shared-go v1.37.1#github.com/park285/shared-go v1.37.2-0.20260731000000-deadbeefdead#' "${destination}/hololive/hololive-api/go.mod"
+			sed -i -E 's#^([[:space:]]*github\.com/park285/shared-go[[:space:]]+)v[0-9]+\.[0-9]+\.[0-9]+(.*)$#\1v0.0.0-20260731000000-deadbeefdead\2#' "${destination}/hololive/hololive-api/go.mod"
+			grep -Fq 'github.com/park285/shared-go v0.0.0-20260731000000-deadbeefdead' "${destination}/hololive/hololive-api/go.mod" || {
+				echo '[production-workspace-test] unpublished-pin fixture setup failed' >&2
+				exit 1
+			}
 			;;
 		*)
 			echo "[production-workspace-test] unknown mutation ${name}" >&2

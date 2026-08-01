@@ -8,6 +8,8 @@
 
 ## 미출시
 
+## v2.0.46 - 2026-08-01
+
 ### 수정
 
 - heartbeat request는 빈 body를 `idle=false`로 허용하되 JSON body는 1,024 bytes 이하의 단일
@@ -32,9 +34,8 @@
 
 ### 의존성
 
-- `iris-client-go v1.1.1`을 채택했습니다. 제거된 공개 facade 심볼은 Hololive가 소비하지 않아
-  Iris transport·webhook·Karing 계약을 유지하면서 최초 rebinding의 stale client cleanup에서
-  발생할 수 있던 nil panic 수정도 반영했습니다.
+- `shared-go v1.39.0`과 `iris-client-go v1.3.0`을 채택해 durable worker·retry 계약과 Iris
+  transport·webhook·Karing 계약을 현재 공개 릴리즈에 고정했습니다.
 
 ## v2.0.45 - 2026-07-15
 
