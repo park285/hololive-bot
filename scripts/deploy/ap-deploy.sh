@@ -22,6 +22,12 @@ esac
 
 ap_host_load "$REPO_ROOT" "$AP_HOST_ARG"
 
+HOLO_API_VERSION=""
+if [[ "$AP_RUNTIME_MODE" == "compose" ]]; then
+  . "$REPO_ROOT/scripts/deploy/lib/ap-compose-version.sh"
+  HOLO_API_VERSION="$(ap_compose_release_version "$REPO_ROOT")"
+fi
+
 cd "$REPO_ROOT"
 
 if [[ ! -r "$FILES_FROM" ]]; then
@@ -158,7 +164,7 @@ sudo -n test -r /run/hololive-bot/ap-compose.env
 sudo -n test -r /run/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 prechange_config_err=\$(mktemp)
-if ! sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet 2>\"\$prechange_config_err\"; then
+if ! sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet 2>\"\$prechange_config_err\"; then
   if grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/run/hololive-bot/(bot|alarm-worker)\.env' \"\$prechange_config_err\"; then
     echo 'AP prechange compose config skipped: token-free ap-compose.env is incompatible with pre-rsync compose; post-rsync config remains required' >&2
   else
@@ -185,9 +191,9 @@ change_started_at="$(
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
 echo change_started_at='$change_started_at'"
 
 remote "set -euo pipefail
