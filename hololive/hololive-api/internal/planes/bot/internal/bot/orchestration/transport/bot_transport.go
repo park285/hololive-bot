@@ -191,11 +191,8 @@ func postReply(
 		}
 
 		lastErr = err
-		if isReplyReissueConflict(err) {
-			return nil, err
-		}
-		stop, definitive := stopReplyAdmissionRetry(ctx, err, admissionMayHaveLanded, clientRequestID)
-		if definitive {
+		abort, stop := replyAdmissionFailureAction(ctx, err, admissionMayHaveLanded, clientRequestID)
+		if abort {
 			return nil, err
 		}
 		if stop {
@@ -205,6 +202,14 @@ func postReply(
 	}
 
 	return nil, replyOutcomeUnknownError{reason: "reply admission response was not received", cause: lastErr}
+}
+
+func replyAdmissionFailureAction(ctx context.Context, err error, admissionMayHaveLanded bool, clientRequestID string) (abort, stop bool) {
+	if isReplyReissueConflict(err) {
+		return true, false
+	}
+	s, definitive := stopReplyAdmissionRetry(ctx, err, admissionMayHaveLanded, clientRequestID)
+	return definitive, s
 }
 
 func stopReplyAdmissionRetry(ctx context.Context, err error, admissionMayHaveLanded bool, clientRequestID string) (stop, definitive bool) {
