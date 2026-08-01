@@ -15,6 +15,7 @@ case "$MODE" in
 esac
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
+. "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
@@ -44,6 +45,7 @@ fi
 service="${AP_SERVICES[0]}"
 port="${AP_PORTS[0]}"
 release_id="${RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)-$AP_NAME}"
+native_release_id_validate "$release_id"
 artifact_dir="${ARTIFACT_DIR:-$REPO_ROOT/artifacts/ap-host-native/$release_id}"
 payload_name=".hololive-host-native-${AP_NAME}-${release_id}"
 version="${HOLO_BOT_VERSION:-$(git -C "$REPO_ROOT" rev-parse --short=12 HEAD)}"
@@ -158,6 +160,7 @@ EOF
 }
 
 mkdir -p "$artifact_dir/bin" "$artifact_dir/internal/domain"
+cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
 
 (
   cd "$REPO_ROOT/hololive/hololive-youtube-producer"
@@ -203,13 +206,17 @@ change_started_at="$5"
 required_udp_buffer="$6"
 swapfile_size_mib="$7"
 payload="$HOME/$payload_name"
-release_dir="/opt/hololive-bot/youtube-producer/releases/$release_id"
+release_path_lib="$payload/bin/ap-host-native-release-path.sh"
+releases_root="/opt/hololive-bot/youtube-producer/releases"
 current_link="/opt/hololive-bot/youtube-producer/current"
 previous_link="/opt/hololive-bot/youtube-producer/previous"
 host_env="/etc/hololive-bot/youtube-producer-host.env"
 unit_file="/etc/systemd/system/hololive-youtube-producer@.service"
 unit="hololive-youtube-producer@${service}.service"
 swapfile="/swapfile"
+
+test -r "$release_path_lib"
+. "$release_path_lib"
 
 if ! getent group opc >/dev/null; then
   sudo -n groupadd --system opc
@@ -224,7 +231,7 @@ sudo -n test -r /run/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /run/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /run/hololive-bot/certs/hololive-h3.key
 
-sudo -n install -d -m 0755 -o root -g root /opt/hololive-bot/youtube-producer/releases
+sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
 sudo -n install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-producer/settings
 sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
@@ -277,11 +284,8 @@ sudo -n sysctl -w vm.swappiness=10 >/dev/null
 old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
-  if [[ -n "$old_target" && "$old_target" == "$release_dir" ]]; then
-    echo "refusing to overwrite the active release: $release_dir" >&2
-    exit 1
-  fi
 fi
+release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
 sudo -n rm -rf "$release_dir"
 sudo -n mkdir -p "$release_dir"
@@ -292,10 +296,28 @@ sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-p
 if [[ -n "$old_target" && -d "$old_target" ]]; then
   sudo -n test -r "$host_env"
   sudo -n test -r "$unit_file"
+  sudo -n test -x "$old_target/bin/youtube-producer"
+  sudo -n test -x "$old_target/bin/youtube-producer-wrapper"
+  sudo -n test -x "$old_target/bin/healthcheck"
+  sudo -n test -d "$old_target/internal/domain/data"
   rollback_contract_dir="$old_target/rollback-contract"
   sudo -n install -d -m 0755 -o root -g root "$rollback_contract_dir"
   sudo -n install -m 0640 -o root -g root "$host_env" "$rollback_contract_dir/youtube-producer-host.env"
   sudo -n install -m 0644 -o root -g root "$unit_file" "$rollback_contract_dir/hololive-youtube-producer@.service"
+  sudo -n sh -c '
+    set -eu
+    cd "$1"
+    {
+      sha256sum \
+        bin/youtube-producer \
+        bin/youtube-producer-wrapper \
+        bin/healthcheck \
+        rollback-contract/youtube-producer-host.env \
+        rollback-contract/hololive-youtube-producer@.service
+      find internal/domain/data -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
+    } > rollback-contract/SHA256SUMS
+    chmod 0644 rollback-contract/SHA256SUMS
+  ' sh "$old_target"
   sudo -n ln -sfn "$old_target" "$previous_link"
 fi
 

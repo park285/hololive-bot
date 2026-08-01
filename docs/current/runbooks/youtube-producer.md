@@ -335,7 +335,8 @@ Host-native deploy automation must add these gates before first live use:
   `current`.
 - Before replacing the installed host env or unit, copy both into the current
   release's `rollback-contract/` and point `previous` at that complete rollback
-  point.
+  point only after sealing the binaries, wrapper, healthcheck, runtime data, env,
+  and unit in `rollback-contract/SHA256SUMS`.
 - Validate rendered env key presence without printing values.
 - Run `systemd-analyze verify` for the unit.
 - Start or restart only the target AP unit.
@@ -364,8 +365,10 @@ journalctl -u hololive-youtube-producer@youtube-producer-d.service \
 Host-native rollback is release-symlink based: point `current` back to the
 previous artifact directory, restore its `rollback-contract/` host env and unit,
 restart the same unit, and require the timestamped completion check above. The
-helper fails closed when the previous release or either contract file is absent;
-an intentional first-deploy decommission is a separate approved stop operation.
+helper first verifies executable presence, wrapper syntax, payload checksums, and
+the preserved unit with `systemd-analyze verify`; any failure is pre-mutation and
+fail-closed. A missing previous release or contract also fails closed; an
+intentional first-deploy decommission is a separate approved stop operation.
 If the failure is topology-level, stop the new tiny AP first and confirm the
 existing APs remain `mode=active-active`, `valkey_available=true`, and
 `scraping_paused=false`.

@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
+ROLLBACK_CHECK_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-rollback-check.sh"
 
 case "$MODE" in
   --dry-run|--apply) ;;
@@ -33,7 +34,9 @@ fi
 service="${AP_SERVICES[0]}"
 
 if [[ "$MODE" == "--dry-run" ]]; then
-  ap_remote_bash "$service" <<'REMOTE'
+  {
+    cat "$ROLLBACK_CHECK_LIB"
+    cat <<'REMOTE'
 set -euo pipefail
 service="$1"
 unit="hololive-youtube-producer@${service}.service"
@@ -44,17 +47,10 @@ rollback_contract_dir="$previous_target/rollback-contract"
 echo "unit=$unit"
 echo "current=$(readlink -f "$current" 2>/dev/null || true)"
 echo "previous=$previous_target"
-if [[ -z "$previous_target" || ! -d "$previous_target" ]]; then
-  echo "previous host-native release is unavailable; refusing partial rollback" >&2
-  exit 1
-fi
-if ! sudo -n test -r "$rollback_contract_dir/youtube-producer-host.env" ||
-   ! sudo -n test -r "$rollback_contract_dir/hololive-youtube-producer@.service"; then
-  echo "previous host-native rollback contract is incomplete; refusing partial rollback" >&2
-  exit 1
-fi
-echo "[DRY-RUN] Previous binary, host env, and systemd unit are available for rollback."
+native_rollback_validate "$previous_target"
+echo "[DRY-RUN] Previous payload, host env, and systemd unit passed rollback validation."
 REMOTE
+  } | ap_remote_bash "$service"
   exit 0
 fi
 
@@ -63,7 +59,9 @@ date -u +%Y-%m-%dT%H:%M:%SZ
 REMOTE
 )"
 
-ap_remote_bash "$service" "$rollback_started_at" <<'REMOTE'
+{
+  cat "$ROLLBACK_CHECK_LIB"
+  cat <<'REMOTE'
 set -euo pipefail
 service="$1"
 rollback_started_at="$2"
@@ -75,15 +73,7 @@ unit_file="/etc/systemd/system/hololive-youtube-producer@.service"
 previous_target="$(readlink -f "$previous" 2>/dev/null || true)"
 rollback_contract_dir="$previous_target/rollback-contract"
 
-if [[ -z "$previous_target" || ! -d "$previous_target" ]]; then
-  echo "previous host-native release is unavailable; refusing partial rollback" >&2
-  exit 1
-fi
-if ! sudo -n test -r "$rollback_contract_dir/youtube-producer-host.env" ||
-   ! sudo -n test -r "$rollback_contract_dir/hololive-youtube-producer@.service"; then
-  echo "previous host-native rollback contract is incomplete; refusing partial rollback" >&2
-  exit 1
-fi
+native_rollback_validate "$previous_target"
 
 sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-producer-host.env" "$host_env"
 sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-producer@.service" "$unit_file"
@@ -93,6 +83,7 @@ sudo -n systemctl daemon-reload
 sudo -n systemctl restart "$unit"
 echo "rollback_started_at=$rollback_started_at"
 REMOTE
+} | ap_remote_bash "$service" "$rollback_started_at"
 
 CHANGE_STARTED_AT="$rollback_started_at" \
   "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"

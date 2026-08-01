@@ -4,10 +4,17 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY="${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh"
 ROLLBACK="${ROOT_DIR}/scripts/deploy/ap-host-native-rollback.sh"
+RELEASE_PATH_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-release-path.sh"
+ROLLBACK_CHECK_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-rollback-check.sh"
 
 failures=0
 record_fail() { echo "[FAIL] $*" >&2; failures=$((failures + 1)); }
 pass() { echo "[PASS] $*"; }
+
+# shellcheck source=scripts/deploy/lib/ap-host-native-release-path.sh
+. "${RELEASE_PATH_LIB}"
+# shellcheck source=scripts/deploy/lib/ap-host-native-rollback-check.sh
+. "${ROLLBACK_CHECK_LIB}"
 
 if grep -Eq 'HOLOLIVE_H3_ADDR=:%s' "${DEPLOY}"; then
   record_fail "ap-host-native binds H3 to all interfaces (:port) (8c2e3ef9)"
@@ -50,6 +57,15 @@ else
   record_fail "ap-host-native deploy must capture the old contract before overwriting it"
 fi
 
+manifest_line="$(grep -nF '> rollback-contract/SHA256SUMS' "${DEPLOY}" | head -1 | cut -d: -f1)"
+previous_line="$(grep -nF 'ln -sfn "$old_target" "$previous_link"' "${DEPLOY}" | head -1 | cut -d: -f1)"
+if [[ -n "${manifest_line}" && -n "${previous_line}" && -n "${install_line}" ]] &&
+   (( manifest_line < previous_line && manifest_line < install_line )); then
+  pass "ap-host-native deploy seals the complete rollback payload before publishing previous"
+else
+  record_fail "ap-host-native deploy must seal rollback checksums before publishing previous or installing the new contract"
+fi
+
 tmp="$(mktemp -d)"
 cleanup() {
   rm -rf "${tmp}"
@@ -57,6 +73,142 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "${tmp}/bin" "${tmp}/success" "${tmp}/failure"
 touch "${tmp}/KR.key"
+
+if RELEASE_ID='../active' \
+   ARTIFACT_DIR="${tmp}/traversal-artifact" \
+   SSH_KEY="${tmp}/KR.key" \
+   "${DEPLOY}" osaka --dry-run >"${tmp}/traversal.out" 2>"${tmp}/traversal.err"; then
+  record_fail "ap-host-native deploy must reject RELEASE_ID traversal before building"
+elif [[ -e "${tmp}/traversal-artifact" ]]; then
+  record_fail "invalid RELEASE_ID must not create the artifact directory"
+elif grep -Fq 'RELEASE_ID must be one safe path component' "${tmp}/traversal.err"; then
+  pass "ap-host-native deploy rejects RELEASE_ID traversal before artifact creation"
+else
+  record_fail "invalid RELEASE_ID must report the safe component contract"
+fi
+
+release_root="${tmp}/releases"
+mkdir -p "${release_root}/active" "${tmp}/outside"
+ln -s "${release_root}/active" "${tmp}/current"
+ln -s "${release_root}/active" "${release_root}/active-alias"
+ln -s "${tmp}/outside" "${release_root}/escape-alias"
+
+if [[ "$(native_release_dir_resolve "${release_root}" safe-release "${tmp}/current")" == "${release_root}/safe-release" ]]; then
+  pass "host-native release resolver accepts a contained inactive release"
+else
+  record_fail "host-native release resolver must accept a contained inactive release"
+fi
+if native_release_dir_resolve "${release_root}" active-alias "${tmp}/current" >/dev/null 2>&1; then
+  record_fail "host-native release resolver must reject a canonical alias of the active release"
+else
+  pass "host-native release resolver rejects a canonical alias of the active release"
+fi
+if native_release_dir_resolve "${release_root}" escape-alias "${tmp}/current" >/dev/null 2>&1; then
+  record_fail "host-native release resolver must reject a canonical path outside releases root"
+else
+  pass "host-native release resolver rejects canonical containment escape"
+fi
+
+resolve_line="$(grep -nF 'native_release_dir_resolve "$releases_root" "$release_id" "$current_link"' "${DEPLOY}" | tail -1 | cut -d: -f1)"
+delete_line="$(grep -nF 'rm -rf "$release_dir"' "${DEPLOY}" | tail -1 | cut -d: -f1)"
+if [[ -n "${resolve_line}" && -n "${delete_line}" ]] && (( resolve_line < delete_line )); then
+  pass "remote canonical release guard runs before release deletion"
+else
+  record_fail "remote canonical release guard must run before release deletion"
+fi
+
+mkdir -p "${tmp}/rollback-bin" "${tmp}/rollback-fixture/bin" \
+  "${tmp}/rollback-fixture/internal/domain/data" "${tmp}/rollback-fixture/rollback-contract"
+cat > "${tmp}/rollback-bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" != "-n" ]] || shift
+exec "$@"
+EOF
+cat > "${tmp}/rollback-bin/systemd-analyze" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+unit="${2:?unit}"
+if grep -Fq INVALID_UNIT "${unit}"; then
+  exit 1
+fi
+EOF
+chmod +x "${tmp}/rollback-bin/sudo" "${tmp}/rollback-bin/systemd-analyze"
+
+rollback_fixture="${tmp}/rollback-fixture"
+printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-producer"
+printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-producer-wrapper"
+printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/healthcheck"
+chmod +x "${rollback_fixture}/bin/youtube-producer" \
+  "${rollback_fixture}/bin/youtube-producer-wrapper" \
+  "${rollback_fixture}/bin/healthcheck"
+printf 'fixture-data\n' > "${rollback_fixture}/internal/domain/data/members.json"
+printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-producer-host.env"
+printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-producer@.service"
+(
+  cd "${rollback_fixture}"
+  sha256sum \
+    bin/youtube-producer \
+    bin/youtube-producer-wrapper \
+    bin/healthcheck \
+    rollback-contract/youtube-producer-host.env \
+    rollback-contract/hololive-youtube-producer@.service \
+    internal/domain/data/members.json \
+    > rollback-contract/SHA256SUMS
+)
+
+if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}"; then
+  pass "native rollback validation accepts a complete integrity fixture"
+else
+  record_fail "native rollback validation must accept a complete integrity fixture"
+fi
+
+mv "${rollback_fixture}/bin/healthcheck" "${rollback_fixture}/bin/healthcheck.missing"
+if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/missing.out" 2>"${tmp}/missing.err"; then
+  record_fail "native rollback validation must reject a missing healthcheck"
+elif grep -Fq 'previous host-native executable is missing or not executable: bin/healthcheck' "${tmp}/missing.err"; then
+  pass "native rollback validation rejects a missing healthcheck"
+else
+  record_fail "missing healthcheck validation must fail for the executable precondition"
+fi
+mv "${rollback_fixture}/bin/healthcheck.missing" "${rollback_fixture}/bin/healthcheck"
+
+printf 'corrupt\n' >> "${rollback_fixture}/bin/youtube-producer"
+if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/corrupt.out" 2>"${tmp}/corrupt.err"; then
+  record_fail "native rollback validation must reject a corrupt binary"
+elif grep -Fq 'previous host-native rollback payload failed checksum validation' "${tmp}/corrupt.err"; then
+  pass "native rollback validation rejects a corrupt binary"
+else
+  record_fail "corrupt binary validation must fail for the checksum precondition"
+fi
+sed -i '$d' "${rollback_fixture}/bin/youtube-producer"
+chmod +x "${rollback_fixture}/bin/youtube-producer"
+
+printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtube-producer@.service"
+(
+  cd "${rollback_fixture}"
+  sha256sum \
+    bin/youtube-producer \
+    bin/youtube-producer-wrapper \
+    bin/healthcheck \
+    rollback-contract/youtube-producer-host.env \
+    rollback-contract/hololive-youtube-producer@.service \
+    internal/domain/data/members.json \
+    > rollback-contract/SHA256SUMS
+)
+if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/invalid-unit.out" 2>"${tmp}/invalid-unit.err"; then
+  record_fail "native rollback validation must reject an invalid systemd unit"
+elif grep -Fq 'previous host-native systemd unit failed validation' "${tmp}/invalid-unit.err"; then
+  pass "native rollback validation rejects an invalid systemd unit"
+else
+  record_fail "invalid unit validation must fail for the systemd precondition"
+fi
+
+if [[ "$(grep -Fc 'native_rollback_validate "$previous_target"' "${ROLLBACK}")" -eq 2 ]]; then
+  pass "native rollback dry-run and apply share the payload integrity gate"
+else
+  record_fail "native rollback dry-run and apply must both invoke payload integrity validation"
+fi
 
 cat > "${tmp}/bin/ssh" <<'EOF'
 #!/usr/bin/env bash
@@ -97,8 +249,7 @@ restore_payload="${tmp}/success/call-2.stdin"
 completion_cmd="${tmp}/success/call-4.cmd"
 if [[ -r "${restore_payload}" ]] &&
    bash -n "${restore_payload}" &&
-   grep -Fq 'previous host-native release is unavailable; refusing partial rollback' "${restore_payload}" &&
-   grep -Fq 'previous host-native rollback contract is incomplete; refusing partial rollback' "${restore_payload}" &&
+   grep -Fq 'native_rollback_validate "$previous_target"' "${restore_payload}" &&
    grep -Fq '"$rollback_contract_dir/youtube-producer-host.env" "$host_env"' "${restore_payload}" &&
    grep -Fq '"$rollback_contract_dir/hololive-youtube-producer@.service" "$unit_file"' "${restore_payload}" &&
    grep -Fq 'systemctl daemon-reload' "${restore_payload}" &&
@@ -106,6 +257,14 @@ if [[ -r "${restore_payload}" ]] &&
   pass "ap-host-native rollback restores binary-adjacent contract files before restarting"
 else
   record_fail "ap-host-native rollback must restore the host env and systemd unit before restarting"
+fi
+
+validate_line="$(grep -nF 'native_rollback_validate "$previous_target"' "${restore_payload}" | tail -1 | cut -d: -f1)"
+restore_line="$(grep -nF 'install -m 0640 -o root -g root "$rollback_contract_dir/youtube-producer-host.env"' "${restore_payload}" | tail -1 | cut -d: -f1)"
+if [[ -n "${validate_line}" && -n "${restore_line}" ]] && (( validate_line < restore_line )); then
+  pass "native rollback validates payload integrity and unit before mutation"
+else
+  record_fail "native rollback validation must run before the first restore mutation"
 fi
 
 if [[ -r "${completion_cmd}" ]] && grep -Fq '2026-08-01T03:04:05Z' "${completion_cmd}"; then
