@@ -10,6 +10,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/source-revision.sh"
 
 compose_file_resolve_path() {
     local file="$1"
@@ -81,8 +82,74 @@ target_requires_db_migration() {
 run_db_migration_before_cutover() {
     echo "[BUILD] hololive-db-migrate"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build hololive-db-migrate
+    verify_built_image_revision hololive-db-migrate
     echo "[MIGRATE] hololive-db-migrate"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" run --rm hololive-db-migrate
+}
+
+verify_live_image_revision() {
+    local service="$1"
+    local container_id=""
+
+    container_id="$(deploy_require_single_identifier \
+        "live container for ${service}" \
+        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" \
+        "${COMPOSE_FILE_ARGS[@]}" ps -q "${service}")"
+    deploy_verify_object_revision "${CONTAINER_CLI}" container "${container_id}" "${REVISION}"
+    echo "[VERIFY] ${service} image revision=${REVISION}"
+}
+
+resolve_revision_services() {
+    BUILT_REVISION_SERVICES=()
+    LIVE_REVISION_SERVICES=()
+
+    case "${TARGET}" in
+        hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|admin-dashboard)
+            BUILT_REVISION_SERVICES=("${TARGET}")
+            LIVE_REVISION_SERVICES=("${TARGET}")
+            ;;
+        hololive-db-migrate)
+            BUILT_REVISION_SERVICES=(hololive-db-migrate)
+            ;;
+        "")
+            BUILT_REVISION_SERVICES=(hololive-api hololive-alarm-worker admin-dashboard)
+            LIVE_REVISION_SERVICES=(hololive-api hololive-alarm-worker admin-dashboard)
+            if [[ ",${COMPOSE_PROFILES:-}," == *",main-ap,"* ]]; then
+                BUILT_REVISION_SERVICES+=(youtube-producer-c)
+                LIVE_REVISION_SERVICES+=(youtube-producer-c)
+            fi
+            if [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] \
+               && [[ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" == "true" ]]; then
+                BUILT_REVISION_SERVICES+=(youtube-producer)
+                LIVE_REVISION_SERVICES+=(youtube-producer)
+            fi
+            ;;
+    esac
+}
+
+verify_built_image_revision() {
+    local service="$1"
+    local image_ref=""
+
+    image_ref="$(deploy_service_image_ref "${service}")"
+    deploy_verify_object_revision "${CONTAINER_CLI}" image "${image_ref}" "${REVISION}"
+    echo "[VERIFY] ${service} built image revision=${REVISION}"
+}
+
+verify_built_image_revisions() {
+    local service=""
+
+    for service in "${BUILT_REVISION_SERVICES[@]}"; do
+        verify_built_image_revision "${service}"
+    done
+}
+
+verify_cutover_image_revisions() {
+    local service=""
+
+    for service in "${LIVE_REVISION_SERVICES[@]}"; do
+        verify_live_image_revision "${service}"
+    done
 }
 
 if [[ $# -ne 1 ]]; then
@@ -97,7 +164,7 @@ for index in "${!COMPOSE_FILE_PATHS[@]}"; do
     file="${COMPOSE_FILE_PATHS[$index]}"
     [[ -n "${file}" ]] || continue
     file="$(compose_file_resolve_path "${file}")"
-    COMPOSE_FILE_PATHS[$index]="${file}"
+    COMPOSE_FILE_PATHS[index]="${file}"
     COMPOSE_FILE_ARGS+=("-f" "${file}")
 done
 COMPOSE_FILE="$(IFS=:; printf '%s' "${COMPOSE_FILE_PATHS[*]}")"
@@ -186,6 +253,16 @@ compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
 postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}"
 
+REVISION_ENABLED=false
+case "${TARGET}" in
+    hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|hololive-db-migrate|admin-dashboard|"")
+        REVISION_ENABLED=true
+        REVISION="$(deploy_source_revision "${ROOT_DIR}")"
+        export REVISION
+        resolve_revision_services
+        ;;
+esac
+
 HOLO_API_VERSION="$(xargs <hololive/hololive-api/VERSION 2>/dev/null || printf '%s' dev)"
 HOLO_ALARM_WORKER_VERSION="$(xargs <hololive/hololive-alarm-worker/VERSION 2>/dev/null || printf '%s' "${HOLO_API_VERSION}")"
 export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION
@@ -194,6 +271,9 @@ echo "[INFO] COMPOSE_MODE=${COMPOSE_MODE}"
 echo "[INFO] COMPOSE_FILE=${COMPOSE_FILE}"
 echo "[INFO] HOLO_API_VERSION=${HOLO_API_VERSION}"
 echo "[INFO] HOLO_ALARM_WORKER_VERSION=${HOLO_ALARM_WORKER_VERSION}"
+if [[ "${REVISION_ENABLED}" == true ]]; then
+    echo "[INFO] REVISION=${REVISION}"
+fi
 echo "[INFO] SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
 echo "[INFO] IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
 echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
@@ -202,7 +282,7 @@ echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 build_target=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|admin-dashboard)
+    hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|hololive-db-migrate|admin-dashboard)
         build_target=true
         ;;
     "")
@@ -225,6 +305,10 @@ if [[ "${build_target}" == true ]]; then
         echo "[BUILD] all buildable services"
         "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build
     fi
+fi
+
+if [[ "${REVISION_ENABLED}" == true ]]; then
+    verify_built_image_revisions
 fi
 
 if [[ -z "${TARGET}" ]] || cutover_service_uses_app_writable_bind_mount "${TARGET}"; then
@@ -258,6 +342,9 @@ if [[ -n "${TARGET}" ]]; then
         echo "[ERROR] ${TARGET} failed health gate after redeploy" >&2
         exit 1
     fi
+    if [[ "${REVISION_ENABLED}" == true ]]; then
+        verify_cutover_image_revisions
+    fi
 else
     cutover_capture_restart_baseline hololive-api hololive-alarm-worker
     echo "[UP] all services"
@@ -267,5 +354,8 @@ else
     if ! cutover_health_gate hololive-api hololive-alarm-worker; then
         echo "[ERROR] health gate failed after all-service redeploy" >&2
         exit 1
+    fi
+    if [[ "${REVISION_ENABLED}" == true ]]; then
+        verify_cutover_image_revisions
     fi
 fi

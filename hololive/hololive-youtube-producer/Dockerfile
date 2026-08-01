@@ -19,12 +19,14 @@ ARG ALPINE_VERSION=3.24
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
 
 ARG VERSION=dev
+ARG REVISION=unknown
 ARG TARGETOS
 ARG TARGETARCH
 # GOAMD64 opt-in: 기본은 v1. 배포 호스트 CPU가 AVX2(Haswell 2013+)면
 # --build-arg GOAMD64=v3로 활성화한다.
 ARG GOAMD64=v1
 # Release images are PGO-off until a verifiable adoption design is implemented.
+RUN if [ "${REVISION}" != "unknown" ]; then test "${#REVISION}" -eq 40 && case "${REVISION}" in *[!0-9a-f]*) exit 1;; esac; fi
 RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
     printf 'app:x:1000:\n' > /tmp/group
 ENV GOWORK=off \
@@ -67,9 +69,11 @@ RUN \
 FROM gcr.io/distroless/static-debian13@sha256:9197324ba51d9cd071af8505989365c006adf9d6d2067eada25aef00abbb5278
 
 ARG VERSION=dev
+ARG REVISION=unknown
 LABEL org.opencontainers.image.title="hololive-youtube-producer" \
       org.opencontainers.image.source="https://github.com/park285/hololive-bot" \
-      org.opencontainers.image.version="${VERSION}"
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
 
 ENV TZ=Asia/Seoul \
     USER=app \

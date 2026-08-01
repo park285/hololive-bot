@@ -83,8 +83,11 @@ go test ../shared-go/... \
 운영계 배포 및 롤아웃은 아래 배포 스크립트로 모듈별로 안전하게 진행됩니다.
 
 ```bash
-# 전체 산출물 컴파일 진행 (버전 범프 제외 옵션)
+# 프로덕션 전체 이미지 build 및 live deploy (clean tree, version bump 금지)
 ./build-all.sh --no-bump
+
+# local/dev 전체 이미지 build만 수행 (dirty tree 및 version bump 허용)
+./build-all.sh --build-only
 
 # 특정 개별 서비스 단위 컨테이너 롤아웃 재배포
 ./scripts/deploy/compose-redeploy-service.sh hololive-api

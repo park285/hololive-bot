@@ -16,6 +16,7 @@
 ## 운영 원칙
 
 - 프로덕션 배포 진입점은 `./build-all.sh --no-bump` 또는 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
+- 인자 없는 `./build-all.sh`는 live deploy로 해석되므로 거부됩니다. 프로덕션은 반드시 clean tree에서 `--no-bump`를 사용하며, local/dev image build는 `./build-all.sh --build-only` 또는 `./build-all.sh <service>`를 사용합니다.
 - 직접 Compose 명령이 필요하면 raw `docker compose` 대신 `./scripts/deploy/compose.sh`를 사용합니다. 이 wrapper는 OpenBao env preflight와 shell shadowing 차단을 먼저 수행합니다.
 - OpenBao env 전환 후 운영 호스트의 local `.env` 파일과 shell profile export 잔재는 [OpenBao Env Cleanup Runbook](./OPENBAO_ENV_CLEANUP_RUNBOOK.md) 기준으로 정리합니다.
 - 상태/장애 1차 확인은 `./scripts/deploy/compose.sh -f docker-compose.prod.yml ps`, `./scripts/deploy/compose.sh ... logs`, `/health`, `/ready` 기준으로 수행합니다.

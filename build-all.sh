@@ -2,11 +2,10 @@
 # Build, validate and optionally deploy the production three-runtime topology.
 #
 # Usage:
-#   ./build-all.sh
-#   ./build-all.sh --no-bump
+#   ./build-all.sh --no-bump            # production build + deploy
 #   ./build-all.sh --build-only
-#   ./build-all.sh --remote-cache
-#   ./build-all.sh --skip-local-ci
+#   ./build-all.sh --no-bump --remote-cache
+#   ./build-all.sh --build-only --skip-local-ci
 #   ./build-all.sh hololive-api
 #   ./build-all.sh alarm-worker
 
@@ -22,6 +21,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${REPO_ROOT}/scripts/deploy/lib/removed-runtimes.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/health-gate.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/postgres-capacity.sh"
+. "${REPO_ROOT}/scripts/deploy/lib/source-revision.sh"
 
 resolve_workspace_path() {
     local explicit_value="$1"
@@ -59,12 +59,92 @@ read_version() {
     fi
 }
 
+verify_built_revision() {
+    local service="$1"
+    local image_ref=""
+
+    image_ref="$(deploy_service_image_ref "${service}")"
+    deploy_verify_object_revision "${CONTAINER_CLI}" image "${image_ref}" "${REVISION}"
+    echo "[VERIFY] ${service} built image revision=${REVISION}"
+}
+
+verify_live_revision() {
+    local service="$1"
+    local container_id=""
+
+    container_id="$(deploy_require_single_identifier \
+        "live container for ${service}" \
+        "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" \
+        "${COMPOSE_FILES[@]}" ps -q "${service}")"
+    deploy_verify_object_revision "${CONTAINER_CLI}" container "${container_id}" "${REVISION}"
+    echo "[VERIFY] ${service} live image revision=${REVISION}"
+}
+
+verify_build_services() {
+    local service=""
+
+    for service in "${BUILD_REVISION_SERVICES[@]}"; do
+        verify_built_revision "${service}"
+    done
+}
+
 usage() {
     sed -n '1,12p' "$0"
     echo
     echo "Build targets:"
     compose_service_build_targets_text | sed 's/^/  /'
 }
+
+NO_BUMP=false
+BUILD_ONLY=false
+REMOTE_CACHE=false
+SKIP_LOCAL_CI=false
+TARGET_SERVICES=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-bump)
+            NO_BUMP=true
+            ;;
+        --build-only)
+            BUILD_ONLY=true
+            ;;
+        --remote-cache)
+            REMOTE_CACHE=true
+            ;;
+        --skip-local-ci)
+            SKIP_LOCAL_CI=true
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        --*)
+            echo "[ERROR] Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            if ! service="$(compose_service_resolve_build_target "$1")"; then
+                echo "[ERROR] Unknown build target: $1" >&2
+                usage >&2
+                exit 1
+            fi
+            TARGET_SERVICES+=("${service}")
+            ;;
+    esac
+    shift
+done
+
+LIVE_DEPLOY_MODE=false
+if [[ "${BUILD_ONLY}" == false && ${#TARGET_SERVICES[@]} -eq 0 ]]; then
+    LIVE_DEPLOY_MODE=true
+fi
+if [[ "${LIVE_DEPLOY_MODE}" == true && "${NO_BUMP}" == false ]]; then
+    echo "[ERROR] Live deployment requires --no-bump so VERSION and source revision remain immutable" >&2
+    echo "        Use --build-only or a service target for local/dev image builds." >&2
+    usage >&2
+    exit 2
+fi
 
 SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
     "${SHARED_GO_WORKSPACE_PATH:-}" \
@@ -109,46 +189,6 @@ declare -A VERSION_DIR_BY_SERVICE=(
     [hololive-api]="hololive/hololive-api"
     [hololive-alarm-worker]="hololive/hololive-alarm-worker"
 )
-
-NO_BUMP=false
-BUILD_ONLY=false
-REMOTE_CACHE=false
-SKIP_LOCAL_CI=false
-TARGET_SERVICES=()
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --no-bump)
-            NO_BUMP=true
-            ;;
-        --build-only)
-            BUILD_ONLY=true
-            ;;
-        --remote-cache)
-            REMOTE_CACHE=true
-            ;;
-        --skip-local-ci)
-            SKIP_LOCAL_CI=true
-            ;;
-        --help|-h)
-            usage
-            exit 0
-            ;;
-        --*)
-            echo "[ERROR] Unknown option: $1" >&2
-            exit 1
-            ;;
-        *)
-            if ! service="$(compose_service_resolve_build_target "$1")"; then
-                echo "[ERROR] Unknown build target: $1" >&2
-                usage >&2
-                exit 1
-            fi
-            TARGET_SERVICES+=("${service}")
-            ;;
-    esac
-    shift
-done
 
 COMPOSE_FILE_PATHS=(deploy/compose/docker-compose.prod.yml)
 COMPOSE_FILES=(-f deploy/compose/docker-compose.prod.yml)
@@ -257,7 +297,17 @@ fi
 
 HOLO_API_VERSION="$(read_version hololive/hololive-api dev)"
 HOLO_ALARM_WORKER_VERSION="$(read_version hololive/hololive-alarm-worker "${HOLO_API_VERSION}")"
-export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION
+REVISION=unknown
+if [[ "${LIVE_DEPLOY_MODE}" == true ]]; then
+    REVISION="$(deploy_source_revision "${REPO_ROOT}")"
+fi
+export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION REVISION
+
+if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
+    BUILD_REVISION_SERVICES=("${TARGET_SERVICES[@]}")
+else
+    BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker admin-dashboard)
+fi
 
 validate_runtime_config_for_deploy
 
@@ -266,6 +316,7 @@ echo "[INFO] COMPOSE_MODE=${COMPOSE_MODE}"
 echo "[INFO] REMOTE_CACHE=${REMOTE_CACHE}"
 echo "[INFO] HOLO_API_VERSION=${HOLO_API_VERSION}"
 echo "[INFO] HOLO_ALARM_WORKER_VERSION=${HOLO_ALARM_WORKER_VERSION}"
+echo "[INFO] REVISION=${REVISION}"
 echo "[INFO] SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
 echo "[INFO] IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
 echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
@@ -285,6 +336,7 @@ else
 
     echo "[BUILD] All active buildable services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build
+    verify_build_services
 
     echo "[CUTOVER] Replacing retired runtimes with the three-runtime topology"
     COMPOSE_FILE_ARGS=("${COMPOSE_FILES[@]}")
@@ -303,6 +355,9 @@ else
         echo "[ERROR] health gate failed after cutover up" >&2
         exit 1
     fi
+    verify_live_revision hololive-api
+    verify_live_revision hololive-alarm-worker
+    verify_live_revision admin-dashboard
     echo "[DONE] Build and deployment complete"
 fi
 

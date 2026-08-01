@@ -8,6 +8,7 @@ FILES_FROM="${FILES_FROM:-$REPO_ROOT/scripts/deploy/ap-rsync-files.txt}"
 EXCLUDES="${EXCLUDES:-$REPO_ROOT/scripts/deploy/ap-rsync-excludes.txt}"
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
+. "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
 
 AP_HOST_ARG="${1:-}"
 MODE="${2:---dry-run}"
@@ -136,6 +137,9 @@ if [[ "$MODE" == "--dry-run" ]]; then
   exit 0
 fi
 
+REVISION="$(deploy_source_revision "$REPO_ROOT")"
+export REVISION
+
 services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"
 ports_list="${AP_PORTS[*]}"
@@ -194,13 +198,16 @@ change_started_at="$(
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
+built_revision=\$(docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' hololive-youtube-producer:prod)
+[[ \"\$built_revision\" == '$REVISION' ]]
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
 echo change_started_at='$change_started_at'"
 
 remote "set -euo pipefail
 since='$change_started_at'
+expected_revision='$REVISION'
 since_epoch=\$(date -u -d \"\$since\" +%s)
 for container in $containers_list; do
   for _ in \$(seq 1 30); do
@@ -213,6 +220,8 @@ for container in $containers_list; do
   started_at=\$(docker inspect -f '{{.State.StartedAt}}' \"\$container\")
   started_epoch=\$(date -u -d \"\$started_at\" +%s)
   [[ \"\$started_epoch\" -ge \"\$since_epoch\" ]]
+  actual_revision=\$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' \"\$container\")
+  [[ \"\$actual_revision\" == \"\$expected_revision\" ]]
 done
 ports=($ports_list)
 idx=0

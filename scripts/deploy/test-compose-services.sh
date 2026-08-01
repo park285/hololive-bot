@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
+literal_dollar='$'
 
 fail() {
     echo "[FAIL] $*" >&2
@@ -126,7 +127,8 @@ for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
         fail "${ap_script} must not require legacy monolithic env"
     fi
     grep -q 'ap_remote_bash' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} must pass remote arguments through ap_remote_bash"
-    if grep -q '\${AP_SSH\[@\]}' "${ROOT_DIR}/${ap_script}"; then
+    literal_ap_ssh_array="${literal_dollar}{AP_SSH[@]}"
+    if grep -Fq "${literal_ap_ssh_array}" "${ROOT_DIR}/${ap_script}"; then
         fail "${ap_script} must not build direct ssh remote command strings"
     fi
 done
@@ -136,6 +138,8 @@ grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HO
 pass "ap active-active deploy handles token-free prechange transition"
 bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh" \
     || fail "ap deploy propagates the validated Compose release version"
+bash "${ROOT_DIR}/scripts/deploy/source-revision-provenance_test.sh" \
+    || fail "image builds and cutovers preserve exact source revision provenance"
 for ap_runtime_script in scripts/deploy/ap-iris-h3-trust-preflight.sh scripts/deploy/ap-completion-check.sh; do
     grep -q 'AP_REQUIRED_UDP_BUFFER_BYTES' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} exposes AP_REQUIRED_UDP_BUFFER_BYTES"
     grep -q 'require-quic-udp-buffer.sh' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} delegates QUIC UDP buffer checks to require-quic-udp-buffer.sh"
