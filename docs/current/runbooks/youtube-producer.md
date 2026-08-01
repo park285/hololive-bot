@@ -212,10 +212,19 @@ Use `scripts/deploy/ap-host-native-deploy.sh`,
 `scripts/logs/ap-host-native-status.sh` for this runtime. Keep live `systemd`
 mutation behind explicit operator approval.
 
+```bash
+./scripts/deploy/ap-host-native-deploy.sh osaka --dry-run
+I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-host-native-deploy.sh osaka --apply
+
+./scripts/deploy/ap-host-native-deploy.sh osaka2 --dry-run
+I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-host-native-deploy.sh osaka2 --apply
+```
+
 Host-native AP invariants:
 - Build artifacts are produced on the central/build host, not on the 1GB AP host.
 - The AP host receives only the runtime artifact set: `bin/youtube-producer`,
-  `bin/healthcheck`, and `internal/domain/data`.
+  `bin/healthcheck`, `bin/youtube-producer-wrapper`, `internal/domain/data`, the
+  non-secret host env, and the systemd unit.
 - OpenBao Agent still renders the AP runtime contract under `/run/hololive-bot/`:
   `youtube-producer.env`, `ap-compose.env`, and the cert files listed in this
   runbook. Raw secrets stay out of repository files and command output.
@@ -324,6 +333,9 @@ Host-native deploy automation must add these gates before first live use:
 - Build or receive the artifact on a non-tiny host for the target architecture.
 - Rsync artifacts atomically into a timestamped release directory, then switch
   `current`.
+- Before replacing the installed host env or unit, copy both into the current
+  release's `rollback-contract/` and point `previous` at that complete rollback
+  point.
 - Validate rendered env key presence without printing values.
 - Run `systemd-analyze verify` for the unit.
 - Start or restart only the target AP unit.
@@ -350,9 +362,12 @@ journalctl -u hololive-youtube-producer@youtube-producer-d.service \
 ```
 
 Host-native rollback is release-symlink based: point `current` back to the
-previous artifact directory, restart the same unit, and rerun the verification
-above. If the failure is topology-level, stop the new tiny AP first and confirm
-the existing APs remain `mode=active-active`, `valkey_available=true`, and
+previous artifact directory, restore its `rollback-contract/` host env and unit,
+restart the same unit, and require the timestamped completion check above. The
+helper fails closed when the previous release or either contract file is absent;
+an intentional first-deploy decommission is a separate approved stop operation.
+If the failure is topology-level, stop the new tiny AP first and confirm the
+existing APs remain `mode=active-active`, `valkey_available=true`, and
 `scraping_paused=false`.
 
 ## Common failure modes
@@ -439,7 +454,7 @@ Mitigation:
 - 회복이 5분 이상 걸리면 메인 valkey-cache의 listen/auth와 Tailscale ACL, 호스트 방화벽을 먼저 확인. 그래도 막히면 producer-b(seoul)를 재시작.
 
 Rollback:
-- 기존 active-active rollback 절차(`./scripts/deploy/ap-rollback.sh <host>`)를 그대로 사용. recovery loop는 readiness 보조 경로이므로 별도 롤백 대상이 아닙니다.
+- 해당 runtime의 기존 active-active rollback 절차(Osaka/Osaka2는 `ap-host-native-rollback.sh`, Seoul은 `ap-rollback.sh`)를 그대로 사용합니다. recovery loop는 readiness 보조 경로이므로 별도 롤백 대상이 아닙니다.
 
 ### 5. Outbox backlog grows
 
@@ -474,16 +489,19 @@ AP_SMOKE_EXTERNAL=true ./scripts/logs/ap-smoke.sh <host>
 ## Rollback
 
 - Use `docs/current/runbooks/rollback.md`.
-- Redeploy the previous `youtube-producer` image/config.
+- Restore the previous `youtube-producer` runtime artifact/config with the runtime-specific helper.
 - Scale down `youtube-producer-b` (seoul) first, confirm `youtube-producer-c` (main) remains healthy, then redeploy the previous image/config.
 - Confirm `YOUTUBE_INGESTION_ENABLED=true`, active `/ready`, health on port `30015`, and outbox/photo sync state after rollback.
-- The deploy wrapper stores overwritten files and prechange container inventory under `backups/<host>-active-active-<timestamp>/` on that AP host; use that evidence to restore the previous `deploy/compose/docker-compose.prod.yml` and that host's compose override if active-active startup fails.
-- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore a pre-cutover `deploy/compose/docker-compose.osaka.yml` that defines `youtube-producer-b` — recover it from git history before the compose-directory refactor (`git show 7558024f^:docker-compose.osaka.yml`) or from the 2026-06-04 cutover backup (`backups/osaka-active-active-20260604T102113Z/`); prechange backups taken by deploys *after* the cutover no longer define `youtube-producer-b` — then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. `ap-rollback.sh osaka` alone restores files but only recreates the services listed in `ap-hosts/osaka.conf` (Osaka AP는 host-native `systemd` 런타임(`AP_RUNTIME_MODE=native`)으로 가동 중이고, compose 경로의 `docker-compose.osaka.yml`은 계약 검증·rollback 대비용으로 보존).
+- The Seoul Compose deploy wrapper stores overwritten files and prechange container inventory under `backups/seoul-active-active-<timestamp>/`; use that evidence to restore the previous `deploy/compose/docker-compose.prod.yml` and Seoul override if active-active startup fails. Osaka/Osaka2 use the native release `previous` + `rollback-contract/` point instead.
+- Topology-level rollback to the pre-2026-06-04 Osaka `a`+`b` layout is manual: stop `youtube-producer-b` on seoul, restore a pre-cutover `deploy/compose/docker-compose.osaka.yml` that defines `youtube-producer-b` — recover it from git history before the compose-directory refactor (`git show 7558024f^:docker-compose.osaka.yml`) or from the 2026-06-04 cutover backup (`backups/osaka-active-active-20260604T102113Z/`); prechange backups taken by deploys *after* the cutover no longer define `youtube-producer-b` — then start it on osaka with an explicit `up -d --no-deps youtube-producer-b`. This historical Compose topology recovery is separate from current host-native release rollback; `ap-rollback.sh` rejects Osaka and Osaka2.
 - Dry-run the rollback helper before applying (per-host approval env var):
 
 ```bash
-BACKUP_DIR=backups/osaka-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh osaka --dry-run
-I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK=true BACKUP_DIR=backups/osaka-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh osaka --apply
+./scripts/deploy/ap-host-native-rollback.sh osaka --dry-run
+I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK=true ./scripts/deploy/ap-host-native-rollback.sh osaka --apply
+
+./scripts/deploy/ap-host-native-rollback.sh osaka2 --dry-run
+I_APPROVE_OSAKA2_ACTIVE_ACTIVE_ROLLBACK=true ./scripts/deploy/ap-host-native-rollback.sh osaka2 --apply
 
 BACKUP_DIR=backups/seoul-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh seoul --dry-run
 I_APPROVE_SEOUL_ACTIVE_ACTIVE_ROLLBACK=true BACKUP_DIR=backups/seoul-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh seoul --apply

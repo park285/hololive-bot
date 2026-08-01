@@ -22,11 +22,14 @@ esac
 
 ap_host_load "$REPO_ROOT" "$AP_HOST_ARG"
 
-HOLO_API_VERSION=""
-if [[ "$AP_RUNTIME_MODE" == "compose" ]]; then
-  . "$REPO_ROOT/scripts/deploy/lib/ap-compose-version.sh"
-  HOLO_API_VERSION="$(ap_compose_release_version "$REPO_ROOT")"
+if [[ "$AP_RUNTIME_MODE" != "compose" ]]; then
+  echo "Refusing Compose AP deploy for $AP_NAME (runtime=$AP_RUNTIME_MODE); use ./scripts/deploy/ap-host-native-deploy.sh $AP_NAME" >&2
+  exit 2
 fi
+
+HOLO_API_VERSION=""
+. "$REPO_ROOT/scripts/deploy/lib/ap-compose-version.sh"
+HOLO_API_VERSION="$(ap_compose_release_version "$REPO_ROOT")"
 
 cd "$REPO_ROOT"
 

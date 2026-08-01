@@ -36,6 +36,21 @@ expect_fail() {
     pass "${label}"
 }
 
+expect_fail_contains() {
+    local label="$1"
+    local expected="$2"
+    shift 2
+
+    if "$@" >/tmp/compose-services-test.out 2>/tmp/compose-services-test.err; then
+        cat /tmp/compose-services-test.out
+        cat /tmp/compose-services-test.err >&2
+        fail "${label}: expected failure"
+    fi
+    grep -Fq "${expected}" /tmp/compose-services-test.err \
+        || fail "${label}: missing error '${expected}'"
+    pass "${label}"
+}
+
 expect_eq "$(compose_service_resolve_build_target hololive-api)" "hololive-api" "build target hololive-api"
 expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm-worker" "build alias alarm-worker"
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
@@ -186,12 +201,34 @@ if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_
 fi
 pass "ap active-active files list excludes forbidden deployment scope"
 
-expect_fail "osaka active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka --apply
-expect_fail "osaka2 active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka2 --apply
+expect_fail_contains "osaka Compose deploy rejects native runtime" \
+    "use ./scripts/deploy/ap-host-native-deploy.sh osaka" \
+    "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka --dry-run
+expect_fail_contains "osaka2 Compose deploy rejects native runtime" \
+    "use ./scripts/deploy/ap-host-native-deploy.sh osaka2" \
+    "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" osaka2 --dry-run
 expect_fail "seoul active-active apply requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" seoul --apply
-expect_fail "osaka active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka --apply
-expect_fail "osaka2 active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka2 --apply
+expect_fail_contains "osaka Compose rollback rejects native runtime" \
+    "use ./scripts/deploy/ap-host-native-rollback.sh osaka" \
+    "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka --dry-run
+expect_fail_contains "osaka2 Compose rollback rejects native runtime" \
+    "use ./scripts/deploy/ap-host-native-rollback.sh osaka2" \
+    "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" osaka2 --dry-run
+expect_fail_contains "Seoul native deploy rejects Compose runtime" \
+    "use ./scripts/deploy/ap-deploy.sh seoul" \
+    "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh" seoul --dry-run
+expect_fail_contains "Seoul native rollback rejects Compose runtime" \
+    "use ./scripts/deploy/ap-rollback.sh seoul" \
+    "${ROOT_DIR}/scripts/deploy/ap-host-native-rollback.sh" seoul --dry-run
 expect_fail "seoul active-active rollback requires explicit env approval" "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --apply
+
+if rg -n 'ap-(deploy|rollback)\.sh (osaka|osaka2)' \
+    "${ROOT_DIR}/docs/current" \
+    "${ROOT_DIR}/docs/runbook_execution" \
+    "${ROOT_DIR}/scripts/README.md"; then
+    fail "current operator docs must route Osaka and Osaka2 through host-native helpers"
+fi
+pass "current operator docs route Osaka and Osaka2 through host-native helpers"
 
 rollback_fixture_root="$(mktemp -d)"
 trap 'rm -rf "${rollback_fixture_root}"; rm -f "${SSH_KEY}"' EXIT

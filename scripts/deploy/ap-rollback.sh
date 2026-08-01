@@ -19,6 +19,11 @@ esac
 
 ap_host_load "$REPO_ROOT" "$AP_HOST_ARG"
 
+if [[ "$AP_RUNTIME_MODE" != "compose" ]]; then
+  echo "Refusing Compose AP rollback for $AP_NAME (runtime=$AP_RUNTIME_MODE); use ./scripts/deploy/ap-host-native-rollback.sh $AP_NAME" >&2
+  exit 2
+fi
+
 if [[ "$MODE" == "--apply" && "${!AP_APPROVE_ROLLBACK_VAR:-}" != "true" ]]; then
   echo "Refusing rollback without $AP_APPROVE_ROLLBACK_VAR=true" >&2
   exit 2

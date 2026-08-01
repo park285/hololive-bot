@@ -104,7 +104,7 @@ SINCE=15m TAIL=600 PATTERN='ingestion_lease|outbox|ERR|WRN' ./scripts/logs/ap-lo
 docker logs --tail 300 hololive-youtube-producer-c
 ```
 
-복구는 해당 호스트만 재배포합니다 — 원격 AP는 `./scripts/deploy/ap-deploy.sh <host>`, main은 `COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c`.
+복구는 해당 호스트만 재배포합니다. Osaka/Osaka2는 `./scripts/deploy/ap-host-native-deploy.sh <host>`, Seoul은 `./scripts/deploy/ap-deploy.sh seoul`, main은 `COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c`를 사용합니다.
 
 ### B. 분산 limiter 과차단 의심
 
@@ -132,14 +132,17 @@ SINCE=15m TAIL=600 PATTERN='ingestion_lease' ./scripts/logs/ap-logs.sh seoul you
 docker logs --since 15m hololive-youtube-producer-c 2>&1 | grep "ingestion_lease"
 ```
 
-원격 AP rollback — prechange 백업 기반 helper를 사용합니다 (host: `osaka`/`seoul`):
+원격 AP rollback — Osaka/Osaka2는 complete native release rollback point, Seoul은 prechange Compose backup을 사용합니다:
 
 ```bash
-BACKUP_DIR=backups/osaka-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh osaka --dry-run
-I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK=true BACKUP_DIR=backups/osaka-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh osaka --apply
+./scripts/deploy/ap-host-native-rollback.sh osaka --dry-run
+I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK=true ./scripts/deploy/ap-host-native-rollback.sh osaka --apply
 
 BACKUP_DIR=backups/seoul-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh seoul --dry-run
 I_APPROVE_SEOUL_ACTIVE_ACTIVE_ROLLBACK=true BACKUP_DIR=backups/seoul-active-active-<timestamp> ./scripts/deploy/ap-rollback.sh seoul --apply
+
+./scripts/deploy/ap-host-native-rollback.sh osaka2 --dry-run
+I_APPROVE_OSAKA2_ACTIVE_ACTIVE_ROLLBACK=true ./scripts/deploy/ap-host-native-rollback.sh osaka2 --apply
 ```
 
 rollback도 한 번에 한 호스트만 수행합니다. 토폴로지/순서 기준은 `docs/current/runbooks/youtube-producer.md`의 Rollback 섹션을 따릅니다. `youtube-producer`는 outbox row producer이므로 승인된 active-active guard 없이 여러 호스트에 동시 기동하지 않습니다.

@@ -36,7 +36,7 @@ expect_failure "invalid runtime VERSION must fail closed" ap_compose_release_ver
 deploy_script="$ROOT_DIR/scripts/deploy/ap-deploy.sh"
 [[ "$(grep -Fc "sudo -n env HOLO_API_VERSION='\$HOLO_API_VERSION'" "$deploy_script")" -eq 4 ]] \
   || fail "every remote sudo Compose config/build/up invocation must propagate HOLO_API_VERSION"
-grep -Fq "if [[ \"\$AP_RUNTIME_MODE\" == \"compose\" ]]; then" "$deploy_script" \
-  || fail "release version resolution must remain scoped to Compose AP hosts"
+grep -Fq "if [[ \"\$AP_RUNTIME_MODE\" != \"compose\" ]]; then" "$deploy_script" \
+  || fail "Compose AP deploy must reject non-Compose hosts before resolving the release version"
 
 echo "all AP Compose release version checks passed"

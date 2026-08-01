@@ -17,6 +17,11 @@ esac
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
+if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
+  echo "Refusing host-native AP deploy for $AP_NAME (runtime=$AP_RUNTIME_MODE); use ./scripts/deploy/ap-deploy.sh $AP_NAME" >&2
+  exit 2
+fi
+
 if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
   echo "AP_REQUIRED_UDP_BUFFER_BYTES must be an integer" >&2
   exit 2
@@ -201,6 +206,8 @@ payload="$HOME/$payload_name"
 release_dir="/opt/hololive-bot/youtube-producer/releases/$release_id"
 current_link="/opt/hololive-bot/youtube-producer/current"
 previous_link="/opt/hololive-bot/youtube-producer/previous"
+host_env="/etc/hololive-bot/youtube-producer-host.env"
+unit_file="/etc/systemd/system/hololive-youtube-producer@.service"
 unit="hololive-youtube-producer@${service}.service"
 swapfile="/swapfile"
 
@@ -266,23 +273,37 @@ sudo -n tee /etc/sysctl.d/99-hololive-swap.conf >/dev/null <<'SYSCTL'
 vm.swappiness = 10
 SYSCTL
 sudo -n sysctl -w vm.swappiness=10 >/dev/null
+
+old_target=""
+if [[ -L "$current_link" ]]; then
+  old_target="$(readlink -f "$current_link" || true)"
+  if [[ -n "$old_target" && "$old_target" == "$release_dir" ]]; then
+    echo "refusing to overwrite the active release: $release_dir" >&2
+    exit 1
+  fi
+fi
+
 sudo -n rm -rf "$release_dir"
 sudo -n mkdir -p "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
 sudo -n chown -R root:root "$release_dir"
 sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-producer" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-producer-wrapper"
-sudo -n install -m 0640 -o root -g root "$payload/youtube-producer-host.env" /etc/hololive-bot/youtube-producer-host.env
-sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-producer@.service" /etc/systemd/system/hololive-youtube-producer@.service
 
-if [[ -L "$current_link" ]]; then
-  old_target="$(readlink -f "$current_link" || true)"
-  if [[ -n "$old_target" && -d "$old_target" ]]; then
-    sudo -n ln -sfn "$old_target" "$previous_link"
-  fi
+if [[ -n "$old_target" && -d "$old_target" ]]; then
+  sudo -n test -r "$host_env"
+  sudo -n test -r "$unit_file"
+  rollback_contract_dir="$old_target/rollback-contract"
+  sudo -n install -d -m 0755 -o root -g root "$rollback_contract_dir"
+  sudo -n install -m 0640 -o root -g root "$host_env" "$rollback_contract_dir/youtube-producer-host.env"
+  sudo -n install -m 0644 -o root -g root "$unit_file" "$rollback_contract_dir/hololive-youtube-producer@.service"
+  sudo -n ln -sfn "$old_target" "$previous_link"
 fi
+
+sudo -n install -m 0640 -o root -g root "$payload/youtube-producer-host.env" "$host_env"
+sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-producer@.service" "$unit_file"
 sudo -n ln -sfn "$release_dir" "$current_link"
 
-sudo -n systemd-analyze verify /etc/systemd/system/hololive-youtube-producer@.service
+sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload
 sudo -n systemctl enable --now "$unit"
 sudo -n systemctl restart "$unit"

@@ -65,22 +65,22 @@ split-host 구성에서는 producer AP runtime만 원격 호스트에서 실행�
 - env 정본은 OpenBao KV입니다. 중앙 Valkey는 Tailscale IP에 publish되므로 password 없이 운영하지 않습니다.
 - 중앙 host의 `./scripts/deploy/compose-redeploy-service.sh youtube-producer`는 기본적으로 차단됩니다. 원격 AP overlay 또는 명시적 emergency override 없이 중앙에서 재기동하지 않습니다.
 
-원격 AP 재배포 진입점은 host 파라미터화된 wrapper입니다. rsync/build/recreate/검증 절차는 `docs/current/runbooks/youtube-producer.md`의 Remote AP rollout 섹션을 따릅니다.
+원격 AP 재배포 진입점은 runtime별 host 파라미터화 wrapper입니다. Osaka와 Osaka2는 host-native helper, Seoul은 Compose helper를 사용합니다. rsync/build/recreate/검증 절차는 `docs/current/runbooks/youtube-producer.md`의 Remote AP rollout 섹션을 따릅니다.
 
 ```bash
-./scripts/deploy/ap-deploy.sh osaka --dry-run
-I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh osaka --apply
+./scripts/deploy/ap-host-native-deploy.sh osaka --dry-run
+I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-host-native-deploy.sh osaka --apply
 
 ./scripts/deploy/ap-deploy.sh seoul --dry-run
 I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh seoul --apply
+
+./scripts/deploy/ap-host-native-deploy.sh osaka2 --dry-run
+I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-host-native-deploy.sh osaka2 --apply
 ```
 
-수동 service start가 필요하면 원격 AP에서 local infra dependency를 만들지 않도록 `--no-deps`를 붙입니다.
+수동 Compose service start가 필요하면 Seoul에서 local infra dependency를 만들지 않도록 `--no-deps`를 붙입니다. Osaka와 Osaka2의 systemd mutation은 host-native helper로만 수행합니다.
 
 ```bash
-SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/<ssh-key> -o IdentitiesOnly=yes ubuntu@<osaka-a-host>'
-$SSH_OSAKA 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps --remove-orphans youtube-producer-a'
-
 SSH_SEOUL='ssh -i /home/kapu/gemini/hololive-bot/<ssh-key> -o IdentitiesOnly=yes -o HostKeyAlias=<tailnet-seoul-b> ubuntu@<tailnet-seoul-b>'
 $SSH_SEOUL 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.seoul.yml up -d --no-deps --remove-orphans youtube-producer-b'
 ```
@@ -173,7 +173,7 @@ COMPOSE_ENV_FILE=./.env.local ./build-all.sh --no-bump --build-only --skip-local
 COMPOSE_FILE=docker-compose.prod.yml:docker-compose.main-ap.yml COMPOSE_PROFILES=main-ap ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
-base `youtube-producer`의 중앙 재배포는 guard로 차단됩니다. 원격 AP(`youtube-producer-a`/`youtube-producer-b`)는 `./scripts/deploy/ap-deploy.sh <host>`로 재배포합니다.
+base `youtube-producer`의 중앙 재배포는 guard로 차단됩니다. Osaka `youtube-producer-a`와 Osaka2 `youtube-producer-d`는 `./scripts/deploy/ap-host-native-deploy.sh <host>`, Seoul `youtube-producer-b`는 `./scripts/deploy/ap-deploy.sh seoul`로 재배포합니다.
 
 통합 런타임 plane 역할 (`hololive-api` 단일 프로세스):
 
