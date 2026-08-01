@@ -22,6 +22,7 @@ package producerruntime
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/panicguard"
@@ -30,13 +31,13 @@ import (
 
 func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, errCh chan<- error) {
 	if r.ConfigSubscriber != nil {
-		panicguard.Go(r.Logger, "youtube-producer-config-subscriber", func() {
+		r.startBackgroundService("youtube-producer-config-subscriber", func() {
 			r.ConfigSubscriber.Run(ctx)
 		})
 		r.Logger.Info("Config subscriber started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.ingestionLease != nil {
-		panicguard.Go(r.Logger, "youtube-producer-ingestion-lease", func() {
+		r.startBackgroundService("youtube-producer-ingestion-lease", func() {
 			r.ingestionLease.StartRenewLoop(ctx, errCh)
 		})
 	}
@@ -44,24 +45,39 @@ func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, er
 		r.ScraperScheduler.Start(ctx)
 		r.Logger.Info("Scraper scheduler started", slog.String("runtime", r.runtimeName()))
 	}
+	if r.runActiveActiveRecovery != nil {
+		r.startBackgroundService("youtube-producer-readiness-recovery-owner", func() {
+			r.runActiveActiveRecovery(ctx)
+		})
+	}
 	if r.PollTargetRefresher != nil {
-		panicguard.Go(r.Logger, "youtube-producer-poll-target-refresh", func() {
+		r.startBackgroundService("youtube-producer-poll-target-refresh", func() {
 			r.PollTargetRefresher.Start(ctx)
 		})
 		r.Logger.Info("YouTube poll target refresher started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.PhotoSync != nil {
-		panicguard.Go(r.Logger, "youtube-producer-photo-sync", func() {
+		r.startBackgroundService("youtube-producer-photo-sync", func() {
 			r.PhotoSync.Start(ctx)
 		})
 		r.Logger.Info("Photo sync service started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.RetentionCleaner != nil {
-		panicguard.Go(r.Logger, "youtube-producer-retention-cleaner", func() {
+		r.startBackgroundService("youtube-producer-retention-cleaner", func() {
 			r.RetentionCleaner.Start(ctx)
 		})
 		r.Logger.Info("YouTube retention cleaner started", slog.String("runtime", r.runtimeName()))
 	}
+}
+
+func (r *YouTubeProducerRuntime) startBackgroundService(name string, run func()) {
+	r.backgroundWG.Add(1)
+	r.activeBackgrounds.Add(1)
+	panicguard.Go(r.Logger, name, func() {
+		defer r.backgroundWG.Done()
+		defer r.activeBackgrounds.Add(-1)
+		run()
+	})
 }
 
 func (r *YouTubeProducerRuntime) startHTTPServer(errCh chan<- error) {
@@ -75,17 +91,38 @@ func (r *YouTubeProducerRuntime) startHTTPServer(errCh chan<- error) {
 	)
 }
 
-func (r *YouTubeProducerRuntime) shutdown(ctx context.Context) {
+func (r *YouTubeProducerRuntime) shutdown(ctx context.Context) error {
 	if r.Readiness != nil {
 		r.Readiness.MarkStopping("")
 	}
 
 	r.stopSchedulers()
 	r.shutdownHTTPServer(ctx)
+	if err := r.waitForBackgroundServices(ctx); err != nil {
+		return err
+	}
 	r.releaseIngestionLease(ctx)
 	sharedlog.Info(ctx, r.Logger, EventIngestionRuntimeStopped, "ingestion runtime stopped",
 		sharedlog.Runtime(r.runtimeName()),
 	)
+	return nil
+}
+
+func (r *YouTubeProducerRuntime) waitForBackgroundServices(ctx context.Context) error {
+	if r.activeBackgrounds.Load() == 0 {
+		return nil
+	}
+	done := make(chan struct{})
+	panicguard.Go(r.Logger, "youtube-producer-background-join", func() {
+		r.backgroundWG.Wait()
+		close(done)
+	})
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for runtime background services: %w", ctx.Err())
+	}
 }
 
 func (r *YouTubeProducerRuntime) stopSchedulers() {

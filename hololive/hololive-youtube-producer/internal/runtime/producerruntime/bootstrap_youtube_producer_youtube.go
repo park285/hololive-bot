@@ -32,9 +32,10 @@ type ingestionRuntimeYouTubeState struct {
 }
 
 type ingestionRuntimeYouTubeDependencies struct {
-	scraperScheduler    *scheduler.Scheduler
-	pollerRegistrations []providers.ChannelPollerRegistration
-	pollTargetRefresher *polltarget.Refresher
+	scraperScheduler        *scheduler.Scheduler
+	pollerRegistrations     []providers.ChannelPollerRegistration
+	pollTargetRefresher     *polltarget.Refresher
+	runActiveActiveRecovery func(context.Context)
 }
 
 func resolveIngestionRuntimeYouTubeState(
@@ -110,7 +111,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if err != nil {
 		return deps, err
 	}
-	startActiveActiveRecoveryLoopIfEnabled(ctx, appConfig, jobClaimer, readinessState, deps.scraperScheduler, logger)
+	deps.runActiveActiveRecovery = buildActiveActiveRecoveryLoop(appConfig, jobClaimer, readinessState, deps.scraperScheduler, logger)
 	deps.pollTargetRefresher = buildPollTargetRefresher(appConfig, infra, deps, state, logger)
 	return deps, nil
 }
@@ -194,21 +195,24 @@ func buildIngestionRuntimeGlobalBudgetWiring(
 	}, nil
 }
 
-func startActiveActiveRecoveryLoopIfEnabled(
-	ctx context.Context,
+func buildActiveActiveRecoveryLoop(
 	appConfig *settings.Config,
 	jobClaimer polling2.JobClaimer,
 	readinessState *readiness.State,
 	scraperScheduler *scheduler.Scheduler,
 	logger *slog.Logger,
-) {
+) func(context.Context) {
 	if !appConfig.Scraper.ActiveActive.Enabled {
-		return
+		return nil
 	}
-	_ = startRecoveryLoop(ctx, jobClaimer, readinessState, 5*time.Second, 60*time.Second, logger, func() {
-		scraperScheduler.NudgeAllJobs()
-		logger.Info("active_active_resumed_nudge")
-	})
+	return func(ctx context.Context) {
+		stop := startRecoveryLoop(ctx, jobClaimer, readinessState, 5*time.Second, 60*time.Second, logger, func() {
+			scraperScheduler.NudgeAllJobs()
+			logger.Info("active_active_resumed_nudge")
+		})
+		<-ctx.Done()
+		stop()
+	}
 }
 
 func buildIngestionRuntimeJobClaimer(

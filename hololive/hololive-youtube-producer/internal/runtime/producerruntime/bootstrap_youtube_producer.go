@@ -193,19 +193,20 @@ func newYouTubeProducerRuntime(
 	}
 
 	return &YouTubeProducerRuntime{
-		RuntimeName:         runtimeName,
-		Config:              appConfig,
-		Logger:              logger,
-		ScraperScheduler:    youtubeDeps.scraperScheduler,
-		PhotoSync:           buildRuntimePhotoSyncService(appConfig, features, infra, logger),
-		ConfigSubscriber:    configSubscriber,
-		PollTargetRefresher: youtubeDeps.pollTargetRefresher,
-		RetentionCleaner:    buildRetentionCleaner(infra, logger),
-		ServerAddr:          httpServers.Addr(),
-		HTTPServers:         httpServers,
-		Readiness:           readinessState,
-		ingestionLease:      youtubeState.ingestionLease,
-		Managed:             lifecycle.NewManaged(cleanup),
+		RuntimeName:             runtimeName,
+		Config:                  appConfig,
+		Logger:                  logger,
+		ScraperScheduler:        youtubeDeps.scraperScheduler,
+		PhotoSync:               buildRuntimePhotoSyncService(appConfig, features, infra, logger),
+		ConfigSubscriber:        configSubscriber,
+		PollTargetRefresher:     youtubeDeps.pollTargetRefresher,
+		RetentionCleaner:        buildRetentionCleaner(infra, logger),
+		ServerAddr:              httpServers.Addr(),
+		HTTPServers:             httpServers,
+		Readiness:               readinessState,
+		ingestionLease:          youtubeState.ingestionLease,
+		runActiveActiveRecovery: youtubeDeps.runActiveActiveRecovery,
+		Managed:                 lifecycle.NewManaged(cleanup),
 	}
 }
 

@@ -115,6 +115,7 @@ func (s *leasedPhotoSyncService) runOwned(ctx context.Context, claim *ingestionl
 	cancel()
 	if !s.waitForInnerStop(done) {
 		s.logShutdownTimeout(ctx)
+		<-done
 		return false
 	}
 

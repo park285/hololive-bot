@@ -143,9 +143,8 @@ func TestLeasedPhotoSyncServiceLeavesLeaseForTTLWhenInnerDoesNotStop(t *testing.
 
 	select {
 	case safeToContinue := <-runDone:
-		require.False(t, safeToContinue)
-	case <-time.After(time.Second):
-		t.Fatal("runOwned did not return after the shutdown timeout")
+		t.Fatalf("runOwned returned before the inner photo sync stopped: %v", safeToContinue)
+	case <-time.After(2 * service.shutdownTimeout):
 	}
 
 	contender := newPhotoSyncGuard(cacheService, "ap-b")
@@ -153,6 +152,14 @@ func TestLeasedPhotoSyncServiceLeavesLeaseForTTLWhenInnerDoesNotStop(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, polling.JobClaimPeerOwned, status.Result)
 	require.Nil(t, contenderClaim, "timed-out shutdown must not explicitly release the lease")
+
+	inner.stop()
+	select {
+	case safeToContinue := <-runDone:
+		require.False(t, safeToContinue)
+	case <-time.After(time.Second):
+		t.Fatal("runOwned did not finish after the inner photo sync stopped")
+	}
 }
 
 func testLeasedPhotoSyncService(

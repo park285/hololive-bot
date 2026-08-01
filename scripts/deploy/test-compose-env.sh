@@ -58,6 +58,7 @@ services:
       ALARM_DISPATCH_CONSUMER_MODE: ${ALARM_DISPATCH_CONSUMER_MODE:-pg}
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: ${YOUTUBE_PRODUCER_RUNTIME_ALLOWED:-false}
       NOTIFICATION_EGRESS_ROLE: ${NOTIFICATION_EGRESS_ROLE:-alarm-worker}
+      REVISION: ${REVISION:-unknown}
       SHARED_GO_WORKSPACE_PATH: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
 EOF
 
@@ -91,7 +92,7 @@ mapfile -t keys < <(compose_env_list_keys_from_file "$env_file")
 pass "env keys are listed"
 
 mapfile -t interpolation_keys < <(compose_env_list_interpolation_keys_from_files "$compose_file")
-[[ "${interpolation_keys[*]}" == "ALARM_DISPATCH_CONSUMER_MODE ALARM_DISPATCH_PUBLISH_MODE CACHE_PASSWORD DB_PASSWORD NOTIFICATION_EGRESS_ROLE SHARED_GO_WORKSPACE_PATH YOUTUBE_PRODUCER_RUNTIME_ALLOWED" ]] || fail "unexpected interpolation keys: ${interpolation_keys[*]}"
+[[ "${interpolation_keys[*]}" == "ALARM_DISPATCH_CONSUMER_MODE ALARM_DISPATCH_PUBLISH_MODE CACHE_PASSWORD DB_PASSWORD NOTIFICATION_EGRESS_ROLE REVISION SHARED_GO_WORKSPACE_PATH YOUTUBE_PRODUCER_RUNTIME_ALLOWED" ]] || fail "unexpected interpolation keys: ${interpolation_keys[*]}"
 pass "compose interpolation keys are listed"
 
 bad_export="$tmpdir/bad-export.env"
@@ -139,7 +140,8 @@ expect_fail env NOTIFICATION_EGRESS_ROLE=youtube-producer bash -c '. "$1"; compo
 pass "shell-only compose key fails"
 
 SHARED_GO_WORKSPACE_PATH=/tmp/shared compose_env_assert_no_shell_shadow_for_compose_files "$env_file" "$compose_file"
-pass "allowed shell control key passes"
+REVISION=0123456789abcdef0123456789abcdef01234567 compose_env_assert_no_shell_shadow_for_compose_files "$env_file" "$compose_file"
+pass "allowed shell control keys pass"
 
 COMPOSE_ENV_FILE="$env_file" expect_fail_with_stderr "Use COMPOSE_ENV_FILE" env CONTAINER_CLI=not-installed "${ROOT_DIR}/scripts/deploy/compose.sh" --env-file "$env_file" -f "$compose_file" config
 pass "compose wrapper rejects direct --env-file before CLI probing"

@@ -178,7 +178,7 @@ compose_env_is_allowed_shell_control_key() {
         SHARED_GO_WORKSPACE_PATH|IRIS_CLIENT_GO_WORKSPACE_PATH)
             return 0
             ;;
-        HOLO_API_VERSION|HOLO_ALARM_WORKER_VERSION)
+        HOLO_API_VERSION|HOLO_ALARM_WORKER_VERSION|REVISION)
             return 0
             ;;
         REMOTE_CACHE_PREFIX)

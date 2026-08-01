@@ -8,6 +8,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
 	"github.com/stretchr/testify/require"
@@ -113,6 +114,42 @@ func TestRecoveryLoopRespectsCancellation(t *testing.T) {
 	case <-done:
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("stop did not return promptly after context cancellation")
+	}
+}
+
+func TestActiveActiveRecoveryLoopStartsOnlyWithRuntimeContext(t *testing.T) {
+	state := readiness.New("youtube-producer", readiness.Features{ActiveActiveEnabled: true})
+	state.MarkRunning()
+	claimer := &recoveryLoopClaimer{
+		responses: []recoveryLoopClaimResponse{{
+			status: polling.JobClaimStatus{Result: polling.JobClaimUnavailable},
+			err:    fmt.Errorf("valkey unavailable"),
+		}},
+	}
+	start := buildActiveActiveRecoveryLoop(&settings.Config{
+		Scraper: settings.ScraperConfig{
+			ActiveActive: settings.ScraperActiveActiveConfig{Enabled: true},
+		},
+	}, claimer, state, nil, testLogger())
+	if start == nil {
+		t.Fatal("active-active recovery loop start = nil")
+	}
+	if got := claimer.calls.Load(); got != 0 {
+		t.Fatalf("claim calls during build = %d, want 0", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		start(ctx)
+		close(done)
+	}()
+	require.Eventually(t, func() bool { return claimer.calls.Load() > 0 }, time.Second, time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("active-active recovery loop did not join after runtime cancellation")
 	}
 }
 

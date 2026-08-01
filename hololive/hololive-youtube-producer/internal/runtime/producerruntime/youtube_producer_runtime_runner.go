@@ -25,6 +25,8 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
@@ -57,7 +59,10 @@ type YouTubeProducerRuntime struct {
 
 	Readiness *readiness.State
 
-	ingestionLease *ingestionlease.Lease
+	ingestionLease          *ingestionlease.Lease
+	runActiveActiveRecovery func(context.Context)
+	backgroundWG            sync.WaitGroup
+	activeBackgrounds       atomic.Int64
 	lifecycle.Managed
 }
 
@@ -70,6 +75,21 @@ func (r *YouTubeProducerRuntime) runtimeName() string {
 		return youtubeProducerRuntimeName
 	}
 	return name
+}
+
+func (r *YouTubeProducerRuntime) Close() {
+	if r == nil {
+		return
+	}
+	if active := r.activeBackgrounds.Load(); active != 0 {
+		if r.Logger != nil {
+			r.Logger.Error("Runtime dependency cleanup skipped while background services are active",
+				slog.Int64("active_background_services", active),
+			)
+		}
+		return
+	}
+	r.Managed.Close()
 }
 
 func (r *YouTubeProducerRuntime) Run() {
@@ -118,8 +138,7 @@ func (r *YouTubeProducerRuntime) handleRuntimeError(err error) {
 }
 
 func (r *YouTubeProducerRuntime) shutdownRuntime(ctx context.Context) error {
-	r.shutdown(ctx)
-	return nil
+	return r.shutdown(ctx)
 }
 
 func buildRetentionCleaner(infra *youtubeProducerInfrastructure, logger *slog.Logger) *retention.Cleaner {
