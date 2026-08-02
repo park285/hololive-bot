@@ -10,6 +10,8 @@ import (
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
+
+	"github.com/park285/shared-go/pkg/retry"
 )
 
 func startRecoveryLoop(
@@ -167,15 +169,7 @@ func sleepRecoveryLoop(ctx context.Context, duration time.Duration) bool {
 	if duration <= 0 {
 		duration = 5 * time.Second
 	}
-	// crosscutting:allow readiness lease 복구는 성공 시 초기화되는 상태 기반 backoff가 필요하다.
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
+	return retry.Sleep(ctx, duration)
 }
 
 func logRecoveryLoopInfo(logger *slog.Logger, message, pollerName string) {

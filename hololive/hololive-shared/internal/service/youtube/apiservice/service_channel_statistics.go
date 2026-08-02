@@ -24,12 +24,20 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/service/fallback"
 	ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
+	"github.com/park285/shared-go/pkg/json"
+)
+
+const (
+	channelStatsCacheKeyPrefix = "youtube:channel_stats:"
+	channelStatsCacheTTL       = 5 * time.Minute
 )
 
 type channelStatsScrapeResult struct {
@@ -43,18 +51,84 @@ func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []st
 		return make(map[string]*ytcontract.ChannelStats), nil
 	}
 
-	scrapeResult := ys.scrapeChannelStatistics(ctx, channelIDs)
-	if len(scrapeResult.stats) == 0 && len(scrapeResult.failedIDs) > 0 {
-		return nil, fmt.Errorf("get channel statistics: scraper failed for all %d channels", len(channelIDs))
+	stats, missing := ys.cachedChannelStatistics(ctx, channelIDs)
+	if len(missing) == 0 {
+		return stats, nil
 	}
 
-	ys.logger.Info("Channel statistics fetched (scraper)",
+	scrapeResult := ys.scrapeChannelStatistics(ctx, missing)
+	if len(stats) == 0 && len(scrapeResult.stats) == 0 && len(scrapeResult.failedIDs) > 0 {
+		return nil, fmt.Errorf("get channel statistics: scraper failed for all %d channels", len(missing))
+	}
+
+	ys.storeChannelStatistics(ctx, scrapeResult.stats)
+	maps.Copy(stats, scrapeResult.stats)
+
+	ys.logger.Debug("Channel statistics fetched (scraper)",
 		slog.Int("channels", len(channelIDs)),
-		slog.Int("results", len(scrapeResult.stats)),
+		slog.Int("results", len(stats)),
 		slog.Int("scraped", scrapeResult.scraped),
 		slog.Int("failed", len(scrapeResult.failedIDs)))
 
-	return scrapeResult.stats, nil
+	return stats, nil
+}
+
+func channelStatsCacheKey(channelID string) string {
+	return channelStatsCacheKeyPrefix + channelID
+}
+
+func (ys *serviceImpl) cachedChannelStatistics(ctx context.Context, channelIDs []string) (cached map[string]*ytcontract.ChannelStats, missingIDs []string) {
+	stats := make(map[string]*ytcontract.ChannelStats, len(channelIDs))
+	if ys.cache == nil {
+		return stats, slices.Clone(channelIDs)
+	}
+
+	missing := make([]string, 0, len(channelIDs))
+	for _, channelID := range channelIDs {
+		channelStats, ok := ys.cachedChannelStats(ctx, channelID)
+		if !ok {
+			missing = append(missing, channelID)
+			continue
+		}
+		stats[channelID] = channelStats
+	}
+
+	return stats, missing
+}
+
+func (ys *serviceImpl) cachedChannelStats(ctx context.Context, channelID string) (*ytcontract.ChannelStats, bool) {
+	raw, hit, err := ys.cache.GetString(ctx, channelStatsCacheKey(channelID))
+	if err != nil || !hit || raw == "" {
+		return nil, false
+	}
+
+	var stats ytcontract.ChannelStats
+	if err := json.Unmarshal([]byte(raw), &stats); err != nil {
+		ys.logger.Debug("Channel statistics cache decode failed",
+			slog.String("channel", channelID),
+			slog.Any("error", err))
+		return nil, false
+	}
+
+	return &stats, true
+}
+
+// 캐시 기록 실패는 다음 호출에서 재스크레이프로 복구되므로 응답을 막지 않는다.
+func (ys *serviceImpl) storeChannelStatistics(ctx context.Context, stats map[string]*ytcontract.ChannelStats) {
+	if ys.cache == nil || len(stats) == 0 {
+		return
+	}
+
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ytDefaults.CacheSaveTimeout)
+	defer cancel()
+
+	for channelID, channelStats := range stats {
+		if err := ys.cache.Set(saveCtx, channelStatsCacheKey(channelID), channelStats, channelStatsCacheTTL); err != nil {
+			ys.logger.Debug("Channel statistics cache write failed",
+				slog.String("channel", channelID),
+				slog.Any("error", err))
+		}
+	}
 }
 
 func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs []string) channelStatsScrapeResult {
@@ -83,7 +157,7 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 
 	result.failedIDs = primary.Failed
 	result.scraped = primary.Succeeded
-	ys.logger.Info("Scraper phase completed",
+	ys.logger.Debug("Scraper phase completed",
 		slog.Int("total", len(channelIDs)),
 		slog.Int("scraped", result.scraped),
 		slog.Int("failed", len(result.failedIDs)))
@@ -99,6 +173,9 @@ func (ys *serviceImpl) scrapeSingleChannelStatistics(ctx context.Context, channe
 }
 
 func (ys *serviceImpl) channelStatsFromScraped(channelID string, stats *parser.ChannelStats) (*ytcontract.ChannelStats, error) {
+	if stats == nil {
+		return nil, fmt.Errorf("scraper channel stats for %s: empty result", channelID)
+	}
 	subscriberCount, videoCount, viewCount, err := validatedScrapedChannelCounts(channelID, stats)
 	if err != nil {
 		return nil, err

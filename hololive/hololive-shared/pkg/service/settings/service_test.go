@@ -133,3 +133,61 @@ func TestSettingsService_RewritesHealedLegacyTargetMinutesOnReload(t *testing.T)
 		t.Fatalf("expected healed settings file, got %q", string(raw))
 	}
 }
+
+func TestSettingsService_UpdateLeavesNoTempFileBehind(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	service := NewSettingsService(path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	if err := service.Update(Settings{AlarmAdvanceMinutes: 7, ScraperProxyEnabled: true}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	for _, entry := range entries {
+		if entry.Name() != "settings.json" {
+			t.Fatalf("unexpected leftover file %q after Update()", entry.Name())
+		}
+	}
+
+	reloaded := NewSettingsService(path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if got := reloaded.Get(); got.AlarmAdvanceMinutes != 7 || !got.ScraperProxyEnabled {
+		t.Fatalf("reloaded settings = %+v, want AlarmAdvanceMinutes=7 ScraperProxyEnabled=true", got)
+	}
+}
+
+func TestSettingsService_UpdateFailsWithoutClobberingExistingFileWhenDirIsReadOnly(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory write permissions")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	service := NewSettingsService(path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	if err := service.Update(Settings{AlarmAdvanceMinutes: 9}); err != nil {
+		t.Fatalf("seed Update() error = %v", err)
+	}
+
+	// 디렉터리는 탐색에 x 비트가 필요해 0600 이하로 낮출 수 없다.
+	if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // G302: 쓰기 불가 디렉터리 재현용 모드
+		t.Fatalf("Chmod() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // G302: t.TempDir() 정리를 위한 모드 복구
+			t.Errorf("restore dir mode: %v", err)
+		}
+	})
+
+	if err := service.Update(Settings{AlarmAdvanceMinutes: 11}); err == nil {
+		t.Fatal("Update() error = nil, want failure on a read-only directory")
+	}
+
+	reloaded := NewSettingsService(path, Settings{AlarmAdvanceMinutes: 5}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if got := reloaded.Get().AlarmAdvanceMinutes; got != 9 {
+		t.Fatalf("persisted AlarmAdvanceMinutes = %d, want the pre-failure value 9", got)
+	}
+}

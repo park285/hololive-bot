@@ -78,7 +78,7 @@ func RunSecondary(ctx context.Context, plan SecondaryPlan) (SecondaryExecution, 
 func secondaryOutcome(result SecondaryResult) string {
 	switch {
 	case result.Successes == 0:
-		return "error"
+		return "noop"
 	case result.Items > 0:
 		return "hit"
 	default:

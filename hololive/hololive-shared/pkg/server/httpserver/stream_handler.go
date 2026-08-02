@@ -25,7 +25,7 @@ import (
 	stdErrors "errors"
 	"log/slog"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,47 +49,31 @@ const (
 
 	MemberIndexCacheTTL = 1 * time.Minute
 
+	MemberIndexRefreshTimeout = 30 * time.Second
+
 	DefaultChannelStatsCacheWorkers   = 4
 	DefaultChannelStatsRefreshWorkers = 1
 )
 
+// 저장 즉시 불변으로 취급하고 통째로 교체한다. 필드를 제자리 수정하면
+// 이미 반환된 스냅샷을 공유하는 호출자에게 data race가 발생한다.
 type memberIndexSnapshot struct {
 	channelIDs   []string
 	channelNames map[string]string
+	expiresAt    time.Time
 }
 
 type StreamState struct {
-	channelStatsCacheLimiter   chan struct{}
-	channelStatsRefreshLimiter chan struct{}
-	memberIndexMu              sync.RWMutex
-	memberIndexExpiresAt       time.Time
-	memberChannelIDs           []string
-	memberChannelName          map[string]string
-	memberIndexReady           bool
-	memberIndexBuildGroup      singleflight.Group
+	memberIndex           atomic.Pointer[memberIndexSnapshot]
+	memberIndexBuildGroup singleflight.Group
 }
 
-func NewStreamState(cacheWorkers, refreshWorkers int) *StreamState {
-	state := &StreamState{
-		memberChannelName: make(map[string]string),
-	}
-	if cacheWorkers > 0 {
-		state.channelStatsCacheLimiter = make(chan struct{}, cacheWorkers)
-	}
-	if refreshWorkers > 0 {
-		state.channelStatsRefreshLimiter = make(chan struct{}, refreshWorkers)
-	}
-	return state
+func NewStreamState(_, _ int) *StreamState {
+	return &StreamState{}
 }
 
 func (s *StreamState) InvalidateMemberIndex() {
-	s.memberIndexMu.Lock()
-	defer s.memberIndexMu.Unlock()
-
-	s.memberChannelIDs = nil
-	s.memberChannelName = make(map[string]string)
-	s.memberIndexExpiresAt = time.Time{}
-	s.memberIndexReady = false
+	s.memberIndex.Store(nil)
 }
 
 type StreamMemberRepository interface {

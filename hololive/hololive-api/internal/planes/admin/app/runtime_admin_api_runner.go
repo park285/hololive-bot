@@ -26,12 +26,12 @@ import (
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
-func (r *AdminAPIRuntime) Run() {
+func (r *AdminAPIRuntime) Run() error {
 	if r == nil {
-		return
+		return nil
 	}
 
-	applifecycle.Run(r.Logger, r.Start, r.Shutdown)
+	return applifecycle.Run(r.Logger, r.Start, r.Shutdown)
 }
 
 func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {

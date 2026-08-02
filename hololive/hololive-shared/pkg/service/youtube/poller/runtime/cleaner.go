@@ -28,7 +28,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -103,85 +103,40 @@ func (c *ViewerSampleCleaner) cleanupWithDedicatedConn(ctx context.Context) (int
 }
 
 func (c *ViewerSampleCleaner) cleanupLocked(ctx context.Context, db dbx.Querier) (int64, error) {
-	locked, err := acquireViewerSampleCleanupLock(ctx, db)
-	if err != nil {
-		return 0, err
-	}
-	if !locked {
-		return 0, nil
-	}
-	defer releaseViewerSampleCleanupLock(ctx, db)
-	return c.cleanupBatches(ctx, db)
-}
-
-func acquireViewerSampleCleanupLock(ctx context.Context, db dbx.Querier) (bool, error) {
-	var locked bool
-	if err := db.QueryRow(ctx, mustSQL("cleaner_0119_01.sql"), viewerSampleCleanupLockKey).Scan(&locked); err != nil {
-		return false, fmt.Errorf("acquire viewer sample cleanup lock: %w", err)
-	}
-	return locked, nil
-}
-
-func releaseViewerSampleCleanupLock(ctx context.Context, db dbx.Querier) {
-	// ctx가 취소돼도 세션 락은 반드시 해제돼야 한다. 안 하면 conn이 락을 쥔 채 pool로 반환된다.
-	if _, err := db.Exec(context.WithoutCancel(ctx), mustSQL("cleaner_0127_02.sql"), viewerSampleCleanupLockKey); err != nil {
-		slog.Warn("release viewer sample cleanup lock failed", "error", err)
-	}
+	var deleted int64
+	_, err := dbx.WithSessionAdvisoryLock(ctx, db, viewerSampleCleanupLockKey, func(lockedCtx context.Context) error {
+		var batchErr error
+		deleted, batchErr = c.cleanupBatches(lockedCtx, db)
+		return batchErr
+	})
+	return deleted, err
 }
 
 func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier) (int64, error) {
-	cutoff := time.Now().AddDate(0, 0, -c.config.RetentionDays)
-	batchSize := c.effectiveBatchSize()
+	spec := c.batchDeleteSpec(time.Now().AddDate(0, 0, -c.config.RetentionDays))
 
-	var totalRowsAffected int64
-	for {
-		rowsAffected, more, err := runViewerSampleCleanupBatch(ctx, db, cutoff, batchSize)
-		totalRowsAffected += rowsAffected
-		if err != nil {
-			return totalRowsAffected, err
-		}
-		if !more {
-			break
-		}
+	totalRowsAffected, err := dbx.DeleteInBatches(ctx, db, spec)
+	if err != nil {
+		return totalRowsAffected, fmt.Errorf("delete viewer sample batch: %w", err)
 	}
 
 	if totalRowsAffected > 0 {
 		slog.Info("Cleaned up old viewer samples",
 			"deleted", totalRowsAffected,
 			"retention_days", c.config.RetentionDays,
-			"batch_size", batchSize)
+			"batch_size", spec.BatchSize)
 	}
 
 	return totalRowsAffected, nil
 }
 
-func runViewerSampleCleanupBatch(ctx context.Context, db dbx.Querier, cutoff time.Time, batchSize int) (rowsAffected int64, more bool, err error) {
-	if err := ctx.Err(); err != nil {
-		return 0, false, err
+func (c *ViewerSampleCleaner) batchDeleteSpec(cutoff time.Time) dbx.BatchDeleteSpec {
+	return dbx.BatchDeleteSpec{
+		Query:     mustSQL("cleaner_0176_03.sql"),
+		Args:      []any{domain.LiveStatusEnded, cutoff},
+		BatchSize: c.effectiveBatchSize(),
+		Yield:     viewerSampleCleanupYield,
 	}
-	rowsAffected, err = deleteViewerSampleCleanupBatch(ctx, db, cutoff, batchSize)
-	if err != nil {
-		return 0, false, err
-	}
-	if rowsAffected < int64(batchSize) {
-		return rowsAffected, false, nil
-	}
-	if err := yieldViewerSampleCleanup(ctx); err != nil {
-		return rowsAffected, false, err
-	}
-	return rowsAffected, true, nil
-}
-
-func deleteViewerSampleCleanupBatch(ctx context.Context, db dbx.Querier, cutoff time.Time, batchSize int) (int64, error) {
-	tag, err := db.Exec(ctx, mustSQL("cleaner_0176_03.sql"),
-		domain.LiveStatusEnded,
-		cutoff,
-		batchSize,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return tag.RowsAffected(), nil
 }
 
 func (c *ViewerSampleCleaner) effectiveBatchSize() int {
@@ -189,15 +144,4 @@ func (c *ViewerSampleCleaner) effectiveBatchSize() int {
 		return c.config.BatchSize
 	}
 	return DefaultViewerSampleCleanerConfig().BatchSize
-}
-
-func yieldViewerSampleCleanup(ctx context.Context) error {
-	timer := time.NewTimer(viewerSampleCleanupYield)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }

@@ -90,9 +90,9 @@ func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, lo
 	return runtime, nil
 }
 
-func (r *Runtime) Run() {
+func (r *Runtime) Run() error {
 	if r == nil || r.group == nil {
-		return
+		return nil
 	}
 
 	err := sharedlifecycle.Run(sharedlifecycle.Options{
@@ -112,6 +112,7 @@ func (r *Runtime) Run() {
 	if err != nil {
 		r.Logger.Error("hololive-api shutdown completed with errors", slog.Any("error", err))
 	}
+	return err
 }
 
 // Close는 Run이 모든 listener와 background loop을 drain한 뒤 프로세스 자원을 해제한다.

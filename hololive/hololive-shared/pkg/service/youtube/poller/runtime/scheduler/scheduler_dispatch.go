@@ -119,6 +119,7 @@ func (s *Scheduler) nextDispatchDelay(workerChannelFull bool) time.Duration {
 func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer s.observeOldestDueAge()
 
 	now := time.Now()
 	for len(s.jobs) > 0 {
@@ -142,4 +143,13 @@ func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
 	}
 
 	return false
+}
+
+func (s *Scheduler) observeOldestDueAge() {
+	if len(s.jobs) == 0 {
+		s.metrics.ObserveSchedulerOldestDueAge(0)
+		return
+	}
+
+	s.metrics.ObserveSchedulerOldestDueAge(time.Since(s.jobs[0].NextRunAt))
 }

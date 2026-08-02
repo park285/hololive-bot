@@ -13,11 +13,9 @@ import (
 )
 
 func NewPprofServer(ctx context.Context, addr, apiKey string) *http.Server {
-	gin.SetMode(gin.ReleaseMode)
-
-	router := gin.New()
+	router := newReleaseModeEngine()
 	ApplyBaseMiddleware(router, ctx, nil, BaseMiddlewareOptions{
-		SkipLogPaths: []string{"/debug/pprof"},
+		SkipLogPaths: []string{"/debug/pprof*"},
 	})
 	group := router.Group("/debug/pprof")
 	group.Use(loopbackAwareAuthMiddleware(addr, apiKey))

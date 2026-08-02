@@ -29,6 +29,8 @@ import (
 	"github.com/georgysavva/scany/v2/pgxscan"
 )
 
+// 문자열 리터럴 안의 '?'와 jsonb 연산자 '?', '?|', '?&'까지 전부 $n으로 바꾼다.
+// 이 helper를 타는 SQL에는 placeholder 용도가 아닌 '?'를 넣으면 안 된다.
 func PostgresPlaceholders(query string) string {
 	var out strings.Builder
 	index := 1

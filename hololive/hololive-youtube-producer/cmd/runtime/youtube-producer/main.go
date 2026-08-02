@@ -24,7 +24,6 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
@@ -34,6 +33,8 @@ import (
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 var Version = "dev"
@@ -64,7 +65,7 @@ func main() {
 		StartupFields: func(appConfig *settings.Config) []any {
 			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
-		BuildTimeout:      time.Minute,
+		BuildTimeout:      constants.AppTimeout.Build,
 		BuildRuntime:      producerruntime.BuildYouTubeProducerRuntime,
 		BuildErrorMessage: "Failed to build youtube producer runtime",
 	}))

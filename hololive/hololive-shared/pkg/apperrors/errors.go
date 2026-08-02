@@ -123,7 +123,7 @@ func (e ValidationError) Error() string {
 	return fmt.Sprintf("validation error field=%s: %s", e.Field, e.Message)
 }
 
-func NewValidationError(message, field string, value any) *ValidationError {
+func NewValidationError(message, field string) *ValidationError {
 	return &ValidationError{
 		Field:   field,
 		Message: message,

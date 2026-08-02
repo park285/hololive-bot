@@ -14,6 +14,8 @@ import (
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/instanceid"
 )
 
 type JobIdentity struct {
@@ -97,7 +99,7 @@ func NewJobRunGuard(cacheClient cache.Client, config JobRunGuardConfig) *JobRunG
 	return &JobRunGuard{
 		cacheClient: cacheClient,
 		namespace:   normalizeJobRunGuardNamespace(config.Namespace),
-		instanceID:  normalizeJobRunGuardInstanceID(config.InstanceID),
+		instanceID:  instanceid.Normalize(config.InstanceID),
 	}
 }
 
@@ -356,17 +358,6 @@ func normalizeJobRunGuardNamespace(namespace string) string {
 	normalized = strings.ReplaceAll(normalized, ":", "-")
 	normalized = strings.ReplaceAll(normalized, " ", "-")
 	return normalized
-}
-
-func normalizeJobRunGuardInstanceID(instanceID string) string {
-	normalized := strings.TrimSpace(instanceID)
-	if normalized != "" {
-		return normalized
-	}
-	if hostname, err := os.Hostname(); err == nil && strings.TrimSpace(hostname) != "" {
-		return strings.TrimSpace(hostname)
-	}
-	return "unknown"
 }
 
 func shortHash(value string) string {

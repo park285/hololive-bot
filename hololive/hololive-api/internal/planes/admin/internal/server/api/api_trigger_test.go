@@ -67,7 +67,7 @@ func TestTriggerHandler_MemberNewsWeekly_NotInitialized(t *testing.T) {
 		nil,
 		slog.New(slog.DiscardHandler),
 	)
-	handler.RegisterInternalRoutes(router.Group(""))
+	handler.RegisterInternalRoutesWithoutAuth(router.Group(""))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	rec := httptest.NewRecorder()
@@ -89,7 +89,7 @@ func TestTriggerHandler_MemberNewsWeekly_Success(t *testing.T) {
 		&stubMemberNewsWeeklyScheduler{},
 		slog.New(slog.DiscardHandler),
 	)
-	handler.RegisterInternalRoutes(router.Group(""))
+	handler.RegisterInternalRoutesWithoutAuth(router.Group(""))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	rec := httptest.NewRecorder()

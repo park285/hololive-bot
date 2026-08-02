@@ -88,7 +88,7 @@ func TestParseHeartbeatReturnsBodyCloseError(t *testing.T) {
 	require.True(t, body.closed)
 }
 
-func TestParseHeartbeatPrefersReadErrorOverCloseError(t *testing.T) {
+func TestParseHeartbeatPreservesReadAndCloseErrors(t *testing.T) {
 	readErr := errors.New("read heartbeat body")
 	closeErr := errors.New("close heartbeat body")
 	body := &heartbeatBody{Reader: iotest.ErrReader(readErr), closeErr: closeErr}
@@ -96,7 +96,7 @@ func TestParseHeartbeatPrefersReadErrorOverCloseError(t *testing.T) {
 	_, err := parseHeartbeat(&http.Request{Body: body})
 
 	require.ErrorIs(t, err, readErr)
-	require.NotErrorIs(t, err, closeErr)
+	require.ErrorIs(t, err, closeErr)
 	require.True(t, body.closed)
 }
 

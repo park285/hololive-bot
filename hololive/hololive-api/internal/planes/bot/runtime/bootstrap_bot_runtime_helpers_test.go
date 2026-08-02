@@ -41,7 +41,7 @@ func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 	require.NotNil(t, handler)
 
 	router := gin.New()
-	handler.RegisterInternalRoutes(router.Group(""))
+	handler.RegisterInternalRoutesWithoutAuth(router.Group(""))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
 	res := httptest.NewRecorder()

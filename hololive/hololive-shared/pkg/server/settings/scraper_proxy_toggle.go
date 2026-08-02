@@ -29,6 +29,9 @@ func ApplyScraperProxyToggle(
 		schedulerApplied = scraperScheduler.SetProxyEnabled(enabled)
 	}
 
+	if logger == nil {
+		logger = slog.Default()
+	}
 	logger.Info("Applied scraper proxy toggle",
 		slog.Bool("enabled", enabled),
 		slog.Bool("youtube_applied", youtubeApplied),

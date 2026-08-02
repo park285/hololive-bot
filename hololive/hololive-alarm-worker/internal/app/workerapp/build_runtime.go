@@ -277,7 +277,7 @@ func buildAlarmFoundation(
 	logger *slog.Logger,
 ) (*alarmFoundation, error) {
 	memberData := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	sharedRL, err := providers.ProvideYouTubeProducerRateLimiter(infra.Cache, logger)
+	sharedRL, err := providers.ProvideYouTubeProducerRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
@@ -289,7 +289,7 @@ func buildAlarmFoundation(
 		sharedRL,
 		logger,
 	)
-	holodexService, err := providers.ProvideHolodexService(appConfig.Holodex.BaseURL, appConfig.Holodex.APIKey, infra.Cache, scraperService, logger)
+	holodexService, err := providers.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}

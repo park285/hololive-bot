@@ -127,14 +127,6 @@ func normalizeGlobalBudgetNamespace(namespace string) string {
 	return normalized
 }
 
-func normalizeGlobalBudgetInstanceID(instanceID string) string {
-	normalized := strings.TrimSpace(instanceID)
-	if normalized == "" {
-		return "unknown"
-	}
-	return normalized
-}
-
 func copySourceMaxInflight(source map[polling.BudgetSource]int) map[polling.BudgetSource]int {
 	copied := make(map[polling.BudgetSource]int, len(source))
 	maps.Copy(copied, source)

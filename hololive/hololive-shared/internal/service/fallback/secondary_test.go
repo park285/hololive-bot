@@ -83,6 +83,19 @@ func TestRunSecondary(t *testing.T) {
 			wantOutcome: "miss",
 		},
 		{
+			name: "noop when runner reports no successes without error",
+			plan: SecondaryPlan{
+				Service:   "svc",
+				Operation: "op",
+				Trigger:   TriggerOnFailures,
+				ShouldRun: true,
+				Run: func(context.Context) (SecondaryResult, error) {
+					return SecondaryResult{Items: 2, Successes: 0}, nil
+				},
+			},
+			wantOutcome: "noop",
+		},
+		{
 			name: "error when runner errors",
 			plan: SecondaryPlan{
 				Service:   "svc",
@@ -121,7 +134,8 @@ func TestSecondaryOutcome(t *testing.T) {
 		result SecondaryResult
 		want   string
 	}{
-		{name: "error when no successes", result: SecondaryResult{}, want: "error"},
+		{name: "noop when runner succeeded with no work", result: SecondaryResult{}, want: "noop"},
+		{name: "noop when items exist but nothing succeeded", result: SecondaryResult{Items: 3}, want: "noop"},
 		{name: "hit when items exist", result: SecondaryResult{Items: 1, Successes: 1}, want: "hit"},
 		{name: "miss when empty success", result: SecondaryResult{Items: 0, Successes: 2}, want: "miss"},
 	}

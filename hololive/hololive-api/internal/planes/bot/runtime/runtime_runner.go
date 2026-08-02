@@ -24,10 +24,10 @@ import (
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
-func (r *BotRuntime) Run() {
+func (r *BotRuntime) Run() error {
 	if r == nil {
-		return
+		return nil
 	}
 
-	applifecycle.Run(r.Logger, r.Start, r.Shutdown)
+	return applifecycle.Run(r.Logger, r.Start, r.Shutdown)
 }

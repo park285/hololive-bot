@@ -116,7 +116,7 @@ func startStatsHub(hub *status.Hub) {
 	hub.Start()
 }
 
-func (r *Runtime) Run() {
+func (r *Runtime) Run() error {
 	server := &http.Server{
 		Addr:              r.cfg.ListenAddr(),
 		Handler:           r.Handler(),
@@ -139,6 +139,7 @@ func (r *Runtime) Run() {
 	if err != nil {
 		r.logger.Error("admin-dashboard terminated", slog.Any("error", err))
 	}
+	return err
 }
 
 func (r *Runtime) Close() {

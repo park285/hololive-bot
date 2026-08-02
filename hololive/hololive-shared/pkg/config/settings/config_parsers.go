@@ -21,6 +21,7 @@
 package settings
 
 import (
+	"log/slog"
 	"math"
 	"strconv"
 	"strings"
@@ -65,13 +66,28 @@ func parseIntList(value string) []int {
 	parts := strings.Split(value, ",")
 	result := make([]int, 0, len(parts))
 	for _, part := range parts {
-		if trimmed := stringutil.TrimSpace(part); trimmed != "" {
-			if intVal, err := strconv.Atoi(trimmed); err == nil {
-				result = append(result, intVal)
-			}
+		trimmed := stringutil.TrimSpace(part)
+		if trimmed == "" {
+			continue
 		}
+		intVal, err := strconv.Atoi(trimmed)
+		if err != nil {
+			slog.Warn("config_int_list_entry_dropped",
+				slog.String("entry", trimmed),
+				slog.Any("error", err))
+			continue
+		}
+		result = append(result, intVal)
 	}
 	return result
+}
+
+// positiveIntEnv 는 양수 env 값만 채택하고, 미설정/파싱 실패/0 이하는 fallback 으로 되돌린다.
+func positiveIntEnv(key string, fallback int) int {
+	if value := sharedenv.Int(key, 0); value > 0 {
+		return value
+	}
+	return fallback
 }
 
 func resolveHolodexAPIKey() string {

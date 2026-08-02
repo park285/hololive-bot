@@ -242,13 +242,6 @@ func secondsEnv(key string, fallback time.Duration) time.Duration {
 	return fallback
 }
 
-func positiveIntEnv(key string, fallback int) int {
-	if value := sharedenv.Int(key, 0); value > 0 {
-		return value
-	}
-	return fallback
-}
-
 func validateUnsupportedLegacyEnvUsage() error {
 	if value, exists := os.LookupEnv("MEMBER_NEWS_CLIPROXY_MODEL"); exists && stringutil.TrimSpace(value) != "" {
 		return fmt.Errorf("MEMBER_NEWS_CLIPROXY_MODEL is no longer supported; use MEMBER_NEWS_LLM_MODEL")

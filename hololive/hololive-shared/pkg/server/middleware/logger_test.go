@@ -271,3 +271,24 @@ func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 		t.Fatalf("x_real_ip = %v, want 203.0.113.11", got)
 	}
 }
+
+// pprof 라우터가 넘기는 "/debug/pprof*" 패턴이 하위 경로까지 스킵하는지 고정한다.
+func TestSkipPathMatcher_WildcardSuffixPatternCoversSubpaths(t *testing.T) {
+	t.Parallel()
+
+	matcher := newSkipPathMatcher([]string{"/debug/pprof*", "/health"})
+
+	skipped := []string{"/debug/pprof", "/debug/pprof/", "/debug/pprof/profile", "/debug/pprof/heap", "/health"}
+	for _, path := range skipped {
+		if !matcher.shouldSkip(path) {
+			t.Errorf("shouldSkip(%q) = false, want true", path)
+		}
+	}
+
+	kept := []string{"/debug/other", "/health/live", "/metrics"}
+	for _, path := range kept {
+		if matcher.shouldSkip(path) {
+			t.Errorf("shouldSkip(%q) = true, want false", path)
+		}
+	}
+}

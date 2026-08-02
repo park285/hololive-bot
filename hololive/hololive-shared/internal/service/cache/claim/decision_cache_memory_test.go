@@ -3,6 +3,7 @@ package claim
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -220,4 +221,122 @@ func resolveConcurrentClaim(start <-chan struct{}, cache *MemoryDecisionCache, a
 
 func testDecisionKey() string {
 	return "youtube_outbox_delivery\x00short:video-1"
+}
+
+func TestMemoryDecisionCache_ResolveClaimDistinctKeysComputeConcurrently(t *testing.T) {
+	t.Parallel()
+
+	cache := NewMemoryDecisionCache()
+	const workers = 8
+
+	entered := make(chan string, workers)
+	release := make(chan struct{})
+	resolveErrs := make(chan error, workers)
+	var wg sync.WaitGroup
+
+	for i := range workers {
+		key := fmt.Sprintf("youtube_outbox_delivery\x00short:video-%d", i)
+		wg.Go(func() {
+			if _, err := cache.ResolveClaim(context.Background(), key, func(context.Context) (Decision, *Token, error) {
+				entered <- key
+				<-release
+				return Decision{Value: key}, nil, nil
+			}); err != nil {
+				resolveErrs <- err
+			}
+		})
+	}
+
+	for range workers {
+		select {
+		case <-entered:
+		case <-time.After(10 * time.Second):
+			close(release)
+			wg.Wait()
+			t.Fatal("distinct keys were serialized: not every compute started before the first one returned")
+		}
+	}
+
+	close(release)
+	wg.Wait()
+	close(resolveErrs)
+
+	for err := range resolveErrs {
+		t.Fatalf("ResolveClaim() error = %v", err)
+	}
+}
+
+func TestMemoryDecisionCache_ResolveClaimWaiterHonoursContextCancel(t *testing.T) {
+	t.Parallel()
+
+	cache := NewMemoryDecisionCache()
+	ownerEntered := make(chan struct{})
+	release := make(chan struct{})
+
+	ownerErr := make(chan error, 1)
+	var ownerWG sync.WaitGroup
+	ownerWG.Go(func() {
+		_, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(context.Context) (Decision, *Token, error) {
+			close(ownerEntered)
+			<-release
+			return Decision{Value: "proceed"}, nil, nil
+		})
+		ownerErr <- err
+	})
+
+	<-ownerEntered
+
+	waiterCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := cache.ResolveClaim(waiterCtx, testDecisionKey(), func(context.Context) (Decision, *Token, error) {
+		t.Error("cancelled waiter must not compute")
+		return Decision{}, nil, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ResolveClaim() error = %v, want %v", err, context.Canceled)
+	}
+
+	close(release)
+	ownerWG.Wait()
+
+	if err := <-ownerErr; err != nil {
+		t.Fatalf("owner ResolveClaim() error = %v", err)
+	}
+}
+
+func TestMemoryDecisionCache_ResolveClaimComputePanicDoesNotBlockNextCaller(t *testing.T) {
+	t.Parallel()
+
+	cache := NewMemoryDecisionCache()
+
+	func() {
+		defer func() {
+			if recovered := recover(); recovered == nil {
+				t.Error("expected compute panic to propagate")
+			}
+		}()
+		if _, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(context.Context) (Decision, *Token, error) {
+			panic("compute exploded")
+		}); err != nil {
+			t.Errorf("unreachable: panicking compute returned error %v", err)
+		}
+	}()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := cache.ResolveClaim(context.Background(), testDecisionKey(), func(context.Context) (Decision, *Token, error) {
+			return Decision{Value: "proceed"}, nil, nil
+		})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("ResolveClaim() after panic error = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("ResolveClaim() blocked after a panicking compute left the key in flight")
+	}
 }

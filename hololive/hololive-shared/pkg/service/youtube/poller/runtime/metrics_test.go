@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -18,6 +19,7 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 
 	m.SchedulerRegisteredJobs.Set(2)
 	m.SchedulerDispatchDefer.WithLabelValues("").Inc()
+	m.ObserveSchedulerOldestDueAge(2500 * time.Millisecond)
 	m.SchedulerPollDuration.WithLabelValues("videos", "success").Observe(0.25)
 	m.ObserveJobClaim("videos", "acquired")
 	m.ObserveJobLeaseRenew("", "success")
@@ -36,6 +38,7 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	assertCounterValue(t, families, "youtube_poller_scheduler_dispatch_deferred_total", map[string]string{
 		"reason": "",
 	}, 1)
+	assertGaugeValue(t, families, "youtube_poller_scheduler_oldest_due_age_seconds", nil, 2.5)
 	assertHistogramLabels(t, families, "youtube_poller_poll_duration_seconds", map[string]string{
 		"poller": "videos",
 		"status": "success",

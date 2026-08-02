@@ -3,9 +3,9 @@ package app
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
+	json "github.com/park285/shared-go/pkg/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -18,6 +18,8 @@ import (
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/httpx"
 	"github.com/kapu/admin-dashboard/internal/session"
+
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 )
 
 type loginRequest struct {
@@ -177,15 +179,12 @@ func parseHeartbeat(req *http.Request) (heartbeatRequest, error) {
 }
 
 func readHeartbeatBody(req *http.Request) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(req.Body, maxHeartbeatBodyBytes+1))
-	if closeErr := req.Body.Close(); closeErr != nil && err == nil {
-		err = closeErr
-	}
+	body, err := httpbody.ReadAllAndClose(req.Body, maxHeartbeatBodyBytes)
 	if err != nil {
+		if errors.Is(err, httpbody.ErrTooLarge) {
+			return nil, fmt.Errorf("heartbeat body exceeds %d bytes", maxHeartbeatBodyBytes)
+		}
 		return nil, err
-	}
-	if int64(len(body)) > maxHeartbeatBodyBytes {
-		return nil, fmt.Errorf("heartbeat body exceeds %d bytes", maxHeartbeatBodyBytes)
 	}
 	return body, nil
 }

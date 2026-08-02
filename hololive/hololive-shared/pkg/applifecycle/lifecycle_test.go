@@ -282,13 +282,14 @@ func TestRun_DelegatesStartAndShutdown(t *testing.T) {
 	var startCalled atomic.Bool
 	var shutdownCalled atomic.Bool
 
-	Run(nil, func(_ context.Context, errCh chan<- error) {
+	err := Run(nil, func(_ context.Context, errCh chan<- error) {
 		startCalled.Store(true)
 		errCh <- errors.New("stop runtime")
 	}, func(context.Context) {
 		shutdownCalled.Store(true)
 	})
 
+	assert.NoError(t, err)
 	assert.True(t, startCalled.Load())
 	assert.True(t, shutdownCalled.Load())
 }

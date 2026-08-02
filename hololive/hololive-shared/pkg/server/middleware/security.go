@@ -43,20 +43,49 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 	}
 }
 
+const (
+	requestIDHeaderKey = "X-Request-ID"
+	maxRequestIDLength = 128
+)
+
 // RequestIDMiddleware 요청마다 고유 X-Request-ID를 생성/전파하는 미들웨어.
-// 클라이언트가 이미 X-Request-ID를 보냈으면 그대로 사용한다.
 func RequestIDMiddleware() gin.HandlerFunc {
-	const headerKey = "X-Request-ID"
 	return func(c *gin.Context) {
-		reqID := c.GetHeader(headerKey)
+		reqID := sanitizedRequestID(c.GetHeader(requestIDHeaderKey))
 		if reqID == "" {
 			reqID = uuid.NewString()
 		}
 		c.Set("request_id", reqID)
 		c.Request = c.Request.WithContext(sharedlog.WithRequestID(c.Request.Context(), reqID))
-		c.Header(headerKey, reqID)
+		c.Header(requestIDHeaderKey, reqID)
 		c.Next()
 	}
+}
+
+const requestIDAllowedBytes = "abcdefghijklmnopqrstuvwxyz" +
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+	"0123456789-_.:"
+
+var requestIDByteAllowed = buildRequestIDByteSet()
+
+func buildRequestIDByteSet() [256]bool {
+	var allowed [256]bool
+	for i := range len(requestIDAllowedBytes) {
+		allowed[requestIDAllowedBytes[i]] = true
+	}
+	return allowed
+}
+
+func sanitizedRequestID(raw string) string {
+	if raw == "" || len(raw) > maxRequestIDLength {
+		return ""
+	}
+	for i := range len(raw) {
+		if !requestIDByteAllowed[raw[i]] {
+			return ""
+		}
+	}
+	return raw
 }
 
 // MaxBodySizeMiddleware 요청 본문 크기를 제한하는 미들웨어.

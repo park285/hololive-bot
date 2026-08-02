@@ -104,15 +104,17 @@ func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
 		H3Server:   &http3.Server{Addr: "invalid::addr"},
 	}
 
-	done := make(chan struct{})
+	errCh := make(chan error, 1)
 
 	go func() {
-		runtime.Run()
-		close(done)
+		errCh <- runtime.Run()
 	}()
 
 	select {
-	case <-done:
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("Run() did not exit on server error")
 	}

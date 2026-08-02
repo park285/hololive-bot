@@ -184,19 +184,46 @@ func (s *Service) Update(newSettings Settings) error {
 	return s.persistCache()
 }
 
+// 같은 디렉터리의 temp 파일에 전량 기록한 뒤 rename으로 교체한다. 제자리 truncate+write는
+// 중간에 실패하면 잘린 settings 파일을 남기고, 그 파일은 다음 기동에서 기본값으로 조용히 대체된다.
 func (s *Service) persistCache() (err error) {
-	f, err := os.Create(s.filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create settings file: %w", err)
-	}
+	tempPath, writeErr := s.writeSettingsTempFile()
 	defer func() {
-		if closeErr := f.Close(); closeErr != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close settings file: %w", closeErr))
+		if err == nil || tempPath == "" {
+			return
+		}
+		if removeErr := os.Remove(tempPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			err = errors.Join(err, fmt.Errorf("failed to remove temp settings file: %w", removeErr))
 		}
 	}()
 
-	if err := json.NewEncoder(f).Encode(s.cache); err != nil {
-		return fmt.Errorf("failed to write settings: %w", err)
+	if writeErr != nil {
+		return writeErr
+	}
+
+	if err = os.Rename(tempPath, s.filePath); err != nil {
+		return fmt.Errorf("failed to replace settings file: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) writeSettingsTempFile() (path string, err error) {
+	temp, err := os.CreateTemp(filepath.Dir(s.filePath), filepath.Base(s.filePath)+".tmp-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp settings file: %w", err)
+	}
+	defer func() {
+		if closeErr := temp.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close temp settings file: %w", closeErr)
+		}
+	}()
+
+	if encodeErr := json.NewEncoder(temp).Encode(s.cache); encodeErr != nil {
+		return temp.Name(), fmt.Errorf("failed to write settings: %w", encodeErr)
+	}
+	if syncErr := temp.Sync(); syncErr != nil {
+		return temp.Name(), fmt.Errorf("failed to sync settings: %w", syncErr)
+	}
+
+	return temp.Name(), nil
 }

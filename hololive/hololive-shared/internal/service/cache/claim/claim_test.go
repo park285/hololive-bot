@@ -3,6 +3,7 @@ package claim
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -221,4 +222,42 @@ func newMemoryCacheAt(now time.Time) *MemoryCache {
 
 func testClaimKey() ClaimKey {
 	return ClaimKey{Scope: "youtube_outbox_delivery", Subject: "video-1"}
+}
+
+func TestMemoryCache_ClaimSweepsExpiredEntriesOfOtherKeys(t *testing.T) {
+	t.Parallel()
+
+	current := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	cache := NewMemoryCache()
+	cache.now = func() time.Time { return current }
+
+	const stale = 32
+	for i := range stale {
+		key := ClaimKey{Scope: "youtube_outbox_delivery", Subject: fmt.Sprintf("video-%d", i)}
+		if _, err := cache.Claim(context.Background(), key, "worker-a", 10*time.Second); err != nil {
+			t.Fatalf("Claim(%v) error = %v", key, err)
+		}
+	}
+	if got := cache.holdingsLen(); got != stale {
+		t.Fatalf("holdings len = %d, want %d", got, stale)
+	}
+
+	current = current.Add(memoryClaimSweepInterval + time.Second)
+	liveKey := ClaimKey{Scope: "youtube_outbox_delivery", Subject: "video-live"}
+	if _, err := cache.Claim(context.Background(), liveKey, "worker-b", time.Minute); err != nil {
+		t.Fatalf("Claim(%v) error = %v", liveKey, err)
+	}
+
+	if got := cache.holdingsLen(); got != 1 {
+		t.Fatalf("holdings len after sweep = %d, want 1 (only the live claim)", got)
+	}
+	if _, err := cache.Claim(context.Background(), liveKey, "worker-c", time.Minute); !errors.Is(err, ErrAlreadyHeld) {
+		t.Fatalf("live claim must survive the sweep: error = %v, want %v", err, ErrAlreadyHeld)
+	}
+}
+
+func (c *MemoryCache) holdingsLen() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.holdings)
 }
