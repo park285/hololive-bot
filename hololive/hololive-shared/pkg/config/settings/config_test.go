@@ -683,13 +683,34 @@ func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
 	})
 }
 
-func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
+func TestLoad_ScraperPollIgnoresRemovedLegacyEnv(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_VIDEOS_SECONDS", "420")
 	t.Setenv("SCRAPER_SHORTS_SECONDS", "660")
 	t.Setenv("SCRAPER_COMMUNITY_SECONDS", "780")
 	t.Setenv("SCRAPER_STATS_SECONDS", "14400")
 	t.Setenv("SCRAPER_LIVE_SECONDS", "180")
+
+	config, err := load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	assertScraperPoll(t, config.Scraper.Poll, DefaultScraperPoll())
+}
+
+func TestLoad_ScraperPollCanonicalEnvWinsOverRemovedLegacyEnv(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS", "420")
+	t.Setenv("SCRAPER_POLL_SHORTS_INTERVAL_SECONDS", "660")
+	t.Setenv("SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS", "780")
+	t.Setenv("SCRAPER_POLL_STATS_INTERVAL_SECONDS", "14400")
+	t.Setenv("SCRAPER_POLL_LIVE_INTERVAL_SECONDS", "180")
+	t.Setenv("SCRAPER_VIDEOS_SECONDS", "60")
+	t.Setenv("SCRAPER_SHORTS_SECONDS", "60")
+	t.Setenv("SCRAPER_COMMUNITY_SECONDS", "60")
+	t.Setenv("SCRAPER_STATS_SECONDS", "60")
+	t.Setenv("SCRAPER_LIVE_SECONDS", "60")
 
 	config, err := load()
 	if err != nil {
@@ -856,9 +877,24 @@ func TestLoad_ScraperWorkerCountEnvOverride(t *testing.T) {
 	}
 }
 
-func TestLoad_ScraperWorkerCountLegacyEnvFallback(t *testing.T) {
+func TestLoad_ScraperWorkerCountIgnoresRemovedLegacyEnv(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_WORKER_COUNT", "6")
+
+	config, err := load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if config.Scraper.WorkerCount != DefaultScraperWorkerCount() {
+		t.Fatalf("Scraper.WorkerCount = %d, want %d", config.Scraper.WorkerCount, DefaultScraperWorkerCount())
+	}
+}
+
+func TestLoad_ScraperWorkerCountCanonicalEnvWinsOverRemovedLegacyEnv(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_SCHEDULER_WORKER_COUNT", "6")
+	t.Setenv("SCRAPER_WORKER_COUNT", "9")
 
 	config, err := load()
 	if err != nil {

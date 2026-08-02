@@ -1403,9 +1403,7 @@ github.com/park285/iris-client-go/webhook -> github.com/park285/iris-client-go/i
 github.com/park285/iris-client-go/webhook -> github.com/park285/iris-client-go/webhook
 github.com/park285/iris-client-go/webhooksign -> github.com/park285/iris-client-go/internal/client/randomhex
 github.com/park285/iris-client-go/webhooksign -> github.com/park285/iris-client-go/internal/irishmac
-github.com/park285/shared-go/pkg/db/pgxdb -> github.com/park285/shared-go/pkg/backoff
 github.com/park285/shared-go/pkg/db/pgxdb -> github.com/park285/shared-go/pkg/envutil
-github.com/park285/shared-go/pkg/db/pgxdb -> github.com/park285/shared-go/pkg/retry
 github.com/park285/shared-go/pkg/ginjson -> github.com/park285/shared-go/pkg/ginjson
 github.com/park285/shared-go/pkg/ginjson -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/healthprobe -> github.com/park285/shared-go/pkg/h3

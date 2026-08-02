@@ -6,7 +6,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,48 +52,11 @@ func TestRuntimeAllowsAlarmScheduler(t *testing.T) {
 	}
 }
 
-func TestLoadAlarmDispatchPublishConfigRejectsRemovedLegacyPublishMode(t *testing.T) {
-	for _, mode := range []string{"valkey_only", "shadow", "pg-frist"} {
-		t.Run(mode, func(t *testing.T) {
-			t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", mode)
-			t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "")
+func TestLoadAlarmDispatchPublishConfigDefaults(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_WAKEUP_ENABLED", "")
+	t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", "")
 
-			appConfig, err := loadAlarmDispatchPublishConfig()
-			require.Error(t, err)
-			assert.Equal(t, queue.PublishConfig{}, appConfig)
-			assert.Contains(t, err.Error(), "ALARM_DISPATCH_PUBLISH_MODE")
-			assert.Contains(t, err.Error(), "no longer supported")
-		})
-	}
-}
-
-func TestLoadAlarmDispatchPublishConfigRejectsRemovedLegacyConsumerMode(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "valkey")
-
-	appConfig, err := loadAlarmDispatchPublishConfig()
-	require.Error(t, err)
-	assert.Equal(t, queue.PublishConfig{}, appConfig)
-	assert.Contains(t, err.Error(), "ALARM_DISPATCH_CONSUMER_MODE")
-	assert.Contains(t, err.Error(), "no longer supported")
-}
-
-func TestLoadAlarmDispatchPublishConfigAllowsUnsetAndPGValues(t *testing.T) {
-	for _, tc := range []struct {
-		name        string
-		publishMode string
-		consumer    string
-	}{
-		{name: "unset", publishMode: "", consumer: ""},
-		{name: "explicit pg pair", publishMode: "pg_first", consumer: "pg"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", tc.publishMode)
-			t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", tc.consumer)
-
-			appConfig, err := loadAlarmDispatchPublishConfig()
-			require.NoError(t, err)
-			assert.True(t, appConfig.WakeupEnabled)
-		})
-	}
+	appConfig := loadAlarmDispatchPublishConfig()
+	assert.True(t, appConfig.WakeupEnabled)
+	assert.Equal(t, 1000, appConfig.MaxDeliveriesPerBatch)
 }

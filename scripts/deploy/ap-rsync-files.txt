@@ -752,7 +752,6 @@ hololive/hololive-shared/pkg/service/youtube/tracking/observation/repository_hel
 ../shared-go/pkg/telemetry/telemetry.go
 ../shared-go/pkg/workerconfig/worker_profile.go
 ../shared-go/pkg/workerconfig/runtime_worker_profile_envelope.go
-../shared-go/pkg/workerpool/queued_pool.go
 hololive/hololive-shared/pkg/server/httpserver/pprof.go
 hololive/hololive-shared/pkg/service/member/cache_warmup.go
 hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/repository_scan.go

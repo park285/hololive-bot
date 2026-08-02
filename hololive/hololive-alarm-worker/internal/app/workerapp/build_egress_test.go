@@ -154,19 +154,6 @@ func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
 	assert.False(t, parseAlarmDispatchKaringEnabled())
 }
 
-func TestBuildAlarmDispatchRunnerRejectsRemovedLegacyConsumerMode(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "valkey")
-	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "")
-	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
-
-	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
-	require.Error(t, err)
-	assert.Nil(t, scheduler)
-	assert.Contains(t, err.Error(), "ALARM_DISPATCH_CONSUMER_MODE")
-	assert.Contains(t, err.Error(), "no longer supported")
-}
-
 func TestBuildAlarmDispatchRunnerWiresPGMode(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
 	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "PG")

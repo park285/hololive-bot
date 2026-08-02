@@ -17,24 +17,12 @@ echo "[M0] shared-go package allowlist check"
 "${SCRIPT_DIR}/check-shared-go-packages.sh"
 echo
 
-echo "[M0] go compatibility adapter check"
-"${SCRIPT_DIR}/check-go-compat-adapters.sh"
-echo
-
 echo "[M0] generic Go internal package name check"
 "${SCRIPT_DIR}/check-go-generic-internal-package-names.sh"
 echo
 
 echo "[M0] cross-cutting boundary guardrail check"
 "${SCRIPT_DIR}/check-crosscutting-guardrails.sh"
-echo
-
-echo "[M0] removed runtime regression check"
-"${SCRIPT_DIR}/check-removed-runtime-regressions.sh"
-echo
-
-echo "[M0] removed runtime build/deploy path check"
-"${SCRIPT_DIR}/check-removed-runtime-build-paths.sh"
 echo
 
 echo "[M0] tracked local artifact check"

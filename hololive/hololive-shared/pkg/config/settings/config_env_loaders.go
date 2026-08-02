@@ -97,10 +97,7 @@ func loadScraperConfig() ScraperConfig {
 		ProxyEnabled:  sharedenv.Bool("SCRAPER_PROXY_ENABLED", false),
 		ProxyURL:      sharedenv.String("SCRAPER_PROXY_URL", ""),
 		FetcherEngine: NormalizeScraperFetcherEngine(sharedenv.String("SCRAPER_FETCHER_ENGINE", DefaultScraperFetcherEngine())),
-		WorkerCount: intAliasEnv([]string{
-			"SCRAPER_SCHEDULER_WORKER_COUNT",
-			"SCRAPER_WORKER_COUNT",
-		}, DefaultScraperWorkerCount()),
+		WorkerCount:   positiveIntEnv("SCRAPER_SCHEDULER_WORKER_COUNT", DefaultScraperWorkerCount()),
 		Scheduler: ScraperSchedulerConfig{
 			PollTimeout:     time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS", int(scraperSchedulerDefaults.PollTimeout/time.Second))) * time.Second,
 			ErrorBackoffMin: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMin/time.Second))) * time.Second,

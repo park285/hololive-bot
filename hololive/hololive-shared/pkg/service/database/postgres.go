@@ -87,7 +87,7 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 			MaxConns:        maxConns,
 			ConnMaxLifetime: constants.DatabaseConfig.ConnMaxLifetime,
 		},
-		Retry: pgxdb.RetryConfig{
+		Ping: pgxdb.PingConfig{
 			PingTimeout: constants.RequestTimeout.DatabasePing,
 		},
 	})

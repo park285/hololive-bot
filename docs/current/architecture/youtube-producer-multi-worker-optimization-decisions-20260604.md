@@ -85,6 +85,8 @@ hololive/hololive-shared/pkg/config/internal/settings/config_env_loaders.go
   canonical worker env는 SCRAPER_SCHEDULER_WORKER_COUNT이고 SCRAPER_WORKER_COUNT는 alias다.
 ```
 
+> 註 (2026-08-02): 이후 scraper env 단일화로 `SCRAPER_WORKER_COUNT` alias는 제거됐습니다. 현재 읽히는 키는 `SCRAPER_SCHEDULER_WORKER_COUNT` 하나입니다.
+
 ---
 
 ## 2. 현재 구조 요약
@@ -1464,6 +1466,8 @@ SCRAPER_SCHEDULER_WORKER_COUNT=2
 ```
 
 이 값은 AP당 worker count입니다. `SCRAPER_WORKER_COUNT`는 기존 alias로만 유지하며, `YOUTUBE_PRODUCER_AP_WORKER_COUNT`는 새로 만들지 않습니다.
+
+> 註 (2026-08-02): 이후 scraper env 단일화로 `SCRAPER_WORKER_COUNT` alias는 제거됐습니다.
 
 3 AP 기준 potential local concurrency는 6입니다.
 

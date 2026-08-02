@@ -119,12 +119,12 @@ func (h *StreamHandler) ensureState() *StreamState {
 	return h.State
 }
 
-func (h *StreamHandler) respondError(c *gin.Context, status int, message string, extra gin.H) {
+func (h *StreamHandler) respondBadRequest(c *gin.Context, message string, extra gin.H) {
 	if h.RespondError != nil {
-		h.RespondError(c, status, message, extra)
+		h.RespondError(c, 400, message, extra)
 		return
 	}
-	RespondError(c, status, message, extra)
+	RespondError(c, 400, message, extra)
 }
 
 func (h *StreamHandler) respondInternalError(c *gin.Context, userMessage, logMessage string, err error, attrs ...slog.Attr) {
@@ -141,7 +141,7 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 	if rawOrg, hasOrg := c.GetQuery("org"); hasOrg {
 		org = strings.TrimSpace(rawOrg)
 		if org == "" {
-			h.respondError(c, 400, "Invalid org parameter", gin.H{
+			h.respondBadRequest(c, "Invalid org parameter", gin.H{
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodexprovider.SupportedStreamOrgParams(),
 			})
@@ -152,7 +152,7 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 	streams, err := h.Holodex.GetLiveStreamsByOrg(ctx, org)
 	if err != nil {
 		if stdErrors.Is(err, holodexprovider.ErrInvalidStreamOrg) {
-			h.respondError(c, 400, "Invalid org parameter", gin.H{
+			h.respondBadRequest(c, "Invalid org parameter", gin.H{
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodexprovider.SupportedStreamOrgParams(),
 			})
@@ -170,7 +170,7 @@ func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	if rawOrg, hasOrg := c.GetQuery("org"); hasOrg {
 		org = strings.TrimSpace(rawOrg)
 		if org == "" {
-			h.respondError(c, 400, "Invalid org parameter", gin.H{
+			h.respondBadRequest(c, "Invalid org parameter", gin.H{
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodexprovider.SupportedStreamOrgParams(),
 			})
@@ -181,7 +181,7 @@ func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	streams, err := h.Holodex.GetUpcomingStreamsByOrg(ctx, 24, org)
 	if err != nil {
 		if stdErrors.Is(err, holodexprovider.ErrInvalidStreamOrg) {
-			h.respondError(c, 400, "Invalid org parameter", gin.H{
+			h.respondBadRequest(c, "Invalid org parameter", gin.H{
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodexprovider.SupportedStreamOrgParams(),
 			})

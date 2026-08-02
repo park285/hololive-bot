@@ -27,15 +27,14 @@ as repo-side contract definitions and compose-path validation inputs.
 - Holodex photo sync on AP-C (`PHOTO_SYNC_ENABLED=true`), guarded by a global Valkey singleton lease with TTL failover. AP-B (`PHOTO_SYNC_ENABLED=false`) is a scraping/polling failover peer only and does not participate in PhotoSync.
 - Community/shorts/live/stats polling configuration
 - `youtube_notification_outbox` production paths for YouTube-derived events
-- Time-series retention cleanup for `youtube_stats_history`, `youtube_channel_stats_snapshots`, `youtube_live_sessions`, and `youtube_live_viewer_samples` (bounded batch deletes, advisory-locked single-runner, default off)
+- Time-series retention cleanup for `youtube_channel_stats_snapshots`, `youtube_live_sessions`, and `youtube_live_viewer_samples` (bounded batch deletes, advisory-locked single-runner, default off)
 
 ## Retention cleanup
 
-App-level retention job (`internal/runtime/retention`) deletes rows older than a per-table cutoff in bounded batches, guarded by a single Postgres advisory lock so only one AP runs it at a time. It is opt-in and defaults to off. Within one tick the runner cleans `youtube_live_viewer_samples` first (delegating to the shared `poller.ViewerSampleCleaner`, which holds its own advisory lock), then the three table passes.
+App-level retention job (`internal/runtime/retention`) deletes rows older than a per-table cutoff in bounded batches, guarded by a single Postgres advisory lock so only one AP runs it at a time. It is opt-in and defaults to off. Within one tick the runner cleans `youtube_live_viewer_samples` first (delegating to the shared `poller.ViewerSampleCleaner`, which holds its own advisory lock), then the two table passes.
 
 | Env key | Default | Effect |
 |---|---|---|
-| `YOUTUBE_PRODUCER_RETENTION_STATS_HISTORY_DAYS` | `0` | `youtube_stats_history` rows with `time < now - N days` are batch-deleted; `0`/negative disables. |
 | `YOUTUBE_PRODUCER_RETENTION_CHANNEL_SNAPSHOTS_DAYS` | `0` | `youtube_channel_stats_snapshots` rows with `captured_at < now - N days`; `0`/negative disables. |
 | `YOUTUBE_PRODUCER_RETENTION_LIVE_SESSIONS_DAYS` | `0` | `youtube_live_sessions` rows with `status='ENDED' AND ended_at < now - N days`; `0`/negative disables. |
 | `YOUTUBE_PRODUCER_RETENTION_VIEWER_SAMPLES_DAYS` | `0` | `youtube_live_viewer_samples` for ENDED sessions older than N days (shared `ViewerSampleCleaner`); `0`/negative disables. |

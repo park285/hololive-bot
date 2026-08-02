@@ -70,9 +70,7 @@ type updateSettingsRequest struct {
 }
 
 type updateLLMSettingsRequest struct {
-	MajorEventScrapeHourKST *int  `json:"majorEventScrapeHourKST"`
-	MajorEventScrapeRunNow  *bool `json:"majorEventScrapeRunNow"`
-	MemberNewsWeeklyRunNow  *bool `json:"memberNewsWeeklyRunNow"`
+	MemberNewsWeeklyRunNow *bool `json:"memberNewsWeeklyRunNow"`
 }
 
 const (
@@ -371,10 +369,6 @@ func (h *SettingsHandler) bindUpdateLLMSettingsRequest(c *gin.Context) (updateLL
 }
 
 func (req updateLLMSettingsRequest) validate(c *gin.Context) bool {
-	if req.MajorEventScrapeHourKST != nil || req.MajorEventScrapeRunNow != nil {
-		sharedserver.RespondError(c, 410, "majorEventScrape* controls are no longer supported; major event scraping is owned by llm-scheduler", nil)
-		return false
-	}
 	if req.MemberNewsWeeklyRunNow == nil {
 		sharedserver.RespondError(c, 400, "at least one llm setting field is required", nil)
 		return false
