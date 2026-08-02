@@ -39,6 +39,7 @@ var (
 type Metrics struct {
 	SchedulerRegisteredJobs           prometheus.Gauge
 	SchedulerDispatchDefer            *prometheus.CounterVec
+	SchedulerOldestDueAge             prometheus.Gauge
 	SchedulerPollDuration             *prometheus.HistogramVec
 	BudgetReserveTotal                *prometheus.CounterVec
 	BudgetReserveWaitSeconds          *prometheus.HistogramVec
@@ -81,6 +82,10 @@ func (m *Metrics) registerSchedulerMetrics() {
 		Name: "youtube_poller_scheduler_dispatch_deferred_total",
 		Help: "worker channel 포화 등으로 scheduler dispatch가 defer된 횟수",
 	}, []string{"reason"})
+	m.SchedulerOldestDueAge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "youtube_poller_scheduler_oldest_due_age_seconds",
+		Help: "실행 시각을 넘긴 가장 오래된 YouTube poller job의 지연 시간",
+	})
 	m.SchedulerPollDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_poller_poll_duration_seconds",
 		Help:    "poller별 channel poll 실행 시간",
@@ -154,6 +159,10 @@ func (m *Metrics) registerContentMetrics() {
 
 func (m *Metrics) ObserveJobClaim(pollerName, result string) {
 	m.JobClaimTotal.WithLabelValues(pollerName, result).Inc()
+}
+
+func (m *Metrics) ObserveSchedulerOldestDueAge(age time.Duration) {
+	m.SchedulerOldestDueAge.Set(max(age.Seconds(), 0))
 }
 
 func (m *Metrics) ObserveJobLeaseRenew(pollerName, result string) {

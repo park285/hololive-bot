@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,6 +64,11 @@ func TestDispatchDueJobs_WorkerChannelFullKeepsAnchoredNextRunAt(t *testing.T) {
 	require.Len(t, scheduler.jobs, 1)
 	assert.Equal(t, scheduledAt, scheduler.jobs[0].NextRunAt)
 	assert.True(t, retrySoon)
+	assert.GreaterOrEqual(t, testutil.ToFloat64(scheduler.metrics.SchedulerOldestDueAge), 0.9)
+
+	readyJobCh := make(chan *Job, 1)
+	assert.False(t, scheduler.dispatchDueJobs(readyJobCh))
+	assert.Zero(t, testutil.ToFloat64(scheduler.metrics.SchedulerOldestDueAge))
 }
 
 func TestSchedulerNextDispatchDelay_UsesShortRetryWhenWorkerChannelFull(t *testing.T) {
