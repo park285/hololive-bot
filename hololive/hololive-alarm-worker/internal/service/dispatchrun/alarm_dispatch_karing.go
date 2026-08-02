@@ -180,13 +180,22 @@ func buildAlarmDispatchKaringExtraArgs(ctx context.Context, store *messagestring
 		return buildAlarmDispatchOutboxKaringExtraArgs(ctx, store, &group.envelopes[0], itemCount)
 	}
 	args := iris.KaringTemplateArgs{}
+	allPremiere := alarmDispatchGroupAllPremiere(group)
 	if alarmDispatchGroupAllStarting(group) {
-		args["alarm_title"] = store.GetOrContext(ctx, messagestrings.NamespaceKaring, "alarm_title_live", "라이브 시작")
+		if allPremiere {
+			args["alarm_title"] = store.GetOrContext(ctx, messagestrings.NamespaceKaring, "alarm_title_live_premiere", "선행공개 시작")
+		} else {
+			args["alarm_title"] = store.GetOrContext(ctx, messagestrings.NamespaceKaring, "alarm_title_live", "라이브 시작")
+		}
 		args["time_left"] = store.GetOrContext(ctx, messagestrings.NamespaceKaring, "time_left_live", "지금 시작")
 		return args
 	}
 	if group.minutesUntil > 0 {
-		args["alarm_title"] = fmt.Sprintf(store.GetOrContext(ctx, messagestrings.NamespaceKaring, "alarm_title_prelive", "방송 %d분 전 알림"), group.minutesUntil)
+		if allPremiere {
+			args["alarm_title"] = fmt.Sprintf(store.GetOrContext(ctx, messagestrings.NamespaceKaring, "alarm_title_prelive_premiere", "선행공개 %d분 전 알림"), group.minutesUntil)
+		} else {
+			args["alarm_title"] = fmt.Sprintf(store.GetOrContext(ctx, messagestrings.NamespaceKaring, "alarm_title_prelive", "방송 %d분 전 알림"), group.minutesUntil)
+		}
 		args["time_left"] = fmt.Sprintf(store.GetOrContext(ctx, messagestrings.NamespaceKaring, "time_left_prelive", "%d분 후 시작"), group.minutesUntil)
 		return args
 	}

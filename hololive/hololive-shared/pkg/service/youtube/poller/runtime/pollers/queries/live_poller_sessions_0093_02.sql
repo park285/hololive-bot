@@ -7,6 +7,7 @@
 		started_at,
 		ended_at,
 		live_first_seen_at,
+		is_premiere,
 		topic_id,
 		thumbnail_url,
 		last_seen_at

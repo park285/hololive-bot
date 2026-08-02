@@ -92,6 +92,7 @@ func (p *LivePoller) endStaleSession(ctx context.Context, channelID, videoID str
 	if !p.markSessionEnded(ctx, videoID, now, pollStartedAt) {
 		return
 	}
+	p.forgetPremiereProbe(videoID)
 	p.finalizeStreamStats(ctx, videoID, channelID)
 }
 

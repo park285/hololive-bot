@@ -39,11 +39,13 @@ type alarmDispatchItemView struct {
 	MinutesUntil    int
 	IsStarting      bool
 	IsScheduled     bool
+	IsPremiere      bool
 }
 
 type alarmDispatchGroupView struct {
 	MinutesUntil int
 	IsStarting   bool
+	AllPremiere  bool
 	Entries      []alarmDispatchItemView
 }
 
@@ -57,6 +59,7 @@ func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store
 		MinutesUntil:    notification.MinutesUntil,
 		IsStarting:      starting,
 		IsScheduled:     !starting && groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil,
+		IsPremiere:      notification.Stream != nil && notification.Stream.IsPremiere,
 	}
 }
 
@@ -85,17 +88,33 @@ func alarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
 	return true
 }
 
-func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, group alarmDispatchGroup) (string, error) {
+func alarmDispatchGroupAllPremiere(group alarmDispatchGroup) bool {
+	if len(group.notifications) == 0 {
+		return false
+	}
+	for i := range group.notifications {
+		if group.notifications[i].Stream == nil || !group.notifications[i].Stream.IsPremiere {
+			return false
+		}
+	}
+	return true
+}
+
+func buildAlarmDispatchGroupView(ctx context.Context, store *messagestrings.Store, group alarmDispatchGroup) alarmDispatchGroupView {
 	entries := make([]alarmDispatchItemView, 0, len(group.notifications))
 	for i := range group.notifications {
 		entries = append(entries, buildAlarmDispatchItemView(ctx, store, &group.notifications[i], group.minutesUntil))
 	}
-	view := alarmDispatchGroupView{
+	return alarmDispatchGroupView{
 		MinutesUntil: group.minutesUntil,
 		IsStarting:   alarmDispatchGroupAllStarting(group),
+		AllPremiere:  alarmDispatchGroupAllPremiere(group),
 		Entries:      entries,
 	}
-	message, err := renderer.Render(ctx, domain.TemplateKeyAlarmDispatchNotificationGroup, "", view)
+}
+
+func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, group alarmDispatchGroup) (string, error) {
+	message, err := renderer.Render(ctx, domain.TemplateKeyAlarmDispatchNotificationGroup, "", buildAlarmDispatchGroupView(ctx, store, group))
 	if err != nil {
 		return "", fmt.Errorf("render alarm dispatch notification group: %w", err)
 	}

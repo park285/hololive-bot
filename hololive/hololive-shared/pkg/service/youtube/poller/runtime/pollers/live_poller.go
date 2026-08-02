@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/service/youtube/livestatus"
@@ -33,9 +34,13 @@ import (
 )
 
 type LivePoller struct {
-	client             *scraper.Client
-	liveStatusProvider LiveStatusProvider
-	db                 pollerDB
+	client                  *scraper.Client
+	watchLiveMetadataClient watchLiveMetadataClient
+	liveStatusProvider      LiveStatusProvider
+	db                      pollerDB
+	premiereProbeMu         sync.Mutex
+	premiereProbeCompleted  map[string]premiereProbeResult
+	premiereProbeInProgress map[string]struct{}
 }
 
 type LiveStatusProvider interface {
@@ -52,11 +57,24 @@ func NewLivePoller(scraperClient *scraper.Client, db any) *LivePoller {
 }
 
 func NewLivePollerWithStatusProvider(provider LiveStatusProvider, scraperClient *scraper.Client, db any) *LivePoller {
-	return &LivePoller{
-		client:             scraperClient,
-		liveStatusProvider: provider,
-		db:                 normalizePollerDB(db),
+	if scraperClient == nil {
+		return newLivePollerWithMetadataClient(provider, nil, db)
 	}
+	return newLivePollerWithMetadataClient(provider, scraperClient, db)
+}
+
+func newLivePollerWithMetadataClient(provider LiveStatusProvider, client watchLiveMetadataClient, db any) *LivePoller {
+	poller := &LivePoller{
+		watchLiveMetadataClient: client,
+		liveStatusProvider:      provider,
+		db:                      normalizePollerDB(db),
+		premiereProbeCompleted:  make(map[string]premiereProbeResult),
+		premiereProbeInProgress: make(map[string]struct{}),
+	}
+	if scraperClient, ok := client.(*scraper.Client); ok {
+		poller.client = scraperClient
+	}
+	return poller
 }
 
 func (p *LivePoller) Name() string {
@@ -255,7 +273,8 @@ func (p *LivePoller) pollStream(ctx context.Context, channelID string, stream *d
 		return nil
 	}
 
-	if err := p.saveLiveSession(ctx, channelID, stream, status, now); err != nil {
+	isPremiere := p.probePremiere(ctx, channelID, stream)
+	if err := p.saveLiveSessionWithPremiere(ctx, channelID, stream, status, now, isPremiere); err != nil {
 		return fmt.Errorf("poll live stream %s: %w", stream.ID, err)
 	}
 

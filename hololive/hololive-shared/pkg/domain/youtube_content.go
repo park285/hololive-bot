@@ -308,6 +308,7 @@ type YouTubeLiveSession struct {
 	StartedAt          *time.Time `json:"started_at,omitempty"`
 	EndedAt            *time.Time `json:"ended_at,omitempty"`
 	LiveFirstSeenAt    *time.Time `db:"live_first_seen_at" json:"live_first_seen_at,omitempty"`
+	IsPremiere         *bool      `db:"is_premiere" json:"is_premiere,omitempty"`
 	TopicID            string     `db:"topic_id" json:"topic_id,omitempty"`
 	ThumbnailURL       string     `db:"thumbnail_url" json:"thumbnail_url,omitempty"`
 	LastSeenAt         time.Time  `db:"last_seen_at" json:"last_seen_at"`

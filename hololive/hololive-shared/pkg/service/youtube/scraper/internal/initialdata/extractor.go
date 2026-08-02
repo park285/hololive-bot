@@ -74,6 +74,12 @@ func Extract(html string) (string, error) {
 	return "", ErrNotFound
 }
 
+func ExtractPlayerResponseCandidates(html string, limit int) []string {
+	collector := newYtInitialDataCandidateCollector(limit)
+	scanAnchorCandidates(html, "ytInitialPlayerResponse", collector)
+	return collector.values
+}
+
 func collectYtInitialDataCandidates(html string) []string {
 	collector := newYtInitialDataCandidateCollector(maxYtInitialDataCandidates)
 	collectAnchorCandidates(html, collector)

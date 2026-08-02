@@ -32,7 +32,7 @@ func TestLivePollerSaveLiveSessionDoesNotResurrectEndedSession(t *testing.T) {
 		Status:    domain.StreamStatusLive,
 	}
 
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, now))
+	require.NoError(t, poller.saveLiveSessionWithPremiere(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, now, premiereFromStream(stream)))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "ended-live").Error)
@@ -64,7 +64,7 @@ func TestLivePollerSaveLiveSessionDoesNotRegressLiveToUpcoming(t *testing.T) {
 		Status:    domain.StreamStatusUpcoming,
 	}
 
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusUpcoming, now))
+	require.NoError(t, poller.saveLiveSessionWithPremiere(context.Background(), "UC_LIVE", stream, domain.LiveStatusUpcoming, now, premiereFromStream(stream)))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "live-regress").Error)
@@ -97,7 +97,7 @@ func TestLivePollerSaveLiveSessionPreservesExistingStartedAt(t *testing.T) {
 		StartActual: &lateStartActual,
 	}
 
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, now))
+	require.NoError(t, poller.saveLiveSessionWithPremiere(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, now, premiereFromStream(stream)))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "started-at-keep").Error)
@@ -126,7 +126,7 @@ func TestLivePollerSaveLiveSessionKeepsMaxLastSeenAt(t *testing.T) {
 		Status:    domain.StreamStatusLive,
 	}
 
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, staleObservation))
+	require.NoError(t, poller.saveLiveSessionWithPremiere(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, staleObservation, premiereFromStream(stream)))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "last-seen-max").Error)
@@ -158,7 +158,7 @@ func TestLivePollerSaveLiveSessionSkipsUnchangedRowWithinMinAdvance(t *testing.T
 	}
 
 	within := seenAt.Add(liveSessionLastSeenMinAdvance - time.Second)
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, within))
+	require.NoError(t, poller.saveLiveSessionWithPremiere(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, within, premiereFromStream(stream)))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "skip-unchanged").Error)
@@ -190,7 +190,7 @@ func TestLivePollerSaveLiveSessionAdvancesLastSeenAtPastMinAdvance(t *testing.T)
 	}
 
 	past := seenAt.Add(liveSessionLastSeenMinAdvance)
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, past))
+	require.NoError(t, poller.saveLiveSessionWithPremiere(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, past, premiereFromStream(stream)))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "advance-last-seen").Error)
@@ -221,7 +221,7 @@ func TestLivePollerSaveLiveSessionUpdatesChangedFieldWithinMinAdvance(t *testing
 	}
 
 	within := seenAt.Add(time.Second)
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, within))
+	require.NoError(t, poller.saveLiveSessionWithPremiere(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, within, premiereFromStream(stream)))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "update-title").Error)
@@ -254,13 +254,116 @@ func TestLivePollerSaveLiveSessionUpdatesStatusTransitionWithinMinAdvance(t *tes
 	}
 
 	within := seenAt.Add(time.Second)
-	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, within))
+	require.NoError(t, poller.saveLiveSessionWithPremiere(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, within, premiereFromStream(stream)))
 
 	var session domain.YouTubeLiveSession
 	require.NoError(t, db.First(&session, "video_id = ?", "upcoming-goes-live").Error)
 	require.Equal(t, domain.LiveStatusLive, session.Status,
 		"status 전이는 MinAdvance 창 안이라도 스킵되면 안 된다")
 	require.Equal(t, within, session.LastSeenAt.UTC())
+}
+
+func TestLivePollerSaveLiveSessionPreservesFirstPremiereDecision(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+
+	isPremiere := true
+	seenAt := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, db.Create(&domain.YouTubeLiveSession{
+		VideoID:    "premiere-decision",
+		ChannelID:  "UC_PREMIERE",
+		Status:     domain.LiveStatusUpcoming,
+		Title:      "Premiere",
+		IsPremiere: &isPremiere,
+		LastSeenAt: seenAt,
+	}).Error)
+
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	stream := &domain.Stream{
+		ID:        "premiere-decision",
+		ChannelID: "UC_PREMIERE",
+		Title:     "Premiere",
+		Status:    domain.StreamStatusUpcoming,
+	}
+	contradictingDecision := false
+
+	require.NoError(t, poller.saveLiveSessionWithPremiere(
+		context.Background(),
+		"UC_PREMIERE",
+		stream,
+		domain.LiveStatusUpcoming,
+		seenAt.Add(time.Second),
+		&contradictingDecision,
+	))
+
+	var session domain.YouTubeLiveSession
+	require.NoError(t, db.First(&session, "video_id = ?", "premiere-decision").Error)
+	require.NotNil(t, session.IsPremiere)
+	require.True(t, *session.IsPremiere)
+
+	require.NoError(t, poller.saveLiveSessionWithPremiere(
+		context.Background(),
+		"UC_PREMIERE",
+		stream,
+		domain.LiveStatusUpcoming,
+		seenAt.Add(2*time.Second),
+		nil,
+	))
+
+	require.NoError(t, db.First(&session, "video_id = ?", "premiere-decision").Error)
+	require.NotNil(t, session.IsPremiere, "NULL 재관측이 기존 판정을 지우면 안 된다")
+	require.True(t, *session.IsPremiere)
+}
+
+func TestLivePollerSaveLiveSessionStoresFalsePremiereDecision(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+
+	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	isPremiere := false
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	stream := &domain.Stream{
+		ID:        "regular-live",
+		ChannelID: "UC_LIVE",
+		Title:     "Regular Live",
+		Status:    domain.StreamStatusUpcoming,
+	}
+
+	require.NoError(t, poller.saveLiveSessionWithPremiere(
+		context.Background(),
+		"UC_LIVE",
+		stream,
+		domain.LiveStatusUpcoming,
+		now,
+		&isPremiere,
+	))
+
+	var session domain.YouTubeLiveSession
+	require.NoError(t, db.First(&session, "video_id = ?", "regular-live").Error)
+	require.NotNil(t, session.IsPremiere)
+	require.False(t, *session.IsPremiere)
+}
+
+func TestLivePollerEndStaleSessionEvictsPremiereProbeCache(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+
+	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, db.Create(&domain.YouTubeLiveSession{
+		VideoID:    "ended-premiere",
+		ChannelID:  "UC_LIVE",
+		Status:     domain.LiveStatusLive,
+		Title:      "Live",
+		LastSeenAt: now.Add(-time.Hour),
+	}).Error)
+
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	_, _, started := poller.beginPremiereProbe("ended-premiere")
+	require.True(t, started)
+	poller.finishPremiereProbe("ended-premiere", premiereProbeResult{isPremiere: true}, true)
+
+	poller.endStaleSession(context.Background(), "UC_LIVE", "ended-premiere", map[string]bool{}, now, now)
+
+	_, found, restarted := poller.beginPremiereProbe("ended-premiere")
+	require.False(t, found, "ENDED 확정 시 probe 캐시가 비워져야 한다")
+	require.True(t, restarted)
 }
 
 func TestLivePollerMarkSessionEndedOnlyEndsLiveSessions(t *testing.T) {

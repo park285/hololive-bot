@@ -35,8 +35,15 @@ import (
 // 과거 tx 내 pre-read(read-then-upsert)는 active-active producer 간 stale 판단 경합이
 // 있었다. 단조 가드(ENDED 불변·LIVE→UPCOMING 회귀 금지)와 COALESCE/GREATEST를 upsert
 // SQL로 내려 단일 문장으로 원자화했다 — 여기서 기존 행을 읽어 병합하지 말 것.
-func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time) error {
-	session := buildLiveSession(channelID, stream, status, now)
+func (p *LivePoller) saveLiveSessionWithPremiere(
+	ctx context.Context,
+	channelID string,
+	stream *domain.Stream,
+	status domain.LiveStatus,
+	now time.Time,
+	isPremiere *bool,
+) error {
+	session := buildLiveSession(channelID, stream, status, now, isPremiere)
 	session.LastSeenAt = now.UTC().Truncate(time.Microsecond)
 	if _, err := p.db.Exec(ctx, mustSQL("live_poller_sessions_0044_01.sql"),
 		session.VideoID,
@@ -50,6 +57,7 @@ func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stre
 		session.TopicID,
 		session.ThumbnailURL,
 		session.LastSeenAt,
+		session.IsPremiere,
 		liveSessionLastSeenMinAdvance.Microseconds(),
 	); err != nil {
 		return fmt.Errorf("save live session: %w", err)
@@ -105,7 +113,13 @@ func normalizeLiveSessionTimes(session *domain.YouTubeLiveSession) {
 	}
 }
 
-func buildLiveSession(channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time) *domain.YouTubeLiveSession {
+func buildLiveSession(
+	channelID string,
+	stream *domain.Stream,
+	status domain.LiveStatus,
+	now time.Time,
+	isPremiere *bool,
+) *domain.YouTubeLiveSession {
 	session := &domain.YouTubeLiveSession{
 		VideoID:            stream.ID,
 		ChannelID:          firstNonEmpty(stream.ChannelID, channelID),
@@ -113,6 +127,7 @@ func buildLiveSession(channelID string, stream *domain.Stream, status domain.Liv
 		Title:              stream.Title,
 		ScheduledStartTime: stream.StartScheduled,
 		LiveFirstSeenAt:    liveFirstSeenAt(status, now),
+		IsPremiere:         isPremiere,
 		TopicID:            streamStringValue(stream.TopicID),
 		ThumbnailURL:       streamStringValue(stream.Thumbnail),
 	}
@@ -122,6 +137,14 @@ func buildLiveSession(channelID string, stream *domain.Stream, status domain.Liv
 	}
 
 	return session
+}
+
+func premiereFromStream(stream *domain.Stream) *bool {
+	if stream == nil || !stream.IsPremiere {
+		return nil
+	}
+	isPremiere := true
+	return &isPremiere
 }
 
 func streamStringValue(value *string) string {

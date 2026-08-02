@@ -1,6 +1,7 @@
 package migrationrunner
 
 import (
+	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
@@ -115,12 +116,14 @@ func TestMigration136LateFailureRollsBackObjectsLedgerAndPrivileges(t *testing.T
 		dbmigrate.ManifestName: {Data: manifestSQL},
 	}
 	var migrationSQL []byte
-	for _, name := range entries {
+	migrationIndex := -1
+	for i, name := range entries {
 		raw, readErr := fs.ReadFile(migrations.FS, name)
 		if readErr != nil {
 			t.Fatalf("read embedded migration %s: %v", name, readErr)
 		}
 		if name == migrationName {
+			migrationIndex = i
 			migrationSQL = raw
 			raw = injectBeforeFinalCommit(t, raw,
 				"SELECT public.migration_136_injected_late_failure();")
@@ -142,8 +145,10 @@ func TestMigration136LateFailureRollsBackObjectsLedgerAndPrivileges(t *testing.T
 	if err != nil {
 		t.Fatalf("rerun migration 136 after rollback: %v", err)
 	}
-	if result.Applied != 1 || result.Skipped != len(entries)-1 || result.Total != len(entries) {
-		t.Fatalf("rerun result = %+v, want applied=1 skipped=%d total=%d", result, len(entries)-1, len(entries))
+	wantApplied := len(entries) - migrationIndex
+	if result.Applied != wantApplied || result.Skipped != migrationIndex || result.Total != len(entries) {
+		t.Fatalf("rerun result = %+v, want applied=%d skipped=%d total=%d",
+			result, wantApplied, migrationIndex, len(entries))
 	}
 	assertMigration136Sealed(t, pool, runtimeRole)
 
@@ -151,7 +156,13 @@ func TestMigration136LateFailureRollsBackObjectsLedgerAndPrivileges(t *testing.T
 	if len(replayManifest) > 0 && replayManifest[len(replayManifest)-1] != '\n' {
 		replayManifest = append(replayManifest, '\n')
 	}
-	replayManifest = append(replayManifest, []byte("133 "+replayName+"\n")...)
+	manifestLines := strings.Split(strings.TrimSpace(string(manifestSQL)), "\n")
+	var lastOrder int
+	var lastName string
+	if _, err := fmt.Sscanf(manifestLines[len(manifestLines)-1], "%d %s", &lastOrder, &lastName); err != nil {
+		t.Fatalf("parse last manifest line %q: %v", manifestLines[len(manifestLines)-1], err)
+	}
+	replayManifest = fmt.Appendf(replayManifest, "%03d %s\n", lastOrder+1, replayName)
 	failureFS[dbmigrate.ManifestName] = &fstest.MapFile{Data: replayManifest}
 	failureFS[replayName] = &fstest.MapFile{Data: migrationSQL}
 	result, err = Run(ctx, pool, failureFS, Config{})

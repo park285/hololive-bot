@@ -211,6 +211,15 @@ func (c *Client) GetVideoMetadata(ctx context.Context, channelID, videoID string
 	return metadata, nil
 }
 
+func (c *Client) GetWatchLiveMetadata(ctx context.Context, channelID, videoID string) (parser.WatchLiveMetadata, error) {
+	html, err := c.getVideoWatchHTML(ctx, channelID, videoID)
+	if err != nil {
+		return parser.WatchLiveMetadata{}, err
+	}
+
+	return parser.ExtractWatchLiveMetadata(html), nil
+}
+
 func (c *Client) getVideoWatchHTML(ctx context.Context, channelID, videoID string) (string, error) {
 	if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
 		return "", fmt.Errorf("video watch page %s: %w", videoID, err)

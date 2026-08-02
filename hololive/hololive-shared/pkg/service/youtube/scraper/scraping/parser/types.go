@@ -18,6 +18,19 @@ const (
 	ReplayStatusReplay
 )
 
+type LiveContentStatus uint8
+
+const (
+	LiveContentUnknown LiveContentStatus = iota
+	LiveContentTrue
+	LiveContentFalse
+)
+
+type WatchLiveMetadata struct {
+	LiveContent    LiveContentStatus
+	StartTimestamp *time.Time
+}
+
 type VideoMetadata struct {
 	PublishedAt *time.Time
 	Replay      ReplayStatus

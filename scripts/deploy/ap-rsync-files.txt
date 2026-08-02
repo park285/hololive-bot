@@ -561,6 +561,7 @@ hololive/hololive-shared/pkg/service/youtube/poller/runtime/helpers.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/job_claim.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/live_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/live_poller_notification.go
+hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/live_poller_premiere.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/live_poller_sessions.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/live_poller_stats.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/pgx_helpers.go

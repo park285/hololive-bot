@@ -254,6 +254,7 @@ func streamFromYouTubeLiveSession(row *domain.YouTubeLiveSession) *domain.Stream
 		StartActual:    utcTimePtr(row.StartedAt),
 		Link:           &link,
 		Channel:        &domain.Channel{ID: channelID, Name: channelID},
+		IsPremiere:     row.IsPremiere != nil && *row.IsPremiere,
 	}
 	if topicID := strings.TrimSpace(row.TopicID); topicID != "" {
 		stream.TopicID = &topicID
