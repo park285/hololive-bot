@@ -258,6 +258,7 @@ func addTemplateAlarmDispatchSamples(data map[domain.TemplateKey]any) {
 	data[domain.TemplateKeyAlarmDispatchNotification] = map[string]any{
 		"IsStarting":      false,
 		"IsScheduled":     false,
+		"IsPremiere":      false,
 		fieldMemberName:   sampleMemberMiko,
 		"MinutesUntil":    5,
 		fieldTitle:        "마인크래프트 건축",
@@ -267,9 +268,10 @@ func addTemplateAlarmDispatchSamples(data map[domain.TemplateKey]any) {
 	data[domain.TemplateKeyAlarmDispatchNotificationGroup] = map[string]any{
 		"IsStarting":   false,
 		"MinutesUntil": 5,
+		"AllPremiere":  false,
 		"Entries": []map[string]any{
-			{"IsStarting": false, "IsScheduled": false, fieldMemberName: sampleMemberMiko, "MinutesUntil": 5, fieldTitle: "마인크래프트 건축", "ScheduleMessage": "", fieldURL: "https://youtu.be/stream123"},
-			{"IsStarting": false, "IsScheduled": true, fieldMemberName: "호시마치 스이세이", "MinutesUntil": 0, fieldTitle: "노래 방송", "ScheduleMessage": "21:00 시작 예정", fieldURL: ""},
+			{"IsStarting": false, "IsScheduled": false, "IsPremiere": false, fieldMemberName: sampleMemberMiko, "MinutesUntil": 5, fieldTitle: "마인크래프트 건축", "ScheduleMessage": "", fieldURL: "https://youtu.be/stream123"},
+			{"IsStarting": false, "IsScheduled": true, "IsPremiere": true, fieldMemberName: "호시마치 스이세이", "MinutesUntil": 0, fieldTitle: "노래 방송", "ScheduleMessage": "21:00 시작 예정", fieldURL: ""},
 		},
 	}
 }

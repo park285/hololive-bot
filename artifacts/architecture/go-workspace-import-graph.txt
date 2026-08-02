@@ -1214,6 +1214,7 @@ github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping -> github.c
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping -> github.com/park285/shared-go/pkg/retry
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser -> github.com/kapu/hololive-shared/internal/service/youtube/timestamp
+github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter -> github.com/kapu/hololive-shared/pkg/service/ratelimit
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter -> github.com/park285/shared-go/pkg/retry
 github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation -> github.com/kapu/hololive-dbtest

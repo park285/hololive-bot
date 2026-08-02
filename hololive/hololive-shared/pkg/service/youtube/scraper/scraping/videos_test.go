@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -361,6 +362,55 @@ func TestParseVideosFromInitialData_LockupViewModel(t *testing.T) {
 	assert.Equal(t, "1 month ago", videos[0].PublishedText)
 	assert.Equal(t, int64(690000), videos[0].ViewCount)
 	assert.Len(t, videos[0].Thumbnail, 1)
+}
+
+func TestGetWatchLiveMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		html string
+		want parser.LiveContentStatus
+	}{
+		{
+			name: "premiere",
+			html: `<script>var ytInitialPlayerResponse = {"videoDetails":{"isUpcoming":true,"isLiveContent":false}};</script>`,
+			want: parser.LiveContentFalse,
+		},
+		{
+			name: "scheduled live",
+			html: `<script>var ytInitialPlayerResponse = {"videoDetails":{"isUpcoming":true,"isLiveContent":true}};</script>`,
+			want: parser.LiveContentTrue,
+		},
+		{
+			name: "unknown",
+			html: "<html>no player response</html>",
+			want: parser.LiveContentUnknown,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := NewClient(
+				WithRateLimiter(ratelimiter.New(0)),
+				WithHTTPClient(&http.Client{
+					Timeout: 5 * time.Second,
+					Transport: videosRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+						assert.Equal(t, "/watch", req.URL.Path)
+						assert.Equal(t, "video-id", req.URL.Query().Get("v"))
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Body:       io.NopCloser(strings.NewReader(test.html)),
+							Header:     make(http.Header),
+							Request:    req,
+						}, nil
+					}),
+				}),
+			)
+
+			metadata, err := client.GetWatchLiveMetadata(context.Background(), "channel-id", "video-id")
+			require.NoError(t, err)
+			assert.Equal(t, test.want, metadata.LiveContent)
+		})
+	}
 }
 
 func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {

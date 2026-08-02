@@ -547,6 +547,7 @@ TABLE youtube_live_sessions
   COLUMN live_first_seen_at timestamp with time zone
   COLUMN topic_id text NOT NULL DEFAULT ''::text
   COLUMN thumbnail_url text NOT NULL DEFAULT ''::text
+  COLUMN is_premiere boolean
   CONSTRAINT chk_youtube_live_sessions_status_vocab CHECK ((status = ANY (ARRAY[('UPCOMING'::character varying)::text, ('LIVE'::character varying)::text, ('ENDED'::character varying)::text])))
   CONSTRAINT youtube_live_sessions_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_yls_channel_last_seen ON public.youtube_live_sessions USING btree (channel_id, last_seen_at DESC)

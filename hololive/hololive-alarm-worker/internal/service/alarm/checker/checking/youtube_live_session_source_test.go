@@ -25,6 +25,8 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	upcomingStart := now.Add(4 * time.Minute)
 	oldSeen := now.Add(-(defaultPersistedLiveSessionRecentWindow + time.Second))
 	recentSeen := now.Add(-time.Minute)
+	isPremiere := true
+	isNotPremiere := false
 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{
 		{
@@ -37,9 +39,18 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 			TopicID:         "Rhythm_Heaven",
 			ThumbnailURL:    "https://i.ytimg.com/vi/live-included/maxresdefault.jpg",
 			LastSeenAt:      recentSeen,
+			IsPremiere:      &isPremiere,
 		},
 		{
 			VideoID:            "upcoming-included",
+			ChannelID:          "ch-1",
+			Status:             domain.LiveStatusUpcoming,
+			ScheduledStartTime: &upcomingStart,
+			LastSeenAt:         recentSeen,
+			IsPremiere:         &isNotPremiere,
+		},
+		{
+			VideoID:            "upcoming-unknown",
 			ChannelID:          "ch-1",
 			Status:             domain.LiveStatusUpcoming,
 			ScheduledStartTime: &upcomingStart,
@@ -69,8 +80,11 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	for _, session := range sessions {
 		gotIDs = append(gotIDs, session.Stream.ID)
 	}
-	assert.ElementsMatch(t, []string{"live-included", "upcoming-included"}, gotIDs)
+	assert.ElementsMatch(t, []string{"live-included", "upcoming-included", "upcoming-unknown"}, gotIDs)
 	assert.Equal(t, "live title", sessionsByID(sessions)["live-included"].Stream.Title)
+	assert.True(t, sessionsByID(sessions)["live-included"].Stream.IsPremiere)
+	assert.False(t, sessionsByID(sessions)["upcoming-included"].Stream.IsPremiere)
+	assert.False(t, sessionsByID(sessions)["upcoming-unknown"].Stream.IsPremiere)
 	assert.Equal(t, liveFirstSeen, sessionsByID(sessions)["live-included"].LiveFirstSeenAt)
 	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.TopicID)
 	assert.Equal(t, "Rhythm_Heaven", *sessionsByID(sessions)["live-included"].Stream.TopicID)
@@ -184,9 +198,10 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 		_, err := pool.Exec(t.Context(), `
 			INSERT INTO youtube_live_sessions(
 				video_id, channel_id, status, title, scheduled_start_time,
-				started_at, ended_at, live_first_seen_at, topic_id, thumbnail_url, last_seen_at
+				started_at, ended_at, live_first_seen_at, topic_id, thumbnail_url, last_seen_at,
+				is_premiere
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		`,
 			session.VideoID,
 			session.ChannelID,
@@ -199,6 +214,7 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 			session.TopicID,
 			session.ThumbnailURL,
 			session.LastSeenAt,
+			session.IsPremiere,
 		)
 		require.NoError(t, err)
 	}

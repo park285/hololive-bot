@@ -21,11 +21,14 @@
 package dispatchrun
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -188,6 +191,108 @@ func TestBuildAlarmDispatchKaringContentListRequestsLiveCatchupUsesLiveLabels(t 
 	require.Len(t, requests, 1)
 	assert.Equal(t, "라이브 시작", requests[0].ExtraArgs["alarm_title"])
 	assert.Equal(t, "지금 시작", requests[0].ExtraArgs["time_left"])
+}
+
+func TestBuildAlarmDispatchKaringExtraArgsPremiereLabels(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO message_strings(namespace, key, value) VALUES
+		('karing', 'alarm_title_live_premiere', '설정 선행공개 시작'),
+		('karing', 'alarm_title_prelive_premiere', '설정 선행공개 %d분 전 알림')
+		ON CONFLICT (namespace, key) DO UPDATE SET value = EXCLUDED.value
+	`)
+	require.NoError(t, err)
+	store := messagestrings.NewStore(pool, slog.Default())
+	require.NoError(t, store.Load(t.Context()))
+
+	premiere := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	premiere.Stream.IsPremiere = true
+	regular := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+
+	for _, tc := range []struct {
+		name          string
+		minutesUntil  int
+		notifications []domain.AlarmNotification
+		wantTitle     string
+		wantTimeLeft  string
+	}{
+		{
+			name:          "all premiere starting",
+			notifications: []domain.AlarmNotification{premiere},
+			wantTitle:     "설정 선행공개 시작",
+			wantTimeLeft:  "지금 시작",
+		},
+		{
+			name:         "all premiere prelive",
+			minutesUntil: 5,
+			notifications: func() []domain.AlarmNotification {
+				n := premiere
+				n.MinutesUntil = 5
+				return []domain.AlarmNotification{n}
+			}(),
+			wantTitle:    "설정 선행공개 5분 전 알림",
+			wantTimeLeft: "5분 후 시작",
+		},
+		{
+			name:         "mixed prelive keeps broadcast",
+			minutesUntil: 5,
+			notifications: func() []domain.AlarmNotification {
+				p := premiere
+				p.MinutesUntil = 5
+				r := regular
+				r.MinutesUntil = 5
+				return []domain.AlarmNotification{p, r}
+			}(),
+			wantTitle:    "방송 5분 전 알림",
+			wantTimeLeft: "5분 후 시작",
+		},
+		{
+			name:          "mixed starting keeps live",
+			notifications: []domain.AlarmNotification{premiere, regular},
+			wantTitle:     "라이브 시작",
+			wantTimeLeft:  "지금 시작",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := buildAlarmDispatchKaringExtraArgs(t.Context(), store, alarmDispatchGroup{
+				minutesUntil:  tc.minutesUntil,
+				notifications: tc.notifications,
+			}, len(tc.notifications))
+
+			assert.Equal(t, tc.wantTitle, args["alarm_title"])
+			assert.Equal(t, tc.wantTimeLeft, args["time_left"])
+		})
+	}
+}
+
+func TestBuildAlarmDispatchKaringExtraArgsPremiereFallbacks(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	_, err := pool.Exec(t.Context(), `
+		DELETE FROM message_strings
+		WHERE namespace = 'karing'
+		  AND key IN ('alarm_title_live_premiere', 'alarm_title_prelive_premiere')
+	`)
+	require.NoError(t, err)
+	store := messagestrings.NewStore(pool, slog.Default())
+	require.NoError(t, store.Load(t.Context()))
+
+	premiere := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	premiere.Stream.IsPremiere = true
+	prelive := premiere
+	prelive.MinutesUntil = 5
+
+	startingArgs := buildAlarmDispatchKaringExtraArgs(t.Context(), store, alarmDispatchGroup{
+		notifications: []domain.AlarmNotification{premiere},
+	}, 1)
+	preliveArgs := buildAlarmDispatchKaringExtraArgs(t.Context(), store, alarmDispatchGroup{
+		minutesUntil:  5,
+		notifications: []domain.AlarmNotification{prelive},
+	}, 1)
+
+	assert.Equal(t, "선행공개 시작", startingArgs["alarm_title"])
+	assert.Equal(t, "지금 시작", startingArgs["time_left"])
+	assert.Equal(t, "선행공개 5분 전 알림", preliveArgs["alarm_title"])
+	assert.Equal(t, "5분 후 시작", preliveArgs["time_left"])
 }
 
 func TestAlarmDispatchEnvelopeClientRequestIDParts(t *testing.T) {

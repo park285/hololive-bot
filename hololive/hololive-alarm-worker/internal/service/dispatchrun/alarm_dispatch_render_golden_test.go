@@ -64,17 +64,21 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	member := util.MarkdownNeutralize(goldenAlarmDispatchMember(n))
 	title := util.MarkdownNeutralize(goldenAlarmDispatchTitle(n))
 	url := resolveAlarmDispatchURL(n)
+	label := "방송"
+	if n.Stream != nil && n.Stream.IsPremiere {
+		label = "선행공개"
+	}
 	var b strings.Builder
 	if groupMinutesUntil < 0 {
 		b.WriteString("## ")
 	}
 	switch {
 	case goldenAlarmDispatchNotificationIsStarting(n):
-		fmt.Fprintf(&b, "🔴 **%s** 방송 시작", member)
+		fmt.Fprintf(&b, "🔴 **%s** %s 시작", member, label)
 	case groupMinutesUntil > 0 && n.MinutesUntil == groupMinutesUntil:
-		fmt.Fprintf(&b, "⏰ **%s** 방송 예정", member)
+		fmt.Fprintf(&b, "⏰ **%s** %s 예정", member, label)
 	default:
-		fmt.Fprintf(&b, "⏰ **%s** 방송 %d분 전", member, n.MinutesUntil)
+		fmt.Fprintf(&b, "⏰ **%s** %s %d분 전", member, label, n.MinutesUntil)
 	}
 	linkable := title != "" && url != "" && !strings.Contains(url, " | ")
 	if linkable {
@@ -103,12 +107,28 @@ func goldenAlarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
 	return true
 }
 
+func goldenAlarmDispatchGroupAllPremiere(group alarmDispatchGroup) bool {
+	if len(group.notifications) == 0 {
+		return false
+	}
+	for i := range group.notifications {
+		if group.notifications[i].Stream == nil || !group.notifications[i].Stream.IsPremiere {
+			return false
+		}
+	}
+	return true
+}
+
 func goldenAlarmDispatchGroup(group alarmDispatchGroup) string {
+	label := "방송"
+	if goldenAlarmDispatchGroupAllPremiere(group) {
+		label = "선행공개"
+	}
 	var b strings.Builder
 	if goldenAlarmDispatchGroupAllStarting(group) {
-		b.WriteString("## 🔴 방송 시작")
+		fmt.Fprintf(&b, "## 🔴 %s 시작", label)
 	} else {
-		fmt.Fprintf(&b, "## ⏰ 방송 %d분 전", group.minutesUntil)
+		fmt.Fprintf(&b, "## ⏰ %s %d분 전", label, group.minutesUntil)
 	}
 	for i := range group.notifications {
 		b.WriteString("\n\n")
@@ -133,6 +153,33 @@ func alarmGoldenNotification(name string, minutesUntil int, stream *domain.Strea
 		Stream:       stream,
 		MinutesUntil: minutesUntil,
 	}
+}
+
+func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
+	premiere := alarmGoldenNotification("Premiere", 5, alarmGoldenStream("premiere", "Premiere Title"))
+	premiere.Stream.IsPremiere = true
+	regular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("regular", "Regular Title"))
+
+	item := buildAlarmDispatchItemView(t.Context(), nil, &premiere, 5)
+	assert.True(t, item.IsPremiere)
+
+	allPremiere := buildAlarmDispatchGroupView(t.Context(), nil, alarmDispatchGroup{
+		minutesUntil:  5,
+		notifications: []domain.AlarmNotification{premiere, premiere},
+	})
+	assert.True(t, allPremiere.AllPremiere)
+	require.Len(t, allPremiere.Entries, 2)
+	assert.True(t, allPremiere.Entries[0].IsPremiere)
+	assert.True(t, allPremiere.Entries[1].IsPremiere)
+
+	mixed := buildAlarmDispatchGroupView(t.Context(), nil, alarmDispatchGroup{
+		minutesUntil:  5,
+		notifications: []domain.AlarmNotification{premiere, regular},
+	})
+	assert.False(t, mixed.AllPremiere)
+	require.Len(t, mixed.Entries, 2)
+	assert.True(t, mixed.Entries[0].IsPremiere)
+	assert.False(t, mixed.Entries[1].IsPremiere)
 }
 
 func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) {
@@ -160,6 +207,10 @@ func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) 
 	upcomingStatus := alarmGoldenStream("yt-upcoming", "예정 방송")
 	upcomingStatus.Status = domain.StreamStatusUpcoming
 
+	premiere := alarmGoldenStream("yt-premiere", "선행공개 제목")
+	premiere.Status = domain.StreamStatusUpcoming
+	premiere.IsPremiere = true
+
 	cases := []struct {
 		name         string
 		notification domain.AlarmNotification
@@ -169,6 +220,7 @@ func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) 
 		{"single-live-status-youtube", alarmGoldenNotification("스이세이", 5, liveStatus)},
 		{"single-start-actual-youtube", alarmGoldenNotification("스이세이", 5, startActual)},
 		{"single-upcoming-status-youtube", alarmGoldenNotification("스이세이", 5, upcomingStatus)},
+		{"single-premiere-youtube", alarmGoldenNotification("스이세이", 5, premiere)},
 		{"single-twitch-only", alarmGoldenNotification("멤버", 3, twitch)},
 		{"single-chzzk-only", alarmGoldenNotification("멤버", 3, chzzk)},
 		{"single-integrated", alarmGoldenNotification("멤버", 3, integrated)},
@@ -237,6 +289,14 @@ func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testin
 	mixedB.Stream.StartScheduled = &scheduled
 	mixedB.ScheduleChangeMessage = "변경 안내"
 
+	premiereA := alarmGoldenNotification("Premiere1", 5, alarmGoldenStream("p-a", "Premiere A"))
+	premiereA.Stream.IsPremiere = true
+	premiereB := alarmGoldenNotification("Premiere2", 5, alarmGoldenStream("p-b", "Premiere B"))
+	premiereB.Stream.IsPremiere = true
+
+	mixedPremiere := premiereA
+	mixedRegular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("p-regular", "Regular"))
+
 	cases := []struct {
 		name  string
 		group alarmDispatchGroup
@@ -263,6 +323,22 @@ func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testin
 				roomID:        "room-golden",
 				minutesUntil:  1,
 				notifications: []domain.AlarmNotification{mixedA, mixedB},
+			},
+		},
+		{
+			name: "group-all-premiere",
+			group: alarmDispatchGroup{
+				roomID:        "room-golden",
+				minutesUntil:  5,
+				notifications: []domain.AlarmNotification{premiereA, premiereB},
+			},
+		},
+		{
+			name: "group-mixed-premiere",
+			group: alarmDispatchGroup{
+				roomID:        "room-golden",
+				minutesUntil:  5,
+				notifications: []domain.AlarmNotification{mixedPremiere, mixedRegular},
 			},
 		},
 	}
