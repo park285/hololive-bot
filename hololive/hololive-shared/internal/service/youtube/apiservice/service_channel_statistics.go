@@ -173,6 +173,9 @@ func (ys *serviceImpl) scrapeSingleChannelStatistics(ctx context.Context, channe
 }
 
 func (ys *serviceImpl) channelStatsFromScraped(channelID string, stats *parser.ChannelStats) (*ytcontract.ChannelStats, error) {
+	if stats == nil {
+		return nil, fmt.Errorf("scraper channel stats for %s: empty result", channelID)
+	}
 	subscriberCount, videoCount, viewCount, err := validatedScrapedChannelCounts(channelID, stats)
 	if err != nil {
 		return nil, err

@@ -126,8 +126,12 @@ func TestGetChannelStatistics_SecondCallIsServedFromCache(t *testing.T) {
 		if got := scraper.callCount(channelID); got != 1 {
 			t.Fatalf("scraper calls for %s = %d, want 1 (cache hit expected)", channelID, got)
 		}
-		if second[channelID].SubscriberCount != first[channelID].SubscriberCount {
-			t.Fatalf("cached stats for %s = %+v, want %+v", channelID, second[channelID], first[channelID])
+		firstStats, secondStats := first[channelID], second[channelID]
+		if firstStats == nil || secondStats == nil {
+			t.Fatalf("stats for %s = (first %v, second %v), want both non-nil", channelID, firstStats, secondStats)
+		}
+		if secondStats.SubscriberCount != firstStats.SubscriberCount {
+			t.Fatalf("cached stats for %s = %+v, want %+v", channelID, secondStats, firstStats)
 		}
 	}
 }
