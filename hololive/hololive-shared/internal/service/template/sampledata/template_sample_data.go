@@ -45,60 +45,73 @@ func GetTemplateSampleData(key domain.TemplateKey) any {
 	return templateSampleData[key]
 }
 
-func GetAllTemplateKeys() []domain.TemplateKey {
-	return []domain.TemplateKey{
-		domain.TemplateKeyOutboxShorts,
-		domain.TemplateKeyOutboxCommunity,
-		domain.TemplateKeyOutboxVideo,
-		domain.TemplateKeyOutboxMilestone,
-		domain.TemplateKeyOutboxVideoGroup,
-		domain.TemplateKeyOutboxShortsGroup,
-		domain.TemplateKeyOutboxCommunityGroup,
-		domain.TemplateKeyCmdAlarmList,
-		domain.TemplateKeyCmdAlarmNotification,
-		domain.TemplateKeyCmdAlarmLiveStarted,
-		domain.TemplateKeyCmdAlarmNotificationGroup,
-		domain.TemplateKeyCmdLiveStreams,
-		domain.TemplateKeyCmdUpcomingStreams,
-		domain.TemplateKeyCmdHelp,
-		domain.TemplateKeyCmdMemberDirectory,
-		domain.TemplateKeyCmdProfile,
-		domain.TemplateKeyCmdChannelSchedule,
-		domain.TemplateKeyCmdAlarmAdded,
-		domain.TemplateKeyCmdAlarmRemoved,
-		domain.TemplateKeyCmdAlarmCleared,
-		domain.TemplateKeyCmdMilestoneAchieved,
-		domain.TemplateKeyCmdMilestoneApproach,
-		domain.TemplateKeyCmdStatsCount,
-		domain.TemplateKeyCmdStatsGainers,
-		domain.TemplateKeyCmdCalendar,
-		domain.TemplateKeyCmdMemberNotLive,
-		domain.TemplateKeyCmdMemberNoUpcoming,
-		domain.TemplateKeyCmdMemberNotFound,
-		domain.TemplateKeyCmdAmbiguousMember,
-		domain.TemplateKeyCelebrationBirthday,
-		domain.TemplateKeyCelebrationAnniversary,
-		domain.TemplateKeyCelebrationBirthdayStream,
-		domain.TemplateKeyAlarmDispatchNotification,
-		domain.TemplateKeyAlarmDispatchNotificationGroup,
-		domain.TemplateKeyCmdMajorEventWeeklySummary,
-		domain.TemplateKeyCmdMajorEventMonthlySummary,
-		domain.TemplateKeyCmdMajorEventSubscribed,
-		domain.TemplateKeyCmdMajorEventUnsubscribed,
-		domain.TemplateKeyCmdMajorEventAlreadySub,
-		domain.TemplateKeyCmdMajorEventNotSub,
-		domain.TemplateKeyCmdMajorEventStatus,
-		domain.TemplateKeyCmdMajorEventUsage,
-		domain.TemplateKeyCmdMemberNewsDigest,
-		domain.TemplateKeyCmdMemberNewsNoMembers,
-		domain.TemplateKeyCmdMemberNewsSubscribed,
-		domain.TemplateKeyCmdMemberNewsUnsubscribed,
-		domain.TemplateKeyCmdMemberNewsAlreadySub,
-		domain.TemplateKeyCmdMemberNewsNotSub,
-		domain.TemplateKeyCmdMemberNewsStatus,
+var allTemplateKeySet = buildTemplateKeySet(allTemplateKeys)
+
+func buildTemplateKeySet(keys []domain.TemplateKey) map[domain.TemplateKey]struct{} {
+	set := make(map[domain.TemplateKey]struct{}, len(keys))
+	for _, key := range keys {
+		set[key] = struct{}{}
 	}
+	return set
+}
+
+func GetAllTemplateKeys() []domain.TemplateKey {
+	return slices.Clone(allTemplateKeys)
+}
+
+var allTemplateKeys = []domain.TemplateKey{
+	domain.TemplateKeyOutboxShorts,
+	domain.TemplateKeyOutboxCommunity,
+	domain.TemplateKeyOutboxVideo,
+	domain.TemplateKeyOutboxMilestone,
+	domain.TemplateKeyOutboxVideoGroup,
+	domain.TemplateKeyOutboxShortsGroup,
+	domain.TemplateKeyOutboxCommunityGroup,
+	domain.TemplateKeyCmdAlarmList,
+	domain.TemplateKeyCmdAlarmNotification,
+	domain.TemplateKeyCmdAlarmLiveStarted,
+	domain.TemplateKeyCmdAlarmNotificationGroup,
+	domain.TemplateKeyCmdLiveStreams,
+	domain.TemplateKeyCmdUpcomingStreams,
+	domain.TemplateKeyCmdHelp,
+	domain.TemplateKeyCmdMemberDirectory,
+	domain.TemplateKeyCmdProfile,
+	domain.TemplateKeyCmdChannelSchedule,
+	domain.TemplateKeyCmdAlarmAdded,
+	domain.TemplateKeyCmdAlarmRemoved,
+	domain.TemplateKeyCmdAlarmCleared,
+	domain.TemplateKeyCmdMilestoneAchieved,
+	domain.TemplateKeyCmdMilestoneApproach,
+	domain.TemplateKeyCmdStatsCount,
+	domain.TemplateKeyCmdStatsGainers,
+	domain.TemplateKeyCmdCalendar,
+	domain.TemplateKeyCmdMemberNotLive,
+	domain.TemplateKeyCmdMemberNoUpcoming,
+	domain.TemplateKeyCmdMemberNotFound,
+	domain.TemplateKeyCmdAmbiguousMember,
+	domain.TemplateKeyCelebrationBirthday,
+	domain.TemplateKeyCelebrationAnniversary,
+	domain.TemplateKeyCelebrationBirthdayStream,
+	domain.TemplateKeyAlarmDispatchNotification,
+	domain.TemplateKeyAlarmDispatchNotificationGroup,
+	domain.TemplateKeyCmdMajorEventWeeklySummary,
+	domain.TemplateKeyCmdMajorEventMonthlySummary,
+	domain.TemplateKeyCmdMajorEventSubscribed,
+	domain.TemplateKeyCmdMajorEventUnsubscribed,
+	domain.TemplateKeyCmdMajorEventAlreadySub,
+	domain.TemplateKeyCmdMajorEventNotSub,
+	domain.TemplateKeyCmdMajorEventStatus,
+	domain.TemplateKeyCmdMajorEventUsage,
+	domain.TemplateKeyCmdMemberNewsDigest,
+	domain.TemplateKeyCmdMemberNewsNoMembers,
+	domain.TemplateKeyCmdMemberNewsSubscribed,
+	domain.TemplateKeyCmdMemberNewsUnsubscribed,
+	domain.TemplateKeyCmdMemberNewsAlreadySub,
+	domain.TemplateKeyCmdMemberNewsNotSub,
+	domain.TemplateKeyCmdMemberNewsStatus,
 }
 
 func IsValidTemplateKey(key domain.TemplateKey) bool {
-	return slices.Contains(GetAllTemplateKeys(), key)
+	_, ok := allTemplateKeySet[key]
+	return ok
 }

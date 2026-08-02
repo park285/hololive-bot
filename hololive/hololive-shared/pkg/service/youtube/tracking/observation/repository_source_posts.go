@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
 	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 

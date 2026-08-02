@@ -62,7 +62,7 @@ func newDiscardLogger() *slog.Logger {
 func newTriggerRouter(h *TriggerHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h.RegisterInternalRoutes(r.Group("/"))
+	h.RegisterInternalRoutesWithoutAuth(r.Group("/"))
 	return r
 }
 

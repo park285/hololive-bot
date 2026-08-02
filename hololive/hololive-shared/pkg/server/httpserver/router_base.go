@@ -37,6 +37,11 @@ type BaseMiddlewareOptions struct {
 	MaxBodyBytes int64
 }
 
+func newReleaseModeEngine() *gin.Engine {
+	gin.SetMode(gin.ReleaseMode)
+	return gin.New()
+}
+
 func ApplyBaseMiddleware(router *gin.Engine, ctx context.Context, logger *slog.Logger, opts BaseMiddlewareOptions) {
 	if router == nil {
 		return

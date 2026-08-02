@@ -28,7 +28,7 @@ import (
 
 	"github.com/park285/shared-go/pkg/json"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTemplateRepository_CreateTemplateRecoversFromDuplicateKey(t *testing.T) {
+func TestTemplateRepository_UpsertResolvesCommittedDuplicateRow(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	repository := NewTemplateRepository(pool, logger)
@@ -28,7 +28,7 @@ func TestTemplateRepository_CreateTemplateRecoversFromDuplicateKey(t *testing.T)
 	)
 	require.NoError(t, err)
 
-	tmpl, err := repository.createTemplate(ctx, key, nil, "resolved body")
+	tmpl, err := repository.Upsert(ctx, key, nil, "resolved body")
 	require.NoError(t, err)
 	require.NotNil(t, tmpl)
 	assert.Equal(t, "resolved body", tmpl.Body)
@@ -37,4 +37,35 @@ func TestTemplateRepository_CreateTemplateRecoversFromDuplicateKey(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, found)
 	assert.Equal(t, "resolved body", found.Body)
+	assert.Equal(t, tmpl.ID, found.ID)
+}
+
+func TestTemplateRepository_UpsertResolvesCommittedDuplicateOverrideRow(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	repository := NewTemplateRepository(pool, logger)
+	ctx := context.Background()
+	key := domain.TemplateKeyOutboxCommunity
+	channelID := "room_dup"
+
+	_, err := pool.Exec(ctx,
+		`INSERT INTO notification_templates(template_key, channel_id, body) VALUES ($1, $2, $3)`,
+		key,
+		channelID,
+		"racing body",
+	)
+	require.NoError(t, err)
+
+	tmpl, err := repository.Upsert(ctx, key, &channelID, "resolved body")
+	require.NoError(t, err)
+	require.NotNil(t, tmpl)
+	assert.Equal(t, "resolved body", tmpl.Body)
+	require.NotNil(t, tmpl.ChannelID)
+	assert.Equal(t, channelID, *tmpl.ChannelID)
+
+	found, err := repository.FindByKeyAndChannel(ctx, key, &channelID)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, "resolved body", found.Body)
+	assert.Equal(t, tmpl.ID, found.ID)
 }

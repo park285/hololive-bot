@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -92,8 +93,9 @@ func TestViewerSampleCleanerDeleteBatchDeletesExactlyBatchSize(t *testing.T) {
 		insertViewerSampleCleanerSample(t, ctx, pool, "old-video", now.Add(time.Duration(i)*time.Second))
 	}
 
+	cleaner := NewViewerSampleCleaner(pool, ViewerSampleCleanerConfig{RetentionDays: 7, BatchSize: 2})
 	cutoff := now.AddDate(0, 0, -7)
-	deleted, err := deleteViewerSampleCleanupBatch(ctx, pool, cutoff, 2)
+	deleted, err := dbx.DeleteOneBatch(ctx, pool, cleaner.batchDeleteSpec(cutoff))
 	require.NoError(t, err)
 	require.EqualValues(t, 2, deleted)
 	require.EqualValues(t, 3, countViewerSampleCleanerSamples(t, ctx, pool, "old-video"))

@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
 	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )

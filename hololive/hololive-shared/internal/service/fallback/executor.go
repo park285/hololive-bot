@@ -25,7 +25,6 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"golang.org/x/sync/errgroup"
 )
 
 type Trigger string
@@ -130,38 +129,40 @@ func (r *parallelResult) markSuccess() {
 	r.mu.Unlock()
 }
 
-func executeParallelTarget[K, V any](ctx context.Context, plan FetchPlan[K, V], index int, key K, result *parallelResult) {
-	if err := panicguard.RunE(nil, "fallback-fetch", func() error {
-		value, err := plan.Fetch(ctx, key)
-		if err != nil {
-			return err
-		}
-		if plan.OnSuccess != nil {
-			plan.OnSuccess(key, value)
-		}
-		result.markSuccess()
-		return nil
-	}); err != nil {
-		result.markFailed(index)
+func fetchParallelTarget[K, V any](ctx context.Context, plan FetchPlan[K, V], key K, result *parallelResult) error {
+	value, err := plan.Fetch(ctx, key)
+	if err != nil {
+		return err
 	}
+	if plan.OnSuccess != nil {
+		plan.OnSuccess(key, value)
+	}
+	result.markSuccess()
+
+	return nil
 }
 
+// 개별 key 실패를 goroutine 안에서 흡수한다. errgroup처럼 첫 실패로 ctx를 취소하면
+// 아직 실행 중인 다른 target까지 중단되어 fallback 후보 집계가 어긋난다.
 func executeParallel[K, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
-	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(plan.Parallelism)
-
+	limiter := make(chan struct{}, plan.Parallelism)
 	result := parallelResult{failed: failed}
+
+	var wg sync.WaitGroup
 	for i := range plan.Targets {
-		index := i
 		key := plan.Targets[i]
-		panicguard.GoE(eg, nil, "fallback-fetch-worker", func() error {
-			executeParallelTarget(egCtx, plan, index, key, &result)
-			return nil
+		limiter <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-limiter }()
+			if err := panicguard.RunE(nil, "fallback-fetch", func() error {
+				return fetchParallelTarget(ctx, plan, key, &result)
+			}); err != nil {
+				result.markFailed(i)
+			}
 		})
 	}
-	if err := eg.Wait(); err != nil {
-		return result.successCount
-	}
+	wg.Wait()
+
 	return result.successCount
 }
 

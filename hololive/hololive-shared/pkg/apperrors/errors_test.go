@@ -111,7 +111,7 @@ func TestValidationError_ErrorAndFactory(t *testing.T) {
 		t.Fatalf("unexpected ValidationError(with field): %q", got)
 	}
 
-	created := NewValidationError("too short", "password", "x")
+	created := NewValidationError("too short", "password")
 	if created.Field != "password" || created.Message != "too short" {
 		t.Fatalf("unexpected NewValidationError result: %+v", created)
 	}

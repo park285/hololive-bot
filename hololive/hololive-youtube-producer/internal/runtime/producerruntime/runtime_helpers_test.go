@@ -165,7 +165,9 @@ func TestYouTubeProducerRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 		Readiness:   readiness,
 	}
 
-	runtime.Run()
+	if err := runtime.Run(); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
 
 	statusCode, payload := readiness.Response()
 	if statusCode != http.StatusServiceUnavailable {

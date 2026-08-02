@@ -22,8 +22,8 @@ package handlers
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
+	json "github.com/park285/shared-go/pkg/json"
 	"strings"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"

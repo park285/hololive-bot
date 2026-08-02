@@ -211,11 +211,7 @@ func loadYouTubeProducerBudgetMaxInflight(key string, defaultValue int) int {
 }
 
 func loadYouTubeProducerBudgetCleanupLimit(defaultValue int) int {
-	value := sharedenv.Int("YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT", defaultValue)
-	if value <= 0 {
-		return defaultValue
-	}
-	return value
+	return positiveIntEnv("YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT", defaultValue)
 }
 
 func loadWorkerPoolConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) WorkerPoolConfig {

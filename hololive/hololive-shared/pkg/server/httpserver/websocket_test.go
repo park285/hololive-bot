@@ -107,9 +107,10 @@ func TestCheckOrigin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 테스트용 오리진 설정
-			orig := wsAllowedOrigins
-			wsAllowedOrigins = tt.origins
-			defer func() { wsAllowedOrigins = orig }()
+			orig := wsAllowedOrigins.Load()
+			origins := tt.origins
+			wsAllowedOrigins.Store(&origins)
+			defer func() { wsAllowedOrigins.Store(orig) }()
 
 			r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost/ws", http.NoBody)
 			if err != nil {
@@ -133,14 +134,15 @@ func TestInitWSUpgrader(t *testing.T) {
 
 	InitWSUpgrader()
 
-	if len(wsAllowedOrigins) != 2 {
-		t.Fatalf("wsAllowedOrigins len = %d, want 2", len(wsAllowedOrigins))
+	origins := allowedWSOrigins()
+	if len(origins) != 2 {
+		t.Fatalf("allowedWSOrigins() len = %d, want 2", len(origins))
 	}
-	if wsAllowedOrigins[0] != "https://a.com" {
-		t.Errorf("wsAllowedOrigins[0] = %q, want %q", wsAllowedOrigins[0], "https://a.com")
+	if origins[0] != "https://a.com" {
+		t.Errorf("allowedWSOrigins()[0] = %q, want %q", origins[0], "https://a.com")
 	}
-	if wsAllowedOrigins[1] != "https://b.com" {
-		t.Errorf("wsAllowedOrigins[1] = %q, want %q", wsAllowedOrigins[1], "https://b.com")
+	if origins[1] != "https://b.com" {
+		t.Errorf("allowedWSOrigins()[1] = %q, want %q", origins[1], "https://b.com")
 	}
 }
 
@@ -149,8 +151,8 @@ func TestInitWSUpgrader_EmptyDeniesAll(t *testing.T) {
 
 	InitWSUpgrader()
 
-	if len(wsAllowedOrigins) != 0 {
-		t.Fatalf("wsAllowedOrigins should be empty, got %d", len(wsAllowedOrigins))
+	if origins := allowedWSOrigins(); len(origins) != 0 {
+		t.Fatalf("allowedWSOrigins() should be empty, got %d", len(origins))
 	}
 
 	r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost/ws", http.NoBody)

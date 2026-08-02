@@ -25,6 +25,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -32,6 +33,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/park285/shared-go/pkg/httputil"
 )
+
+const TriggerExecutionTimeout = 5 * time.Minute
+
+// 알림 발송은 중간에 끊기면 부분 전송으로 남으므로 호출측 연결 취소와 분리하고
+// 서버 측 deadline으로만 제한한다.
+func triggerExecutionContext(c *gin.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(c.Request.Context()), TriggerExecutionTimeout)
+}
 
 type MajorEventScheduler interface {
 	SendWeeklyNotification(ctx context.Context) error
@@ -66,7 +75,7 @@ func NewTriggerHandler(
 	}
 }
 
-func (h *TriggerHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
+func (h *TriggerHandler) RegisterInternalRoutesWithoutAuth(rg *gin.RouterGroup) {
 	h.registerInternalRoutes(rg, httputil.AdminAuthConfig{Disabled: true})
 }
 
@@ -88,7 +97,10 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 		return
 	}
 
-	if err := h.majorEvent.SendWeeklyNotification(c.Request.Context()); err != nil {
+	ctx, cancel := triggerExecutionContext(c)
+	defer cancel()
+
+	if err := h.majorEvent.SendWeeklyNotification(ctx); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{"message": "notification already in progress"})
 			return
@@ -112,7 +124,10 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 		return
 	}
 
-	if err := h.majorEventMonthly.SendMonthlyNotification(c.Request.Context()); err != nil {
+	ctx, cancel := triggerExecutionContext(c)
+	defer cancel()
+
+	if err := h.majorEventMonthly.SendMonthlyNotification(ctx); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{"message": "notification already in progress"})
 			return
@@ -136,7 +151,10 @@ func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 		return
 	}
 
-	if err := h.memberNewsWeekly.SendWeeklyDigest(c.Request.Context()); err != nil {
+	ctx, cancel := triggerExecutionContext(c)
+	defer cancel()
+
+	if err := h.memberNewsWeekly.SendWeeklyDigest(ctx); err != nil {
 		RespondInternalError(
 			h.logger,
 			c,

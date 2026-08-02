@@ -90,7 +90,7 @@ func (s *Service) renameRoomsKey(ctx context.Context, tempKey, key string, rooms
 
 	client, builder, ok := s.rawCacheEvalClient()
 	if !ok {
-		return s.renameRoomsKeyFallback(ctx, key, rooms)
+		return s.renameRoomsKeyFallback(ctx, tempKey, key, rooms)
 	}
 
 	return s.renameRoomsKeyNative(ctx, client, builder, tempKey, key)
@@ -104,7 +104,11 @@ func (s *Service) renameRoomsKeyCustom(ctx context.Context, tempKey, key string,
 	return nil
 }
 
-func (s *Service) renameRoomsKeyFallback(ctx context.Context, key string, rooms []string) error {
+// raw client이 없어 RENAME을 쓸 수 없는 형상(테스트 double 등) 전용 경로다.
+// Del→SAdd 사이에 조회하는 reader는 빈 집합을 볼 수 있다.
+func (s *Service) renameRoomsKeyFallback(ctx context.Context, tempKey, key string, rooms []string) error {
+	defer s.discardRoomsTempKey(ctx, tempKey)
+
 	if err := s.cache.Del(ctx, key); err != nil {
 		return fmt.Errorf("fallback clear %s: %w", key, err)
 	}
@@ -118,6 +122,13 @@ func (s *Service) renameRoomsKeyFallback(ctx context.Context, key string, rooms 
 	}
 
 	return nil
+}
+
+// fallback은 tempKey를 소비하지 않으므로, 남겨두면 sync마다 새 temp key가 무한히 쌓인다.
+func (s *Service) discardRoomsTempKey(ctx context.Context, tempKey string) {
+	if err := s.cache.Del(context.WithoutCancel(ctx), tempKey); err != nil && s.logger != nil {
+		s.logger.Warn("discard acl rooms temp key failed", slog.Any("error", err))
+	}
 }
 
 func (s *Service) renameRoomsKeyNative(ctx context.Context, client valkey.Client, builder valkey.Builder, tempKey, key string) error {

@@ -6,9 +6,9 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
+	json "github.com/park285/shared-go/pkg/json"
 	"image/png"
 	"strings"
 )

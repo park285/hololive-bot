@@ -29,7 +29,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP string) (string, error) {

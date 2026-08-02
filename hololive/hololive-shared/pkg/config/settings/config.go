@@ -21,18 +21,13 @@
 package settings
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/park285/iris-client-go/iris"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
-	"github.com/park285/shared-go/pkg/workerconfig"
 )
 
 type Config struct {
@@ -113,13 +108,7 @@ func buildConfig(
 		return nil, err
 	}
 	irisConfig := loadIrisConfig(webhookToken, botToken)
-	workerProfile := workerconfig.DefaultIrisBotWebhookWorkerProfile()
-	if options.FetchIrisWorkerProfile {
-		workerProfile, err = fetchIrisBotWebhookWorkerProfile(&irisConfig)
-		if err != nil {
-			return nil, fmt.Errorf("fetch Iris bot webhook worker profile: %w", err)
-		}
-	}
+	workerProfile := resolveIrisBotWebhookWorkerProfile(&irisConfig, options)
 
 	return &Config{
 		Iris:    irisConfig,
@@ -196,50 +185,6 @@ func loadIrisConfig(webhookToken, botToken string) IrisConfig {
 		HTTPDialTimeout:           time.Duration(sharedenv.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
 		HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
 	}
-}
-
-func fetchIrisBotWebhookWorkerProfile(config *IrisConfig) (profile workerconfig.IrisBotWebhookWorkerProfile, err error) {
-	if strings.TrimSpace(config.BotToken) == "" {
-		return profile, workerconfig.ErrWorkerProfileDisabled
-	}
-	baseURL, err := resolveIrisBaseURL(config)
-	if err != nil {
-		return profile, err
-	}
-	dialGuard, err := newSettingsIrisH3DialGuard(context.Background(), baseURL, config.HTTPDialTimeout)
-	if err != nil {
-		return profile, fmt.Errorf("configure Iris H3 dial guard: %w", err)
-	}
-	irisClient, err := iris.NewClient(
-		iris.WithBaseURL(baseURL),
-		iris.WithBotToken(config.BotToken),
-		iris.WithTransport(sharedenv.String("IRIS_TRANSPORT", "")),
-		iris.WithTimeout(config.HTTPTimeout),
-		iris.WithDialTimeout(config.HTTPDialTimeout),
-		iris.WithResponseHeaderTimeout(config.HTTPResponseHeaderTimeout),
-		iris.WithH3DialGuardContext(dialGuard),
-	)
-	if err != nil {
-		return profile, err
-	}
-	defer func() {
-		if closeErr := irisClient.Close(); closeErr != nil {
-			err = errors.Join(err, fmt.Errorf("close Iris client: %w", closeErr))
-		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), config.HTTPTimeout)
-	defer cancel()
-
-	diagnostics, err := irisClient.GetRuntimeDiagnostics(ctx)
-	if err != nil {
-		return profile, err
-	}
-	envelope, err := workerconfig.DecodeRuntimeWorkerProfileEnvelope(bytes.NewReader(diagnostics))
-	if err != nil {
-		return profile, err
-	}
-	return envelope.Profile, nil
 }
 
 func loadKakaoConfig() KakaoConfig {

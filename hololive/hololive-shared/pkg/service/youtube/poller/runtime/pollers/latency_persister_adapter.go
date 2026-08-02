@@ -23,7 +23,7 @@ package pollers
 import (
 	"context"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"

@@ -21,11 +21,12 @@
 package activity
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -44,12 +45,15 @@ type Logger struct {
 	logger     *slog.Logger
 	stdoutOnly bool
 	mu         sync.RWMutex
+	file       *os.File
 }
 
 var (
 	activityLogRotateMaxBytes   int64 = 10 * 1024 * 1024 // 10MB
-	activityLogReadMaxLineBytes       = 16 * 1024 * 1024 // 16MB
+	activityLogReadMaxLineBytes int64 = 16 * 1024 * 1024 // 16MB
 )
+
+const activityLogTailChunkBytes int64 = 64 * 1024
 
 const activityLogFilePerm = 0o600
 
@@ -82,24 +86,58 @@ func (l *Logger) Log(entryType, summary string, details map[string]any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if err := l.rotateIfNeeded(); err != nil {
-		l.logger.Error("Failed to rotate activity log", slog.Any("error", err))
-	}
-
-	f, err := os.OpenFile(l.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, activityLogFilePerm)
+	file, err := l.activeFileLocked()
 	if err != nil {
 		l.logger.Error("Failed to open activity log file", slog.Any("error", err))
 		return
 	}
-	defer func() {
-		if closeErr := f.Close(); closeErr != nil {
-			l.logger.Error("Failed to close activity log file", slog.Any("error", closeErr))
-		}
-	}()
 
-	if err := json.NewEncoder(f).Encode(entry); err != nil {
+	if err := json.NewEncoder(file).Encode(entry); err != nil {
 		l.logger.Error("Failed to write activity log", slog.Any("error", err))
 	}
+}
+
+func (l *Logger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	file := l.file
+	l.file = nil
+	if file == nil {
+		return nil
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close activity log: %w", err)
+	}
+
+	return nil
+}
+
+func (l *Logger) activeFileLocked() (*os.File, error) {
+	if err := l.rotateIfNeededLocked(); err != nil {
+		l.logger.Error("Failed to rotate activity log", slog.Any("error", err))
+	}
+	if l.file != nil {
+		return l.file, nil
+	}
+
+	file, err := os.OpenFile(l.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, activityLogFilePerm)
+	if err != nil {
+		return nil, fmt.Errorf("open activity log: %w", err)
+	}
+	l.file = file
+
+	return file, nil
+}
+
+func (l *Logger) closeFileLocked() {
+	if l.file == nil {
+		return
+	}
+	if err := l.file.Close(); err != nil {
+		l.logger.Error("Failed to close activity log file", slog.Any("error", err))
+	}
+	l.file = nil
 }
 
 func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
@@ -128,62 +166,77 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 		}
 	}()
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), activityLogReadMaxLineBytes)
-
-	return scanRecentLogEntries(scanner, limit)
+	return tailRecentLogEntries(f, limit)
 }
 
-func scanRecentLogEntries(scanner *bufio.Scanner, limit int) ([]LogEntry, error) {
-	ring := make([]LogEntry, limit)
-	count := 0
-	writePos := 0
+func tailRecentLogEntries(f *os.File, limit int) ([]LogEntry, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat activity log: %w", err)
+	}
 
-	for scanner.Scan() {
+	entries := make([]LogEntry, 0, limit)
+	offset := info.Size()
+	var (
+		carry []byte
+		read  int64
+	)
+
+	for offset > 0 && len(entries) < limit && read < activityLogReadMaxLineBytes {
+		chunkSize := min(activityLogTailChunkBytes, offset)
+		offset -= chunkSize
+		read += chunkSize
+
+		chunk := make([]byte, chunkSize, chunkSize+int64(len(carry)))
+		if _, err := f.ReadAt(chunk, offset); err != nil {
+			return nil, fmt.Errorf("failed to read activity log: %w", err)
+		}
+
+		var lines [][]byte
+		lines, carry = splitTailChunk(append(chunk, carry...), offset > 0)
+		entries = appendNewestFirstEntries(entries, lines, limit)
+	}
+
+	slices.Reverse(entries)
+
+	return entries, nil
+}
+
+// hasEarlierBytes가 true면 첫 조각은 앞 chunk와 이어져야 완성되는 부분 줄이라 carry로 넘긴다.
+func splitTailChunk(buf []byte, hasEarlierBytes bool) (lines [][]byte, carry []byte) {
+	segments := bytes.Split(buf, []byte{'\n'})
+	if hasEarlierBytes && len(segments) > 0 {
+		carry = segments[0]
+		segments = segments[1:]
+	}
+
+	lines = make([][]byte, 0, len(segments))
+	for _, segment := range segments {
+		if len(segment) > 0 {
+			lines = append(lines, segment)
+		}
+	}
+
+	return lines, carry
+}
+
+func appendNewestFirstEntries(entries []LogEntry, lines [][]byte, limit int) []LogEntry {
+	for i := len(lines) - 1; i >= 0 && len(entries) < limit; i-- {
 		var entry LogEntry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+		if err := json.Unmarshal(lines[i], &entry); err != nil {
 			continue // 잘못된 형식의 줄은 건너뜀
 		}
-
-		ring[writePos] = entry
-
-		writePos = (writePos + 1) % limit
-		if count < limit {
-			count++
-		}
+		entries = append(entries, entry)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read activity log: %w", err)
-	}
-
-	return orderRecentLogEntries(ring, count, writePos, limit), nil
+	return entries
 }
 
-func orderRecentLogEntries(ring []LogEntry, count, writePos, limit int) []LogEntry {
-	if count == 0 {
-		return []LogEntry{}
-	}
-
-	if count < limit {
-		logs := make([]LogEntry, count)
-		copy(logs, ring[:count])
-
-		return logs
-	}
-
-	logs := make([]LogEntry, count)
-	for i := range count {
-		logs[i] = ring[(writePos+i)%limit]
-	}
-
-	return logs
-}
-
-func (l *Logger) rotateIfNeeded() error {
+func (l *Logger) rotateIfNeededLocked() error {
 	info, err := os.Stat(l.filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			l.closeFileLocked()
 			return nil
 		}
 
@@ -193,6 +246,9 @@ func (l *Logger) rotateIfNeeded() error {
 	if info.Size() < activityLogRotateMaxBytes {
 		return nil
 	}
+
+	// rename 전에 핸들을 닫아야 다음 쓰기가 rotate된 파일이 아니라 새 파일로 간다.
+	l.closeFileLocked()
 
 	rotatedPath := l.filePath + ".1"
 	if err := os.Remove(rotatedPath); err != nil && !errors.Is(err, os.ErrNotExist) {

@@ -25,14 +25,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/pkg/db/pgxdb"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -49,22 +46,7 @@ func NewTemplateRepository(pool *pgxpool.Pool, logger *slog.Logger) *TemplateRep
 }
 
 func (r *TemplateRepository) List(ctx context.Context, key *domain.TemplateKey, channelID *string) ([]*domain.NotificationTemplate, error) {
-	query := mustSQL("template_repository_0051_01.sql")
-	args := make([]any, 0, 2)
-	conditions := make([]string, 0, 2)
-
-	if key != nil {
-		args = append(args, *key)
-		conditions = append(conditions, fmt.Sprintf("template_key = $%d", len(args)))
-	}
-	if channelID != nil {
-		args = append(args, *channelID)
-		conditions = append(conditions, fmt.Sprintf("channel_id = $%d", len(args)))
-	}
-	if len(conditions) > 0 {
-		query += " WHERE " + strings.Join(conditions, " AND ")
-	}
-	query += " ORDER BY template_key, channel_id"
+	query, args := templateListQuery(key, channelID)
 
 	var templates []*domain.NotificationTemplate
 	if err := pgxscan.Select(ctx, r.pool, &templates, query, args...); err != nil {
@@ -74,17 +56,28 @@ func (r *TemplateRepository) List(ctx context.Context, key *domain.TemplateKey, 
 	return templates, nil
 }
 
+func templateListQuery(key *domain.TemplateKey, channelID *string) (query string, args []any) {
+	switch {
+	case key != nil && channelID != nil:
+		return templateListByKeyAndChannelSQL, []any{*key, *channelID}
+	case key != nil:
+		return templateListByKeySQL, []any{*key}
+	case channelID != nil:
+		return templateListByChannelSQL, []any{*channelID}
+	default:
+		return templateListSQL, nil
+	}
+}
+
 func (r *TemplateRepository) FindByKeyAndChannel(ctx context.Context, key domain.TemplateKey, channelID *string) (*domain.NotificationTemplate, error) {
-	var tmpl domain.NotificationTemplate
-	query := mustSQL("template_repository_0078_02.sql")
+	query := templateFindDefaultSQL
 	args := []any{key}
-	if channelID == nil {
-		query += " AND channel_id IS NULL"
-	} else {
+	if channelID != nil {
+		query = templateFindOverrideSQL
 		args = append(args, *channelID)
-		query += " AND channel_id = $2"
 	}
 
+	var tmpl domain.NotificationTemplate
 	err := pgxscan.Get(ctx, r.pool, &tmpl, query, args...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -96,67 +89,27 @@ func (r *TemplateRepository) FindByKeyAndChannel(ctx context.Context, key domain
 	return &tmpl, nil
 }
 
+// Upsert는 default(ux_notification_templates_default)와
+// override(ux_notification_templates_channel) 부분 유니크 인덱스를 각각 arbiter로
+// 쓴다. 하나의 INSERT는 인덱스 하나만 추론할 수 있어 변형이 둘로 나뉜다.
 func (r *TemplateRepository) Upsert(ctx context.Context, key domain.TemplateKey, channelID *string, body string) (*domain.NotificationTemplate, error) {
-	existing, err := r.FindByKeyAndChannel(ctx, key, channelID)
-	if err != nil {
-		return nil, err
+	query := templateUpsertDefaultSQL
+	args := []any{key, body}
+	if channelID != nil {
+		query = templateUpsertOverrideSQL
+		args = []any{key, *channelID, body}
 	}
 
-	if existing == nil {
-		return r.createTemplate(ctx, key, channelID, body)
+	var tmpl domain.NotificationTemplate
+	if err := pgxscan.Get(ctx, r.pool, &tmpl, query, args...); err != nil {
+		return nil, fmt.Errorf("upsert template: %w", err)
 	}
-
-	return r.updateTemplate(ctx, existing, body)
-}
-
-func (r *TemplateRepository) createTemplate(ctx context.Context, key domain.TemplateKey, channelID *string, body string) (*domain.NotificationTemplate, error) {
-	var newTmpl domain.NotificationTemplate
-	err := pgxscan.Get(ctx, r.pool, &newTmpl,
-		mustSQL("template_repository_0116_03.sql"),
-		key,
-		channelID,
-		body,
-	)
-	if err != nil {
-		return r.handleCreateTemplateError(ctx, key, channelID, body, err)
-	}
-	return &newTmpl, nil
-}
-
-func (r *TemplateRepository) handleCreateTemplateError(ctx context.Context, key domain.TemplateKey, channelID *string, body string, err error) (*domain.NotificationTemplate, error) {
-	if !pgxdb.IsDuplicateKey(err) {
-		return nil, fmt.Errorf("create template: %w", err)
-	}
-
-	retryTarget, findErr := r.FindByKeyAndChannel(ctx, key, channelID)
-	if findErr != nil {
-		return nil, fmt.Errorf("find template after duplicate key: %w", findErr)
-	}
-	if retryTarget == nil {
-		return nil, fmt.Errorf("create template: %w", err)
-	}
-
-	if _, saveErr := r.updateTemplate(ctx, retryTarget, body); saveErr != nil {
-		return nil, fmt.Errorf("update template after duplicate key: %w", saveErr)
-	}
-	return retryTarget, nil
-}
-
-func (r *TemplateRepository) updateTemplate(ctx context.Context, existing *domain.NotificationTemplate, body string) (*domain.NotificationTemplate, error) {
-	err := pgxscan.Get(ctx, r.pool, existing,
-		mustSQL("template_repository_0150_04.sql"),
-		body,
-		existing.ID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("update template: %w", err)
-	}
-	return existing, nil
+	return &tmpl, nil
 }
 
 func (r *TemplateRepository) DeleteOverride(ctx context.Context, key domain.TemplateKey, channelID string) error {
 	if _, err := r.pool.Exec(ctx,
-		mustSQL("template_repository_0165_05.sql"),
+		templateDeleteOverrideSQL,
 		key,
 		channelID,
 	); err != nil {
@@ -168,7 +121,7 @@ func (r *TemplateRepository) DeleteOverride(ctx context.Context, key domain.Temp
 func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKey) (defaultTmpl *domain.NotificationTemplate, overrides []*domain.NotificationTemplate, err error) {
 	var tmpl domain.NotificationTemplate
 	err = pgxscan.Get(ctx, r.pool, &tmpl,
-		mustSQL("template_repository_0177_06.sql"),
+		templateFindDefaultSQL,
 		key,
 	)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -179,7 +132,7 @@ func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKe
 	}
 
 	if err := pgxscan.Select(ctx, r.pool, &overrides,
-		mustSQL("template_repository_0190_07.sql"),
+		templateListOverridesSQL,
 		key,
 	); err != nil {
 		return nil, nil, fmt.Errorf("get overrides: %w", err)
@@ -190,7 +143,7 @@ func (r *TemplateRepository) GetByKey(ctx context.Context, key domain.TemplateKe
 
 func (r *TemplateRepository) CreateRevision(ctx context.Context, templateID int64, body string) error {
 	if _, err := r.pool.Exec(ctx,
-		mustSQL("template_repository_0204_08.sql"),
+		revisionInsertSQL,
 		templateID,
 		body,
 	); err != nil {
@@ -202,7 +155,7 @@ func (r *TemplateRepository) CreateRevision(ctx context.Context, templateID int6
 func (r *TemplateRepository) GetRevisions(ctx context.Context, templateID int64, limit int) ([]*domain.NotificationTemplateRevision, error) {
 	var revisions []*domain.NotificationTemplateRevision
 	if err := pgxscan.Select(ctx, r.pool, &revisions,
-		mustSQL("template_repository_0216_09.sql"),
+		revisionListSQL,
 		templateID,
 		limit,
 	); err != nil {
@@ -214,7 +167,7 @@ func (r *TemplateRepository) GetRevisions(ctx context.Context, templateID int64,
 func (r *TemplateRepository) GetRevisionByID(ctx context.Context, id int64) (*domain.NotificationTemplateRevision, error) {
 	var revision domain.NotificationTemplateRevision
 	err := pgxscan.Get(ctx, r.pool, &revision,
-		mustSQL("template_repository_0232_10.sql"),
+		revisionGetSQL,
 		id,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -231,14 +184,12 @@ func (r *TemplateRepository) PruneOldRevisions(ctx context.Context, templateID i
 		return nil
 	}
 
-	return dbx.InPgxTx(ctx, r.pool, func(tx dbx.Tx) error {
-		if _, err := tx.Exec(ctx,
-			mustSQL("template_repository_0253_11.sql"),
-			templateID,
-			keepCount,
-		); err != nil {
-			return fmt.Errorf("prune revisions: %w", err)
-		}
-		return nil
-	})
+	if _, err := r.pool.Exec(ctx,
+		revisionPruneSQL,
+		templateID,
+		keepCount,
+	); err != nil {
+		return fmt.Errorf("prune revisions: %w", err)
+	}
+	return nil
 }

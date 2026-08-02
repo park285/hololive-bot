@@ -22,6 +22,34 @@ func TestMustReaderReadsAsset(t *testing.T) {
 	}
 }
 
+func TestMustReaderPreservesTrailingWhitespace(t *testing.T) {
+	t.Parallel()
+
+	read := MustReader(
+		fstest.MapFS{
+			"queries/prefix.sql": &fstest.MapFile{Data: []byte("\n\t\tSELECT id FROM t WHERE ")},
+		},
+		"queries",
+	)
+
+	const want = "\n\t\tSELECT id FROM t WHERE "
+	if got := read("prefix.sql"); got != want {
+		t.Fatalf("read(prefix.sql) = %q, want %q", got, want)
+	}
+}
+
+func TestMustReaderPanicsWithBlankAsset(t *testing.T) {
+	t.Parallel()
+
+	read := MustReader(
+		fstest.MapFS{
+			"queries/blank.sql": &fstest.MapFile{Data: []byte(" \n\t")},
+		},
+		"queries",
+	)
+	assertPanicContains(t, func() { read("blank.sql") }, `empty embedded SQL "queries/blank.sql"`)
+}
+
 func TestMustReaderPanicsWithMissingAssetPath(t *testing.T) {
 	t.Parallel()
 

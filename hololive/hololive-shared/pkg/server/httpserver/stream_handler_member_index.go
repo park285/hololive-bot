@@ -23,12 +23,12 @@ package httpserver
 import (
 	"context"
 	"fmt"
-	"maps"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// 반환된 slice/map은 캐시가 보유한 불변 스냅샷을 그대로 공유한다. 호출자는 수정하면 안 된다.
 func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) (result0 []string, result1 map[string]string, err error) {
 	state := h.ensureState()
 	if snapshot, ok := state.cachedMemberIndexSnapshot(time.Now()); ok {
@@ -42,52 +42,50 @@ func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) (result0 []str
 		return nil, nil, fmt.Errorf("member index singleflight: %w", err)
 	}
 
-	snapshot, ok := value.(memberIndexSnapshot)
-	if !ok {
+	snapshot, ok := value.(*memberIndexSnapshot)
+	if !ok || snapshot == nil {
 		return nil, nil, fmt.Errorf("member index snapshot: unexpected type")
 	}
 
 	return snapshot.channelIDs, snapshot.channelNames, nil
 }
 
-func (h *StreamHandler) refreshActiveMemberIndexSnapshot(ctx context.Context, state *StreamState) (memberIndexSnapshot, error) {
+func (h *StreamHandler) refreshActiveMemberIndexSnapshot(ctx context.Context, state *StreamState) (*memberIndexSnapshot, error) {
 	if snapshot, ok := state.cachedMemberIndexSnapshot(time.Now()); ok {
 		return snapshot, nil
 	}
 
-	members, err := h.fetchAllMembers(ctx)
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), MemberIndexRefreshTimeout)
+	defer cancel()
+
+	members, err := h.fetchAllMembers(refreshCtx)
 	if err != nil {
-		return memberIndexSnapshot{}, err
+		return nil, err
 	}
 
 	channelIDs, channelToName := BuildActiveMemberIndex(members)
-	state.storeMemberIndexSnapshot(channelIDs, channelToName)
 
-	return memberIndexSnapshot{channelIDs: channelIDs, channelNames: channelToName}, nil
+	return state.storeMemberIndexSnapshot(channelIDs, channelToName), nil
 }
 
-func (s *StreamState) cachedMemberIndexSnapshot(now time.Time) (memberIndexSnapshot, bool) {
-	s.memberIndexMu.RLock()
-	defer s.memberIndexMu.RUnlock()
-
-	if !s.memberIndexReady || !now.Before(s.memberIndexExpiresAt) {
-		return memberIndexSnapshot{}, false
+func (s *StreamState) cachedMemberIndexSnapshot(now time.Time) (*memberIndexSnapshot, bool) {
+	snapshot := s.memberIndex.Load()
+	if snapshot == nil || !now.Before(snapshot.expiresAt) {
+		return nil, false
 	}
 
-	return memberIndexSnapshot{
-		channelIDs:   append([]string(nil), s.memberChannelIDs...),
-		channelNames: maps.Clone(s.memberChannelName),
-	}, true
+	return snapshot, true
 }
 
-func (s *StreamState) storeMemberIndexSnapshot(channelIDs []string, channelToName map[string]string) {
-	s.memberIndexMu.Lock()
-	defer s.memberIndexMu.Unlock()
+func (s *StreamState) storeMemberIndexSnapshot(channelIDs []string, channelToName map[string]string) *memberIndexSnapshot {
+	snapshot := &memberIndexSnapshot{
+		channelIDs:   channelIDs,
+		channelNames: channelToName,
+		expiresAt:    time.Now().Add(MemberIndexCacheTTL),
+	}
+	s.memberIndex.Store(snapshot)
 
-	s.memberChannelIDs = append([]string(nil), channelIDs...)
-	s.memberChannelName = maps.Clone(channelToName)
-	s.memberIndexExpiresAt = time.Now().Add(MemberIndexCacheTTL)
-	s.memberIndexReady = true
+	return snapshot
 }
 
 func (h *StreamHandler) fetchAllMembers(ctx context.Context) ([]*domain.Member, error) {

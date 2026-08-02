@@ -534,7 +534,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		cacheErr := appErrors.NewCacheError("cache", "get", "k1", errors.New("down"))
 		assert.Equal(t, messaging.ErrCacheConnectionFailed, b.getErrorMessage(cacheErr))
 
-		validationErr := appErrors.NewValidationError("invalid input", "field", "v")
+		validationErr := appErrors.NewValidationError("invalid input", "field")
 		assert.Equal(t, messaging.ErrCommandProcessingFailed, b.getErrorMessage(validationErr))
 
 		assert.Equal(t, messaging.ErrCommandProcessingFailed, b.getErrorMessage(errors.New("generic error")))

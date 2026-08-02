@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/dbx"
 	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"

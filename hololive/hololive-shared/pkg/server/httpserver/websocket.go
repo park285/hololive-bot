@@ -24,12 +24,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gorilla/websocket"
 )
 
 // wsAllowedOrigins: 환경변수 WEBSOCKET_ALLOWED_ORIGINS에서 로드된 허용 오리진 목록
-var wsAllowedOrigins []string
+var wsAllowedOrigins atomic.Pointer[[]string]
 
 func init() {
 	InitWSUpgrader()
@@ -37,14 +38,15 @@ func init() {
 
 // 비어있으면 모든 WebSocket 연결을 거부합니다 (secure default).
 func InitWSUpgrader() {
-	raw := os.Getenv("WEBSOCKET_ALLOWED_ORIGINS")
-	wsAllowedOrigins = parseOrigins(raw)
+	origins := parseOrigins(os.Getenv("WEBSOCKET_ALLOWED_ORIGINS"))
+	wsAllowedOrigins.Store(&origins)
+}
 
-	WSUpgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-		CheckOrigin:     checkOrigin,
+func allowedWSOrigins() []string {
+	if origins := wsAllowedOrigins.Load(); origins != nil {
+		return *origins
 	}
+	return nil
 }
 
 // parseOrigins: 쉼표 구분 문자열을 파싱하여 공백 제거 후 오리진 슬라이스 반환
@@ -66,7 +68,8 @@ func parseOrigins(raw string) []string {
 // checkOrigin: 요청의 Origin 헤더가 허용 목록에 있는지 검증합니다.
 // 허용 목록이 비어있으면 모든 연결을 거부합니다.
 func checkOrigin(r *http.Request) bool {
-	if len(wsAllowedOrigins) == 0 {
+	allowedOrigins := allowedWSOrigins()
+	if len(allowedOrigins) == 0 {
 		return false
 	}
 
@@ -75,7 +78,7 @@ func checkOrigin(r *http.Request) bool {
 		return false
 	}
 
-	for _, allowed := range wsAllowedOrigins {
+	for _, allowed := range allowedOrigins {
 		if strings.EqualFold(origin, allowed) {
 			return true
 		}
@@ -84,7 +87,6 @@ func checkOrigin(r *http.Request) bool {
 	return false
 }
 
-// InitWSUpgrader()를 호출하여 환경변수에서 허용 오리진을 로드해야 합니다.
 var WSUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,

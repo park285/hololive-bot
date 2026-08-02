@@ -116,9 +116,7 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRou
 	if opts == nil {
 		opts = &RuntimeRouterOptions{}
 	}
-	gin.SetMode(gin.ReleaseMode)
-
-	router := gin.New()
+	router := newReleaseModeEngine()
 	if err := configureRuntimeClientIPTrust(router, opts.TrustRemoteAddrOnly); err != nil {
 		return nil, err
 	}

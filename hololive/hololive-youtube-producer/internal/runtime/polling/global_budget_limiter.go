@@ -10,6 +10,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/instanceid"
 )
 
 type GlobalBudgetLimiterConfig struct {
@@ -73,7 +75,7 @@ func NewGlobalBudgetLimiter(cacheClient cache.Client, cfg GlobalBudgetLimiterCon
 	return &globalBudgetLimiter{
 		cacheClient:        cacheClient,
 		namespace:          namespace,
-		instanceID:         normalizeGlobalBudgetInstanceID(cfg.InstanceID),
+		instanceID:         instanceid.Normalize(cfg.InstanceID),
 		sourceMaxInflight:  copySourceMaxInflight(cfg.SourceMaxInflight),
 		classMaxInflight:   copyClassMaxInflight(cfg.ClassMaxInflight),
 		deniedRetryAfter:   deniedRetryAfter,
@@ -178,7 +180,7 @@ func globalBudgetSourceCooldownValue(instanceID, reason string) string {
 	if trimmedReason == "" {
 		trimmedReason = "source_cooldown"
 	}
-	return normalizeGlobalBudgetInstanceID(instanceID) + ":" + trimmedReason
+	return instanceid.Normalize(instanceID) + ":" + trimmedReason
 }
 
 func globalBudgetCooldownSeconds(ttl time.Duration) int64 {

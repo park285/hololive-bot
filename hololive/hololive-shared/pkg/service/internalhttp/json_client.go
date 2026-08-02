@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
+	sharedenv "github.com/park285/shared-go/pkg/envutil"
 	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	"github.com/park285/shared-go/pkg/httputil"
 )
@@ -45,8 +45,8 @@ func NewClientForURLStrict(rawURL string, timeout time.Duration, _ *slog.Logger)
 	}
 
 	client, _, err := sharedh3.NewClient(timeout, sharedh3.ClientOptions{
-		CACertFile: firstNonEmptyEnv(internalH3CACertFileEnv, hololiveH3CertFileEnv),
-		ServerName: firstNonEmptyEnv(internalH3ServerNameEnv, hololiveH3ServerNameEnv),
+		CACertFile: sharedenv.StringAny(internalH3CACertFileEnv, hololiveH3CertFileEnv),
+		ServerName: sharedenv.StringAny(internalH3ServerNameEnv, hololiveH3ServerNameEnv),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure internal H3 client for %s: %w", rawURL, err)
@@ -57,13 +57,4 @@ func NewClientForURLStrict(rawURL string, timeout time.Duration, _ *slog.Logger)
 func internalURLUsesHTTPS(raw string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	return err == nil && parsed != nil && parsed.Scheme == "https"
-}
-
-func firstNonEmptyEnv(keys ...string) string {
-	for _, key := range keys {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
-	}
-	return ""
 }

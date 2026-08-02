@@ -28,12 +28,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (r *AlarmWorkerRuntime) Run() {
+func (r *AlarmWorkerRuntime) Run() error {
 	if r == nil {
-		return
+		return nil
 	}
 
-	applifecycle.Run(r.Logger, r.Start, r.Shutdown)
+	return applifecycle.Run(r.Logger, r.Start, r.Shutdown)
 }
 
 func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {

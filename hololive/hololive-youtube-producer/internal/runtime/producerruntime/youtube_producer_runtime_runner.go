@@ -92,16 +92,18 @@ func (r *YouTubeProducerRuntime) Close() {
 	r.Managed.Close()
 }
 
-func (r *YouTubeProducerRuntime) Run() {
-	if err := lifecycle.Run(lifecycle.Options{
+func (r *YouTubeProducerRuntime) Run() error {
+	err := lifecycle.Run(lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
 		Start:           r.startRuntime,
 		OnSignal:        r.handleShutdownSignal,
 		OnError:         r.handleRuntimeError,
 		Shutdown:        r.shutdownRuntime,
-	}); err != nil {
+	})
+	if err != nil {
 		r.handleRuntimeError(err)
 	}
+	return err
 }
 
 func (r *YouTubeProducerRuntime) startRuntime(ctx context.Context, errCh chan<- error) {

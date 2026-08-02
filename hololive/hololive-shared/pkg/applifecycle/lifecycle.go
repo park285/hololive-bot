@@ -81,14 +81,16 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	}
 }
 
-func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context)) {
-	if err := lifecycle.Run(runtimeOptions(logger, start, shutdown)); err != nil {
+func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context)) error {
+	err := lifecycle.Run(runtimeOptions(logger, start, shutdown))
+	if err != nil {
 		logError(logger, "Shutdown error", err)
 	}
 
 	if logger != nil {
 		logger.Info("Shutdown complete")
 	}
+	return err
 }
 
 func runtimeOptions(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context)) lifecycle.Options {

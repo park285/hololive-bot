@@ -277,7 +277,9 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 	t.Parallel()
 
 	var nilRuntime *AdminAPIRuntime
-	nilRuntime.Run()
+	if err := nilRuntime.Run(); err != nil {
+		t.Fatalf("nil Run() error = %v", err)
+	}
 	nilRuntime.Start(t.Context(), nil)
 	nilRuntime.StartHTTPServer(nil)
 	nilRuntime.Shutdown(t.Context())
