@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 // startScheduled가 zero이면 ("", false, nil) 반환
@@ -38,29 +37,13 @@ func (s *Service) TryClaimLogicalEvent(ctx context.Context, roomID, channelID st
 	return key, acquired, nil
 }
 
+// 두 키를 한 pipeline으로 SetNX하면 경쟁자끼리 키를 나눠 잡은 뒤 서로 release해
+// 승자 0명이 될 수 있다(중복 배치에서 알림 전량 skip). key1 승자만 key2를 시도한다.
 func (s *Service) TryClaimPair(ctx context.Context, key1, key2 string, ttl time.Duration) (acquired1, acquired2 bool) {
-	results, err := s.cache.SetNXMulti(ctx, []cache.SetNXEntry{
-		{Key: key1, Value: "1", TTL: ttl},
-		{Key: key2, Value: "1", TTL: ttl},
-	})
-	if err != nil {
-		return s.fallback.TryClaimOnOutage(key1, ttl, err),
-			s.fallback.TryClaimOnOutage(key2, ttl, err)
+	if !s.tryClaimKey(ctx, key1, ttl) {
+		return false, false
 	}
-	if len(results) != 2 {
-		err := fmt.Errorf("setnx multi: unexpected result count: %d", len(results))
-		return s.fallback.TryClaimOnOutage(key1, ttl, err),
-			s.fallback.TryClaimOnOutage(key2, ttl, err)
-	}
-	return s.resolveClaimResult(key1, ttl, results[0]),
-		s.resolveClaimResult(key2, ttl, results[1])
-}
-
-func (s *Service) resolveClaimResult(key string, ttl time.Duration, r cache.SetNXResult) bool {
-	if r.Err != nil {
-		return s.fallback.TryClaimOnOutage(key, ttl, r.Err)
-	}
-	return r.Acquired
+	return true, s.tryClaimKey(ctx, key2, ttl)
 }
 
 func (s *Service) TryClaimScheduleTransition(ctx context.Context, streamID string, oldScheduled, newScheduled time.Time) (value0 string, ok1 bool, err error) {
