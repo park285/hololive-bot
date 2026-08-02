@@ -613,6 +613,7 @@ services:
       - path: ${ADMIN_DASHBOARD_ENV_FILE:-/run/hololive-bot/admin-dashboard.env}
         required: false
     environment:
+      <<: *app-file-log-env
       PORT: "30190"
       ENV: "production"
       FORCE_HTTPS: "true"
@@ -622,7 +623,6 @@ services:
       # 로그인 rate limit을 우회할 수 있다. 네트워크 재생성으로 게이트웨이가 바뀌면 XFF 무시로
       # 안전하게 격하된다(단일 버킷 rate limit).
       TRUSTED_PROXY_CIDRS: "172.23.0.1/32"
-      LOG_LEVEL: "info"
       ALLOWED_ORIGINS: "https://admin.holoshi.com"
       ADMIN_USER: ${ADMIN_USER:-admin}
       SESSION_TOKEN_ROTATION: "true"

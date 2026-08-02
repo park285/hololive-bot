@@ -69,7 +69,9 @@ func TestBlankIdentifiersBecomeUnknown(t *testing.T) {
 func TestPseudonymNeverEchoesItsInput(t *testing.T) {
 	t.Parallel()
 
-	for _, value := range []string{"검색어", "미코", "123", "user@example.com"} {
+	// 숫자 ID는 16자 hex digest보다 길게 잡는다 — "123" 같은 짧은 숫자열은 키가 프로세스마다
+	// 랜덤이라 digest에 우연히 포함될 수 있어(≈0.3%/run) 부분 문자열 단언이 flaky해진다.
+	for _, value := range []string{"검색어", "미코", "1234567890123456789", "user@example.com"} {
 		got := Pseudonym(value)
 		if strings.Contains(got, value) {
 			t.Fatalf("Pseudonym(%q) = %q, want the input to be absent", value, got)
