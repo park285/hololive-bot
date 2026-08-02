@@ -41,12 +41,12 @@ func (h *StreamHandler) GetChannel(c *gin.Context) {
 func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
 	ids := SplitChannelIDs(channelIDs)
 	if len(ids) == 0 {
-		h.respondError(c, 400, "channelIds parameter is empty or invalid", nil)
+		h.respondBadRequest(c, "channelIds parameter is empty or invalid", nil)
 		return
 	}
 
 	if len(ids) > 100 {
-		h.respondError(c, 400, "channelIds supports at most 100 values", gin.H{
+		h.respondBadRequest(c, "channelIds supports at most 100 values", gin.H{
 			"limit":    100,
 			"received": len(ids),
 		})
@@ -69,14 +69,7 @@ func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
 }
 
 func (h *StreamHandler) respondChannelQueryError(c *gin.Context) {
-	channelID := c.Query("channelId")
-	if channelID != "" {
-		h.respondError(c, 410, "Legacy channelId query is no longer supported", gin.H{
-			"hint": "use channelIds query parameter",
-		})
-		return
-	}
-	h.respondError(c, 400, "channelIds parameter required", nil)
+	h.respondBadRequest(c, "channelIds parameter required", nil)
 }
 
 func channelResponses(channelsMap map[string]*domain.Member) []*ChannelResponse {
@@ -111,7 +104,7 @@ func (h *StreamHandler) SearchChannels(c *gin.Context) {
 	ctx := c.Request.Context()
 	query := c.Query("q")
 	if query == "" {
-		h.respondError(c, 400, "q parameter required", nil)
+		h.respondBadRequest(c, "q parameter required", nil)
 		return
 	}
 

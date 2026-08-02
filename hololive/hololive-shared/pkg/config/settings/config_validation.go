@@ -227,45 +227,24 @@ func loadScraperPoll() ScraperPoll {
 	defaults := DefaultScraperPoll()
 
 	return ScraperPoll{
-		Videos: secondsAliasEnv([]string{
-			"SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS",
-			"SCRAPER_VIDEOS_SECONDS",
-		}, defaults.Videos),
-		Shorts: secondsAliasEnv([]string{
-			"SCRAPER_POLL_SHORTS_INTERVAL_SECONDS",
-			"SCRAPER_SHORTS_SECONDS",
-		}, defaults.Shorts),
-		Community: secondsAliasEnv([]string{
-			"SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS",
-			"SCRAPER_COMMUNITY_SECONDS",
-		}, defaults.Community),
-		Stats: secondsAliasEnv([]string{
-			"SCRAPER_POLL_STATS_INTERVAL_SECONDS",
-			"SCRAPER_STATS_SECONDS",
-		}, defaults.Stats),
-		Live: secondsAliasEnv([]string{
-			"SCRAPER_POLL_LIVE_INTERVAL_SECONDS",
-			"SCRAPER_LIVE_SECONDS",
-		}, defaults.Live),
+		Videos:    secondsEnv("SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS", defaults.Videos),
+		Shorts:    secondsEnv("SCRAPER_POLL_SHORTS_INTERVAL_SECONDS", defaults.Shorts),
+		Community: secondsEnv("SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS", defaults.Community),
+		Stats:     secondsEnv("SCRAPER_POLL_STATS_INTERVAL_SECONDS", defaults.Stats),
+		Live:      secondsEnv("SCRAPER_POLL_LIVE_INTERVAL_SECONDS", defaults.Live),
 	}
 }
 
-func secondsAliasEnv(keys []string, fallback time.Duration) time.Duration {
-	for _, key := range keys {
-		seconds := sharedenv.Int(key, 0)
-		if seconds > 0 {
-			return time.Duration(seconds) * time.Second
-		}
+func secondsEnv(key string, fallback time.Duration) time.Duration {
+	if seconds := sharedenv.Int(key, 0); seconds > 0 {
+		return time.Duration(seconds) * time.Second
 	}
 	return fallback
 }
 
-func intAliasEnv(keys []string, fallback int) int {
-	for _, key := range keys {
-		value := sharedenv.Int(key, 0)
-		if value > 0 {
-			return value
-		}
+func positiveIntEnv(key string, fallback int) int {
+	if value := sharedenv.Int(key, 0); value > 0 {
+		return value
 	}
 	return fallback
 }

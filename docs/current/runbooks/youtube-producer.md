@@ -46,18 +46,17 @@
 | `SCRAPER_BACKFILL_ENABLED=false` | optional secondary poller identities for coverage; disabled by default | no |
 | `SCRAPER_BACKFILL_*_INTERVAL_SECONDS` | backfill poller intervals for shorts/community/live when enabled | no |
 | `SCRAPER_BACKFILL_TARGET_GROUP=notification` | initial backfill target group; only `notification` is accepted | no |
-| `YOUTUBE_PRODUCER_RETENTION_STATS_HISTORY_DAYS` | delete `youtube_stats_history` rows older than N days; `0` (default) disables cleanup (infinite retention) | no |
 | `YOUTUBE_PRODUCER_RETENTION_CHANNEL_SNAPSHOTS_DAYS` | delete `youtube_channel_stats_snapshots` rows older than N days; `0` (default) disables cleanup | no |
 | `YOUTUBE_PRODUCER_RETENTION_LIVE_SESSIONS_DAYS` | delete `ENDED` `youtube_live_sessions` rows whose `ended_at` is older than N days; `0` (default) disables cleanup | no |
 | `YOUTUBE_PRODUCER_RETENTION_VIEWER_SAMPLES_DAYS` | delete `youtube_live_viewer_samples` rows older than N days; `0` (default) disables cleanup. live_sessions cleanup only removes sessions with no remaining samples, so enable this together with `LIVE_SESSIONS_DAYS` to actually reclaim sessions | no |
 
 Retention deletion runs on `youtube-producer-c` only — the `main-ap` overlay sets
-compose-level defaults (viewer_samples 30d, stats_history/channel_snapshots 180d,
+compose-level defaults (viewer_samples 30d, channel_snapshots 180d,
 live_sessions 365d). The a/b/d instances keep the process default `0` so hourly
 batch DELETEs never cross Tailscale; the advisory lock only serializes concurrent
 runs, it does not deduplicate per-instance schedules.
 
-To override the four values, set them in `/run/hololive-bot/compose.env` (the
+To override the three values, set them in `/run/hololive-bot/compose.env` (the
 `--env-file` source) and redeploy `youtube-producer-c`. Do NOT export them as
 shell variables around `compose-redeploy-service.sh` — the compose-env shadow
 guard (`compose_env_assert_no_shell_shadow_for_compose_files`) aborts the deploy
@@ -135,16 +134,18 @@ Active-active cadence is global for the same `(poller_name, channel_id)` identit
 Use primary interval tuning first, then enable backfill only if metrics show missed observations and the request budget remains acceptable. Starting profile for review, not a default:
 
 ```text
-SCRAPER_SHORTS_SECONDS=90
-SCRAPER_COMMUNITY_SECONDS=90
-SCRAPER_LIVE_SECONDS=90
-SCRAPER_VIDEOS_SECONDS=900
-SCRAPER_STATS_SECONDS=21600
+SCRAPER_POLL_SHORTS_INTERVAL_SECONDS=90
+SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS=90
+SCRAPER_POLL_LIVE_INTERVAL_SECONDS=90
+SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS=900
+SCRAPER_POLL_STATS_INTERVAL_SECONDS=21600
 YOUTUBE_PRODUCER_AP_WORKER_COUNT=2
 YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2
 ```
 
-Primary community polling follows the shorts cadence in youtube-producer; keep `SCRAPER_COMMUNITY_SECONDS` aligned for config readability. Backfill community polling remains separately controlled by `SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS`.
+The pre-rename keys (`SCRAPER_SHORTS_SECONDS`, `SCRAPER_COMMUNITY_SECONDS`, `SCRAPER_LIVE_SECONDS`, `SCRAPER_VIDEOS_SECONDS`, `SCRAPER_STATS_SECONDS`, `SCRAPER_WORKER_COUNT`) are no longer read; leaving them in an env file changes nothing.
+
+Primary community polling follows the shorts cadence in youtube-producer; keep `SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS` aligned for config readability. Backfill community polling remains separately controlled by `SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS`.
 
 Optional backfill pollers use separate names (`shorts_backfill`, `community_backfill`, `live_backfill`) and separate cooldown keys. They reuse the same persistence/outbox path, so duplicate delivery is still guarded by `(kind, content_id)` idempotency and `alarm-worker` delivery claims. Backfill remains disabled by default:
 

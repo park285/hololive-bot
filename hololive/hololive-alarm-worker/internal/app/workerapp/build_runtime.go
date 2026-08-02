@@ -135,10 +135,7 @@ func buildAlarmWorkerHTTPRuntime(
 		return nil, alarmWorkerBackgroundRunners{}, "router", err
 	}
 
-	publishConfig, err := loadAlarmDispatchPublishConfig()
-	if err != nil {
-		return nil, alarmWorkerBackgroundRunners{}, "celebration publish config", err
-	}
+	publishConfig := loadAlarmDispatchPublishConfig()
 	runners = alarmWorkerBackgroundRunners{
 		celebration:    buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger),
 		birthdayStream: buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger),
@@ -227,10 +224,7 @@ func buildRuntimeScheduler(
 		return nil, nil
 	}
 
-	publishConfig, err := loadAlarmDispatchPublishConfig()
-	if err != nil {
-		return nil, err
-	}
+	publishConfig := loadAlarmDispatchPublishConfig()
 
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(
 		cacheClient,
@@ -333,28 +327,9 @@ func buildAlarmFoundation(
 	}, nil
 }
 
-func loadAlarmDispatchPublishConfig() (queue.PublishConfig, error) {
-	if err := rejectRemovedAlarmDispatchModeEnv(); err != nil {
-		return queue.PublishConfig{}, err
-	}
+func loadAlarmDispatchPublishConfig() queue.PublishConfig {
 	return queue.PublishConfig{
 		WakeupEnabled:         envutil.Bool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
 		MaxDeliveriesPerBatch: envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000),
-	}, nil
-}
-
-func rejectRemovedAlarmDispatchModeEnv() error {
-	publishMode := strings.ToLower(envutil.String("ALARM_DISPATCH_PUBLISH_MODE", ""))
-	switch publishMode {
-	case "", "pg_first":
-	default:
-		return fmt.Errorf("ALARM_DISPATCH_PUBLISH_MODE=%q is no longer supported; the PG dispatch outbox is the only publish path (unset the variable)", publishMode)
-	}
-	consumerMode := strings.ToLower(envutil.String("ALARM_DISPATCH_CONSUMER_MODE", ""))
-	switch consumerMode {
-	case "", "pg":
-		return nil
-	default:
-		return fmt.Errorf("ALARM_DISPATCH_CONSUMER_MODE=%q is no longer supported; the PG dispatch outbox is the only consumer path (unset the variable)", consumerMode)
 	}
 }

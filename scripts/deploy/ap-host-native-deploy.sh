@@ -62,7 +62,6 @@ write_host_env() {
     printf 'YOUTUBE_PRODUCER_LOG_FILE_NAME=%s.log\n' "$service"
     printf 'YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false\n'
     printf 'YOUTUBE_INGESTION_ENABLED=true\n'
-    printf 'YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true\n'
     printf 'SERVER_PORT=%s\n' "$port"
     printf 'HOLOLIVE_HTTP_TRANSPORTS=h3\n'
     printf 'HOLOLIVE_H3_ADDR=127.0.0.1:%s\n' "$port"
@@ -84,8 +83,7 @@ write_host_env() {
     printf 'POSTGRES_DB=hololive\n'
     printf 'POSTGRES_SSLMODE=verify-full\n'
     printf 'POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem\n'
-    printf 'POSTGRES_QUERY_EXEC_MODE=exec\n'
-    printf 'POSTGRES_AUTO_PREPARE_SCHEMA=false\n'
+    printf 'POSTGRES_QUERY_EXEC_MODE=cache_statement\n'
     printf 'POSTGRES_POOL_MIN_CONNS=2\n'
     printf 'POSTGRES_POOL_MAX_CONNS=8\n'
     printf 'POSTGRES_SOCKET_PATH=\n'

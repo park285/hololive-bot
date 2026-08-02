@@ -106,9 +106,6 @@ func buildAlarmDispatchRunner(
 	if infra == nil {
 		return nil, fmt.Errorf("infra is required")
 	}
-	if err := rejectRemovedAlarmDispatchModeEnv(); err != nil {
-		return nil, err
-	}
 	if infra.Postgres == nil {
 		return nil, fmt.Errorf("postgres is required")
 	}

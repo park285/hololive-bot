@@ -22,10 +22,9 @@ package dbtest
 
 import "github.com/jackc/pgx/v5"
 
-// 운영 compose(deploy/compose/docker-compose.prod.yml의 POSTGRES_QUERY_EXEC_MODE 기본값)와
-// 같은 모드로 테스트 pool을 돌린다. exec는 서버 describe 없이 클라이언트가 Go 타입으로
-// 인코딩을 정하므로, pgx 기본 모드로 테스트하면 []byte→jsonb 같은 운영 전용 인코딩 실패가
-// 테스트를 통과해 버린다. 기본값 드리프트는 TestProductionComposePinsTheTestPoolQueryExecMode가 막는다.
-var productionQueryExecMode = pgx.QueryExecModeExec
+// exec_mode는 파라미터 인코딩의 결정 주체(서버 describe 결과 vs 클라이언트의 Go 타입 추론)를
+// 바꾼다. 테스트 pool이 운영 compose의 POSTGRES_QUERY_EXEC_MODE 기본값과 다른 모드로 돌면
+// []byte→jsonb 같은 특정 모드 전용 인코딩 실패를 테스트가 그대로 통과시킨다.
+var productionQueryExecMode = pgx.QueryExecModeCacheStatement
 
-const productionComposeQueryExecModeName = "exec"
+const productionComposeQueryExecModeName = "cache_statement"

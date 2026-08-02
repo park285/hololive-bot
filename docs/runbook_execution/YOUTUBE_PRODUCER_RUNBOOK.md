@@ -21,7 +21,7 @@
 ## 2) 배포 구성
 
 `docker-compose.prod.yml` 기준:
-- `youtube-producer`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`, `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=false`, `SERVER_PORT=30005`
+- `youtube-producer`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=false`, `SERVER_PORT=30005`
 - container image는 `GOWORK=off`로 `hololive-youtube-producer/go.mod`의 published external pin을 사용합니다. `SHARED_GO_WORKSPACE_PATH`는 local CI source 검증에만 사용합니다.
 
 운영 기준:
@@ -38,12 +38,14 @@ Remote AP split-host 운영 기준 (4-way active-active):
 - `CACHE_PASSWORD`는 admin-dashboard Redis URL에도 들어가므로 URL-safe hex 값을 권장합니다.
 
 스크래퍼 튜닝 env:
-- `SCRAPER_WORKER_COUNT` 기본값 `2`
-- `SCRAPER_VIDEOS_SECONDS` 기본값 `300`
-- `SCRAPER_SHORTS_SECONDS` 기본값 `60`
-- `SCRAPER_COMMUNITY_SECONDS` 기본값 `60`
-- `SCRAPER_STATS_SECONDS` 기본값 `21600`
-- `SCRAPER_LIVE_SECONDS` 기본값 `300`
+- `SCRAPER_SCHEDULER_WORKER_COUNT` 기본값 `4` (AP overlay는 `2`로 override)
+- `SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS` 기본값 `900`
+- `SCRAPER_POLL_SHORTS_INTERVAL_SECONDS` 기본값 `120`
+- `SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS` 기본값 `120`
+- `SCRAPER_POLL_STATS_INTERVAL_SECONDS` 기본값 `21600`
+- `SCRAPER_POLL_LIVE_INTERVAL_SECONDS` 기본값 `120`
+
+구 키(`SCRAPER_WORKER_COUNT`, `SCRAPER_VIDEOS_SECONDS`, `SCRAPER_SHORTS_SECONDS`, `SCRAPER_COMMUNITY_SECONDS`, `SCRAPER_STATS_SECONDS`, `SCRAPER_LIVE_SECONDS`)는 더 이상 읽지 않습니다. env에 남아 있어도 오류 없이 무시되므로, 값을 바꿔도 반영되지 않습니다.
 
 원격 AP 재배포 — rsync/build/recreate/검증을 포함한 runtime별 scoped wrapper를 사용합니다. Osaka와 Osaka2는 host-native `systemd`, Seoul은 Compose 경로입니다:
 

@@ -22,11 +22,30 @@ work_mem 역산: (512 − 128(shared_buffers) − 64(maintenance) − ~80(io wor
 
 OOM 검증: `VACUUM (ANALYZE)` 부하 유도 중 RSS 78MiB(15% of cap, 기준 ≤80%), `OOMKilled=false`.
 
-## A3 — pgx exec_mode 재평가 (D2: `exec` 유지)
+## A3 — pgx exec_mode 재평가 (D2: `exec` 유지 → 2026-08-02 `cache_statement`로 전환, 아래 재평가 참조)
 
 - 현행: compose `POSTGRES_QUERY_EXEC_MODE:-exec` (코드 기본값은 `cache_statement`이나 운영은 exec 고정).
 - 근거: pg_stat_statements 기준 top query mean이 전부 sub-ms(0.027~0.43ms), 커넥션 여유(33/100) — `cache_statement`의 개선 여지가 측정 한계 이하. per-conn statement cache는 512MB envelope에 추가 메모리 압박. 플랜 Stop-rule D2("우열 모호하면 exec 유지, 근거 기록") 적용.
 - 재평가 트리거: top query mean > 5ms 또는 DB CPU 포화 시 A/B 측정(`pg_stat_statements_reset()` 후 모드별 부하 비교).
+
+### A3 재평가 결과 (2026-08-02, `cache_statement` 전환)
+
+위 D2 판정은 2026-06-04 시점 기록이며, 아래 근거로 뒤집혔다. compose 기본값과 `scripts/deploy/ap-host-native-deploy.sh`의 host env를 `cache_statement`로 전환한다(코드 기본값과 일치).
+
+전환 근거:
+
+1. **A2의 512MB envelope 전제 소멸** — A3이 기록한 "per-conn statement cache는 512MB envelope에 추가 메모리 압박"은 당시 `shared_buffers=128MB` / 512MB cap 기준이었다. 현재 compose는 `shared_buffers=512MB`, 컨테이너 `memory: 2g`로 확대되어 메모리 압박 근거 자체가 사라졌다.
+2. **exec 계열 인코딩 위험군 제거** — 2026-08-01 jsonb 장애로 드러났듯 `exec`는 서버 describe 없이 클라이언트가 Go 타입만 보고 인코딩을 정하므로, `[]byte`→`jsonb` 같은 바인딩이 운영에서만 실패한다. `cache_statement`는 서버 describe 결과로 인코딩을 정해 이 위험군을 구조적으로 제거한다.
+3. **스택 단일 모드 합류** — ChatBotGo·TwentyQ는 이미 `cache_statement`로 운영 중이다. hololive만 `exec`로 남아 있어 스택 전체에 모드별 인코딩 차이라는 이중 기준이 있었다.
+
+성능 근거는 **여전히 중립**이다. A3 원 측정의 "top query mean sub-ms(0.027~0.43ms)"는 그대로여서 `cache_statement`의 개선 여지는 측정 한계 이하다. 즉 이 전환은 성능 최적화가 아니라 인코딩 정합성·스택 일관성 결정이다.
+
+DDL invalidation 리스크는 이중으로 bounded다:
+
+- pgx는 쿼리 오류 시 해당 SQL의 statement/description 캐시를 즉시 무효화한다(pgx v5.10.0 `rows.go:172-180`). 마이그레이션으로 stale해진 캐시는 첫 실패 1회로 자정된다.
+- hololive pool은 `MaxConnLifetime=5m`(`hololive/hololive-shared/pkg/constants/network.go`) + jitter `lifetime/5=1m`(`shared-go/pkg/db/pgxdb/pool.go`의 `overlayLifetime`)이라 커넥션이 5~6분 내 전량 재생성된다. stale 캐시 노출 창의 상한이 여기서 한 번 더 닫힌다.
+
+롤백: `POSTGRES_QUERY_EXEC_MODE=exec`를 env로 주입하면 즉시 되돌아간다(코드 변경 불필요). 단 `hololive/hololive-dbtest`의 테스트 pool 모드는 compose 기본값과 `TestProductionComposePinsTheTestPoolQueryExecMode`로 묶여 있어, 기본값을 되돌릴 때는 같은 커밋에서 함께 되돌려야 한다.
 
 ## A4 — skip scan / AIO 실효성 (측정 완료, 분류 확정)
 

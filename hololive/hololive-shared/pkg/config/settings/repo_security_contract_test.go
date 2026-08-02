@@ -1097,23 +1097,6 @@ func TestRepoComposeNoStackRendersWeakPostgresSSLMode(t *testing.T) {
 	}
 }
 
-func TestRepoCompose_StandaloneDispatcherServiceIsRemoved(t *testing.T) {
-	content := readRepoFile(t, "deploy/compose/docker-compose.prod.yml")
-
-	disallowed := []string{
-		"\n  dispatcher-go:",
-		"hololive-dispatcher-go",
-		"legacy-dispatcher-go",
-		"DISPATCHER_PORT",
-		"30020",
-	}
-	for _, pattern := range disallowed {
-		if strings.Contains(content, pattern) {
-			t.Fatalf("docker-compose.prod.yml still contains standalone dispatcher pattern %q", pattern)
-		}
-	}
-}
-
 func TestRepoHololiveComposeUnitExecutesOnlyImmutableRootWrappers_03e6dca8(t *testing.T) {
 	unit := readRepoFile(t, "scripts/systemd/hololive-compose.service")
 

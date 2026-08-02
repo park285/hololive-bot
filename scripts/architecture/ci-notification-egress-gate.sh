@@ -76,28 +76,11 @@ else
   echo "[PASS] ${service} has no Iris egress env"
 fi
 
-dispatcher_hits="$(rg -n 'dispatcher-go|hololive-dispatcher-go|legacy-dispatcher-go' "${compose}" || true)"
-if [[ -n "${dispatcher_hits}" ]]; then
-  echo "[FAIL] standalone dispatcher-go must be absent from docker-compose.prod.yml" >&2
-  echo "${dispatcher_hits}" >&2
-  fail=1
-else
-  echo "[PASS] standalone dispatcher-go is absent from docker-compose.prod.yml"
-fi
-
 alarm_worker_block="$(awk '
   $0 == "  hololive-alarm-worker:" {in_block=1; print; next}
   in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}
   in_block {print}
 ' "${compose}")"
-lease_env_hits="$(rg -n 'ALARM_WORKER_EGRESS_LEASE_ENABLED' "${ROOT_DIR}/deploy" "${ROOT_DIR}/hololive" || true)"
-if [[ -n "${lease_env_hits}" ]]; then
-  echo "[FAIL] ALARM_WORKER_EGRESS_LEASE_ENABLED was removed; no runtime reads it, so reintroducing it under deploy/ or hololive/ only re-adds a Valkey availability dependency to proactive egress" >&2
-  echo "${lease_env_hits}" >&2
-  fail=1
-else
-  echo "[PASS] ALARM_WORKER_EGRESS_LEASE_ENABLED is absent from deploy/ and hololive/"
-fi
 if ! grep -Fq 'NOTIFICATION_SCHEDULER_ROLE: "worker"' <<< "${alarm_worker_block}"; then
   echo "[FAIL] alarm-worker must pin NOTIFICATION_SCHEDULER_ROLE: \"worker\" in docker-compose.prod.yml; the runtime validator also accepts off, so this literal is the deploy-layer guard that keeps the single alarm-worker instance from starting without the alarm checker/scheduler" >&2
   fail=1

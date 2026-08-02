@@ -39,7 +39,7 @@ sudo find data logs -type f -exec chmod 660 {} +
 
 `docker-compose.prod.yml` 기준 현재 YouTube 수집과 photo sync 책임은 `youtube-producer` 서비스가 소유하며, 런타임은 4-way active-active 인스턴스로 실행됩니다 (osaka `youtube-producer-a` `30005`, seoul `youtube-producer-b` `30015`, main `youtube-producer-c` `30025`, osaka2 `youtube-producer-d` `30035`). seoul `b`·main `c`는 compose 컨테이너로, osaka `a`·osaka2 `d`는 host-native `systemd` 런타임으로 실행됩니다.
 
-- `youtube-producer` (base 정의, 인스턴스 overlay가 포트·instance id·PhotoSync 참여를 override — `youtube-producer-b`는 PhotoSync 미참여): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`
+- `youtube-producer` (base 정의, 인스턴스 overlay가 포트·instance id·PhotoSync 참여를 override — `youtube-producer-b`는 PhotoSync 미참여): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`
   - YouTube ingestion scheduler
   - YouTube producer scheduler
   - YouTube outbox row production; final send is owned by `alarm-worker`
@@ -48,7 +48,7 @@ sudo find data logs -type f -exec chmod 660 {} +
 
 운영 라우팅 고정:
 - YouTube 커뮤니티/쇼츠 알람은 전체 운영 채널에서 `youtube-producer`가 outbox row를 만들고 `alarm-worker`가 claim/render/final send를 수행합니다.
-- compose 기준 rollout key는 `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED` 하나만 사용하고, canary fallback은 두지 않습니다. 운영 compose에서는 `youtube-producer=true`로 고정합니다.
+- 이 라우팅에는 별도 rollout key나 canary fallback을 두지 않습니다. compose에는 이 경로를 분기하는 env가 없습니다.
 - `youtube-producer` 실행 권한은 `YOUTUBE_PRODUCER_RUNTIME_ALLOWED`로 한 번 더 제한합니다. base 기본값은 `false`이고 Seoul Compose overlay, Osaka·Osaka2 host-native env, `main-ap` profile에서만 `true`입니다. Osaka·Osaka2 Compose overlay에도 계약 검증을 위해 같은 값이 유지됩니다.
 
 ## Remote AP split-host 운영 (osaka, seoul, osaka2)
