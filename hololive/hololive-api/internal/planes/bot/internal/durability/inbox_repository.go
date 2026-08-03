@@ -337,13 +337,11 @@ func reclaimExpiredInboxTx(ctx context.Context, tx pgx.Tx, maxAttempts, batchSiz
 	if err != nil {
 		return InboxReclaim{}, err
 	}
-	for _, key := range keys {
-		if err := lockInboxOrderingKey(ctx, tx, key); err != nil {
-			return InboxReclaim{}, err
-		}
-	}
 	if len(keys) == 0 {
 		return InboxReclaim{}, nil
+	}
+	if err := lockInboxOrderingKeys(ctx, tx, keys); err != nil {
+		return InboxReclaim{}, err
 	}
 	var reclaim InboxReclaim
 	err = tx.QueryRow(ctx, inboxReclaimExpiredSQL, maxAttempts, batchSize, keys).
