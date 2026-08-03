@@ -12,7 +12,7 @@ var (
 	youTubePollTargetMetricsOnce sync.Once
 
 	youtubePollTargetRefreshTotal                *prometheus.CounterVec
-	youtubePollTargetRefreshLastSuccessTimestamp prometheus.Gauge
+	youtubePollTargetRefreshLastSuccessTimestamp *prometheus.GaugeVec
 	youtubePollTargetRefreshAcceptedTargetCount  *prometheus.GaugeVec
 	youtubePollTargetRefreshDBValidationTotal    *prometheus.CounterVec
 )
@@ -23,10 +23,10 @@ func ensureYouTubePollTargetMetrics() {
 			Name: "hololive_youtube_poll_target_refresh_total",
 			Help: "YouTube poll target refresh outcomes",
 		}, []string{"result"})
-		youtubePollTargetRefreshLastSuccessTimestamp = promauto.NewGauge(prometheus.GaugeOpts{
+		youtubePollTargetRefreshLastSuccessTimestamp = promauto.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "hololive_youtube_poll_target_refresh_last_success_timestamp_seconds",
 			Help: "Unix timestamp of the last successful YouTube poll target refresh",
-		})
+		}, nil)
 		youtubePollTargetRefreshAcceptedTargetCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "hololive_youtube_poll_target_refresh_accepted_target_count",
 			Help: "Accepted YouTube poll target counts by target type",
@@ -50,7 +50,7 @@ func observeYouTubePollTargetValidation(result string) {
 func observeYouTubePollTargetRefreshSuccess(at time.Time, targets Targets) {
 	ensureYouTubePollTargetMetrics()
 	youtubePollTargetRefreshTotal.WithLabelValues("success").Inc()
-	youtubePollTargetRefreshLastSuccessTimestamp.Set(float64(at.Unix()))
+	youtubePollTargetRefreshLastSuccessTimestamp.WithLabelValues().Set(float64(at.Unix()))
 	youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification").Set(float64(len(targets.NotificationChannelIDs)))
 	youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats").Set(float64(len(targets.StatsChannelIDs)))
 }

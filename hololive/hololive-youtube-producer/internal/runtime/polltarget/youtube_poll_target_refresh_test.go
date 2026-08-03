@@ -752,7 +752,7 @@ func TestYouTubePollTargetRefresherRefreshMetricsSuccessAndAcceptedCounts(t *tes
 	refresher.refresh(context.Background())
 
 	assert.Equal(t, successBefore+1, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success")))
-	assert.Equal(t, float64(refreshAt.Unix()), testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp))
+	assert.Equal(t, float64(refreshAt.Unix()), testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp.WithLabelValues()))
 	assert.Equal(t, float64(1), testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification")))
 	assert.Equal(t, float64(2), testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats")))
 }
@@ -814,7 +814,7 @@ func TestYouTubePollTargetRefresherRefreshMetricsErrorPreservesLastSuccessSnapsh
 	refresher.timeNow = func() time.Time { return failedRefreshAt }
 	successBefore := testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success"))
 	errorBefore := testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("error"))
-	lastSuccessBefore := testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp)
+	lastSuccessBefore := testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp.WithLabelValues())
 	notificationCountBefore := testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification"))
 	statsCountBefore := testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats"))
 
@@ -822,7 +822,7 @@ func TestYouTubePollTargetRefresherRefreshMetricsErrorPreservesLastSuccessSnapsh
 
 	assert.Equal(t, successBefore, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success")))
 	assert.Equal(t, errorBefore+1, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("error")))
-	assert.Equal(t, lastSuccessBefore, testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp))
+	assert.Equal(t, lastSuccessBefore, testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp.WithLabelValues()))
 	assert.Equal(t, notificationCountBefore, testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification")))
 	assert.Equal(t, statsCountBefore, testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats")))
 }
