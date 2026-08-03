@@ -59,6 +59,7 @@ func (s *Scheduler) RegisterCheckedWithBudgetProfile(channelID string, poller Po
 	if pollerName == "" {
 		return fmt.Errorf("poller name is empty")
 	}
+	s.metrics.EnsurePollerLastSuccessTimestamp(pollerName)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -120,6 +121,7 @@ func (s *Scheduler) SyncPollerTargets(targetSync *PollerTargetSync) {
 	if pollerName == "" {
 		return
 	}
+	s.metrics.EnsurePollerLastSuccessTimestamp(pollerName)
 
 	desired := desiredPollerTargetChannels(targetSync.ChannelIDs)
 
@@ -138,6 +140,7 @@ func (s *Scheduler) SyncPollerTargetGroups(targetSyncs []PollerTargetSync) {
 	if pollerName == "" {
 		return
 	}
+	s.metrics.EnsurePollerLastSuccessTimestamp(pollerName)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

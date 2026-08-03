@@ -12,6 +12,7 @@ import (
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -704,4 +705,135 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 	refresher.refresh(context.Background())
 
 	assert.NotContains(t, logBuf.String(), `"msg":"youtube_poll_target_operational_channels_refreshed"`)
+}
+
+func TestYouTubePollTargetRefresherRefreshMetricsSuccessAndAcceptedCounts(t *testing.T) {
+	cache := cachemocks.NewStrictClient()
+	cache.ExistsFunc = func(context.Context, string) (bool, error) {
+		return false, nil
+	}
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		return []string{"UC_NOTIFY"}, nil
+	}
+
+	registrations := buildYouTubeProducerChannelPollerRegistrations(
+		&databasemocks.Client{},
+		&settings.ScraperConfig{Poll: settings.ScraperPoll{
+			Videos: 7 * time.Minute, Shorts: 11 * time.Minute, Community: 13 * time.Minute,
+			Stats: 4 * time.Hour, Live: 3 * time.Minute,
+		}},
+		ratelimiter.New(time.Second),
+		cache,
+		[]string{"UC_NOTIFY"},
+		[]string{"UC_NOTIFY", "UC_STATS"},
+	)
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY", "UC_STATS"}),
+	)
+	refresher := newYouTubePollTargetRefresher(
+		cache,
+		scheduler,
+		registrations,
+		[]communityshorts.OperationalChannel{
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
+		},
+		func(context.Context) ([]string, error) { return nil, nil },
+		newYouTubePollTargetTestLogger(),
+	)
+	refreshAt := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
+	refresher.timeNow = func() time.Time { return refreshAt }
+
+	successBefore := testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success"))
+	refresher.refresh(context.Background())
+
+	assert.Equal(t, successBefore+1, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success")))
+	assert.Equal(t, float64(refreshAt.Unix()), testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp))
+	assert.Equal(t, float64(1), testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification")))
+	assert.Equal(t, float64(2), testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats")))
+}
+
+func TestYouTubePollTargetRefresherRefreshMetricsErrorPreservesLastSuccessSnapshot(t *testing.T) {
+	cache := cachemocks.NewStrictClient()
+	cache.ExistsFunc = func(context.Context, string) (bool, error) {
+		return false, nil
+	}
+	cacheHealthy := true
+	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		if !cacheHealthy {
+			return nil, assert.AnError
+		}
+		return []string{"UC_NOTIFY"}, nil
+	}
+	loadAlarmChannelIDs := func(context.Context) ([]string, error) {
+		if !cacheHealthy {
+			return nil, assert.AnError
+		}
+		return []string{"UC_NOTIFY"}, nil
+	}
+
+	registrations := buildYouTubeProducerChannelPollerRegistrations(
+		&databasemocks.Client{},
+		&settings.ScraperConfig{Poll: settings.ScraperPoll{
+			Videos: 7 * time.Minute, Shorts: 11 * time.Minute, Community: 13 * time.Minute,
+			Stats: 4 * time.Hour, Live: 3 * time.Minute,
+		}},
+		ratelimiter.New(time.Second),
+		cache,
+		[]string{"UC_NOTIFY"},
+		[]string{"UC_NOTIFY", "UC_STATS"},
+	)
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY", "UC_STATS"}),
+	)
+	refresher := newYouTubePollTargetRefresher(
+		cache,
+		scheduler,
+		registrations,
+		[]communityshorts.OperationalChannel{
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
+		},
+		loadAlarmChannelIDs,
+		newYouTubePollTargetTestLogger(),
+	)
+	firstRefreshAt := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
+	refresher.timeNow = func() time.Time { return firstRefreshAt }
+	refresher.refresh(context.Background())
+
+	cacheHealthy = false
+	failedRefreshAt := firstRefreshAt.Add(time.Minute)
+	refresher.timeNow = func() time.Time { return failedRefreshAt }
+	successBefore := testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success"))
+	errorBefore := testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("error"))
+	lastSuccessBefore := testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp)
+	notificationCountBefore := testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification"))
+	statsCountBefore := testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats"))
+
+	refresher.refresh(context.Background())
+
+	assert.Equal(t, successBefore, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success")))
+	assert.Equal(t, errorBefore+1, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("error")))
+	assert.Equal(t, lastSuccessBefore, testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp))
+	assert.Equal(t, notificationCountBefore, testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification")))
+	assert.Equal(t, statsCountBefore, testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats")))
+}
+
+func TestDisabledYouTubePollTargetRefresherDoesNotRecordRefreshOutcome(t *testing.T) {
+	refresher := newDisabledYouTubePollTargetRefresher(newYouTubePollTargetTestLogger())
+	successBefore := testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success"))
+	errorBefore := testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("error"))
+
+	refresher.refresh(context.Background())
+
+	assert.Equal(t, successBefore, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success")))
+	assert.Equal(t, errorBefore, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("error")))
 }

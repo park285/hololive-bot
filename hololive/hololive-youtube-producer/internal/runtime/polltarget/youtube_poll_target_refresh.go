@@ -170,21 +170,29 @@ func (r *Refresher) refresh(ctx context.Context) {
 
 	operational, ok := r.refreshOperationalChannels(ctx)
 	if !ok {
+		observeYouTubePollTargetRefreshError()
 		return
 	}
 	registry := r.readRegistryVersion(ctx)
 	if r.reuseTargetsIfRegistryUnchanged(ctx, registry, operational) {
+		observeYouTubePollTargetRefreshSuccess(r.now(), r.lastResolvedTargets)
 		return
 	}
 
 	now := r.now()
-	candidate, ok := r.resolveUsableAlarmTargetCandidate(ctx, now, operational)
+	candidate, ok, reused := r.resolveUsableAlarmTargetCandidate(ctx, now, operational)
 	if !ok {
+		observeYouTubePollTargetRefreshError()
+		return
+	}
+	if reused {
+		observeYouTubePollTargetRefreshSuccess(r.now(), r.lastResolvedTargets)
 		return
 	}
 
 	targets, ok := r.resolveTargetsWithCacheValidation(ctx, now, operational.channels, candidate.ids, candidate.fromCache)
 	if !ok {
+		observeYouTubePollTargetRefreshError()
 		return
 	}
 	r.finishRefresh(ctx, targets, operational, registry, candidate.fromCache)
@@ -198,15 +206,15 @@ func (r *Refresher) resolveUsableAlarmTargetCandidate(
 	ctx context.Context,
 	now time.Time,
 	operational operationalChannelResolution,
-) (alarmTargetCandidate, bool) {
+) (alarmTargetCandidate, bool, bool) {
 	candidate, ok := r.resolveAlarmTargetCandidate(ctx, now)
 	if !ok {
-		return alarmTargetCandidate{}, false
+		return alarmTargetCandidate{}, false, false
 	}
 	if r.reuseTargetsForEmptyCacheCandidate(ctx, candidate, operational) {
-		return alarmTargetCandidate{}, false
+		return alarmTargetCandidate{}, true, true
 	}
-	return candidate, true
+	return candidate, true, false
 }
 
 func (r *Refresher) now() time.Time {
@@ -364,6 +372,7 @@ func (r *Refresher) finishRefresh(
 	if targetsChanged || tieringRefreshDue {
 		r.applyResolvedTargets(ctx, targets)
 	}
+	observeYouTubePollTargetRefreshSuccess(r.now(), targets)
 }
 
 func (r *Refresher) applyResolvedTargets(ctx context.Context, targets Targets) {

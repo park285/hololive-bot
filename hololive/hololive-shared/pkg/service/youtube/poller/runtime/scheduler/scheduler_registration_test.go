@@ -26,6 +26,7 @@ import (
 	"time"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,6 +56,30 @@ func TestSchedulerRegisterSignalsWakeChannel(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("expected scheduler register to signal wakeCh")
 	}
+}
+
+func TestSchedulerRegistrationCreatesColdStartPollerFreshnessSeries(t *testing.T) {
+	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	poller := &togglePollerStub{name: "cold-start-registration"}
+
+	require.NoError(t, scheduler.RegisterChecked("channel-1", poller, PriorityNormal, time.Minute))
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, family := range families {
+		if family.GetName() != "youtube_poller_last_success_timestamp_seconds" {
+			continue
+		}
+		for _, metric := range family.Metric {
+			for _, label := range metric.Label {
+				if label.GetName() == "poller" && label.GetValue() == poller.Name() {
+					assert.Zero(t, metric.GetGauge().GetValue())
+					return
+				}
+			}
+		}
+	}
+	t.Fatal("cold-start poller freshness series was not gathered")
 }
 
 func TestSchedulerNudgeAllJobsResetsBackoffAndWakesDispatcher(t *testing.T) {
