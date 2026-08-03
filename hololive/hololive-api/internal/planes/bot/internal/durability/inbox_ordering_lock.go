@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var inboxOrderingKeysLockSQL = mustSQL("inbox_ordering_keys_lock.sql")
+
 func (r *InboxRepository) beginLockedMessageTx(ctx context.Context, messageID string) (pgx.Tx, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -35,6 +37,16 @@ func rollbackInboxTx(ctx context.Context, tx pgx.Tx) error {
 func lockInboxOrderingKey(ctx context.Context, tx pgx.Tx, orderingKey string) error {
 	if _, err := tx.Exec(ctx, inboxOrderingKeyLockSQL, orderingKey); err != nil {
 		return fmt.Errorf("lock webhook ordering key: %w", err)
+	}
+	return nil
+}
+
+func lockInboxOrderingKeys(ctx context.Context, tx pgx.Tx, orderingKeys []string) error {
+	if len(orderingKeys) == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, inboxOrderingKeysLockSQL, orderingKeys); err != nil {
+		return fmt.Errorf("lock webhook ordering keys: %w", err)
 	}
 	return nil
 }
