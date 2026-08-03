@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # youtube-producer 빌드에 필요한 hololive-bot 내부 .go 파일이 ap-rsync 매니페스트에
 # 모두 포함되는지 go list -deps로 검증한다. 새 패키지 추가 시 매니페스트 누락을
-# 배포 전에 잡는다(과거 d86cb826/226977ef 누락 이력). go가 없으면 경고 후 skip하고
-# 원격 빌드를 최종 안전망으로 둔다.
+# 배포 전에 잡는다(과거 d86cb826/226977ef 누락 이력).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANIFEST="${1:-$ROOT_DIR/scripts/deploy/ap-rsync-files.txt}"
+GO_CMD="${GO_CMD:-go}"
 if [[ "$MANIFEST" != /* ]]; then
   MANIFEST="$PWD/$MANIFEST"
 fi
 
-if ! command -v go >/dev/null 2>&1; then
-  echo "[WARN] go not found; skipping ap-rsync manifest completeness check" >&2
-  exit 0
+if ! command -v "$GO_CMD" >/dev/null 2>&1; then
+  echo "[FAIL] required Go command not found: $GO_CMD" >&2
+  exit 1
 fi
 if [[ ! -r "$MANIFEST" ]]; then
   echo "[FAIL] manifest not readable: $MANIFEST" >&2
@@ -40,7 +40,7 @@ done
 SHARED_GO_DIR="$(cd "$ROOT_DIR/../shared-go" 2>/dev/null && pwd || true)"
 build_targets=(./cmd/runtime/youtube-producer ./cmd/runtime/healthcheck)
 missing="$(cd "$ROOT_DIR/hololive/hololive-youtube-producer" &&
-  go list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{range .EmbedFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}" 2>/dev/null |
+  "$GO_CMD" list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{range .EmbedFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}" 2>/dev/null |
   sed "s#^$ROOT_DIR/##; s#^$SHARED_GO_DIR/#../shared-go/#" |
   grep -E '^(hololive/|\.\./shared-go/)' |
   sort -u |
