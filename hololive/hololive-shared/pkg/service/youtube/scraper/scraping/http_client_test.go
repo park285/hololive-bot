@@ -104,6 +104,9 @@ func TestCreateHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *test
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
+	if resp == nil {
+		t.Fatal("scraper request returned a nil response without an error")
+	}
 	defer func() {
 		mustClose(t, resp.Body)
 	}()
