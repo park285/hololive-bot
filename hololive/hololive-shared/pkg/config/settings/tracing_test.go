@@ -121,6 +121,37 @@ func TestLoadTracingConfigRejectsUnknownProducerInstance(t *testing.T) {
 	}
 }
 
+func TestLoadTracingConfigAllowsDisabledUnknownProducerInstance(t *testing.T) {
+	tests := []struct {
+		name       string
+		instanceID string
+		setFlags   bool
+	}{
+		{name: "empty instance and unset flags"},
+		{name: "legacy instance and false flags", instanceID: "legacy-producer", setFlags: true},
+		{name: "unknown instance and false flags", instanceID: "youtube-producer-legacy", setFlags: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearTracingEnv(t)
+			if tt.setFlags {
+				for _, key := range tracingEnabledEnvKeys[2:] {
+					t.Setenv(key, "false")
+				}
+			}
+
+			config, err := loadTracingConfig(tracingRuntimeYouTubeProducer, tt.instanceID)
+			if err != nil {
+				t.Fatalf("loadTracingConfig() error = %v, want nil", err)
+			}
+			if config.Enabled {
+				t.Fatal("TracingConfig.Enabled = true, want false")
+			}
+		})
+	}
+}
+
 func TestLoadTracingConfigRejectsInvalidValues(t *testing.T) {
 	tests := []struct {
 		name    string
