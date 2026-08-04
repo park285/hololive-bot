@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
@@ -99,17 +101,62 @@ func NewH2CServer(addr string, handler http.Handler, operation string) *http.Ser
 	return srv
 }
 
+type requestTargetContextKey struct{}
+
+type requestTarget struct {
+	url        *url.URL
+	requestURI string
+}
+
 func newOtelHandler(handler http.Handler, operation string) http.Handler {
 	if strings.TrimSpace(operation) == "" {
 		return handler
 	}
-	return otelhttp.NewHandler(
-		handler,
+
+	restoredHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target, ok := r.Context().Value(requestTargetContextKey{}).(requestTarget)
+		if !ok {
+			handler.ServeHTTP(w, r)
+			return
+		}
+
+		restored := r.Clone(r.Context())
+		restored.URL = target.url
+		restored.RequestURI = target.requestURI
+		handler.ServeHTTP(w, restored)
+		r.Pattern = restored.Pattern
+	})
+
+	instrumented := otelhttp.NewHandler(
+		restoredHandler,
 		operation,
+		otelhttp.WithPropagators(propagation.TraceContext{}),
+		otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
 		otelhttp.WithSpanNameFormatter(func(operation string, _ *http.Request) string {
 			return operation
 		}),
 	)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), requestTargetContextKey{}, requestTarget{
+			url:        r.URL,
+			requestURI: r.RequestURI,
+		})
+		traced := r.Clone(ctx)
+		if r.URL != nil {
+			sanitizedURL := *r.URL
+			sanitizedURL.Path = ""
+			sanitizedURL.RawPath = ""
+			sanitizedURL.RawQuery = ""
+			sanitizedURL.ForceQuery = false
+			sanitizedURL.Fragment = ""
+			sanitizedURL.RawFragment = ""
+			sanitizedURL.Opaque = ""
+			traced.URL = &sanitizedURL
+		}
+		traced.RequestURI = ""
+		instrumented.ServeHTTP(w, traced)
+	})
 }
 
 func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRouterOptions) (*gin.Engine, error) {

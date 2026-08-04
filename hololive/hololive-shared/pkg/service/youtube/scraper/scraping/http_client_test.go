@@ -21,13 +21,38 @@
 package scraping
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/embedded"
+	"go.opentelemetry.io/otel/trace/noop"
 )
+
+type startCountingTracerProvider struct {
+	embedded.TracerProvider
+	starts atomic.Int64
+}
+
+func (p *startCountingTracerProvider) Tracer(string, ...trace.TracerOption) trace.Tracer {
+	return &startCountingTracer{starts: &p.starts}
+}
+
+type startCountingTracer struct {
+	embedded.Tracer
+	starts *atomic.Int64
+}
+
+func (t *startCountingTracer) Start(ctx context.Context, _ string, _ ...trace.SpanStartOption) (context.Context, trace.Span) {
+	t.starts.Add(1)
+	return noop.NewTracerProvider().Tracer("test-noop").Start(ctx, "test-noop")
+}
 
 func TestCreateHTTPClient_DirectHTTP2(t *testing.T) {
 	client, transport, err := createHTTPClient(ProxyConfig{})
@@ -48,6 +73,43 @@ func TestCreateHTTPClient_ProxyHTTP2(t *testing.T) {
 
 	require.NotNil(t, transport, "base transport should be returned")
 	assert.False(t, transport.ForceAttemptHTTP2, "proxy path should disable HTTP/2 (single tunnel multiplex is fragile)")
+}
+
+func TestCreateHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *testing.T) {
+	provider := &startCountingTracerProvider{}
+	previousProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousProvider)
+	})
+
+	_, controlSpan := otel.Tracer("scraper-tracing-contract-test").Start(t.Context(), "control")
+	controlSpan.End()
+	require.Equal(t, int64(1), provider.starts.Load(), "test tracer provider must be active")
+
+	requestURIs := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestURIs <- r.URL.RequestURI()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client, transport, err := createHTTPClient(ProxyConfig{})
+	require.NoError(t, err)
+	require.Same(t, transport, client.Transport, "scraper client must retain the configured base transport")
+
+	const sentinelURI = "/youtube/videos/sensitive-video-id?channel=sensitive-channel-id&q=sensitive-query"
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+sentinelURI, http.NoBody)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		mustClose(t, resp.Body)
+	}()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.Equal(t, sentinelURI, <-requestURIs)
+	assert.Equal(t, int64(1), provider.starts.Load(), "scraper request must not create an outbound client span")
 }
 
 func TestCreateHTTPClient_RejectsInvalidProxyURL(t *testing.T) {
