@@ -24,6 +24,7 @@ type HololiveAPIConfig struct {
 	Admin   *Config
 	LLM     *LLMSchedulerConfig
 	Logging LoggingConfig
+	Tracing TracingConfig
 }
 
 func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
@@ -47,6 +48,7 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 		Admin:   adminConfig,
 		LLM:     llmConfig,
 		Logging: botConfig.Logging,
+		Tracing: botConfig.Tracing,
 	}
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("hololive-api config validation failed: %w", err)
@@ -102,6 +104,9 @@ func (c *HololiveAPIConfig) Validate() error {
 	}
 	if c.Bot == nil || c.Admin == nil || c.LLM == nil {
 		return fmt.Errorf("bot, admin and llm plane configs are required")
+	}
+	if err := validateTracingConfig(c.Tracing); err != nil {
+		return err
 	}
 	if err := c.validatePlaneRuntimes(); err != nil {
 		return err
