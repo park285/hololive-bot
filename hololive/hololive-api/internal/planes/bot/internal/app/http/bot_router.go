@@ -80,6 +80,7 @@ func botRouteRegistrar(
 	logger *slog.Logger,
 ) func(*gin.Engine) error {
 	return func(router *gin.Engine) error {
+		registerShortLinkRoutes(router)
 		registerWebhookRoute(router, webhookHandler)
 		if err := registerIrisRoomRoute(router, apiKey, irisRoomLister, logger); err != nil {
 			return err

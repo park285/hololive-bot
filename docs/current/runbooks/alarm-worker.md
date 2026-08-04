@@ -35,8 +35,26 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `DELIVERY_DISPATCHER_ENABLED` | generic notification delivery outbox egress enablement | production yes |
 | `ALARM_DISPATCH_CONSUMER_ENABLED` | alarm dispatch outbox egress enablement | production yes |
 | `ALARM_DISPATCH_KARING_ENABLED` | alarm dispatch queue egress uses Karing content-list templates instead of text sends | no |
+| `ALARM_SHORT_LINK_BASE_URL` | public HTTPS origin for thumbnail-free grouped alarm links; blank disables | no |
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
+
+## Grouped alarm short links
+
+여러 방송을 하나의 일반 텍스트 alarm notification으로 묶을 때 `ALARM_SHORT_LINK_BASE_URL`을 설정하면 YouTube 링크를 `<origin>/l/<video_id>`로 렌더링합니다. `hololive-api` bot plane의 `/l/:videoID` route가 일반 사용자는 YouTube로 `302` redirect하고 KakaoTalk scraper의 `kakaotalk-scrap/` User-Agent는 `403`으로 거부합니다.
+
+활성화 조건:
+
+1. `/run/hololive-bot/alarm-worker.env`에 path/query/fragment가 없는 public `https` origin을 설정합니다.
+2. 외부 ingress에서 해당 origin의 `/l/*`를 `hololive-api` bot plane으로 전달합니다.
+3. `ALARM_DISPATCH_KARING_ENABLED=false`를 유지합니다. Karing list template은 명시적 thumbnail 계약을 가지므로 두 기능을 동시에 켜면 alarm-worker가 fail closed합니다.
+
+```text
+ALARM_SHORT_LINK_BASE_URL=https://go.example.com
+ALARM_DISPATCH_KARING_ENABLED=false
+```
+
+기능을 되돌리려면 `ALARM_SHORT_LINK_BASE_URL`을 비우고 alarm-worker를 재기동합니다. 기존 단일 알림과 Karing template 계약은 변경되지 않습니다.
 
 ## Logs
 
@@ -109,6 +127,31 @@ Mitigation:
 Rollback:
 - Roll back settings publisher/consumer change.
 
+### 3. Grouped short links do not suppress previews
+
+Symptoms:
+- Grouped alarm still contains direct YouTube URLs.
+- KakaoTalk still renders a YouTube preview.
+
+Diagnosis:
+```bash
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker printenv ALARM_SHORT_LINK_BASE_URL
+curl -I https://go.example.com/l/dQw4w9WgXcQ
+curl -I -A 'facebookexternalhit/1.1; kakaotalk-scrap/1.0' https://go.example.com/l/dQw4w9WgXcQ
+```
+
+Expected:
+- regular request: `302` with a YouTube `Location` header
+- Kakao scraper request: `403` without a `Location` header
+
+Mitigation:
+- Confirm the public ingress routes `/l/*` to the bot plane and preserves `User-Agent`.
+- Confirm `ALARM_DISPATCH_KARING_ENABLED=false`.
+- Restart alarm-worker after updating its env file.
+
+Rollback:
+- Clear `ALARM_SHORT_LINK_BASE_URL` and restart alarm-worker.
+
 ## Smoke test
 
 ```bash
@@ -126,5 +169,6 @@ Rollback:
 
 - `../contracts/alarm.md`
 - `../contracts/karing-kakaolink.md`
+- `../contracts/shortlink.md`
 - `../contracts/settings.md`
 - `../QUEUE_AND_PUBSUB_CONTRACTS.md`
