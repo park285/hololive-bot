@@ -95,21 +95,24 @@ func tracingEnabledEnv(runtime tracingRuntime, producerInstanceID string) (strin
 	case tracingRuntimeAlarmWorker:
 		return tracingAlarmWorkerEnabledEnv, nil
 	case tracingRuntimeYouTubeProducer:
-		switch strings.ToLower(strings.TrimSpace(producerInstanceID)) {
-		case "a", "youtube-producer-a":
-			return tracingYouTubeProducerAEnabledEnv, nil
-		case "b", "youtube-producer-b":
-			return tracingYouTubeProducerBEnabledEnv, nil
-		case "c", "youtube-producer-c":
-			return tracingYouTubeProducerCEnabledEnv, nil
-		case "d", "youtube-producer-d":
-			return tracingYouTubeProducerDEnabledEnv, nil
-		default:
-			return "", fmt.Errorf("YOUTUBE_PRODUCER_INSTANCE_ID must be one of a, b, c, d, youtube-producer-a, youtube-producer-b, youtube-producer-c, youtube-producer-d")
-		}
+		return youtubeProducerTracingEnabledEnv(producerInstanceID)
 	default:
 		return "", fmt.Errorf("unsupported tracing runtime %d", runtime)
 	}
+}
+
+func youtubeProducerTracingEnabledEnv(instanceID string) (string, error) {
+	normalized := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(instanceID)), "youtube-producer-")
+	enabledEnv, ok := map[string]string{
+		"a": tracingYouTubeProducerAEnabledEnv,
+		"b": tracingYouTubeProducerBEnabledEnv,
+		"c": tracingYouTubeProducerCEnabledEnv,
+		"d": tracingYouTubeProducerDEnabledEnv,
+	}[normalized]
+	if !ok {
+		return "", fmt.Errorf("YOUTUBE_PRODUCER_INSTANCE_ID must be one of a, b, c, d, youtube-producer-a, youtube-producer-b, youtube-producer-c, youtube-producer-d")
+	}
+	return enabledEnv, nil
 }
 
 func validateTracingConfig(config TracingConfig) error {

@@ -112,18 +112,11 @@ func youtubeProducerTelemetryConfig(appConfig *settings.Config, version string) 
 }
 
 func youtubeProducerTelemetryServiceName(instanceID string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(instanceID)) {
-	case "a", "youtube-producer-a":
-		return "youtube-producer-a", nil
-	case "b", "youtube-producer-b":
-		return "youtube-producer-b", nil
-	case "c", "youtube-producer-c":
-		return "youtube-producer-c", nil
-	case "d", "youtube-producer-d":
-		return "youtube-producer-d", nil
-	default:
+	normalized := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(instanceID)), "youtube-producer-")
+	if normalized != "a" && normalized != "b" && normalized != "c" && normalized != "d" {
 		return "", fmt.Errorf("unsupported YOUTUBE_PRODUCER_INSTANCE_ID")
 	}
+	return "youtube-producer-" + normalized, nil
 }
 
 func youtubeProducerLogFileName() string {

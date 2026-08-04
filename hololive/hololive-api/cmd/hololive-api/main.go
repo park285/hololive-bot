@@ -56,22 +56,8 @@ func main() {
 				slog.Int("llm_port", appConfig.LLM.Server.Port),
 			}
 		},
-		BuildTimeout: constants.AppTimeout.Build,
-		BuildRuntime: func(
-			ctx context.Context,
-			appConfig *settings.HololiveAPIConfig,
-			logger *slog.Logger,
-		) (*observability.ManagedRuntime[*app.Runtime], error) {
-			traceConfig := hololiveAPITelemetryConfig(appConfig, Version)
-			return observability.BuildRuntime(
-				ctx,
-				&traceConfig,
-				logger,
-				func(ctx context.Context) (*app.Runtime, error) {
-					return app.BuildRuntime(ctx, appConfig, logger)
-				},
-			)
-		},
+		BuildTimeout:      constants.AppTimeout.Build,
+		BuildRuntime:      buildHololiveAPIRuntime,
 		BuildErrorMessage: "Failed to assemble hololive-api runtime",
 	})
 	if logCloser != nil {
@@ -80,6 +66,17 @@ func main() {
 		}
 	}
 	os.Exit(code)
+}
+
+func buildHololiveAPIRuntime(
+	ctx context.Context,
+	appConfig *settings.HololiveAPIConfig,
+	logger *slog.Logger,
+) (*observability.ManagedRuntime[*app.Runtime], error) {
+	traceConfig := hololiveAPITelemetryConfig(appConfig, Version)
+	return observability.BuildRuntime(ctx, &traceConfig, logger, func(ctx context.Context) (*app.Runtime, error) {
+		return app.BuildRuntime(ctx, appConfig, logger)
+	})
 }
 
 func hololiveAPITelemetryConfig(appConfig *settings.HololiveAPIConfig, version string) telemetry.Config {
