@@ -90,6 +90,7 @@ hololive/hololive-youtube-producer/internal/communityshorts/target_baseline_rout
 hololive/hololive-shared/pkg/apperrors/errors.go
 hololive/hololive-shared/pkg/privacylog/cachekey.go
 hololive/hololive-shared/pkg/privacylog/privacylog.go
+hololive/hololive-shared/pkg/observability/runtime.go
 hololive/hololive-shared/pkg/config/settings/config.go
 hololive/hololive-shared/pkg/config/settings/config_alarm_dispatch.go
 hololive/hololive-shared/pkg/config/settings/config_api_operational.go
@@ -113,6 +114,7 @@ hololive/hololive-shared/pkg/config/settings/hololive_api.go
 hololive/hololive-shared/pkg/config/settings/llm_scheduler.go
 hololive/hololive-shared/pkg/config/settings/runtime_inputs.go
 hololive/hololive-shared/pkg/config/settings/runtime_role_validation.go
+hololive/hololive-shared/pkg/config/settings/tracing.go
 hololive/hololive-shared/pkg/config/settings/server_transport.go
 hololive/hololive-shared/pkg/config/settings/logging.go
 hololive/hololive-shared/pkg/config/settings/worker_profile.go

@@ -44,6 +44,7 @@ type Config struct {
 	Notification           NotificationConfig
 	AlarmDispatchRetention AlarmDispatchRetentionConfig
 	Logging                LoggingConfig
+	Tracing                TracingConfig
 	Bot                    BotConfig
 	Services               ServicesConfig
 	Environment            string
@@ -67,16 +68,22 @@ type Config struct {
 type configLoadOptions struct {
 	FetchIrisWorkerProfile bool
 	CORSDefaultEnforce     bool
+	TracingRuntime         tracingRuntime
 }
 
 func LoadAdminAPIRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{CORSDefaultEnforce: true})
+	return loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{
+		CORSDefaultEnforce: true,
+		TracingRuntime:     tracingRuntimeHololiveAPI,
+	})
 }
 
 // LoadYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
 // Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
 func LoadYouTubeProducerRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateYouTubeProducerRuntime, configLoadOptions{})
+	return loadConfigValidated((*Config).ValidateYouTubeProducerRuntime, configLoadOptions{
+		TracingRuntime: tracingRuntimeYouTubeProducer,
+	})
 }
 
 func loadConfigValidated(validate func(*Config) error, options configLoadOptions) (*Config, error) {
@@ -109,6 +116,11 @@ func buildConfig(
 	}
 	irisConfig := loadIrisConfig(webhookToken, botToken)
 	workerProfile := resolveIrisBotWebhookWorkerProfile(&irisConfig, options)
+	scraperConfig := loadScraperConfig()
+	tracingConfig, err := loadTracingConfig(options.TracingRuntime, scraperConfig.ActiveActive.InstanceID)
+	if err != nil {
+		return nil, fmt.Errorf("load tracing config: %w", err)
+	}
 
 	return &Config{
 		Iris:    irisConfig,
@@ -126,10 +138,11 @@ func buildConfig(
 		Notification:           loadNotificationConfig(),
 		AlarmDispatchRetention: loadAlarmDispatchRetentionConfig(),
 		Logging:                loadLoggingConfig(),
+		Tracing:                tracingConfig,
 		Bot:                    loadBotConfig(),
 		Services:               loadServicesConfig(),
 		Environment:            loadAppEnvironment(),
-		Scraper:                loadScraperConfig(),
+		Scraper:                scraperConfig,
 		Webhook:                loadWebhookConfig(&workerProfile),
 		WorkerPool:             loadWorkerPoolConfig(&workerProfile),
 		WorkerProfile: WorkerProfileConfig{

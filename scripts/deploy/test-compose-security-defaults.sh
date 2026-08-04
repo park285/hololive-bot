@@ -104,3 +104,83 @@ if "100.100.1.3:30190" in origins:
     sys.exit(1)
 PY
 pass "live-compat dashboard exposure is opt-in by default"
+
+merged_main_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml:docker-compose.main-ap.yml:docker-compose.main-ap.live-compat.yml COMPOSE_PROFILES=main-ap docker compose config --no-interpolate --format json 2>/dev/null)" \
+  || fail "prod+main-ap compose failed to render"
+
+python3 - "${merged_main_ap}" <<'PY'
+import json, sys
+
+merged = json.loads(sys.argv[1])
+services = merged.get("services", {})
+networks = merged.get("networks", {})
+
+traces = networks.get("observability-traces", {})
+if traces.get("external") is not True or traces.get("name") != "observability-traces":
+    print("[FAIL] observability-traces must be the explicitly named external network")
+    sys.exit(1)
+
+participants = {
+    name
+    for name, service in services.items()
+    if "observability-traces" in (service.get("networks", {}) or {})
+}
+expected = {"hololive-api", "hololive-alarm-worker", "youtube-producer-c"}
+if participants != expected:
+    print(f"[FAIL] observability-traces participants: expected {sorted(expected)}, got {sorted(participants)}")
+    sys.exit(1)
+
+forbidden_ports = {4317, 4318, 8888, 13133, 16685, 16686}
+for name, service in services.items():
+    for port in service.get("ports", []) or []:
+        if isinstance(port, dict):
+            published = port.get("published")
+            target = port.get("target")
+            exposed = {int(value) for value in (published, target) if str(value).isdigit()}
+        else:
+            fields = str(port).split(":")
+            exposed = {int(value.split("/")[0]) for value in fields if value.split("/")[0].isdigit()}
+        blocked = exposed & forbidden_ports
+        if blocked:
+            print(f"[FAIL] {name} publishes forbidden Jaeger/OTLP port(s): {sorted(blocked)}")
+            sys.exit(1)
+PY
+pass "central runtimes alone join the external trace network without Jaeger or OTLP host ports"
+
+while read -r service compose_file; do
+  merged_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE="docker-compose.prod.yml:${compose_file}" COMPOSE_PROFILES=oracle docker compose config --no-interpolate --format json 2>/dev/null)" \
+    || fail "prod+${compose_file} compose failed to render"
+
+  python3 - "${service}" "${merged_ap}" <<'PY'
+import json, sys
+
+service_name = sys.argv[1]
+merged = json.loads(sys.argv[2])
+service = merged.get("services", {}).get(service_name, {})
+if "observability-traces" in merged.get("networks", {}):
+    print(f"[FAIL] {service_name} AP topology must not declare the central-only observability-traces network")
+    sys.exit(1)
+if "observability-traces" in (service.get("networks", {}) or {}):
+    print(f"[FAIL] {service_name} must not join observability-traces before secure Tailnet ingress exists")
+    sys.exit(1)
+
+forbidden_ports = {4317, 4318, 8888, 13133, 16685, 16686}
+for port in service.get("ports", []) or []:
+    if isinstance(port, dict):
+        published = port.get("published")
+        target = port.get("target")
+        exposed = {int(value) for value in (published, target) if str(value).isdigit()}
+    else:
+        fields = str(port).split(":")
+        exposed = {int(value.split("/")[0]) for value in fields if value.split("/")[0].isdigit()}
+    blocked = exposed & forbidden_ports
+    if blocked:
+        print(f"[FAIL] {service_name} publishes forbidden Jaeger/OTLP port(s): {sorted(blocked)}")
+        sys.exit(1)
+PY
+done <<'EOF'
+youtube-producer-a docker-compose.osaka.yml
+youtube-producer-b docker-compose.seoul.yml
+youtube-producer-d docker-compose.osaka2.yml
+EOF
+pass "remote AP producers remain outside the trace network without Jaeger or OTLP host ports"

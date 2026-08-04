@@ -31,7 +31,6 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/proxy"
 
 	"github.com/park285/shared-go/pkg/httputil"
@@ -217,7 +216,7 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 		slog.Info("Scraper using direct connection (no proxy)")
 		baseTransport.DialContext = newDirectDialContext()
 		return &http.Client{
-			Transport: instrumentScraperTransport(baseTransport),
+			Transport: baseTransport,
 			Timeout:   ytDefaults.ScraperHTTPTimeout,
 		}, baseTransport, nil
 	}
@@ -251,7 +250,7 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 		"has_auth", auth != nil)
 
 	return &http.Client{
-		Transport: instrumentScraperTransport(transport),
+		Transport: transport,
 		Timeout:   ytDefaults.ScraperHTTPTimeout,
 	}, transport, nil
 }
@@ -339,14 +338,6 @@ func closeProxyConnWhenCanceled(ctx context.Context, conn net.Conn) (net.Conn, e
 		return nil, fmt.Errorf("close canceled proxy connection: %w", closeErr)
 	}
 	return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
-}
-
-func instrumentScraperTransport(baseTransport *http.Transport) http.RoundTripper {
-	if baseTransport == nil {
-		return http.DefaultTransport
-	}
-
-	return otelhttp.NewTransport(baseTransport)
 }
 
 func unwrapHTTPTransport(roundTripper http.RoundTripper) (*http.Transport, bool) {

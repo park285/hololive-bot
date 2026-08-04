@@ -21,6 +21,8 @@
 package main
 
 import (
+	"context"
+	"log/slog"
 	"os"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -29,15 +31,17 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-shared/pkg/observability"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/pkg/telemetry"
 )
 
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *workerruntime.AlarmWorkerRuntime]{
+	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime]]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
@@ -58,9 +62,35 @@ func main() {
 		LoggerLevel: func(appConfig *settings.Config) string {
 			return appConfig.Logging.Level
 		},
-		StartupMessage:    "Hololive Alarm Worker starting...",
-		BuildTimeout:      constants.AppTimeout.Build,
-		BuildRuntime:      workerapp.BuildAlarmWorkerRuntime,
+		StartupMessage: "Hololive Alarm Worker starting...",
+		BuildTimeout:   constants.AppTimeout.Build,
+		BuildRuntime: func(
+			ctx context.Context,
+			appConfig *settings.Config,
+			logger *slog.Logger,
+		) (*observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime], error) {
+			traceConfig := alarmWorkerTelemetryConfig(appConfig, Version)
+			return observability.BuildRuntime(
+				ctx,
+				&traceConfig,
+				logger,
+				func(ctx context.Context) (*workerruntime.AlarmWorkerRuntime, error) {
+					return workerapp.BuildAlarmWorkerRuntime(ctx, appConfig, logger)
+				},
+			)
+		},
 		BuildErrorMessage: "Failed to assemble alarm worker runtime",
 	}))
+}
+
+func alarmWorkerTelemetryConfig(appConfig *settings.Config, version string) telemetry.Config {
+	return telemetry.Config{
+		Enabled:        appConfig.Tracing.Enabled,
+		ServiceName:    "hololive-alarm-worker",
+		ServiceVersion: version,
+		Environment:    appConfig.Environment,
+		OTLPEndpoint:   appConfig.Tracing.Endpoint,
+		OTLPInsecure:   appConfig.Tracing.Insecure,
+		SampleRate:     appConfig.Tracing.SampleRate,
+	}
 }

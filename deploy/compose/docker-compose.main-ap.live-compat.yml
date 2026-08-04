@@ -17,3 +17,5 @@ services:
       - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - valkey-cache-socket:/var/run/valkey:ro
+    networks:
+      observability-traces: {}

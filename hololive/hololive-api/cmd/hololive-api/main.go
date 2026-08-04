@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -10,16 +11,18 @@ import (
 	"github.com/kapu/hololive-api/internal/app"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-shared/pkg/observability"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/pkg/telemetry"
 )
 
 var Version = "dev"
 
 func main() {
 	var logCloser io.Closer
-	code := bootstrap.Run(bootstrap.Options[*settings.HololiveAPIConfig, *app.Runtime]{
+	code := bootstrap.Run(bootstrap.Options[*settings.HololiveAPIConfig, *observability.ManagedRuntime[*app.Runtime]]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
@@ -54,7 +57,7 @@ func main() {
 			}
 		},
 		BuildTimeout:      constants.AppTimeout.Build,
-		BuildRuntime:      app.BuildRuntime,
+		BuildRuntime:      buildHololiveAPIRuntime,
 		BuildErrorMessage: "Failed to assemble hololive-api runtime",
 	})
 	if logCloser != nil {
@@ -63,4 +66,27 @@ func main() {
 		}
 	}
 	os.Exit(code)
+}
+
+func buildHololiveAPIRuntime(
+	ctx context.Context,
+	appConfig *settings.HololiveAPIConfig,
+	logger *slog.Logger,
+) (*observability.ManagedRuntime[*app.Runtime], error) {
+	traceConfig := hololiveAPITelemetryConfig(appConfig, Version)
+	return observability.BuildRuntime(ctx, &traceConfig, logger, func(ctx context.Context) (*app.Runtime, error) {
+		return app.BuildRuntime(ctx, appConfig, logger)
+	})
+}
+
+func hololiveAPITelemetryConfig(appConfig *settings.HololiveAPIConfig, version string) telemetry.Config {
+	return telemetry.Config{
+		Enabled:        appConfig.Tracing.Enabled,
+		ServiceName:    "hololive-api",
+		ServiceVersion: version,
+		Environment:    appConfig.Bot.Environment,
+		OTLPEndpoint:   appConfig.Tracing.Endpoint,
+		OTLPInsecure:   appConfig.Tracing.Insecure,
+		SampleRate:     appConfig.Tracing.SampleRate,
+	}
 }

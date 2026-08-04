@@ -66,6 +66,9 @@ func (c *Config) validateWithRequired(validateRequired func() error) error {
 }
 
 func (c *Config) validateRuntimeConfigs() error {
+	if err := validateTracingConfig(c.Tracing); err != nil {
+		return err
+	}
 	if err := validateScraperConfig(&c.Scraper); err != nil {
 		return err
 	}

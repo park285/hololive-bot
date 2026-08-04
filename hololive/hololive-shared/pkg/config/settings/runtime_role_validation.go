@@ -29,11 +29,17 @@ const (
 
 // proactive notification egress 소유를 거부하는 bot runtime config 로더다.
 func LoadBotRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateBotRuntime, configLoadOptions{FetchIrisWorkerProfile: true})
+	return loadConfigValidated((*Config).ValidateBotRuntime, configLoadOptions{
+		FetchIrisWorkerProfile: true,
+		TracingRuntime:         tracingRuntimeHololiveAPI,
+	})
 }
 
 func LoadAlarmWorkerRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateAlarmWorkerRuntime, configLoadOptions{FetchIrisWorkerProfile: true})
+	return loadConfigValidated((*Config).ValidateAlarmWorkerRuntime, configLoadOptions{
+		FetchIrisWorkerProfile: true,
+		TracingRuntime:         tracingRuntimeAlarmWorker,
+	})
 }
 
 func (c *Config) ValidateBotRuntime() error {

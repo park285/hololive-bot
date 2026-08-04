@@ -21,6 +21,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -28,11 +30,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/producerruntime"
 	"github.com/park285/shared-go/pkg/envutil"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/pkg/telemetry"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -40,7 +44,7 @@ import (
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *producerruntime.YouTubeProducerRuntime]{
+	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *observability.ManagedRuntime[*producerruntime.YouTubeProducerRuntime]]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
@@ -65,10 +69,54 @@ func main() {
 		StartupFields: func(appConfig *settings.Config) []any {
 			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
-		BuildTimeout:      constants.AppTimeout.Build,
-		BuildRuntime:      producerruntime.BuildYouTubeProducerRuntime,
+		BuildTimeout: constants.AppTimeout.Build,
+		BuildRuntime: func(
+			ctx context.Context,
+			appConfig *settings.Config,
+			logger *slog.Logger,
+		) (*observability.ManagedRuntime[*producerruntime.YouTubeProducerRuntime], error) {
+			traceConfig, err := youtubeProducerTelemetryConfig(appConfig, Version)
+			if err != nil {
+				return nil, err
+			}
+			return observability.BuildRuntime(
+				ctx,
+				&traceConfig,
+				logger,
+				func(ctx context.Context) (*producerruntime.YouTubeProducerRuntime, error) {
+					return producerruntime.BuildYouTubeProducerRuntime(ctx, appConfig, logger)
+				},
+			)
+		},
 		BuildErrorMessage: "Failed to build youtube producer runtime",
 	}))
+}
+
+func youtubeProducerTelemetryConfig(appConfig *settings.Config, version string) (telemetry.Config, error) {
+	serviceName, err := youtubeProducerTelemetryServiceName(appConfig.Scraper.ActiveActive.InstanceID)
+	if err != nil {
+		if appConfig.Tracing.Enabled {
+			return telemetry.Config{}, err
+		}
+		serviceName = "youtube-producer"
+	}
+	return telemetry.Config{
+		Enabled:        appConfig.Tracing.Enabled,
+		ServiceName:    serviceName,
+		ServiceVersion: version,
+		Environment:    appConfig.Environment,
+		OTLPEndpoint:   appConfig.Tracing.Endpoint,
+		OTLPInsecure:   appConfig.Tracing.Insecure,
+		SampleRate:     appConfig.Tracing.SampleRate,
+	}, nil
+}
+
+func youtubeProducerTelemetryServiceName(instanceID string) (string, error) {
+	normalized := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(instanceID)), "youtube-producer-")
+	if normalized != "a" && normalized != "b" && normalized != "c" && normalized != "d" {
+		return "", fmt.Errorf("unsupported YOUTUBE_PRODUCER_INSTANCE_ID")
+	}
+	return "youtube-producer-" + normalized, nil
 }
 
 func youtubeProducerLogFileName() string {

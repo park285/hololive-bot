@@ -62,6 +62,7 @@ func TestLoadYouTubeProducerRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
 	setRuntimeH3ServerEnv(t)
 	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
 	t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
+	t.Setenv("YOUTUBE_PRODUCER_INSTANCE_ID", "youtube-producer-a")
 
 	cfg, err := LoadYouTubeProducerRuntime()
 	if err != nil {
@@ -95,6 +96,7 @@ func TestNonEgressConfigLoadersSkipWorkerProfileFetchWithAccidentalIrisToken(t *
 				setRuntimeH3ServerEnv(t)
 				t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
 				t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
+				t.Setenv("YOUTUBE_PRODUCER_INSTANCE_ID", "youtube-producer-a")
 			},
 			load: LoadYouTubeProducerRuntime,
 		},
@@ -127,6 +129,7 @@ func TestLoadYouTubeProducerRuntimeRequiresHolodexKey(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY", "")
 	t.Setenv("HOLODEX_API_KEY_1", "")
 	t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
+	t.Setenv("YOUTUBE_PRODUCER_INSTANCE_ID", "youtube-producer-a")
 
 	_, err := LoadYouTubeProducerRuntime()
 	if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY") {
