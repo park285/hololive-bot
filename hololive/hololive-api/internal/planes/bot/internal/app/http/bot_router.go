@@ -58,6 +58,7 @@ func ProvideBotRouter(
 ) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:                 appConfig.Server.APIKey,
+		SkipLogPaths:           []string{"/l/*"},
 		InternalReadyResponder: botReadyResponder(ctx, readiness.Pick(readyProbe...)),
 		RegisterRoutes:         botRouteRegistrar(appConfig.Server.APIKey, webhookHandler, triggerHandler, irisRoomLister, logger), //nolint:contextcheck // gin handler는 build ctx가 아니라 요청별 c.Request.Context()를 사용해야 한다.
 	})

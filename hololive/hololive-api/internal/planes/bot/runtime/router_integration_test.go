@@ -21,6 +21,7 @@
 package botruntime
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -29,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	json "github.com/park285/shared-go/pkg/json"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -110,6 +112,32 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 
 	if readyResp.StatusCode != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestProvideBotRouter_SkipsScraperShortLinkWarnings(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	router, err := apphttp.ProvideBotRouter(t.Context(), &settings.Config{}, logger, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("ProvideBotRouter() error = %v", err)
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/l/dQw4w9WgXcQ", http.NoBody)
+	req.Header.Set("User-Agent", "facebookexternalhit/1.1; kakaotalk-scrap/1.0")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, req)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("short-link scraper status = %d, want %d", response.Code, http.StatusForbidden)
+	}
+	if logs.Len() != 0 {
+		var entry map[string]any
+		if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &entry); err != nil {
+			t.Fatalf("unexpected short-link log = %q (JSON parse failed: %v)", logs.String(), err)
+		}
+		t.Fatalf("scraper short-link request emitted log entry: %v", entry)
 	}
 }
 
