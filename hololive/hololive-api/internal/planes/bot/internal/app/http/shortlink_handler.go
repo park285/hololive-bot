@@ -10,7 +10,7 @@ import (
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 )
 
-const kakaoTalkScraperUserAgentToken = "kakaotalk-scrap/"
+const kakaoTalkScraperUserAgentMarker = "kakaotalk-scrap/"
 
 func registerShortLinkRoutes(router gin.IRoutes) {
 	if router == nil {
@@ -45,5 +45,5 @@ func setShortLinkResponseHeaders(c *gin.Context) {
 }
 
 func isKakaoTalkScraper(userAgent string) bool {
-	return strings.Contains(strings.ToLower(userAgent), kakaoTalkScraperUserAgentToken)
+	return strings.Contains(strings.ToLower(userAgent), kakaoTalkScraperUserAgentMarker)
 }
