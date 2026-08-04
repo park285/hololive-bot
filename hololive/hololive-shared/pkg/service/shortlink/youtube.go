@@ -27,28 +27,42 @@ func NewYouTubeBuilder(rawOrigin string) (YouTubeBuilder, error) {
 	if err != nil {
 		return YouTubeBuilder{}, fmt.Errorf("parse origin: %w", err)
 	}
-	if parsed.Scheme != "https" {
-		return YouTubeBuilder{}, errors.New("origin must use https")
+	if err := validateYouTubeOriginAuthority(parsed); err != nil {
+		return YouTubeBuilder{}, err
 	}
-	if parsed.Hostname() == "" {
-		return YouTubeBuilder{}, errors.New("origin host is required")
-	}
-	if parsed.User != nil {
-		return YouTubeBuilder{}, errors.New("origin user info is not allowed")
-	}
-	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" {
-		return YouTubeBuilder{}, errors.New("origin path is not allowed")
-	}
-	if parsed.RawQuery != "" || parsed.ForceQuery {
-		return YouTubeBuilder{}, errors.New("origin query is not allowed")
-	}
-	if parsed.Fragment != "" {
-		return YouTubeBuilder{}, errors.New("origin fragment is not allowed")
+	if err := validateYouTubeOriginSuffix(parsed); err != nil {
+		return YouTubeBuilder{}, err
 	}
 
 	parsed.Path = ""
 	parsed.RawPath = ""
 	return YouTubeBuilder{origin: strings.TrimSuffix(parsed.String(), "/")}, nil
+}
+
+func validateYouTubeOriginAuthority(parsed *url.URL) error {
+	if parsed.Scheme != "https" {
+		return errors.New("origin must use https")
+	}
+	if parsed.Hostname() == "" {
+		return errors.New("origin host is required")
+	}
+	if parsed.User != nil {
+		return errors.New("origin user info is not allowed")
+	}
+	return nil
+}
+
+func validateYouTubeOriginSuffix(parsed *url.URL) error {
+	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" {
+		return errors.New("origin path is not allowed")
+	}
+	if parsed.RawQuery != "" || parsed.ForceQuery {
+		return errors.New("origin query is not allowed")
+	}
+	if parsed.Fragment != "" {
+		return errors.New("origin fragment is not allowed")
+	}
+	return nil
 }
 
 // Enabled는 단축 링크 origin이 설정되었는지 반환합니다.
