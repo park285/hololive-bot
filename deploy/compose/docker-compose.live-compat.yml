@@ -94,6 +94,8 @@ services:
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
+    networks:
+      observability-traces: {}
 
   hololive-alarm-worker:
     env_file: !override
@@ -111,6 +113,8 @@ services:
       - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
+    networks:
+      observability-traces: {}
 
   youtube-producer:
     environment:
@@ -146,3 +150,6 @@ networks:
       config:
         - subnet: 172.22.0.0/16
           gateway: 172.22.0.1
+  observability-traces:
+    external: true
+    name: observability-traces
