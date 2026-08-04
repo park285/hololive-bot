@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -82,6 +83,73 @@ func TestOtelHandlerDoesNotRecordRawRequestTarget(t *testing.T) {
 		for _, sentinel := range sentinels {
 			if strings.Contains(value, sentinel) {
 				t.Fatalf("request identifier %q recorded in span attribute %q", sentinel, attr.Key)
+			}
+		}
+	}
+}
+
+func TestOtelHandlerDoesNotRecordClientPII(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithSpanProcessor(recorder),
+	)
+	installRuntimeOTelGlobals(t, provider)
+
+	const (
+		operation       = "hololive.http.server"
+		remoteAddr      = "198.51.100.42:43123"
+		forwardedFor    = "203.0.113.77, 198.51.100.42"
+		userAgent       = "private-client/7.0"
+		preservedHeader = "private-header-value"
+	)
+
+	var gotRequest *http.Request
+	handler := newOtelHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRequest = r.Clone(r.Context())
+		w.WriteHeader(http.StatusNoContent)
+	}), operation)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/private/route", http.NoBody)
+	req.RemoteAddr = remoteAddr
+	req.Header.Set("X-Forwarded-For", forwardedFor)
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("X-Private-Header", preservedHeader)
+
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if gotRequest == nil {
+		t.Fatal("handler was not called")
+	}
+	if gotRequest.RemoteAddr != remoteAddr {
+		t.Fatalf("handler RemoteAddr = %q, want %q", gotRequest.RemoteAddr, remoteAddr)
+	}
+	for key, want := range map[string]string{
+		"X-Forwarded-For":  forwardedFor,
+		"User-Agent":       userAgent,
+		"X-Private-Header": preservedHeader,
+	} {
+		if got := gotRequest.Header.Get(key); got != want {
+			t.Fatalf("handler header %s = %q, want %q", key, got, want)
+		}
+	}
+
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(spans))
+	}
+	forbiddenKeys := map[attribute.Key]struct{}{
+		attribute.Key("client.address"):       {},
+		attribute.Key("network.peer.address"): {},
+		attribute.Key("network.peer.port"):    {},
+		attribute.Key("user_agent.original"):  {},
+	}
+	for _, attr := range spans[0].Attributes() {
+		if _, forbidden := forbiddenKeys[attr.Key]; forbidden {
+			t.Fatalf("forbidden client PII attribute %q recorded with value %q", attr.Key, attr.Value.String())
+		}
+		for _, sentinel := range []string{remoteAddr, "198.51.100.42", forwardedFor, "203.0.113.77", userAgent} {
+			if strings.Contains(attr.Value.String(), sentinel) {
+				t.Fatalf("client PII %q recorded in span attribute %q", sentinel, attr.Key)
 			}
 		}
 	}
