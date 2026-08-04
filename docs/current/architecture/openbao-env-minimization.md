@@ -398,7 +398,7 @@ Repo-side 변경만. **기본 경로 플립은 merge 가능하지만, 대상 호
 
 - `openbao-secrets-stack/config/agent-hololive-bot.hcl`은 legacy `/run/hololive-bot/env`를 유지하면서 `/run/hololive-bot/{compose,ap-compose,bot,alarm-worker,youtube-producer}.env` split render template을 추가했다.
 - `openbao-secrets-stack/config/agent-hololive-bot-ap.hcl`, `policies/prod-hololive-bot-ap-read.hcl`, `deploy/systemd/openbao-agent-hololive-bot-ap.service`는 AP host 전용이다. AP host는 `/run/hololive-bot/ap-compose.env`, `/run/hololive-bot/youtube-producer.env`, cert 파일만 렌더/read하고 central `/run/hololive-bot/compose.env` 및 legacy `/run/hololive-bot/env`는 렌더하지 않는다.
-- AP unit은 `Group=opc`로 실행한다. AP producer image가 `1000:1000` non-root로 실행되므로 cert/key는 `root:opc 0640`으로 렌더되어 container-readable하고, env 파일은 `0600`으로 유지된다.
+- AP unit은 `User=openbao-agent-hololive-bot-ap`, `Group=opc`로 실행한다. AP producer image가 `1000:1000` non-root로 실행되므로 cert/key는 `openbao-agent-hololive-bot-ap:opc 0640`으로 렌더되어 container-readable하고, env 파일은 `openbao-agent-hololive-bot-ap:opc 0600`으로 유지된다.
 - `openbao-secrets-stack/scripts/split-hololive-env-bundles.py`는 기존 `kv/prod/hololive-bot/env`를 새 KV bundle 5종으로 분배하는 helper다. `ap-compose-env`는 `IRIS_WEBHOOK_TOKEN`/`IRIS_BOT_TOKEN`을 제외한다. fixture dry-run은 `--source-json`, live KV read dry-run은 `--read-live`를 명시한다. live KV write는 `--write`가 필요하다.
 - 기존 monolithic KV에 없는 optional/default key는 합성하지 않는다. `bot.env`는 comment-only 파일로 렌더되고, 앱 기본값을 사용한다.
 - `openbao-secrets-stack/scripts/verify-hololive-h3-contract.sh`는 split template 존재, strict missing-key 설정, helper/template key parity, source 누락 key 거부, `ap-compose.env`/AP producer env의 Iris egress token 부재, AP agent/policy의 central env read/render 금지, central/AP systemd `ExecStart=/usr/bin/bao`, AP runtime legacy env 부재를 검증한다.

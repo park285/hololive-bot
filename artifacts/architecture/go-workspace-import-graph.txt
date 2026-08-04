@@ -1383,7 +1383,6 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/retention -> github.c
 github.com/kapu/hololive-youtube-producer/internal/runtime/retention -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-youtube-producer/internal/runtime/retention -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-youtube-producer/internal/runtime/retention -> github.com/park285/shared-go/pkg/retry
-github.com/park285/iris-client-go/cmd/iris-diag-exporter -> github.com/park285/iris-client-go/iris
 github.com/park285/iris-client-go/internal/client/common -> github.com/park285/iris-client-go/internal/jsonx
 github.com/park285/iris-client-go/internal/client/multipart -> github.com/park285/iris-client-go/internal/client/randomhex
 github.com/park285/iris-client-go/internal/client/rebind -> github.com/park285/iris-client-go/internal/client/transport

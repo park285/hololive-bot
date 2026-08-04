@@ -7,6 +7,7 @@ import (
 	"time"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 type renewJoinPoller struct {
@@ -102,6 +103,9 @@ func TestRunClaimedJobPollJoinsRenewLoopBeforeFinalizingClaim(t *testing.T) {
 	}
 	if got := claim.markCompletedCalls.Load(); got != 1 {
 		t.Fatalf("MarkCompleted calls = %d, want 1", got)
+	}
+	if got := testutil.ToFloat64(scheduler.metrics.PollerLastSuccessTimestamp.WithLabelValues(job.Poller.Name())); got <= 0 {
+		t.Fatalf("poller last success timestamp = %v, want positive Unix timestamp", got)
 	}
 }
 
@@ -223,6 +227,9 @@ func TestRunClaimedJobPollLeavesClaimForTTLWhenRenewJoinTimesOut(t *testing.T) {
 	}
 	if got := claim.releaseCalls.Load(); got != 0 {
 		t.Fatalf("Release calls after renew join timeout = %d, want 0 (TTL fail-closed)", got)
+	}
+	if got := testutil.ToFloat64(scheduler.metrics.PollerLastSuccessTimestamp.WithLabelValues(job.Poller.Name())); got != 0 {
+		t.Fatalf("poller last success timestamp after renew join timeout = %v, want 0", got)
 	}
 }
 

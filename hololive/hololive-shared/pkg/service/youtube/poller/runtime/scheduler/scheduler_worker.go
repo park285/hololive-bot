@@ -129,6 +129,9 @@ func (s *Scheduler) runClaimedJobPoll(
 	}
 	status := s.logPollResult(job, workerID, pollCtx, elapsed, err)
 	s.metrics.SchedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
+	if status == "success" {
+		s.metrics.ObservePollerSuccess(job.Poller.Name(), time.Now())
+	}
 
 	s.rescheduleJobAfterPoll(job, err)
 }

@@ -110,12 +110,16 @@ central host.
 - `hololive_youtube_scraper_fetch_fallback_total{from_engine,to_engine,reason}`: fallback count when a blocked fetch body triggers the configured browser snapshot fallback.
 - `youtube_poller_job_claim_total{poller,result}`: active-active claim distribution and Valkey fail-closed errors.
 - `youtube_poller_job_lease_renew_total{poller,result}`: lease renew success/error/lost signals.
-- `youtube_poller_job_mark_completed_total{poller,result}` and `youtube_poller_job_release_total{poller,result}`: completion/release ownership outcomes.
+- `youtube_poller_job_mark_completed_total{poller,result}`: successful poll completion ownership outcomes.
+- `youtube_poller_job_release_total{poller,result}`: poll error/cancellation cleanup-path lease release outcomes. Healthy completed polls use `mark_completed`, so release series can be absent during a fully successful runtime.
+- `youtube_poller_last_success_timestamp_seconds{poller}`: claim, lease, reservation finalization까지 성공한 poller별 마지막 성공 Unix timestamp.
+- `hololive_youtube_poll_target_refresh_total{result}` and `hololive_youtube_poll_target_refresh_last_success_timestamp_seconds`: poll-target refresh lifecycle outcome and freshness.
+- `hololive_youtube_poll_target_refresh_accepted_target_count{target_type}`: 마지막 성공 refresh가 승인한 `notification`/`stats` target 수.
 - `youtube_poller_outbox_insert_total{kind,result}`: outbox insert success/conflict/error counts.
 
 Active-active `/ready` fails closed on startup until a lightweight Valkey JobRunGuard probe or later job claim proves lease availability. During that state it reports `valkey_available=false` and `scraping_paused=true` while `/health` can still be up.
 
-`/ready` is readiness state, not recent activity telemetry. Use the `youtube_poller_job_*` metrics above to confirm recent `acquired`, `peer_owned`, `already_completed`, renew, mark-completed, and release activity.
+`/ready` is readiness state, not recent activity telemetry. Use `youtube_poller_last_success_timestamp_seconds` for successful activity freshness, `youtube_poller_job_*` for claim/lease/mark-completed outcomes, and release only for error-path cleanup diagnostics.
 
 `/metrics` is protected by `X-API-Key` when `API_SECRET_KEY` is configured. Producer metrics are served from the plain HTTP metrics listener on `:30095`, separate from the H3 app port. Docker AP metrics are published on each host Tailscale IP only (`a` `<tailnet-osaka-a>:30095`, `b` `<tailnet-seoul-b>:30095`, `d` `<tailnet-osaka2-d>:30095`) so central Prometheus can scrape them with the shared API key header. For operator-local checks, run the probe from inside the target container so the secret stays in the container environment and is not passed as a command-line value:
 

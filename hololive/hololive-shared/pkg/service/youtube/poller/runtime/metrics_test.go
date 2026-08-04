@@ -21,6 +21,7 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	m.SchedulerDispatchDefer.WithLabelValues("").Inc()
 	m.ObserveSchedulerOldestDueAge(2500 * time.Millisecond)
 	m.SchedulerPollDuration.WithLabelValues("videos", "success").Observe(0.25)
+	m.ObservePollerSuccess("videos", time.Unix(1_700_000_000, 0))
 	m.ObserveJobClaim("videos", "acquired")
 	m.ObserveJobLeaseRenew("", "success")
 	m.ObserveJobMarkCompleted("resolver", "lost")
@@ -39,6 +40,9 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 		"reason": "",
 	}, 1)
 	assertGaugeValue(t, families, "youtube_poller_scheduler_oldest_due_age_seconds", nil, 2.5)
+	assertGaugeValue(t, families, "youtube_poller_last_success_timestamp_seconds", map[string]string{
+		"poller": "videos",
+	}, 1_700_000_000)
 	assertHistogramLabels(t, families, "youtube_poller_poll_duration_seconds", map[string]string{
 		"poller": "videos",
 		"status": "success",

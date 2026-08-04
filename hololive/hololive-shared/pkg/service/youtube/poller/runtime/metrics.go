@@ -41,6 +41,7 @@ type Metrics struct {
 	SchedulerDispatchDefer            *prometheus.CounterVec
 	SchedulerOldestDueAge             prometheus.Gauge
 	SchedulerPollDuration             *prometheus.HistogramVec
+	PollerLastSuccessTimestamp        *prometheus.GaugeVec
 	BudgetReserveTotal                *prometheus.CounterVec
 	BudgetReserveWaitSeconds          *prometheus.HistogramVec
 	BudgetRetryAfterSeconds           *prometheus.HistogramVec
@@ -91,6 +92,10 @@ func (m *Metrics) registerSchedulerMetrics() {
 		Help:    "poller별 channel poll 실행 시간",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"poller", "status"})
+	m.PollerLastSuccessTimestamp = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "youtube_poller_last_success_timestamp_seconds",
+		Help: "poller별 마지막 성공 poll의 Unix timestamp",
+	}, []string{"poller"})
 	m.BudgetReserveTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_budget_reserve_total",
 		Help: "source별 scheduler budget reservation 결과",
@@ -163,6 +168,20 @@ func (m *Metrics) ObserveJobClaim(pollerName, result string) {
 
 func (m *Metrics) ObserveSchedulerOldestDueAge(age time.Duration) {
 	m.SchedulerOldestDueAge.Set(max(age.Seconds(), 0))
+}
+
+func (m *Metrics) ObservePollerSuccess(pollerName string, at time.Time) {
+	if m == nil || m.PollerLastSuccessTimestamp == nil {
+		return
+	}
+	m.PollerLastSuccessTimestamp.WithLabelValues(pollerName).Set(float64(at.Unix()))
+}
+
+func (m *Metrics) EnsurePollerLastSuccessTimestamp(pollerName string) {
+	if m == nil || m.PollerLastSuccessTimestamp == nil {
+		return
+	}
+	m.PollerLastSuccessTimestamp.WithLabelValues(pollerName)
 }
 
 func (m *Metrics) ObserveJobLeaseRenew(pollerName, result string) {
