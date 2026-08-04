@@ -23,6 +23,7 @@ package dispatch
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -120,32 +121,59 @@ func (d *Dispatcher) Start(ctx context.Context) {
 
 	panicguard.Go(d.logger, "youtube-outbox-dispatcher", func() {
 		defer d.started.Store(false)
-		d.run(ctx)
+		d.runJoined(ctx)
 	})
-	d.startBackgroundLoops(ctx)
 }
 
-func (d *Dispatcher) startBackgroundLoops(ctx context.Context) {
+func (d *Dispatcher) startBackgroundLoopsWithWait(ctx context.Context, waitGroup *sync.WaitGroup) {
 	if d.claim != nil && d.claim.delivery != nil {
-		panicguard.Go(d.logger, "youtube-outbox-aggregate-sync", func() {
+		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-aggregate-sync", func(ctx context.Context) {
 			d.aggregateSyncLoop(ctx)
 		})
 	}
 	if d.telemetry != nil {
-		panicguard.Go(d.logger, "youtube-outbox-telemetry", func() {
+		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-telemetry", func(ctx context.Context) {
 			d.telemetry.telemetryLoop(ctx)
 		})
 	}
 	if d.config.CleanupEnabled {
-		panicguard.Go(d.logger, "youtube-outbox-cleanup", func() {
+		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-cleanup", func(ctx context.Context) {
 			d.cleanupLoop(ctx)
 		})
 	}
 	if d.config.ReviveEnabled && d.claim != nil && d.claim.db != nil {
-		panicguard.Go(d.logger, "youtube-outbox-revive", func() {
+		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-revive", func(ctx context.Context) {
 			d.reviveLoop(ctx)
 		})
 	}
+}
+
+func (d *Dispatcher) startBackgroundLoop(
+	ctx context.Context,
+	waitGroup *sync.WaitGroup,
+	name string,
+	loop func(context.Context),
+) {
+	if waitGroup != nil {
+		waitGroup.Add(1)
+	}
+	panicguard.Go(d.logger, name, func() {
+		if waitGroup != nil {
+			defer waitGroup.Done()
+		}
+		loop(ctx)
+	})
+}
+
+func (d *Dispatcher) runJoined(ctx context.Context) {
+	runCtx, cancel := context.WithCancel(ctx)
+	var waitGroup sync.WaitGroup
+	d.startBackgroundLoopsWithWait(runCtx, &waitGroup)
+	defer func() {
+		cancel()
+		waitGroup.Wait()
+	}()
+	d.run(runCtx)
 }
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {

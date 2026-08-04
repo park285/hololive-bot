@@ -56,6 +56,7 @@ type AlarmWorkerRuntime struct {
 
 	schedulerMu     sync.Mutex
 	schedulerCancel context.CancelFunc
+	schedulerDone   chan struct{}
 	lifecycle.Managed
 }
 
@@ -107,12 +108,10 @@ func (r youtubeOutboxDispatcherRunner) Start(ctx context.Context) error {
 	if r.dispatcher == nil {
 		return nil
 	}
-	r.dispatcher.Start(ctx)
 	if r.logger != nil {
 		r.logger.Info("YouTube outbox dispatcher started by alarm-worker")
 	}
-	<-ctx.Done()
-	return nil
+	return r.dispatcher.Run(ctx)
 }
 
 func (r notificationEgressRunner) startRunners(ctx context.Context, runners []NamedScheduler) error {
@@ -128,12 +127,7 @@ func (r notificationEgressRunner) startRunners(ctx context.Context, runners []Na
 	}
 
 	runnerErrCh := r.startRunnerGroup(ctx, runners)
-	select {
-	case <-ctx.Done():
-		return nil
-	case err := <-runnerErrCh:
-		return r.handleRunnerGroupResult(err)
-	}
+	return r.handleRunnerGroupResult(<-runnerErrCh)
 }
 
 func (r notificationEgressRunner) handleRunnerGroupResult(err error) error {
@@ -165,6 +159,9 @@ func (r *AlarmWorkerRuntime) setAlarmSchedulerCancel(cancel context.CancelFunc) 
 	}
 
 	r.schedulerMu.Lock()
+	if r.schedulerDone == nil {
+		r.schedulerDone = make(chan struct{})
+	}
 	prevCancel := r.schedulerCancel
 	r.schedulerCancel = cancel
 	r.schedulerMu.Unlock()
@@ -186,4 +183,29 @@ func (r *AlarmWorkerRuntime) clearAlarmSchedulerCancel() bool {
 	}
 
 	return false
+}
+
+func (r *AlarmWorkerRuntime) beginAlarmScheduler() {
+	r.schedulerMu.Lock()
+	r.schedulerDone = make(chan struct{})
+	r.schedulerMu.Unlock()
+}
+
+func (r *AlarmWorkerRuntime) alarmSchedulerDone() chan struct{} {
+	r.schedulerMu.Lock()
+	done := r.schedulerDone
+	r.schedulerMu.Unlock()
+	return done
+}
+
+func (r *AlarmWorkerRuntime) waitAlarmScheduler(ctx context.Context) {
+	done := r.alarmSchedulerDone()
+	if done == nil {
+		return
+	}
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }

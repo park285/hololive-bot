@@ -61,12 +61,18 @@ func TestNotificationEgressRunnerReturnsNilWhenNoActiveRunners(t *testing.T) {
 	}
 }
 
-func TestNotificationEgressRunnerReturnsNilOnContextCancel(t *testing.T) {
+func TestNotificationEgressRunnerReturnsNilAfterRunnerExitOnContextCancel(t *testing.T) {
 	started := make(chan struct{})
+	cancelObserved := make(chan struct{})
+	release := make(chan struct{})
+	runnerExited := make(chan struct{})
 	runner := notificationEgressRunner{runners: []NamedScheduler{
 		{Name: "long-running", Scheduler: runtimeAlarmSchedulerFunc(func(runnerCtx context.Context) error {
 			close(started)
 			<-runnerCtx.Done()
+			close(cancelObserved)
+			<-release
+			close(runnerExited)
 			return nil
 		})},
 	}}
@@ -77,12 +83,31 @@ func TestNotificationEgressRunnerReturnsNilOnContextCancel(t *testing.T) {
 
 	<-started
 	cancel()
+	select {
+	case <-cancelObserved:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner did not observe context cancel")
+	}
+
+	select {
+	case err := <-done:
+		t.Fatalf("Start returned before canceled runner exited: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
 
 	select {
 	case err := <-done:
 		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
-		t.Fatal("Start did not return after context cancel")
+		t.Fatal("Start did not return after canceled runner exited")
+	}
+
+	select {
+	case <-runnerExited:
+	default:
+		t.Fatal("Start returned before runner exit was observed")
 	}
 }
 
@@ -105,4 +130,130 @@ type runtimeAlarmSchedulerFunc func(context.Context) error
 
 func (f runtimeAlarmSchedulerFunc) Start(ctx context.Context) error {
 	return f(ctx)
+}
+
+func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
+	schedulerStarted := make(chan struct{})
+	cancelObserved := make(chan struct{})
+	release := make(chan struct{})
+	schedulerExited := make(chan struct{})
+	runtime := &AlarmWorkerRuntime{
+		Scheduler: runtimeAlarmSchedulerFunc(func(ctx context.Context) error {
+			close(schedulerStarted)
+			<-ctx.Done()
+			close(cancelObserved)
+			<-release
+			close(schedulerExited)
+			return nil
+		}),
+	}
+
+	runtime.Start(t.Context(), make(chan error, 1))
+	select {
+	case <-schedulerStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not start")
+	}
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		runtime.Shutdown(t.Context())
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-cancelObserved:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not observe shutdown cancellation")
+	}
+	select {
+	case <-shutdownDone:
+		t.Fatal("Shutdown returned before scheduler exit")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-schedulerExited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not exit after release")
+	}
+	select {
+	case <-shutdownDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Shutdown did not return after scheduler exit")
+	}
+}
+
+func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
+	schedulerStarted := make(chan struct{})
+	release := make(chan struct{})
+	schedulerExited := make(chan struct{})
+	runtime := &AlarmWorkerRuntime{
+		Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
+			close(schedulerStarted)
+			<-release
+			close(schedulerExited)
+			return nil
+		}),
+	}
+
+	runtime.Start(t.Context(), make(chan error, 1))
+	select {
+	case <-schedulerStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not start")
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	shutdownDone := make(chan struct{})
+	go func() {
+		runtime.Shutdown(shutdownCtx)
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-shutdownCtx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("shutdown context did not reach its deadline")
+	}
+	select {
+	case <-shutdownDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Shutdown blocked past its context deadline")
+	}
+	select {
+	case <-schedulerExited:
+		t.Fatal("scheduler exited despite ignoring cancellation")
+	default:
+	}
+
+	close(release)
+	select {
+	case <-schedulerExited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not exit after release")
+	}
+}
+
+func TestAlarmWorkerRuntimeReportsSchedulerErrorOnErrCh(t *testing.T) {
+	sentinel := errors.New("scheduler boom")
+	runtime := &AlarmWorkerRuntime{
+		Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
+			return sentinel
+		}),
+	}
+	errCh := make(chan error, 1)
+	runtime.Start(t.Context(), errCh)
+
+	select {
+	case err := <-errCh:
+		require.ErrorIs(t, err, sentinel)
+		assert.Contains(t, err.Error(), "alarm runtime scheduler error")
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler error was not reported on errCh")
+	}
+
+	runtime.Shutdown(t.Context())
 }

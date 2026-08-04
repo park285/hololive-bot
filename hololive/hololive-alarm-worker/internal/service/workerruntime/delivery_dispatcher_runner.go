@@ -6,7 +6,7 @@ import (
 )
 
 type deliveryOutboxDispatcher interface {
-	Start(ctx context.Context)
+	Run(ctx context.Context) error
 }
 
 type deliveryOutboxDispatcherRunner struct {
@@ -22,10 +22,8 @@ func (r deliveryOutboxDispatcherRunner) Start(ctx context.Context) error {
 	if r.dispatcher == nil {
 		return nil
 	}
-	r.dispatcher.Start(ctx)
 	if r.logger != nil {
 		r.logger.Info("Notification delivery outbox dispatcher started by alarm-worker")
 	}
-	<-ctx.Done()
-	return nil
+	return r.dispatcher.Run(ctx)
 }
