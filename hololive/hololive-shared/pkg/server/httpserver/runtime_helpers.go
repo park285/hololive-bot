@@ -106,6 +106,8 @@ type requestTargetContextKey struct{}
 type requestTarget struct {
 	url        *url.URL
 	requestURI string
+	remoteAddr string
+	header     http.Header
 }
 
 func newOtelHandler(handler http.Handler, operation string) http.Handler {
@@ -123,6 +125,8 @@ func newOtelHandler(handler http.Handler, operation string) http.Handler {
 		restored := r.Clone(r.Context())
 		restored.URL = target.url
 		restored.RequestURI = target.requestURI
+		restored.RemoteAddr = target.remoteAddr
+		restored.Header = target.header.Clone()
 		handler.ServeHTTP(w, restored)
 		r.Pattern = restored.Pattern
 	})
@@ -141,8 +145,13 @@ func newOtelHandler(handler http.Handler, operation string) http.Handler {
 		ctx := context.WithValue(r.Context(), requestTargetContextKey{}, requestTarget{
 			url:        r.URL,
 			requestURI: r.RequestURI,
+			remoteAddr: r.RemoteAddr,
+			header:     r.Header.Clone(),
 		})
 		traced := r.Clone(ctx)
+		traced.RemoteAddr = ""
+		traced.Header.Del("X-Forwarded-For")
+		traced.Header.Del("User-Agent")
 		if r.URL != nil {
 			sanitizedURL := *r.URL
 			sanitizedURL.Path = ""

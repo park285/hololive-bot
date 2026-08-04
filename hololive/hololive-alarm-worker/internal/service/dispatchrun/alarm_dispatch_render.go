@@ -7,6 +7,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatch"
 )
@@ -101,9 +102,20 @@ func alarmDispatchGroupAllPremiere(group alarmDispatchGroup) bool {
 }
 
 func buildAlarmDispatchGroupView(ctx context.Context, store *messagestrings.Store, group alarmDispatchGroup) alarmDispatchGroupView {
+	return buildAlarmDispatchGroupViewWithShortLinks(ctx, store, group, shortlinkservice.YouTubeBuilder{})
+}
+
+func buildAlarmDispatchGroupViewWithShortLinks(
+	ctx context.Context,
+	store *messagestrings.Store,
+	group alarmDispatchGroup,
+	shortLinks shortlinkservice.YouTubeBuilder,
+) alarmDispatchGroupView {
 	entries := make([]alarmDispatchItemView, 0, len(group.notifications))
 	for i := range group.notifications {
-		entries = append(entries, buildAlarmDispatchItemView(ctx, store, &group.notifications[i], group.minutesUntil))
+		entry := buildAlarmDispatchItemView(ctx, store, &group.notifications[i], group.minutesUntil)
+		entry.URL = resolveAlarmDispatchGroupURL(&group.notifications[i], shortLinks)
+		entries = append(entries, entry)
 	}
 	return alarmDispatchGroupView{
 		MinutesUntil: group.minutesUntil,
@@ -114,7 +126,16 @@ func buildAlarmDispatchGroupView(ctx context.Context, store *messagestrings.Stor
 }
 
 func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, group alarmDispatchGroup) (string, error) {
-	message, err := renderer.Render(ctx, domain.TemplateKeyAlarmDispatchNotificationGroup, "", buildAlarmDispatchGroupView(ctx, store, group))
+	shortLinks, err := configuredAlarmShortLinkBuilder()
+	if err != nil {
+		return "", fmt.Errorf("render alarm dispatch notification group: short links: %w", err)
+	}
+	message, err := renderer.Render(
+		ctx,
+		domain.TemplateKeyAlarmDispatchNotificationGroup,
+		"",
+		buildAlarmDispatchGroupViewWithShortLinks(ctx, store, group, shortLinks),
+	)
 	if err != nil {
 		return "", fmt.Errorf("render alarm dispatch notification group: %w", err)
 	}
@@ -158,7 +179,7 @@ func alarmDispatchMessageString(ctx context.Context, store *messagestrings.Store
 }
 
 func resolveAlarmDispatchURL(notification *domain.AlarmNotification) string {
-	if notification.Stream == nil {
+	if notification == nil || notification.Stream == nil {
 		return ""
 	}
 	stream := notification.Stream
@@ -169,6 +190,31 @@ func resolveAlarmDispatchURL(notification *domain.AlarmNotification) string {
 		return resolveAlarmDispatchIntegratedURL(stream)
 	}
 	return stream.GetYouTubeURL()
+}
+
+func resolveAlarmDispatchGroupURL(notification *domain.AlarmNotification, shortLinks shortlinkservice.YouTubeBuilder) string {
+	if notification == nil {
+		return ""
+	}
+	resolved := resolveAlarmDispatchURL(notification)
+	if notification.Stream == nil || !shortLinks.Enabled() {
+		return resolved
+	}
+
+	stream := notification.Stream
+	if _, direct := resolveAlarmDispatchDirectPlatformURL(stream); direct {
+		return resolved
+	}
+	shortURL, ok := shortLinks.URL(stream.ID)
+	if !ok {
+		return resolved
+	}
+	if stream.IsIntegrated {
+		if chzzkURL := stream.GetChzzkLiveURL(); chzzkURL != "" {
+			return fmt.Sprintf("%s | %s", shortURL, chzzkURL)
+		}
+	}
+	return shortURL
 }
 
 func resolveAlarmDispatchDirectPlatformURL(stream *domain.Stream) (string, bool) {

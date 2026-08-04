@@ -185,6 +185,7 @@ github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/alarm/queue
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/messagestrings
+github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/shortlink
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatch
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/sqlassets
@@ -398,10 +399,13 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/contracts/irisrooms
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/contracts/shortlink
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/health
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/readiness
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/server/httpserver
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/server/middleware
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-shared/pkg/service/shortlink
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/park285/iris-client-go/iris
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/park285/iris-client-go/webhook
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/park285/shared-go/pkg/ginjson
@@ -1075,6 +1079,7 @@ github.com/kapu/hololive-shared/pkg/service/ratelimit -> github.com/kapu/hololiv
 github.com/kapu/hololive-shared/pkg/service/settings -> github.com/kapu/hololive-shared/pkg/service/alarm/checker
 github.com/kapu/hololive-shared/pkg/service/settings -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/settings/mocks -> github.com/kapu/hololive-shared/pkg/service/settings
+github.com/kapu/hololive-shared/pkg/service/shortlink -> github.com/kapu/hololive-shared/pkg/contracts/shortlink
 github.com/kapu/hololive-shared/pkg/service/subscriptionclient -> github.com/kapu/hololive-shared/pkg/contracts/subscription
 github.com/kapu/hololive-shared/pkg/service/subscriptionclient -> github.com/kapu/hololive-shared/pkg/service/subscriptionclient
 github.com/kapu/hololive-shared/pkg/service/subscriptionclient -> github.com/park285/shared-go/pkg/httputil

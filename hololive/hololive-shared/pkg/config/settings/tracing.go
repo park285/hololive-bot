@@ -95,10 +95,43 @@ func tracingEnabledEnv(runtime tracingRuntime, producerInstanceID string) (strin
 	case tracingRuntimeAlarmWorker:
 		return tracingAlarmWorkerEnabledEnv, nil
 	case tracingRuntimeYouTubeProducer:
-		return youtubeProducerTracingEnabledEnv(producerInstanceID)
+		return tracingEnabledEnvForYouTubeProducer(producerInstanceID)
 	default:
 		return "", fmt.Errorf("unsupported tracing runtime %d", runtime)
 	}
+}
+
+func tracingEnabledEnvForYouTubeProducer(producerInstanceID string) (string, error) {
+	enabledEnv, err := youtubeProducerTracingEnabledEnv(producerInstanceID)
+	if err == nil {
+		return enabledEnv, nil
+	}
+	disabled, disabledErr := allYouTubeProducerTracingDisabled()
+	if disabledErr != nil {
+		return "", disabledErr
+	}
+	if disabled {
+		return "", nil
+	}
+	return "", err
+}
+
+func allYouTubeProducerTracingDisabled() (bool, error) {
+	for _, key := range []string{
+		tracingYouTubeProducerAEnabledEnv,
+		tracingYouTubeProducerBEnabledEnv,
+		tracingYouTubeProducerCEnabledEnv,
+		tracingYouTubeProducerDEnabledEnv,
+	} {
+		enabled, err := sharedenv.BoolE(key, false)
+		if err != nil {
+			return false, err
+		}
+		if enabled {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func youtubeProducerTracingEnabledEnv(instanceID string) (string, error) {
