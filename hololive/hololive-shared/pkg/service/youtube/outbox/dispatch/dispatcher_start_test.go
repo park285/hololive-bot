@@ -209,6 +209,57 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	}
 }
 
+func TestDispatcherRunWaitsForDelayedBackgroundLoopExit(t *testing.T) {
+	dispatcher := NewDispatcher(nil, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+		PollInterval:          time.Hour,
+		AggregateSyncInterval: time.Hour,
+		TelemetryPollInterval: time.Hour,
+		CleanupEnabled:        false,
+		ReviveEnabled:         false,
+	})
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseLoop := func() {
+		releaseOnce.Do(func() { close(release) })
+	}
+	dispatcher.setOnAggregateSync(func() {
+		close(entered)
+		<-release
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- dispatcher.Run(ctx)
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		releaseLoop()
+		cancel()
+		t.Fatal("aggregate sync loop did not start")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		t.Fatalf("Run returned before delayed background loop exited: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	releaseLoop()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after delayed background loop exited")
+	}
+}
+
 func openDispatcherStartTestDB(t *testing.T, name string) *deliveryTestDB {
 	t.Helper()
 

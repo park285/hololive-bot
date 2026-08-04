@@ -33,8 +33,12 @@ func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) {
 	}
 
 	applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
-		Logger:                r.Logger,
-		ClearAlarmScheduler:   r.clearAlarmSchedulerCancel,
+		Logger: r.Logger,
+		ClearAlarmScheduler: func() bool {
+			canceled := r.clearAlarmSchedulerCancel()
+			r.waitAlarmScheduler(ctx)
+			return canceled
+		},
 		ShutdownHTTPServer:    r.ShutdownHTTPServer,
 		ShutdownAlarmServices: alarmservice.CloseAllAlarmServices,
 	})

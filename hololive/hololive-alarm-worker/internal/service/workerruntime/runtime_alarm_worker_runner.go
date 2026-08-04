@@ -41,6 +41,7 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
+	r.beginAlarmScheduler()
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:     r.Logger,
 		ServerAddr: r.ServerAddr,
@@ -58,6 +59,11 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 }
 
 func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) error {
+	done := r.alarmSchedulerDone()
+	if done != nil {
+		defer close(done)
+	}
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	if r.Scheduler != nil {
 		panicguard.GoE(eg, r.Logger, "alarm-worker-scheduler", func() error {

@@ -432,6 +432,7 @@ hololive/hololive-shared/pkg/service/database/mocks/client.go
 hololive/hololive-shared/pkg/service/database/pgx_helpers.go
 hololive/hololive-shared/pkg/service/database/postgres.go
 hololive/hololive-shared/pkg/service/delivery/dispatcher.go
+hololive/hololive-shared/pkg/service/delivery/dispatcher_run.go
 hololive/hololive-shared/pkg/service/delivery/locker.go
 hololive/hololive-shared/pkg/service/delivery/outbox_repository.go
 hololive/hololive-shared/pkg/service/delivery/result.go
@@ -528,6 +529,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/analytics/latency_period.go
 hololive/hololive-shared/pkg/service/youtube/outbox/analytics/types.go
 hololive/hololive-shared/pkg/service/youtube/outbox/deliverysql/pgx.go
 hololive/hololive-shared/pkg/service/youtube/outbox/deliverysql/scalars.go
+hololive/hololive-shared/pkg/service/youtube/outbox/dispatch/dispatcher_run.go
 hololive/hololive-shared/pkg/service/youtube/outbox/format/formatter.go
 hololive/hololive-shared/pkg/service/youtube/outbox/format/payload.go
 hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/alarm_timing.go
