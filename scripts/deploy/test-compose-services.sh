@@ -84,6 +84,7 @@ done
 # KR.key는 gitignore된 로컬 배포 키라 클린 체크아웃에 없다.
 # conf 계약 검증에는 키 실체가 불필요하므로 tmp 키로 대체한다.
 SSH_KEY="$(mktemp)"
+export SSH_KEY
 trap 'rm -f "${SSH_KEY}"' EXIT
 
 ap_host_load "${ROOT_DIR}" osaka || fail "osaka ap-host conf loads"
