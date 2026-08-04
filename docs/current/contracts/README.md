@@ -13,6 +13,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `alarm.http` - alarm internal HTTP JSON
 - `alarm.dispatch` - alarm dispatch Valkey queue/retry/DLQ
 - `karing.kakaolink` - alarm-worker to Iris Karing KakaoLink template send
+- `shortlink.youtube` - public fixed-target YouTube redirect with KakaoTalk scraper rejection
 - `settings.update` - settings/config update Valkey Pub/Sub
 - `iris.webhook` - Iris external webhook/send boundary
 
@@ -23,6 +24,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `trigger.md` - manual notification trigger HTTP JSON
 - `alarm.md` - alarm HTTP API and alarm dispatch queue
 - `karing-kakaolink.md` - Karing KakaoLink template ID, variables, links, and smoke-test contract
+- `shortlink.md` - fixed-target YouTube short-link route, scraper rejection, and alarm rendering contract
 - `settings.md` - settings/config update Pub/Sub
 - `iris-boundary.md` - Iris external boundary
 
@@ -33,6 +35,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 | Change | Required docs |
 |---|---|
 | Internal HTTP path/method/request/response | `../CONTRACT_MAP.md`, matching `*.md`, `../ERROR_CONTRACT.md` if error changes |
+| Public redirect path/method/status | `../CONTRACT_MAP.md`, matching `*.md`, affected runbook |
 | Queue key/envelope/retry/DLQ | `../CONTRACT_MAP.md`, `alarm.md`, `../QUEUE_AND_PUBSUB_CONTRACTS.md` |
 | Pub/Sub channel/type/payload | `../CONTRACT_MAP.md`, `settings.md`, `../QUEUE_AND_PUBSUB_CONTRACTS.md` |
 | External Iris transport or auth | `../CONTRACT_MAP.md`, `iris-boundary.md`, affected runbook |

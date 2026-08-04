@@ -103,6 +103,9 @@ func buildAlarmDispatchRunner(
 		}
 		return nil, nil
 	}
+	if err := dispatchrun.ValidateAlarmShortLinkConfig(parseAlarmDispatchKaringEnabled()); err != nil {
+		return nil, fmt.Errorf("validate alarm dispatch short links: %w", err)
+	}
 	if infra == nil {
 		return nil, fmt.Errorf("infra is required")
 	}
