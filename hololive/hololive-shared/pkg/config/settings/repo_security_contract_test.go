@@ -83,7 +83,11 @@ func TestRepoShortLinkIngressBoundary(t *testing.T) {
 		t.Fatalf("short-link listener count = %d, want 1", count)
 	}
 
-	shortLinkServer := content[strings.Index(content, listener):]
+	listenerIndex := strings.Index(content, listener)
+	if listenerIndex < 0 {
+		t.Fatal("short-link listener is missing")
+	}
+	shortLinkServer := content[listenerIndex:]
 	for _, required := range []string{
 		"allow 100.100.1.5;",
 		"deny all;",

@@ -79,7 +79,7 @@ func TestBotRuntimeStartHTTPServer_Branches(t *testing.T) {
 
 	t.Run("short-link listen error pushes err channel", func(t *testing.T) {
 		runtime := &BotRuntime{
-			ShortLinkServer: &http.Server{Addr: "invalid::addr"},
+			ShortLinkServer: &http.Server{Addr: "invalid::addr", ReadHeaderTimeout: time.Second},
 		}
 		errCh := make(chan error, 1)
 
