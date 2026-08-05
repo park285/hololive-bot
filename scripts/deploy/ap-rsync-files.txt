@@ -755,6 +755,7 @@ hololive/hololive-shared/pkg/service/youtube/tracking/observation/repository_hel
 ../shared-go/pkg/runtime/lifecycle/doc.go
 ../shared-go/pkg/stringutil/stringutil.go
 ../shared-go/pkg/telemetry/doc.go
+../shared-go/pkg/telemetry/http.go
 ../shared-go/pkg/telemetry/telemetry.go
 ../shared-go/pkg/workerconfig/worker_profile.go
 ../shared-go/pkg/workerconfig/runtime_worker_profile_envelope.go
