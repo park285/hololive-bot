@@ -216,6 +216,7 @@ run_ambient() {
   bash scripts/logs/test-stream-mirror-retention.sh
   bash scripts/deploy/verify-exec-tree-ownership_test.sh
   bash scripts/deploy/systemd-compose-up_test.sh
+  bash scripts/deploy/lib/public-bind-mounts_test.sh
   bash scripts/deploy/test-compose-security-defaults.sh
   bash scripts/runtime/set-iris-base-url_test.sh
   bash scripts/runtime/pg-hotpath-explain-snapshot_test.sh

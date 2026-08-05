@@ -9,6 +9,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/public-bind-mounts.sh"
 
 compose_file_resolve_path() {
     local file="$1"
@@ -281,12 +282,20 @@ if [[ "${compose_invokes_up}" == true ]]; then
     done
 
     bind_preflight_required=false
+    public_ingress_preflight_required=false
     removed_runtime_cleanup_required=false
     gate_targets=()
     if [[ ${#up_service_targets[@]} -eq 0 ]]; then
         bind_preflight_required=true
         removed_runtime_cleanup_required=true
         gate_targets=(hololive-api hololive-alarm-worker admin-dashboard)
+        for file in "${compose_files[@]}"; do
+            if [[ "${file##*/}" == "docker-compose.live-compat.yml" ]]; then
+                public_ingress_preflight_required=true
+                gate_targets+=(admin-dashboard-ingress)
+                break
+            fi
+        done
     else
         for service in "${up_service_targets[@]}"; do
             if cutover_service_uses_app_writable_bind_mount "${service}"; then
@@ -296,7 +305,19 @@ if [[ "${compose_invokes_up}" == true ]]; then
             if [[ "${service}" == "hololive-api" || "${service}" == "admin-dashboard" ]]; then
                 removed_runtime_cleanup_required=true
             fi
+            if [[ "${service}" == "admin-dashboard-ingress" ]]; then
+                public_ingress_preflight_required=true
+                gate_targets+=("${service}")
+            fi
         done
+    fi
+
+    if [[ "${public_ingress_preflight_required}" == true ]]; then
+        echo "[PREFLIGHT] Preparing public ingress bind source mode"
+        if ! prepare_admin_dashboard_ingress_bind_mount "${ROOT_DIR}"; then
+            echo "[ERROR] public ingress bind source preflight failed before cutover" >&2
+            exit 1
+        fi
     fi
 
     echo "[PREFLIGHT] Rendering Compose before start"
