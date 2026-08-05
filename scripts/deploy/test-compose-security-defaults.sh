@@ -105,6 +105,67 @@ if "100.100.1.3:30190" in origins:
 PY
 pass "live-compat dashboard exposure is opt-in by default"
 
+nginx_image="$(python3 - "${COMPOSE_DIR}/docker-compose.live-compat.yml" <<'PY'
+import re, sys
+
+content = open(sys.argv[1], encoding="utf-8").read()
+match = re.search(r'^\s*image:\s*\$\{NGINX_IMAGE:-([^}]+)}\s*$', content, re.MULTILINE)
+if not match:
+    print("[FAIL] pinned admin-dashboard-ingress image default is missing", file=sys.stderr)
+    sys.exit(1)
+print(match.group(1))
+PY
+)" || fail "could not resolve pinned admin-dashboard-ingress image"
+
+nginx_test_dir="$(mktemp -d)"
+trap 'rm -rf -- "${nginx_test_dir}"' EXIT
+sed 's/100\.100\.1\.3/127.0.0.1/g' \
+  "${ROOT_DIR}/deploy/nginx/admin-dashboard-ingress.conf" \
+  >"${nginx_test_dir}/admin-dashboard-ingress.conf"
+docker run --rm \
+  --network host \
+  --read-only \
+  --tmpfs /tmp:size=16m \
+  --tmpfs /var/cache/nginx:size=16m \
+  --tmpfs /var/run:size=1m \
+  -v "${nginx_test_dir}/admin-dashboard-ingress.conf:/etc/nginx/admin-dashboard-ingress.conf:ro" \
+  "${nginx_image}" \
+  nginx -t -c /etc/nginx/admin-dashboard-ingress.conf \
+  || fail "admin-dashboard-ingress nginx -t failed"
+pass "admin-dashboard-ingress config passes nginx -t with the pinned image"
+
+sed \
+  -e 's/listen 443 ssl;/listen 127.0.0.1:30999;/' \
+  -e '/listen 443 quic;/d' \
+  -e '/http2 on;/d' \
+  -e '/include \/etc\/nginx\/tls.conf;/d' \
+  -e "/if (\\\$blocked_request)/d" \
+  -e '/include \/etc\/nginx\/proxy.conf;/d' \
+  "${ROOT_DIR}/deploy/nginx/holoshi-public-shortlink.conf" \
+  >"${nginx_test_dir}/holoshi-public-shortlink.test.conf"
+printf '%s\n' \
+  'worker_processes 1;' \
+  'pid /tmp/nginx.pid;' \
+  'events { worker_connections 16; }' \
+  'http {' \
+  '  access_log off;' \
+  '  error_log /dev/stderr warn;' \
+  '  include /etc/nginx/holoshi-public-shortlink.test.conf;' \
+  '}' \
+  >"${nginx_test_dir}/holoshi-public-test.conf"
+docker run --rm \
+  --network host \
+  --read-only \
+  --tmpfs /tmp:size=16m \
+  --tmpfs /var/cache/nginx:size=16m \
+  --tmpfs /var/run:size=1m \
+  -v "${nginx_test_dir}/holoshi-public-test.conf:/etc/nginx/holoshi-public-test.conf:ro" \
+  -v "${nginx_test_dir}/holoshi-public-shortlink.test.conf:/etc/nginx/holoshi-public-shortlink.test.conf:ro" \
+  "${nginx_image}" \
+  nginx -t -c /etc/nginx/holoshi-public-test.conf \
+  || fail "holoshi public ingress nginx -t failed"
+pass "holoshi public ingress template passes nginx -t with the pinned image"
+
 merged_main_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml:docker-compose.main-ap.yml:docker-compose.main-ap.live-compat.yml COMPOSE_PROFILES=main-ap docker compose config --no-interpolate --format json 2>/dev/null)" \
   || fail "prod+main-ap compose failed to render"
 

@@ -198,73 +198,134 @@ func validatePlanePool(plane string, config *PostgresConfig) error {
 }
 
 func validateHololiveAPIListenerPorts(config *HololiveAPIConfig) error {
-	owners := make(map[int]string)
-	if err := registerPrimaryListenerPorts(owners, config); err != nil {
-		return err
+	listeners := []listenerEndpoint{
+		{owner: "bot-h3", network: "udp", addr: config.Bot.Server.H3Addr, expectedPort: config.Bot.Server.Port, requirePortMatch: true},
+		{owner: "admin-h3", network: "udp", addr: config.Admin.Server.H3Addr, expectedPort: config.Admin.Server.Port, requirePortMatch: true},
+		{owner: "llm-h3", network: "udp", addr: config.LLM.Server.H3Addr, expectedPort: config.LLM.Server.Port, requirePortMatch: true},
+		{owner: "short-link", network: "tcp", addr: config.Bot.Server.ShortLinkAddr},
+		{owner: "metrics", network: "tcp", addr: config.Bot.Server.MetricsAddr},
+		{owner: "pprof", network: "tcp", addr: config.Bot.Server.PprofAddr},
 	}
-	return registerAuxiliaryListenerPorts(owners, config)
-}
 
-func registerPrimaryListenerPorts(owners map[int]string, config *HololiveAPIConfig) error {
-	listeners := []struct {
-		owner string
-		port  int
-	}{
-		{owner: "bot", port: config.Bot.Server.Port},
-		{owner: "admin", port: config.Admin.Server.Port},
-		{owner: "llm", port: config.LLM.Server.Port},
-	}
+	parsed := make([]listenerEndpoint, 0, len(listeners))
 	for _, listener := range listeners {
-		if listener.port <= 0 || listener.port > 65535 {
-			return fmt.Errorf("%s listener port must be between 1 and 65535", listener.owner)
-		}
-		if err := recordListenerPort(owners, listener.owner, listener.port); err != nil {
+		if err := addListenerEndpoint(&parsed, &listener); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func registerAuxiliaryListenerPorts(owners map[int]string, config *HololiveAPIConfig) error {
-	auxiliaries := []struct {
-		owner string
-		addr  string
-	}{
-		{owner: "short-link", addr: config.Bot.Server.ShortLinkAddr},
-		{owner: "metrics", addr: config.Bot.Server.MetricsAddr},
-		{owner: "pprof", addr: config.Bot.Server.PprofAddr},
+func addListenerEndpoint(parsed *[]listenerEndpoint, listener *listenerEndpoint) error {
+	if strings.TrimSpace(listener.addr) == "" {
+		return nil
 	}
-	for _, auxiliary := range auxiliaries {
-		if strings.TrimSpace(auxiliary.addr) == "" {
-			continue
-		}
-		port, err := listenerPort(auxiliary.addr)
-		if err != nil {
-			return fmt.Errorf("%s listener: %w", auxiliary.owner, err)
-		}
-		if err := recordListenerPort(owners, auxiliary.owner, port); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func recordListenerPort(owners map[int]string, owner string, port int) error {
-	if previous, exists := owners[port]; exists {
-		return fmt.Errorf("listener port %d is shared by %s and %s", port, previous, owner)
-	}
-	owners[port] = owner
-	return nil
-}
-
-func listenerPort(addr string) (int, error) {
-	_, portText, err := net.SplitHostPort(strings.TrimSpace(addr))
+	endpoint, err := parseListenerEndpoint(listener)
 	if err != nil {
-		return 0, fmt.Errorf("invalid address %q: %w", addr, err)
+		return fmt.Errorf("%s listener: %w", listener.owner, err)
 	}
-	port, err := strconv.Atoi(portText)
+	if previousOwner := overlappingListenerOwner(*parsed, &endpoint); previousOwner != "" {
+		return fmt.Errorf(
+			"listener endpoint %s/%s:%d is shared by %s and %s",
+			endpoint.network,
+			endpoint.host,
+			endpoint.port,
+			previousOwner,
+			endpoint.owner,
+		)
+	}
+	*parsed = append(*parsed, endpoint)
+	return nil
+}
+
+func overlappingListenerOwner(parsed []listenerEndpoint, endpoint *listenerEndpoint) string {
+	for index := range parsed {
+		if endpointsOverlap(&parsed[index], endpoint) {
+			return parsed[index].owner
+		}
+	}
+	return ""
+}
+
+type listenerEndpoint struct {
+	owner            string
+	network          string
+	addr             string
+	host             string
+	port             int
+	expectedPort     int
+	requirePortMatch bool
+}
+
+func parseListenerEndpoint(listener *listenerEndpoint) (listenerEndpoint, error) {
+	host, port, err := splitListenerAddress(listener.addr)
+	if err != nil {
+		return listenerEndpoint{}, err
+	}
+	if err := validateListenerPortMatch(listener, port); err != nil {
+		return listenerEndpoint{}, err
+	}
+	listener.host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	listener.port = port
+	return *listener, nil
+}
+
+func splitListenerAddress(addr string) (host string, port int, err error) {
+	host, portText, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid address %q: %w", addr, err)
+	}
+	port, err = strconv.Atoi(portText)
 	if err != nil || port <= 0 || port > 65535 {
-		return 0, fmt.Errorf("invalid port in address %q", addr)
+		return "", 0, fmt.Errorf("invalid port in address %q", addr)
 	}
-	return port, nil
+	return host, port, nil
+}
+
+func validateListenerPortMatch(listener *listenerEndpoint, actualPort int) error {
+	if !listener.requirePortMatch {
+		return nil
+	}
+	if listener.expectedPort <= 0 || listener.expectedPort > 65535 {
+		return fmt.Errorf("configured port must be between 1 and 65535")
+	}
+	if actualPort != listener.expectedPort {
+		return fmt.Errorf("address port %d must match configured port %d", actualPort, listener.expectedPort)
+	}
+	return nil
+}
+
+func endpointsOverlap(left, right *listenerEndpoint) bool {
+	return left.network == right.network && left.port == right.port && listenerHostsOverlap(left.host, right.host)
+}
+
+func listenerHostsOverlap(left, right string) bool {
+	if isWildcardListenerHost(left) || isWildcardListenerHost(right) {
+		return true
+	}
+	if left == right {
+		return true
+	}
+	return listenerHostIPOverlap(left, right)
+}
+
+func listenerHostIPOverlap(left, right string) bool {
+	leftIP := net.ParseIP(left)
+	rightIP := net.ParseIP(right)
+	if leftIP != nil && rightIP != nil {
+		return leftIP.Equal(rightIP)
+	}
+	return listenerHostnameMatchesIP(left, rightIP) || listenerHostnameMatchesIP(right, leftIP)
+}
+
+func listenerHostnameMatchesIP(host string, ip net.IP) bool {
+	return host == "localhost" && ip != nil && ip.IsLoopback()
+}
+
+func isWildcardListenerHost(host string) bool {
+	if host == "" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsUnspecified()
 }

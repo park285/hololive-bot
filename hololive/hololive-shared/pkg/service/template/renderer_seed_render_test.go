@@ -306,6 +306,42 @@ func TestSeedTemplates_AlarmNotificationGroupEntryLabelLink(t *testing.T) {
 	}
 }
 
+func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	const (
+		markerTitle = "【挑戦】今日こそは絶対フルコン!!【 #UNIT_B / #玲銘ミラ】"
+		shortURL    = "https://short.holoshi.com/l/CtQ_15HfY_M"
+	)
+
+	body := seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotificationGroup)
+	out := renderSeedBody(t, domain.TemplateKeyAlarmDispatchNotificationGroup, body, map[string]any{
+		"MinutesUntil": 5,
+		"IsStarting":   false,
+		"AllPremiere":  false,
+		"Entries": []map[string]any{
+			{
+				"MemberName":      "유닛 B",
+				"Title":           markerTitle,
+				"URL":             shortURL,
+				"ScheduleMessage": "",
+				"MinutesUntil":    5,
+				"IsStarting":      false,
+				"IsScheduled":     true,
+				"IsPremiere":      false,
+			},
+		},
+	})
+
+	wantLink := "[" + util.MarkdownNeutralize(markerTitle) + "](" + shortURL + ")"
+	if !hasSeedLine(out, wantLink) {
+		t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: short-link label link %q 없음: %q", wantLink, out)
+	}
+	if !strings.Contains(out, shortURL) {
+		t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: short URL이 변형됨: %q", out)
+	}
+}
+
 func hasSeedLine(out, want string) bool {
 	return slices.Contains(strings.Split(out, "\n"), want)
 }
