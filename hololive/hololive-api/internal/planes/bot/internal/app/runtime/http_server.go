@@ -43,6 +43,20 @@ func ShutdownHTTP3Server(ctx context.Context, server *http3.Server) error {
 	return httpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed")
 }
 
+func StartShortLinkServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
+	if server == nil {
+		return
+	}
+	httpserver.StartServerWithPrefix(server, "short-link server error", logger, errCh)
+}
+
+func ShutdownShortLinkServer(ctx context.Context, server *http.Server) error {
+	if server == nil {
+		return nil
+	}
+	return httpserver.Shutdown(ctx, server, "short-link server shutdown failed")
+}
+
 func StartMetricsServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
 	if server == nil {
 		return

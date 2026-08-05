@@ -40,17 +40,65 @@ func TestValidateAlarmProviderURL(t *testing.T) {
 func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 	t.Parallel()
 
-	config := &HololiveAPIConfig{
-		Bot:   &Config{Server: ServerConfig{Port: 30001, MetricsAddr: ":30091", PprofAddr: ":30061"}},
-		Admin: &Config{Server: ServerConfig{Port: 30006}},
-		LLM:   &LLMSchedulerConfig{Server: ServerConfig{Port: 30003}},
+	newConfig := func(shortLinkAddr string) *HololiveAPIConfig {
+		return &HololiveAPIConfig{
+			Bot: &Config{Server: ServerConfig{
+				Port:          30001,
+				H3Addr:        ":30001",
+				ShortLinkAddr: shortLinkAddr,
+				MetricsAddr:   ":30091",
+				PprofAddr:     ":30061",
+			}},
+			Admin: &Config{Server: ServerConfig{Port: 30006, H3Addr: ":30006"}},
+			LLM:   &LLMSchedulerConfig{Server: ServerConfig{Port: 30003, H3Addr: ":30003"}},
+		}
 	}
+
+	config := newConfig(":30101")
 	require.NoError(t, validateHololiveAPIListenerPorts(config))
 
 	config.Admin.Server.Port = 30001
+	config.Admin.Server.H3Addr = ":30001"
 	err := validateHololiveAPIListenerPorts(config)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "shared by bot and admin")
+	assert.Contains(t, err.Error(), "shared by bot-h3 and admin-h3")
+
+	tests := []struct {
+		name    string
+		addr    string
+		wantErr string
+	}{
+		{name: "metrics collision", addr: ":30091", wantErr: "shared by short-link and metrics"},
+		{name: "pprof collision", addr: ":30061", wantErr: "shared by short-link and pprof"},
+		{name: "invalid address", addr: "not-an-address", wantErr: "short-link listener: invalid address"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateHololiveAPIListenerPorts(newConfig(tt.addr))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+
+	t.Run("same port on tcp and udp is allowed", func(t *testing.T) {
+		require.NoError(t, validateHololiveAPIListenerPorts(newConfig(":30001")))
+	})
+
+	t.Run("same tcp port on distinct specific hosts is allowed", func(t *testing.T) {
+		config := newConfig("127.0.0.1:30091")
+		config.Bot.Server.MetricsAddr = "100.100.1.3:30091"
+		require.NoError(t, validateHololiveAPIListenerPorts(config))
+	})
+
+	t.Run("h3 address must match configured plane port", func(t *testing.T) {
+		config := newConfig(":30101")
+		config.LLM.Server.H3Addr = ":30004"
+		err := validateHololiveAPIListenerPorts(config)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "llm-h3 listener: address port 30004 must match configured port 30003")
+	})
 }
 
 func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {

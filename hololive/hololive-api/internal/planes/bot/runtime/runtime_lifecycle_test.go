@@ -22,8 +22,11 @@ package botruntime
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
+	"net"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -75,6 +78,24 @@ func TestBotRuntimeStartHTTPServer_Branches(t *testing.T) {
 			t.Fatal("timed out waiting for HTTP server error")
 		}
 	})
+
+	t.Run("short-link listen error pushes err channel", func(t *testing.T) {
+		runtime := &BotRuntime{
+			ShortLinkServer: &http.Server{Addr: "invalid::addr", ReadHeaderTimeout: time.Second},
+		}
+		errCh := make(chan error, 1)
+
+		runtime.StartHTTPServer(errCh)
+
+		select {
+		case err := <-errCh:
+			if err == nil || !strings.Contains(err.Error(), "short-link server error") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for short-link server error")
+		}
+	})
 }
 
 func TestBotRuntimeStartAndHelpers_NoPanicOnNilComponents(t *testing.T) {
@@ -92,6 +113,76 @@ func TestBotRuntimeStartAndHelpers_NoPanicOnNilComponents(t *testing.T) {
 
 	if logBuf.Len() == 0 {
 		t.Fatal("expected runtime helpers to write logs")
+	}
+}
+
+func TestBotRuntimeShutdownHTTPServer_DrainsShortLinkListener(t *testing.T) {
+	t.Parallel()
+
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listener == nil {
+		t.Fatal("net.ListenConfig.Listen returned a nil listener")
+	}
+
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			writer.WriteHeader(http.StatusNoContent)
+		}),
+		ReadHeaderTimeout: time.Second,
+	}
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- server.Serve(listener)
+	}()
+
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+listener.Addr().String(), http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request == nil {
+		t.Fatal("http.NewRequestWithContext returned a nil request")
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response == nil {
+		t.Fatal("http.Client.Do returned a nil response")
+	}
+	if closeErr := response.Body.Close(); closeErr != nil {
+		t.Fatalf("close response body: %v", closeErr)
+	}
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("short-link status = %d, want %d", response.StatusCode, http.StatusNoContent)
+	}
+
+	runtime := &BotRuntime{ShortLinkServer: server}
+	shutdownContext, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	if err := runtime.ShutdownHTTPServer(shutdownContext); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-serveErr:
+		if !errors.Is(err, http.ErrServerClosed) {
+			t.Fatalf("Serve() error = %v, want http.ErrServerClosed", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("short-link listener did not stop after shutdown")
+	}
+
+	dialer := &net.Dialer{Timeout: time.Second}
+	connection, err := dialer.DialContext(t.Context(), "tcp", listener.Addr().String())
+	if err == nil {
+		if closeErr := connection.Close(); closeErr != nil {
+			t.Fatalf("close unexpected post-shutdown connection: %v", closeErr)
+		}
+		t.Fatal("short-link listener still accepts connections after shutdown")
 	}
 }
 

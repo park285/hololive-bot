@@ -108,6 +108,7 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		ConfigSubscriber:     configSubscriber,
 		ServerAddr:           appConfig.Server.H3Addr,
 		H3Server:             h3Server,
+		ShortLinkServer:      appbootstrap.BuildShortLinkServer(appConfig.Server.ShortLinkAddr),
 		MetricsServer:        metricsServer,
 		PprofServer:          pprofServer,
 		h3CertReloadStart:    h3CertReloadStart,

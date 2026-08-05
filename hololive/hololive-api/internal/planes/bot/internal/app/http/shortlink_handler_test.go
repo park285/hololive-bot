@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -56,15 +55,22 @@ func TestYouTubeShortLinkRejectsInvalidVideoID(t *testing.T) {
 	assert.Empty(t, response.Header().Get("Location"))
 }
 
+func TestShortLinkHandlerDoesNotExposeBotRoutes(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
+	response := httptest.NewRecorder()
+	ProvideShortLinkHandler().ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusNotFound, response.Code)
+}
+
 func serveShortLinkRequest(t *testing.T, method, path, userAgent string) *httptest.ResponseRecorder {
 	t.Helper()
-
-	router := gin.New()
-	registerShortLinkRoutes(router)
 
 	request := httptest.NewRequestWithContext(t.Context(), method, path, http.NoBody)
 	request.Header.Set("User-Agent", userAgent)
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, request)
+	ProvideShortLinkHandler().ServeHTTP(response, request)
 	return response
 }

@@ -43,10 +43,11 @@ type BotRuntime struct {
 
 	ConfigSubscriber *configsub.Subscriber
 
-	ServerAddr    string
-	H3Server      *http3.Server
-	MetricsServer *http.Server
-	PprofServer   *http.Server
+	ServerAddr      string
+	H3Server        *http3.Server
+	ShortLinkServer *http.Server
+	MetricsServer   *http.Server
+	PprofServer     *http.Server
 
 	h3CertReloadStart func(context.Context)
 

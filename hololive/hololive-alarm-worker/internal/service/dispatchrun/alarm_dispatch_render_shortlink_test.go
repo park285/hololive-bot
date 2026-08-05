@@ -96,7 +96,7 @@ func TestBuildAlarmDispatchItemViewKeepsSingleNotificationURL(t *testing.T) {
 }
 
 func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, "https://go.example.com")
+	t.Setenv(alarmShortLinkBaseURLEnv, alarmShortLinkOrigin)
 	renderer, store := newAlarmDispatchTestRendering(t)
 	group := alarmDispatchGroup{
 		minutesUntil: 5,
@@ -109,8 +109,8 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, group)
 
 	require.NoError(t, err)
-	assert.Contains(t, message, "https://go.example.com/l/dQw4w9WgXcQ")
-	assert.Contains(t, message, "https://go.example.com/l/abcdefghijk")
+	assert.Contains(t, message, alarmShortLinkOrigin+"/l/dQw4w9WgXcQ")
+	assert.Contains(t, message, alarmShortLinkOrigin+"/l/abcdefghijk")
 	assert.NotContains(t, message, domain.YouTubeWatchURL("dQw4w9WgXcQ"))
 }
 

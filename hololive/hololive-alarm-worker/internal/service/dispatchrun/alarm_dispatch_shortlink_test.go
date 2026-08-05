@@ -25,7 +25,7 @@ func TestValidateAlarmShortLinkConfigRejectsInvalidOrigin(t *testing.T) {
 }
 
 func TestValidateAlarmShortLinkConfigRejectsKaringConflict(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, "https://go.example.com")
+	t.Setenv(alarmShortLinkBaseURLEnv, alarmShortLinkOrigin)
 
 	err := ValidateAlarmShortLinkConfig(true)
 
@@ -33,13 +33,22 @@ func TestValidateAlarmShortLinkConfigRejectsKaringConflict(t *testing.T) {
 	assert.Contains(t, err.Error(), "ALARM_DISPATCH_KARING_ENABLED=false")
 }
 
-func TestConfiguredAlarmShortLinkBuilderBuildsLink(t *testing.T) {
+func TestValidateAlarmShortLinkConfigRejectsUntrustedHTTPSOrigin(t *testing.T) {
 	t.Setenv(alarmShortLinkBaseURLEnv, "https://go.example.com")
+
+	err := ValidateAlarmShortLinkConfig(false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), alarmShortLinkOrigin)
+}
+
+func TestConfiguredAlarmShortLinkBuilderBuildsLink(t *testing.T) {
+	t.Setenv(alarmShortLinkBaseURLEnv, alarmShortLinkOrigin+"/")
 
 	builder, err := configuredAlarmShortLinkBuilder()
 	require.NoError(t, err)
 
 	link, ok := builder.URL("dQw4w9WgXcQ")
 	assert.True(t, ok)
-	assert.Equal(t, "https://go.example.com/l/dQw4w9WgXcQ", link)
+	assert.Equal(t, alarmShortLinkOrigin+"/l/dQw4w9WgXcQ", link)
 }

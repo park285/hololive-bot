@@ -9,7 +9,7 @@
 | Check | Expected |
 |---|---|
 | Health | `http://127.0.0.1:30190/health` returns `{"status":"ok"}` |
-| Public ingress | Seoul Nginx proxies `admin.holoshi.com` to `100.100.1.3:30191`; central `admin-dashboard-ingress` Nginx proxies that to loopback `127.0.0.1:30190` |
+| Public ingress | Seoul Nginx proxies `admin.holoshi.com` to `100.100.1.3:30191`; 별도 `short.holoshi.com/l/*`는 `100.100.1.3:30192`를 통해 short-link listener로 전달합니다. |
 | Container | `admin-dashboard` healthy (`./bin/healthcheck` 기반 compose healthcheck) |
 | Auth | 미인증 `/admin/api/*` 호출이 401 JSON 반환 |
 | Logs | no repeated valkey/session/relay errors |
@@ -87,6 +87,9 @@ cd admin-dashboard/frontend && npm ci && npm run lint && npm run build
 `admin-dashboard-ingress` Nginx 컨테이너가 Tailscale 전용 포트 `100.100.1.3:30191`에서 받아
 `127.0.0.1:30190`으로 전달합니다.
 
+같은 Nginx가 `100.100.1.3:30192`에서 Seoul gateway source만 허용하고 `/l/*`를
+`127.0.0.1:30101` short-link listener로 전달합니다. 그 외 path는 `404`로 거부합니다.
+
 source 제한은 `deploy/nginx/admin-dashboard-ingress.conf`가 적용합니다. 허용 source는 Seoul gateway
 `100.100.1.5`, 중앙 Tailscale 주소 `100.100.1.3`, 로컬 loopback뿐입니다. 컨테이너는 Tailscale IP가
 아직 준비되지 않아 bind에 실패해도 `restart: unless-stopped`로 재시도하므로 systemd의 early-boot
@@ -103,11 +106,24 @@ sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env \
 `disable --now`하고 제거합니다. 먼저 timestamp backup을 남기고, rollback 시 Nginx를 중지한 뒤
 백업 unit과 nft 규칙을 복원합니다.
 
-Seoul Nginx upstream:
+Seoul Nginx는 admin과 short-link public origin을 분리합니다. `admin.holoshi.com`은 기존 admin upstream
+`100.100.1.3:30191`만 유지하고, `deploy/nginx/holoshi-public-shortlink.conf`가 전용
+`short.holoshi.com` TLS/HTTP3 server와 `shortlink_backend` upstream을 소유합니다. 해당 파일은
+`holoshi-nginx`의 `http` context에 한 번만 적용합니다.
 
-```text
-reverse_proxy 100.100.1.3:30191
+```nginx
+http {
+    # 기존 공통 map/upstream/server 설정
+    include <release-path>/deploy/nginx/holoshi-public-shortlink.conf;
+}
 ```
+
+template는 `short.holoshi.com/l/*`를 `100.100.1.3:30192`로 전달하고 다른 short-link path는
+`404`로 닫습니다. admin traffic과 WebSocket은 이 server를 통과하지 않습니다. 적용 전후
+`nginx -t`를 통과시킨 뒤 reload합니다.
+
+provider rollout은 `127.0.0.1:30101` listener → 중앙 `30192` ingress → Seoul template →
+`scripts/deploy/shortlink-smoke.sh` public smoke → `ALARM_SHORT_LINK_BASE_URL` consumer 활성화 순서입니다.
 
 ## Logs
 
@@ -193,6 +209,7 @@ Mitigation:
 curl -s http://127.0.0.1:30190/health
 curl -fsS http://100.100.1.3:30191/health   # central 또는 Seoul gateway에서 실행
 curl -fsS https://admin.holoshi.com/health
+./scripts/deploy/shortlink-smoke.sh          # central host에서 3-hop 302/403/404 계약 검증
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30190/admin/api/auth/session   # 401
 curl -sI http://127.0.0.1:30190/health | grep -i x-content-type-options                  # nosniff
 ```
@@ -200,6 +217,7 @@ curl -sI http://127.0.0.1:30190/health | grep -i x-content-type-options         
 ## Rollback
 
 - `docs/current/runbooks/rollback.md` 기준으로 직전 `admin-dashboard` 이미지/설정 재배포.
+- short-link consumer rollback은 `ALARM_SHORT_LINK_BASE_URL`을 먼저 비우고 alarm-worker를 재기동합니다. 이미 발송된 URL을 위해 `30101` listener, 중앙 `30192` ingress, Seoul public routing은 명시적으로 승인된 미래 compatibility deprecation 전까지 무기한 유지합니다.
 - 롤백 후 위 Smoke test와 대시보드 로그인 경로 재확인.
 
 ## Related

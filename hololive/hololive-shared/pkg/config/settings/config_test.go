@@ -537,6 +537,7 @@ func TestLoad_ServerHTTP3Config(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_ADDR", ":30001")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
+	t.Setenv("HOLOLIVE_SHORT_LINK_ADDR", " 127.0.0.1:30101 ")
 
 	config, err := load()
 	if err != nil {
@@ -554,6 +555,9 @@ func TestLoad_ServerHTTP3Config(t *testing.T) {
 	}
 	if config.Server.H3KeyFile != "/run/hololive-bot/certs/hololive-h3.key" {
 		t.Fatalf("Server.H3KeyFile = %q", config.Server.H3KeyFile)
+	}
+	if config.Server.ShortLinkAddr != "127.0.0.1:30101" {
+		t.Fatalf("Server.ShortLinkAddr = %q, want 127.0.0.1:30101", config.Server.ShortLinkAddr)
 	}
 	if !config.ServerTransportEnabled("h3") {
 		t.Fatal("ServerTransportEnabled(h3) = false, want true")

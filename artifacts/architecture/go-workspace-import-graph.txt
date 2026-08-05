@@ -785,6 +785,7 @@ github.com/kapu/hololive-shared/pkg/applifecycle -> github.com/kapu/hololive-sha
 github.com/kapu/hololive-shared/pkg/applifecycle -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-shared/pkg/applifecycle -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/kapu/hololive-shared/pkg/constants
+github.com/kapu/hololive-shared/pkg/config/settings -> github.com/kapu/hololive-shared/pkg/contracts/shortlink
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/park285/iris-client-go/iris
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/park285/shared-go/pkg/logging

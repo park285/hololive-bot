@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	shortlinkcontracts "github.com/kapu/hololive-shared/pkg/contracts/shortlink"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,6 +75,127 @@ func TestRepoComposeProdHardenedDefaults(t *testing.T) {
 	assertProdComposeRequiredPatterns(t, content)
 	assertProdComposeEgressEnvFiles(t, content)
 	assertProdComposeNonEgressIsolation(t, content)
+}
+
+func TestRepoShortLinkIngressBoundary(t *testing.T) {
+	content := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf")
+	listener := "listen 100.100.1.3:30192;"
+	server := nginxBlockContaining(t, content, "server {", listener)
+
+	assertExactNginxDirectives(t, server, "allow", []string{"127.0.0.1", "100.100.1.3", "100.100.1.5"})
+	assertExactNginxDirectives(t, server, "deny", []string{"all"})
+
+	locationAnchor := "location ^~ " + shortlinkcontracts.YouTubePathPrefix
+	location := nginxBlockContaining(t, server, locationAnchor, "proxy_pass")
+	cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml", "deploy/compose/docker-compose.live-compat.yml")
+	listenerAddr := composeEnvironment(t, cfg, "hololive-api")["HOLOLIVE_SHORT_LINK_ADDR"]
+	wantProxy := "http://127.0.0.1" + listenerAddr
+	assertExactNginxDirectives(t, location, "proxy_pass", []string{wantProxy})
+	assertExactNginxDirectives(t, location, "limit_req", []string{"zone=shortlink_requests burst=40 nodelay"})
+	assertExactNginxDirectives(t, location, "limit_conn", []string{"shortlink_connections 32"})
+
+	catchAll := nginxBlockContaining(t, server, "location /", "return 404;")
+	assertExactNginxDirectives(t, catchAll, "return", []string{"404"})
+	for _, required := range []string{
+		"limit_req_zone $binary_remote_addr zone=shortlink_requests:1m rate=20r/s;",
+		"limit_conn_zone $binary_remote_addr zone=shortlink_connections:1m;",
+		"limit_req_status 429;",
+		"limit_conn_status 429;",
+	} {
+		if !strings.Contains(content, required) {
+			t.Fatalf("short-link ingress missing admission control %q", required)
+		}
+	}
+}
+
+func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
+	publicTemplate := readRepoFile(t, "deploy/nginx/holoshi-public-shortlink.conf")
+	centralConfig := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf")
+	if count := len(regexp.MustCompile(`(?m)^\s*location\s+`).FindAllString(publicTemplate, -1)); count != 2 {
+		t.Fatalf("public ingress location count = %d, want 2", count)
+	}
+
+	centralShortLink := nginxBlockContaining(t, centralConfig, "server {", "location ^~ "+shortlinkcontracts.YouTubePathPrefix)
+	shortLinkListen := nginxDirectiveValues(centralShortLink, "listen")
+	if len(shortLinkListen) != 1 {
+		t.Fatalf("central short-link listen directives = %q, want exactly one", shortLinkListen)
+	}
+	publicUpstream := nginxBlockContaining(t, publicTemplate, "upstream shortlink_backend {", "server")
+	assertExactNginxDirectives(t, publicUpstream, "server", shortLinkListen)
+	assertExactNginxDirectives(t, publicUpstream, "keepalive", []string{"8"})
+
+	publicServer := nginxBlockContaining(t, publicTemplate, "server {", "server_name short.holoshi.com;")
+	assertExactNginxDirectives(t, publicServer, "server_name", []string{"short.holoshi.com"})
+	assertExactNginxDirectives(t, publicServer, "listen", []string{"443 quic", "443 ssl"})
+	publicShortLink := nginxBlockContaining(t, publicServer, "location ^~ "+shortlinkcontracts.YouTubePathPrefix, "proxy_pass")
+	assertExactNginxDirectives(t, publicShortLink, "proxy_pass", []string{"http://shortlink_backend"})
+	catchAll := nginxBlockContaining(t, publicServer, "location /", "return 404;")
+	assertExactNginxDirectives(t, catchAll, "return", []string{"404"})
+}
+
+func nginxBlockContaining(t *testing.T, content, anchor, required string) string {
+	t.Helper()
+
+	searchFrom := 0
+	for {
+		relative := strings.Index(content[searchFrom:], anchor)
+		if relative < 0 {
+			break
+		}
+		start := searchFrom + relative
+		block := nginxBalancedBlock(t, content, start)
+		if strings.Contains(block, required) {
+			return block
+		}
+		searchFrom = start + len(anchor)
+	}
+	t.Fatalf("nginx %q block containing %q is missing", anchor, required)
+	return ""
+}
+
+func nginxBalancedBlock(t *testing.T, content string, anchorIndex int) string {
+	t.Helper()
+
+	openRelative := strings.Index(content[anchorIndex:], "{")
+	if openRelative < 0 {
+		t.Fatalf("nginx block at offset %d has no opening brace", anchorIndex)
+	}
+	open := anchorIndex + openRelative
+	depth := 0
+	for index := open; index < len(content); index++ {
+		switch content[index] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return content[anchorIndex : index+1]
+			}
+		}
+	}
+	t.Fatalf("nginx block at offset %d is unbalanced", anchorIndex)
+	return ""
+}
+
+func assertExactNginxDirectives(t *testing.T, block, directive string, want []string) {
+	t.Helper()
+
+	got := nginxDirectiveValues(block, directive)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("nginx %s directives = %q, want %q", directive, got, want)
+	}
+}
+
+func nginxDirectiveValues(block, directive string) []string {
+	pattern := regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(directive) + `\s+([^;]+);\s*$`)
+	matches := pattern.FindAllStringSubmatch(block, -1)
+	got := make([]string, 0, len(matches))
+	for _, match := range matches {
+		got = append(got, strings.TrimSpace(match[1]))
+	}
+	slices.Sort(got)
+	return got
 }
 
 func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
@@ -641,6 +763,10 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 
 func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 	t.Helper()
+	apiBlock := composeServiceBlock(t, overlay, "hololive-api")
+	if strings.Contains(apiBlock, "${HOLOLIVE_SHORT_LINK_ADDR") || !strings.Contains(apiBlock, `HOLOLIVE_SHORT_LINK_ADDR: ":30101"`) {
+		t.Fatal("live overlay must pin HOLOLIVE_SHORT_LINK_ADDR to the published ingress port")
+	}
 
 	for _, service := range []string{"hololive-api", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)
@@ -681,6 +807,11 @@ func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 	assertRenderedPort(t, cfg, "holo-postgres", "5433", "5432", "tcp")
 	assertRenderedPort(t, cfg, "hololive-api", "30001", "30001", "tcp")
 	assertRenderedPort(t, cfg, "hololive-api", "30001", "30001", "udp")
+	assertRenderedPortOnHost(t, cfg, "hololive-api", "127.0.0.1", "30101", "30101", "tcp")
+	apiEnv := composeEnvironment(t, cfg, "hololive-api")
+	if apiEnv["HOLOLIVE_SHORT_LINK_ADDR"] != ":30101" {
+		t.Fatalf("hololive-api HOLOLIVE_SHORT_LINK_ADDR = %q, want :30101", apiEnv["HOLOLIVE_SHORT_LINK_ADDR"])
+	}
 
 	if command := composeCommand(t, cfg, "valkey-cache"); !strings.Contains(command, "--unixsocketperm 660") {
 		t.Fatalf("live overlay valkey command = %q, want --unixsocketperm 660", command)
