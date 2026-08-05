@@ -9,7 +9,7 @@
 | Check | Expected |
 |---|---|
 | Health | `http://127.0.0.1:30190/health` returns `{"status":"ok"}` |
-| Public ingress | Seoul Nginx proxies `admin.holoshi.com` to `100.100.1.3:30191`; central `admin-dashboard-ingress` Nginx proxies that to loopback `127.0.0.1:30190` |
+| Public ingress | Seoul Nginx proxies `admin.holoshi.com` to `100.100.1.3:30191`; `/l/*`만 `100.100.1.3:30192`를 통해 short-link listener로 분리됩니다. |
 | Container | `admin-dashboard` healthy (`./bin/healthcheck` 기반 compose healthcheck) |
 | Auth | 미인증 `/admin/api/*` 호출이 401 JSON 반환 |
 | Logs | no repeated valkey/session/relay errors |
@@ -86,6 +86,9 @@ cd admin-dashboard/frontend && npm ci && npm run lint && npm run build
 `admin.holoshi.com`은 Seoul Nginx가 TLS/HTTP3 종료점을 맡고, 중앙 호스트의 host-networked
 `admin-dashboard-ingress` Nginx 컨테이너가 Tailscale 전용 포트 `100.100.1.3:30191`에서 받아
 `127.0.0.1:30190`으로 전달합니다.
+
+같은 Nginx가 `100.100.1.3:30192`에서 Seoul gateway source만 허용하고 `/l/*`를
+`127.0.0.1:30101` short-link listener로 전달합니다. 그 외 path는 `404`로 거부합니다.
 
 source 제한은 `deploy/nginx/admin-dashboard-ingress.conf`가 적용합니다. 허용 source는 Seoul gateway
 `100.100.1.5`, 중앙 Tailscale 주소 `100.100.1.3`, 로컬 loopback뿐입니다. 컨테이너는 Tailscale IP가
