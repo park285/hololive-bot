@@ -35,13 +35,13 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `DELIVERY_DISPATCHER_ENABLED` | generic notification delivery outbox egress enablement | production yes |
 | `ALARM_DISPATCH_CONSUMER_ENABLED` | alarm dispatch outbox egress enablement | production yes |
 | `ALARM_DISPATCH_KARING_ENABLED` | alarm dispatch queue egress uses Karing content-list templates instead of text sends | no |
-| `ALARM_SHORT_LINK_BASE_URL` | public HTTPS origin for thumbnail-free grouped alarm links; blank disables | no |
+| `ALARM_SHORT_LINK_BASE_URL` | `https://short.holoshi.com` for thumbnail-free grouped alarm links; blank disables | no |
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
 ## Grouped alarm short links
 
-여러 방송을 하나의 일반 텍스트 alarm notification으로 묶을 때 `ALARM_SHORT_LINK_BASE_URL`을 설정하면 YouTube 링크를 `<origin>/l/<video_id>`로 렌더링합니다. `hololive-api` bot plane의 `/l/:videoID` route가 일반 사용자는 YouTube로 `302` redirect하고 KakaoTalk scraper의 `kakaotalk-scrap/` User-Agent는 `403`으로 거부합니다.
+여러 방송을 하나의 일반 텍스트 alarm notification으로 묶을 때 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 설정하면 YouTube 링크를 해당 origin의 `/l/<video_id>`로 렌더링합니다. 빈 값 외 다른 origin은 migration 139의 trusted-link 계약과 어긋나므로 startup에서 거부합니다. `hololive-api` bot plane의 `/l/:videoID` route가 일반 사용자는 YouTube로 `302` redirect하고 KakaoTalk scraper의 `kakaotalk-scrap/` User-Agent는 `403`으로 거부합니다.
 
 provider-first 활성화 순서:
 

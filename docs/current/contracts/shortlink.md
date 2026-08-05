@@ -46,9 +46,9 @@
 
 ## Alarm Rendering
 
-`ALARM_SHORT_LINK_BASE_URL`이 설정된 경우에만 두 개 이상의 일반 alarm notification 그룹에서 YouTube URL을 `<origin>/l/<videoID>`로 바꿉니다.
+`ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`인 경우에만 두 개 이상의 일반 alarm notification 그룹에서 YouTube URL을 해당 origin의 `/l/<videoID>`로 바꿉니다. 빈 값은 기능을 비활성화하며, 다른 origin은 migration 139의 trusted-link allowlist와 어긋나므로 startup에서 거부합니다.
 
-- 값은 path, query, fragment, user info가 없는 `https` origin이어야 합니다.
+- 활성 값은 `https://short.holoshi.com`이며 trailing slash 하나는 같은 origin으로 정규화합니다.
 - 빈 값은 기능을 비활성화하고 기존 YouTube 원본 URL을 유지합니다.
 - 단일 방송 알림, Twitch-only, Chzzk-only, celebration, YouTube outbox 경로는 기존 링크를 유지합니다.
 - integrated 알림은 YouTube 부분만 단축하고 기존 Chzzk 보조 링크를 유지합니다.
