@@ -97,7 +97,8 @@ func TestRepoShortLinkIngressBoundary(t *testing.T) {
 	catchAll := nginxBlockContaining(t, server, "location /", "return 404;")
 	assertExactNginxDirectives(t, catchAll, "return", []string{"404"})
 	for _, required := range []string{
-		"limit_req_zone $binary_remote_addr zone=shortlink_requests:1m rate=20r/s;",
+		"map $http_x_forwarded_for $shortlink_client {",
+		"limit_req_zone $shortlink_client zone=shortlink_requests:1m rate=20r/s;",
 		"limit_conn_zone $binary_remote_addr zone=shortlink_connections:1m;",
 		"limit_req_status 429;",
 		"limit_conn_status 429;",
