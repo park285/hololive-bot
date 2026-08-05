@@ -27,7 +27,7 @@ import (
 	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/shared-go/pkg/jsonutil"
+	"github.com/park285/shared-go/pkg/httputil"
 
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
@@ -101,7 +101,7 @@ func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string)
 		}
 	}
 
-	body, err := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
+	body, err := httputil.ReadAllLimited(resp.Body, c.maxResponseBodyBytes)
 	if err != nil {
 		c.recordFailure()
 		return nil, fmt.Errorf("%s: %w", readErrorPrefix, err)

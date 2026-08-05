@@ -22,7 +22,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -31,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/observability"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/instanceid"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/producerruntime"
 	"github.com/park285/shared-go/pkg/envutil"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
@@ -75,10 +75,7 @@ func main() {
 			appConfig *settings.Config,
 			logger *slog.Logger,
 		) (*observability.ManagedRuntime[*producerruntime.YouTubeProducerRuntime], error) {
-			traceConfig, err := youtubeProducerTelemetryConfig(appConfig, Version)
-			if err != nil {
-				return nil, err
-			}
+			traceConfig := youtubeProducerTelemetryConfig(appConfig, Version)
 			return observability.BuildRuntime(
 				ctx,
 				&traceConfig,
@@ -92,31 +89,21 @@ func main() {
 	}))
 }
 
-func youtubeProducerTelemetryConfig(appConfig *settings.Config, version string) (telemetry.Config, error) {
-	serviceName, err := youtubeProducerTelemetryServiceName(appConfig.Scraper.ActiveActive.InstanceID)
-	if err != nil {
-		if appConfig.Tracing.Enabled {
-			return telemetry.Config{}, err
-		}
-		serviceName = "youtube-producer"
-	}
+func youtubeProducerTelemetryConfig(appConfig *settings.Config, version string) telemetry.Config {
 	return telemetry.Config{
 		Enabled:        appConfig.Tracing.Enabled,
-		ServiceName:    serviceName,
+		ServiceName:    youtubeProducerTelemetryServiceName(appConfig.Scraper.ActiveActive.InstanceID),
 		ServiceVersion: version,
 		Environment:    appConfig.Environment,
 		OTLPEndpoint:   appConfig.Tracing.Endpoint,
 		OTLPInsecure:   appConfig.Tracing.Insecure,
 		SampleRate:     appConfig.Tracing.SampleRate,
-	}, nil
+	}
 }
 
-func youtubeProducerTelemetryServiceName(instanceID string) (string, error) {
-	normalized := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(instanceID)), "youtube-producer-")
-	if normalized != "a" && normalized != "b" && normalized != "c" && normalized != "d" {
-		return "", fmt.Errorf("unsupported YOUTUBE_PRODUCER_INSTANCE_ID")
-	}
-	return "youtube-producer-" + normalized, nil
+func youtubeProducerTelemetryServiceName(instanceID string) string {
+	normalized := strings.TrimPrefix(strings.ToLower(instanceid.Normalize(instanceID)), "youtube-producer-")
+	return "youtube-producer-" + normalized
 }
 
 func youtubeProducerLogFileName() string {

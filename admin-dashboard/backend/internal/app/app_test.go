@@ -440,8 +440,8 @@ func TestDockerHandlersWithoutDocker(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, doRequest(handler, req).Code)
 }
 
-func TestETagRoundTrip(t *testing.T) {
-	sess := liveSession("etag-session")
+func TestAdminAPIDisablesCaching(t *testing.T) {
+	sess := liveSession("no-cache-session")
 	rt := newTestRuntime(t, storeWith(sess), nil)
 	handler := rt.Handler()
 
@@ -449,15 +449,10 @@ func TestETagRoundTrip(t *testing.T) {
 	req.AddCookie(signedSessionCookie(sess.ID))
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
-	etag := rec.Header().Get("ETag")
-	require.NotEmpty(t, etag)
-
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/health", http.NoBody)
-	req.AddCookie(signedSessionCookie(sess.ID))
-	req.Header.Set("If-None-Match", etag)
-	rec = doRequest(handler, req)
-	require.Equal(t, http.StatusNotModified, rec.Code)
-	require.Empty(t, rec.Body.String())
+	require.Equal(t, "no-store, private", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "no-cache", rec.Header().Get("Pragma"))
+	require.Equal(t, "0", rec.Header().Get("Expires"))
+	require.Empty(t, rec.Header().Get("ETag"))
 }
 
 func TestETagSkippedForLargeBody(t *testing.T) {

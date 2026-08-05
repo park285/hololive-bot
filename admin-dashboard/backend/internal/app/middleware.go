@@ -98,6 +98,11 @@ func (r *Runtime) securityHeaders() gin.HandlerFunc {
 		header.Set("X-XSS-Protection", "1; mode=block")
 		header.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https://*.ytimg.com https://*.ggpht.com; connect-src 'self' ws: wss:; frame-ancestors 'none'")
+		if strings.HasPrefix(c.Request.URL.Path, "/admin/api/") {
+			header.Set("Cache-Control", "no-store, private")
+			header.Set("Pragma", "no-cache")
+			header.Set("Expires", "0")
+		}
 		if r.cfg.Security.ForceHTTPS {
 			header.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
@@ -226,7 +231,7 @@ func (r *Runtime) etag() gin.HandlerFunc {
 }
 
 func etagSkipped(req *http.Request) bool {
-	return req.Method != http.MethodGet || !strings.HasPrefix(req.URL.Path, "/admin/api/") || req.Header.Get("Upgrade") != ""
+	return req.Method != http.MethodGet || strings.HasPrefix(req.URL.Path, "/admin/api/") || req.Header.Get("Upgrade") != ""
 }
 
 func etagMatches(header, etag string) bool {

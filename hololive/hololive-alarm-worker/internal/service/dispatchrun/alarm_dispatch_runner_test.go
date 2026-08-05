@@ -18,20 +18,22 @@ import (
 var errAlarmDispatchRunnerTestSend = errors.New("send failed")
 
 type alarmDispatchRunnerTestConsumer struct {
-	batches           [][]domain.AlarmQueueEnvelope
-	drainErr          error
-	onDrain           func()
-	markSending       []domain.AlarmQueueEnvelope
-	markDispatched    []domain.AlarmQueueEnvelope
-	quarantined       []domain.AlarmQueueEnvelope
-	quarantineReason  string
-	scheduledRetry    []domain.AlarmQueueEnvelope
-	movedDLQ          []domain.AlarmQueueEnvelope
-	requeued          []domain.AlarmQueueEnvelope
-	releasedClaims    []string
-	markDispatchedErr error
-	quarantineErr     error
-	routeFailuresErr  error
+	batches               [][]domain.AlarmQueueEnvelope
+	drainErr              error
+	onDrain               func()
+	markSending           []domain.AlarmQueueEnvelope
+	markDispatched        []domain.AlarmQueueEnvelope
+	quarantined           []domain.AlarmQueueEnvelope
+	quarantineReason      string
+	scheduledRetry        []domain.AlarmQueueEnvelope
+	scheduledSendingRetry []domain.AlarmQueueEnvelope
+	movedDLQ              []domain.AlarmQueueEnvelope
+	requeued              []domain.AlarmQueueEnvelope
+	releasedClaims        []string
+	markSendingErr        error
+	markDispatchedErr     error
+	quarantineErr         error
+	routeFailuresErr      error
 }
 
 func (c *alarmDispatchRunnerTestConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
@@ -51,7 +53,7 @@ func (c *alarmDispatchRunnerTestConsumer) DrainBatch(context.Context, int) ([]do
 
 func (c *alarmDispatchRunnerTestConsumer) MarkSending(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	c.markSending = append(c.markSending, envelopes...)
-	return nil
+	return c.markSendingErr
 }
 
 func (c *alarmDispatchRunnerTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
@@ -76,6 +78,12 @@ func (c *alarmDispatchRunnerTestConsumer) RouteFailures(_ context.Context, retry
 	c.scheduledRetry = append(c.scheduledRetry, retryEnvelopes...)
 	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
 	return c.routeFailuresErr
+}
+
+func (c *alarmDispatchRunnerTestConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+	c.scheduledSendingRetry = append(c.scheduledSendingRetry, retryEnvelopes...)
+	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
+	return nil
 }
 
 func (c *alarmDispatchRunnerTestConsumer) Requeue(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
@@ -135,7 +143,7 @@ func TestAlarmDispatchRunnerRunOnceSendsKaringContentListRequest(t *testing.T) {
 	envelope.Notification.Stream.Thumbnail = &thumbnail
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -170,7 +178,7 @@ func TestAlarmDispatchRunnerUpcomingKaringRequestPreservesMinuteWindow(t *testin
 	envelope.Notification.Stream.StartScheduled = &start
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -199,7 +207,7 @@ func TestAlarmDispatchRunnerKaringSplitsMixedLiveCatchupAndPrelive(t *testing.T)
 	upcoming.Notification.Stream.StartScheduled = &start
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{live, upcoming}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -251,7 +259,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxCommunitySendsKaringRequest(t *testing.
 	}
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -292,7 +300,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxMilestoneUsesTextDispatchWhenKaringEnab
 	}
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), karingEnabled: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -386,7 +394,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T
 			}
 			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 			sender := &alarmDispatchRunnerTestSender{}
-			runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+			runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
 
 			processed, err := runner.runOnce(t.Context())
 
@@ -418,7 +426,7 @@ func TestAlarmDispatchRunnerKaringChunksRequestsByFour(t *testing.T) {
 	}
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -503,7 +511,7 @@ func TestAlarmDispatchKaringTemplateIDByItemCount(t *testing.T) {
 func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -521,28 +529,10 @@ func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 	assert.Empty(t, consumer.movedDLQ)
 }
 
-func TestAlarmDispatchRunnerRunOnceSchedulesRetryOnSendFailure(t *testing.T) {
-	consumer := &alarmDispatchRunnerLegacyTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
-	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), postSendQuarantine: true, maxBatch: 10}
-
-	processed, err := runner.runOnce(t.Context())
-
-	require.NoError(t, err)
-	assert.True(t, processed)
-	require.Len(t, consumer.scheduledRetry, 1)
-	require.NotNil(t, consumer.scheduledRetry[0].Retry)
-	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
-	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, errAlarmDispatchRunnerTestSend.Error())
-	assert.Equal(t, dispatchoutbox.ErrorCodeUnknown, consumer.scheduledRetry[0].Retry.LastErrorCode)
-	assert.Empty(t, consumer.markDispatched)
-	assert.Empty(t, consumer.movedDLQ)
-}
-
 func TestAlarmDispatchRunnerQuarantinesPGSendFailureAfterMarkSending(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -557,23 +547,22 @@ func TestAlarmDispatchRunnerQuarantinesPGSendFailureAfterMarkSending(t *testing.
 }
 
 func TestAlarmDispatchRunnerRetriesKaringBadGatewayAfterMarkSending(t *testing.T) {
-	// alarmDispatchRunnerTestConsumer는 alarmDispatchSendingFailureConsumer를 구현하지 않으므로
-	// persistSendingRetry가 persistPreSendFailure로 폴백하여 RouteFailures를 호출한다.
 	karingErr := fmt.Errorf("iris send karing content list: %w", &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"})
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
-	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
 	require.NoError(t, err)
 	assert.True(t, processed)
 	require.Len(t, consumer.markSending, 1)
-	require.Len(t, consumer.scheduledRetry, 1)
-	require.NotNil(t, consumer.scheduledRetry[0].Retry)
-	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
-	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, "returned 502")
-	assert.Equal(t, dispatchoutbox.ErrorCodeHTTP5xx, consumer.scheduledRetry[0].Retry.LastErrorCode)
+	require.Len(t, consumer.scheduledSendingRetry, 1)
+	require.NotNil(t, consumer.scheduledSendingRetry[0].Retry)
+	assert.Equal(t, 1, consumer.scheduledSendingRetry[0].Retry.Attempt)
+	assert.Contains(t, consumer.scheduledSendingRetry[0].Retry.LastError, "returned 502")
+	assert.Equal(t, dispatchoutbox.ErrorCodeHTTP5xx, consumer.scheduledSendingRetry[0].Retry.LastErrorCode)
+	assert.Empty(t, consumer.scheduledRetry)
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markDispatched)
@@ -586,7 +575,7 @@ func TestAlarmDispatchRunnerReturnsErrorWhenPostSendQuarantineFails(t *testing.T
 		quarantineErr: quarantineErr,
 	}
 	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), postSendQuarantine: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
@@ -638,31 +627,18 @@ func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testin
 	require.Len(t, consumer.markDispatched, 1)
 }
 
-func TestAlarmDispatchRunnerUsesLegacyRetryWhenConsumerCannotQuarantine(t *testing.T) {
-	consumer := &alarmDispatchRunnerLegacyTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
-	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
-
-	processed, err := runner.runOnce(t.Context())
-
-	require.NoError(t, err)
-	assert.True(t, processed)
-	require.Len(t, consumer.scheduledRetry, 1)
-	assert.Empty(t, consumer.movedDLQ)
-}
-
 func TestAlarmDispatchRunnerRunOnceMovesExhaustedRetryToDLQAndReleasesClaims(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope("room-1", &domain.AlarmQueueRetryMetadata{Attempt: 2})
 	envelope.ClaimKeys = []string{"alarm:dispatch:claim:room-1:stream-1"}
-	consumer := &alarmDispatchRunnerLegacyTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
-	sender := &alarmDispatchRunnerTestSender{fail: true}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{karingErr: &iris.HTTPError{StatusCode: 503}}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
 	require.NoError(t, err)
 	assert.True(t, processed)
-	assert.Empty(t, consumer.scheduledRetry)
+	assert.Empty(t, consumer.scheduledSendingRetry)
 	require.Len(t, consumer.movedDLQ, 1)
 	require.NotNil(t, consumer.movedDLQ[0].Retry)
 	assert.Equal(t, 3, consumer.movedDLQ[0].Retry.Attempt)
@@ -1030,54 +1006,6 @@ func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetr
 		},
 		Retry: retry,
 	}
-}
-
-type alarmDispatchRunnerLegacyTestConsumer struct {
-	batches           [][]domain.AlarmQueueEnvelope
-	markSendingErr    error
-	markSending       []domain.AlarmQueueEnvelope
-	markDispatched    []domain.AlarmQueueEnvelope
-	scheduledRetry    []domain.AlarmQueueEnvelope
-	movedDLQ          []domain.AlarmQueueEnvelope
-	requeued          []domain.AlarmQueueEnvelope
-	releasedClaims    []string
-	markDispatchedErr error
-	routeFailuresErr  error
-}
-
-func (c *alarmDispatchRunnerLegacyTestConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
-	if len(c.batches) == 0 {
-		return nil, nil
-	}
-	batch := c.batches[0]
-	c.batches = c.batches[1:]
-	return batch, nil
-}
-
-func (c *alarmDispatchRunnerLegacyTestConsumer) MarkSending(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.markSending = append(c.markSending, envelopes...)
-	return c.markSendingErr
-}
-
-func (c *alarmDispatchRunnerLegacyTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.markDispatched = append(c.markDispatched, envelopes...)
-	return c.markDispatchedErr
-}
-
-func (c *alarmDispatchRunnerLegacyTestConsumer) ReleaseClaimKeys(_ context.Context, claimKeys []string) error {
-	c.releasedClaims = append(c.releasedClaims, claimKeys...)
-	return nil
-}
-
-func (c *alarmDispatchRunnerLegacyTestConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
-	c.scheduledRetry = append(c.scheduledRetry, retryEnvelopes...)
-	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
-	return c.routeFailuresErr
-}
-
-func (c *alarmDispatchRunnerLegacyTestConsumer) Requeue(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.requeued = append(c.requeued, envelopes...)
-	return nil
 }
 
 type alarmDispatchRunnerTestIdleWaiter struct {

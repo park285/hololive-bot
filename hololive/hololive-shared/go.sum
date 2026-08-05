@@ -164,10 +164,10 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/park285/iris-client-go v1.5.0 h1:pzoybKt1mWti/uZkEkwm9KfJCB5ndhpgE9HuCTLVCLo=
-github.com/park285/iris-client-go v1.5.0/go.mod h1:TERJyZlDaI3TA0aDOh6p/1JuZTxCXINafZ/NSNETZqs=
-github.com/park285/shared-go v1.43.3 h1:f/qDko/bjOf6n3fkXlQ3OK1R2sVRSl2Gt05smVYUOjo=
-github.com/park285/shared-go v1.43.3/go.mod h1:XU3ygFV9G40+bjGn8zXzr/aPoVj0MOAJozKvbcyuQCw=
+github.com/park285/iris-client-go v1.6.0 h1:yfWL0x/xZgAaZfIAvJhu6XPBAnM4/kHkpRiw/0SSlx8=
+github.com/park285/iris-client-go v1.6.0/go.mod h1:dQB2tRw5x1IYh3xisB310y81de9Z/b7cCkumyj1mjn8=
+github.com/park285/shared-go v1.44.0 h1:BL4ET6H8R/araIU/oJrTsr0jQzt9Y5LDYIRPQdFnhsI=
+github.com/park285/shared-go v1.44.0/go.mod h1:XU3ygFV9G40+bjGn8zXzr/aPoVj0MOAJozKvbcyuQCw=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

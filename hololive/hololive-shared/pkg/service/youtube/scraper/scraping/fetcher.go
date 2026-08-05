@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/park285/shared-go/pkg/jsonutil"
+	"github.com/park285/shared-go/pkg/httputil"
 )
 
 type FetcherEngine string
@@ -113,7 +113,7 @@ func closeUnsuccessfulFetchResponse(resp *http.Response) error {
 }
 
 func readSuccessfulFetchResponse(resp *http.Response) ([]byte, error) {
-	body, err := jsonutil.ReadAllLimit(resp.Body, ytDefaults.MaxPageBodyBytes)
+	body, err := httputil.ReadAllLimited(resp.Body, ytDefaults.MaxPageBodyBytes)
 	closeErr := resp.Body.Close()
 	if err != nil {
 		if closeErr != nil {
@@ -134,7 +134,7 @@ func responseBodyReadError(err error) error {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
-	if errors.Is(err, jsonutil.ErrBodyTooLarge) {
+	if errors.Is(err, httputil.ErrResponseBodyTooLarge) {
 		return fmt.Errorf("%w: %w", ErrResponseTooLarge, err)
 	}
 	return fmt.Errorf("failed to read response body: %w", err)

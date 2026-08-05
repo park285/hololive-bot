@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/pkg/httputil"
-	"github.com/park285/shared-go/pkg/jsonutil"
 )
 
 type Config struct {
@@ -121,7 +120,7 @@ func (f *Fetcher) newSnapshotRequest(ctx context.Context, req Request) (*http.Re
 }
 
 func readSnapshotResponse(resp *http.Response) (Response, error) {
-	body, err := jsonutil.ReadAllLimit(resp.Body, 4<<20)
+	body, err := httputil.ReadAllLimited(resp.Body, 4<<20)
 	if err != nil {
 		return Response{}, fmt.Errorf("read browser snapshot response: %w", err)
 	}

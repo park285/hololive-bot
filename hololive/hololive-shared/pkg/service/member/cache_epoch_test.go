@@ -428,7 +428,7 @@ func TestCacheEpoch_TwoProcessesConvergeAcrossValkey(t *testing.T) {
 	})
 }
 
-func TestCacheEpoch_LegacyInvalidationCannotDeleteAuthority(t *testing.T) {
+func TestCacheEpoch_InvalidationLeavesUnprefixedKeyspaceUntouched(t *testing.T) {
 	service, mini := testutil.NewTestCacheServiceWithMini(t, t.Context())
 	c := &Cache{
 		cache:  service,
@@ -437,22 +437,18 @@ func TestCacheEpoch_LegacyInvalidationCannotDeleteAuthority(t *testing.T) {
 	}
 	c.authorityEpoch.Store(1)
 	c.authorityHealthy.Store(true)
-	if err := mini.Set(memberNameKeyPrefix+"legacy", "stale"); err != nil {
-		t.Fatalf("seed legacy key: %v", err)
-	}
-	keys, err := service.ScanKeys(t.Context(), memberCachePattern, 100)
-	if err != nil || len(keys) != 1 {
-		t.Fatalf("legacy precondition keys = %v, err = %v", keys, err)
+	if err := mini.Set(memberNameKeyPrefix+"unprefixed", "stale"); err != nil {
+		t.Fatalf("seed unprefixed key: %v", err)
 	}
 
 	if err := c.InvalidateAll(t.Context()); err != nil {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
 	if !mini.Exists(memberEpochAuthorityKey) {
-		t.Fatal("legacy member:* invalidation deleted the V2 authority key")
+		t.Fatal("invalidation deleted the V2 authority key")
 	}
-	if mini.Exists(memberNameKeyPrefix + "legacy") {
-		t.Fatal("legacy member key was not deleted during expand-contract rollout")
+	if !mini.Exists(memberNameKeyPrefix + "unprefixed") {
+		t.Fatal("invalidation scanned/deleted outside the epoch-scoped namespace; contraction removed the legacy member:* sweep")
 	}
 }
 

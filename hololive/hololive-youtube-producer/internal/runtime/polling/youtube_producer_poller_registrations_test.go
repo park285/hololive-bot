@@ -332,9 +332,16 @@ func TestEstimateYouTubeProducerSourceBudgetKeepsSustainedIndependentOfAPCount(t
 }
 
 func TestResolveYouTubeProducerActiveAPCount(t *testing.T) {
-	require.Equal(t, 4, resolveYouTubeProducerActiveAPCount(4, false))
-	require.Equal(t, 3, resolveYouTubeProducerActiveAPCount(0, true))
-	require.Equal(t, 1, resolveYouTubeProducerActiveAPCount(0, false))
+	configured, err := resolveYouTubeProducerActiveAPCount(4, false)
+	require.NoError(t, err)
+	require.Equal(t, 4, configured)
+
+	_, err = resolveYouTubeProducerActiveAPCount(0, true)
+	require.ErrorContains(t, err, "active instance count is not configured")
+
+	single, err := resolveYouTubeProducerActiveAPCount(0, false)
+	require.NoError(t, err)
+	require.Equal(t, 1, single)
 }
 
 func TestBudgetRejectsAggressiveBackfillInterval(t *testing.T) {
@@ -380,6 +387,7 @@ func buildBackfillTestRegistrationsWithLiveStatusProvider(backfill settings.Scra
 		liveStatusProvider,
 		notificationChannelIDs,
 		[]string{"UC_STATS"},
+		nil,
 	)
 }
 

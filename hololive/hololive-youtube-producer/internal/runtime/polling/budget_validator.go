@@ -77,14 +77,14 @@ func logYouTubeProducerSourceBudgetEstimate(estimate BudgetEstimate, logger *slo
 	}
 }
 
-func resolveYouTubeProducerActiveAPCount(configured int, activeActiveEnabled bool) int {
+func resolveYouTubeProducerActiveAPCount(configured int, activeActiveEnabled bool) (int, error) {
 	if configured > 0 {
-		return configured
+		return configured, nil
 	}
 	if activeActiveEnabled {
-		return 3
+		return 0, fmt.Errorf("resolve active AP count: active-active is enabled but active instance count is not configured; set the fleet AP count explicitly")
 	}
-	return 1
+	return 1, nil
 }
 
 func validateYouTubeProducerAggregateBudget(summary youtubeProducerBudgetSummary) error {

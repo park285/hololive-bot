@@ -143,6 +143,7 @@ func BuildRegistrationsWithClient(
 		liveStatusProvider,
 		notificationChannelIDs,
 		statsChannelIDs,
+		slog.Default(),
 	)
 }
 

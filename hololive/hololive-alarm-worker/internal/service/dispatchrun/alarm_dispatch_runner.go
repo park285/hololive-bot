@@ -20,16 +20,12 @@ type Consumer interface {
 	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
 	RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error
+	RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error
 	Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-}
-
-type alarmDispatchQuarantineConsumer interface {
 	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error
 }
 
-type alarmDispatchSendingFailureConsumer interface {
-	RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error
-}
+var _ Consumer = (*dispatchoutbox.Consumer)(nil)
 
 type IdleWaiter interface {
 	Wait(ctx context.Context) bool
@@ -46,27 +42,23 @@ type clientRequestSender interface {
 }
 
 type Runner struct {
-	consumer           Consumer
-	sender             Sender
-	renderer           *template.Renderer
-	messageStrings     *messagestrings.Store
-	idleWaiter         IdleWaiter
-	karingEnabled      bool
-	consumerMode       string
-	postSendQuarantine bool
-	maxBatch           int
-	maxBatchesPerWake  int
-	batchesSinceWake   int
-	yield              func(context.Context) bool
-	logger             *slog.Logger
+	consumer          Consumer
+	sender            Sender
+	renderer          *template.Renderer
+	messageStrings    *messagestrings.Store
+	idleWaiter        IdleWaiter
+	karingEnabled     bool
+	maxBatch          int
+	maxBatchesPerWake int
+	batchesSinceWake  int
+	yield             func(context.Context) bool
+	logger            *slog.Logger
 }
 
 type RunnerConfig struct {
-	KaringEnabled      bool
-	ConsumerMode       string
-	PostSendQuarantine bool
-	MaxBatch           int
-	MaxBatchesPerWake  int
+	KaringEnabled     bool
+	MaxBatch          int
+	MaxBatchesPerWake int
 }
 
 func NewRunner(
@@ -79,17 +71,15 @@ func NewRunner(
 	logger *slog.Logger,
 ) *Runner {
 	return &Runner{
-		consumer:           consumer,
-		sender:             sender,
-		renderer:           renderer,
-		messageStrings:     messageStrings,
-		idleWaiter:         idleWaiter,
-		karingEnabled:      config.KaringEnabled,
-		consumerMode:       config.ConsumerMode,
-		postSendQuarantine: config.PostSendQuarantine,
-		maxBatch:           config.MaxBatch,
-		maxBatchesPerWake:  config.MaxBatchesPerWake,
-		logger:             logger,
+		consumer:          consumer,
+		sender:            sender,
+		renderer:          renderer,
+		messageStrings:    messageStrings,
+		idleWaiter:        idleWaiter,
+		karingEnabled:     config.KaringEnabled,
+		maxBatch:          config.MaxBatch,
+		maxBatchesPerWake: config.MaxBatchesPerWake,
+		logger:            logger,
 	}
 }
 
@@ -219,9 +209,6 @@ func (r *Runner) finalizeDispatchFailure(
 // MarkSending 에러 시 UPDATE는 이미 커밋된 뒤라 'sending' 잔류 행은 leased 전용 RouteFailures로
 // 복원 불가 — status IN ('leased','sending')을 덮는 RouteSendingFailures로 보상한다(발송 전이라 중복 없음).
 func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	if _, ok := r.consumer.(alarmDispatchSendingFailureConsumer); !ok {
-		return fmt.Errorf("mark alarm dispatch sending: %w", cause)
-	}
 	return r.persistSendingRetry(ctx, envelopes, cause)
 }
 
@@ -229,14 +216,7 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []doma
 	if isAlarmDispatchRetryablePostSendFailure(cause) {
 		return r.persistSendingRetry(ctx, envelopes, cause)
 	}
-	if !r.postSendQuarantine {
-		return r.persistPreSendFailure(ctx, envelopes, cause)
-	}
-	consumer, ok := r.consumer.(alarmDispatchQuarantineConsumer)
-	if !ok {
-		return r.persistPreSendFailure(ctx, envelopes, cause)
-	}
-	if err := consumer.Quarantine(ctx, envelopes, cause); err != nil {
+	if err := r.consumer.Quarantine(ctx, envelopes, cause); err != nil {
 		return fmt.Errorf("quarantine alarm dispatch after send failure: %w", err)
 	}
 	observeAlarmDispatchRunnerPostSendQuarantined(len(envelopes))
@@ -244,13 +224,9 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []doma
 }
 
 func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	consumer, ok := r.consumer.(alarmDispatchSendingFailureConsumer)
-	if !ok {
-		return r.persistPreSendFailure(ctx, envelopes, cause)
-	}
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
 	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []domain.AlarmQueueEnvelope) error {
-		if err := consumer.RouteSendingFailures(ctx, retry, dlq); err != nil {
+		if err := r.consumer.RouteSendingFailures(ctx, retry, dlq); err != nil {
 			return fmt.Errorf("route alarm dispatch sending failure: %w", err)
 		}
 		return nil
@@ -258,7 +234,7 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.Ala
 		// 'sending' 잔류 행은 leased 전용 Requeue(RouteFailures fence)에 매칭되지 않아
 		// 일시적 infra 오류가 QuarantineStaleSending의 terminal quarantine으로 굳는다.
 		// fallback도 sending fence로 전량 retry 복원한다.
-		return consumer.RouteSendingFailures(ctx, envelopes, nil)
+		return r.consumer.RouteSendingFailures(ctx, envelopes, nil)
 	})
 }
 

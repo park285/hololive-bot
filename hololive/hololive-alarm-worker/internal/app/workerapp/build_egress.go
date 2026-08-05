@@ -141,11 +141,9 @@ func newAlarmDispatchConsumer(infra *sharedmodules.InfraModule, logger *slog.Log
 
 func alarmDispatchRunnerConfig() dispatchrun.RunnerConfig {
 	return dispatchrun.RunnerConfig{
-		KaringEnabled:      parseAlarmDispatchKaringEnabled(),
-		ConsumerMode:       "pg",
-		PostSendQuarantine: true,
-		MaxBatch:           envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_BATCH", 50),
-		MaxBatchesPerWake:  envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", 20),
+		KaringEnabled:     parseAlarmDispatchKaringEnabled(),
+		MaxBatch:          envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_BATCH", 50),
+		MaxBatchesPerWake: envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", 20),
 	}
 }
 
