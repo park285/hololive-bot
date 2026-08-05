@@ -12,6 +12,13 @@ import (
 
 const kakaoTalkScraperUserAgentMarker = "kakaotalk-scrap/"
 
+func ProvideShortLinkHandler() http.Handler {
+	router := gin.New()
+	router.Use(gin.Recovery())
+	registerShortLinkRoutes(router)
+	return router
+}
+
 func registerShortLinkRoutes(router gin.IRoutes) {
 	if router == nil {
 		return

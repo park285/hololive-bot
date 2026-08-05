@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
@@ -33,6 +34,14 @@ func BuildBotServer(
 
 	addr := fmt.Sprintf(":%d", appConfig.Server.Port)
 	return sharedserver.NewH2CServer(addr, botRouter, "hololive-bot.http"), nil
+}
+
+func BuildShortLinkServer(addr string) *http.Server {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return nil
+	}
+	return sharedserver.NewH2CServer(addr, apphttp.ProvideShortLinkHandler(), "hololive-bot.shortlink")
 }
 
 func BuildBotHTTP3Server(

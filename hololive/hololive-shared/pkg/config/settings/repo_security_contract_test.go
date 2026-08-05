@@ -681,6 +681,11 @@ func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 	assertRenderedPort(t, cfg, "holo-postgres", "5433", "5432", "tcp")
 	assertRenderedPort(t, cfg, "hololive-api", "30001", "30001", "tcp")
 	assertRenderedPort(t, cfg, "hololive-api", "30001", "30001", "udp")
+	assertRenderedPortOnHost(t, cfg, "hololive-api", "127.0.0.1", "30101", "30101", "tcp")
+	apiEnv := composeEnvironment(t, cfg, "hololive-api")
+	if apiEnv["HOLOLIVE_SHORT_LINK_ADDR"] != ":30101" {
+		t.Fatalf("hololive-api HOLOLIVE_SHORT_LINK_ADDR = %q, want :30101", apiEnv["HOLOLIVE_SHORT_LINK_ADDR"])
+	}
 
 	if command := composeCommand(t, cfg, "valkey-cache"); !strings.Contains(command, "--unixsocketperm 660") {
 		t.Fatalf("live overlay valkey command = %q, want --unixsocketperm 660", command)

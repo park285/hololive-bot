@@ -49,6 +49,8 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 2. 외부 ingress에서 해당 origin의 `/l/*`를 `hololive-api` bot plane으로 전달합니다.
 3. `ALARM_DISPATCH_KARING_ENABLED=false`를 유지합니다. Karing list template은 명시적 thumbnail 계약을 가지므로 두 기능을 동시에 켜면 alarm-worker가 fail closed합니다.
 
+중앙 live-compat Compose는 `/l/*`만 제공하는 host ingress 전용 HTTP backend를 `127.0.0.1:30101`에 publish합니다. 이 포트는 외부 인터페이스에 직접 노출하지 않고 public ingress의 upstream으로만 사용합니다.
+
 ```text
 ALARM_SHORT_LINK_BASE_URL=https://go.example.com
 ALARM_DISPATCH_KARING_ENABLED=false

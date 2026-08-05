@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"errors"
 	"log/slog"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -73,6 +74,24 @@ func TestBotRuntimeStartHTTPServer_Branches(t *testing.T) {
 			}
 		case <-time.After(2 * time.Second):
 			t.Fatal("timed out waiting for HTTP server error")
+		}
+	})
+
+	t.Run("short-link listen error pushes err channel", func(t *testing.T) {
+		runtime := &BotRuntime{
+			ShortLinkServer: &http.Server{Addr: "invalid::addr"},
+		}
+		errCh := make(chan error, 1)
+
+		runtime.StartHTTPServer(errCh)
+
+		select {
+		case err := <-errCh:
+			if err == nil || !strings.Contains(err.Error(), "short-link server error") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for short-link server error")
 		}
 	})
 }
