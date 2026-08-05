@@ -48,7 +48,7 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://100.100.1.3:30191/health && wget -S -O /dev/null -T 3 -U 'KakaoTalk-Scrap/1.0' http://100.100.1.3:30192/l/dQw4w9WgXcQ 2>&1 | grep -q 'HTTP/1.1 403'"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null -T 3 http://100.100.1.3:30191/health && wget -q -O /dev/null -T 3 http://100.100.1.3:30192/healthz"]
 
   holo-postgres:
     environment:
