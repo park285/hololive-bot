@@ -10,14 +10,39 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"go.opentelemetry.io/otel/trace"
 )
 
-func TestOtelHandlerDoesNotRecordRawRequestTarget(t *testing.T) {
+type runtimeTracingCase struct {
+	operation     string
+	requestTarget string
+	remoteAddr    string
+	forwardedFor  string
+	userAgent     string
+}
+
+type runtimeTracingObservation struct {
+	url        *url.URL
+	requestURI string
+	remoteAddr string
+	header     http.Header
+}
+
+func (o *runtimeTracingObservation) reset() {
+	*o = runtimeTracingObservation{}
+}
+
+func (o *runtimeTracingObservation) capture(_ http.ResponseWriter, r *http.Request) {
+	copiedURL := *r.URL
+	o.url = &copiedURL
+	o.requestURI = r.RequestURI
+	o.remoteAddr = r.RemoteAddr
+	o.header = r.Header.Clone()
+}
+
+func TestRuntimeHTTPServersPreserveRequestTargetAndSanitizeSpans(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
@@ -25,117 +50,111 @@ func TestOtelHandlerDoesNotRecordRawRequestTarget(t *testing.T) {
 	)
 	installRuntimeOTelGlobals(t, provider)
 
-	const (
-		operation     = "hololive.http.server"
-		requestTarget = "/api/private/private-user-123?token=private-token-456"
-	)
+	caseData := runtimeTracingCase{
+		operation:     "hololive.http.server",
+		requestTarget: "/api/private/private-user-123?token=private-token-456",
+		remoteAddr:    "198.51.100.42:43123",
+		forwardedFor:  "203.0.113.77, 198.51.100.42",
+		userAgent:     "private-client/7.0",
+	}
+	observation := &runtimeTracingObservation{}
 
-	var (
-		gotURL        *url.URL
-		gotRequestURI string
-	)
+	servers := []struct {
+		name    string
+		handler http.Handler
+	}{
+		{name: "h2c", handler: newRuntimeH2CTracingHandler(caseData.operation, observation)},
+		{name: "h3", handler: newRuntimeH3TracingHandler(t, caseData.operation, observation)},
+	}
+	for _, server := range servers {
+		t.Run(server.name, func(t *testing.T) {
+			req, wantURL := newRuntimeTracingRequest(t, &caseData)
+			observation.reset()
+			server.handler.ServeHTTP(httptest.NewRecorder(), req)
+			assertRuntimeTracingRequest(t, observation, &wantURL, &caseData)
+		})
+	}
+
+	assertRuntimeTracingSpans(t, recorder.Ended(), len(servers), &caseData)
+}
+
+func newRuntimeTracingMux(observation *runtimeTracingObservation) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/private/{userID}", func(w http.ResponseWriter, r *http.Request) {
-		copiedURL := *r.URL
-		gotURL = &copiedURL
-		gotRequestURI = r.RequestURI
-		w.WriteHeader(http.StatusNoContent)
-	})
+	mux.HandleFunc("GET /api/private/{userID}", observation.capture)
+	return mux
+}
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, requestTarget, http.NoBody)
+func newRuntimeH2CTracingHandler(operation string, observation *runtimeTracingObservation) http.Handler {
+	return NewH2CServer(":0", newRuntimeTracingMux(observation), operation).Handler
+}
+
+func newRuntimeH3TracingHandler(t *testing.T, operation string, observation *runtimeTracingObservation) http.Handler {
+	t.Helper()
+
+	certFile, keyFile := writeH3LocalhostCertificate(t)
+	server, err := NewH3Server(":0", newRuntimeTracingMux(observation), certFile, keyFile, operation)
+	if err != nil {
+		t.Fatalf("NewH3Server() error = %v", err)
+	}
+	return server.Handler
+}
+
+func newRuntimeTracingRequest(t *testing.T, data *runtimeTracingCase) (*http.Request, url.URL) {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, data.requestTarget, http.NoBody)
 	req.URL.RawPath = "/api/private/private-user-%31%32%33"
 	req.URL.ForceQuery = true
 	req.URL.Fragment = "private-fragment-789"
 	req.URL.RawFragment = "private-fragment-%37%38%39"
 	req.URL.Opaque = "private-opaque-abc"
-	wantURL := *req.URL
+	req.RemoteAddr = data.remoteAddr
+	req.Header.Set("X-Forwarded-For", data.forwardedFor)
+	req.Header.Set("User-Agent", data.userAgent)
+	return req, *req.URL
+}
 
-	newOtelHandler(mux, operation).ServeHTTP(httptest.NewRecorder(), req)
+func assertRuntimeTracingRequest(t *testing.T, observation *runtimeTracingObservation, wantURL *url.URL, data *runtimeTracingCase) {
+	t.Helper()
 
-	if gotURL == nil {
+	if observation.url == nil {
 		t.Fatal("handler was not called")
 	}
-	if *gotURL != wantURL {
-		t.Fatalf("handler URL = %#v, want %#v", *gotURL, wantURL)
+	if *observation.url != *wantURL {
+		t.Fatalf("handler URL = %#v, want %#v", *observation.url, *wantURL)
 	}
-	if gotRequestURI != requestTarget {
-		t.Fatalf("handler RequestURI = %q, want %q", gotRequestURI, requestTarget)
+	if observation.requestURI != data.requestTarget {
+		t.Fatalf("handler RequestURI = %q, want %q", observation.requestURI, data.requestTarget)
 	}
-
-	spans := recorder.Ended()
-	if len(spans) != 1 {
-		t.Fatalf("ended spans = %d, want 1", len(spans))
+	if observation.remoteAddr != data.remoteAddr {
+		t.Fatalf("handler RemoteAddr = %q, want %q", observation.remoteAddr, data.remoteAddr)
 	}
-	if got := spans[0].Name(); got != operation {
-		t.Fatalf("span name = %q, want %q", got, operation)
-	}
-
-	sentinels := []string{
-		"private-user-123",
-		"private-user-%31%32%33",
-		"private-token-456",
-		"private-fragment-789",
-		"private-fragment-%37%38%39",
-		"private-opaque-abc",
-	}
-	for _, attr := range spans[0].Attributes() {
-		value := attr.Value.String()
-		for _, sentinel := range sentinels {
-			if strings.Contains(value, sentinel) {
-				t.Fatalf("request identifier %q recorded in span attribute %q", sentinel, attr.Key)
-			}
+	for key, want := range map[string]string{
+		"X-Forwarded-For": data.forwardedFor,
+		"User-Agent":      data.userAgent,
+	} {
+		if got := observation.header.Get(key); got != want {
+			t.Fatalf("handler header %s = %q, want %q", key, got, want)
 		}
 	}
 }
 
-func TestOtelHandlerDoesNotRecordClientPII(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithSpanProcessor(recorder),
-	)
-	installRuntimeOTelGlobals(t, provider)
+func assertRuntimeTracingSpans(t *testing.T, spans []sdktrace.ReadOnlySpan, wantCount int, data *runtimeTracingCase) {
+	t.Helper()
 
-	const (
-		operation       = "hololive.http.server"
-		remoteAddr      = "198.51.100.42:43123"
-		forwardedFor    = "203.0.113.77, 198.51.100.42"
-		userAgent       = "private-client/7.0"
-		preservedHeader = "private-header-value"
-	)
-
-	var gotRequest *http.Request
-	handler := newOtelHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotRequest = r.Clone(r.Context())
-		w.WriteHeader(http.StatusNoContent)
-	}), operation)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/private/route", http.NoBody)
-	req.RemoteAddr = remoteAddr
-	req.Header.Set("X-Forwarded-For", forwardedFor)
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("X-Private-Header", preservedHeader)
-
-	handler.ServeHTTP(httptest.NewRecorder(), req)
-
-	if gotRequest == nil {
-		t.Fatal("handler was not called")
+	if len(spans) != wantCount {
+		t.Fatalf("ended spans = %d, want %d", len(spans), wantCount)
 	}
-	if gotRequest.RemoteAddr != remoteAddr {
-		t.Fatalf("handler RemoteAddr = %q, want %q", gotRequest.RemoteAddr, remoteAddr)
+	for _, span := range spans {
+		assertRuntimeTracingSpan(t, span, data)
 	}
-	for key, want := range map[string]string{
-		"X-Forwarded-For":  forwardedFor,
-		"User-Agent":       userAgent,
-		"X-Private-Header": preservedHeader,
-	} {
-		if got := gotRequest.Header.Get(key); got != want {
-			t.Fatalf("handler header %s = %q, want %q", key, got, want)
-		}
-	}
+}
 
-	spans := recorder.Ended()
-	if len(spans) != 1 {
-		t.Fatalf("ended spans = %d, want 1", len(spans))
+func assertRuntimeTracingSpan(t *testing.T, span sdktrace.ReadOnlySpan, data *runtimeTracingCase) {
+	t.Helper()
+
+	if got := span.Name(); got != data.operation {
+		t.Fatalf("span name = %q, want %q", got, data.operation)
 	}
 	forbiddenKeys := map[attribute.Key]struct{}{
 		attribute.Key("client.address"):       {},
@@ -143,83 +162,35 @@ func TestOtelHandlerDoesNotRecordClientPII(t *testing.T) {
 		attribute.Key("network.peer.port"):    {},
 		attribute.Key("user_agent.original"):  {},
 	}
-	for _, attr := range spans[0].Attributes() {
+	for _, attr := range span.Attributes() {
 		if _, forbidden := forbiddenKeys[attr.Key]; forbidden {
 			t.Fatalf("forbidden client PII attribute %q recorded with value %q", attr.Key, attr.Value.String())
 		}
-		for _, sentinel := range []string{remoteAddr, "198.51.100.42", forwardedFor, "203.0.113.77", userAgent} {
+		for _, sentinel := range runtimeTracingSentinels(data) {
 			if strings.Contains(attr.Value.String(), sentinel) {
-				t.Fatalf("client PII %q recorded in span attribute %q", sentinel, attr.Key)
+				t.Fatalf("request identifier %q recorded in span attribute %q", sentinel, attr.Key)
 			}
 		}
 	}
 }
 
-func TestOtelHandlerRemoteSampledParentCannotOverrideLocalSampler(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(0.1))),
-		sdktrace.WithSpanProcessor(recorder),
-		sdktrace.WithIDGenerator(runtimeUnsampledIDGenerator{}),
-	)
-	installRuntimeOTelGlobals(t, provider)
-
-	var (
-		called  bool
-		sampled bool
-	)
-	handler := newOtelHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		sampled = trace.SpanFromContext(r.Context()).SpanContext().IsSampled()
-		w.WriteHeader(http.StatusNoContent)
-	}), "hololive.http.server")
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/private", http.NoBody)
-	req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-
-	handler.ServeHTTP(httptest.NewRecorder(), req)
-
-	if !called {
-		t.Fatal("handler was not called")
-	}
-	if sampled {
-		t.Fatal("remote sampled traceparent overrode the local sampler")
-	}
-	if got := len(recorder.Ended()); got != 0 {
-		t.Fatalf("ended spans = %d, want 0", got)
+func runtimeTracingSentinels(data *runtimeTracingCase) []string {
+	return []string{
+		"private-user-123",
+		"private-user-%31%32%33",
+		"private-token-456",
+		"private-fragment-789",
+		"private-fragment-%37%38%39",
+		"private-opaque-abc",
+		data.remoteAddr,
+		"198.51.100.42",
+		data.forwardedFor,
+		"203.0.113.77",
+		data.userAgent,
 	}
 }
 
-func TestOtelHandlerDoesNotExtractRemoteBaggage(t *testing.T) {
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithSpanProcessor(recorder),
-	)
-	installRuntimeOTelGlobals(t, provider)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
-
-	var gotMember baggage.Member
-	handler := newOtelHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMember = baggage.FromContext(r.Context()).Member("private-user")
-		w.WriteHeader(http.StatusNoContent)
-	}), "hololive.http.server")
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/private", http.NoBody)
-	req.Header.Set("baggage", "private-user=private-user-123")
-
-	handler.ServeHTTP(httptest.NewRecorder(), req)
-
-	if gotMember.Key() != "" {
-		t.Fatalf("remote baggage reached handler context: %q", gotMember.Key())
-	}
-	if got := len(recorder.Ended()); got != 1 {
-		t.Fatalf("ended spans = %d, want 1", got)
-	}
-}
-
-func TestOtelHandlerEmptyOperationDoesNotCreateSpan(t *testing.T) {
+func TestRuntimeHTTPServersBlankOperationDoesNotCreateSpan(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
@@ -227,35 +198,39 @@ func TestOtelHandlerEmptyOperationDoesNotCreateSpan(t *testing.T) {
 	)
 	installRuntimeOTelGlobals(t, provider)
 
-	called := false
-	handler := newOtelHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		called = true
+	called := 0
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called++
 		w.WriteHeader(http.StatusNoContent)
-	}), " \t ")
-	handler.ServeHTTP(
-		httptest.NewRecorder(),
-		httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/private?token=private", http.NoBody),
-	)
+	})
+	h2cServer := NewH2CServer(":0", handler, " \t\n ")
+	certFile, keyFile := writeH3LocalhostCertificate(t)
+	h3Server, err := NewH3Server(":0", handler, certFile, keyFile, " \t\n ")
+	if err != nil {
+		t.Fatalf("NewH3Server() error = %v", err)
+	}
 
-	if !called {
-		t.Fatal("handler was not called")
+	for _, server := range []struct {
+		name    string
+		handler http.Handler
+	}{
+		{name: "h2c", handler: h2cServer.Handler},
+		{name: "h3", handler: h3Server.Handler},
+	} {
+		t.Run(server.name, func(t *testing.T) {
+			server.handler.ServeHTTP(
+				httptest.NewRecorder(),
+				httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/private?token=private", http.NoBody),
+			)
+		})
+	}
+
+	if called != 2 {
+		t.Fatalf("handler calls = %d, want 2", called)
 	}
 	if got := len(recorder.Ended()); got != 0 {
 		t.Fatalf("ended spans = %d, want 0", got)
 	}
-}
-
-type runtimeUnsampledIDGenerator struct{}
-
-func (runtimeUnsampledIDGenerator) NewIDs(context.Context) (trace.TraceID, trace.SpanID) {
-	return trace.TraceID{
-		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	}, trace.SpanID{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-}
-
-func (runtimeUnsampledIDGenerator) NewSpanID(context.Context, trace.TraceID) trace.SpanID {
-	return trace.SpanID{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 }
 
 func installRuntimeOTelGlobals(t *testing.T, provider *sdktrace.TracerProvider) {

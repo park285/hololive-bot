@@ -860,6 +860,7 @@ github.com/kapu/hololive-shared/pkg/server/httpserver -> github.com/park285/shar
 github.com/kapu/hololive-shared/pkg/server/httpserver -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-shared/pkg/server/httpserver -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/server/httpserver -> github.com/park285/shared-go/pkg/runtime/httpserver
+github.com/kapu/hololive-shared/pkg/server/httpserver -> github.com/park285/shared-go/pkg/telemetry
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-shared/pkg/server/middleware -> github.com/park285/shared-go/pkg/httputil

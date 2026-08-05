@@ -12,6 +12,7 @@ import (
 
 	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	runtimehttpserver "github.com/park285/shared-go/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/pkg/telemetry"
 	"github.com/quic-go/quic-go/http3"
 )
 
@@ -46,7 +47,7 @@ func NewH3Server(addr string, handler http.Handler, certFile, keyFile, operation
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
-	handler = newOtelHandler(handler, operation)
+	handler = telemetry.NewPublicHTTPHandler(handler, operation, telemetry.HTTPHandlerOptions{})
 
 	return sharedh3.NewServer(addr, handler, certFile, keyFile)
 }
