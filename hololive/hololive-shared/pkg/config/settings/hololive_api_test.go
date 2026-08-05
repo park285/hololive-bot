@@ -40,17 +40,46 @@ func TestValidateAlarmProviderURL(t *testing.T) {
 func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 	t.Parallel()
 
-	config := &HololiveAPIConfig{
-		Bot:   &Config{Server: ServerConfig{Port: 30001, MetricsAddr: ":30091", PprofAddr: ":30061"}},
-		Admin: &Config{Server: ServerConfig{Port: 30006}},
-		LLM:   &LLMSchedulerConfig{Server: ServerConfig{Port: 30003}},
+	newConfig := func(shortLinkAddr string) *HololiveAPIConfig {
+		return &HololiveAPIConfig{
+			Bot: &Config{Server: ServerConfig{
+				Port:          30001,
+				ShortLinkAddr: shortLinkAddr,
+				MetricsAddr:   ":30091",
+				PprofAddr:     ":30061",
+			}},
+			Admin: &Config{Server: ServerConfig{Port: 30006}},
+			LLM:   &LLMSchedulerConfig{Server: ServerConfig{Port: 30003}},
+		}
 	}
+
+	config := newConfig(":30101")
 	require.NoError(t, validateHololiveAPIListenerPorts(config))
 
 	config.Admin.Server.Port = 30001
 	err := validateHololiveAPIListenerPorts(config)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "shared by bot and admin")
+
+	tests := []struct {
+		name    string
+		addr    string
+		wantErr string
+	}{
+		{name: "primary collision", addr: ":30001", wantErr: "shared by bot and short-link"},
+		{name: "metrics collision", addr: ":30091", wantErr: "shared by short-link and metrics"},
+		{name: "pprof collision", addr: ":30061", wantErr: "shared by short-link and pprof"},
+		{name: "invalid address", addr: "not-an-address", wantErr: "short-link listener: invalid address"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateHololiveAPIListenerPorts(newConfig(tt.addr))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
 }
 
 func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {

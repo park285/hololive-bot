@@ -230,6 +230,7 @@ func registerAuxiliaryListenerPorts(owners map[int]string, config *HololiveAPICo
 		owner string
 		addr  string
 	}{
+		{owner: "short-link", addr: config.Bot.Server.ShortLinkAddr},
 		{owner: "metrics", addr: config.Bot.Server.MetricsAddr},
 		{owner: "pprof", addr: config.Bot.Server.PprofAddr},
 	}

@@ -76,6 +76,27 @@ func TestRepoComposeProdHardenedDefaults(t *testing.T) {
 	assertProdComposeNonEgressIsolation(t, content)
 }
 
+func TestRepoShortLinkIngressBoundary(t *testing.T) {
+	content := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf")
+	listener := "listen 100.100.1.3:30192;"
+	if count := strings.Count(content, listener); count != 1 {
+		t.Fatalf("short-link listener count = %d, want 1", count)
+	}
+
+	shortLinkServer := content[strings.Index(content, listener):]
+	for _, required := range []string{
+		"allow 100.100.1.5;",
+		"deny all;",
+		"location ^~ /l/ {",
+		"proxy_pass http://127.0.0.1:30101;",
+		"location / {\n            return 404;",
+	} {
+		if !strings.Contains(shortLinkServer, required) {
+			t.Fatalf("short-link ingress missing boundary %q", required)
+		}
+	}
+}
+
 func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
 	content := readRepoFile(t, "deploy/compose/docker-compose.remote-cache.yml")
 
