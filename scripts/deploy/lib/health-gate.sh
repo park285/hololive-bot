@@ -19,9 +19,15 @@ wait_for_service_health() {
     local elapsed=0
     local container=""
 
-    container="$(compose_health_resolve_container "${service}")"
+    while (( elapsed < timeout )); do
+        container="$(compose_health_resolve_container "${service}")"
+        [[ -n "${container}" ]] && break
+        echo "[HEALTH] ${service}: waiting for container (${elapsed}s/${timeout}s)"
+        sleep "${interval}"
+        elapsed=$((elapsed + interval))
+    done
     if [[ -z "${container}" ]]; then
-        echo "[HEALTH] no container resolved for ${service}" >&2
+        echo "[HEALTH] no container resolved for ${service} within ${timeout}s" >&2
         return 1
     fi
 
