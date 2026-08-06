@@ -72,7 +72,6 @@ func TestViewerSampleCleanerPlanBoundsIneligiblePrefixAndPaginatesEmptySessions(
 		_ = tx.Rollback(context.Background())
 	})
 
-	cursor := initialViewerSampleCleanupCursor()
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = force_generic_plan")
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `PREPARE viewer_sample_cleanup_plan(
@@ -82,16 +81,14 @@ func TestViewerSampleCleanerPlanBoundsIneligiblePrefixAndPaginatesEmptySessions(
 
 	var rawPlan string
 	explainSQL := `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-		EXECUTE viewer_sample_cleanup_plan($1, $2, $3, $4, $5)`
-	err = tx.QueryRow(
-		ctx,
-		explainSQL,
-		now.AddDate(0, 0, -7),
-		cursor.endedAt,
-		cursor.videoID,
-		viewerSampleCleanupSessionPageSize,
-		batchSize,
-	).Scan(&rawPlan)
+		EXECUTE viewer_sample_cleanup_plan(
+			CURRENT_TIMESTAMP - INTERVAL '7 days',
+			TIMESTAMPTZ '0001-01-01 00:00:00+00',
+			''::varchar(20),
+			64,
+			2
+		)`
+	err = tx.QueryRow(ctx, explainSQL).Scan(&rawPlan)
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, "DEALLOCATE viewer_sample_cleanup_plan")
 	require.NoError(t, err)
