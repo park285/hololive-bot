@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/park285/shared-go/pkg/jsonutil"
+	"github.com/park285/shared-go/pkg/httputil"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
@@ -97,7 +98,11 @@ func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, 
 	}
 	defer c.closeHolodexResponse(resp)
 
-	body, readErr := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
+	maxBody := c.maxResponseBodyBytes
+	if maxBody <= 0 {
+		maxBody = settings.DefaultMaxResponseBodyBytes
+	}
+	body, readErr := httputil.ReadAllLimited(resp.Body, maxBody)
 	if readErr != nil {
 		return nil, false, fmt.Errorf("failed to read response: %w", readErr)
 	}

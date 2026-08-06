@@ -40,6 +40,7 @@ func buildYouTubeProducerComponents(
 		liveStatusProvider,
 		notificationChannelIDs,
 		statsChannelIDs,
+		logger,
 	)
 	if budgetWiring == nil {
 		budgetWiring = &GlobalBudgetWiring{}
@@ -69,7 +70,10 @@ func validateYouTubeProducerRegistrationsAndBudgets(
 	if err := validateRegistrationBudgetProfiles(pollerRegistrations); err != nil {
 		return err
 	}
-	activeAPCount := resolveYouTubeProducerActiveAPCount(budgetWiring.ActiveInstanceCount, scraperConfig.ActiveActive.Enabled)
+	activeAPCount, err := resolveYouTubeProducerActiveAPCount(budgetWiring.ActiveInstanceCount, scraperConfig.ActiveActive.Enabled)
+	if err != nil {
+		return err
+	}
 	sourceBudgetEstimate := estimateYouTubeProducerSourceBudget(
 		pollerRegistrations,
 		activeAPCount,

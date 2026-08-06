@@ -34,7 +34,6 @@ import (
 
 	"github.com/park285/shared-go/pkg/httputil"
 	json "github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/jsonutil"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 )
@@ -154,7 +153,7 @@ func (c *ExaMCPClient) doSearchRequest(req *http.Request) ([]byte, error) {
 		return nil, fmt.Errorf("exa request: %w", checkErr)
 	}
 
-	respBody, err := jsonutil.ReadAllLimit(resp.Body, settings.DefaultMaxResponseBodyBytes)
+	respBody, err := httputil.ReadAllLimited(resp.Body, settings.DefaultMaxResponseBodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read exa response: %w", err)
 	}

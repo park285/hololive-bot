@@ -30,7 +30,7 @@ func (r *Runner) runStep(ctx context.Context) bool {
 	if !processed {
 		r.batchesSinceWake = 0
 		if r.idleWaiter != nil {
-			observeAlarmDispatchRunnerEmptyPoll(r.consumerModeLabel())
+			observeAlarmDispatchRunnerEmptyPoll("pg")
 			return r.idleWaiter.Wait(ctx)
 		}
 		return retry.Sleep(ctx, 25*time.Millisecond)
@@ -51,16 +51,6 @@ func (r *Runner) yieldAfterBatchLimit(ctx context.Context) bool {
 		return r.yield(ctx)
 	}
 	return retry.Sleep(ctx, 10*time.Millisecond)
-}
-
-func (r *Runner) consumerModeLabel() string {
-	if r.consumerMode != "" {
-		return r.consumerMode
-	}
-	if r.postSendQuarantine {
-		return "pg"
-	}
-	return "valkey"
 }
 
 func (r *Runner) handleStepError(ctx context.Context, err error) bool {

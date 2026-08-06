@@ -743,7 +743,7 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 		require.Error(t, err)
 		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
-		require.Len(t, s.optsByAttempt, replyReissueMaxGenerations+1)
+		require.Len(t, s.optsByAttempt, iris.ReplyReissueMaxGenerations+1)
 		wantIDs := []string{clientRequestID, clientRequestID + ":r1", clientRequestID + ":r2"}
 		for i, opts := range s.optsByAttempt {
 			got, _ := capturedSendOptions(t, opts)
@@ -1099,7 +1099,7 @@ func TestCommandTransportSendImage(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorIs(t, err, iris.ErrPermanent)
 		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
-		require.Len(t, c.optsByAttempt, replyReissueMaxGenerations+1)
+		require.Len(t, c.optsByAttempt, iris.ReplyReissueMaxGenerations+1)
 		wantIDs := []string{
 			"hololive:v1:message:m-1:reply:0",
 			"hololive:v1:message:m-1:reply:0:r1",
@@ -1225,7 +1225,7 @@ func TestCommandTransportSendImages(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorIs(t, err, iris.ErrPermanent)
 		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
-		require.Len(t, c.optsByAttempt, replyReissueMaxGenerations+1)
+		require.Len(t, c.optsByAttempt, iris.ReplyReissueMaxGenerations+1)
 		wantIDs := []string{
 			"hololive:v1:message:m-1:reply:0",
 			"hololive:v1:message:m-1:reply:0:r1",

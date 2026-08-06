@@ -55,6 +55,7 @@ func goldenBuildRegistrations(tiering, backfill bool, liveStatusProvider pollers
 		liveStatusProvider,
 		[]string{"UC_A", "UC_B", "UC_C"},
 		[]string{"UC_STATS_1", "UC_STATS_2"},
+		nil,
 	)
 }
 

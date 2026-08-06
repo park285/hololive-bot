@@ -411,8 +411,6 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/park285/shared-go/pkg/ginjson
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/runtime -> github.com/park285/shared-go/pkg/runtime/httpserver
-github.com/kapu/hololive-api/internal/planes/bot/internal/app/wiring -> github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration
-github.com/kapu/hololive-api/internal/planes/bot/internal/app/wiring -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot -> github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot -> github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers
@@ -585,7 +583,6 @@ github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/holo
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-api/internal/planes/bot/internal/app/http
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-api/internal/planes/bot/internal/app/runtime
-github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-api/internal/planes/bot/internal/app/wiring
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport
@@ -678,7 +675,6 @@ github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/sum
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer -> github.com/park285/shared-go/pkg/json
-github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer -> github.com/park285/shared-go/pkg/promptguard
 github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews -> github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail
@@ -952,7 +948,6 @@ github.com/kapu/hololive-shared/pkg/service/chzzk -> github.com/kapu/hololive-sh
 github.com/kapu/hololive-shared/pkg/service/chzzk -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/chzzk -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-shared/pkg/service/chzzk -> github.com/park285/shared-go/pkg/json
-github.com/kapu/hololive-shared/pkg/service/chzzk -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/kapu/hololive-shared/pkg/contracts/settings
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-shared/pkg/service/configsub -> github.com/park285/shared-go/pkg/json
@@ -1002,7 +997,6 @@ github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient -> github
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient -> github.com/park285/shared-go/pkg/backoff
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient -> github.com/park285/shared-go/pkg/httputil
-github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient -> github.com/park285/shared-go/pkg/retry
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/internal/service/fallback
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/pkg/config/settings
@@ -1098,7 +1092,6 @@ github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/kapu/hololive-s
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/pkg/json
-github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql
@@ -1208,7 +1201,6 @@ github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler -> 
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/browserfetcher -> github.com/park285/shared-go/pkg/httputil
-github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/browserfetcher -> github.com/park285/shared-go/pkg/jsonutil
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata -> github.com/park285/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping -> github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua
 github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping -> github.com/kapu/hololive-shared/internal/service/youtube/timestamp
@@ -1259,6 +1251,7 @@ github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github
 github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/kapu/hololive-shared/pkg/health
 github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/kapu/hololive-shared/pkg/observability
+github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/kapu/hololive-youtube-producer/internal/runtime/instanceid
 github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/kapu/hololive-youtube-producer/internal/runtime/producerruntime
 github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github.com/park285/shared-go/pkg/logging
@@ -1436,6 +1429,7 @@ github.com/park285/shared-go/pkg/healthprobe -> github.com/park285/shared-go/pkg
 github.com/park285/shared-go/pkg/healthprobe -> github.com/park285/shared-go/pkg/httputil
 github.com/park285/shared-go/pkg/healthprobe -> github.com/park285/shared-go/pkg/netguard
 github.com/park285/shared-go/pkg/httputil -> github.com/park285/shared-go/pkg/json
+github.com/park285/shared-go/pkg/jsonutil -> github.com/park285/shared-go/pkg/httputil
 github.com/park285/shared-go/pkg/jsonutil -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/llm -> github.com/park285/shared-go/pkg/json
 github.com/park285/shared-go/pkg/llm -> github.com/park285/shared-go/pkg/jsonutil

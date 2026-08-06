@@ -26,13 +26,14 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
+
+	iris "github.com/park285/iris-client-go/iris"
 )
 
 const (
-	replyIDService             = "hololive"
-	replyIDSchemaVersion       = "v1"
-	replyPhaseReply            = "reply"
-	replyReissueMaxGenerations = 2
+	replyIDService       = "hololive"
+	replyIDSchemaVersion = "v1"
+	replyPhaseReply      = "reply"
 )
 
 // iris.WithClientRequestID 계약: 8..160 ASCII, [A-Za-z0-9._:-]만 허용.
@@ -78,7 +79,7 @@ func reissuedReplyClientRequestID(clientRequestID string, generation int) string
 	if clientRequestID == "" || generation <= 0 {
 		return clientRequestID
 	}
-	suffix := ":r" + strconv.Itoa(generation)
+	suffix := iris.ReplyReissueSuffix(generation)
 	candidate := clientRequestID + suffix
 	if isValidReplyClientRequestID(candidate) {
 		return candidate

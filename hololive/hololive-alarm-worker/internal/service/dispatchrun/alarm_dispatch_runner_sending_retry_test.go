@@ -1,7 +1,6 @@
 package dispatchrun
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -14,16 +13,15 @@ import (
 func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures(t *testing.T) {
 	karingErr := &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"}
 
-	consumer := &alarmDispatchRunnerSendingRetryTestConsumer{
+	consumer := &alarmDispatchRunnerTestConsumer{
 		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}},
 	}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
 	runner := Runner{
-		consumer:           consumer,
-		sender:             sender,
-		karingEnabled:      true,
-		postSendQuarantine: true,
-		maxBatch:           10,
+		consumer:      consumer,
+		sender:        sender,
+		karingEnabled: true,
+		maxBatch:      10,
 	}
 
 	processed, err := runner.runOnce(t.Context())
@@ -43,16 +41,15 @@ func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures
 func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesRouteSendingFailures(t *testing.T) {
 	karingErr := &iris.HTTPError{StatusCode: 503}
 
-	consumer := &alarmDispatchRunnerSendingRetryTestConsumer{
+	consumer := &alarmDispatchRunnerTestConsumer{
 		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}},
 	}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
 	runner := Runner{
-		consumer:           consumer,
-		sender:             sender,
-		karingEnabled:      true,
-		postSendQuarantine: true,
-		maxBatch:           10,
+		consumer:      consumer,
+		sender:        sender,
+		karingEnabled: true,
+		maxBatch:      10,
 	}
 
 	processed, err := runner.runOnce(t.Context())
@@ -116,67 +113,4 @@ func assertRetryNextVisibleDelay(t *testing.T, retry *domain.AlarmQueueRetryMeta
 	require.NoError(t, err)
 	assert.False(t, nextVisibleAt.Before(startedAt.Add(delay)), "NextVisibleAt %s should be at least %s after start", nextVisibleAt, delay)
 	assert.False(t, nextVisibleAt.After(time.Now().UTC().Add(delay+200*time.Millisecond)), "NextVisibleAt %s should stay near RetryAfterMS delay %s", nextVisibleAt, delay)
-}
-
-type alarmDispatchRunnerSendingRetryTestConsumer struct {
-	batches               [][]domain.AlarmQueueEnvelope
-	markSendingErr        error
-	markSending           []domain.AlarmQueueEnvelope
-	markDispatched        []domain.AlarmQueueEnvelope
-	quarantined           []domain.AlarmQueueEnvelope
-	quarantineReason      string
-	scheduledRetry        []domain.AlarmQueueEnvelope
-	scheduledSendingRetry []domain.AlarmQueueEnvelope
-	movedDLQ              []domain.AlarmQueueEnvelope
-	requeued              []domain.AlarmQueueEnvelope
-	releasedClaims        []string
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) DrainBatch(_ context.Context, _ int) ([]domain.AlarmQueueEnvelope, error) {
-	if len(c.batches) == 0 {
-		return nil, nil
-	}
-	batch := c.batches[0]
-	c.batches = c.batches[1:]
-	return batch, nil
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) MarkSending(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.markSending = append(c.markSending, envelopes...)
-	return c.markSendingErr
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.markDispatched = append(c.markDispatched, envelopes...)
-	return nil
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) ReleaseClaimKeys(_ context.Context, claimKeys []string) error {
-	c.releasedClaims = append(c.releasedClaims, claimKeys...)
-	return nil
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
-	c.scheduledRetry = append(c.scheduledRetry, retryEnvelopes...)
-	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
-	return nil
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
-	c.scheduledSendingRetry = append(c.scheduledSendingRetry, retryEnvelopes...)
-	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
-	return nil
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) Requeue(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.requeued = append(c.requeued, envelopes...)
-	return nil
-}
-
-func (c *alarmDispatchRunnerSendingRetryTestConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	c.quarantined = append(c.quarantined, envelopes...)
-	if cause != nil {
-		c.quarantineReason = cause.Error()
-	}
-	return nil
 }

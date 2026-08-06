@@ -24,8 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -162,7 +160,7 @@ func postReplyWithReissue(
 	post func(string) (*iris.ReplyAcceptedResponse, error),
 ) (*iris.ReplyAcceptedResponse, error) {
 	var lastErr error
-	for generation := 0; generation <= replyReissueMaxGenerations; generation++ {
+	for generation := 0; generation <= iris.ReplyReissueMaxGenerations; generation++ {
 		accepted, err := post(reissuedReplyClientRequestID(clientRequestID, generation))
 		if !isReplyReissueConflict(err) {
 			return accepted, err
@@ -232,9 +230,7 @@ func classifyAdmissionError(err error) error {
 }
 
 func isReplyReissueConflict(err error) bool {
-	var httpErr *iris.HTTPError
-	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusConflict &&
-		strings.TrimSpace(iris.HTTPErrorCode(err)) == iris.HTTPErrorCodeClientRequestIDFailed
+	return iris.IsPreHandoffClientRequestIDConflict(err)
 }
 
 func appendReplyClientRequestID(opts []iris.SendOption, clientRequestID string) []iris.SendOption {

@@ -40,7 +40,6 @@ const (
 	memberChannelKeyPrefix = "member:channel:"
 	memberNameKeyPrefix    = "member:name:"
 	memberAliasKeyPrefix   = "member:alias:"
-	memberCachePattern     = "member:*"
 	allChannelIDsKey       = "channel_ids"
 	allMembersSnapshotKey  = "all_members"
 )
@@ -230,11 +229,8 @@ func (c *Cache) loadChannelFromMemory(channelID string) (*domain.Member, bool) {
 	if !ok {
 		return nil, false
 	}
-	switch member := val.(type) {
-	case *memoryMember:
+	if member, ok := val.(*memoryMember); ok {
 		return member.member, true
-	case *domain.Member:
-		return member, true
 	}
 	c.byChannelID.Delete(channelID)
 	return nil, false
@@ -248,11 +244,8 @@ func (c *Cache) loadNameFromMemory(name string) (*domain.Member, bool) {
 	if !ok {
 		return nil, false
 	}
-	switch member := val.(type) {
-	case *memoryMember:
+	if member, ok := val.(*memoryMember); ok {
 		return member.member, true
-	case *domain.Member:
-		return member, true
 	}
 	c.byName.Delete(name)
 	return nil, false

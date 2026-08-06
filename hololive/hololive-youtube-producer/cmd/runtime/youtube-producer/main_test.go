@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -22,7 +24,7 @@ func TestYouTubeProducerLogFileNameDefaultsToLegacyName(t *testing.T) {
 	}
 }
 
-func TestYouTubeProducerTelemetryConfigUsesFixedInstanceIdentity(t *testing.T) {
+func TestYouTubeProducerTelemetryConfigDerivesInstanceIdentity(t *testing.T) {
 	tests := []struct {
 		instanceID string
 		want       string
@@ -31,6 +33,8 @@ func TestYouTubeProducerTelemetryConfigUsesFixedInstanceIdentity(t *testing.T) {
 		{instanceID: "youtube-producer-b", want: "youtube-producer-b"},
 		{instanceID: "c", want: "youtube-producer-c"},
 		{instanceID: "youtube-producer-d", want: "youtube-producer-d"},
+		{instanceID: "youtube-producer-e", want: "youtube-producer-e"},
+		{instanceID: "custom-producer", want: "youtube-producer-custom-producer"},
 	}
 
 	for _, tt := range tests {
@@ -46,10 +50,7 @@ func TestYouTubeProducerTelemetryConfigUsesFixedInstanceIdentity(t *testing.T) {
 			}
 			appConfig.Scraper.ActiveActive.InstanceID = tt.instanceID
 
-			got, err := youtubeProducerTelemetryConfig(appConfig, "3.4.5")
-			if err != nil {
-				t.Fatalf("youtubeProducerTelemetryConfig() error = %v", err)
-			}
+			got := youtubeProducerTelemetryConfig(appConfig, "3.4.5")
 			if got.ServiceName != tt.want {
 				t.Fatalf("ServiceName = %q, want %q", got.ServiceName, tt.want)
 			}
@@ -63,26 +64,25 @@ func TestYouTubeProducerTelemetryConfigUsesFixedInstanceIdentity(t *testing.T) {
 	}
 }
 
-func TestYouTubeProducerTelemetryConfigRejectsUnknownEnabledInstance(t *testing.T) {
-	appConfig := &settings.Config{Tracing: settings.TracingConfig{Enabled: true}}
-	appConfig.Scraper.ActiveActive.InstanceID = "custom-producer"
+func TestYouTubeProducerTelemetryServiceNameIsSameRegardlessOfTracingEnabled(t *testing.T) {
+	enabled := &settings.Config{Tracing: settings.TracingConfig{Enabled: true}}
+	enabled.Scraper.ActiveActive.InstanceID = "d"
+	disabled := &settings.Config{Tracing: settings.TracingConfig{Enabled: false}}
+	disabled.Scraper.ActiveActive.InstanceID = "d"
 
-	if _, err := youtubeProducerTelemetryConfig(appConfig, "dev"); err == nil {
-		t.Fatal("youtubeProducerTelemetryConfig() error = nil, want unsupported instance error")
+	if a, b := youtubeProducerTelemetryConfig(enabled, "dev").ServiceName, youtubeProducerTelemetryConfig(disabled, "dev").ServiceName; a != b {
+		t.Fatalf("ServiceName diverges on Tracing.Enabled: enabled=%q disabled=%q", a, b)
 	}
 }
 
-func TestYouTubeProducerTelemetryConfigDisabledIsNoOpWithoutInstance(t *testing.T) {
-	appConfig := &settings.Config{Tracing: settings.TracingConfig{Enabled: false}}
+func TestYouTubeProducerTelemetryServiceNameWithoutInstanceFallsBackToHostname(t *testing.T) {
+	hostname, err := os.Hostname()
+	if err != nil || strings.TrimSpace(hostname) == "" {
+		t.Skip("hostname unavailable")
+	}
+	want := "youtube-producer-" + strings.ToLower(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(hostname)), "youtube-producer-"))
 
-	got, err := youtubeProducerTelemetryConfig(appConfig, "dev")
-	if err != nil {
-		t.Fatalf("youtubeProducerTelemetryConfig() error = %v", err)
-	}
-	if got.Enabled {
-		t.Fatal("disabled telemetry config was enabled")
-	}
-	if got.ServiceName != "youtube-producer" {
-		t.Fatalf("ServiceName = %q, want disabled fallback identity", got.ServiceName)
+	if got := youtubeProducerTelemetryServiceName(""); got != want {
+		t.Fatalf("ServiceName = %q, want hostname-derived %q", got, want)
 	}
 }

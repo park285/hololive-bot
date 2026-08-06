@@ -30,10 +30,10 @@ func (c *Cache) InvalidateAll(ctx context.Context) error {
 	if c.epoch != nil {
 		return c.invalidateCoordinated(ctx)
 	}
-	return c.invalidateLegacy(ctx)
+	return c.invalidateLocal()
 }
 
-func (c *Cache) invalidateLegacy(ctx context.Context) error {
+func (c *Cache) invalidateLocal() error {
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
 	c.snapshotGeneration.Add(1)
@@ -42,22 +42,7 @@ func (c *Cache) invalidateLegacy(ctx context.Context) error {
 	c.allMembers.Clear()
 	c.allMembersSnapshot.Store(nil)
 
-	if !c.cacheEnabled() {
-		c.logger.Info("Member cache invalidated", slog.Int("keys_deleted", 0))
-		return nil
-	}
-
-	keys, err := c.cache.ScanKeys(ctx, memberCachePattern, 100)
-	if err != nil {
-		return fmt.Errorf("failed to scan keys for invalidation: %w", err)
-	}
-	if len(keys) > 0 {
-		if _, err := c.cache.DelMany(ctx, keys); err != nil {
-			return fmt.Errorf("failed to invalidate cache store: %w", err)
-		}
-	}
-
-	c.logger.Info("Member cache invalidated", slog.Int("keys_deleted", len(keys)))
+	c.logger.Info("Member cache invalidated", slog.Int("keys_deleted", 0))
 	return nil
 }
 
@@ -67,7 +52,6 @@ func (c *Cache) invalidateCoordinated(ctx context.Context) error {
 		return err
 	}
 	c.publishEpochNotification(ctx, epoch)
-	c.deleteLegacyMemberKeys(ctx)
 	return nil
 }
 
@@ -96,25 +80,6 @@ func (c *Cache) publishEpochNotification(ctx context.Context, epoch uint64) {
 	memberCacheEpochNotificationsTotal.WithLabelValues("sent").Inc()
 }
 
-func (c *Cache) deleteLegacyMemberKeys(ctx context.Context) {
-	if !c.cacheEnabled() {
-		return
-	}
-	keys, err := c.cache.ScanKeys(ctx, memberCachePattern, 100)
-	if err != nil {
-		if c.logger != nil {
-			c.logger.Warn("legacy member cache scan failed after epoch advance", slog.Any("error", err))
-		}
-		return
-	}
-	if len(keys) == 0 {
-		return
-	}
-	if _, err := c.cache.DelMany(ctx, keys); err != nil && c.logger != nil {
-		c.logger.Warn("legacy member cache delete failed after epoch advance", slog.Any("error", err))
-	}
-}
-
 func (c *Cache) Refresh(ctx context.Context) error {
 	if err := c.InvalidateAll(ctx); err != nil {
 		return fmt.Errorf("failed to invalidate cache: %w", err)
@@ -123,17 +88,7 @@ func (c *Cache) Refresh(ctx context.Context) error {
 }
 
 func (c *Cache) InvalidateAliasCache(ctx context.Context, alias string) error {
-	if c.epoch != nil {
-		return c.InvalidateAll(ctx)
-	}
-	if !c.cacheEnabled() {
-		c.logger.Info("Alias cache invalidated", slog.String("alias", alias))
-		return nil
-	}
-
-	aliasKey := memberAliasKeyPrefix + alias
-	if err := c.cache.Del(ctx, aliasKey); err != nil {
-		c.logger.Warn("Failed to invalidate alias cache", slog.String("alias", alias), slog.Any("error", err))
+	if err := c.InvalidateAll(ctx); err != nil {
 		return fmt.Errorf("failed to invalidate alias cache: %w", err)
 	}
 

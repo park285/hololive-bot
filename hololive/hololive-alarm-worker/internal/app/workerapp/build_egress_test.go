@@ -122,10 +122,8 @@ func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
 	assert.Contains(t, err.Error(), "postgres is required")
 }
 
-func TestBuildAlarmDispatchRunnerDefaultsToPGWhenConsumerModeUnset(t *testing.T) {
+func TestBuildAlarmDispatchRunnerBuildsPGRunner(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "")
-	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "")
 	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "7")
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
@@ -137,10 +135,8 @@ func TestBuildAlarmDispatchRunnerDefaultsToPGWhenConsumerModeUnset(t *testing.T)
 	require.True(t, ok)
 	assert.NotNil(t, runner)
 	runnerConfig := alarmDispatchRunnerConfig()
-	assert.Equal(t, "pg", runnerConfig.ConsumerMode)
 	assert.Equal(t, 7, runnerConfig.MaxBatch)
 	assert.True(t, runnerConfig.KaringEnabled)
-	assert.True(t, runnerConfig.PostSendQuarantine)
 }
 
 func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
@@ -154,9 +150,8 @@ func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
 	assert.False(t, parseAlarmDispatchKaringEnabled())
 }
 
-func TestBuildAlarmDispatchRunnerWiresPGMode(t *testing.T) {
+func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "PG")
 	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "9")
 	t.Setenv("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", "3")
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
@@ -169,11 +164,9 @@ func TestBuildAlarmDispatchRunnerWiresPGMode(t *testing.T) {
 	require.True(t, ok)
 	assert.NotNil(t, runner)
 	runnerConfig := alarmDispatchRunnerConfig()
-	assert.Equal(t, "pg", runnerConfig.ConsumerMode)
 	assert.Equal(t, 9, runnerConfig.MaxBatch)
 	assert.Equal(t, 3, runnerConfig.MaxBatchesPerWake)
 	assert.False(t, runnerConfig.KaringEnabled)
-	assert.True(t, runnerConfig.PostSendQuarantine)
 }
 
 func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {

@@ -22,6 +22,7 @@ package polling
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -61,6 +62,7 @@ func buildYouTubeProducerChannelPollerRegistrations(
 		nil,
 		notificationChannelIDs,
 		statsChannelIDs,
+		slog.Default(),
 	)
 }
 
@@ -72,6 +74,7 @@ func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 	liveStatusProvider pollerruntime.LiveStatusProvider,
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
+	logger *slog.Logger,
 ) []providers.ChannelPollerRegistration {
 	if scraperConfig == nil {
 		scraperConfig = &settings.ScraperConfig{}
@@ -85,7 +88,7 @@ func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 	if registrations, ok := tryBuildTieredChannelPollerRegistrations(ctx, tieringEnabled, pool, &pollers, poll, polltarget.Targets{
 		NotificationChannelIDs: notificationChannelIDs,
 		StatsChannelIDs:        statsChannelIDs,
-	}); ok {
+	}, logger); ok {
 		return appendBackfillChannelPollerRegistrations(registrations, &pollers, scraperConfig.Backfill, notificationChannelIDs)
 	}
 	registrations := buildFlatYouTubeProducerChannelPollerRegistrations(&pollers, poll, notificationChannelIDs, statsChannelIDs)
@@ -207,12 +210,16 @@ func tryBuildTieredChannelPollerRegistrations(
 	pollers *youTubeProducerPollerSet,
 	poll settings.ScraperPoll,
 	targets polltarget.Targets,
+	logger *slog.Logger,
 ) ([]providers.ChannelPollerRegistration, bool) {
 	if !enabled {
 		return nil, false
 	}
 	tieredTargets, tierErr := polltarget.ClassifyByActivity(ctx, pool, targets, time.Now())
 	if tierErr != nil {
+		if logger != nil {
+			logger.Warn("youtube_producer_poll_tiering_fallback_to_flat", slog.Any("error", tierErr))
+		}
 		return nil, false
 	}
 	return buildTieredYouTubeProducerChannelPollerRegistrations(pollers, poll, &tieredTargets), true

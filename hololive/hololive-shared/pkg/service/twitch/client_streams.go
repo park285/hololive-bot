@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/jsonutil"
 
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
@@ -236,7 +236,7 @@ func (c *Client) readStreamsResponseBody(resp *http.Response) ([]byte, error) {
 		return nil, fmt.Errorf("validate response: %w", err)
 	}
 
-	body, err := jsonutil.ReadAllLimit(resp.Body, c.maxResponseBodyBytes)
+	body, err := httputil.ReadAllLimited(resp.Body, c.maxResponseBodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
