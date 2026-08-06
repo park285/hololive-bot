@@ -113,6 +113,17 @@ func asViewerSampleSession(db any) *pgxpool.Conn {
 }
 
 func (c *ViewerSampleCleaner) Cleanup(ctx context.Context) (int64, error) {
+	runCtx, cancel := context.WithTimeout(ctx, c.effectiveMaxDuration())
+	defer cancel()
+
+	deleted, err := c.cleanup(runCtx)
+	if err == nil {
+		return deleted, nil
+	}
+	return deleted, viewerSampleCleanupCallError(ctx, runCtx, err)
+}
+
+func (c *ViewerSampleCleaner) cleanup(ctx context.Context) (int64, error) {
 	if c.acquirer != nil {
 		return c.cleanupWithDedicatedConn(ctx)
 	}
@@ -152,18 +163,15 @@ func (c *ViewerSampleCleaner) cleanupLocked(ctx context.Context, conn *pgxpool.C
 
 func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier) (int64, error) {
 	startedAt := time.Now()
-	runCtx, cancel := context.WithTimeout(ctx, c.effectiveMaxDuration())
-	defer cancel()
-
 	cutoff := time.Now().AddDate(0, 0, -c.config.RetentionDays)
 	c.ensureCleanupState()
 	maxBatches := c.effectiveMaxBatches()
 	var total int64
 
 	for batch := 1; batch <= maxBatches; batch++ {
-		step, err := c.deleteNextBatch(runCtx, db, cutoff, c.state.cursor)
+		step, err := c.deleteNextBatch(ctx, db, cutoff, c.state.cursor)
 		if err != nil {
-			return total, viewerSampleCleanupRunError(ctx, runCtx, err)
+			return total, fmt.Errorf("delete viewer sample batch: %w", err)
 		}
 		total += step.deleted
 		c.state.passDeleted += step.deleted
@@ -187,8 +195,8 @@ func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier
 			c.logCleanup(total, batch, true, time.Since(startedAt))
 			return total, nil
 		}
-		if err := yieldViewerSampleCleanup(runCtx); err != nil {
-			return total, viewerSampleCleanupRunError(ctx, runCtx, err)
+		if err := yieldViewerSampleCleanup(ctx); err != nil {
+			return total, fmt.Errorf("yield viewer sample cleanup: %w", err)
 		}
 	}
 
@@ -309,11 +317,11 @@ func (c *ViewerSampleCleaner) resetCleanupState() {
 	c.state = viewerSampleCleanupState{cursor: initialViewerSampleCleanupCursor()}
 }
 
-func viewerSampleCleanupRunError(parentCtx, runCtx context.Context, err error) error {
+func viewerSampleCleanupCallError(parentCtx, runCtx context.Context, err error) error {
 	if parentCtx.Err() == nil && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 		return fmt.Errorf("viewer sample cleanup time budget exceeded: %w", errors.Join(context.DeadlineExceeded, err))
 	}
-	return fmt.Errorf("viewer sample cleanup interrupted: %w", err)
+	return err
 }
 
 func yieldViewerSampleCleanup(ctx context.Context) error {
