@@ -386,6 +386,17 @@ func TestBuildYouTubeProducerYouTubeComponents(t *testing.T) {
 	assert.Equal(t, 5, scraperScheduler.SetProxyEnabled(false))
 }
 
+func TestBuildIngestionRuntimeGlobalBudgetWiringDisabledKeepsActiveInstanceCount(t *testing.T) {
+	budgetConfig := configsettings.YouTubeProducerGlobalBudgetConfig{
+		Enabled:             false,
+		ActiveInstanceCount: 4,
+	}
+	wiring, err := buildIngestionRuntimeGlobalBudgetWiring(&configsettings.Config{}, &youtubeProducerInfrastructure{}, &budgetConfig, nil, testLogger())
+	require.NoError(t, err)
+	require.Nil(t, wiring.Limiter)
+	require.Equal(t, 4, wiring.ActiveInstanceCount)
+}
+
 func TestBuildIngestionRuntimeGlobalBudgetWiringPassesCleanupLimit(t *testing.T) {
 	ctx := context.Background()
 	cacheService := testutil.NewTestCacheService(t, ctx)

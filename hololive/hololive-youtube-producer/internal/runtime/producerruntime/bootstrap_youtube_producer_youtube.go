@@ -150,8 +150,13 @@ func buildIngestionRuntimeGlobalBudgetWiring(
 	readinessState *readiness.State,
 	logger *slog.Logger,
 ) (polling.GlobalBudgetWiring, error) {
-	if budgetCfg == nil || !budgetCfg.Enabled {
+	if budgetCfg == nil {
 		return polling.GlobalBudgetWiring{}, nil
+	}
+	if !budgetCfg.Enabled {
+		// limiter가 꺼져 있어도 active-active budget 검증은 fleet 인스턴스 수를 요구한다 —
+		// zero wiring을 돌려주면 count=0이 되어 producer 부팅이 fail-closed로 죽는다.
+		return polling.GlobalBudgetWiring{ActiveInstanceCount: budgetCfg.ActiveInstanceCount}, nil
 	}
 	if budgetCfg.WindowCheckEnabled && logger != nil {
 		logger.Warn("budget_window_check_not_implemented",
