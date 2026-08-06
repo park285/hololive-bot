@@ -335,7 +335,7 @@ func buildLLMSchedulerHTTPServer(
 	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
 
 	addr := fmt.Sprintf(":%d", port)
-	return sharedserver.NewH2CServer(addr, router, "hololive-llm-sched.http"), nil
+	return sharedserver.NewH2CServer(addr, router, "hololive-llm-sched.http", sharedserver.LocalPlaneTraceFilter), nil
 }
 
 func buildLLMSchedulerHTTPServers(
@@ -365,5 +365,6 @@ func buildLLMSchedulerHTTPServers(
 	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
 	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
 
-	return sharedserver.NewRuntimeHTTPServers(ctx, serverConfig, router, "hololive-llm-sched.http")
+	return sharedserver.NewRuntimeHTTPServers(ctx, serverConfig, router, "hololive-llm-sched.http",
+		sharedserver.LocalPlaneTraceFilter)
 }

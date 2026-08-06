@@ -33,7 +33,7 @@ func BuildBotServer(
 	}
 
 	addr := fmt.Sprintf(":%d", appConfig.Server.Port)
-	return sharedserver.NewH2CServer(addr, botRouter, "hololive-bot.http"), nil
+	return sharedserver.NewH2CServer(addr, botRouter, "hololive-bot.http", sharedserver.LocalPlaneTraceFilter), nil
 }
 
 func BuildShortLinkServer(addr string) *http.Server {
@@ -41,7 +41,8 @@ func BuildShortLinkServer(addr string) *http.Server {
 	if addr == "" {
 		return nil
 	}
-	return sharedserver.NewH2CServer(addr, apphttp.ProvideShortLinkHandler(), "hololive-bot.shortlink")
+	return sharedserver.NewH2CServer(addr, apphttp.ProvideShortLinkHandler(), "hololive-bot.shortlink",
+		sharedserver.LocalPlaneTraceFilter)
 }
 
 func BuildBotHTTP3Server(

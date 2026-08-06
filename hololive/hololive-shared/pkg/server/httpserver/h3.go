@@ -22,13 +22,15 @@ type RuntimeHTTPServers struct {
 	Pprof   *http.Server
 }
 
-func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerConfig, handler http.Handler, operation string) (*RuntimeHTTPServers, error) {
+func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerConfig, handler http.Handler, operation string,
+	traceFilters ...func(*http.Request) bool,
+) (*RuntimeHTTPServers, error) {
 	if serverConfig == nil {
 		return nil, fmt.Errorf("server config is nil")
 	}
 	servers := &RuntimeHTTPServers{}
 	if serverConfig.TransportEnabled("h3") {
-		h3Server, err := NewH3Server(runtimeH3Addr(serverConfig), handler, serverConfig.H3CertFile, serverConfig.H3KeyFile, operation)
+		h3Server, err := NewH3Server(runtimeH3Addr(serverConfig), handler, serverConfig.H3CertFile, serverConfig.H3KeyFile, operation, traceFilters...)
 		if err != nil {
 			return nil, err
 		}
@@ -43,11 +45,15 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 	return servers, nil
 }
 
-func NewH3Server(addr string, handler http.Handler, certFile, keyFile, operation string) (*http3.Server, error) {
+func NewH3Server(addr string, handler http.Handler, certFile, keyFile, operation string,
+	traceFilters ...func(*http.Request) bool,
+) (*http3.Server, error) {
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
-	handler = telemetry.NewPublicHTTPHandler(handler, operation, telemetry.HTTPHandlerOptions{})
+
+	traceFilter := firstTraceFilter(traceFilters)
+	handler = telemetry.NewPublicHTTPHandler(handler, operation, telemetry.HTTPHandlerOptions{Filter: traceFilter})
 
 	return sharedh3.NewServer(addr, handler, certFile, keyFile)
 }
