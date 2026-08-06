@@ -28,6 +28,12 @@ else
   record_fail "ap-host-native H3 bind not narrowed to loopback (8c2e3ef9)"
 fi
 
+if grep -Fq 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT=4' "${DEPLOY}"; then
+  pass "ap-host-native pins the four-instance active-active fleet size"
+else
+  record_fail "ap-host-native must configure the four-instance active-active fleet size"
+fi
+
 if grep -Fq 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings' "${DEPLOY}"; then
   pass "ap-host-native settings dir uses persistent varlib path"
 else
