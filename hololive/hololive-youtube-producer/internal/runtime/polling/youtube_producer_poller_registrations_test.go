@@ -1,8 +1,11 @@
 package polling
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -336,12 +339,70 @@ func TestResolveYouTubeProducerActiveAPCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, configured)
 
+	fleet, err := resolveYouTubeProducerActiveAPCount(4, true)
+	require.NoError(t, err)
+	require.Equal(t, 4, fleet)
+
 	_, err = resolveYouTubeProducerActiveAPCount(0, true)
 	require.ErrorContains(t, err, "active instance count is not configured")
 
 	single, err := resolveYouTubeProducerActiveAPCount(0, false)
 	require.NoError(t, err)
 	require.Equal(t, 1, single)
+}
+
+func TestResolveYouTubeProducerActiveAPCountWarnsOnStaleCountWithoutActiveActive(t *testing.T) {
+	var logBuffer bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	stale, err := resolveYouTubeProducerActiveAPCount(4, false)
+	require.NoError(t, err)
+	require.Equal(t, 4, stale)
+	require.Equal(t, 1, strings.Count(logBuffer.String(), "youtube_producer_active_ap_count_without_active_active"))
+	require.Contains(t, logBuffer.String(), `"active_instance_count":4`)
+
+	logBuffer.Reset()
+	single, err := resolveYouTubeProducerActiveAPCount(1, false)
+	require.NoError(t, err)
+	require.Equal(t, 1, single)
+
+	fleet, err := resolveYouTubeProducerActiveAPCount(4, true)
+	require.NoError(t, err)
+	require.Equal(t, 4, fleet)
+	require.Empty(t, logBuffer.String())
+}
+
+func TestValidateRegistrationsAndBudgetsUsesWiredFleetCountWhenGlobalBudgetDisabled(t *testing.T) {
+	registrations := buildBackfillTestRegistrations(settings.ScraperBackfillConfig{}, []string{"UC_A", "UC_B"})
+	scraperConfig := &settings.ScraperConfig{
+		Poll: settings.ScraperPoll{
+			Videos:    15 * time.Minute,
+			Shorts:    6 * time.Minute,
+			Community: 15 * time.Minute,
+			Stats:     6 * time.Hour,
+			Live:      2 * time.Minute,
+		},
+		ActiveActive: settings.ScraperActiveActiveConfig{
+			Enabled:    true,
+			InstanceID: "c",
+			Namespace:  "production",
+		},
+	}
+
+	wiredCount := &GlobalBudgetWiring{ActiveInstanceCount: 4}
+	require.Nil(t, wiredCount.Limiter)
+	require.Zero(t, wiredCount.BudgetRPM)
+	require.NoError(t, validateYouTubeProducerRegistrationsAndBudgets(registrations, scraperConfig, wiredCount, false, nil))
+
+	summary := summarizeYouTubeProducerBudgetForFleet(registrations, wiredCount.BudgetRPM, 4)
+	require.Equal(t, defaultYouTubeProducerBudgetRPM(), summary.BudgetRPM)
+	require.Equal(t, defaultYouTubeProducerBudgetRPM()*4, summary.FleetBudgetRPM)
+	require.Equal(t, 4, summary.ActiveAPCount)
+
+	err := validateYouTubeProducerRegistrationsAndBudgets(registrations, scraperConfig, &GlobalBudgetWiring{}, false, nil)
+	require.ErrorContains(t, err, "active instance count is not configured")
 }
 
 func TestBudgetRejectsAggressiveBackfillInterval(t *testing.T) {
