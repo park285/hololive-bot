@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 18121fe81a150a576665f2e74db4ee85b2e1fea8 # v1.44.1
+          ref: 4f73c692ef0d436621ef44dcf810387cd54bc14d # v1.46.1
           path: shared-go
           persist-credentials: false
 
