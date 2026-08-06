@@ -7,7 +7,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/shared-go v1.44.0
+	github.com/park285/shared-go v1.44.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/quic-go/quic-go v0.61.0
 	github.com/stretchr/testify v1.11.1
