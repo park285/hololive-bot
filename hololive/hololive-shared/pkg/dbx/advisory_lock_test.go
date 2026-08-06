@@ -77,7 +77,7 @@ func TestWithSessionAdvisoryLockFailsClosedWhenUnlockCannotBeConfirmed(t *testin
 	})
 	require.True(t, acquired)
 	require.ErrorIs(t, err, wantErr)
-	require.ErrorIs(t, err, ErrSessionAdvisoryUnlock)
+	require.ErrorIs(t, err, errSessionAdvisoryUnlock)
 	require.True(t, advisoryLockFree(t, context.Background(), pool))
 }
 
