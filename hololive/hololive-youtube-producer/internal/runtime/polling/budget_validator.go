@@ -79,6 +79,14 @@ func logYouTubeProducerSourceBudgetEstimate(estimate BudgetEstimate, logger *slo
 
 func resolveYouTubeProducerActiveAPCount(configured int, activeActiveEnabled bool) (int, error) {
 	if configured > 0 {
+		// active-active가 꺼진 단일 인스턴스인데 fleet count가 남아 있으면, 값을 고치지 않고
+		// 그대로 쓴다(fleet 용량 = BudgetRPM × count). 그래서 stale한 4는 fleet budget 추정을
+		// 실제 용량의 4배로 부풀린다 — 조용히 1로 눌러 감추는 대신 한 번 경고한다.
+		if !activeActiveEnabled && configured > 1 {
+			slog.Default().Warn("youtube_producer_active_ap_count_without_active_active",
+				slog.Int("active_instance_count", configured),
+			)
+		}
 		return configured, nil
 	}
 	if activeActiveEnabled {
