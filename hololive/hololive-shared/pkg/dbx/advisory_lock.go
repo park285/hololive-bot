@@ -35,8 +35,7 @@ const (
 	sessionAdvisoryCloseTimeout  = 5 * time.Second
 )
 
-// ErrSessionAdvisoryUnlock은 세션 락 해제가 확인되지 않아 연결을 재사용할 수 없음을 나타낸다.
-var ErrSessionAdvisoryUnlock = errors.New("session advisory unlock failed")
+var errSessionAdvisoryUnlock = errors.New("session advisory unlock failed")
 
 // 세션 락이므로 acquire/release가 반드시 같은 연결에서 일어나야 한다. q에
 // *pgxpool.Pool을 넘기면 두 문장이 서로 다른 연결로 나가 락이 영구히 남을 수
@@ -77,10 +76,10 @@ func releaseSessionAdvisoryLock(ctx context.Context, q Querier, key int64) error
 
 	var unlocked bool
 	if err := q.QueryRow(releaseCtx, sessionAdvisoryLockReleaseSQL, key).Scan(&unlocked); err != nil {
-		return fmt.Errorf("%w: key=%d: %w", ErrSessionAdvisoryUnlock, key, err)
+		return fmt.Errorf("%w: key=%d: %w", errSessionAdvisoryUnlock, key, err)
 	}
 	if !unlocked {
-		return fmt.Errorf("%w: key=%d was not held", ErrSessionAdvisoryUnlock, key)
+		return fmt.Errorf("%w: key=%d was not held", errSessionAdvisoryUnlock, key)
 	}
 	return nil
 }
