@@ -80,11 +80,15 @@ func triggerRuntimeRouteRegistrar(triggerHandler *TriggerHandler, apiKey string)
 	}
 }
 
-func NewH2CServer(addr string, handler http.Handler, operation string) *http.Server {
+func NewH2CServer(addr string, handler http.Handler, operation string,
+	traceFilters ...func(*http.Request) bool,
+) *http.Server {
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
-	handler = telemetry.NewPublicHTTPHandler(handler, operation, telemetry.HTTPHandlerOptions{})
+
+	traceFilter := firstTraceFilter(traceFilters)
+	handler = telemetry.NewPublicHTTPHandler(handler, operation, telemetry.HTTPHandlerOptions{Filter: traceFilter})
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -194,4 +198,23 @@ func registerRuntimeInternalReadyRoute(router *gin.Engine, apiKey string, readyR
 	internal := router.Group("/internal")
 	internal.Use(middleware.APIKeyAuthMiddleware(apiKey))
 	internal.GET("/ready", readyResponder)
+}
+
+func LocalPlaneTraceFilter(r *http.Request) bool {
+	switch r.URL.Path {
+	case "/health", "/ready", "/internal/ready", "/metrics":
+		return false
+	default:
+		return true
+	}
+}
+
+func firstTraceFilter(filters []func(*http.Request) bool) func(*http.Request) bool {
+	for _, filter := range filters {
+		if filter != nil {
+			return filter
+		}
+	}
+
+	return nil
 }

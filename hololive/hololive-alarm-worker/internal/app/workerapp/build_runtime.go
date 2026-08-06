@@ -141,7 +141,8 @@ func buildAlarmWorkerHTTPRuntime(
 		birthdayStream: buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger),
 	}
 
-	servers, err = sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, "hololive-alarm-worker.http")
+	servers, err = sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, "hololive-alarm-worker.http",
+		sharedserver.LocalPlaneTraceFilter)
 	if err != nil {
 		return nil, alarmWorkerBackgroundRunners{}, "http servers", err
 	}
