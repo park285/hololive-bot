@@ -57,6 +57,7 @@ write_host_env() {
     printf 'NOTIFICATION_EGRESS_ROLE=producer\n'
     printf 'YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true\n'
     printf 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true\n'
+    printf 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT=4\n'
     printf 'YOUTUBE_PRODUCER_LEASE_NAMESPACE=production\n'
     printf 'YOUTUBE_PRODUCER_INSTANCE_ID=%s\n' "$service"
     printf 'YOUTUBE_PRODUCER_LOG_FILE_NAME=%s.log\n' "$service"
