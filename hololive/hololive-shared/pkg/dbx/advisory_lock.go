@@ -22,16 +22,28 @@ package dbx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const (
+	sessionAdvisoryUnlockTimeout = 5 * time.Second
+	sessionAdvisoryCloseTimeout  = 5 * time.Second
+)
+
+// ErrSessionAdvisoryUnlock은 세션 락 해제가 확인되지 않아 연결을 재사용할 수 없음을 나타낸다.
+var ErrSessionAdvisoryUnlock = errors.New("session advisory unlock failed")
 
 // 세션 락이므로 acquire/release가 반드시 같은 연결에서 일어나야 한다. q에
 // *pgxpool.Pool을 넘기면 두 문장이 서로 다른 연결로 나가 락이 영구히 남을 수
 // 있으니 단일 연결(*pgxpool.Conn, pgx.Tx 등)을 넘긴다. 트랜잭션 종료 시 자동
 // 해제되는 pg_try_advisory_xact_lock과 달리 해제가 명시적이라, ctx가 취소돼도
-// context.WithoutCancel로 해제 문장을 반드시 보낸다.
-func WithSessionAdvisoryLock(ctx context.Context, q Querier, key int64, fn func(context.Context) error) (bool, error) {
+// 별도 timeout 안에서 해제 문장을 반드시 보낸다.
+func WithSessionAdvisoryLock(ctx context.Context, q Querier, key int64, fn func(context.Context) error) (acquired bool, err error) {
 	if q == nil {
 		return false, fmt.Errorf("session advisory lock querier is nil")
 	}
@@ -43,7 +55,15 @@ func WithSessionAdvisoryLock(ctx context.Context, q Querier, key int64, fn func(
 	if !locked {
 		return false, nil
 	}
-	defer releaseSessionAdvisoryLock(ctx, q, key)
+
+	defer func() {
+		unlockErr := releaseSessionAdvisoryLock(ctx, q, key)
+		if unlockErr == nil {
+			return
+		}
+		discardAdvisoryLockPoolConnection(ctx, q, key)
+		err = errors.Join(err, unlockErr)
+	}()
 
 	if fn == nil {
 		return true, nil
@@ -51,9 +71,31 @@ func WithSessionAdvisoryLock(ctx context.Context, q Querier, key int64, fn func(
 	return true, fn(ctx)
 }
 
-func releaseSessionAdvisoryLock(ctx context.Context, q Querier, key int64) {
-	if _, err := q.Exec(context.WithoutCancel(ctx), sessionAdvisoryLockReleaseSQL, key); err != nil {
-		slog.Default().Warn("release session advisory lock failed",
+func releaseSessionAdvisoryLock(ctx context.Context, q Querier, key int64) error {
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionAdvisoryUnlockTimeout)
+	defer cancel()
+
+	var unlocked bool
+	if err := q.QueryRow(releaseCtx, sessionAdvisoryLockReleaseSQL, key).Scan(&unlocked); err != nil {
+		return fmt.Errorf("%w: key=%d: %w", ErrSessionAdvisoryUnlock, key, err)
+	}
+	if !unlocked {
+		return fmt.Errorf("%w: key=%d was not held", ErrSessionAdvisoryUnlock, key)
+	}
+	return nil
+}
+
+func discardAdvisoryLockPoolConnection(ctx context.Context, q Querier, key int64) {
+	conn, ok := q.(*pgxpool.Conn)
+	if !ok {
+		return
+	}
+
+	rawConn := conn.Hijack()
+	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sessionAdvisoryCloseTimeout)
+	defer cancel()
+	if err := rawConn.Close(closeCtx); err != nil {
+		slog.Default().Warn("close connection after advisory unlock failure",
 			slog.Int64("key", key),
 			slog.Any("error", err),
 		)
