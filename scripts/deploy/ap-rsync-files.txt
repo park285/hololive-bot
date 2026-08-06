@@ -10,6 +10,7 @@ scripts/deploy/lib/health-gate.sh
 scripts/deploy/lib/ap-host.sh
 scripts/deploy/lib/require-quic-udp-buffer.sh
 scripts/deploy/lib/postgres-capacity.sh
+scripts/deploy/lib/public-bind-mounts.sh
 scripts/ci/check-postgres-capacity.sh
 scripts/ci/postgres-capacity-policy.tsv
 scripts/deploy/ap-hosts/osaka.conf

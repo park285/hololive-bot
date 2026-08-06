@@ -112,6 +112,11 @@ expect_fail "ap-host loader rejects unknown host" ap_host_load "${ROOT_DIR}" non
 
 AP_ACTIVE_ACTIVE_FILES="${ROOT_DIR}/scripts/deploy/ap-rsync-files.txt"
 [[ -r "${AP_ACTIVE_ACTIVE_FILES}" ]] || fail "ap active-active files list is readable"
+while IFS= read -r compose_dependency; do
+    grep -qxF "${compose_dependency}" "${AP_ACTIVE_ACTIVE_FILES}" \
+        || fail "ap active-active syncs Compose helper ${compose_dependency}"
+done < <(rg -o 'scripts/deploy/lib/[[:alnum:]_.-]+\.sh' "${ROOT_DIR}/scripts/deploy/compose.sh" | sort -u)
+pass "ap active-active syncs every Compose helper"
 grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs Iris H3 trust preflight"
 pass "ap active-active syncs Iris H3 trust preflight"
 grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
