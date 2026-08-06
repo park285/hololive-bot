@@ -50,9 +50,6 @@ func summarizeYouTubeProducerBudgetForFleet(registrations []providers.ChannelPol
 	if budgetRPM <= 0 {
 		budgetRPM = defaultYouTubeProducerBudgetRPM()
 	}
-	if activeAPCount < 1 {
-		activeAPCount = 1
-	}
 
 	return youtubeProducerBudgetSummary{
 		PollerRPM:                 pollerRPM,
