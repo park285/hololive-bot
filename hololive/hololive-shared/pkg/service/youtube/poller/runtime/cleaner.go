@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,27 +35,24 @@ import (
 )
 
 const (
-	viewerSampleCleanupLockKey         int64 = 841977301
-	viewerSampleCleanupYield                 = 10 * time.Millisecond
-	viewerSampleCleanupSessionPageSize       = 64
-	viewerSampleCleanupMaxBatchSize          = 1000
-	viewerSampleCleanupMaxBatches            = 64
-	viewerSampleCleanupMaxDuration           = 30 * time.Second
+	viewerSampleCleanupLockKey          int64 = 841977301
+	viewerSampleCleanupYield                  = 10 * time.Millisecond
+	viewerSampleCleanupSessionPageSize        = 64
+	viewerSampleCleanupMaxBatchSize           = 1000
+	viewerSampleCleanupMaxBatches             = 64
+	viewerSampleCleanupMaxDuration            = 30 * time.Second
+	viewerSampleCleanupStatementTimeout       = 2 * time.Second
 )
 
 type ViewerSampleCleanerConfig struct {
 	RetentionDays int
 	BatchSize     int
-	MaxBatches    int
-	MaxDuration   time.Duration
 }
 
 func DefaultViewerSampleCleanerConfig() ViewerSampleCleanerConfig {
 	return ViewerSampleCleanerConfig{
 		RetentionDays: 7,
 		BatchSize:     viewerSampleCleanupMaxBatchSize,
-		MaxBatches:    viewerSampleCleanupMaxBatches,
-		MaxDuration:   viewerSampleCleanupMaxDuration,
 	}
 }
 
@@ -62,6 +60,11 @@ type ViewerSampleCleaner struct {
 	acquirer viewerSampleConnAcquirer
 	session  *pgxpool.Conn
 	config   ViewerSampleCleanerConfig
+
+	stateMu     sync.Mutex
+	state       viewerSampleCleanupState
+	maxBatches  int
+	maxDuration time.Duration
 }
 
 type viewerSampleConnAcquirer interface {
@@ -71,7 +74,11 @@ type viewerSampleConnAcquirer interface {
 type viewerSampleCleanupCursor struct {
 	endedAt time.Time
 	videoID string
-	offset  int
+}
+
+type viewerSampleCleanupState struct {
+	cursor      viewerSampleCleanupCursor
+	passDeleted int64
 }
 
 type viewerSampleCleanupStep struct {
@@ -83,9 +90,12 @@ type viewerSampleCleanupStep struct {
 
 func NewViewerSampleCleaner(db any, config ViewerSampleCleanerConfig) *ViewerSampleCleaner {
 	return &ViewerSampleCleaner{
-		acquirer: asViewerSampleConnAcquirer(db),
-		session:  asViewerSampleSession(db),
-		config:   config,
+		acquirer:    asViewerSampleConnAcquirer(db),
+		session:     asViewerSampleSession(db),
+		config:      config,
+		state:       viewerSampleCleanupState{cursor: initialViewerSampleCleanupCursor()},
+		maxBatches:  viewerSampleCleanupMaxBatches,
+		maxDuration: viewerSampleCleanupMaxDuration,
 	}
 }
 
@@ -124,6 +134,9 @@ func (c *ViewerSampleCleaner) cleanupWithDedicatedConn(ctx context.Context) (int
 func (c *ViewerSampleCleaner) cleanupLocked(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
 	var deleted int64
 	acquired, err := dbx.WithSessionAdvisoryLock(ctx, conn, viewerSampleCleanupLockKey, func(lockedCtx context.Context) error {
+		c.stateMu.Lock()
+		defer c.stateMu.Unlock()
+
 		var batchErr error
 		deleted, batchErr = c.cleanupBatches(lockedCtx, conn)
 		return batchErr
@@ -142,33 +155,32 @@ func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier
 	runCtx, cancel := context.WithTimeout(ctx, c.effectiveMaxDuration())
 	defer cancel()
 
-	cutoff := time.Now().AddDate(0, 0, -c.effectiveRetentionDays())
-	cursor := initialViewerSampleCleanupCursor()
+	cutoff := time.Now().AddDate(0, 0, -c.config.RetentionDays)
+	c.ensureCleanupState()
 	maxBatches := c.effectiveMaxBatches()
 	var total int64
-	var passDeleted int64
 
 	for batch := 1; batch <= maxBatches; batch++ {
-		step, err := c.deleteNextBatch(runCtx, db, cutoff, cursor)
+		step, err := c.deleteNextBatch(runCtx, db, cutoff, c.state.cursor)
 		if err != nil {
 			return total, viewerSampleCleanupRunError(ctx, runCtx, err)
 		}
 		total += step.deleted
-		passDeleted += step.deleted
+		c.state.passDeleted += step.deleted
 
-		nextCursor, passDone, err := step.nextCursor(cursor)
+		nextCursor, passDone, err := step.nextCursor()
 		if err != nil {
 			return total, fmt.Errorf("advance viewer sample cleanup cursor: %w", err)
 		}
 		if passDone {
-			if passDeleted == 0 {
+			if c.state.passDeleted == 0 {
+				c.resetCleanupState()
 				c.logCleanup(total, batch, false, time.Since(startedAt))
 				return total, nil
 			}
-			cursor = initialViewerSampleCleanupCursor()
-			passDeleted = 0
+			c.resetCleanupState()
 		} else {
-			cursor = nextCursor
+			c.state.cursor = nextCursor
 		}
 
 		if batch == maxBatches {
@@ -189,17 +201,19 @@ func (c *ViewerSampleCleaner) deleteNextBatch(
 	cutoff time.Time,
 	cursor viewerSampleCleanupCursor,
 ) (viewerSampleCleanupStep, error) {
+	statementCtx, cancel := context.WithTimeout(ctx, viewerSampleCleanupStatementTimeout)
+	defer cancel()
+
 	var step viewerSampleCleanupStep
 	var targetEndedAt, pageEndEndedAt pgtype.Timestamptz
 	var targetVideoID, pageEndVideoID pgtype.Text
 
 	err := db.QueryRow(
-		ctx,
+		statementCtx,
 		mustSQL("cleaner_0176_03.sql"),
 		cutoff,
 		cursor.endedAt,
 		cursor.videoID,
-		cursor.offset,
 		viewerSampleCleanupSessionPageSize,
 		c.effectiveBatchSize(),
 	).Scan(
@@ -211,6 +225,12 @@ func (c *ViewerSampleCleaner) deleteNextBatch(
 		&pageEndVideoID,
 	)
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(statementCtx.Err(), context.DeadlineExceeded) {
+			return viewerSampleCleanupStep{}, fmt.Errorf(
+				"viewer sample cleanup statement time budget exceeded: %w",
+				errors.Join(context.DeadlineExceeded, err),
+			)
+		}
 		return viewerSampleCleanupStep{}, fmt.Errorf("delete viewer sample cleanup step: %w", err)
 	}
 
@@ -244,24 +264,19 @@ func (s viewerSampleCleanupStep) validate() error {
 	return nil
 }
 
-func (s viewerSampleCleanupStep) nextCursor(current viewerSampleCleanupCursor) (viewerSampleCleanupCursor, bool, error) {
+func (s viewerSampleCleanupStep) nextCursor() (viewerSampleCleanupCursor, bool, error) {
 	if s.target != nil {
 		next := *s.target
-		next.offset = 1
 		return next, false, nil
 	}
 	if s.candidateCount < viewerSampleCleanupSessionPageSize {
-		return current, true, nil
+		return viewerSampleCleanupCursor{}, true, nil
 	}
 	if s.pageEnd == nil {
-		return current, false, fmt.Errorf("full candidate page has no page-end cursor")
+		return viewerSampleCleanupCursor{}, false, fmt.Errorf("full candidate page has no page-end cursor")
 	}
 
-	// cursor 조건은 항상 indexable한 >=로 유지하고, 이미 검사한 경계 한 행만 OFFSET 1로
-	// 건너뛴다. OR 조건으로 partial-index keyset 경로를 약화하지 않는다.
-	next := *s.pageEnd
-	next.offset = 1
-	return next, false, nil
+	return *s.pageEnd, false, nil
 }
 
 func viewerSampleCleanupCursorFromPG(
@@ -282,6 +297,16 @@ func initialViewerSampleCleanupCursor() viewerSampleCleanupCursor {
 		endedAt: time.Date(1, time.January, 1, 0, 0, 0, 0, time.UTC),
 		videoID: "",
 	}
+}
+
+func (c *ViewerSampleCleaner) ensureCleanupState() {
+	if c.state.cursor.endedAt.IsZero() {
+		c.resetCleanupState()
+	}
+}
+
+func (c *ViewerSampleCleaner) resetCleanupState() {
+	c.state = viewerSampleCleanupState{cursor: initialViewerSampleCleanupCursor()}
 }
 
 func viewerSampleCleanupRunError(parentCtx, runCtx context.Context, err error) error {
@@ -308,21 +333,15 @@ func (c *ViewerSampleCleaner) logCleanup(deleted int64, batches int, budgetExhau
 	}
 	slog.Info("Viewer sample cleanup completed",
 		"deleted", deleted,
-		"retention_days", c.effectiveRetentionDays(),
+		"retention_days", c.config.RetentionDays,
 		"batch_size", c.effectiveBatchSize(),
 		"candidate_page_size", viewerSampleCleanupSessionPageSize,
 		"batches", batches,
 		"max_batches", c.effectiveMaxBatches(),
 		"max_duration", c.effectiveMaxDuration(),
+		"statement_timeout", viewerSampleCleanupStatementTimeout,
 		"budget_exhausted", budgetExhausted,
 		"duration", duration)
-}
-
-func (c *ViewerSampleCleaner) effectiveRetentionDays() int {
-	if c.config.RetentionDays > 0 {
-		return c.config.RetentionDays
-	}
-	return DefaultViewerSampleCleanerConfig().RetentionDays
 }
 
 func (c *ViewerSampleCleaner) effectiveBatchSize() int {
@@ -333,15 +352,15 @@ func (c *ViewerSampleCleaner) effectiveBatchSize() int {
 }
 
 func (c *ViewerSampleCleaner) effectiveMaxBatches() int {
-	if c.config.MaxBatches <= 0 {
-		return DefaultViewerSampleCleanerConfig().MaxBatches
+	if c.maxBatches <= 0 {
+		return viewerSampleCleanupMaxBatches
 	}
-	return min(c.config.MaxBatches, viewerSampleCleanupMaxBatches)
+	return min(c.maxBatches, viewerSampleCleanupMaxBatches)
 }
 
 func (c *ViewerSampleCleaner) effectiveMaxDuration() time.Duration {
-	if c.config.MaxDuration <= 0 {
-		return DefaultViewerSampleCleanerConfig().MaxDuration
+	if c.maxDuration <= 0 {
+		return viewerSampleCleanupMaxDuration
 	}
-	return min(c.config.MaxDuration, viewerSampleCleanupMaxDuration)
+	return min(c.maxDuration, viewerSampleCleanupMaxDuration)
 }
