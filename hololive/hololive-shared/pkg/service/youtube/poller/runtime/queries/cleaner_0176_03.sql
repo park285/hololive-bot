@@ -3,10 +3,9 @@ WITH candidate_sessions AS MATERIALIZED (
 	FROM youtube_live_sessions l
 	WHERE l.status = 'ENDED'
 		AND l.ended_at < $1
-		AND (l.ended_at, l.video_id) >= ($2::timestamptz, $3::varchar(20))
+		AND (l.ended_at, l.video_id) > ($2::timestamptz, $3::varchar(20))
 	ORDER BY l.ended_at ASC, l.video_id ASC
-	OFFSET $4::integer
-	LIMIT $5::integer
+	LIMIT $4::integer
 ),
 target_session AS MATERIALIZED (
 	SELECT candidate.ended_at, candidate.video_id
@@ -32,7 +31,7 @@ picked AS MATERIALIZED (
 	JOIN youtube_live_viewer_samples sample
 		ON sample.video_id = target.video_id
 	ORDER BY sample.captured_at ASC
-	LIMIT $6::integer
+	LIMIT $5::integer
 ),
 deleted AS (
 	DELETE FROM youtube_live_viewer_samples sample
