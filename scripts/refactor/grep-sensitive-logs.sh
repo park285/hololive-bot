@@ -42,7 +42,7 @@ for target in "${TARGETS[@]}"; do
       echo "suspicious sensitive log: $line" >&2
       bad=1
     fi
-  done < <(grep -RInE "$pattern" "$target" --include='*.go' --exclude='*_test.go' || true)
+  done < <(grep -RInE "$pattern" "$target" --include='*.go' --exclude='*_test.go' --exclude-dir='.git' --exclude-dir='.claude' || true)
 done
 
 while IFS= read -r line; do

@@ -57,3 +57,14 @@ if [[ "${LAST_STATUS}" -eq 0 || "${LAST_OUTPUT}" != *'suspicious sensitive log:'
   exit 1
 fi
 printf '[PASS] raw sensitive field is rejected\n'
+
+nested_worktree_target="${TMP_ROOT}/nested/iris-client-go"
+nested_worktree_source="${nested_worktree_target}/.claude/worktrees/task/internal/client/transport"
+mkdir -p "${nested_worktree_source}"
+printf 'package client\n\nvar unsafe = slog.String("Body", body)\n' >"${nested_worktree_source}/errors.go"
+run_gate "${nested_worktree_target}"
+if [[ "${LAST_STATUS}" -ne 0 ]]; then
+  printf '[FAIL] nested tool worktree was scanned\n%s\n' "${LAST_OUTPUT}" >&2
+  exit 1
+fi
+printf '[PASS] nested tool worktree is excluded\n'

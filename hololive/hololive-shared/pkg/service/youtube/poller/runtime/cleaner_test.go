@@ -25,11 +25,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -94,11 +94,20 @@ func TestViewerSampleCleanerDeleteBatchDeletesExactlyBatchSize(t *testing.T) {
 	}
 
 	cleaner := NewViewerSampleCleaner(pool, ViewerSampleCleanerConfig{RetentionDays: 7, BatchSize: 2})
-	cutoff := now.AddDate(0, 0, -7)
-	deleted, err := dbx.DeleteOneBatch(ctx, pool, cleaner.batchDeleteSpec(cutoff))
+	step, err := cleaner.deleteNextBatch(ctx, pool, now.AddDate(0, 0, -7), initialViewerSampleCleanupCursor())
 	require.NoError(t, err)
-	require.EqualValues(t, 2, deleted)
+	require.EqualValues(t, 2, step.deleted)
+	require.NotNil(t, step.target)
+	require.Equal(t, "old-video", step.target.videoID)
 	require.EqualValues(t, 3, countViewerSampleCleanerSamples(t, ctx, pool, "old-video"))
+}
+
+func rollbackViewerSampleCleanerTx(t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	err := tx.Rollback(context.Background())
+	if err != nil {
+		require.ErrorIs(t, err, pgx.ErrTxClosed)
+	}
 }
 
 func insertViewerSampleCleanerLiveSession(

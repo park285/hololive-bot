@@ -63,6 +63,24 @@ func TestWithSessionAdvisoryLockReleasesAfterContextCancel(t *testing.T) {
 	require.True(t, advisoryLockFree(t, context.Background(), pool))
 }
 
+func TestWithSessionAdvisoryLockFailsClosedWhenUnlockCannotBeConfirmed(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	conn := acquireAdvisoryLockTestConn(t, ctx, pool)
+	wantErr := errors.New("callback failed")
+
+	acquired, err := WithSessionAdvisoryLock(ctx, conn, advisoryLockTestKey, func(context.Context) error {
+		var unlocked bool
+		require.NoError(t, conn.QueryRow(ctx, "SELECT pg_advisory_unlock($1)", advisoryLockTestKey).Scan(&unlocked))
+		require.True(t, unlocked)
+		return wantErr
+	})
+	require.True(t, acquired)
+	require.ErrorIs(t, err, wantErr)
+	require.ErrorIs(t, err, errSessionAdvisoryUnlock)
+	require.True(t, advisoryLockFree(t, context.Background(), pool))
+}
+
 func TestWithSessionAdvisoryLockRejectsNilQuerier(t *testing.T) {
 	acquired, err := WithSessionAdvisoryLock(context.Background(), nil, advisoryLockTestKey, nil)
 	require.Error(t, err)
