@@ -30,13 +30,14 @@ func TestLocalPlaneTraceFilter(t *testing.T) {
 	t.Parallel()
 
 	for target, want := range map[string]bool{
-		"/health":           false,
-		"/ready":            false,
-		"/internal/ready":   false,
-		"/metrics":          false,
-		"/api/videos":       true,
-		"/internal/trigger": true,
-		"/health/deep":      true,
+		"/health":                          false,
+		"/ready":                           false,
+		"/internal/ready":                  false,
+		"/metrics":                         false,
+		"/api/videos":                      true,
+		"/internal/trigger":                true,
+		"/health/deep":                     true,
+		"/__observability/trace-heartbeat": true,
 	} {
 		if got := LocalPlaneTraceFilter(httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, http.NoBody)); got != want {
 			t.Fatalf("LocalPlaneTraceFilter(%q) = %v, want %v", target, got, want)
