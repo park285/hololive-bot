@@ -21,6 +21,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/shared-go/pkg/ginjson"
 )
@@ -157,6 +159,8 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 		return
 	}
 
+	h.publishACLChange(ctx, "room_add", req.Room, "")
+
 	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room added successfully"})
 
 	h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
@@ -195,6 +199,8 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		return
 	}
 
+	h.publishACLChange(ctx, "room_remove", req.Room, "")
+
 	ginjson.Respond(c, 200, statusMessageResponse{Status: "ok", Message: "Room removed successfully"})
 
 	h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
@@ -214,7 +220,25 @@ func (h *RoomHandler) SetACL(c *gin.Context) {
 		return
 	}
 
+	_, mode, _ := h.acl.GetACLStatus()
+	h.publishACLChange(c.Request.Context(), "acl_update", "", string(mode))
+
 	h.respondSetACL(c)
+}
+
+// 발행 실패는 요청을 실패시키지 않는다 — DB 반영은 이미 끝났고, 통지를 놓친 복제본은
+// 다음 기동 때 DB에서 다시 읽어 수렴한다.
+func (h *RoomHandler) publishACLChange(ctx context.Context, reason, room, mode string) {
+	if h.valkeyCache == nil {
+		return
+	}
+
+	if err := configsub.NewPublisher(h.valkeyCache.GetClient()).PublishACL(ctx, reason, room, mode); err != nil {
+		h.safeLogger().Warn("Failed to publish ACL change",
+			slog.String("reason", reason),
+			slog.Any("error", err),
+		)
+	}
 }
 
 func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
