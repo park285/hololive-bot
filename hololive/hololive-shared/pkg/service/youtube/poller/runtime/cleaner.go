@@ -169,30 +169,15 @@ func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier
 	var total int64
 
 	for batch := 1; batch <= maxBatches; batch++ {
-		step, err := c.deleteNextBatch(ctx, db, cutoff, c.state.cursor)
+		deleted, passDone, err := c.runCleanupBatch(ctx, db, cutoff)
+		total += deleted
 		if err != nil {
-			return total, fmt.Errorf("delete viewer sample batch: %w", err)
-		}
-		total += step.deleted
-		c.state.passDeleted += step.deleted
-
-		nextCursor, passDone, err := step.nextCursor()
-		if err != nil {
-			return total, fmt.Errorf("advance viewer sample cleanup cursor: %w", err)
-		}
-		if passDone {
-			if c.state.passDeleted == 0 {
-				c.resetCleanupState()
-				c.logCleanup(total, batch, false, time.Since(startedAt))
-				return total, nil
-			}
-			c.resetCleanupState()
-		} else {
-			c.state.cursor = nextCursor
+			return total, err
 		}
 
-		if batch == maxBatches {
-			c.logCleanup(total, batch, true, time.Since(startedAt))
+		stop, budgetExhausted := viewerSampleCleanupStop(passDone, batch, maxBatches)
+		if stop {
+			c.logCleanup(total, batch, budgetExhausted, time.Since(startedAt))
 			return total, nil
 		}
 		if err := yieldViewerSampleCleanup(ctx); err != nil {
@@ -201,6 +186,47 @@ func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier
 	}
 
 	return total, nil
+}
+
+func viewerSampleCleanupStop(passDone bool, batch, maxBatches int) (bool, bool) {
+	if passDone {
+		return true, false
+	}
+	budgetExhausted := batch == maxBatches
+	return budgetExhausted, budgetExhausted
+}
+
+func (c *ViewerSampleCleaner) runCleanupBatch(
+	ctx context.Context,
+	db dbx.Querier,
+	cutoff time.Time,
+) (int64, bool, error) {
+	step, err := c.deleteNextBatch(ctx, db, cutoff, c.state.cursor)
+	if err != nil {
+		return 0, false, fmt.Errorf("delete viewer sample batch: %w", err)
+	}
+
+	c.state.passDeleted += step.deleted
+	passDone, err := c.advanceCleanupState(step)
+	if err != nil {
+		return step.deleted, false, fmt.Errorf("advance viewer sample cleanup cursor: %w", err)
+	}
+	return step.deleted, passDone, nil
+}
+
+func (c *ViewerSampleCleaner) advanceCleanupState(step viewerSampleCleanupStep) (bool, error) {
+	nextCursor, passDone, err := step.nextCursor()
+	if err != nil {
+		return false, err
+	}
+	if !passDone {
+		c.state.cursor = nextCursor
+		return false, nil
+	}
+
+	passEmpty := c.state.passDeleted == 0
+	c.resetCleanupState()
+	return passEmpty, nil
 }
 
 func (c *ViewerSampleCleaner) deleteNextBatch(
