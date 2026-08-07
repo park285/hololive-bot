@@ -58,6 +58,8 @@ func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 		return
 	}
 
+	s.applyPendingSyncLocked(job)
+
 	now := time.Now()
 	s.updateJobNextRunAfterPoll(job, pollErr, now)
 
@@ -67,6 +69,21 @@ func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 		heap.Push(&s.jobs, job)
 	}
 	s.notifyDispatcher()
+}
+
+func (s *Scheduler) applyPendingSyncLocked(job *Job) {
+	pending := job.pendingSync
+	if pending == nil {
+		return
+	}
+	job.pendingSync = nil
+	job.Poller = pending.Poller
+	job.Priority = pending.Priority
+	job.budgetProfile = pending.BudgetProfile
+	if job.Interval != pending.Interval {
+		s.resetJobScheduleForIntervalChange(job, pending.Interval)
+	}
+	job.Interval = pending.Interval
 }
 
 func (s *Scheduler) rescheduleJobAfterClaimSkip(job *Job, retryAfter time.Duration) {
@@ -80,6 +97,7 @@ func (s *Scheduler) rescheduleJobAfterClaimSkip(job *Job, retryAfter time.Durati
 	if !ok || current != job {
 		return
 	}
+	s.applyPendingSyncLocked(job)
 	if retryAfter <= 0 {
 		retryAfter = s.errorBackoffMin
 	}
@@ -105,6 +123,7 @@ func (s *Scheduler) rescheduleJobAfterBudgetSkip(job *Job, retryAfter time.Durat
 	if !ok || current != job {
 		return
 	}
+	s.applyPendingSyncLocked(job)
 	if retryAfter <= 0 {
 		retryAfter = s.errorBackoffMin
 	}

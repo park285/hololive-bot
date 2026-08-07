@@ -20,6 +20,13 @@ if [[ ! -r "$MANIFEST" ]]; then
   exit 1
 fi
 
+while IFS= read -r path; do
+  if ! grep -qxF "$path" "$MANIFEST"; then
+    echo "[FAIL] ap-rsync-files.txt missing Compose wrapper dependency: $path" >&2
+    exit 1
+  fi
+done < <(rg -o 'scripts/deploy/lib/[[:alnum:]_.-]+\.sh' "$ROOT_DIR/scripts/deploy/compose.sh" | sort -u)
+
 # Dockerfile의 로컬 replace는 런타임 import 그래프에 없더라도 go mod download 전에
 # 대상 모듈의 metadata가 원격 build context에 존재해야 한다.
 required_context_files=(

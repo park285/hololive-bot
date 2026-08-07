@@ -153,4 +153,5 @@ type BotConfigSubscriberRuntimeDependencies struct {
 	YouTubeService youtube.Service
 	HolodexService *holodexprovider.Service
 	AlarmCRUD      domain.AlarmCRUD
+	ACL            *acl.Service
 }

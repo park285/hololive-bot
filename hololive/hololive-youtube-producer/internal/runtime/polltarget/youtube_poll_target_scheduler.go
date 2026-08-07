@@ -26,20 +26,36 @@ func (s *SchedulerSyncer) SyncAt(ctx context.Context, targets Targets, now time.
 	tieredTargets, hasTieredTargets := s.classifyTargetsForTieredRegistrations(ctx, targets, now)
 	tieredSyncs := make(map[string][]scheduler.PollerTargetSync)
 	for i := range s.registrations {
-		registration := &s.registrations[i]
-		if !shouldSyncYouTubePollRegistration(registration) {
-			continue
-		}
-		sync := youtubePollRegistrationTargetSync(registration, targets, &tieredTargets, hasTieredTargets)
-		if isTieredNotificationTargetGroup(registration.TargetGroup) {
-			tieredSyncs[registration.Poller.Name()] = append(tieredSyncs[registration.Poller.Name()], sync)
-			continue
-		}
-		s.scheduler.SyncPollerTargets(&sync)
+		s.syncRegistration(tieredSyncs, &s.registrations[i], targets, &tieredTargets, hasTieredTargets)
 	}
 	for _, syncs := range tieredSyncs {
 		s.scheduler.SyncPollerTargetGroups(syncs)
 	}
+}
+
+func (s *SchedulerSyncer) syncRegistration(
+	tieredSyncs map[string][]scheduler.PollerTargetSync,
+	registration *providers.ChannelPollerRegistration,
+	targets Targets,
+	tieredTargets *TieredTargets,
+	hasTieredTargets bool,
+) {
+	if !shouldSyncYouTubePollRegistration(registration) {
+		return
+	}
+	if isTieredNotificationTargetGroup(registration.TargetGroup) {
+		// 분류 실패 시 boot 시점 registration.ChannelIDs로 fallback-sync하면
+		// desired set에 없는 현재 채널의 job이 삭제된다 — sync를 건너뛰어
+		// 스케줄러의 마지막 정상 상태를 유지한다.
+		if !hasTieredTargets {
+			return
+		}
+		sync := youtubePollRegistrationTargetSync(registration, targets, tieredTargets, hasTieredTargets)
+		tieredSyncs[registration.Poller.Name()] = append(tieredSyncs[registration.Poller.Name()], sync)
+		return
+	}
+	sync := youtubePollRegistrationTargetSync(registration, targets, tieredTargets, hasTieredTargets)
+	s.scheduler.SyncPollerTargets(&sync)
 }
 
 func (s *SchedulerSyncer) classifyTargetsForTieredRegistrations(ctx context.Context, targets Targets, now time.Time) (TieredTargets, bool) {
@@ -54,9 +70,7 @@ func (s *SchedulerSyncer) classifyTargetsForTieredRegistrations(ctx context.Cont
 	defer cancel()
 	tieredTargets, err := classifyYouTubePollTargetsByActivity(classifyCtx, s.tieringDB, targets, now)
 	if err != nil {
-		if classifyCtx.Err() != nil {
-			s.logTieredClassifySkipped(err)
-		}
+		s.logTieredClassifySkipped(err)
 		return TieredTargets{}, false
 	}
 	return tieredTargets, true

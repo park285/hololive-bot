@@ -32,7 +32,7 @@ func groupAlarmDispatchEnvelopesByKey(
 	index := map[string]int{}
 	for i := range envelopes {
 		envelope := &envelopes[i]
-		key := keyFunc(envelope)
+		key := alarmDispatchRegroupKey(envelope, keyFunc)
 		groupIndex, ok := index[key]
 		if !ok {
 			index[key] = len(groups)
@@ -42,6 +42,15 @@ func groupAlarmDispatchEnvelopesByKey(
 		appendAlarmDispatchEnvelope(&groups[groupIndex], envelope)
 	}
 	return groups
+}
+
+// 재드레인 봉투가 신규 봉투와 병합되면 그룹 구성이 바뀌어 ClientRequestID가 다르게 재파생되고,
+// 이미 admission된 첫 발송이 dedup에 접히지 않아 중복 발화한다 — 재시도 봉투는 항상 solo 그룹.
+func alarmDispatchRegroupKey(envelope *domain.AlarmQueueEnvelope, keyFunc func(*domain.AlarmQueueEnvelope) string) string {
+	if envelope != nil && envelope.Retry != nil && envelope.Retry.Attempt > 0 {
+		return fmt.Sprintf("retry-solo|%d", envelope.DispatchOutboxID)
+	}
+	return keyFunc(envelope)
 }
 
 func newAlarmDispatchGroup(envelope *domain.AlarmQueueEnvelope) alarmDispatchGroup {

@@ -213,7 +213,7 @@ func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []doma
 }
 
 func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	if isAlarmDispatchRetryablePostSendFailure(cause) {
+	if alarmDispatchPostSendFailureIsRetryable(cause, len(envelopes)) {
 		return r.persistSendingRetry(ctx, envelopes, cause)
 	}
 	if err := r.consumer.Quarantine(ctx, envelopes, cause); err != nil {
@@ -238,15 +238,39 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.Ala
 	})
 }
 
-func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
-	if cause == nil {
-		return false
+// TransportError/DeadlineExceeded는 응답을 한 번도 받지 못한 경우라 첫 발송이 이미
+// admission됐을 수 있다. 재드레인에서 그룹 구성이 바뀌면 ClientRequestID가 다르게 재파생되어
+// Iris dedup에 접히지 않고 중복 발화하므로, ambiguous 원인은 solo 재그룹핑으로 ID가 그대로
+// 재생산되는 단건 그룹에만 재시도를 허용하고 다건 그룹은 quarantine한다.
+// 429/502/503은 미수용이 확정된 응답이라 그룹 크기와 무관하게 재시도한다.
+func alarmDispatchPostSendFailureIsRetryable(cause error, envelopeCount int) bool {
+	if isAlarmDispatchNotAdmittedRetryableFailure(cause) {
+		return true
 	}
+	return envelopeCount == 1 && isAlarmDispatchAmbiguousPostSendFailure(cause)
+}
+
+func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
+	return isAlarmDispatchNotAdmittedRetryableFailure(cause) || isAlarmDispatchAmbiguousPostSendFailure(cause)
+}
+
+func isAlarmDispatchNotAdmittedRetryableFailure(cause error) bool {
 	var httpErr *iris.HTTPError
 	if errors.As(cause, &httpErr) {
 		return httpErr.StatusCode == 429 || httpErr.StatusCode == 502 || httpErr.StatusCode == 503
 	}
 	return false
+}
+
+func isAlarmDispatchAmbiguousPostSendFailure(cause error) bool {
+	if cause == nil {
+		return false
+	}
+	var transportErr *iris.TransportError
+	if errors.As(cause, &transportErr) {
+		return true
+	}
+	return errors.Is(cause, context.DeadlineExceeded)
 }
 
 func (r *Runner) preserveAfterPersistenceFailure(
@@ -309,13 +333,28 @@ func envelopesExcludingIDs(envelopes []domain.AlarmQueueEnvelope, ids []int64) [
 	return kept
 }
 
+const (
+	alarmDispatchMaxAttempts          = 3
+	alarmDispatchRetryableMaxAttempts = 6
+)
+
+// attempt*5s 선형 백오프에서 3회는 누적 15s라 Iris 재기동(30~60s)을 넘기지 못하고
+// 대기 물량 전체를 DLQ로 흘린다. 일시적 원인만 6회(누적 75s)로 늘린다.
+func alarmDispatchMaxAttemptsForCause(cause error) int {
+	if isAlarmDispatchRetryablePostSendFailure(cause) {
+		return alarmDispatchRetryableMaxAttempts
+	}
+	return alarmDispatchMaxAttempts
+}
+
 func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) (retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) {
 	retryEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
 	dlqEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	maxAttempts := alarmDispatchMaxAttemptsForCause(cause)
 	for i := range envelopes {
 		updated := envelopes[i]
 		updated.Retry = nextAlarmDispatchRetry(&envelopes[i], cause)
-		if updated.Retry.Attempt >= 3 {
+		if updated.Retry.Attempt >= maxAttempts {
 			dlqEnvelopes = append(dlqEnvelopes, updated)
 			continue
 		}

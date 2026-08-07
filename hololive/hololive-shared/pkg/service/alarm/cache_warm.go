@@ -46,15 +46,20 @@ func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache
 
 func warmSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Client, repository *Repository, rebuild bool) (CacheWarmSummary, error) {
 	operation := subscriberCacheWarmOperation(rebuild)
-	warmData, err := loadSubscriberCacheWarmData(ctx, repository, operation)
-	if err != nil {
-		return CacheWarmSummary{}, err
-	}
 
+	// clear는 DB 스냅샷보다 먼저 실행해야 한다. 스냅샷→clear 순서에서는 스냅샷 채취 후
+	// 커밋된 구독의 SAdd가 clear에 지워지고 스냅샷에도 없어 다음 rebuild까지 영구
+	// 소실된다. clear→load 순서면 clear 이후의 SAdd는 warm SAdd와 병합되고, clear
+	// 이전의 add는 스냅샷에 포함되어 양쪽 경쟁 창이 모두 닫힌다.
 	if rebuild {
 		if err := clearSubscriberCacheNamespace(ctx, cacheClient); err != nil {
 			return CacheWarmSummary{}, err
 		}
+	}
+
+	warmData, err := loadSubscriberCacheWarmData(ctx, repository, operation)
+	if err != nil {
+		return CacheWarmSummary{}, err
 	}
 
 	if err := writeSubscriberCacheWarmData(ctx, cacheClient, warmData); err != nil {

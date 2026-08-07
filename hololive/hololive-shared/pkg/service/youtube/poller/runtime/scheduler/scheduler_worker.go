@@ -31,37 +31,6 @@ import (
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 )
 
-// worker: 작업 실행 워커
-func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int, stopCh <-chan struct{}) {
-	defer s.wg.Done()
-
-	for {
-		job, ok := nextWorkerJob(ctx, jobCh, stopCh)
-		if !ok {
-			return
-		}
-		s.executeJob(ctx, job, id)
-	}
-}
-
-func nextWorkerJob(ctx context.Context, jobCh <-chan *Job, stopCh <-chan struct{}) (*Job, bool) {
-	select {
-	case <-ctx.Done():
-		return nil, false
-	case <-stopCh:
-		return nil, false
-	case job, ok := <-jobCh:
-		return validWorkerJob(job, ok)
-	}
-}
-
-func validWorkerJob(job *Job, ok bool) (*Job, bool) {
-	if !ok || job == nil {
-		return nil, false
-	}
-	return job, true
-}
-
 // executeJob: 작업 실행
 func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	if job == nil {
@@ -77,11 +46,14 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	}
 
 	claimStartedAt := time.Now()
-	renew := s.maybeStartJobClaimRenewLoop(ctx, job.Poller.Name(), decision)
+	// reschedule로 heap에 복귀한 job은 sync가 락 하에 필드를 덮어쓸 수 있어, 그 뒤에 실행되는
+	// defer는 job 필드를 직접 읽지 않고 여기서 캡처한 사본만 사용한다.
+	pollerName := job.Poller.Name()
+	renew := s.maybeStartJobClaimRenewLoop(ctx, pollerName, decision)
 	defer func() {
 		if err := renew.StopAndWait(ctx, s.claimCompletionTimeout); err != nil {
 			s.logger.Warn("Poll job claim renew cleanup failed",
-				slog.String("poller", job.Poller.Name()),
+				slog.String("poller", pollerName),
 				slog.Any("error", err),
 			)
 		}
@@ -103,8 +75,9 @@ func (s *Scheduler) runClaimedJobPoll(
 		return
 	}
 
+	budgetProfile := job.budgetProfile
 	reservationTerminal := false
-	defer s.releaseJobReservationIfNotTerminal(ctx, job, reservation, &reservationTerminal)
+	defer s.releaseJobReservationIfNotTerminal(ctx, budgetProfile, reservation, &reservationTerminal)
 
 	pollCtx, cancel := s.pollContext(claimCtx)
 	defer cancel()
@@ -123,7 +96,7 @@ func (s *Scheduler) runClaimedJobPoll(
 	if decision.claimed && renewStopErr == nil {
 		err = s.finishJobClaim(ctx, job, decision.claim, err)
 	}
-	err = s.commitJobReservation(ctx, job, reservation, err, &reservationTerminal)
+	err = s.commitJobReservation(ctx, budgetProfile, reservation, err, &reservationTerminal)
 	if decision.claimed {
 		s.observeJobLeaseElapsed(job, time.Since(claimStartedAt))
 	}
@@ -196,7 +169,7 @@ func joinPollErrors(current, additional error) error {
 	return errors.Join(current, additional)
 }
 
-func (s *Scheduler) releaseJobReservationIfNotTerminal(ctx context.Context, job *Job, reservation polling.BudgetReservation, terminal *bool) {
+func (s *Scheduler) releaseJobReservationIfNotTerminal(ctx context.Context, budgetProfile polling.BudgetProfile, reservation polling.BudgetReservation, terminal *bool) {
 	if reservation == nil || *terminal {
 		return
 	}
@@ -206,10 +179,10 @@ func (s *Scheduler) releaseJobReservationIfNotTerminal(ctx context.Context, job 
 		s.logger.Warn("Failed to release poll budget reservation", slog.Any("error", err))
 	}
 	*terminal = true
-	s.metrics.AddBudgetInflight(job.budgetProfile, -1)
+	s.metrics.AddBudgetInflight(budgetProfile, -1)
 }
 
-func (s *Scheduler) commitJobReservation(ctx context.Context, job *Job, reservation polling.BudgetReservation, pollErr error, terminal *bool) error {
+func (s *Scheduler) commitJobReservation(ctx context.Context, budgetProfile polling.BudgetProfile, reservation polling.BudgetReservation, pollErr error, terminal *bool) error {
 	if pollErr != nil || reservation == nil {
 		return pollErr
 	}
@@ -219,7 +192,7 @@ func (s *Scheduler) commitJobReservation(ctx context.Context, job *Job, reservat
 		return fmt.Errorf("commit budget reservation: %w", commitErr)
 	}
 	*terminal = true
-	s.metrics.AddBudgetInflight(job.budgetProfile, -1)
+	s.metrics.AddBudgetInflight(budgetProfile, -1)
 	return nil
 }
 

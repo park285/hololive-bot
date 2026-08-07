@@ -10,6 +10,7 @@ scripts/deploy/lib/health-gate.sh
 scripts/deploy/lib/ap-host.sh
 scripts/deploy/lib/require-quic-udp-buffer.sh
 scripts/deploy/lib/postgres-capacity.sh
+scripts/deploy/lib/public-bind-mounts.sh
 scripts/ci/check-postgres-capacity.sh
 scripts/ci/postgres-capacity-policy.tsv
 scripts/deploy/ap-hosts/osaka.conf
@@ -596,6 +597,7 @@ hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_reschedule.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_timing.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_worker.go
+hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_worker_loop.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/freshness_deferrals.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/shorts_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/shorts_poller_freshness.go

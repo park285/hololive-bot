@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -76,15 +77,29 @@ func formatReplyClientRequestID(token string, ordinal uint64) string {
 }
 
 func reissuedReplyClientRequestID(clientRequestID string, generation int) string {
-	if clientRequestID == "" || generation <= 0 {
+	clientRequestID = strings.TrimSpace(clientRequestID)
+	if generation <= 0 {
 		return clientRequestID
 	}
-	suffix := iris.ReplyReissueSuffix(generation)
-	candidate := clientRequestID + suffix
-	if isValidReplyClientRequestID(candidate) {
+	if clientRequestID == "" {
+		return ""
+	}
+
+	candidate, err := iris.ReissuedClientRequestID(clientRequestID, generation)
+	if err == nil {
 		return candidate
 	}
-	return formatReplyClientRequestID(hashedReplyIDToken(candidate), 0) + suffix
+	if errors.Is(err, iris.ErrReplyReissueGenerationOutOfRange) ||
+		errors.Is(err, iris.ErrReplyReissueBaseAlreadyReissued) {
+		return ""
+	}
+
+	fallbackBase := formatReplyClientRequestID(hashedReplyIDToken(clientRequestID), 0)
+	candidate, err = iris.ReissuedClientRequestID(fallbackBase, generation)
+	if err != nil {
+		return ""
+	}
+	return candidate
 }
 
 func hashedReplyIDToken(messageID string) string {

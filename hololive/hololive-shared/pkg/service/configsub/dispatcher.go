@@ -32,6 +32,7 @@ import (
 type ApplyHandlers struct {
 	ScraperProxy        func(contractssettings.ScraperProxyPayloadV1)
 	AlarmAdvanceMinutes func(contractssettings.AlarmAdvanceMinutesPayloadV1)
+	ACL                 func(contractssettings.ACLPayloadV1)
 	Unknown             func(updateType string)
 }
 
@@ -51,6 +52,8 @@ func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update co
 		applyScraperProxyUpdate(logger, handlers, update)
 	case contractssettings.UpdateTypeAlarmAdvanceMinutes:
 		applyAlarmAdvanceMinutesUpdate(logger, handlers, update)
+	case contractssettings.UpdateTypeACL:
+		applyACLUpdate(logger, handlers, update)
 	default:
 		applyUnknownConfigUpdate(logger, handlers, update)
 	}
@@ -80,6 +83,19 @@ func applyAlarmAdvanceMinutesUpdate(logger *slog.Logger, handlers ApplyHandlers,
 		return
 	}
 	handlers.AlarmAdvanceMinutes(payload)
+}
+
+func applyACLUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
+	if handlers.ACL == nil {
+		logConfigUpdateHandlerMissing(logger, update.Type)
+		return
+	}
+
+	var payload contractssettings.ACLPayloadV1
+	if !decodeConfigUpdatePayload(logger, update, &payload) {
+		return
+	}
+	handlers.ACL(payload)
 }
 
 func applyUnknownConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {

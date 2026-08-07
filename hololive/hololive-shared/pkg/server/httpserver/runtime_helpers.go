@@ -168,8 +168,13 @@ func installRuntimeMiddleware(router *gin.Engine, ctx context.Context, logger *s
 	if opts == nil {
 		opts = &RuntimeRouterOptions{}
 	}
+	// "/__observability/*"는 로깅에서만 제외한다. observability-stack의
+	// collect-runtime-metrics.sh가 liveness 근거로 쓸 404 span을 만들려고 일부러
+	// 호출하는 경로이므로, LocalPlaneTraceFilter에는 절대 추가하면 안 된다.
 	ApplyBaseMiddleware(router, ctx, logger, BaseMiddlewareOptions{
-		SkipLogPaths: append([]string{"/health", "/ready", "/internal/ready", "/metrics"}, opts.SkipLogPaths...),
+		SkipLogPaths: append(
+			[]string{"/health", "/ready", "/internal/ready", "/metrics", "/__observability/*"},
+			opts.SkipLogPaths...),
 	})
 	if opts.EnableGzip {
 		router.Use(gzip.Gzip(gzip.DefaultCompression))
