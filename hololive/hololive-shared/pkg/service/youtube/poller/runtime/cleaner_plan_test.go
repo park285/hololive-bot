@@ -3,7 +3,6 @@ package polling
 import (
 	"context"
 	"encoding/json"
-	"slices"
 	"testing"
 	"time"
 
@@ -27,7 +26,7 @@ func TestViewerSampleCleanerDeleteBatchSkipsLockedSession(t *testing.T) {
 	holder, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = holder.Rollback(context.Background())
+		rollbackViewerSampleCleanerTx(t, holder)
 	})
 	_, err = holder.Exec(ctx, "SELECT video_id FROM youtube_live_sessions WHERE video_id = $1 FOR UPDATE", "a-locked")
 	require.NoError(t, err)
@@ -70,7 +69,7 @@ func TestViewerSampleCleanerPlanBoundsIneligiblePrefixAndPaginatesEmptySessions(
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = tx.Rollback(context.Background())
+		rollbackViewerSampleCleanerTx(t, tx)
 	})
 
 	_, err = tx.Exec(ctx, "SET LOCAL plan_cache_mode = force_generic_plan")
@@ -98,12 +97,12 @@ func TestViewerSampleCleanerPlanBoundsIneligiblePrefixAndPaginatesEmptySessions(
 	var plans []viewerSampleExplainEnvelope
 	require.NoError(t, json.Unmarshal([]byte(rawPlan), &plans))
 	require.Len(t, plans, 1)
-	require.True(t, viewerSamplePlanUsesIndex(plans[0].Plan, "idx_yls_ended_cleanup"))
-	require.True(t, viewerSamplePlanUsesIndex(plans[0].Plan, "youtube_live_viewer_samples_pkey"))
-	require.False(t, viewerSamplePlanHasSequentialSampleScan(plans[0].Plan))
+	require.True(t, viewerSamplePlanUsesIndex(&plans[0].Plan, "idx_yls_ended_cleanup"))
+	require.True(t, viewerSamplePlanUsesIndex(&plans[0].Plan, "youtube_live_viewer_samples_pkey"))
+	require.False(t, viewerSamplePlanHasSequentialSampleScan(&plans[0].Plan))
 	require.LessOrEqual(
 		t,
-		viewerSamplePlanMaxExaminedRows(plans[0].Plan),
+		viewerSamplePlanMaxExaminedRows(&plans[0].Plan),
 		float64(viewerSampleCleanupSessionPageSize*2),
 	)
 
@@ -132,26 +131,31 @@ type viewerSampleExplainNode struct {
 	Plans                     []viewerSampleExplainNode `json:"Plans"`
 }
 
-func viewerSamplePlanUsesIndex(node viewerSampleExplainNode, indexName string) bool {
+func viewerSamplePlanUsesIndex(node *viewerSampleExplainNode, indexName string) bool {
 	if node.IndexName == indexName {
 		return true
 	}
-	for _, child := range node.Plans {
-		if viewerSamplePlanUsesIndex(child, indexName) {
+	for i := range node.Plans {
+		if viewerSamplePlanUsesIndex(&node.Plans[i], indexName) {
 			return true
 		}
 	}
 	return false
 }
 
-func viewerSamplePlanHasSequentialSampleScan(node viewerSampleExplainNode) bool {
+func viewerSamplePlanHasSequentialSampleScan(node *viewerSampleExplainNode) bool {
 	if node.RelationName == "youtube_live_viewer_samples" && node.NodeType == "Seq Scan" {
 		return true
 	}
-	return slices.ContainsFunc(node.Plans, viewerSamplePlanHasSequentialSampleScan)
+	for i := range node.Plans {
+		if viewerSamplePlanHasSequentialSampleScan(&node.Plans[i]) {
+			return true
+		}
+	}
+	return false
 }
 
-func viewerSamplePlanMaxExaminedRows(node viewerSampleExplainNode) float64 {
+func viewerSamplePlanMaxExaminedRows(node *viewerSampleExplainNode) float64 {
 	maxRows := float64(0)
 	if node.RelationName == "youtube_live_viewer_samples" || node.IndexName == "youtube_live_viewer_samples_pkey" {
 		loops := node.ActualLoops
@@ -160,8 +164,8 @@ func viewerSamplePlanMaxExaminedRows(node viewerSampleExplainNode) float64 {
 		}
 		maxRows = (node.ActualRows + node.RowsRemovedByFilter + node.RowsRemovedByIndexRecheck) * loops
 	}
-	for _, child := range node.Plans {
-		maxRows = max(maxRows, viewerSamplePlanMaxExaminedRows(child))
+	for i := range node.Plans {
+		maxRows = max(maxRows, viewerSamplePlanMaxExaminedRows(&node.Plans[i]))
 	}
 	return maxRows
 }

@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -99,6 +100,14 @@ func TestViewerSampleCleanerDeleteBatchDeletesExactlyBatchSize(t *testing.T) {
 	require.NotNil(t, step.target)
 	require.Equal(t, "old-video", step.target.videoID)
 	require.EqualValues(t, 3, countViewerSampleCleanerSamples(t, ctx, pool, "old-video"))
+}
+
+func rollbackViewerSampleCleanerTx(t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	err := tx.Rollback(context.Background())
+	if err != nil {
+		require.ErrorIs(t, err, pgx.ErrTxClosed)
+	}
 }
 
 func insertViewerSampleCleanerLiveSession(

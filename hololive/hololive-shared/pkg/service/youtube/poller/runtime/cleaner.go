@@ -108,7 +108,10 @@ func asViewerSampleConnAcquirer(db any) viewerSampleConnAcquirer {
 }
 
 func asViewerSampleSession(db any) *pgxpool.Conn {
-	session, _ := db.(*pgxpool.Conn)
+	session, ok := db.(*pgxpool.Conn)
+	if !ok {
+		return nil
+	}
 	return session
 }
 
@@ -188,11 +191,11 @@ func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier
 	return total, nil
 }
 
-func viewerSampleCleanupStop(passDone bool, batch, maxBatches int) (bool, bool) {
+func viewerSampleCleanupStop(passDone bool, batch, maxBatches int) (stop, budgetExhausted bool) {
 	if passDone {
 		return true, false
 	}
-	budgetExhausted := batch == maxBatches
+	budgetExhausted = batch == maxBatches
 	return budgetExhausted, budgetExhausted
 }
 
@@ -200,14 +203,14 @@ func (c *ViewerSampleCleaner) runCleanupBatch(
 	ctx context.Context,
 	db dbx.Querier,
 	cutoff time.Time,
-) (int64, bool, error) {
+) (deleted int64, passDone bool, err error) {
 	step, err := c.deleteNextBatch(ctx, db, cutoff, c.state.cursor)
 	if err != nil {
 		return 0, false, fmt.Errorf("delete viewer sample batch: %w", err)
 	}
 
 	c.state.passDeleted += step.deleted
-	passDone, err := c.advanceCleanupState(step)
+	passDone, err = c.advanceCleanupState(step)
 	if err != nil {
 		return step.deleted, false, fmt.Errorf("advance viewer sample cleanup cursor: %w", err)
 	}

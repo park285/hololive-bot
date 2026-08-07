@@ -123,7 +123,7 @@ func TestViewerSampleCleanerCleanupStopsAtTimeBudget(t *testing.T) {
 	holder, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = holder.Rollback(context.Background())
+		rollbackViewerSampleCleanerTx(t, holder)
 	})
 	_, err = holder.Exec(ctx, "LOCK TABLE youtube_live_sessions IN ACCESS EXCLUSIVE MODE")
 	require.NoError(t, err)
