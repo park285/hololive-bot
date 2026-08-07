@@ -22,7 +22,6 @@ func TestResolveYouTubeProducerFleetActiveAPCount(t *testing.T) {
 		{name: "active-active requires explicit count", configured: 0, activeActiveEnabled: true, wantErr: true},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := resolveYouTubeProducerFleetActiveAPCount(test.configured, test.activeActiveEnabled)
