@@ -58,6 +58,14 @@ func (p *Publisher) PublishAlarmAdvanceMinutes(ctx context.Context, minutes int)
 	})
 }
 
+func (p *Publisher) PublishACL(ctx context.Context, reason, room, mode string) error {
+	return p.publish(ctx, contractssettings.UpdateTypeACL, contractssettings.ACLPayloadV1{
+		Reason: reason,
+		Room:   room,
+		Mode:   mode,
+	})
+}
+
 func (p *Publisher) publish(ctx context.Context, updateType string, payload any) error {
 	if p == nil || p.client == nil {
 		return fmt.Errorf("publish config update: client is nil")

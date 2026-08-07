@@ -117,3 +117,40 @@ func TestNewApplyFn_Unknown(t *testing.T) {
 		})
 	})
 }
+
+func TestNewApplyFn_ACL(t *testing.T) {
+	called := false
+	var got contractssettings.ACLPayloadV1
+
+	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
+		ACL: func(payload contractssettings.ACLPayloadV1) {
+			called = true
+			got = payload
+		},
+	})
+
+	payload, err := json.Marshal(contractssettings.ACLPayloadV1{Reason: "room_add", Room: "room-1", Mode: "whitelist"})
+	assert.NoError(t, err)
+
+	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeACL, Payload: payload})
+
+	assert.True(t, called, "acl update must reach the ACL handler")
+	assert.Equal(t, "room_add", got.Reason)
+	assert.Equal(t, "room-1", got.Room)
+	assert.Equal(t, "whitelist", got.Mode)
+}
+
+func TestNewApplyFn_ACLWithoutHandlerDoesNotFallThroughToUnknown(t *testing.T) {
+	unknownCalled := false
+
+	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
+		Unknown: func(string) { unknownCalled = true },
+	})
+
+	payload, err := json.Marshal(contractssettings.ACLPayloadV1{Reason: "room_add"})
+	assert.NoError(t, err)
+
+	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeACL, Payload: payload})
+
+	assert.False(t, unknownCalled, "a known type with no handler must not be reported as unknown")
+}

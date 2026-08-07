@@ -58,6 +58,7 @@ func buildBotConfigSubscriberRuntimeDependencies(infra *appbootstrap.BotInfrastr
 		YouTubeService: infra.Deps.Service,
 		HolodexService: infra.HolodexService,
 		AlarmCRUD:      infra.AlarmCRUD,
+		ACL:            infra.Deps.ACL,
 	}
 }
 
