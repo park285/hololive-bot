@@ -2,6 +2,7 @@ package dispatchrun
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -21,7 +22,46 @@ func groupAlarmDispatchEnvelopesForKaring(envelopes []domain.AlarmQueueEnvelope,
 	if !karingEnabled {
 		return groupAlarmDispatchEnvelopes(envelopes)
 	}
-	return groupAlarmDispatchEnvelopesByKey(envelopes, alarmDispatchKaringGroupKey)
+	grouped := groupAlarmDispatchEnvelopesByKey(envelopes, alarmDispatchKaringGroupKey)
+	split := make([]alarmDispatchGroup, 0, len(grouped))
+	for i := range grouped {
+		split = append(split, splitAlarmDispatchKaringGroup(grouped[i])...)
+	}
+	return split
+}
+
+// 한 그룹이 여러 chunk로 나뉘면 앞 chunk만 전송된 뒤 뒤 chunk가 502로 실패하는 부분 성공이 가능하고,
+// 그 실패는 not-admitted라 envelopeCount와 무관하게 재시도되어 전체를 retry-solo로 재그룹한다 —
+// 이미 전송된 item이 다른 ClientRequestID로 다시 나간다. chunk 경계에서 미리 잘라 그 상태를 없앤다.
+func splitAlarmDispatchKaringGroup(group alarmDispatchGroup) []alarmDispatchGroup {
+	if len(group.envelopes) <= alarmDispatchKaringMaxItemsPerRequest ||
+		len(group.envelopes) != len(group.notifications) {
+		return []alarmDispatchGroup{group}
+	}
+
+	order := make([]int, len(group.envelopes))
+	for i := range order {
+		order[i] = i
+	}
+	// buildAlarmDispatchKaringContentListRequests와 같은 정렬이어야 분할 결과가 기존 chunk 경계와
+	// 일치하고, 드레인 순서가 ClientRequestID에 새지 않는다.
+	sort.SliceStable(order, func(a, b int) bool {
+		return alarmDispatchNotificationKaringItemIdentity(group, order[a]) <
+			alarmDispatchNotificationKaringItemIdentity(group, order[b])
+	})
+
+	groups := make([]alarmDispatchGroup, 0, (len(order)+alarmDispatchKaringMaxItemsPerRequest-1)/alarmDispatchKaringMaxItemsPerRequest)
+	for start := 0; start < len(order); start += alarmDispatchKaringMaxItemsPerRequest {
+		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(order))
+		sub := alarmDispatchGroup{roomID: group.roomID, minutesUntil: group.minutesUntil}
+		for _, index := range order[start:end] {
+			envelope := group.envelopes[index]
+			sub.envelopes = append(sub.envelopes, envelope)
+			sub.notifications = append(sub.notifications, group.notifications[index])
+		}
+		groups = append(groups, sub)
+	}
+	return groups
 }
 
 func groupAlarmDispatchEnvelopesByKey(

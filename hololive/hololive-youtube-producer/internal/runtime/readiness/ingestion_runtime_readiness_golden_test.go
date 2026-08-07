@@ -14,7 +14,7 @@ func TestGoldenResponseSingleOwnerBudgetAdmissionDenied(t *testing.T) {
 		ActiveActiveInstance: "youtube-producer-b",
 	})
 	state.MarkRunning()
-	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"}, 0)
 
 	code, payload := state.Response()
 

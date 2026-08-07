@@ -20,13 +20,14 @@ func alarmDispatchKaringIdentityTestEnvelope(roomID string, dispatchOutboxID int
 func karingRequestIDs(t *testing.T, envelopes []domain.AlarmQueueEnvelope) []string {
 	t.Helper()
 	groups := groupAlarmDispatchEnvelopesForKaring(envelopes, true)
-	require.Len(t, groups, 1)
-	requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, groups[0])
-	require.NoError(t, err)
-	ids := make([]string, 0, len(requests))
-	for i := range requests {
-		require.NotNil(t, requests[i].ClientRequestID)
-		ids = append(ids, *requests[i].ClientRequestID)
+	ids := make([]string, 0, len(groups))
+	for g := range groups {
+		requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, groups[g])
+		require.NoError(t, err)
+		require.Len(t, requests, 1,
+			"분할 후에는 그룹당 chunk가 정확히 하나여야 부분 성공 상태가 생기지 않는다")
+		require.NotNil(t, requests[0].ClientRequestID)
+		ids = append(ids, *requests[0].ClientRequestID)
 	}
 	return ids
 }

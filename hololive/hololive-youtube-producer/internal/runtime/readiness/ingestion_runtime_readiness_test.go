@@ -204,8 +204,8 @@ func TestStateResponseBudgetAdmissionDeniedDoesNotChangeHTTPReadiness(t *testing
 		GlobalBudgetEnabled: true,
 	})
 	state.MarkRunning()
-	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper", "holodex_live", "youtube_scraper"})
-	state.MarkBudgetAdmissionDenied("source_cooldown", []string{"browser_snapshot", "holodex_live"})
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper", "holodex_live", "youtube_scraper"}, 0)
+	state.MarkBudgetAdmissionDenied("source_cooldown", []string{"browser_snapshot", "holodex_live"}, time.Minute)
 
 	statusCode, payload := state.Response()
 
@@ -239,7 +239,7 @@ func TestStateResponseBudgetCleanupIncompleteDoesNotChangeHTTPReadiness(t *testi
 		GlobalBudgetEnabled: true,
 	})
 	state.MarkRunning()
-	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"youtube_scraper", "holodex_live", "youtube_scraper"})
+	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"youtube_scraper", "holodex_live", "youtube_scraper"}, 0)
 
 	statusCode, payload := state.Response()
 
@@ -273,8 +273,8 @@ func TestStateResponseBudgetAdmissionReasonSwitchClearsCleanupIncomplete(t *test
 		GlobalBudgetEnabled: true,
 	})
 	state.MarkRunning()
-	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"youtube_scraper"})
-	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"youtube_scraper"}, 0)
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"}, 0)
 
 	_, payload := state.Response()
 
@@ -292,8 +292,8 @@ func TestStateResponseBudgetDisabledIgnoresBudgetState(t *testing.T) {
 	})
 	state.MarkRunning()
 	state.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
-	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
-	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"holodex_live"})
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"}, 0)
+	state.MarkBudgetAdmissionDenied("budget_cleanup_incomplete", []string{"holodex_live"}, 0)
 
 	statusCode, payload := state.Response()
 
@@ -360,7 +360,7 @@ func TestPublicResponseOmitsOperationalDiagnostics(t *testing.T) {
 	})
 	state.MarkRunning()
 	state.MarkLeaseAvailable()
-	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"}, 0)
 
 	statusCode, payload := state.PublicResponse()
 

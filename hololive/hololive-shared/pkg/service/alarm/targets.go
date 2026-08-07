@@ -80,6 +80,7 @@ func resolveChannelSubscribersFromCache(
 ) (result0 []string, ok1 bool, err error) {
 	subscribers, err := LookupChannelSubscribersByType(ctx, cacheClient, channelID, alarmType)
 	if err != nil {
+		observeAlarmSubscriberCacheError("lookup")
 		if requireCacheSuccess {
 			return nil, true, fmt.Errorf("resolve channel subscribers by type: %w", err)
 		}
@@ -91,14 +92,27 @@ func resolveChannelSubscribersFromCache(
 		return normalizedSubscribers, true, nil
 	}
 
+	resolved, err := resolveKnownEmptySubscriberCache(ctx, cacheClient, channelID, alarmType, requireCacheSuccess)
+	return nil, resolved, err
+}
+
+func resolveKnownEmptySubscriberCache(
+	ctx context.Context,
+	cacheClient cache.Client,
+	channelID string,
+	alarmType domain.AlarmType,
+	requireCacheSuccess bool,
+) (bool, error) {
 	isKnownEmpty, err := cacheClient.Exists(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType))
-	if err == nil && isKnownEmpty {
-		return nil, true, nil
+	if err == nil {
+		return isKnownEmpty, nil
 	}
-	if err != nil && requireCacheSuccess {
-		return nil, true, fmt.Errorf("resolve channel subscribers by type: check empty subscriber cache: %w", err)
+
+	observeAlarmSubscriberCacheError("check_empty")
+	if requireCacheSuccess {
+		return true, fmt.Errorf("resolve channel subscribers by type: check empty subscriber cache: %w", err)
 	}
-	return nil, false, nil
+	return false, nil
 }
 
 func resolveChannelSubscribersFromDB(

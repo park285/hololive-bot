@@ -164,7 +164,7 @@ func (l readinessReportingBudgetLimiter) TryReserve(
 		if decision.AffectedSource != "" {
 			denied = []string{decision.AffectedSource}
 		}
-		l.readiness.MarkBudgetAdmissionDenied(decision.Reason, denied)
+		l.readiness.MarkBudgetAdmissionDenied(decision.Reason, denied, decision.RetryAfter)
 		return reservation, decision, nil
 	}
 	l.readiness.ClearBudgetAdmission(sources)

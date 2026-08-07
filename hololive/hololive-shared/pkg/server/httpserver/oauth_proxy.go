@@ -125,6 +125,14 @@ var oauthRedirectTmpl = template.Must(template.New("oauth").Parse(`<!DOCTYPE htm
 </body>
 </html>`))
 
+func trustedOAuthDeepLinkURL(deepLinkURL string) string {
+	parsed, err := url.Parse(deepLinkURL)
+	if err != nil || parsed.Scheme != AppScheme {
+		return fmt.Sprintf("%s://%s", AppScheme, CallbackPath)
+	}
+	return deepLinkURL
+}
+
 type oauthRedirectData struct {
 	Color       string
 	Icon        string
@@ -137,7 +145,7 @@ func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
 		Color:       "#667eea",
 		Icon:        "⏳",
 		Status:      "로그인 처리 중...",
-		DeepLinkURL: template.URL(deepLinkURL), //nolint:gosec // G203: 고정 scheme(hololive-app://) + url.Values.Encode() 산출물만 담는 값 — URL filter의 #ZgotmplZ 치환을 우회하기 위한 의도된 신뢰 마킹.
+		DeepLinkURL: template.URL(trustedOAuthDeepLinkURL(deepLinkURL)), //nolint:gosec // G203: trustedOAuthDeepLinkURL이 hololive-app:// scheme을 강제한 뒤에만 승격 — URL filter의 #ZgotmplZ 치환을 우회하기 위한 의도된 신뢰 마킹.
 	}
 
 	if isError {
