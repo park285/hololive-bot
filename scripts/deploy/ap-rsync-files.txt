@@ -597,6 +597,7 @@ hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_reschedule.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_timing.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_worker.go
+hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_worker_loop.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/freshness_deferrals.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/shorts_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/shorts_poller_freshness.go
