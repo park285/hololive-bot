@@ -18,6 +18,8 @@ import (
 	"github.com/kapu/admin-dashboard/internal/session"
 )
 
+const heartbeatPath = "/admin/api/auth/heartbeat"
+
 func (r *Runtime) auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionID, sess, clearCookies, err := r.resolveSession(c.Request)
@@ -48,10 +50,27 @@ func (r *Runtime) resolveSession(req *http.Request) (sessionID string, sess *ses
 		r.logger.Error("session lookup failed", slog.Any("error", err))
 		return "", nil, false, httpx.StoreUnavailable()
 	}
-	if sess == nil || (sess.RotatedTo != nil && req.URL.Path != "/admin/api/auth/heartbeat") {
+	if sess == nil {
 		return "", nil, true, httpx.Unauthorized()
 	}
+	if sess.RotatedTo != nil && req.URL.Path != heartbeatPath {
+		return r.resolveRotatedSession(req, sessionID, *sess.RotatedTo)
+	}
 	return sessionID, sess, false, nil
+}
+
+// 회전 유예 중 옛 쿠키 요청은 교체 세션을 따라간다. 쿠키를 지우면 동시 heartbeat가 방금 심은 새 쿠키까지 삭제되므로,
+// 실패 경로에서도 ClearAuthCookies를 하지 않는다. CSRF 바인딩은 요청이 실제로 들고 온 marker ID를 유지해야 성립한다.
+func (r *Runtime) resolveRotatedSession(req *http.Request, markerID, rotatedTo string) (sessionID string, sess *session.Session, clearCookies bool, err error) {
+	replacement, err := r.sessions.Get(req.Context(), rotatedTo)
+	if err != nil {
+		r.logger.Error("rotated session lookup failed", slog.Any("error", err))
+		return "", nil, false, httpx.StoreUnavailable()
+	}
+	if replacement == nil || replacement.RotatedTo != nil {
+		return "", nil, false, httpx.Unauthorized()
+	}
+	return markerID, replacement, false, nil
 }
 
 func (r *Runtime) csrf() gin.HandlerFunc {

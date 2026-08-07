@@ -129,14 +129,25 @@ func nextReplyEmission(ctx context.Context) (identity string, ordinal uint64, ok
 	return state.id, state.ordinal.Add(1) - 1, true
 }
 
-func currentReplyEmission(ctx context.Context) (identity string, ordinal uint64, ok bool) {
-	state := replyIdentityStateFromContext(ctx)
-	if state == nil {
-		return "", 0, false
+// 발급된 ordinal은 카운터에서 다시 읽어낼 수 없다. 동시 발송이 있으면 카운터는 이미 앞서 있고,
+// 재조회한 ordinal은 남의 슬롯을 가리켜 outbox 유니크 키 충돌로 응답 하나가 조용히 사라진다.
+type replyEmission struct {
+	identity        string
+	ordinal         uint64
+	clientRequestID string
+	ok              bool
+}
+
+func issueReplyEmission(ctx context.Context) replyEmission {
+	identity, ordinal, ok := nextReplyEmission(ctx)
+	if !ok {
+		return replyEmission{}
 	}
-	ordinal = state.ordinal.Load()
-	if ordinal == 0 {
-		return state.id, 0, true
+
+	return replyEmission{
+		identity:        identity,
+		ordinal:         ordinal,
+		clientRequestID: replyClientRequestID(identity, ordinal),
+		ok:              true,
 	}
-	return state.id, ordinal - 1, true
 }

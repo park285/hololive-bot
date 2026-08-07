@@ -123,6 +123,15 @@ func (s *leasedPhotoSyncService) runOwned(ctx context.Context, claim *ingestionl
 	return true
 }
 
+// renew 오류(err != nil)는 소유권 불명이라 즉시 중단하지 않고 다음 tick에 재시도한다.
+// renewed == false만 소유권 확정 상실로 즉시 중단한다. 실패 상한·renew 타임아웃·종료 대기의
+// 합이 lease TTL 안에 들어와야 다음 owner와 겹치지 않는다 — 이 관계는
+// TestPhotoSyncRenewFailureBudgetStaysWithinLeaseTTL이 고정한다.
+const (
+	photoSyncMaxRenewFailures = 2
+	photoSyncRenewTimeout     = 5 * time.Second
+)
+
 func (s *leasedPhotoSyncService) renewUntilStopped(
 	ctx context.Context,
 	claim *ingestionlease.JobRunClaim,
@@ -136,6 +145,7 @@ func (s *leasedPhotoSyncService) renewUntilStopped(
 	}
 	ticker := time.NewTicker(renewInterval)
 	defer ticker.Stop()
+	renewFailures := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -143,14 +153,33 @@ func (s *leasedPhotoSyncService) renewUntilStopped(
 		case <-done:
 			return
 		case <-ticker.C:
-			renewed, err := claim.Renew(ctx, leaseTTL)
-			if err != nil || !renewed {
+			renewed, err := renewPhotoSyncClaim(ctx, claim, leaseTTL)
+			if err != nil {
+				renewFailures++
+				if renewFailures < photoSyncMaxRenewFailures {
+					s.logWarn(ctx, "photo_sync_lease_renew_retry", err)
+					continue
+				}
 				s.logWarn(ctx, "photo_sync_lease_lost", err)
 				cancel()
 				return
 			}
+			if !renewed {
+				s.logWarn(ctx, "photo_sync_lease_lost", errors.New("photo sync lease no longer owned"))
+				cancel()
+				return
+			}
+			renewFailures = 0
 		}
 	}
+}
+
+// 상한 없는 renew는 DB 지연 한 번으로 ticker 루프 전체를 세워 TTL을 넘길 수 있다 —
+// hang을 5초 안에 실패로 바꿔 실패 상한 경로로 합류시킨다.
+func renewPhotoSyncClaim(ctx context.Context, claim *ingestionlease.JobRunClaim, leaseTTL time.Duration) (bool, error) {
+	renewCtx, cancel := context.WithTimeout(ctx, photoSyncRenewTimeout)
+	defer cancel()
+	return claim.Renew(renewCtx, leaseTTL)
 }
 
 func (s *leasedPhotoSyncService) waitForInnerStop(done <-chan struct{}) bool {

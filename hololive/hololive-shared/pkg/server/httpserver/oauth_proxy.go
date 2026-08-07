@@ -129,7 +129,7 @@ type oauthRedirectData struct {
 	Color       string
 	Icon        string
 	Status      string
-	DeepLinkURL string
+	DeepLinkURL template.URL
 }
 
 func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
@@ -137,7 +137,7 @@ func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
 		Color:       "#667eea",
 		Icon:        "⏳",
 		Status:      "로그인 처리 중...",
-		DeepLinkURL: deepLinkURL,
+		DeepLinkURL: template.URL(deepLinkURL), //nolint:gosec // G203: 고정 scheme(hololive-app://) + url.Values.Encode() 산출물만 담는 값 — URL filter의 #ZgotmplZ 치환을 우회하기 위한 의도된 신뢰 마킹.
 	}
 
 	if isError {

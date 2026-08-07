@@ -53,6 +53,11 @@ type Job struct {
 	immediateFirstRun   bool
 	consecutiveFailures int
 	index               int // heap 인덱스
+	// s.mu 하에서만 접근. in-flight job(index < 0)은 워커가 락 없이 필드를 읽으므로
+	// sync 갱신을 여기 보류했다가 reschedule 시점에 적용한다. reschedule로 heap에 복귀한
+	// 뒤에는 sync가 락 하에 직접 쓰므로, 워커의 후속 defer는 job 필드가 아니라
+	// 사전 캡처한 사본만 읽어야 한다.
+	pendingSync *PollerTargetSync
 }
 
 type Priority int

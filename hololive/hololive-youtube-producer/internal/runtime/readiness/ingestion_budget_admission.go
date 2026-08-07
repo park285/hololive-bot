@@ -78,7 +78,11 @@ func isBudgetAdmissionReason(reason string) bool {
 func (s *State) applyBudgetAdmissionLocked(reason, source string) {
 	switch reason {
 	case "source_cooldown":
-		s.sourceCooldown[source] = time.Time{}
+		// MarkSourceCooldownFor가 기록한 non-zero 만료를 zero-time으로 덮으면
+		// pruneExpiredCooldownsLocked가 항목을 영원히 제거하지 못한다(zero-time은 프루닝 제외).
+		if existing, ok := s.sourceCooldown[source]; !ok || existing.IsZero() {
+			s.sourceCooldown[source] = time.Time{}
+		}
 		delete(s.budgetExhausted, source)
 		delete(s.budgetCleanupIncomplete, source)
 	case "budget_cleanup_incomplete":

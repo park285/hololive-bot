@@ -302,7 +302,7 @@ func TestWarmSubscriberCacheFromRepository_LoadError(t *testing.T) {
 	assert.ErrorContains(t, err, "load failed")
 }
 
-func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorPreservesExistingCache(t *testing.T) {
+func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorLeavesCacheCleared(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
@@ -344,15 +344,15 @@ func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorPreservesExisti
 
 	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-existing"}, registryRooms)
+	assert.Empty(t, registryRooms)
 
 	existingRoomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"UC_EXISTING"}, existingRoomChannels)
+	assert.Empty(t, existingRoomChannels)
 
-	existingMemberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_EXISTING")
+	channelRegistry, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
-	assert.Equal(t, "Existing Member", existingMemberName)
+	assert.Empty(t, channelRegistry)
 }
 
 func TestCompactUniqueStrings_TrimsDedupesAndPreservesOrder(t *testing.T) {

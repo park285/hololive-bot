@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/admin-dashboard/internal/auth"
 )
 
 type heartbeatBody struct {
@@ -109,4 +111,51 @@ func TestWaitForLoginBackoffStopsWhenRequestIsCanceled(t *testing.T) {
 
 func TestWaitForLoginBackoffSkipsNonPositiveDelay(t *testing.T) {
 	require.True(t, waitForLoginBackoff(context.Background(), 0))
+}
+
+func TestLogoutDuringRotationGraceDeletesMarkerAndReplacement(t *testing.T) {
+	replacement := liveSession("replacement-session")
+	store := storeWithSessions(rotatedMarker("marker-session", "replacement-session"), replacement)
+	var deleted []string
+	store.deleteFn = func(_ context.Context, id string) error {
+		deleted = append(deleted, id)
+		return nil
+	}
+	rt := newTestRuntime(t, store, nil)
+
+	csrf, err := auth.NewCSRFToken("marker-session", testSecret)
+	require.NoError(t, err)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+	req.AddCookie(signedSessionCookie("marker-session"))
+	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	req.Header.Set("X-CSRF-Token", csrf)
+
+	rec := doRequest(rt.Handler(), req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []string{"replacement-session", "marker-session"}, deleted,
+		"logout must revoke the live replacement session, not only the grace marker")
+	require.True(t, clearsAuthCookies(rec))
+}
+
+func TestLogoutOutsideGraceDeletesSingleSession(t *testing.T) {
+	store := storeWith(liveSession("plain-session"))
+	var deleted []string
+	store.deleteFn = func(_ context.Context, id string) error {
+		deleted = append(deleted, id)
+		return nil
+	}
+	rt := newTestRuntime(t, store, nil)
+
+	csrf, err := auth.NewCSRFToken("plain-session", testSecret)
+	require.NoError(t, err)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+	req.AddCookie(signedSessionCookie("plain-session"))
+	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	req.Header.Set("X-CSRF-Token", csrf)
+
+	rec := doRequest(rt.Handler(), req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []string{"plain-session"}, deleted)
 }

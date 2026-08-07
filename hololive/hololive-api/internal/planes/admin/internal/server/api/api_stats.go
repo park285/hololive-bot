@@ -40,6 +40,8 @@ import (
 
 var systemStatsStreamInterval = 5 * time.Second
 
+const systemStatsWriteTimeout = 10 * time.Second
+
 var errSystemStatsStreamStopped = errors.New("system stats stream stopped")
 
 type statsResponse struct {
@@ -170,6 +172,10 @@ func (h *StatsHandler) writeSystemStats(
 		return false
 	}
 
+	if err := conn.SetWriteDeadline(time.Now().Add(systemStatsWriteTimeout)); err != nil {
+		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
+		return false
+	}
 	if err := conn.WriteJSON(stats); err != nil {
 		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
 		return false

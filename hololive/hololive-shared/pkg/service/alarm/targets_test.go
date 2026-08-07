@@ -348,7 +348,7 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	}
 }
 
-func TestLoadChannelSubscriberAlarms_QueryContextPreservesParentDeadline(t *testing.T) {
+func TestLoadChannelSubscriberAlarms_QueryContextIgnoresParentDeadline(t *testing.T) {
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
@@ -366,11 +366,14 @@ func TestLoadChannelSubscriberAlarms_QueryContextPreservesParentDeadline(t *test
 		}
 	})
 
-	alarms, err := loadChannelSubscriberAlarms(ctx, db, "UC_deadline_preserved", domain.AlarmTypeLive)
+	alarms, err := loadChannelSubscriberAlarms(ctx, db, "UC_deadline_isolated", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Nil(t, alarms)
 	require.True(t, <-hasDeadline)
-	require.WithinDuration(t, deadline, <-deadlines, 5*time.Millisecond)
+
+	remaining := time.Until(<-deadlines)
+	require.Greater(t, remaining, 4*time.Second)
+	require.Less(t, remaining, 6*time.Second)
 }
 
 func TestLoadChannelSubscriberAlarms_QueryContextAppliesFallbackTimeoutWithoutParentDeadline(t *testing.T) {
@@ -398,7 +401,7 @@ func TestLoadChannelSubscriberAlarms_QueryContextAppliesFallbackTimeoutWithoutPa
 	require.Less(t, remaining, 6*time.Second)
 }
 
-func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *testing.T) {
+func TestLoadChannelSubscriberAlarms_SingleflightIsolatesFollowersFromFirstCallerDeadline(t *testing.T) {
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
@@ -446,9 +449,16 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *tes
 	require.Error(t, first.err)
 	assert.ErrorContains(t, first.err, context.DeadlineExceeded.Error())
 
+	select {
+	case <-releaseQuery:
+	default:
+		close(releaseQuery)
+	}
+
 	second := waitAlarmLoadResult(t, secondDone, 250*time.Millisecond, releaseQuery, "second")
-	require.Error(t, second.err)
-	assert.ErrorContains(t, second.err, context.DeadlineExceeded.Error())
+	require.NoError(t, second.err)
+	require.Len(t, second.alarms, 1)
+	assert.Equal(t, "room-mixed", second.alarms[0].RoomID)
 
 	if got := queryCount.Load(); got != 1 {
 		t.Fatalf("db query count = %d, want 1", got)

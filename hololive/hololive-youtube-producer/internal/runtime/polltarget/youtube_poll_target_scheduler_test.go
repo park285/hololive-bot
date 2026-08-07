@@ -298,7 +298,7 @@ func TestYouTubePollSchedulerSyncerSyncAtSkipsTieredClassifyOnCancelledContext(t
 
 	keys := schedulerJobKeys(t, cancelledScheduler)
 	require.Contains(t, keys, "UC_ACTIVE_REG:videos",
-		"cancelled context must skip tiered classify and fall back to registration channel IDs")
+		"cancelled context must skip the tiered sync and keep the scheduler's existing jobs")
 	require.NotContains(t, keys, "UC_NOTIFY:videos",
 		"cancelled context must not run tiered classify against resolved notification targets")
 }

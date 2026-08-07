@@ -33,6 +33,10 @@ const (
 	durableMaxAttempts           = int32(5)
 	durableBatchSize             = int32(100)
 	commandStaleAfter            = 5 * time.Minute
+	// Stop이 wg.Wait로 in-flight 정산을 조인하고 종료 hook 체인(bot→admin→llm plane)은
+	// AppTimeout.Shutdown(10s) 단일 ctx를 순차 공유하므로, 정산 예산이 그 절반을 넘으면
+	// DB 장애 시 후속 plane의 graceful 종료가 통째로 굶는다.
+	durableSettlementTimeout     = 3 * time.Second
 	durableTerminalRetention     = 8 * 24 * time.Hour
 	durableManualReviewRetention = 30 * 24 * time.Hour
 )
@@ -210,7 +214,12 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	}
 	stopHeartbeat()
 	<-heartbeatDone
-	r.completeCommandAndInbox(ctx, claim.MessageID, token, err)
+	// shutdown이 runCtx를 취소한 뒤에도 정산은 성공해야 한다 — 취소된 ctx 그대로면
+	// command가 claimed로 방치되어 재시작 후 같은 방이 head-of-line에서 수 분간 정지한다.
+	// token fencing이 있어 소유권을 잃은 경우에도 안전한 no-op이다.
+	settleCtx, cancelSettle := context.WithTimeout(context.WithoutCancel(ctx), durableSettlementTimeout)
+	defer cancelSettle()
+	r.completeCommandAndInbox(settleCtx, claim.MessageID, token, err)
 }
 
 func (r *durableRuntime) claimCommand(ctx context.Context, claim *durability.InboxClaim, token string) (bool, error) {

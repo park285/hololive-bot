@@ -92,8 +92,14 @@ func handleDigestLockNotAcquired(onLockNotAcquired func() error) error {
 	return nil
 }
 
+const digestLockReleaseTimeout = 5 * time.Second
+
 func (d *DigestScheduler) releaseDigestLock(ctx context.Context, lockKey, token string) {
-	if releaseErr := d.Locker.Release(ctx, lockKey, token); releaseErr != nil && d.Logger != nil {
+	// shutdown이 실행 ctx를 취소한 채 도달하면 Release가 반드시 실패해 lock이
+	// DefaultExecutionLockTTL(15분)까지 잔존하므로 해제는 취소와 분리한다.
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), digestLockReleaseTimeout)
+	defer cancel()
+	if releaseErr := d.Locker.Release(releaseCtx, lockKey, token); releaseErr != nil && d.Logger != nil {
 		d.Logger.Warn("release digest lock failed", slog.String("lock_key", lockKey), slog.Any("error", releaseErr))
 	}
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/config"
+	"github.com/kapu/admin-dashboard/internal/docker"
 	"github.com/kapu/admin-dashboard/internal/openapi"
 	"github.com/kapu/admin-dashboard/internal/session"
 	"github.com/kapu/admin-dashboard/internal/static"
@@ -96,6 +97,33 @@ func storeWith(sess *session.Session) *fakeSessions {
 			return nil, nil
 		},
 	}
+}
+
+func storeWithSessions(sessions ...*session.Session) *fakeSessions {
+	byID := make(map[string]*session.Session, len(sessions))
+	for _, sess := range sessions {
+		byID[sess.ID] = sess
+	}
+	return &fakeSessions{
+		getFn: func(_ context.Context, id string) (*session.Session, error) {
+			return byID[id], nil
+		},
+	}
+}
+
+func rotatedMarker(id, rotatedTo string) *session.Session {
+	marker := liveSession(id)
+	marker.RotatedTo = &rotatedTo
+	return marker
+}
+
+func clearsAuthCookies(rec *httptest.ResponseRecorder) bool {
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == auth.SessionCookieName && cookie.MaxAge < 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func testPasswordHash(t *testing.T, password string) string {
@@ -223,13 +251,13 @@ func TestSessionStatusAuthenticated(t *testing.T) {
 	require.Contains(t, payload, "session_policy")
 }
 
-func TestRotatedSessionOnlyAllowsHeartbeat(t *testing.T) {
-	rotatedTo := "next-session"
-	sess := liveSession("rotated-session")
-	sess.RotatedTo = &rotatedTo
-	store := storeWith(sess)
+func TestRotatedSessionFollowsReplacementDuringGrace(t *testing.T) {
+	marker := rotatedMarker("rotated-session", "next-session")
+	replacement := liveSession("next-session")
+	replacement.AbsoluteExpiresAt = marker.AbsoluteExpiresAt.Add(time.Hour)
+	store := storeWithSessions(marker, replacement)
 	store.refreshFn = func(context.Context, string, bool) (session.RefreshResult, error) {
-		return session.RefreshResult{Kind: session.RefreshRotated, Session: liveSession(rotatedTo)}, nil
+		return session.RefreshResult{Kind: session.RefreshRotated, Session: replacement}, nil
 	}
 	rt := newTestRuntime(t, store, func(cfg *config.Config) {
 		cfg.Security.CSRFMode = config.SecurityOff
@@ -237,14 +265,101 @@ func TestRotatedSessionOnlyAllowsHeartbeat(t *testing.T) {
 	handler := rt.Handler()
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
-	req.AddCookie(signedSessionCookie(sess.ID))
-	require.Equal(t, http.StatusUnauthorized, doRequest(handler, req).Code)
+	req.AddCookie(signedSessionCookie(marker.ID))
+	rec := doRequest(handler, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.False(t, clearsAuthCookies(rec), "grace 요청은 동시 heartbeat가 심은 새 쿠키를 지우면 안 된다")
+	payload := decodeBody(t, rec)
+	require.Equal(t, true, payload["authenticated"])
+	require.InDelta(t, float64(replacement.AbsoluteExpiresAt.Unix()), payload["absolute_expires_at"], 0)
+	csrfToken, ok := payload["csrf_token"].(string)
+	require.True(t, ok, "csrf_token: %v", payload["csrf_token"])
+	require.True(t, auth.ValidateCSRFToken(marker.ID, csrfToken, testSecret), "CSRF는 요청이 실제로 보낸 marker ID에 바인딩되어야 한다")
 
 	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", http.NoBody)
-	req.AddCookie(signedSessionCookie(sess.ID))
-	rec := doRequest(handler, req)
+	req.AddCookie(signedSessionCookie(marker.ID))
+	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, decodeBody(t, rec), "csrf_token")
+}
+
+func TestRotatedSessionDeniesWithoutClearingCookies(t *testing.T) {
+	const markerID = "rotated-session"
+	chained := rotatedMarker("chained-session", "third-session")
+	failingStore := &fakeSessions{getFn: func(_ context.Context, id string) (*session.Session, error) {
+		if id == markerID {
+			return rotatedMarker(markerID, "next-session"), nil
+		}
+		return nil, errors.New("valkey down")
+	}}
+
+	cases := []struct {
+		name       string
+		store      *fakeSessions
+		wantStatus int
+	}{
+		{name: "replacement missing", store: storeWithSessions(rotatedMarker(markerID, "next-session")), wantStatus: http.StatusUnauthorized},
+		{name: "replacement already rotated", store: storeWithSessions(rotatedMarker(markerID, chained.ID), chained), wantStatus: http.StatusUnauthorized},
+		{name: "replacement lookup fails", store: failingStore, wantStatus: http.StatusServiceUnavailable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := newTestRuntime(t, tc.store, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+			req.AddCookie(signedSessionCookie(markerID))
+			rec := doRequest(rt.Handler(), req)
+
+			require.Equal(t, tc.wantStatus, rec.Code)
+			require.False(t, clearsAuthCookies(rec), "회전 유예 거부는 쿠키를 삭제하면 안 된다")
+		})
+	}
+}
+
+func TestDockerActionNotModifiedSucceedsAndClearsCache(t *testing.T) {
+	const containerName = "hololive-api"
+	listCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/containers/json":
+			listCalls++
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := w.Write([]byte(`[{"Id":"1","Names":["/` + containerName + `"],"Image":"img","Status":"Up","State":"running","Created":1}]`)); err != nil {
+				t.Errorf("write docker list response: %v", err)
+			}
+		case "/containers/" + containerName + "/start":
+			w.WriteHeader(http.StatusNotModified)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	dockerClient, err := docker.NewClient(server.URL)
+	require.NoError(t, err)
+
+	rt := newTestRuntime(t, storeWithSessions(liveSession("docker-session")), func(cfg *config.Config) {
+		cfg.Security.CSRFMode = config.SecurityOff
+	})
+	rt.docker = dockerClient
+	handler := rt.Handler()
+
+	listContainers := func() int {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/containers", http.NoBody)
+		req.AddCookie(signedSessionCookie("docker-session"))
+		return doRequest(handler, req).Code
+	}
+
+	require.Equal(t, http.StatusOK, listContainers())
+	require.Equal(t, 1, listCalls)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/docker/containers/"+containerName+"/start", http.NoBody)
+	req.AddCookie(signedSessionCookie("docker-session"))
+	rec := doRequest(handler, req)
+	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+	require.Equal(t, "ok", decodeBody(t, rec)["status"])
+
+	require.Equal(t, http.StatusOK, listContainers())
+	require.Equal(t, 2, listCalls, "304 응답도 컨테이너 목록 캐시를 무효화해야 한다")
 }
 
 func TestLoginValidation(t *testing.T) {

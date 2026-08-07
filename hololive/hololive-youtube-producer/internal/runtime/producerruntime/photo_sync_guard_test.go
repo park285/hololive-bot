@@ -226,3 +226,14 @@ func (s *countingPhotoSyncService) Start(ctx context.Context) {
 	s.counter.Add(1)
 	s.inner.Start(ctx)
 }
+
+func TestPhotoSyncRenewFailureBudgetStaysWithinLeaseTTL(t *testing.T) {
+	t.Parallel()
+
+	renewInterval := defaultPhotoSyncLeaseTTL / 3
+	require.Positive(t, renewInterval)
+	worstCancelAt := time.Duration(photoSyncMaxRenewFailures)*renewInterval + photoSyncRenewTimeout
+	require.Less(t, worstCancelAt+defaultPhotoSyncShutdownWait, defaultPhotoSyncLeaseTTL,
+		"renew-failure cutoff plus inner shutdown wait must complete before the lease TTL expires, "+
+			"or the next owner overlaps a still-running photo sync")
+}

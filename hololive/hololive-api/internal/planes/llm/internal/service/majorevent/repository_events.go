@@ -214,6 +214,42 @@ func (r *Repository) GetAllActiveEvents(ctx context.Context) ([]*domain.MajorEve
 	return r.queryEvents(ctx, "get all active events", query, domain.MajorEventStatusActive)
 }
 
+func (r *Repository) UpdateEventLinkStatuses(ctx context.Context, events []*domain.MajorEvent) (int64, error) {
+	ids, statuses, checkedAts, links := eventLinkStatusArrays(events)
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	query := mustSQL("repository_events_0260_06.sql")
+
+	result, err := r.pool.Exec(ctx, query, ids, statuses, checkedAts, links)
+	if err != nil {
+		return 0, fmt.Errorf("update event link statuses: %w", err)
+	}
+	return result.RowsAffected(), nil
+}
+
+// 링크 체크(최대 RunTimeout) 동안 피드 upsert가 같은 행을 새 링크로 교체하며 'unchecked'로
+// 리셋할 수 있다 — 체크한 링크를 함께 넘겨 SQL이 e.link = u.link일 때만 판정을 기록하게 한다.
+func eventLinkStatusArrays(events []*domain.MajorEvent) (ids []int, statuses []string, checkedAts []time.Time, links []string) {
+	ids = make([]int, 0, len(events))
+	statuses = make([]string, 0, len(events))
+	checkedAts = make([]time.Time, 0, len(events))
+	links = make([]string, 0, len(events))
+
+	for _, event := range events {
+		if event == nil || event.ID == 0 || event.LinkCheckedAt == nil {
+			continue
+		}
+		ids = append(ids, event.ID)
+		statuses = append(statuses, string(event.LinkStatus))
+		checkedAts = append(checkedAts, event.LinkCheckedAt.UTC())
+		links = append(links, event.Link)
+	}
+
+	return ids, statuses, checkedAts, links
+}
+
 func (r *Repository) scanEvents(rows pgx.Rows) ([]*domain.MajorEvent, error) {
 	var events []*domain.MajorEvent
 

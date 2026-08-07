@@ -240,6 +240,12 @@ func (s *Scheduler) removePollerTargetJob(key string, job *Job) {
 }
 
 func (s *Scheduler) updatePollerTargetJob(job *Job, targetSync *PollerTargetSync) {
+	if job.index < 0 {
+		pending := *targetSync
+		job.pendingSync = &pending
+		return
+	}
+	job.pendingSync = nil
 	job.Poller = targetSync.Poller
 	job.Priority = targetSync.Priority
 	job.budgetProfile = targetSync.BudgetProfile
@@ -247,9 +253,7 @@ func (s *Scheduler) updatePollerTargetJob(job *Job, targetSync *PollerTargetSync
 		s.resetJobScheduleForIntervalChange(job, targetSync.Interval)
 	}
 	job.Interval = targetSync.Interval
-	if job.index >= 0 {
-		heap.Fix(&s.jobs, job.index)
-	}
+	heap.Fix(&s.jobs, job.index)
 }
 
 func (s *Scheduler) addMissingPollerTargetJobs(pollerName string, targetSync *PollerTargetSync, desired map[string]struct{}) {

@@ -593,6 +593,7 @@ github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/holo
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-shared/pkg/applifecycle
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-shared/pkg/config/settings
+github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-shared/pkg/contracts/membernews
 github.com/kapu/hololive-api/internal/planes/bot/runtime -> github.com/kapu/hololive-shared/pkg/contracts/settings
