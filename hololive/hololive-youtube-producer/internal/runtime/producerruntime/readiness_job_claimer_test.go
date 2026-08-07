@@ -336,7 +336,7 @@ func TestReadinessReportingBudgetLimiterMarksSourceCooldown(t *testing.T) {
 	})
 	state.MarkRunning()
 	limiter := newReadinessReportingBudgetLimiter(&readinessBudgetLimiterStub{
-		decision: polling.BudgetDecision{Allowed: false, Reason: "source_cooldown"},
+		decision: polling.BudgetDecision{Allowed: false, Reason: "source_cooldown", RetryAfter: time.Minute},
 	}, state)
 
 	_, _, err := limiter.TryReserve(context.Background(), &polling.BudgetJob{PollerName: "live"}, readinessBudgetProfile(polling.BudgetSourceHolodexLive), time.Minute)
@@ -401,7 +401,7 @@ func TestReadinessReportingBudgetLimiterAllowedClearsAdmissionAndBackend(t *test
 	})
 	state.MarkRunning()
 	state.MarkBudgetBackendUnavailable("valkey_unavailable_global_budget_fail_closed")
-	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"})
+	state.MarkBudgetAdmissionDenied("budget_exhausted", []string{"youtube_scraper"}, 0)
 	limiter := newReadinessReportingBudgetLimiter(&readinessBudgetLimiterStub{
 		decision: polling.BudgetDecision{Allowed: true},
 	}, state)

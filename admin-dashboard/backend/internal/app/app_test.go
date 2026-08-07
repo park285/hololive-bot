@@ -673,14 +673,11 @@ func TestSessionStatusPreservesValidCSRFToken(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, csrf, payloadToken)
 
-	var csrfCookie *http.Cookie
 	for _, ck := range rec.Result().Cookies() {
 		if ck.Name == auth.CSRFCookieName {
-			csrfCookie = ck
+			require.Equal(t, csrf, ck.Value, "a valid CSRF token must never be replaced with a different one")
 		}
 	}
-	require.NotNil(t, csrfCookie)
-	require.Equal(t, csrf, csrfCookie.Value)
 }
 
 func TestSPAFallbackServesIndexWith200(t *testing.T) {

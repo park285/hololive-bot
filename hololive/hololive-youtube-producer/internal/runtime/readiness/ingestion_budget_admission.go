@@ -50,7 +50,7 @@ func (s *State) MarkBudgetBackendAvailable() {
 	s.budgetBackendAvailable.Store(true)
 }
 
-func (s *State) MarkBudgetAdmissionDenied(reason string, sources []string) {
+func (s *State) MarkBudgetAdmissionDenied(reason string, sources []string, retryAfter time.Duration) {
 	if s == nil {
 		return
 	}
@@ -62,10 +62,14 @@ func (s *State) MarkBudgetAdmissionDenied(reason string, sources []string) {
 	if len(normalized) == 0 {
 		return
 	}
+	expiry := s.now()
+	if retryAfter > 0 {
+		expiry = expiry.Add(retryAfter)
+	}
 	s.budgetMu.Lock()
 	defer s.budgetMu.Unlock()
 	for _, source := range normalized {
-		s.applyBudgetAdmissionLocked(reason, source)
+		s.applyBudgetAdmissionLocked(reason, source, expiry)
 	}
 }
 
@@ -75,13 +79,13 @@ func isBudgetAdmissionReason(reason string) bool {
 		reason == "budget_cleanup_incomplete"
 }
 
-func (s *State) applyBudgetAdmissionLocked(reason, source string) {
+func (s *State) applyBudgetAdmissionLocked(reason, source string, expiry time.Time) {
 	switch reason {
 	case "source_cooldown":
-		// MarkSourceCooldownFor가 기록한 non-zero 만료를 zero-time으로 덮으면
-		// pruneExpiredCooldownsLocked가 항목을 영원히 제거하지 못한다(zero-time은 프루닝 제외).
-		if existing, ok := s.sourceCooldown[source]; !ok || existing.IsZero() {
-			s.sourceCooldown[source] = time.Time{}
+		// ClearBudgetAdmission은 profile의 SourceUnits만 훑으므로, fallback 전용 source는
+		// 이 만료 시각으로 프루닝되는 것 외에 해제 경로가 없다.
+		if existing, ok := s.sourceCooldown[source]; !ok || expiry.After(existing) {
+			s.sourceCooldown[source] = expiry
 		}
 		delete(s.budgetExhausted, source)
 		delete(s.budgetCleanupIncomplete, source)
@@ -158,7 +162,7 @@ func (s *State) budgetAdmissionPayload(budgetEnabled bool) (budgetExhausted, sou
 func (s *State) pruneExpiredCooldownsLocked() {
 	now := s.now()
 	for source, expiry := range s.sourceCooldown {
-		if !expiry.IsZero() && now.After(expiry) {
+		if now.After(expiry) {
 			delete(s.sourceCooldown, source)
 		}
 	}

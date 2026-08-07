@@ -79,12 +79,14 @@ func (r *Runtime) handleSessionStatus(c *gin.Context) {
 		httpx.Abort(c, httpx.Unauthorized())
 		return
 	}
-	csrf, err := r.sessionStatusCSRFToken(c.Request, sessionID)
+	csrf, reissued, err := r.sessionStatusCSRFToken(c.Request, sessionID)
 	if err != nil {
 		httpx.Abort(c, httpx.Internal(err))
 		return
 	}
-	auth.SetCSRFCookie(c.Writer, csrf, r.cfg.Security.ForceHTTPS)
+	if reissued {
+		auth.SetCSRFCookie(c.Writer, csrf, r.cfg.Security.ForceHTTPS)
+	}
 	ginjson.Respond(c, http.StatusOK, sessionStatusResponse{
 		Status:            "ok",
 		Authenticated:     true,
@@ -101,11 +103,18 @@ func (r *Runtime) handleSessionStatus(c *gin.Context) {
 	})
 }
 
-func (r *Runtime) sessionStatusCSRFToken(req *http.Request, sessionID string) (string, error) {
-	if cookie, err := req.Cookie(auth.CSRFCookieName); err == nil && auth.ValidateCSRFToken(sessionID, cookie.Value, r.cfg.SessionSecret) {
-		return cookie.Value, nil
+// 회전 유예 중에는 동시 heartbeat가 교체 세션에 바인딩된 토큰을 방금 심었을 수 있다.
+// marker에 바인딩된 값을 다시 쓰면 그걸 덮어써 이후 변경 요청이 전부 403이 된다.
+func (r *Runtime) sessionStatusCSRFToken(req *http.Request, sessionID string) (token string, reissued bool, err error) {
+	if cookie, cookieErr := req.Cookie(auth.CSRFCookieName); cookieErr == nil &&
+		auth.ValidateCSRFToken(sessionID, cookie.Value, r.cfg.SessionSecret) {
+		return cookie.Value, false, nil
 	}
-	return auth.NewCSRFToken(sessionID, r.cfg.SessionSecret)
+	token, err = auth.NewCSRFToken(sessionID, r.cfg.SessionSecret)
+	if err != nil {
+		return "", false, err
+	}
+	return token, true, nil
 }
 
 func (r *Runtime) handleLogout(c *gin.Context) {
