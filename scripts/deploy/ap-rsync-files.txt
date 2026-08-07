@@ -559,6 +559,7 @@ hololive/hololive-shared/pkg/service/youtube/outbox/timeline/types.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/channel_stats_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/sql.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/cleaner.go
+hololive/hololive-shared/pkg/service/youtube/poller/runtime/cleaner_state.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/community_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/community_shorts_detection.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/latency_persister_adapter.go
