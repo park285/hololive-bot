@@ -70,7 +70,10 @@ func validateYouTubeProducerRegistrationsAndBudgets(
 	if err := validateRegistrationBudgetProfiles(pollerRegistrations); err != nil {
 		return err
 	}
-	activeAPCount, err := resolveYouTubeProducerActiveAPCount(budgetWiring.ActiveInstanceCount, scraperConfig.ActiveActive.Enabled)
+	activeAPCount, err := resolveYouTubeProducerFleetActiveAPCount(
+		budgetWiring.ActiveInstanceCount,
+		scraperConfig.ActiveActive.Enabled,
+	)
 	if err != nil {
 		return err
 	}
@@ -83,6 +86,13 @@ func validateYouTubeProducerRegistrationsAndBudgets(
 	budgetSummary := summarizeYouTubeProducerBudgetForFleet(pollerRegistrations, budgetWiring.BudgetRPM, activeAPCount)
 	logYouTubeProducerBudgetSummary(budgetSummary, logger)
 	return validateYouTubeProducerRuntimeBudget(budgetSummary, limiterConfigured)
+}
+
+func resolveYouTubeProducerFleetActiveAPCount(configured int, activeActiveEnabled bool) (int, error) {
+	if !activeActiveEnabled {
+		return 1, nil
+	}
+	return resolveYouTubeProducerActiveAPCount(configured, true)
 }
 
 func buildYouTubeProducerSchedulerOptions(
