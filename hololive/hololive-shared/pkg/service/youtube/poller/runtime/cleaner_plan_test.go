@@ -3,6 +3,7 @@ package polling
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -147,12 +148,7 @@ func viewerSamplePlanHasSequentialSampleScan(node viewerSampleExplainNode) bool 
 	if node.RelationName == "youtube_live_viewer_samples" && node.NodeType == "Seq Scan" {
 		return true
 	}
-	for _, child := range node.Plans {
-		if viewerSamplePlanHasSequentialSampleScan(child) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(node.Plans, viewerSamplePlanHasSequentialSampleScan)
 }
 
 func viewerSamplePlanMaxExaminedRows(node viewerSampleExplainNode) float64 {
