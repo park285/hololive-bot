@@ -19,6 +19,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/iris-client-go/webhook"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -60,6 +62,9 @@ func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error 
 		return errors.New("admit webhook: message identity is missing")
 	}
 	messageID := durability.MessageIdentity(msg.JSON.MessageID)
+	if id := strings.TrimSpace(msg.JSON.MessageID); id != "" {
+		trace.SpanFromContext(ctx).SetAttributes(attribute.String("iris.message_id", id))
+	}
 	roomID := strings.TrimSpace(msg.JSON.ChatID)
 	if roomID == "" {
 		roomID = strings.TrimSpace(msg.Room)
