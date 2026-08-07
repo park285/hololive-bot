@@ -97,19 +97,19 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 
 	opts := appendThreadIDOption(sendCtx, nil)
 
-	clientRequestID := nextReplyClientRequestID(sendCtx)
+	emission := issueReplyEmission(sendCtx)
 	if t.replyOutboxWriter() != nil {
 		kind := StoredReplyKindText
 		if t.markdownReplies {
 			kind = StoredReplyKindMarkdown
 		}
 		threadID, _ := ThreadIDFromContext(sendCtx)
-		if err := t.recordReply(sendCtx, room, clientRequestID, &StoredReply{Kind: kind, Message: message, ThreadID: threadID}); err != nil {
+		if err := t.recordReply(sendCtx, room, emission, &StoredReply{Kind: kind, Message: message, ThreadID: threadID}); err != nil {
 			return fmt.Errorf("record reply: %w", err)
 		}
 		return nil
 	}
-	if err := t.sendMessage(sendCtx, room, message, clientRequestID, opts...); err != nil {
+	if err := t.sendMessage(sendCtx, room, message, emission.clientRequestID, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message: %w", serviceErr)
 	}
@@ -252,10 +252,10 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 	defer cancel()
 
 	if t.replyOutboxWriter() != nil {
-		clientRequestID := nextReplyClientRequestID(sendCtx)
+		emission := issueReplyEmission(sendCtx)
 		threadID, _ := ThreadIDFromContext(sendCtx)
 		contentType, _ := ImageContentTypeFromContext(sendCtx)
-		if err := t.recordReply(sendCtx, room, clientRequestID, &StoredReply{Kind: StoredReplyKindImage, Image: imageData, ThreadID: threadID, ImageContentType: contentType}); err != nil {
+		if err := t.recordReply(sendCtx, room, emission, &StoredReply{Kind: StoredReplyKindImage, Image: imageData, ThreadID: threadID, ImageContentType: contentType}); err != nil {
 			return fmt.Errorf("record image reply: %w", err)
 		}
 		return nil
@@ -293,9 +293,9 @@ func (t *CommandTransport) SendImages(ctx context.Context, room string, images [
 	defer cancel()
 
 	if t.replyOutboxWriter() != nil {
-		clientRequestID := nextReplyClientRequestID(sendCtx)
+		emission := issueReplyEmission(sendCtx)
 		threadID, _ := ThreadIDFromContext(sendCtx)
-		if err := t.recordReply(sendCtx, room, clientRequestID, &StoredReply{Kind: StoredReplyKindImages, Images: images, ThreadID: threadID}); err != nil {
+		if err := t.recordReply(sendCtx, room, emission, &StoredReply{Kind: StoredReplyKindImages, Images: images, ThreadID: threadID}); err != nil {
 			return fmt.Errorf("record image replies: %w", err)
 		}
 		return nil

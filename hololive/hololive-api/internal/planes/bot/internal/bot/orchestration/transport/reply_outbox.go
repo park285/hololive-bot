@@ -167,13 +167,12 @@ func encodeStoredReply(reply *StoredReply) (string, error) {
 	return string(payload), nil
 }
 
-func (t *CommandTransport) recordReply(ctx context.Context, room, clientRequestID string, reply *StoredReply) error {
+func (t *CommandTransport) recordReply(ctx context.Context, room string, emission replyEmission, reply *StoredReply) error {
 	writer := t.replyOutboxWriter()
 	if writer == nil {
 		return errors.New("reply outbox writer is not configured")
 	}
-	identity, ordinal, ok := currentReplyEmission(ctx)
-	if !ok {
+	if !emission.ok {
 		return errors.New("reply identity is not configured")
 	}
 	payload, err := encodeStoredReply(reply)
@@ -181,8 +180,8 @@ func (t *CommandTransport) recordReply(ctx context.Context, room, clientRequestI
 		return err
 	}
 	if err := writer.RecordReply(ctx, &ReplyOutboxEntry{
-		MessageID: identity, Phase: ReplyPhase, Ordinal: ordinal, Room: room,
-		Payload: payload, ClientRequestID: clientRequestID,
+		MessageID: emission.identity, Phase: ReplyPhase, Ordinal: emission.ordinal, Room: room,
+		Payload: payload, ClientRequestID: emission.clientRequestID,
 	}); err != nil {
 		return fmt.Errorf("%w: %w", ErrReplyStagingFailed, err)
 	}

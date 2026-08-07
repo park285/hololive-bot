@@ -264,11 +264,16 @@ func (c *Client) action(ctx context.Context, name, action string, timeout time.D
 	if resp.StatusCode == http.StatusNotFound {
 		return httpx.NewError(http.StatusNotFound, "container not found")
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if !dockerActionSucceeded(resp.StatusCode) {
 		return httpx.Internal(fmt.Errorf("docker %s %s returned %s", action, name, resp.Status))
 	}
 	c.clearCache()
 	return nil
+}
+
+// Docker Engine은 이미 목표 상태인 컨테이너의 start/stop에 304를 반환한다. 요청한 상태에 도달해 있으므로 성공이다.
+func dockerActionSucceeded(status int) bool {
+	return status == http.StatusNotModified || (status >= 200 && status < 300)
 }
 
 func (c *Client) doAction(ctx context.Context, name, action string) (*http.Response, error) {

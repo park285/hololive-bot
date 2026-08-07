@@ -294,3 +294,15 @@ func TestLinkCheckerCheckLink_BlockedDNSRebindingBetweenValidationAndDial(t *tes
 		t.Fatalf("internal server hits = %d, want 0", got)
 	}
 }
+
+func TestShouldFallbackToGETOnContextDeadline(t *testing.T) {
+	t.Parallel()
+
+	wrapped := fmt.Errorf("probe link: do request: %w", context.DeadlineExceeded)
+	if !shouldFallbackToGET(0, wrapped) {
+		t.Fatal("HEAD ctx deadline must fall back to GET; its message lacks the 'timeout' substring")
+	}
+	if shouldFallbackToGET(0, fmt.Errorf("probe link: do request: %w", context.Canceled)) {
+		t.Fatal("context cancellation must not trigger a GET fallback")
+	}
+}

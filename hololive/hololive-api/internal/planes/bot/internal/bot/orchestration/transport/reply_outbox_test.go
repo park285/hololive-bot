@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/park285/iris-client-go/iris"
@@ -32,7 +33,14 @@ import (
 )
 
 type recordingReplyOutbox struct {
+	mu      sync.Mutex
 	entries []*ReplyOutboxEntry
+}
+
+func (r *recordingReplyOutbox) snapshot() []*ReplyOutboxEntry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]*ReplyOutboxEntry(nil), r.entries...)
 }
 
 type failingReplyOutbox struct{ err error }
@@ -58,6 +66,8 @@ func (c *storedReplyReissueClient) SendMessageAccepted(_ context.Context, _, mes
 func (w failingReplyOutbox) RecordReply(context.Context, *ReplyOutboxEntry) error { return w.err }
 
 func (r *recordingReplyOutbox) RecordReply(_ context.Context, entry *ReplyOutboxEntry) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.entries = append(r.entries, entry)
 	return nil
 }
@@ -182,5 +192,41 @@ func TestExportedReplyClientRequestIDIsDeterministic(t *testing.T) {
 	for ordinal := range uint64(4) {
 		assert.Equal(t, ReplyClientRequestID(identity, ordinal), ReplyClientRequestID(identity, ordinal))
 		assert.Equal(t, replyClientRequestID(identity, ordinal), ReplyClientRequestID(identity, ordinal))
+	}
+}
+
+func TestConcurrentSendsRecordDistinctOrdinalsMatchingClientRequestIDs(t *testing.T) {
+	t.Parallel()
+
+	const identity = "message:m-race"
+	writer := &recordingReplyOutbox{}
+	transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
+	ctx := WithReplyIdentity(context.Background(), identity)
+
+	const sends = 8
+	var wg sync.WaitGroup
+	sendErrs := make([]error, sends)
+	for i := range sends {
+		wg.Add(1)
+		go func(slot int) {
+			defer wg.Done()
+			sendErrs[slot] = transport.SendMessage(ctx, "room-race", "hello")
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range sendErrs {
+		require.NoErrorf(t, err, "send %d", i)
+	}
+
+	entries := writer.snapshot()
+	require.Len(t, entries, sends)
+	seen := make(map[uint64]struct{}, sends)
+	for _, entry := range entries {
+		if _, dup := seen[entry.Ordinal]; dup {
+			t.Fatalf("duplicate ordinal %d recorded across concurrent sends", entry.Ordinal)
+		}
+		seen[entry.Ordinal] = struct{}{}
+		require.Equal(t, ReplyClientRequestID(identity, entry.Ordinal), entry.ClientRequestID,
+			"recorded ordinal and clientRequestID must come from the same issuance")
 	}
 }

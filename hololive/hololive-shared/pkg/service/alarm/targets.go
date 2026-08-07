@@ -20,19 +20,6 @@ const channelSubscriberLoadTimeout = 5 * time.Second
 
 var channelSubscriberLoadGroup singleflight.Group
 
-func withoutCancelPreserveDeadline(ctx context.Context, fallback time.Duration) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		return context.WithTimeout(context.Background(), fallback)
-	}
-
-	base := context.WithoutCancel(ctx)
-	if deadline, ok := ctx.Deadline(); ok {
-		return context.WithDeadline(base, deadline)
-	}
-
-	return context.WithTimeout(base, fallback)
-}
-
 func LookupChannelSubscribersByType(
 	ctx context.Context,
 	cacheClient cache.Client,
@@ -182,7 +169,10 @@ func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID 
 }
 
 func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
-	queryCtx, cancel := withoutCancelPreserveDeadline(ctx, channelSubscriberLoadTimeout)
+	// singleflight 공유 쿼리를 최초 호출자의 deadline에 결합하면 촉박한 호출자가
+	// follower 전원의 실패를 유발하고, 긴 deadline은 5s 상한을 무효화한다 — 항상 고정
+	// 상한으로 격리한다.
+	queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelSubscriberLoadTimeout)
 	defer cancel()
 
 	rows, err := db.Query(queryCtx, mustSQL("targets_0188_01.sql"), channelID, string(alarmType))

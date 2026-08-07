@@ -22,6 +22,7 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -263,6 +264,11 @@ func isSuccessStatus(code int) bool {
 
 func shouldFallbackToGET(statusCode int, probeErr error) bool {
 	if probeErr != nil {
+		// probe의 ctx 타임아웃은 "context deadline exceeded"라 "timeout" 부분문자열에
+		// 걸리지 않는다 — HEAD를 끊는 서버가 GET에는 정상 응답하는 경우를 놓치지 않게 한다.
+		if errors.Is(probeErr, context.DeadlineExceeded) {
+			return true
+		}
 		normalized := strings.ToLower(probeErr.Error())
 		return strings.Contains(normalized, "timeout") ||
 			strings.Contains(normalized, "connection reset") ||

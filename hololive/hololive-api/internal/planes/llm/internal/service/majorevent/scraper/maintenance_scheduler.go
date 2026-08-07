@@ -34,6 +34,7 @@ import (
 type maintenanceRepository interface {
 	UpdateExpiredEvents(ctx context.Context) (int64, error)
 	GetAllActiveEvents(ctx context.Context) ([]*domain.MajorEvent, error)
+	UpdateEventLinkStatuses(ctx context.Context, events []*domain.MajorEvent) (int64, error)
 }
 
 // MaintenanceScheduler는 만료 상태 업데이트와 링크 검증을 주기적으로 수행한다.
@@ -212,12 +213,18 @@ func (s *MaintenanceScheduler) runLinkCheck(ctx context.Context) {
 		return
 	}
 
+	persisted, err := s.repository.UpdateEventLinkStatuses(runCtx, events)
+	if err != nil {
+		s.logger.Warn("Major event link status persist failed", slog.String("error", err.Error()))
+	}
+
 	s.logger.Info(
 		"Major event link check completed",
 		slog.Int("checked", result.Checked),
 		slog.Int("ok", result.OK),
 		slog.Int("failed", result.Failed),
 		slog.Int("blocked", result.Blocked),
+		slog.Int64("persisted", persisted),
 	)
 }
 

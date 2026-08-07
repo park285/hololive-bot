@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -93,6 +94,7 @@ func (c *alarmDispatchRunnerTestConsumer) Requeue(_ context.Context, envelopes [
 
 type alarmDispatchRunnerTestSender struct {
 	fail             bool
+	messageErr       error
 	karingErr        error
 	roomID           string
 	messages         []string
@@ -104,6 +106,9 @@ type alarmDispatchRunnerTestSender struct {
 func (s *alarmDispatchRunnerTestSender) SendMessage(_ context.Context, roomID, message string) error {
 	s.roomID = roomID
 	s.messages = append(s.messages, message)
+	if s.messageErr != nil {
+		return s.messageErr
+	}
 	if s.fail {
 		return errAlarmDispatchRunnerTestSend
 	}
@@ -114,6 +119,9 @@ func (s *alarmDispatchRunnerTestSender) SendMessageWithClientRequestID(_ context
 	s.roomID = roomID
 	s.messages = append(s.messages, message)
 	s.clientRequestIDs = append(s.clientRequestIDs, clientRequestID)
+	if s.messageErr != nil {
+		return s.messageErr
+	}
 	if s.fail {
 		return errAlarmDispatchRunnerTestSend
 	}
@@ -628,7 +636,7 @@ func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testin
 }
 
 func TestAlarmDispatchRunnerRunOnceMovesExhaustedRetryToDLQAndReleasesClaims(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", &domain.AlarmQueueRetryMetadata{Attempt: 2})
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", &domain.AlarmQueueRetryMetadata{Attempt: alarmDispatchRetryableMaxAttempts - 1})
 	envelope.ClaimKeys = []string{"alarm:dispatch:claim:room-1:stream-1"}
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{karingErr: &iris.HTTPError{StatusCode: 503}}
@@ -641,8 +649,85 @@ func TestAlarmDispatchRunnerRunOnceMovesExhaustedRetryToDLQAndReleasesClaims(t *
 	assert.Empty(t, consumer.scheduledSendingRetry)
 	require.Len(t, consumer.movedDLQ, 1)
 	require.NotNil(t, consumer.movedDLQ[0].Retry)
-	assert.Equal(t, 3, consumer.movedDLQ[0].Retry.Attempt)
+	assert.Equal(t, alarmDispatchRetryableMaxAttempts, consumer.movedDLQ[0].Retry.Attempt)
 	assert.Equal(t, []string{"alarm:dispatch:claim:room-1:stream-1"}, consumer.releasedClaims)
+}
+
+func TestAlarmDispatchRunnerKeepsRetryingRetryableCauseBeyondBaseAttemptCap(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", &domain.AlarmQueueRetryMetadata{Attempt: alarmDispatchMaxAttempts - 1})
+	envelope.ClaimKeys = []string{"alarm:dispatch:claim:room-1:stream-1"}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{karingErr: &iris.HTTPError{StatusCode: 503}}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Empty(t, consumer.movedDLQ, "retryable cause must not hit the base attempt cap")
+	assert.Empty(t, consumer.quarantined)
+	require.Len(t, consumer.scheduledSendingRetry, 1)
+	require.NotNil(t, consumer.scheduledSendingRetry[0].Retry)
+	assert.Equal(t, alarmDispatchMaxAttempts, consumer.scheduledSendingRetry[0].Retry.Attempt)
+	assert.Empty(t, consumer.releasedClaims, "claim keys stay held while the envelope is still retryable")
+}
+
+func TestAlarmDispatchRunnerTransportFailureRetriesInsteadOfQuarantine(t *testing.T) {
+	transportErr := &iris.TransportError{Op: "post", URL: "/karing/content-list", Err: errors.New("connection refused")}
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.ClaimKeys = []string{"alarm:dispatch:claim:room-1:stream-1"}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{karingErr: transportErr}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Empty(t, consumer.quarantined, "a brief Iris outage must not terminally quarantine the backlog")
+	assert.Empty(t, consumer.movedDLQ)
+	assert.Empty(t, consumer.scheduledRetry, "post-send failure must route through RouteSendingFailures")
+	require.Len(t, consumer.scheduledSendingRetry, 1)
+	require.NotNil(t, consumer.scheduledSendingRetry[0].Retry)
+	assert.Equal(t, 1, consumer.scheduledSendingRetry[0].Retry.Attempt)
+	assert.Empty(t, consumer.markDispatched)
+}
+
+func TestAlarmDispatchRunnerDeadlineExceededRetriesInsteadOfQuarantine(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{
+		karingErr: fmt.Errorf("send iris karing content list: %w", context.DeadlineExceeded),
+	}
+	runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Empty(t, consumer.quarantined)
+	assert.Empty(t, consumer.movedDLQ)
+	require.Len(t, consumer.scheduledSendingRetry, 1)
+	assert.Empty(t, consumer.markDispatched)
+}
+
+func TestAlarmDispatchRunnerNonRetryableHTTPFailureStillQuarantines(t *testing.T) {
+	for _, statusCode := range []int{500, 504, 401, 403} {
+		t.Run(strconv.Itoa(statusCode), func(t *testing.T) {
+			envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+			sender := &alarmDispatchRunnerTestSender{karingErr: &iris.HTTPError{StatusCode: statusCode}}
+			runner := Runner{consumer: consumer, sender: sender, karingEnabled: true, maxBatch: 10}
+
+			processed, err := runner.runOnce(t.Context())
+
+			require.NoError(t, err)
+			assert.True(t, processed)
+			require.Len(t, consumer.quarantined, 1, "ambiguous-outcome status must stay terminal")
+			assert.Empty(t, consumer.scheduledSendingRetry)
+			assert.Empty(t, consumer.markDispatched)
+		})
+	}
 }
 
 func TestAlarmDispatchRunnerWaitsOnIdleWaiterForEmptyPGBatch(t *testing.T) {
