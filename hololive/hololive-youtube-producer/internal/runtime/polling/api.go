@@ -30,7 +30,7 @@ func BuildComponents(
 	scraperConfig *settings.ScraperConfig,
 	postgresService database.Client,
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider pollers.LiveStatusProvider,
 	logger *slog.Logger,
@@ -42,7 +42,7 @@ func BuildComponents(
 		&GlobalBudgetWiring{},
 		postgresService,
 		notificationChannelIDs,
-		statsChannelIDs,
+		operationalChannelIDs,
 		scraperClient,
 		liveStatusProvider,
 		logger,
@@ -55,7 +55,7 @@ func BuildComponentsWithJobClaimer(
 	budgetWiring *GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider pollers.LiveStatusProvider,
 	logger *slog.Logger,
@@ -67,7 +67,7 @@ func BuildComponentsWithJobClaimer(
 		budgetWiring,
 		postgresService,
 		notificationChannelIDs,
-		statsChannelIDs,
+		operationalChannelIDs,
 		scraperClient,
 		liveStatusProvider,
 		logger,
@@ -81,7 +81,7 @@ func BuildComponentsWithJobClaimerContext(
 	budgetWiring *GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider pollers.LiveStatusProvider,
 	logger *slog.Logger,
@@ -93,7 +93,7 @@ func BuildComponentsWithJobClaimerContext(
 		budgetWiring,
 		postgresService,
 		notificationChannelIDs,
-		statsChannelIDs,
+		operationalChannelIDs,
 		scraperClient,
 		liveStatusProvider,
 		logger,
@@ -114,7 +114,7 @@ func BuildRegistrations(
 	sharedRL *ratelimiter.RateLimiter,
 	cacheClient cache.Client,
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	return buildYouTubeProducerChannelPollerRegistrations(
 		context.Background(),
@@ -123,7 +123,7 @@ func BuildRegistrations(
 		sharedRL,
 		cacheClient,
 		notificationChannelIDs,
-		statsChannelIDs,
+		operationalChannelIDs,
 	)
 }
 
@@ -133,7 +133,7 @@ func BuildRegistrationsWithClient(
 	scraperClient *scraper.Client,
 	liveStatusProvider pollers.LiveStatusProvider,
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	return buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		context.Background(),
@@ -142,7 +142,7 @@ func BuildRegistrationsWithClient(
 		scraperClient,
 		liveStatusProvider,
 		notificationChannelIDs,
-		statsChannelIDs,
+		operationalChannelIDs,
 		slog.Default(),
 	)
 }

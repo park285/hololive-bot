@@ -341,15 +341,18 @@ WithBudgetProfile(poller.BudgetProfile{
 ```go
 WithBudgetProfile(poller.BudgetProfile{
     SourceUnits: map[poller.BudgetSource]float64{
-        poller.BudgetSourceHolodexLive:   1,
-        poller.BudgetSourcePostgresWrite: 1,
+        poller.BudgetSourceHolodexLive:   ceil(float64(len(operationalChannelIDs)) / 40),
+        poller.BudgetSourcePostgresWrite: float64(len(operationalChannelIDs)),
+    },
+    FallbackSourceUnits: map[poller.BudgetSource]float64{
+        poller.BudgetSourceYouTubeScraper: float64(len(operationalChannelIDs) * fallbackMaxAttempts),
     },
     BurstClass: poller.BudgetBurstPrimary,
     Priority:   poller.BudgetPriorityHigh,
 })
 ```
 
-`live` fallback은 Holodex provider 내부에서 별도로 `BudgetSourceYouTubeScraper`를 debit합니다.
+`live_batch`는 operational roster snapshot을 최대 40개씩 조회하므로 Holodex unit은 chunk 수입니다. target refresh는 poller snapshot과 이 profile을 함께 교체합니다.
 
 ### 필수 `BudgetProfile` matrix
 
@@ -360,13 +363,13 @@ WithBudgetProfile(poller.BudgetProfile{
 | `videos` | `youtube_scraper=videosWorstCaseRequestUnits()`, `postgres_write=1` | `primary` | `normal` | 기존 worst-case unit 유지 |
 | `shorts` | `youtube_scraper=shortsWorstCaseRequestUnits(...)`, `postgres_write=1` | `primary` | `normal` 또는 registration priority | inline published_at resolver 반영 |
 | `community` | `youtube_scraper=communityWorstCaseRequestUnits(...)`, `postgres_write=1` | `primary` | `normal` 또는 registration priority | inline published_at resolver 반영 |
-| `stats` | `youtube_scraper=FetchPageMaxAttempts`, `postgres_write=1` | `primary` | `low` | stats target만 적용 |
-| `live` | `holodex_live=1`, `postgres_write=1` | `primary` | `high` | fallback scraper는 별도 reservation |
+| `stats` | `youtube_scraper=FetchPageMaxAttempts`, `postgres_write=1` | `primary` | `low` | operational target에 적용 |
+| `live_batch` | `holodex_live=ceil(roster/40)`, `postgres_write=roster` | `primary` | `high` | operational target snapshot, fallback profile 포함 |
 | `pending_published_at_resolver` | `youtube_scraper=maxResolvePerRun*MetadataResolveFetchPolicy.MaxAttempts`, `postgres_write=1` | `primary` | `low` | global synthetic target |
 | `shorts_backfill` | `youtube_scraper=shortsWorstCaseRequestUnits(...)`, `postgres_write=1` | `backfill` | `low` | backfill enabled일 때만 |
 | `community_backfill` | `youtube_scraper=communityWorstCaseRequestUnits(...)`, `postgres_write=1` | `backfill` | `low` | backfill enabled일 때만 |
-| `live_backfill` | `holodex_live=1`, `postgres_write=1` | `backfill` | `low` | fallback scraper는 별도 reservation |
-| Holodex live fallback | `youtube_scraper=len(channelIDs)` | `fallback` | `high` 또는 `normal` | Holodex service 내부에서 reserve |
+| `live_backfill_batch` | `holodex_live=ceil(roster/40)`, `postgres_write=roster` | `backfill` | `low` | operational target snapshot, fallback profile 포함 |
+| Holodex live fallback | `youtube_scraper=roster*fallbackMaxAttempts` | registration class | registration priority | batch registration의 conservative fault envelope |
 
 `BudgetSourceProxy`와 `BudgetSourceBrowserSnapshot`은 scraper client가 실제로 proxy 또는 browser snapshot path를 사용할 때만 추가합니다. source unit을 모르면 0으로 추정하지 말고 해당 source profile을 생략합니다.
 

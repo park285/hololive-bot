@@ -45,6 +45,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 - Runtime runbook index: `runbooks/README.md`
 - Deployment baseline: `DEPLOYMENT_BASELINE.md`
 - YouTube notification split: `youtube-producer` owns producer AP responsibilities up to `youtube_notification_outbox`, active-active coordination/readiness, and Holodex photo sync (`c` singleton lease; `b` excluded); `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
+- Birthday stream split: `youtube-producer` discovers LIVE/UPCOMING sessions for the enabled operational roster independently of ordinary subscriptions; `alarm-worker` resolves recipients from `status='sent'` deliveries of the matching birthday greeting event and relies on the dispatch ledger for late-room convergence.
 
 ## Maintenance
 

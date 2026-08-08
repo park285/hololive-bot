@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/util"
 
 	"github.com/park285/shared-go/pkg/retry"
@@ -33,7 +32,6 @@ type birthdayStreamSession struct {
 
 type BirthdayStreamRunner struct {
 	memberRepo       BirthdayMemberRepository
-	alarmRepo        AlarmRoomRepository
 	sessions         birthdayStreamSessionStore
 	publisher        Publisher
 	logger           *slog.Logger
@@ -50,7 +48,6 @@ type BirthdayStreamRunnerConfig struct {
 
 func NewBirthdayStreamRunner(
 	memberRepo BirthdayMemberRepository,
-	alarmRepo AlarmRoomRepository,
 	sessions birthdayStreamSessionStore,
 	publisher Publisher,
 	logger *slog.Logger,
@@ -58,7 +55,6 @@ func NewBirthdayStreamRunner(
 ) *BirthdayStreamRunner {
 	return &BirthdayStreamRunner{
 		memberRepo:       memberRepo,
-		alarmRepo:        alarmRepo,
 		sessions:         sessions,
 		publisher:        publisher,
 		logger:           logger,
@@ -151,15 +147,19 @@ func (r *BirthdayStreamRunner) publishCandidates(
 	dateStr string,
 	memberCount int,
 ) error {
-	allRooms, err := r.alarmRepo.GetAllDistinctRoomIDs(ctx)
+	birthdayEventKeys := birthdayGreetingEventKeys(candidates, dateStr)
+	roomsByEventKey, err := r.sessions.FindSentRoomsByEventKeys(ctx, birthdayEventKeys)
 	if err != nil {
-		return fmt.Errorf("birthday stream runner: get all rooms: %w", err)
+		return fmt.Errorf("birthday stream runner: find sent birthday rooms: %w", err)
 	}
-	if len(allRooms) == 0 {
+	if len(roomsByEventKey) == 0 {
 		return nil
 	}
 
-	envelopes := buildBirthdayStreamEnvelopes(candidates, allRooms, dateStr)
+	envelopes := buildBirthdayStreamEnvelopes(candidates, roomsByEventKey, dateStr)
+	if len(envelopes) == 0 {
+		return nil
+	}
 	result, err := r.publisher.PublishDispatchBatch(ctx, envelopes)
 	if err != nil {
 		return fmt.Errorf("birthday stream runner: publish dispatch batch: %w", err)
@@ -170,7 +170,7 @@ func (r *BirthdayStreamRunner) publishCandidates(
 			slog.String("date", dateStr),
 			slog.Int("birthday_members", memberCount),
 			slog.Int("videos", len(candidates)),
-			slog.Int("rooms", len(allRooms)),
+			slog.Int("eligible_rooms", countBirthdayStreamAudienceRooms(roomsByEventKey)),
 			slog.Int("envelopes", len(envelopes)),
 			slog.Int("inserted_events", result.InsertedEvents),
 			slog.Int("inserted_deliveries", result.InsertedDeliveries),
@@ -246,45 +246,38 @@ func (r *BirthdayStreamRunner) selectNewSessionsForMember(
 	if err != nil {
 		return nil, err
 	}
-	remaining := birthdayStreamMaxPublishedPerMemberDay - len(publishedKeys)
-	if remaining <= 0 {
-		return nil, nil
-	}
 
 	published := make(map[string]struct{}, len(publishedKeys))
 	for _, key := range publishedKeys {
 		published[key] = struct{}{}
 	}
+	return selectBirthdayStreamSessionsWithinDailyCap(channelID, dateStr, sessions, published), nil
+}
 
-	fresh := make([]birthdayStreamSession, 0, len(sessions))
-	for _, session := range sessions {
+func selectBirthdayStreamSessionsWithinDailyCap(
+	channelID string,
+	dateStr string,
+	sessions []birthdayStreamSession,
+	published map[string]struct{},
+) []birthdayStreamSession {
+	remaining := max(birthdayStreamMaxPublishedPerMemberDay-len(published), 0)
+
+	ordered := append([]birthdayStreamSession(nil), sessions...)
+	sortBirthdayStreamSessions(ordered)
+	selected := make([]birthdayStreamSession, 0, min(len(ordered), birthdayStreamMaxPublishedPerMemberDay))
+	for _, session := range ordered {
 		if _, ok := published[birthdayStreamEventKey(channelID, dateStr, session.VideoID)]; ok {
+			if len(selected) < birthdayStreamMaxPublishedPerMemberDay {
+				selected = append(selected, session)
+			}
 			continue
 		}
-		fresh = append(fresh, session)
+		if remaining > 0 && len(selected) < birthdayStreamMaxPublishedPerMemberDay {
+			selected = append(selected, session)
+			remaining--
+		}
 	}
-	sortBirthdayStreamSessions(fresh)
-	if len(fresh) > remaining {
-		fresh = fresh[:remaining]
-	}
-	return fresh, nil
-}
-
-func birthdayStreamEventKey(channelID, dateStr, videoID string) string {
-	payload := domain.CelebrationDispatchPayload{
-		Kind:      domain.CelebrationKindBirthdayStream,
-		ChannelID: channelID,
-		Date:      dateStr,
-		VideoID:   videoID,
-	}
-	return dispatchoutbox.BuildEventKey(&dispatchoutbox.DedupeInput{
-		SourceKind:     domain.AlarmDispatchSourceKindCelebration,
-		SourceIdentity: payload.Identity(),
-	})
-}
-
-func birthdayStreamEventKeyPrefix(channelID, dateStr string) string {
-	return birthdayStreamEventKey(channelID, dateStr, "") + ":"
+	return selected
 }
 
 func sortBirthdayStreamSessions(sessions []birthdayStreamSession) {
@@ -302,47 +295,6 @@ func birthdayStreamEffectiveStart(session *birthdayStreamSession) time.Time {
 		return *start
 	}
 	return time.Time{}
-}
-
-func buildBirthdayStreamEnvelopes(
-	candidates []birthdayStreamCandidate,
-	allRooms []string,
-	dateStr string,
-) []domain.AlarmQueueEnvelope {
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(candidates)*len(allRooms))
-	for _, c := range candidates {
-		displayName := resolveCelebrationMemberName(c.member)
-		for _, roomID := range allRooms {
-			envelopes = append(envelopes, domain.AlarmQueueEnvelope{
-				Notification: domain.AlarmNotification{
-					AlarmType: domain.AlarmTypeBirthday,
-					RoomID:    roomID,
-					Channel:   &domain.Channel{ID: c.member.ChannelID, Name: displayName},
-				},
-				SourceKind: domain.AlarmDispatchSourceKindCelebration,
-				Celebration: &domain.CelebrationDispatchPayload{
-					Kind:              domain.CelebrationKindBirthdayStream,
-					MemberName:        displayName,
-					ChannelID:         c.member.ChannelID,
-					Photo:             c.member.Photo,
-					Date:              dateStr,
-					VideoID:           c.session.VideoID,
-					StreamTitle:       c.session.Title,
-					StreamURL:         domain.YouTubeWatchURL(c.session.VideoID),
-					ScheduledStartKST: birthdayStreamScheduledStartKST(&c.session),
-				},
-			})
-		}
-	}
-	return envelopes
-}
-
-func birthdayStreamScheduledStartKST(session *birthdayStreamSession) string {
-	start := util.FirstNonNilTime(session.ScheduledStart, session.StartedAt)
-	if start == nil {
-		return ""
-	}
-	return util.FormatKST(*start, "15:04")
 }
 
 func (r *BirthdayStreamRunner) effectiveInterval() time.Duration {

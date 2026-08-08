@@ -14,7 +14,7 @@ import (
 
 type Targets struct {
 	NotificationChannelIDs []string
-	StatsChannelIDs        []string
+	OperationalChannelIDs  []string
 	DroppedAlarmTargets    int
 }
 
@@ -64,9 +64,9 @@ func resolveYouTubePollTargetsFromAlarmChannelIDs(
 	alarmChannelIDs []string,
 	operationalChannels []communityshorts.OperationalChannel,
 ) Targets {
-	statsChannelIDs := communityshorts.EnabledChannelIDs(operationalChannels)
-	allowed := make(map[string]struct{}, len(statsChannelIDs))
-	for _, channelID := range statsChannelIDs {
+	operationalChannelIDs := communityshorts.EnabledChannelIDs(operationalChannels)
+	allowed := make(map[string]struct{}, len(operationalChannelIDs))
+	for _, channelID := range operationalChannelIDs {
 		allowed[channelID] = struct{}{}
 	}
 
@@ -87,7 +87,7 @@ func resolveYouTubePollTargetsFromAlarmChannelIDs(
 
 	return Targets{
 		NotificationChannelIDs: notificationChannelIDs,
-		StatsChannelIDs:        statsChannelIDs,
+		OperationalChannelIDs:  operationalChannelIDs,
 		DroppedAlarmTargets:    dropped,
 	}
 }
@@ -106,7 +106,7 @@ func logYouTubePollTargetStartupSourceState(
 	if len(cacheOnly) == 0 && len(dbOnly) == 0 {
 		logger.Info("youtube_poll_targets_startup_source_aligned",
 			slog.Int("notification_target_channels", len(dbTargets.NotificationChannelIDs)),
-			slog.Int("stats_target_channels", len(dbTargets.StatsChannelIDs)),
+			slog.Int("operational_target_channels", len(dbTargets.OperationalChannelIDs)),
 		)
 		return
 	}

@@ -21,7 +21,7 @@ func validateRegistrationBudgetProfiles(registrations []providers.ChannelPollerR
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
-		if registration.HasBudgetProfile && len(registration.BudgetProfile.SourceUnits) > 0 {
+		if hasValidRegistrationBudgetProfile(registration) {
 			continue
 		}
 		missing = append(missing, registration.Poller.Name())
@@ -33,6 +33,17 @@ func validateRegistrationBudgetProfiles(registrations []providers.ChannelPollerR
 		"youtube-producer poller registrations require budget profiles: %s",
 		strings.Join(missing, ", "),
 	)
+}
+
+func hasValidRegistrationBudgetProfile(registration *providers.ChannelPollerRegistration) bool {
+	if registration == nil || !registration.HasBudgetProfile {
+		return false
+	}
+	if len(registration.BudgetProfile.SourceUnits) > 0 {
+		return true
+	}
+	snapshotPoller, ok := registration.Poller.(providers.ChannelTargetSnapshotPoller)
+	return ok && len(snapshotPoller.ChannelTargets()) == 0
 }
 
 func estimateYouTubeProducerSourceBudget(registrations []providers.ChannelPollerRegistration, activeAPCount, perAPWorkerCount int) BudgetEstimate {

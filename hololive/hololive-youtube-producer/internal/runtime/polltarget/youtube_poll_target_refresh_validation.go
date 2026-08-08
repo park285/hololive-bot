@@ -201,7 +201,7 @@ func hasChannelID(set map[string]struct{}, channelID string) bool {
 
 func equalYouTubePollTargets(a, b Targets) bool {
 	return sameChannelIDSet(a.NotificationChannelIDs, b.NotificationChannelIDs) &&
-		sameChannelIDSet(a.StatsChannelIDs, b.StatsChannelIDs)
+		sameChannelIDSet(a.OperationalChannelIDs, b.OperationalChannelIDs)
 }
 
 func sameChannelIDSet(left, right []string) bool {

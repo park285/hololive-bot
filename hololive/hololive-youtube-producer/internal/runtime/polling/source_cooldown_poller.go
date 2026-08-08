@@ -29,6 +29,12 @@ type sourceCooldownReportingPoller struct {
 	reportTimeout time.Duration
 }
 
+type sourceCooldownReportingTargetSnapshotPoller struct {
+	*sourceCooldownReportingPoller
+}
+
+var _ providers.ChannelTargetSnapshotPoller = (*sourceCooldownReportingTargetSnapshotPoller)(nil)
+
 func wrapYouTubeProducerSourceCooldownPollers(
 	registrations []providers.ChannelPollerRegistration,
 	limiter polling.GlobalBudgetLimiter,
@@ -71,13 +77,17 @@ func newSourceCooldownReportingPoller(
 	if inner == nil || reporter == nil {
 		return inner
 	}
-	return &sourceCooldownReportingPoller{
+	reportingPoller := &sourceCooldownReportingPoller{
 		inner:         inner,
 		reporter:      reporter,
 		source:        polling.BudgetSourceYouTubeScraper,
 		logger:        logger,
 		reportTimeout: defaultSourceCooldownReportTimeout,
 	}
+	if _, ok := inner.(providers.ChannelTargetSnapshotPoller); ok {
+		return &sourceCooldownReportingTargetSnapshotPoller{sourceCooldownReportingPoller: reportingPoller}
+	}
+	return reportingPoller
 }
 
 func (p *sourceCooldownReportingPoller) Poll(ctx context.Context, channelID string) error {
@@ -107,6 +117,31 @@ func (p *sourceCooldownReportingPoller) ProxyEnabled() bool {
 		ProxyEnabled() bool
 	})
 	return ok && proxyPoller.ProxyEnabled()
+}
+
+func (p *sourceCooldownReportingTargetSnapshotPoller) ChannelTargets() []string {
+	if p == nil || p.sourceCooldownReportingPoller == nil {
+		return nil
+	}
+	snapshotPoller, ok := p.inner.(providers.ChannelTargetSnapshotPoller)
+	if !ok {
+		return nil
+	}
+	return snapshotPoller.ChannelTargets()
+}
+
+func (p *sourceCooldownReportingTargetSnapshotPoller) WithChannelTargets(channelIDs []string) (scheduler.Poller, polling.BudgetProfile) {
+	if p == nil || p.sourceCooldownReportingPoller == nil {
+		return p, polling.BudgetProfile{}
+	}
+	snapshotPoller, ok := p.inner.(providers.ChannelTargetSnapshotPoller)
+	if !ok {
+		return p, polling.BudgetProfile{}
+	}
+	updatedInner, profile := snapshotPoller.WithChannelTargets(channelIDs)
+	updated := *p.sourceCooldownReportingPoller
+	updated.inner = updatedInner
+	return &sourceCooldownReportingTargetSnapshotPoller{sourceCooldownReportingPoller: &updated}, profile
 }
 
 func (p *sourceCooldownReportingPoller) reportIfSourceCooldown(ctx context.Context, err error) {

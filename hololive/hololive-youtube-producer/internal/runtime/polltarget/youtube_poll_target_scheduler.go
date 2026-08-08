@@ -103,13 +103,31 @@ func youtubePollRegistrationTargetSync(
 		return scheduler.PollerTargetSync{}
 	}
 	updated := cloneYouTubePollRegistration(registration)
-	updated.ChannelIDs = youtubePollRegistrationChannelIDs(registration, targets, tieredTargets, hasTieredTargets)
+	desiredChannelIDs := youtubePollRegistrationChannelIDs(registration, targets, tieredTargets, hasTieredTargets)
+	if snapshotPoller, ok := registration.Poller.(providers.ChannelTargetSnapshotPoller); ok {
+		updatedPoller, budgetProfile := snapshotPoller.WithChannelTargets(desiredChannelIDs)
+		updated.Poller = updatedPoller
+		updated = updated.WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).
+			WithBudgetProfile(budgetProfile)
+	} else {
+		updated.ChannelIDs = desiredChannelIDs
+	}
 
 	sync := updated.ToTargetSync()
-	if isNotificationTargetGroup(registration.TargetGroup) {
+	if isImmediateTargetGroup(registration.TargetGroup) {
 		sync.ForceImmediateFirstRun = true
 	}
 	return sync
+}
+
+func channelTargetsForRegistration(registration *providers.ChannelPollerRegistration) []string {
+	if registration == nil {
+		return nil
+	}
+	if snapshotPoller, ok := registration.Poller.(providers.ChannelTargetSnapshotPoller); ok {
+		return snapshotPoller.ChannelTargets()
+	}
+	return registration.ChannelIDs
 }
 
 func cloneYouTubePollRegistration(registration *providers.ChannelPollerRegistration) providers.ChannelPollerRegistration {
@@ -131,8 +149,8 @@ func youtubePollRegistrationChannelIDs(
 	tieredTargets *TieredTargets,
 	hasTieredTargets bool,
 ) []string {
-	if registration.TargetGroup == providers.ChannelTargetGroupStats {
-		return append([]string(nil), targets.StatsChannelIDs...)
+	if registration.TargetGroup == providers.ChannelTargetGroupOperational {
+		return append([]string(nil), targets.OperationalChannelIDs...)
 	}
 	if registration.TargetGroup == providers.ChannelTargetGroupGlobal {
 		return append([]string(nil), registration.ChannelIDs...)
@@ -184,6 +202,10 @@ func hasTieredNotificationRegistration(registrations []providers.ChannelPollerRe
 
 func isNotificationTargetGroup(group providers.ChannelTargetGroup) bool {
 	return group == providers.ChannelTargetGroupNotification || isTieredNotificationTargetGroup(group)
+}
+
+func isImmediateTargetGroup(group providers.ChannelTargetGroup) bool {
+	return isNotificationTargetGroup(group)
 }
 
 func isTieredNotificationTargetGroup(group providers.ChannelTargetGroup) bool {

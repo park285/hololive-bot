@@ -24,6 +24,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Generic `notification_delivery_outbox` consume/send path for major event/member news notification rows
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send when `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`
+- Birthday and anniversary celebration production. Birthday stream delivery audience is derived from sent deliveries of the matching birthday greeting event; it does not fall back to every alarm room.
 
 ## Provides
 
@@ -59,6 +60,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - `ALARM_DISPATCH_CONSUMER_ENABLED=true` for production alarm dispatch outbox egress
 - `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true` for production YouTube outbox egress
 - Alarm timing/config env
+- `BIRTHDAY_STREAM_RUNNER_ENABLED=true` only after the birthday stream template is present and full-roster producer discovery has been verified
 
 ## Shutdown behavior
 

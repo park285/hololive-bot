@@ -20,7 +20,7 @@ func buildYouTubeProducerChannelPollerRegistrations(
 	_ *ratelimiter.RateLimiter,
 	_ cache.Client,
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	poll := scraperConfig.PollOrDefault()
 	pollers := testPollerSet{
@@ -31,14 +31,14 @@ func buildYouTubeProducerChannelPollerRegistrations(
 		live:      refreshTestPoller{name: "live"},
 	}
 	if scraperConfig.PollTiering.Enabled {
-		targets := Targets{NotificationChannelIDs: notificationChannelIDs, StatsChannelIDs: statsChannelIDs}
+		targets := Targets{NotificationChannelIDs: notificationChannelIDs, OperationalChannelIDs: operationalChannelIDs}
 		if postgres != nil {
 			if tiered, err := ClassifyByActivity(context.Background(), postgres.GetPool(), targets, time.Now()); err == nil {
 				return buildTestTieredRegistrations(&pollers, poll, &tiered)
 			}
 		}
 	}
-	return buildTestFlatRegistrations(&pollers, poll, notificationChannelIDs, statsChannelIDs)
+	return buildTestFlatRegistrations(&pollers, poll, notificationChannelIDs, operationalChannelIDs)
 }
 
 type testPollerSet struct {
@@ -53,7 +53,7 @@ func buildTestFlatRegistrations(
 	pollers *testPollerSet,
 	poll settings.ScraperPoll,
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	communityInterval := testCommunityPrimaryPollInterval(poll)
 	return []providers.ChannelPollerRegistration{
@@ -61,8 +61,8 @@ func buildTestFlatRegistrations(
 		testNotificationRegistration(pollers.shorts, scheduler.PriorityLow, poll.Shorts, notificationChannelIDs),
 		testNotificationRegistration(pollers.community, scheduler.PriorityLow, communityInterval, notificationChannelIDs),
 		providers.NewChannelPollerRegistration(pollers.stats, scheduler.PriorityLow, poll.Stats).
-			WithChannelIDs(statsChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupStats),
+			WithChannelIDs(operationalChannelIDs).
+			WithTargetGroup(providers.ChannelTargetGroupOperational),
 		testNotificationRegistration(pollers.live, scheduler.PriorityHigh, poll.Live, notificationChannelIDs),
 	}
 }
@@ -78,8 +78,8 @@ func buildTestTieredRegistrations(
 	registrations = appendTestTieredNotificationRegistrations(registrations, pollers.community, testCommunityPrimaryPollInterval(poll), scheduler.PriorityLow, targets)
 	registrations = append(registrations,
 		providers.NewChannelPollerRegistration(pollers.stats, scheduler.PriorityLow, poll.Stats).
-			WithChannelIDs(targets.StatsChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupStats),
+			WithChannelIDs(targets.OperationalChannelIDs).
+			WithTargetGroup(providers.ChannelTargetGroupOperational),
 		testNotificationRegistration(pollers.live, scheduler.PriorityHigh, poll.Live, targets.NotificationChannelIDs),
 	)
 	return registrations

@@ -37,9 +37,10 @@ type Service struct {
 	retry        *retryScheduler
 	concurrency  settings.HolodexConcurrencyConfig
 
-	liveFallbackMu     sync.Mutex
-	liveFallbackCursor int
-	liveStatusFallback settings.HolodexLiveStatusFallbackConfig
+	liveFallbackMu      sync.Mutex
+	liveFallbackCursors map[liveFallbackSetKey]liveFallbackCursorState
+	liveFallbackClock   uint64
+	liveStatusFallback  settings.HolodexLiveStatusFallbackConfig
 }
 
 func NewHolodexService(baseURL, apiKey string, cacheClient cache.Client, scraperService *htmlscraper.Service, logger *slog.Logger) (*Service, error) {

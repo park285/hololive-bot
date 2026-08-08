@@ -10,6 +10,7 @@ import (
 
 	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/stretchr/testify/require"
@@ -107,6 +108,33 @@ func TestWrapSourceCooldownPollersIncludesLiveBatchFallbackScraperSource(t *test
 	require.Equal(t, 1, limiter.calls)
 	require.Equal(t, polling.BudgetSourceYouTubeScraper, limiter.source)
 	require.Equal(t, "youtube_blocked_response", limiter.reason)
+}
+
+func TestWrapSourceCooldownPollersPreservesTargetSnapshotContract(t *testing.T) {
+	limiter := &sourceCooldownTestLimiter{}
+	base := pollers.NewLivePollerWithStatusProvider(nil, nil, nil)
+	batch := newLiveBatchPoller(
+		"live_batch",
+		base,
+		[]string{"UC_OLD"},
+		polling.BudgetBurstPrimary,
+		polling.BudgetPriorityHigh,
+	)
+	registration := providers.NewChannelPollerRegistration(batch, scheduler.PriorityHigh, time.Minute).
+		WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).
+		WithBudgetProfile(batch.budgetProfile())
+
+	wrapped := wrapYouTubeProducerSourceCooldownPollers([]providers.ChannelPollerRegistration{registration}, limiter, nil)
+	snapshot, ok := wrapped[0].Poller.(providers.ChannelTargetSnapshotPoller)
+	require.True(t, ok)
+	require.Equal(t, []string{"UC_OLD"}, snapshot.ChannelTargets())
+
+	updatedPoller, profile := snapshot.WithChannelTargets([]string{"UC_NEW_A", "UC_NEW_B"})
+	updated, ok := updatedPoller.(providers.ChannelTargetSnapshotPoller)
+	require.True(t, ok)
+	require.Equal(t, []string{"UC_OLD"}, snapshot.ChannelTargets())
+	require.Equal(t, []string{"UC_NEW_A", "UC_NEW_B"}, updated.ChannelTargets())
+	require.Equal(t, 2.0, profile.SourceUnits[polling.BudgetSourcePostgresWrite])
 }
 
 func TestSourceCooldownReportingPollerBoundsReportContext(t *testing.T) {

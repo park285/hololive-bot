@@ -36,6 +36,9 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `ALARM_DISPATCH_CONSUMER_ENABLED` | alarm dispatch outbox egress enablement | production yes |
 | `ALARM_DISPATCH_KARING_ENABLED` | alarm dispatch queue egress uses Karing content-list templates instead of text sends | no |
 | `ALARM_SHORT_LINK_BASE_URL` | `https://short.holoshi.com` for thumbnail-free grouped alarm links; blank disables | no |
+| `BIRTHDAY_STREAM_RUNNER_ENABLED` | matching birthday greeting이 sent인 방에만 birthday stream event를 생산 | production policy |
+| `BIRTHDAY_STREAM_POLL_INTERVAL_MS` | birthday stream session 평가 주기; 기본 30분 | no |
+| `BIRTHDAY_STREAM_SESSION_FRESHNESS_MS` | stale UPCOMING/LIVE 제외 창; 기본 30분 | no |
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
@@ -154,6 +157,21 @@ Mitigation:
 
 Rollback:
 - Clear `ALARM_SHORT_LINK_BASE_URL` and restart alarm-worker first. Keep the listener and both ingress layers indefinitely until an explicitly approved future compatibility deprecation.
+
+### 4. 생일축하는 갔지만 생일 방송 알람이 생성되지 않음
+
+Diagnosis:
+- `celebration:birthday:{channelID}:{date}` event와 그 delivery의 `status`, `sent_at`을 확인합니다. `sent`가 아닌 방은 의도적으로 대상이 아닙니다.
+- 같은 `channelID`의 당일 `youtube_live_sessions`가 `UPCOMING` 또는 `LIVE`이고 `last_seen_at` freshness 안에 있는지 확인합니다.
+- `Birthday stream runner failed` 로그가 있으면 audience SQL 오류를 먼저 해결합니다. 이 경로는 실패 시 전체 방으로 fallback하지 않습니다.
+- 이미 `celebration:birthday_stream:{channelID}:{date}:{videoID}` event가 있어도 현재 세션이면 다음 tick에서 재평가됩니다. 새 방 delivery만 outbox dedupe를 통과합니다.
+
+Mitigation:
+- producer의 full-roster LIVE discovery부터 복구한 뒤 runner를 재평가합니다.
+- birthday greeting delivery를 수동으로 sent 처리하거나 birthday stream을 전체 방에 재전송하지 않습니다.
+
+Rollback:
+- 구 alarm-worker image는 전체 방 fan-out 의미를 가지므로 rollback 전에 `BIRTHDAY_STREAM_RUNNER_ENABLED=false`로 runner를 중지합니다.
 
 ## Smoke test
 

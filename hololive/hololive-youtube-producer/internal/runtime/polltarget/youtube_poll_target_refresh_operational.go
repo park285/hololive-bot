@@ -69,42 +69,43 @@ func equalOperationalChannels(left, right []communityshorts.OperationalChannel) 
 
 func resolveYouTubePollTargetsFromRegistrations(registrations []providers.ChannelPollerRegistration) Targets {
 	var notificationChannelIDs []string
-	var statsChannelIDs []string
+	var operationalChannelIDs []string
 
 	for i := range registrations {
-		notificationChannelIDs, statsChannelIDs = addYouTubePollTargetRegistration(
+		notificationChannelIDs, operationalChannelIDs = addYouTubePollTargetRegistration(
 			notificationChannelIDs,
-			statsChannelIDs,
+			operationalChannelIDs,
 			&registrations[i],
 		)
 	}
 
 	return Targets{
 		NotificationChannelIDs: notificationChannelIDs,
-		StatsChannelIDs:        statsChannelIDs,
+		OperationalChannelIDs:  operationalChannelIDs,
 	}
 }
 
 func addYouTubePollTargetRegistration(
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 	registration *providers.ChannelPollerRegistration,
-) (resolvedNotificationChannelIDs, resolvedStatsChannelIDs []string) {
+) (resolvedNotificationChannelIDs, resolvedOperationalChannelIDs []string) {
+	channelIDs := channelTargetsForRegistration(registration)
 	switch registration.TargetGroup {
-	case providers.ChannelTargetGroupStats:
-		statsChannelIDs = mergeUniqueChannelIDs(statsChannelIDs, registration.ChannelIDs)
+	case providers.ChannelTargetGroupOperational:
+		operationalChannelIDs = mergeUniqueChannelIDs(operationalChannelIDs, channelIDs)
 	case providers.ChannelTargetGroupGlobal:
-		return notificationChannelIDs, statsChannelIDs
+		return notificationChannelIDs, operationalChannelIDs
 	case providers.ChannelTargetGroupDefault,
 		providers.ChannelTargetGroupNotification,
 		providers.ChannelTargetGroupActive,
 		providers.ChannelTargetGroupWarm,
 		providers.ChannelTargetGroupCold:
-		notificationChannelIDs = mergeUniqueChannelIDs(notificationChannelIDs, registration.ChannelIDs)
+		notificationChannelIDs = mergeUniqueChannelIDs(notificationChannelIDs, channelIDs)
 	}
-	return notificationChannelIDs, statsChannelIDs
+	return notificationChannelIDs, operationalChannelIDs
 }
 
 func hasYouTubePollTargets(targets Targets) bool {
-	return len(targets.NotificationChannelIDs) > 0 || len(targets.StatsChannelIDs) > 0
+	return len(targets.NotificationChannelIDs) > 0 || len(targets.OperationalChannelIDs) > 0
 }

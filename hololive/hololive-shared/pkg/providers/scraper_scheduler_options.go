@@ -47,14 +47,22 @@ type ChannelPollerRegistrationOptions struct {
 
 type ChannelTargetGroup string
 
+type ChannelTargetSnapshotPoller interface {
+	scheduler.Poller
+	ChannelTargets() []string
+	WithChannelTargets([]string) (scheduler.Poller, polling.BudgetProfile)
+}
+
 const (
 	ChannelTargetGroupDefault      ChannelTargetGroup = "default"
 	ChannelTargetGroupNotification ChannelTargetGroup = "notification"
 	ChannelTargetGroupActive       ChannelTargetGroup = "notification_active"
 	ChannelTargetGroupWarm         ChannelTargetGroup = "notification_warm"
 	ChannelTargetGroupCold         ChannelTargetGroup = "notification_cold"
-	ChannelTargetGroupStats        ChannelTargetGroup = "stats"
-	ChannelTargetGroupGlobal       ChannelTargetGroup = "global"
+	ChannelTargetGroupOperational  ChannelTargetGroup = "operational"
+	// Deprecated: ChannelTargetGroupOperational을 사용합니다.
+	ChannelTargetGroupStats  ChannelTargetGroup = ChannelTargetGroupOperational
+	ChannelTargetGroupGlobal ChannelTargetGroup = "global"
 
 	SyntheticGlobalPollerChannelID = "__global__"
 )

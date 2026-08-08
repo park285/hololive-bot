@@ -55,7 +55,7 @@ func TestResolveTargetsWithCacheValidation(t *testing.T) {
 
 		require.True(t, ok)
 		assert.Equal(t, []string{"UC_NOTIFY"}, targets.NotificationChannelIDs)
-		assert.Equal(t, []string{"UC_NOTIFY", "UC_STATS"}, targets.StatsChannelIDs)
+		assert.Equal(t, []string{"UC_NOTIFY", "UC_STATS"}, targets.OperationalChannelIDs)
 		assert.Nil(t, refresher.cacheOnlyFirstSeen)
 	})
 
@@ -81,7 +81,7 @@ func TestResolveTargetsWithCacheValidation(t *testing.T) {
 
 		require.True(t, ok)
 		assert.Equal(t, []string{"UC_BASE", "UC_CACHE_ONLY"}, targets.NotificationChannelIDs)
-		assert.Equal(t, []string{"UC_BASE", "UC_CACHE_ONLY"}, targets.StatsChannelIDs)
+		assert.Equal(t, []string{"UC_BASE", "UC_CACHE_ONLY"}, targets.OperationalChannelIDs)
 		assert.Equal(t, 1, dbCalls)
 		assert.Equal(t, now, refresher.cacheOnlyFirstSeen["UC_CACHE_ONLY"])
 	})
@@ -159,7 +159,7 @@ func TestResolveTargetsWithCacheValidation(t *testing.T) {
 
 		require.False(t, ok)
 		assert.Empty(t, targets.NotificationChannelIDs)
-		assert.Empty(t, targets.StatsChannelIDs)
+		assert.Empty(t, targets.OperationalChannelIDs)
 	})
 }
 

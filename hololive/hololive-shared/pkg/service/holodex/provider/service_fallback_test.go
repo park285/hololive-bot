@@ -738,6 +738,66 @@ func TestChannelsLiveStatusFallbackRotatesCursor(t *testing.T) {
 	}
 }
 
+func TestChannelsLiveStatusFallbackRotatesAcrossBatchSets(t *testing.T) {
+	mockReq := &MockRequester{
+		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
+			return nil, &apiclient.APIError{
+				Operation:  "channels_live_status",
+				StatusCode: http.StatusServiceUnavailable,
+				Err:        fmt.Errorf("upstream unavailable"),
+			}
+		},
+	}
+	attempted := make(map[string]int)
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+		attempted[channelID]++
+		return nil, nil
+	})
+
+	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+	service.liveStatusFallback = settings.HolodexLiveStatusFallbackConfig{
+		MaxPerCycle:     4,
+		WallClockBudget: time.Second,
+	}
+	channelSets := make([][]string, 0, 3)
+	for setIndex, size := range []int{40, 40, 34} {
+		channelIDs := make([]string, 0, size)
+		for channelIndex := range size {
+			channelIDs = append(channelIDs, fmt.Sprintf("set-%d-channel-%02d", setIndex, channelIndex))
+		}
+		channelSets = append(channelSets, channelIDs)
+	}
+
+	for range 10 {
+		for _, channelIDs := range channelSets {
+			_, _, err := service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
+			if err != nil {
+				t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
+			}
+		}
+	}
+
+	for _, channelIDs := range channelSets {
+		for _, channelID := range channelIDs {
+			if attempted[channelID] == 0 {
+				t.Errorf("channel %s was never attempted", channelID)
+			}
+		}
+	}
+}
+
+func TestLiveStatusFallbackCursorStateIsBounded(t *testing.T) {
+	service := &Service{}
+	for index := range liveFallbackCursorSetLimit + 1 {
+		channelIDs := []string{fmt.Sprintf("set-%03d-channel", index)}
+		service.nextLiveStatusFallbackChannel(channelIDs, newLiveFallbackSetKey(channelIDs))
+	}
+
+	if len(service.liveFallbackCursors) != liveFallbackCursorSetLimit {
+		t.Fatalf("live fallback cursor sets = %d, want %d", len(service.liveFallbackCursors), liveFallbackCursorSetLimit)
+	}
+}
+
 func TestChannelsLiveStatusFallbackDoesNotAdvanceCursorForBudgetUnattemptedChannels(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {

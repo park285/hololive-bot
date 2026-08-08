@@ -156,7 +156,7 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 			ActiveNotificationChannelIDs: []string{"UC_A"},
 			WarmNotificationChannelIDs:   []string{"UC_B"},
 			ColdNotificationChannelIDs:   []string{"UC_C"},
-			StatsChannelIDs:              []string{"UC_STATS"},
+			OperationalChannelIDs:        []string{"UC_STATS"},
 		},
 	)
 	registrations = appendBackfillChannelPollerRegistrations(registrations, &pollers, settings.ScraperBackfillConfig{
@@ -168,7 +168,7 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 		LiveEnabled:       true,
 		LiveInterval:      3 * time.Minute,
 		TargetGroup:       "notification",
-	}, []string{"UC_A", "UC_B", "UC_C"})
+	}, []string{"UC_A", "UC_B", "UC_C"}, []string{"UC_A", "UC_B", "UC_C"})
 
 	assertAllBudgetProfiles(t, registrations)
 }
@@ -192,7 +192,7 @@ func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 			ActiveNotificationChannelIDs: []string{"UC_A"},
 			WarmNotificationChannelIDs:   []string{"UC_B"},
 			ColdNotificationChannelIDs:   []string{"UC_C"},
-			StatsChannelIDs:              []string{"UC_STATS"},
+			OperationalChannelIDs:        []string{"UC_STATS"},
 		},
 	)
 
@@ -230,7 +230,7 @@ func TestTieredCommunityRegistrationsUseShortsInterval(t *testing.T) {
 			ActiveNotificationChannelIDs: []string{"UC_A"},
 			WarmNotificationChannelIDs:   []string{"UC_B"},
 			ColdNotificationChannelIDs:   []string{"UC_C"},
-			StatsChannelIDs:              []string{"UC_STATS"},
+			OperationalChannelIDs:        []string{"UC_STATS"},
 		},
 	)
 
@@ -261,7 +261,7 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 
 	live := requireRegistration(t, registrations, "live_batch")
 	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[polling.BudgetSourceHolodexLive])
-	require.Equal(t, float64(2), live.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
+	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
 	require.Equal(t, polling.BudgetBurstPrimary, live.BudgetProfile.BurstClass)
 	require.Equal(t, polling.BudgetPriorityHigh, live.BudgetProfile.Priority)
 
@@ -308,6 +308,22 @@ func TestValidateRegistrationBudgetProfilesRequiresExplicitProfiles(t *testing.T
 	require.Contains(t, err.Error(), "empty_budget")
 
 	require.NoError(t, validateRegistrationBudgetProfiles(registrations[2:]))
+}
+
+func TestValidateRegistrationBudgetProfilesAllowsEmptyTargetSnapshot(t *testing.T) {
+	base := pollerruntime.NewLivePollerWithStatusProvider(nil, nil, nil)
+	emptySnapshot := newLiveBatchPoller(
+		"live_batch",
+		base,
+		nil,
+		polling.BudgetBurstPrimary,
+		polling.BudgetPriorityHigh,
+	)
+	registration := providers.NewChannelPollerRegistration(emptySnapshot, scheduler.PriorityHigh, time.Minute).
+		WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).
+		WithBudgetProfile(emptySnapshot.budgetProfile())
+
+	require.NoError(t, validateRegistrationBudgetProfiles([]providers.ChannelPollerRegistration{registration}))
 }
 
 func TestEstimateYouTubeProducerSourceBudgetKeepsSustainedIndependentOfAPCount(t *testing.T) {
