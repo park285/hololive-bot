@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: 6355a3f717d11e71a66f8449cb25a619040795eb # v1.7.0
+          ref: 5601e52c7e96e5525ad02d6065a469fdef55e118 # v1.8.0
           path: iris-client-go
           persist-credentials: false
 
