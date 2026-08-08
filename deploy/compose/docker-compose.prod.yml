@@ -640,6 +640,8 @@ services:
     volumes:
       - ../../logs:/app/logs
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+    group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
     extra_hosts: *host-extra-hosts
     depends_on:
       valkey-cache:
