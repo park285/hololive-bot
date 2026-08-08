@@ -78,12 +78,25 @@ func TestLiveBatchPollerWithChannelTargetsReturnsImmutableSnapshot(t *testing.T)
 	poller := newLiveBatchPoller("live_batch", base, []string{"UC_OLD"}, polling.BudgetBurstPrimary, polling.BudgetPriorityHigh)
 
 	updatedPoller, profile := poller.WithChannelTargets([]string{"UC_NEW", "UC_NEW", " "})
-	updated := updatedPoller.(*liveBatchPoller)
+	updated, ok := updatedPoller.(*liveBatchPoller)
+	if !ok {
+		t.Fatalf("updated poller type = %T, want *liveBatchPoller", updatedPoller)
+	}
 
 	require.Equal(t, []string{"UC_OLD"}, poller.ChannelTargets())
 	require.Equal(t, []string{"UC_NEW"}, updated.ChannelTargets())
 	require.Equal(t, 1.0, profile.SourceUnits[polling.BudgetSourceHolodexLive])
 	require.Equal(t, 1.0, profile.SourceUnits[polling.BudgetSourcePostgresWrite])
+}
+
+func TestLiveBatchPollerWithChannelTargetsHandlesNilReceiver(t *testing.T) {
+	var poller *liveBatchPoller
+
+	updated, profile := poller.WithChannelTargets([]string{"UC_NEW"})
+
+	require.Nil(t, updated)
+	require.Empty(t, profile.SourceUnits)
+	require.Empty(t, profile.FallbackSourceUnits)
 }
 
 func TestSummarizeBudgetIncludesLiveBatchFallbackInYouTubeScraperFaultEnvelope(t *testing.T) {

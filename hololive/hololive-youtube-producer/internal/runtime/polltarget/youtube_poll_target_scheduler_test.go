@@ -265,7 +265,10 @@ func TestYouTubePollRegistrationTargetSyncReplacesSnapshotAndBudgetAtomically(t 
 	sync := youtubePollRegistrationTargetSync(&registration, Targets{
 		OperationalChannelIDs: []string{"UC_NEW_A", "UC_NEW_B"},
 	}, nil, false)
-	updated := sync.Poller.(*refreshTestTargetSnapshotPoller)
+	updated, ok := sync.Poller.(*refreshTestTargetSnapshotPoller)
+	if !ok {
+		t.Fatalf("updated poller type = %T, want *refreshTestTargetSnapshotPoller", sync.Poller)
+	}
 
 	assert.Equal(t, []string{providers.SyntheticGlobalPollerChannelID}, sync.ChannelIDs)
 	assert.Equal(t, []string{"UC_OLD"}, poller.ChannelTargets())

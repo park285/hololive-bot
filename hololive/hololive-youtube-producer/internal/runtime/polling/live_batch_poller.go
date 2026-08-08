@@ -133,10 +133,11 @@ func (p *liveBatchPoller) ChannelTargets() []string {
 
 func (p *liveBatchPoller) WithChannelTargets(channelIDs []string) (scheduler.Poller, polling.BudgetProfile) {
 	if p == nil {
-		return p, holodexLiveBatchBudgetProfile(0, "", "")
+		return nil, holodexLiveBatchBudgetProfile(0, "", "")
 	}
 	updated := newLiveBatchPoller(p.name, p.base, channelIDs, p.burstClass, p.budgetPriority)
-	return updated, updated.budgetProfile()
+	profile := updated.budgetProfile()
+	return updated, profile
 }
 
 func (p *liveBatchPoller) budgetProfile() polling.BudgetProfile {

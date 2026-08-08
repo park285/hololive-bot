@@ -45,14 +45,14 @@ func buildBirthdayStreamEnvelopes(
 		displayName := resolveCelebrationMemberName(candidate.member)
 		rooms := roomsByBirthdayEventKey[birthdayGreetingEventKey(candidate.member.ChannelID, dateStr)]
 		for _, roomID := range rooms {
-			envelopes = append(envelopes, birthdayStreamEnvelope(candidate, displayName, roomID, dateStr))
+			envelopes = append(envelopes, birthdayStreamEnvelope(&candidate, displayName, roomID, dateStr))
 		}
 	}
 	return envelopes
 }
 
 func birthdayStreamEnvelope(
-	candidate birthdayStreamCandidate,
+	candidate *birthdayStreamCandidate,
 	displayName string,
 	roomID string,
 	dateStr string,
