@@ -432,6 +432,7 @@ services:
       - "127.0.0.1:30067:30067"
     volumes: *alarm-worker-volumes
     group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
       - "1000"
     extra_hosts: *iris-extra-hosts
     depends_on: *db-cache-depends
@@ -512,6 +513,7 @@ services:
       - "127.0.0.1:30061:30061"
     volumes: *hololive-api-volumes
     group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
       - "1000"
     extra_hosts: *iris-extra-hosts
     depends_on:
@@ -580,6 +582,7 @@ services:
       - "127.0.0.1:30095:30095"
     volumes: *go-volumes
     group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
       - "1000"
     extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
