@@ -47,7 +47,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   fi
 fi
 
-export COMPOSE_ENV_FILE=/run/hololive-bot/compose.env
+export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 
 down_files=(
   -f deploy/compose/docker-compose.prod.yml

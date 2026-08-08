@@ -18,7 +18,7 @@ SETTLE_SEC="${RESTART_SETTLE_SEC:-5}"               # 각 복구 후 회복 확�
 SCRIPT_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 REPO_DIR="${REPO_DIR:-${SCRIPT_REPO_DIR}}"
 COMPOSE_FILE="${COMPOSE_FILE:-${REPO_DIR}/deploy/compose/docker-compose.prod.yml}"
-COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-/run/hololive-bot/env}"
+COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-/etc/stack-secrets/hololive-bot/env}"
 PING_SOCKET="${PING_SOCKET:-/var/run/valkey/valkey-cache.sock}"
 # post-check: 복구 후 살아있어야 할 핵심 컨테이너
 POSTCHECK_CONTAINERS="${POSTCHECK_CONTAINERS:-valkey-cache holo-postgres hololive-api hololive-alarm-worker}"
@@ -95,15 +95,15 @@ validate_repo_dir() {
 
 validate_compose_env_file() {
   local env_real prefix prefix_real allowed=0
-  local prefixes=("${REPO_DIR}" "/run/hololive-bot")
+  local prefixes=("${REPO_DIR}" "/etc/stack-secrets/hololive-bot")
 
-  env_real="$(realpath -e -- "${COMPOSE_ENV_FILE}" 2>/dev/null)" || { input_validation_failed "COMPOSE_ENV_FILE" "not_canonical" "${COMPOSE_ENV_FILE}" "${REPO_DIR},/run/hololive-bot"; return 1; }
+  env_real="$(realpath -e -- "${COMPOSE_ENV_FILE}" 2>/dev/null)" || { input_validation_failed "COMPOSE_ENV_FILE" "not_canonical" "${COMPOSE_ENV_FILE}" "${REPO_DIR},/etc/stack-secrets/hololive-bot"; return 1; }
   if [ "${COMPOSE_ENV_FILE}" != "${env_real}" ]; then
     input_validation_failed "COMPOSE_ENV_FILE" "not_canonical" "${COMPOSE_ENV_FILE}" "${env_real}"
     return 1
   fi
   if [ ! -f "${env_real}" ]; then
-    input_validation_failed "COMPOSE_ENV_FILE" "not_file" "${COMPOSE_ENV_FILE}" "${REPO_DIR},/run/hololive-bot"
+    input_validation_failed "COMPOSE_ENV_FILE" "not_file" "${COMPOSE_ENV_FILE}" "${REPO_DIR},/etc/stack-secrets/hololive-bot"
     return 1
   fi
 
@@ -115,7 +115,7 @@ validate_compose_env_file() {
     fi
   done
   if [ "${allowed}" -ne 1 ]; then
-    input_validation_failed "COMPOSE_ENV_FILE" "outside_expected_prefix" "${COMPOSE_ENV_FILE}" "${REPO_DIR},/run/hololive-bot"
+    input_validation_failed "COMPOSE_ENV_FILE" "outside_expected_prefix" "${COMPOSE_ENV_FILE}" "${REPO_DIR},/etc/stack-secrets/hololive-bot"
     return 1
   fi
 

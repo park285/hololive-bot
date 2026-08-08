@@ -168,29 +168,29 @@ x-scraper-env: &scraper-env
 x-go-volumes: &go-volumes
   - ../../data:/app/data
   - ../../logs:/app/logs
-  - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-  - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-  - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+  - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-hololive-api-volumes: &hololive-api-volumes
   - ../../data:/app/data
   - ../../logs:/app/logs
   - ../../runtime-config:/app/runtime-config:ro
-  - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-  - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-  - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-  - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+  - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+  - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-alarm-worker-volumes: &alarm-worker-volumes
   - ../../data:/app/data
   - ../../logs:/app/logs
   - ../../runtime-config:/app/runtime-config:ro
-  - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-  - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-  - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-  - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+  - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+  - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+  - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-db-depends: &db-depends
@@ -272,7 +272,7 @@ services:
       - holo-pg-data:/var/lib/postgresql
       - ../../backups:/backups
       - ../../hololive/hololive-api/scripts/init-db:/docker-entrypoint-initdb.d:ro
-      - /run/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
+      - /etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /var/run/postgresql:size=16m,mode=3775
@@ -353,7 +353,7 @@ services:
       - /app/bin/db-migrate
     volumes:
       - ../../hololive/hololive-api/scripts/migrations:/migrations:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     depends_on:
       holo-postgres:
         condition: service_healthy
@@ -379,7 +379,7 @@ services:
     # 배치 디스패치/전송 도중 SIGKILL을 피하기 위한 우아한 종료 여유(api와 동일 기준).
     stop_grace_period: 45s
     env_file:
-      - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}
+      - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}
     environment:
       <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env]
       NOTIFICATION_EGRESS_ROLE: "owner"
@@ -432,6 +432,7 @@ services:
       - "127.0.0.1:30067:30067"
     volumes: *alarm-worker-volumes
     group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
       - "1000"
     extra_hosts: *iris-extra-hosts
     depends_on: *db-cache-depends
@@ -456,7 +457,7 @@ services:
     container_name: hololive-api
     stop_grace_period: 45s
     env_file:
-      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}
+      - ${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}
     environment:
       <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *cliproxy-env]
       APP_VERSION: ${HOLO_API_VERSION:-2.0.0}
@@ -512,6 +513,7 @@ services:
       - "127.0.0.1:30061:30061"
     volumes: *hololive-api-volumes
     group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
       - "1000"
     extra_hosts: *iris-extra-hosts
     depends_on:
@@ -580,6 +582,7 @@ services:
       - "127.0.0.1:30095:30095"
     volumes: *go-volumes
     group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
       - "1000"
     extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
@@ -610,7 +613,7 @@ services:
     # required:false — admin-dashboard는 central 전용인데 AP 배포도 전체 모델을 `config`로 검증하므로
     # AP 호스트의 파일 부재를 허용해야 한다. central 실재는 systemd-compose-up wait_for_file이 보장한다.
     env_file:
-      - path: ${ADMIN_DASHBOARD_ENV_FILE:-/run/hololive-bot/admin-dashboard.env}
+      - path: ${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}
         required: false
     environment:
       <<: *app-file-log-env
@@ -636,7 +639,9 @@ services:
       - "127.0.0.1:30190:30190"
     volumes:
       - ../../logs:/app/logs
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+    group_add:
+      - "${HOLOLIVE_RUNTIME_GID:-1002}"
     extra_hosts: *host-extra-hosts
     depends_on:
       valkey-cache:

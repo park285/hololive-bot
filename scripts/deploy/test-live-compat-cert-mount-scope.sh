@@ -40,11 +40,11 @@ violations = []
 for name, svc in services.items():
     for v in svc.get("volumes", []):
         src = v.get("source", "") if isinstance(v, dict) else str(v).split(":")[0]
-        if str(src).rstrip("/") == "/run/hololive-bot/certs":
+        if str(src).rstrip("/") == "/etc/stack-secrets/hololive-bot/certs":
             violations.append(name)
 
 if violations:
-    print("[FAIL] hb06 (%s): directory-wide /run/hololive-bot/certs mount in %s (a691472f)"
+    print("[FAIL] hb06 (%s): directory-wide /etc/stack-secrets/hololive-bot/certs mount in %s (a691472f)"
           % (label, sorted(set(violations))))
     sys.exit(1)
 PY

@@ -39,11 +39,11 @@ change_started_at="$3"
 unit="hololive-youtube-producer@${service}.service"
 current_link="/opt/hololive-bot/youtube-producer/current"
 
-sudo -n test -r /run/hololive-bot/ap-compose.env
-sudo -n test -r /run/hololive-bot/youtube-producer.env
-sudo -n test -r /run/hololive-bot/certs/postgres-ca.pem
-sudo -n test -r /run/hololive-bot/certs/hololive-h3.crt
-sudo -n test -r /run/hololive-bot/certs/hololive-h3.key
+sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
+sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
+sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
 sudo -n test -r /etc/hololive-bot/youtube-producer-host.env
 sudo -n test -d /var/lib/hololive-bot/youtube-producer/settings
 sudo -n test -x "$current_link/bin/healthcheck"
@@ -68,12 +68,12 @@ sudo -n grep -qx 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings' 
 sudo -n -u hololive test -w /var/lib/hololive-bot/youtube-producer/settings
 
 sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
   "$current_link/bin/healthcheck" "https://127.0.0.1:${port}/health" >/dev/null
 ready="$(
   sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
   "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
 )"
@@ -107,10 +107,10 @@ ports_list="${AP_PORTS[*]}"
 remote "set -euo pipefail
 cd ~/hololive-bot
 bash scripts/deploy/lib/require-quic-udp-buffer.sh '$AP_REQUIRED_UDP_BUFFER_BYTES' '$AP_NAME'
-sudo -n test -r /run/hololive-bot/ap-compose.env
-sudo -n test -r /run/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps $services_list
+sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps $services_list
 
 for container in $containers_list; do
   docker inspect \"\$container\" >/dev/null

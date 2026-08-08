@@ -70,7 +70,7 @@ services:
 
   hololive-api:
     env_file: !override
-      - ${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}
+      - ${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
@@ -91,17 +91,17 @@ services:
       - ../../data:/app/data
       - ${LIVE_LOGS_PATH:?LIVE_LOGS_PATH is required for live-compat overlays}:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
     networks:
       observability-traces: {}
 
   hololive-alarm-worker:
     env_file: !override
-      - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}
+      - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
@@ -110,10 +110,10 @@ services:
       - ../../data:/app/data
       - ${LIVE_LOGS_PATH:?LIVE_LOGS_PATH is required for live-compat overlays}:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
     networks:
       observability-traces: {}
@@ -125,9 +125,9 @@ services:
       - ../../data:/app/data
       - ${LIVE_LOGS_PATH:?LIVE_LOGS_PATH is required for live-compat overlays}:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
   admin-dashboard:

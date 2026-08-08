@@ -66,13 +66,13 @@ write_host_env() {
     printf 'SERVER_PORT=%s\n' "$port"
     printf 'HOLOLIVE_HTTP_TRANSPORTS=h3\n'
     printf 'HOLOLIVE_H3_ADDR=127.0.0.1:%s\n' "$port"
-    printf 'HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt\n'
-    printf 'HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key\n'
+    printf 'HOLOLIVE_H3_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
+    printf 'HOLOLIVE_H3_KEY_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.key\n'
     printf 'HOLOLIVE_H3_SERVER_NAME=127.0.0.1\n'
-    printf 'HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt\n'
+    printf 'HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1\n'
     printf 'HOLOLIVE_METRICS_ADDR=%s:30095\n' "$AP_SSH_HOST"
-    printf 'HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt\n'
+    printf 'HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HEALTHCHECK_SERVER_NAME=127.0.0.1\n'
     printf 'PHOTO_SYNC_ENABLED=false\n'
     printf 'SCRAPER_FETCHER_ENGINE=nethttp\n'
@@ -83,7 +83,7 @@ write_host_env() {
     printf 'POSTGRES_PORT=5433\n'
     printf 'POSTGRES_DB=hololive\n'
     printf 'POSTGRES_SSLMODE=verify-full\n'
-    printf 'POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem\n'
+    printf 'POSTGRES_SSLROOTCERT=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem\n'
     printf 'POSTGRES_QUERY_EXEC_MODE=cache_statement\n'
     printf 'POSTGRES_POOL_MIN_CONNS=2\n'
     printf 'POSTGRES_POOL_MAX_CONNS=8\n'
@@ -129,17 +129,16 @@ write_unit() {
   cat > "$dest" <<'EOF'
 [Unit]
 Description=Hololive youtube-producer AP (%i)
-After=network-online.target openbao-agent-hololive-bot.service
+After=network-online.target
 Wants=network-online.target
-Requires=openbao-agent-hololive-bot.service
 
 [Service]
 Type=simple
 User=hololive
 Group=opc
 WorkingDirectory=/opt/hololive-bot/youtube-producer/current
-EnvironmentFile=/run/hololive-bot/ap-compose.env
-EnvironmentFile=/run/hololive-bot/youtube-producer.env
+EnvironmentFile=/etc/stack-secrets/hololive-bot/ap-compose.env
+EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-producer.env
 EnvironmentFile=/etc/hololive-bot/youtube-producer-host.env
 ExecStart=/opt/hololive-bot/youtube-producer/current/bin/youtube-producer-wrapper
 Restart=always
@@ -150,7 +149,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/run/hololive-bot /var/log/hololive-bot /tmp
+ReadWritePaths=/var/log/hololive-bot /tmp
 ReadWritePaths=/var/lib/hololive-bot
 
 [Install]
@@ -224,11 +223,11 @@ if ! id hololive >/dev/null 2>&1; then
   sudo -n useradd --system --gid opc --home-dir /nonexistent --shell /usr/sbin/nologin hololive
 fi
 
-sudo -n test -r /run/hololive-bot/ap-compose.env
-sudo -n test -r /run/hololive-bot/youtube-producer.env
-sudo -n test -r /run/hololive-bot/certs/postgres-ca.pem
-sudo -n test -r /run/hololive-bot/certs/hololive-h3.crt
-sudo -n test -r /run/hololive-bot/certs/hololive-h3.key
+sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
+sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
+sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
 
 sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
@@ -345,7 +344,7 @@ printf 'net.core.wmem_max=%s\n' "$(sysctl -n net.core.wmem_max)"
 
 for _ in $(seq 1 30); do
   if sudo -n -u hololive env \
-     HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+     HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
      HEALTHCHECK_SERVER_NAME=127.0.0.1 \
      "$current_link/bin/healthcheck" "https://127.0.0.1:${port}/health"; then
     break
@@ -355,7 +354,7 @@ done
 
 ready="$(
   sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
   "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
 )"
