@@ -149,7 +149,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/etc/stack-secrets/hololive-bot /var/log/hololive-bot /tmp
+ReadWritePaths=/var/log/hololive-bot /tmp
 ReadWritePaths=/var/lib/hololive-bot
 
 [Install]
