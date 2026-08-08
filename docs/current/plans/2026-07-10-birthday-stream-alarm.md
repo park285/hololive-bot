@@ -1,5 +1,7 @@
 # 생일 방송 와꾸 알람 구현 계획 (birthday_stream) — v2
 
+> **Superseded:** discovery와 발송 대상 설계는 `2026-08-08-birthday-stream-alarm-v3.md`가 대체합니다. 특히 “전체 방 fan-out”과 “일반 알람 구독이 있어야 LIVE가 관측됨”은 더 이상 현재 계약이 아닙니다. 이 문서는 v2 구현 이력으로만 유지합니다.
+
 작성: 2026-07-10. 독립 설계안 3건의 교차 반박으로 수렴한 안에 별도 적대 리뷰(HOLD 판정, HIGH 3건)를 반영한 v2.
 선행 문서: `docs/agent-workflows/plans/2026-05-26-celebration-alarm.md` (로컬 전용 워크플로 문서; 자정 축하 러너 — 본 계획은 그 연장선의 별도 러너).
 

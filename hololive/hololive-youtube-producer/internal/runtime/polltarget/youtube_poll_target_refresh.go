@@ -289,7 +289,7 @@ func (r *Refresher) reuseTargetsIfRegistryUnchanged(
 	targets := r.lastResolvedTargets
 	targetsChanged := false
 	if operational.changed {
-		targets.StatsChannelIDs = communityshorts.EnabledChannelIDs(operational.channels)
+		targets.OperationalChannelIDs = communityshorts.EnabledChannelIDs(operational.channels)
 		targetsChanged = !equalYouTubePollTargets(r.lastResolvedTargets, targets)
 	}
 	if targetsChanged || r.shouldRefreshTieredTargets() {
@@ -299,13 +299,13 @@ func (r *Refresher) reuseTargetsIfRegistryUnchanged(
 	return true
 }
 
-func (r *Refresher) applyStatsTargetRefreshIfChanged(ctx context.Context, operational operationalChannelResolution) {
+func (r *Refresher) applyOperationalTargetRefreshIfChanged(ctx context.Context, operational operationalChannelResolution) {
 	if !operational.changed {
 		return
 	}
 
 	targets := r.lastResolvedTargets
-	targets.StatsChannelIDs = communityshorts.EnabledChannelIDs(operational.channels)
+	targets.OperationalChannelIDs = communityshorts.EnabledChannelIDs(operational.channels)
 	if !equalYouTubePollTargets(r.lastResolvedTargets, targets) {
 		r.applyResolvedTargets(ctx, targets)
 	}
@@ -345,7 +345,7 @@ func (r *Refresher) reuseTargetsForEmptyCacheCandidate(
 	if !candidate.fromCache || len(candidate.ids) != 0 || !hasYouTubePollTargets(r.lastResolvedTargets) {
 		return false
 	}
-	r.applyStatsTargetRefreshIfChanged(ctx, operational)
+	r.applyOperationalTargetRefreshIfChanged(ctx, operational)
 	return true
 }
 
@@ -365,7 +365,7 @@ func (r *Refresher) finishRefresh(
 		r.logger.Info("youtube_poll_target_operational_channels_refreshed",
 			slog.Int("operational_channel_count", len(operational.channels)),
 			slog.Int("notification_target_channels", len(targets.NotificationChannelIDs)),
-			slog.Int("stats_target_channels", len(targets.StatsChannelIDs)),
+			slog.Int("operational_target_channels", len(targets.OperationalChannelIDs)),
 			slog.Bool("fallback_used", operational.fallbackUsed),
 		)
 	}

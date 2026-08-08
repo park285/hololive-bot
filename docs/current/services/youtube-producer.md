@@ -26,6 +26,7 @@ as repo-side contract definitions and compose-path validation inputs.
 - YouTube polling/scraping scheduler when `YOUTUBE_INGESTION_ENABLED=true`
 - Holodex photo sync on AP-C (`PHOTO_SYNC_ENABLED=true`), guarded by a global Valkey singleton lease with TTL failover. AP-B (`PHOTO_SYNC_ENABLED=false`) is a scraping/polling failover peer only and does not participate in PhotoSync.
 - Community/shorts/live/stats polling configuration
+- Poll target separation: videos/shorts/community use notification subscriptions, while channel stats and Holodex-backed LIVE/UPCOMING discovery use the enabled operational roster. The live batch scheduler keeps one global job and chunks the roster at execution time.
 - `youtube_notification_outbox` production paths for YouTube-derived events
 - Time-series retention cleanup for `youtube_channel_stats_snapshots`, `youtube_live_sessions`, and `youtube_live_viewer_samples` (bounded batch deletes, advisory-locked single-runner, default off)
 
@@ -94,6 +95,7 @@ scraper-only by default with `PHOTO_SYNC_ENABLED=false`,
 - Health: remote AP local H3 port (`30005`/`30015`/`30035`), AP-C `https://127.0.0.1:30025/health`
 - Ready: remote AP local H3 port (`30005`/`30015`/`30035`), AP-C `https://127.0.0.1:30025/ready`, all with `mode=active-active`
 - Metrics: `youtube_poller_job_claim_total`, `youtube_poller_job_lease_renew_total`, `youtube_poller_job_mark_completed_total`, `youtube_poller_job_release_total`, `youtube_poller_outbox_insert_total`
+- Target metrics: `hololive_youtube_poll_target_refresh_accepted_target_count{target_type="notification|operational"}`. `youtube_producer_live_discovery_subscription_fallback` means the Holodex provider is absent and full-roster LIVE discovery is not active.
 
 ## Related documents
 

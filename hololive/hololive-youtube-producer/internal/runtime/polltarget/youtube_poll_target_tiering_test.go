@@ -139,13 +139,13 @@ func TestClassifyYouTubePollTargetsByActivityShortCircuits(t *testing.T) {
 			name: "nil db keeps notification targets active",
 			targets: Targets{
 				NotificationChannelIDs: []string{"UC_ACTIVE_BY_DEFAULT", " "},
-				StatsChannelIDs:        []string{"UC_STATS"},
+				OperationalChannelIDs:  []string{"UC_STATS"},
 			},
 		},
 		{
-			name: "empty notification list preserves stats targets",
+			name: "empty notification list preserves operational targets",
 			targets: Targets{
-				StatsChannelIDs: []string{"UC_STATS"},
+				OperationalChannelIDs: []string{"UC_STATS"},
 			},
 		},
 	}
@@ -161,7 +161,7 @@ func TestClassifyYouTubePollTargetsByActivityShortCircuits(t *testing.T) {
 			assert.Equal(t, tt.targets.NotificationChannelIDs, got.ActiveNotificationChannelIDs)
 			assert.Empty(t, got.WarmNotificationChannelIDs)
 			assert.Empty(t, got.ColdNotificationChannelIDs)
-			assert.Equal(t, tt.targets.StatsChannelIDs, got.StatsChannelIDs)
+			assert.Equal(t, tt.targets.OperationalChannelIDs, got.OperationalChannelIDs)
 		})
 	}
 }

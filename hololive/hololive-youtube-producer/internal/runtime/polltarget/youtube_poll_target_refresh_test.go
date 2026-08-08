@@ -754,7 +754,7 @@ func TestYouTubePollTargetRefresherRefreshMetricsSuccessAndAcceptedCounts(t *tes
 	assert.Equal(t, successBefore+1, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("success")))
 	assert.Equal(t, float64(refreshAt.Unix()), testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp.WithLabelValues()))
 	assert.Equal(t, float64(1), testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification")))
-	assert.Equal(t, float64(2), testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats")))
+	assert.Equal(t, float64(2), testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("operational")))
 }
 
 func TestYouTubePollTargetRefresherRefreshMetricsErrorPreservesLastSuccessSnapshot(t *testing.T) {
@@ -816,7 +816,7 @@ func TestYouTubePollTargetRefresherRefreshMetricsErrorPreservesLastSuccessSnapsh
 	errorBefore := testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("error"))
 	lastSuccessBefore := testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp.WithLabelValues())
 	notificationCountBefore := testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification"))
-	statsCountBefore := testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats"))
+	statsCountBefore := testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("operational"))
 
 	refresher.refresh(context.Background())
 
@@ -824,7 +824,7 @@ func TestYouTubePollTargetRefresherRefreshMetricsErrorPreservesLastSuccessSnapsh
 	assert.Equal(t, errorBefore+1, testutil.ToFloat64(youtubePollTargetRefreshTotal.WithLabelValues("error")))
 	assert.Equal(t, lastSuccessBefore, testutil.ToFloat64(youtubePollTargetRefreshLastSuccessTimestamp.WithLabelValues()))
 	assert.Equal(t, notificationCountBefore, testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification")))
-	assert.Equal(t, statsCountBefore, testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats")))
+	assert.Equal(t, statsCountBefore, testutil.ToFloat64(youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("operational")))
 }
 
 func TestDisabledYouTubePollTargetRefresherDoesNotRecordRefreshOutcome(t *testing.T) {

@@ -100,7 +100,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		{name: "videos", priority: pollscheduler.PriorityNormal, interval: 7 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 9},
 		{name: "shorts", priority: pollscheduler.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
 		{name: "community", priority: pollscheduler.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
-		{name: "channel_stats", priority: pollscheduler.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupStats, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 6},
+		{name: "channel_stats", priority: pollscheduler.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupOperational, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 6},
 		{name: "live", priority: pollscheduler.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
 	}
 
@@ -181,14 +181,14 @@ func TestClassifyYouTubePollTargetsByActivity(t *testing.T) {
 
 	targets, err := polltarget.ClassifyByActivity(context.Background(), pool, polltarget.Targets{
 		NotificationChannelIDs: []string{"UC_LIVE", "UC_ACTIVE", "UC_WARM", "UC_COLD"},
-		StatsChannelIDs:        []string{"UC_STATS"},
+		OperationalChannelIDs:  []string{"UC_STATS"},
 	}, now)
 
 	require.NoError(t, err)
 	require.Equal(t, []string{"UC_LIVE", "UC_ACTIVE"}, targets.ActiveNotificationChannelIDs)
 	require.Equal(t, []string{"UC_WARM"}, targets.WarmNotificationChannelIDs)
 	require.Equal(t, []string{"UC_COLD"}, targets.ColdNotificationChannelIDs)
-	require.Equal(t, []string{"UC_STATS"}, targets.StatsChannelIDs)
+	require.Equal(t, []string{"UC_STATS"}, targets.OperationalChannelIDs)
 }
 
 func TestBuildYouTubeProducerChannelPollerRegistrations_TieredTargetsReduceRPM(t *testing.T) {
@@ -279,7 +279,7 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 	)
 	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, pool)
 
-	syncer.SyncAt(t.Context(), polltarget.Targets{NotificationChannelIDs: notificationIDs, StatsChannelIDs: statsIDs}, now)
+	syncer.SyncAt(t.Context(), polltarget.Targets{NotificationChannelIDs: notificationIDs, OperationalChannelIDs: statsIDs}, now)
 
 	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_ACTIVE:videos"))
 	require.Equal(t, 20*time.Minute, schedulerJobInterval(t, scheduler, "UC_WARM:videos"))
@@ -312,7 +312,7 @@ func TestTieredPollerRefreshRemovesEmptyNotificationTargets(t *testing.T) {
 	)
 	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, pool)
 
-	syncer.SyncAt(t.Context(), polltarget.Targets{NotificationChannelIDs: nil, StatsChannelIDs: statsIDs}, now)
+	syncer.SyncAt(t.Context(), polltarget.Targets{NotificationChannelIDs: nil, OperationalChannelIDs: statsIDs}, now)
 
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:videos")
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_COLD:videos")

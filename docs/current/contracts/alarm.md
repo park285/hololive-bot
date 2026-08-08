@@ -53,6 +53,7 @@ type AlarmQueueEnvelope struct {
     SourcePayload string                            `json:"source_payload,omitempty"`
     SourceKind    domain.AlarmDispatchSourceKind    `json:"source_kind,omitempty"`
     YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
+    Celebration   *domain.CelebrationDispatchPayload   `json:"celebration,omitempty"`
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -66,6 +67,8 @@ type AlarmQueueRetryMetadata struct {
 
 Live alarm notifications keep using `Notification` and `ValidateLiveDispatchRoute`.
 Major event/member news rows are produced in `notification_delivery_outbox`; `alarm-worker` claims those rows and sends them through Iris/Kakao. YouTube live/video/community/shorts rows are produced in `youtube_notification_outbox`; `alarm-worker` claims those rows, resolves rooms, renders with the shared YouTube outbox formatter, sends through Iris/Kakao, and writes per-room delivery state.
+
+Birthday stream notifications use `SourceKind=celebration`, `AlarmType=BIRTHDAY`, and `Celebration.Kind=birthday_stream`. Their recipient contract is the set of rooms whose matching `celebration:birthday:{channelID}:{date}` delivery is already `sent`; an audience lookup failure must not widen delivery to other rooms. Re-publishing a known birthday stream event is permitted so a newly eligible room can add its missing delivery through the existing event/delivery dedupe keys.
 
 HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service/alarm/dto.go` and the client-local request structs in `client.go`.
 

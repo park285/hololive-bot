@@ -52,7 +52,7 @@ func observeYouTubePollTargetRefreshSuccess(at time.Time, targets Targets) {
 	youtubePollTargetRefreshTotal.WithLabelValues("success").Inc()
 	youtubePollTargetRefreshLastSuccessTimestamp.WithLabelValues().Set(float64(at.Unix()))
 	youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("notification").Set(float64(len(targets.NotificationChannelIDs)))
-	youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("stats").Set(float64(len(targets.StatsChannelIDs)))
+	youtubePollTargetRefreshAcceptedTargetCount.WithLabelValues("operational").Set(float64(len(targets.OperationalChannelIDs)))
 }
 
 func observeYouTubePollTargetRefreshError() {

@@ -24,7 +24,7 @@ func buildYouTubeProducerComponents(
 	budgetWiring *GlobalBudgetWiring,
 	postgresService database.Client,
 	notificationChannelIDs []string,
-	statsChannelIDs []string,
+	operationalChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider pollers.LiveStatusProvider,
 	logger *slog.Logger,
@@ -39,7 +39,7 @@ func buildYouTubeProducerComponents(
 		scraperClient,
 		liveStatusProvider,
 		notificationChannelIDs,
-		statsChannelIDs,
+		operationalChannelIDs,
 		logger,
 	)
 	if budgetWiring == nil {

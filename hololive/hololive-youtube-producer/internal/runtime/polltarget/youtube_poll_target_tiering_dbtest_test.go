@@ -42,7 +42,7 @@ func TestClassifyByActivitySeedsChannelsAcrossTierCutoffs(t *testing.T) {
 
 	targets := Targets{
 		NotificationChannelIDs: notificationChannelIDs,
-		StatsChannelIDs:        []string{"UC_STATS"},
+		OperationalChannelIDs:  []string{"UC_STATS"},
 	}
 
 	got, err := ClassifyByActivity(t.Context(), pool, targets, now)
@@ -68,5 +68,5 @@ func TestClassifyByActivitySeedsChannelsAcrossTierCutoffs(t *testing.T) {
 	require.ElementsMatch(t, []string{"UC_COLD_JUST_PAST_WARM", "UC_COLD_OLD", "UC_COLD_NO_ACTIVITY"}, got.ColdNotificationChannelIDs)
 
 	require.Equal(t, notificationChannelIDs, got.NotificationChannelIDs)
-	require.Equal(t, targets.StatsChannelIDs, got.StatsChannelIDs)
+	require.Equal(t, targets.OperationalChannelIDs, got.OperationalChannelIDs)
 }

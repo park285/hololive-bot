@@ -29,8 +29,35 @@ import (
 	"github.com/stretchr/testify/require"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
+
+type refreshTestTargetSnapshotPoller struct {
+	name    string
+	targets []string
+}
+
+func (p *refreshTestTargetSnapshotPoller) Poll(context.Context, string) error {
+	return nil
+}
+
+func (p *refreshTestTargetSnapshotPoller) Name() string {
+	return p.name
+}
+
+func (p *refreshTestTargetSnapshotPoller) ChannelTargets() []string {
+	return append([]string(nil), p.targets...)
+}
+
+func (p *refreshTestTargetSnapshotPoller) WithChannelTargets(channelIDs []string) (pollscheduler.Poller, polling.BudgetProfile) {
+	updated := &refreshTestTargetSnapshotPoller{name: p.name, targets: append([]string(nil), channelIDs...)}
+	return updated, polling.BudgetProfile{
+		SourceUnits: map[polling.BudgetSource]float64{
+			polling.BudgetSourcePostgresWrite: float64(len(channelIDs)),
+		},
+	}
+}
 
 func TestShouldSyncYouTubePollRegistration(t *testing.T) {
 	t.Parallel()
@@ -82,7 +109,7 @@ func TestYouTubePollRegistrationChannelIDs(t *testing.T) {
 
 	targets := Targets{
 		NotificationChannelIDs: []string{"UC_NOTIFY"},
-		StatsChannelIDs:        []string{"UC_STATS"},
+		OperationalChannelIDs:  []string{"UC_OPERATIONAL"},
 	}
 	tieredTargets := TieredTargets{
 		ActiveNotificationChannelIDs: []string{"UC_ACTIVE"},
@@ -102,9 +129,9 @@ func TestYouTubePollRegistrationChannelIDs(t *testing.T) {
 			want:  []string{"UC_NOTIFY"},
 		},
 		{
-			name:  "stats uses resolved stats targets",
-			group: providers.ChannelTargetGroupStats,
-			want:  []string{"UC_STATS"},
+			name:  "operational uses resolved operational targets",
+			group: providers.ChannelTargetGroupOperational,
+			want:  []string{"UC_OPERATIONAL"},
 		},
 		{
 			name:  "global keeps registration targets",
@@ -161,7 +188,7 @@ func TestYouTubePollRegistrationTargetSync(t *testing.T) {
 
 	targets := Targets{
 		NotificationChannelIDs: []string{"UC_NOTIFY"},
-		StatsChannelIDs:        []string{"UC_STATS"},
+		OperationalChannelIDs:  []string{"UC_OPERATIONAL"},
 	}
 	tieredTargets := TieredTargets{
 		ActiveNotificationChannelIDs: []string{"UC_ACTIVE"},
@@ -201,10 +228,10 @@ func TestYouTubePollRegistrationTargetSync(t *testing.T) {
 			wantImmediate:  true,
 		},
 		{
-			name:           "stats targets do not force immediate first run",
-			group:          providers.ChannelTargetGroupStats,
+			name:           "operational targets do not force immediate first run",
+			group:          providers.ChannelTargetGroupOperational,
 			interval:       4 * time.Hour,
-			wantChannelIDs: []string{"UC_STATS"},
+			wantChannelIDs: []string{"UC_OPERATIONAL"},
 		},
 	}
 
@@ -225,6 +252,31 @@ func TestYouTubePollRegistrationTargetSync(t *testing.T) {
 			assert.Equal(t, tt.wantImmediate, got.ForceImmediateFirstRun)
 		})
 	}
+}
+
+func TestYouTubePollRegistrationTargetSyncReplacesSnapshotAndBudgetAtomically(t *testing.T) {
+	t.Parallel()
+
+	poller := &refreshTestTargetSnapshotPoller{name: "live_batch", targets: []string{"UC_OLD"}}
+	registration := providers.NewChannelPollerRegistration(poller, pollscheduler.PriorityHigh, time.Minute).
+		WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).
+		WithTargetGroup(providers.ChannelTargetGroupOperational)
+
+	sync := youtubePollRegistrationTargetSync(&registration, Targets{
+		OperationalChannelIDs: []string{"UC_NEW_A", "UC_NEW_B"},
+	}, nil, false)
+	updated, ok := sync.Poller.(*refreshTestTargetSnapshotPoller)
+	if !ok {
+		t.Fatalf("updated poller type = %T, want *refreshTestTargetSnapshotPoller", sync.Poller)
+	}
+
+	assert.Equal(t, []string{providers.SyntheticGlobalPollerChannelID}, sync.ChannelIDs)
+	assert.Equal(t, []string{"UC_OLD"}, poller.ChannelTargets())
+	assert.Equal(t, []string{"UC_NEW_A", "UC_NEW_B"}, updated.ChannelTargets())
+	assert.Equal(t, 2.0, sync.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
+
+	resolved := resolveYouTubePollTargetsFromRegistrations([]providers.ChannelPollerRegistration{registration})
+	assert.Equal(t, []string{"UC_OLD"}, resolved.OperationalChannelIDs)
 }
 
 func TestYouTubePollSchedulerSyncerSyncAtHandlesNilDependencies(t *testing.T) {

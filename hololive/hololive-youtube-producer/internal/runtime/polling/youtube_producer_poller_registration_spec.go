@@ -56,7 +56,7 @@ func buildStatsRegistration(statsPoller scheduler.Poller, interval time.Duration
 		Priority:              scheduler.PriorityLow,
 		Interval:              interval,
 		ChannelIDs:            channelIDs,
-		TargetGroup:           providers.ChannelTargetGroupStats,
+		TargetGroup:           providers.ChannelTargetGroupOperational,
 		WorstCaseAttempts:     scraper.FetchPageMaxAttempts,
 		WorstCaseRequestUnits: channelStatsWorstCaseRequestUnits(),
 		BudgetProfile:         youtubeScraperBudgetProfile(channelStatsWorstCaseRequestUnits(), polling.BudgetBurstPrimary, polling.BudgetPriorityLow),

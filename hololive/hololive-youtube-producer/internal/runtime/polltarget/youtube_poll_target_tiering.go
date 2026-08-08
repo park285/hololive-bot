@@ -21,7 +21,7 @@ type TieredTargets struct {
 	ActiveNotificationChannelIDs []string
 	WarmNotificationChannelIDs   []string
 	ColdNotificationChannelIDs   []string
-	StatsChannelIDs              []string
+	OperationalChannelIDs        []string
 }
 
 func classifyYouTubePollTargetsByActivity(ctx context.Context, pool *pgxpool.Pool, targets Targets, now time.Time) (TieredTargets, error) {
@@ -31,7 +31,7 @@ func classifyYouTubePollTargetsByActivity(ctx context.Context, pool *pgxpool.Poo
 
 	out := TieredTargets{
 		NotificationChannelIDs: targets.NotificationChannelIDs,
-		StatsChannelIDs:        targets.StatsChannelIDs,
+		OperationalChannelIDs:  targets.OperationalChannelIDs,
 	}
 	if pool == nil || len(targets.NotificationChannelIDs) == 0 {
 		out.ActiveNotificationChannelIDs = targets.NotificationChannelIDs

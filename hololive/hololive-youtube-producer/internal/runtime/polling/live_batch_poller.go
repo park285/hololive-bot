@@ -32,10 +32,14 @@ type livePollerRegistrationSpec struct {
 }
 
 type liveBatchPoller struct {
-	name       string
-	base       *pollers.LivePoller
-	channelIDs []string
+	name           string
+	base           *pollers.LivePoller
+	channelIDs     []string
+	burstClass     polling.BudgetBurstClass
+	budgetPriority polling.BudgetPriority
 }
+
+var _ providers.ChannelTargetSnapshotPoller = (*liveBatchPoller)(nil)
 
 func appendLivePollerRegistrations(
 	registrations []providers.ChannelPollerRegistration,
@@ -48,7 +52,7 @@ func appendLivePollerRegistrations(
 	if spec.TargetGroup == "" {
 		spec.TargetGroup = providers.ChannelTargetGroupNotification
 	}
-	if spec.BatchEnabled && spec.BatchBase != nil && len(channelIDs) > 0 {
+	if spec.BatchEnabled && spec.BatchBase != nil {
 		return appendLiveBatchPollerRegistrations(registrations, spec, channelIDs)
 	}
 	return append(registrations, providers.NewChannelPollerRegistration(spec.Base, spec.Priority, spec.Interval).
@@ -64,26 +68,35 @@ func appendLiveBatchPollerRegistrations(
 	spec *livePollerRegistrationSpec,
 	channelIDs []string,
 ) []providers.ChannelPollerRegistration {
-	chunks := chunkLiveRegistrationChannelIDs(channelIDs, defaultLiveBatchChannelChunkSize)
-	for idx, chunk := range chunks {
-		name := liveBatchRegistrationName(spec.Name, idx, len(chunks))
-		batchPoller := newLiveBatchPoller(name, spec.BatchBase, chunk)
-		fallbackUnits := liveBatchYouTubeScraperFallbackUnits(len(chunk))
-		registrations = append(registrations, providers.NewChannelPollerRegistration(batchPoller, spec.Priority, spec.Interval).
-			WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).
-			WithTargetGroup(spec.TargetGroup).
-			WithWorstCaseAttempts(1).
-			WithWorstCaseRequestUnitsPerRun(fallbackUnits).
-			WithBudgetProfile(holodexLiveBatchBudgetProfile(len(chunk), spec.BurstClass, spec.BudgetPriority)))
-	}
-	return registrations
+	batchPoller := newLiveBatchPoller(
+		liveBatchRegistrationName(spec.Name),
+		spec.BatchBase,
+		channelIDs,
+		spec.BurstClass,
+		spec.BudgetPriority,
+	)
+	fallbackUnits := liveBatchYouTubeScraperFallbackUnits(len(channelIDs))
+	return append(registrations, providers.NewChannelPollerRegistration(batchPoller, spec.Priority, spec.Interval).
+		WithChannelIDs([]string{providers.SyntheticGlobalPollerChannelID}).
+		WithTargetGroup(spec.TargetGroup).
+		WithWorstCaseAttempts(1).
+		WithWorstCaseRequestUnitsPerRun(fallbackUnits).
+		WithBudgetProfile(batchPoller.budgetProfile()))
 }
 
-func newLiveBatchPoller(name string, base *pollers.LivePoller, channelIDs []string) scheduler.Poller {
+func newLiveBatchPoller(
+	name string,
+	base *pollers.LivePoller,
+	channelIDs []string,
+	burstClass polling.BudgetBurstClass,
+	budgetPriority polling.BudgetPriority,
+) *liveBatchPoller {
 	return &liveBatchPoller{
-		name:       strings.TrimSpace(name),
-		base:       base,
-		channelIDs: append([]string(nil), channelIDs...),
+		name:           strings.TrimSpace(name),
+		base:           base,
+		channelIDs:     uniqueLiveRegistrationChannelIDs(channelIDs),
+		burstClass:     burstClass,
+		budgetPriority: budgetPriority,
 	}
 }
 
@@ -91,8 +104,17 @@ func (p *liveBatchPoller) Poll(ctx context.Context, _ string) error {
 	if p == nil || p.base == nil {
 		return fmt.Errorf("live batch poller %s has no base poller", p.Name())
 	}
-	errs := p.base.PollBatch(ctx, p.channelIDs)
-	return joinLiveBatchErrors(errs)
+	var batchErrs []error
+	for _, chunk := range chunkLiveRegistrationChannelIDs(p.channelIDs, defaultLiveBatchChannelChunkSize) {
+		if err := ctx.Err(); err != nil {
+			batchErrs = append(batchErrs, err)
+			break
+		}
+		if err := joinLiveBatchErrors(p.base.PollBatch(ctx, chunk)); err != nil {
+			batchErrs = append(batchErrs, err)
+		}
+	}
+	return errors.Join(batchErrs...)
 }
 
 func (p *liveBatchPoller) Name() string {
@@ -100,6 +122,29 @@ func (p *liveBatchPoller) Name() string {
 		return "live_batch"
 	}
 	return p.name
+}
+
+func (p *liveBatchPoller) ChannelTargets() []string {
+	if p == nil {
+		return nil
+	}
+	return append([]string(nil), p.channelIDs...)
+}
+
+func (p *liveBatchPoller) WithChannelTargets(channelIDs []string) (scheduler.Poller, polling.BudgetProfile) {
+	if p == nil {
+		return nil, holodexLiveBatchBudgetProfile(0, "", "")
+	}
+	updated := newLiveBatchPoller(p.name, p.base, channelIDs, p.burstClass, p.budgetPriority)
+	profile := updated.budgetProfile()
+	return updated, profile
+}
+
+func (p *liveBatchPoller) budgetProfile() polling.BudgetProfile {
+	if p == nil {
+		return holodexLiveBatchBudgetProfile(0, "", "")
+	}
+	return holodexLiveBatchBudgetProfile(len(p.channelIDs), p.burstClass, p.budgetPriority)
 }
 
 func joinLiveBatchErrors(errs map[string]error) error {
@@ -153,38 +198,34 @@ func chunkLiveRegistrationChannelIDs(channelIDs []string, chunkSize int) [][]str
 	return chunks
 }
 
-func liveBatchRegistrationName(baseName string, index, total int) string {
+func liveBatchRegistrationName(baseName string) string {
 	trimmed := strings.TrimSpace(baseName)
 	if trimmed == "" {
 		trimmed = "live"
 	}
-	if total <= 1 {
-		return trimmed + "_batch"
-	}
-	return fmt.Sprintf("%s_batch_%02d", trimmed, index+1)
+	return trimmed + "_batch"
 }
 
 func holodexLiveBatchBudgetProfile(channelCount int, class polling.BudgetBurstClass, priority polling.BudgetPriority) polling.BudgetProfile {
-	if channelCount < 1 {
-		channelCount = 1
+	channelCount = max(channelCount, 0)
+	holodexUnits := float64((channelCount + defaultLiveBatchChannelChunkSize - 1) / defaultLiveBatchChannelChunkSize)
+	sourceUnits := make(map[polling.BudgetSource]float64)
+	fallbackSourceUnits := make(map[polling.BudgetSource]float64)
+	if channelCount > 0 {
+		sourceUnits[polling.BudgetSourceHolodexLive] = holodexUnits
+		sourceUnits[polling.BudgetSourcePostgresWrite] = float64(channelCount)
+		fallbackSourceUnits[polling.BudgetSourceYouTubeScraper] = liveBatchYouTubeScraperFallbackUnits(channelCount)
 	}
 	return polling.BudgetProfile{
-		SourceUnits: map[polling.BudgetSource]float64{
-			polling.BudgetSourceHolodexLive:   1,
-			polling.BudgetSourcePostgresWrite: float64(channelCount),
-		},
-		FallbackSourceUnits: map[polling.BudgetSource]float64{
-			polling.BudgetSourceYouTubeScraper: liveBatchYouTubeScraperFallbackUnits(channelCount),
-		},
-		BurstClass: class,
-		Priority:   priority,
+		SourceUnits:         sourceUnits,
+		FallbackSourceUnits: fallbackSourceUnits,
+		BurstClass:          class,
+		Priority:            priority,
 	}
 }
 
 func liveBatchYouTubeScraperFallbackUnits(channelCount int) float64 {
-	if channelCount < 1 {
-		channelCount = 1
-	}
+	channelCount = max(channelCount, 0)
 	attempts := scraper.LiveStatusFallbackFetchPolicy.MaxAttempts
 	if attempts <= 0 {
 		attempts = scraper.FetchPageMaxAttempts

@@ -169,6 +169,7 @@ github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/notification/alarmservice
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/twitch
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/park285/shared-go/pkg/logging
+github.com/kapu/hololive-alarm-worker/internal/service/celebration -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-alarm-worker/internal/service/celebration -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-alarm-worker/internal/service/celebration -> github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox
 github.com/kapu/hololive-alarm-worker/internal/service/celebration -> github.com/kapu/hololive-shared/pkg/sqlassets
@@ -1342,6 +1343,7 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/database/mocks
+github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/sqlassets

@@ -47,7 +47,7 @@ func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceEvenWhenCacheSuper
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
-	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.OperationalChannelIDs)
 	assert.Equal(t, 0, targets.DroppedAlarmTargets)
 	assert.Equal(t, 1, dbCalls)
 }
@@ -82,7 +82,7 @@ func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceOnSameSizeMismatch
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
-	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.OperationalChannelIDs)
 	assert.Equal(t, 0, targets.DroppedAlarmTargets)
 	assert.Equal(t, 1, dbCalls)
 }
@@ -118,7 +118,7 @@ func TestResolveYouTubePollTargets_LogsStartupSourceDivergence(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
-	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.OperationalChannelIDs)
 	assert.Equal(t, 0, targets.DroppedAlarmTargets)
 	assert.Contains(t, buf.String(), `"msg":"youtube_poll_targets_startup_source_diverged"`)
 	assert.Contains(t, buf.String(), `"db_notification_target_channels":1`)
@@ -158,11 +158,11 @@ func TestResolveYouTubePollTargets_LogsStartupSourceAlignment(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
-	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.OperationalChannelIDs)
 	assert.Equal(t, 0, targets.DroppedAlarmTargets)
 	assert.Contains(t, buf.String(), `"msg":"youtube_poll_targets_startup_source_aligned"`)
 	assert.Contains(t, buf.String(), `"notification_target_channels":1`)
-	assert.Contains(t, buf.String(), `"stats_target_channels":2`)
+	assert.Contains(t, buf.String(), `"operational_target_channels":2`)
 }
 
 func TestResolveYouTubePollTargets_WarnsWhenCacheInspectionFails(t *testing.T) {
@@ -196,7 +196,7 @@ func TestResolveYouTubePollTargets_WarnsWhenCacheInspectionFails(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
-	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.OperationalChannelIDs)
 	assert.Equal(t, 0, targets.DroppedAlarmTargets)
 	assert.Contains(t, buf.String(), `"msg":"Failed to inspect cache-backed YouTube poll targets at startup"`)
 	assert.Contains(t, buf.String(), `"error":"cache read failed"`)
@@ -215,7 +215,7 @@ func TestResolveYouTubePollTargetsFromAlarmChannelIDs(t *testing.T) {
 	)
 
 	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
-	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.OperationalChannelIDs)
 	assert.Equal(t, 1, targets.DroppedAlarmTargets)
 }
 
@@ -243,5 +243,5 @@ func TestHB05BadAlarmChannelIDDoesNotAbortIngesterStartup_1b0fca5a(t *testing.T)
 		"allowed alarm channels survive; bad/duplicate/unsubscribed ids are dropped, not fatal")
 	assert.Equal(t, 3, targets.DroppedAlarmTargets,
 		"empty, whitespace, and unsubscribed ids are counted as dropped")
-	assert.ElementsMatch(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.ElementsMatch(t, []string{"UCpekora", "UCmiko"}, targets.OperationalChannelIDs)
 }

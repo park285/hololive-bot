@@ -60,7 +60,7 @@ func resolveIngestionRuntimeYouTubeState(
 
 	logger.Info("Resolved YouTube poll targets",
 		slog.Int("notification_target_channels", len(pollTargets.NotificationChannelIDs)),
-		slog.Int("stats_target_channels", len(pollTargets.StatsChannelIDs)),
+		slog.Int("operational_target_channels", len(pollTargets.OperationalChannelIDs)),
 		slog.Int("dropped_alarm_targets", pollTargets.DroppedAlarmTargets),
 	)
 
@@ -103,7 +103,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		&budgetWiring,
 		infra.postgresService,
 		state.pollTargets.NotificationChannelIDs,
-		state.pollTargets.StatsChannelIDs,
+		state.pollTargets.OperationalChannelIDs,
 		sharedScraperClient,
 		infra.holodexService,
 		logger,

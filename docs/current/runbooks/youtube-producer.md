@@ -14,6 +14,7 @@
 | Ready | active AP `/ready` payloads show `mode=active-active` |
 | Logs | startup markers include PostgreSQL and Valkey connection success; repeated poller, photo sync, outbox, DB, cache, or proxy errors are absent |
 | Queue | produces outbox/tracking state; does not consume alarm dispatch queue |
+| LIVE discovery | Holodex-backed `live_batch` uses one global scheduler job and the enabled operational roster; no `youtube_producer_live_discovery_subscription_fallback` warning |
 | PostgreSQL TLS | AP `b` and main `c` render `POSTGRES_SSLMODE=verify-full` and mount `/run/hololive-bot/certs/postgres-ca.pem` |
 
 ## Dependencies
@@ -114,7 +115,7 @@ central host.
 - `youtube_poller_job_release_total{poller,result}`: poll error/cancellation cleanup-path lease release outcomes. Healthy completed polls use `mark_completed`, so release series can be absent during a fully successful runtime.
 - `youtube_poller_last_success_timestamp_seconds{poller}`: claim, lease, reservation finalization까지 성공한 poller별 마지막 성공 Unix timestamp.
 - `hololive_youtube_poll_target_refresh_total{result}` and `hololive_youtube_poll_target_refresh_last_success_timestamp_seconds`: poll-target refresh lifecycle outcome and freshness.
-- `hololive_youtube_poll_target_refresh_accepted_target_count{target_type}`: 마지막 성공 refresh가 승인한 `notification`/`stats` target 수.
+- `hololive_youtube_poll_target_refresh_accepted_target_count{target_type}`: 마지막 성공 refresh가 승인한 `notification`/`operational` target 수.
 - `youtube_poller_outbox_insert_total{kind,result}`: outbox insert success/conflict/error counts.
 
 Active-active `/ready` fails closed on startup until a lightweight Valkey JobRunGuard probe or later job claim proves lease availability. During that state it reports `valkey_available=false` and `scraping_paused=true` while `/health` can still be up.
@@ -482,6 +483,24 @@ Mitigation:
 Rollback:
 - Roll back the runtime that introduced the backlog.
 
+### 6. 구독 없는 생일 멤버의 LIVE/UPCOMING 세션이 보이지 않음
+
+Symptoms:
+- 생일축하 event는 있지만 해당 멤버의 `youtube_live_sessions` 행이 없습니다.
+- producer 로그에 `youtube_producer_live_discovery_subscription_fallback`이 보이거나 operational target 수가 roster보다 작습니다.
+
+Diagnosis:
+- startup/sync 로그에서 `operational_target_channels`와 `notification_target_channels`를 구분해 확인합니다.
+- `hololive_youtube_poll_target_refresh_accepted_target_count{target_type="operational"}`가 enabled operational roster 수와 같은지 확인합니다.
+- scheduler에는 `__global__:live_batch` job 하나가 있어야 하며 채널별 `live_batch_01`, `live_batch_02` job이 남아 있으면 안 됩니다.
+
+Mitigation:
+- Holodex provider 구성과 연결 오류를 먼저 복구합니다. provider가 구성되지 않은 상태에서 per-channel scraper로 전체 roster를 강제하지 않습니다.
+- provider가 정상인데 target 수가 다르면 operational roster refresh와 target sync 로그를 확인합니다.
+
+Rollback:
+- producer rollback은 일반 notification polling을 유지하지만 구독 없는 멤버의 birthday stream discovery를 다시 잃습니다. audience가 v3로 전환된 뒤 worker까지 rollback해야 한다면 먼저 birthday stream runner를 중지합니다.
+
 ## Smoke test
 
 ```bash
@@ -498,6 +517,7 @@ AP_SMOKE_EXTERNAL=true ./scripts/logs/ap-smoke.sh <host>
 
 - Use `docs/current/runbooks/rollback.md`.
 - Restore the previous `youtube-producer` runtime artifact/config with the runtime-specific helper.
+- v3 alarm-worker가 아닌 구 worker와 full-roster producer를 함께 실행하지 않습니다. 구 worker로 되돌리기 전에 `BIRTHDAY_STREAM_RUNNER_ENABLED=false`를 적용해야 all-room fan-out을 막을 수 있습니다.
 - Scale down `youtube-producer-b` (seoul) first, confirm `youtube-producer-c` (main) remains healthy, then redeploy the previous image/config.
 - Confirm `YOUTUBE_INGESTION_ENABLED=true`, active `/ready`, health on port `30015`, and outbox/photo sync state after rollback.
 - The Seoul Compose deploy wrapper stores overwritten files and prechange container inventory under `backups/seoul-active-active-<timestamp>/`; use that evidence to restore the previous `deploy/compose/docker-compose.prod.yml` and Seoul override if active-active startup fails. Osaka/Osaka2 use the native release `previous` + `rollback-contract/` point instead.

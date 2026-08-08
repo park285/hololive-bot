@@ -64,7 +64,6 @@ func buildBirthdayStreamRunnerScheduler(
 	}
 
 	memberRepo := member.NewMemberRepository(infra.Postgres, logger)
-	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
 	publisher := queue.NewPublisher(
 		infra.Cache,
 		logger,
@@ -75,7 +74,6 @@ func buildBirthdayStreamRunnerScheduler(
 
 	return celebration.NewBirthdayStreamRunner(
 		memberRepo,
-		alarmRepo,
 		celebration.NewPgxStore(infra.Postgres.GetPool()),
 		publisher,
 		logger,
