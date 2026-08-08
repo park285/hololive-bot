@@ -84,22 +84,22 @@ if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" != "1" ]]; then
 fi
 
 for file in \
-  /run/hololive-bot/compose.env \
-  /run/hololive-bot/bot.env \
-  /run/hololive-bot/alarm-worker.env \
-  /run/hololive-bot/youtube-producer.env \
-  /run/hololive-bot/admin-dashboard.env \
-  /run/hololive-bot/certs/hololive-h3.crt \
-  /run/hololive-bot/certs/hololive-h3.key \
-  /run/hololive-bot/certs/iris-ca.pem \
-  /run/hololive-bot/certs/postgres-ca.pem \
-  /run/hololive-bot/postgres-tls/server.crt \
-  /run/hololive-bot/postgres-tls/server.key
+  /etc/stack-secrets/hololive-bot/compose.env \
+  /etc/stack-secrets/hololive-bot/bot.env \
+  /etc/stack-secrets/hololive-bot/alarm-worker.env \
+  /etc/stack-secrets/hololive-bot/youtube-producer.env \
+  /etc/stack-secrets/hololive-bot/admin-dashboard.env \
+  /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
+  /etc/stack-secrets/hololive-bot/certs/hololive-h3.key \
+  /etc/stack-secrets/hololive-bot/certs/iris-ca.pem \
+  /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem \
+  /etc/stack-secrets/hololive-bot/postgres-tls/server.crt \
+  /etc/stack-secrets/hololive-bot/postgres-tls/server.key
 do
   wait_for_file "$file"
 done
 
-export COMPOSE_ENV_FILE=/run/hololive-bot/compose.env
+export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 
 base_files=(-f deploy/compose/docker-compose.prod.yml)
 main_ap_files=(-f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml)

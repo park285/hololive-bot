@@ -35,7 +35,7 @@ services:
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]
     env_file: !override
-      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
+      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}
     environment:
       <<: *osaka2-ap-env
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
@@ -43,8 +43,8 @@ services:
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     logging: *osaka2-ap-logging
     deploy:
       resources:
@@ -61,7 +61,7 @@ services:
       sbom: false
     container_name: hololive-youtube-producer-d
     env_file:
-      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}
+      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}
     environment:
       <<: *osaka2-ap-env
       YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
@@ -86,10 +86,10 @@ services:
       - ../../data:/app/data
       - ../../logs:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
     logging: *osaka2-ap-logging
     deploy:
       resources:

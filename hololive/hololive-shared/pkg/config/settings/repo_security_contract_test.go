@@ -420,7 +420,7 @@ func assertProdComposeDisallowedPatterns(t *testing.T, content string) {
 		"${ADMIN_DASHBOARD_PORT_BIND_IP:-100.100.1.3}:30190:30190",
 		"${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001",
 		"network_mode: host",
-		"/run/hololive-bot/certs:/run/hololive-bot/certs:ro",
+		"/etc/stack-secrets/hololive-bot/certs:/run/hololive-bot/certs:ro",
 		"POSTGRES_HOST: host.docker.internal",
 		"POSTGRES_PORT: \"5433\"",
 		"POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}",
@@ -484,13 +484,13 @@ func assertProdComposeEgressEnvFiles(t *testing.T, content string) {
 	for _, service := range egressOwners {
 		block := composeServiceBlock(t, content, service)
 		wantEnvFile := map[string]string{
-			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}",
-			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}",
+			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}",
+			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}",
 		}[service]
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
 			t.Fatalf("%s must use per-service env_file %q for app-only secrets", service, wantEnvFile)
 		}
-		if strings.Contains(block, "/run/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
+		if strings.Contains(block, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
 			t.Fatalf("%s must not consume monolithic COMPOSE_ENV_FILE as env_file", service)
 		}
 		if !strings.Contains(block, "*iris-env") {
@@ -530,10 +530,10 @@ func assertNonEgressEnvFilePolicy(t *testing.T, service, block string) {
 		}
 		return
 	}
-	if !strings.Contains(block, "${ADMIN_DASHBOARD_ENV_FILE:-/run/hololive-bot/admin-dashboard.env}") {
+	if !strings.Contains(block, "${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}") {
 		t.Fatalf("admin-dashboard must inject its secrets via the scoped admin-dashboard.env env_file")
 	}
-	if strings.Contains(block, "/run/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
+	if strings.Contains(block, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
 		t.Fatalf("admin-dashboard must not consume monolithic COMPOSE_ENV_FILE as env_file")
 	}
 }
@@ -772,13 +772,13 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 	for _, service := range []string{"hololive-api", "hololive-alarm-worker"} {
 		block := composeServiceBlock(t, overlay, service)
 		wantEnvFile := map[string]string{
-			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/run/hololive-bot/bot.env}",
-			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/run/hololive-bot/alarm-worker.env}",
+			"hololive-api":          "${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}",
+			"hololive-alarm-worker": "${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}",
 		}[service]
 		if !strings.Contains(block, "env_file:") || !strings.Contains(block, wantEnvFile) {
 			t.Fatalf("live overlay must keep per-service env_file %q for %s", wantEnvFile, service)
 		}
-		if strings.Contains(block, "/run/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
+		if strings.Contains(block, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
 			t.Fatalf("live overlay must not restore monolithic env_file for %s", service)
 		}
 	}
@@ -936,10 +936,10 @@ func TestRepoAPDeployScriptsUseSplitRuntimeEnv(t *testing.T) {
 		"scripts/deploy/ap-iris-h3-trust-preflight.sh",
 	} {
 		content := readRepoFile(t, file)
-		if strings.Contains(content, "/run/hololive-bot/env") {
-			t.Fatalf("%s still references monolithic /run/hololive-bot/env", file)
+		if strings.Contains(content, "/etc/stack-secrets/hololive-bot/env") {
+			t.Fatalf("%s still references monolithic /etc/stack-secrets/hololive-bot/env", file)
 		}
-		if !strings.Contains(content, "/run/hololive-bot/ap-compose.env") {
+		if !strings.Contains(content, "/etc/stack-secrets/hololive-bot/ap-compose.env") {
 			t.Fatalf("%s missing AP-safe compose env file contract", file)
 		}
 	}
@@ -1093,7 +1093,7 @@ func assertHoloPostgresTLSMount(t *testing.T, cfg renderedCompose, stackName str
 	for _, volume := range composeVolumes(t, cfg, "holo-postgres") {
 		source := cleanVolumePath(volume.Source)
 		target := cleanVolumePath(volume.Target)
-		if source == "/run/hololive-bot/postgres-tls" && target == "/run/hololive-bot/postgres-tls" {
+		if source == "/etc/stack-secrets/hololive-bot/postgres-tls" && target == "/run/hololive-bot/postgres-tls" {
 			if !volume.ReadOnly {
 				t.Fatalf("holo-postgres postgres-tls mount must be read-only in %s", stackName)
 			}
@@ -1142,7 +1142,7 @@ func assertMainAPLiveCompatOverlayText(t *testing.T) {
 	t.Helper()
 
 	mainAP := readRepoFile(t, "deploy/compose/docker-compose.main-ap.yml")
-	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}"
+	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}"
 	if block := composeServiceBlock(t, mainAP, "youtube-producer-c"); !strings.Contains(block, "env_file:") || !strings.Contains(block, producerEnvFile) {
 		t.Fatalf("main-ap must give youtube-producer-c scoped env_file %q", producerEnvFile)
 	}
@@ -1476,7 +1476,7 @@ func writeCentralComposeEnvFile(t *testing.T) string {
 	})
 }
 
-// /run/hololive-bot/admin-dashboard.env는 0600 root 렌더 파일이라 kapu로 도는 테스트는
+// /etc/stack-secrets/hololive-bot/admin-dashboard.env는 0600 root 렌더 파일이라 kapu로 도는 테스트는
 // 기본 경로를 열 수 없다(required:false는 부재만 허용). 셸 테스트와 동일하게 스텁으로 대체한다.
 func writeAdminDashboardEnvFile(t *testing.T) string {
 	t.Helper()
@@ -1517,10 +1517,10 @@ func renderableAPComposeFile(t *testing.T, relativePath string) string {
 func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) string {
 	t.Helper()
 
-	if strings.Contains(content, "/run/hololive-bot/env") || strings.Contains(content, "COMPOSE_ENV_FILE") {
+	if strings.Contains(content, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(content, "COMPOSE_ENV_FILE") {
 		t.Fatalf("%s must not reference monolithic hololive env file", sourceName)
 	}
-	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/run/hololive-bot/youtube-producer.env}"
+	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}"
 	if !strings.Contains(content, producerEnvFile) {
 		t.Fatalf("%s missing AP youtube-producer env_file path %s", sourceName, producerEnvFile)
 	}
@@ -1588,10 +1588,10 @@ func assertAPComposeServiceCertMounts(t *testing.T, cfg renderedCompose, compose
 	for _, volume := range composeVolumes(t, cfg, service) {
 		source := cleanVolumePath(volume.Source)
 		target := cleanVolumePath(volume.Target)
-		if source == "/run/hololive-bot/certs" && target == "/run/hololive-bot/certs" {
+		if source == "/etc/stack-secrets/hololive-bot/certs" && target == "/run/hololive-bot/certs" {
 			t.Fatalf("%s %s mounts broad cert directory: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
 		}
-		isH3ServerKey := source == "/run/hololive-bot/certs/hololive-h3.key" && target == "/run/hololive-bot/certs/hololive-h3.key"
+		isH3ServerKey := source == "/etc/stack-secrets/hololive-bot/certs/hololive-h3.key" && target == "/run/hololive-bot/certs/hololive-h3.key"
 		if (strings.HasSuffix(volume.Source, ".key") || strings.HasSuffix(volume.Target, ".key")) && !isH3ServerKey {
 			t.Fatalf("%s %s mounts private key file: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
 		}

@@ -167,12 +167,12 @@ mkdir -p \"\$(dirname '$backup_dir/$PROD_COMPOSE_FILE.prechange')\" \"\$(dirname
 cp \"\$prod_prechange_file\" '$backup_dir/$PROD_COMPOSE_FILE.prechange'
 cp \"\$ap_prechange_file\" '$backup_dir/$AP_COMPOSE_FILE.prechange'
 docker ps -a --filter label=com.docker.compose.project=hololive --format '{{json .}}' > '$backup_dir/prechange-containers.json' 2>/dev/null || true
-sudo -n test -r /run/hololive-bot/ap-compose.env
-sudo -n test -r /run/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 prechange_config_err=\$(mktemp)
-if ! sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet 2>\"\$prechange_config_err\"; then
-  if grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/run/hololive-bot/(bot|alarm-worker)\.env' \"\$prechange_config_err\"; then
+if ! sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet 2>\"\$prechange_config_err\"; then
+  if grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/etc/stack-secrets/hololive-bot/(bot|alarm-worker)\.env' \"\$prechange_config_err\"; then
     echo 'AP prechange compose config skipped: token-free ap-compose.env is incompatible with pre-rsync compose; post-rsync config remains required' >&2
   else
     cat \"\$prechange_config_err\" >&2
@@ -198,11 +198,11 @@ change_started_at="$(
 
 remote "set -euo pipefail
 cd ~/hololive-bot
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
 built_revision=\$(docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' hololive-youtube-producer:prod)
 [[ \"\$built_revision\" == '$REVISION' ]]
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
 echo change_started_at='$change_started_at'"
 
 remote "set -euo pipefail

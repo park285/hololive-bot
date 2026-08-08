@@ -29,21 +29,21 @@ printf 'net.core.wmem_max=%s\n' "$(sysctl -n net.core.wmem_max 2>/dev/null || ec
 
 echo
 echo "== runtime files =="
-sudo -n find /run/hololive-bot -maxdepth 3 -printf "%M %u %g %s %TY-%Tm-%TdT%TH:%TM:%TS %p\n" 2>/dev/null | sort || true
+sudo -n find /etc/stack-secrets/hololive-bot -maxdepth 3 -printf "%M %u %g %s %TY-%Tm-%TdT%TH:%TM:%TS %p\n" 2>/dev/null | sort || true
 
 echo
 echo "== env keys =="
-sudo -n sh -c 'for f in /run/hololive-bot/*.env /etc/hololive-bot/youtube-producer-host.env; do test -r "$f" && printf "%s\n" "$f" && cut -d= -f1 "$f" | sort; done' || true
+sudo -n sh -c 'for f in /etc/stack-secrets/hololive-bot/*.env /etc/hololive-bot/youtube-producer-host.env; do test -r "$f" && printf "%s\n" "$f" && cut -d= -f1 "$f" | sort; done' || true
 
 echo
 echo "== health =="
 if [[ -x /opt/hololive-bot/youtube-producer/current/bin/healthcheck ]]; then
   sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
     /opt/hololive-bot/youtube-producer/current/bin/healthcheck "https://127.0.0.1:${port}/health" || true
   sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
     /opt/hololive-bot/youtube-producer/current/bin/healthcheck --body "https://127.0.0.1:${port}/ready" || true
 else

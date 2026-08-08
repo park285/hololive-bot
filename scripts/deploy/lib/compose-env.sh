@@ -10,7 +10,7 @@ compose_env_resolve_file() {
         return
     fi
 
-    local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/run/hololive-bot/compose.env}"
+    local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/etc/stack-secrets/hololive-bot/compose.env}"
     if [[ -r "${openbao_env}" ]]; then
         printf '%s\n' "${openbao_env}"
         return
