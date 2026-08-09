@@ -208,7 +208,7 @@ services:
   holo-postgres:
     <<: *db-service
     # PostgreSQL 18.4의 2026-07-25 manifest digest. 이후 갱신도 tag와 digest를 함께 검증한다.
-    image: ${POSTGRES_IMAGE:-postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a}
+    image: ${POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}
     container_name: holo-postgres
     oom_score_adj: -300
     shm_size: 512mb
