@@ -62,7 +62,7 @@ git show 35dcf0f8^:deploy/compose/docker-compose.prod.yml        > deploy/compos
 git show 35dcf0f8^:deploy/compose/docker-compose.live-compat.yml > deploy/compose/rollback.live-compat.yml
 ```
 
-live-compat overlay가 필요한 이유: 구 bot의 `:30001`을 tailnet IP(`100.100.1.7`)에 binding해야 Iris(`100.100.1.5`) webhook ingress가 도달합니다. prod overlay만 쓰면 `127.0.0.1`에만 binding되어 봇 ingress가 끊깁니다.
+live-compat overlay가 필요한 이유: 구 bot의 `:30001`을 tailnet IP(`100.100.1.8`)에 binding해야 Iris(`100.100.1.5`) webhook ingress가 도달합니다. prod overlay만 쓰면 `127.0.0.1`에만 binding되어 봇 ingress가 끊깁니다.
 
 ### Step 2 — hololive-api 제거 (포트/alias 회수)
 
@@ -85,7 +85,7 @@ sudo -n docker compose --env-file /etc/stack-secrets/hololive-bot/compose.env \
 복구되는 계약(구 정의에서 확인됨):
 
 - **network alias** (hololive-net): `hololive-bot`, `hololive-admin-api`, `llm-scheduler`. 내부 호출(bot/admin → `https://llm-scheduler:30003`)이 이 alias에 의존합니다.
-- **ports**: bot `100.100.1.7:30001`(+/udp, live-compat) / admin `127.0.0.1:30006` / llm `127.0.0.1:30003`.
+- **ports**: bot `100.100.1.8:30001`(+/udp, live-compat) / admin `127.0.0.1:30006` / llm `127.0.0.1:30003`.
 - **env_file**: bot만 `/etc/stack-secrets/hololive-bot/bot.env`(호스트 측 경로). admin/llm은 env_file 없이 compose inline env(컷오버와 동일 시크릿 소스)를 씁니다.
 - **cert mounts**: `/run/hololive-bot/certs/{hololive-h3.crt,hololive-h3.key,iris-ca.pem,postgres-ca.pem}` — 절대경로라 변동 없음.
 - **docker-proxy 의존**: bot은 `DOCKER_HOST=tcp://docker-proxy:2375` + `docker-proxy-net`을 씁니다. docker-proxy가 내려가 있으면 컨테이너-관리 기능만 degrade되고 core bot은 기동됩니다. 필요 시 `... up -d --no-deps docker-proxy`를 추가합니다.
