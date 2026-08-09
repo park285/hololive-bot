@@ -17,7 +17,7 @@ ARG GO_VERSION=1.26.5
 ARG ALPINE_VERSION=3.24
 ARG NODE_VERSION=24
 
-FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS frontend-builder
 WORKDIR /app/frontend
 
 COPY admin-dashboard/frontend/package.json admin-dashboard/frontend/package-lock.json ./
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.npm corepack npm ci --no-audit --no-fund
 COPY admin-dashboard/frontend/ .
 RUN corepack npm run build
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown
