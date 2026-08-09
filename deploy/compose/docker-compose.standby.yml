@@ -1,0 +1,82 @@
+# iris-seoul hot standby (physical streaming replication from the hololive-osaka primary).
+#
+# 이 파일은 standby 의 정상 상태만 소유한다. 최초 pg_basebackup 부트스트랩은 일회성이라
+# docs/current/runbooks/postgres-replication.md 가 소유한다.
+#
+#   docker compose --env-file /etc/stack-secrets/hololive-bot/ap-compose.env \
+#     -f deploy/compose/docker-compose.standby.yml up -d holo-postgres-standby
+
+services:
+  holo-postgres-standby:
+    image: ${POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}
+    container_name: holo-postgres-standby
+    restart: unless-stopped
+    stop_grace_period: 1m
+    shm_size: 256mb
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - postgres
+      - "-c"
+      - "hba_file=/run/hololive-bot/postgres/pg_hba.conf"
+      - "-c"
+      - "hot_standby=on"
+      - "-c"
+      - "hot_standby_feedback=on"
+      # primary 보다 작으면 standby 가 기동을 거부한다. 값은 prod primary 와 동일하게 둔다.
+      - "-c"
+      - "max_connections=60"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=768MB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "ssl=on"
+      - "-c"
+      - "ssl_cert_file=/run/hololive-bot/postgres-tls/server.crt"
+      - "-c"
+      - "ssl_key_file=/run/hololive-bot/postgres-tls/server.key"
+      - "-c"
+      - "primary_conninfo=host=${HOLOLIVE_PRIMARY_HOST:-100.100.1.8} port=${HOLOLIVE_PRIMARY_PORT:-5433} user=${HOLOLIVE_REPLICATOR_USER:-hololive_replicator} sslmode=verify-full sslrootcert=/run/hololive-bot/certs/postgres-ca.pem passfile=/run/hololive-bot/postgres/pgpass application_name=${HOLOLIVE_STANDBY_SLOT:-iris_seoul_standby}"
+      - "-c"
+      - "primary_slot_name=${HOLOLIVE_STANDBY_SLOT:-iris_seoul_standby}"
+    environment:
+      PGDATA: /var/lib/postgresql/pgdata
+      PGPORT: "5432"
+    volumes:
+      - holo-pg-standby-data:/var/lib/postgresql
+      - ./postgres/pg_hba.conf:/run/hololive-bot/postgres/pg_hba.conf:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/postgres/pgpass:/run/hololive-bot/postgres/pgpass:ro
+      - /etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
+    ports:
+      - "127.0.0.1:5434:5432"
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/run/postgresql:size=16m,mode=3775
+    healthcheck:
+      # 연결 가능만으로는 부족하다 — recovery 상태여야 실제 standby 다.
+      test:
+        - "CMD-SHELL"
+        - "psql -U postgres_admin -d hololive -p 5432 -Atc 'select pg_is_in_recovery()' | grep -qx t"
+      interval: 30s
+      timeout: 7s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 256
+
+volumes:
+  holo-pg-standby-data:
