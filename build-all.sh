@@ -203,7 +203,7 @@ fi
 
 if [[ ( "${BUILD_ONLY}" == true || ${#TARGET_SERVICES[@]} -gt 0 ) \
       && -z "${COMPOSE_ENV_FILE:-}" \
-      && ! -r "${OPENBAO_HOLOLIVE_ENV_FILE:-/etc/stack-secrets/hololive-bot/compose.env}" ]]; then
+      && ! -r "${STACK_SECRETS_HOLOLIVE_ENV_FILE:-/etc/stack-secrets/hololive-bot/compose.env}" ]]; then
     COMPOSE_ENV_FILE="${REPO_ROOT}/deploy/compose/build-only.env.sample"
     echo "[INFO] build-only: no production compose env present; using committed sample ${COMPOSE_ENV_FILE}" >&2
 fi

@@ -10,14 +10,14 @@ compose_env_resolve_file() {
         return
     fi
 
-    local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/etc/stack-secrets/hololive-bot/compose.env}"
-    if [[ -r "${openbao_env}" ]]; then
-        printf '%s\n' "${openbao_env}"
+    local stack_secrets_env="${STACK_SECRETS_HOLOLIVE_ENV_FILE:-/etc/stack-secrets/hololive-bot/compose.env}"
+    if [[ -r "${stack_secrets_env}" ]]; then
+        printf '%s\n' "${stack_secrets_env}"
         return
     fi
 
-    echo "[ERROR] Compose env file not readable: ${openbao_env}" >&2
-    echo "        Set COMPOSE_ENV_FILE explicitly for non-OpenBao or test deployments." >&2
+    echo "[ERROR] Compose env file not readable: ${stack_secrets_env}" >&2
+    echo "        Set COMPOSE_ENV_FILE explicitly for test or non-stack-secrets deployments." >&2
     return 1
 }
 
@@ -169,7 +169,7 @@ compose_env_is_allowed_shell_control_key() {
     local key="$1"
 
     case "${key}" in
-        COMPOSE_ENV_FILE|OPENBAO_HOLOLIVE_ENV_FILE|COMPOSE_PROFILES|COMPOSE_PROJECT_NAME)
+        COMPOSE_ENV_FILE|STACK_SECRETS_HOLOLIVE_ENV_FILE|COMPOSE_PROFILES|COMPOSE_PROJECT_NAME)
             return 0
             ;;
         HOLOLIVE_API_ENV_FILE|HOLOLIVE_ALARM_WORKER_ENV_FILE|HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE|ADMIN_DASHBOARD_ENV_FILE)

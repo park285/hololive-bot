@@ -69,8 +69,13 @@ cd admin-dashboard/frontend && npm ci && npm run lint && npm run build
 
 ## Deploy (container recreation)
 
+빌드 호스트에서 이미지를 만들어 전송한 뒤, 중앙 런타임 호스트에서는 no-build로
+recreate만 합니다. 전체 절차와 수용 증거는 [`release.md`](release.md#compose-service-재배포)가
+소유합니다. `compose-redeploy-service.sh`는 cutover 전에 빌드하므로 빌드 호스트에서만
+실행합니다.
+
 ```bash
-# 이미지 재빌드 + 컨테이너 재생성 (canonical 경로, alias: admin)
+# 빌드 호스트
 ./scripts/deploy/compose-redeploy-service.sh admin-dashboard
 ```
 

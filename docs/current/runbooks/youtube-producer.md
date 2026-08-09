@@ -196,12 +196,19 @@ CHANGE_STARTED_AT=<change_started_at> ./scripts/deploy/ap-completion-check.sh <h
 
 The remote wrapper covers that host's AP services only. The main-host `youtube-producer-c` is redeployed separately on the main host, guarded by its `main-ap` profile:
 
+이미지는 빌드 호스트에서 만들어 전송하고, 중앙 런타임 호스트에서는 no-build로
+recreate만 합니다 — 전체 절차는 [`release.md`](release.md#compose-service-재배포)가
+소유합니다. 런타임 호스트에서 실행하는 부분은 다음과 같습니다.
+
 ```bash
-sudo -n env \
-  COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml:deploy/compose/docker-compose.main-ap.yml:deploy/compose/docker-compose.main-ap.live-compat.yml \
+sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
   COMPOSE_PROFILES=main-ap \
-  COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
-  ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+  ./scripts/deploy/compose.sh \
+  -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  -f deploy/compose/docker-compose.main-ap.yml \
+  -f deploy/compose/docker-compose.main-ap.live-compat.yml \
+  up -d --no-deps youtube-producer-c
 ```
 
 First boot on a newly provisioned AP host (no AP containers yet) requires `AP_PREFLIGHT_ALLOW_FIRST_BOOT=true` so the Iris H3 trust preflight skips its in-container check once; post-start readiness checks still gate the rollout. The wrapper also copies `deploy/compose/docker-compose.prod.yml` and the host overlay into its prechange backup *before* the rsync step, so pre-seed the repo files onto the host once (manual rsync with `--files-from=scripts/deploy/ap-rsync-files.txt`) before the first `--apply`.
