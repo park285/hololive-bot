@@ -90,9 +90,15 @@ PG18의 `pg_stat_statements`, `EXPLAIN (ANALYZE, BUFFERS)`, `pg_stat_io`를 기�
 적용 위치:
 
 ```env
-# /run/hololive-bot/env 또는 운영 env 렌더링 원본
+# 운영 env 원본
 POSTGRES_IMAGE=postgres:18.4
 ```
+
+> 현행: 이 결정은 env가 아니라 Compose 기본값에서 digest까지 고정하는 형태로
+> 안착했습니다. `deploy/compose/docker-compose.prod.yml`의
+> `${POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:…}`이 정본이고
+> `compose.env`는 이 값을 override하지 않습니다. Alpine 변형과 digest 고정은
+> 메타레포의 `tools/checks/check-stack-db-access-policy.sh`가 강제합니다.
 
 ### 결정 H2 — PG18 GUC는 현재 Track A 값을 유지한다
 

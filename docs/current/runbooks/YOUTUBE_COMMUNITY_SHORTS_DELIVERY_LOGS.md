@@ -136,7 +136,7 @@ compose 운영 기준 Postgres는 `localhost:5433` 입니다.
 
 ```bash
 set -a
-source "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/env}"
+source "${HOLOLIVE_BOT_ENV_FILE:-/etc/stack-secrets/hololive-bot/env}"
 set +a
 
 PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5433 -U "${HOLOLIVE_DB_USER:-hololive_runtime}" -d hololive <<'SQL'

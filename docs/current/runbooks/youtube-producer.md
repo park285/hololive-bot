@@ -40,9 +40,9 @@
 | `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false` | producer-only egress boundary | yes |
 | `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true` | must be true only on owning AP hosts | yes |
 | `POSTGRES_SSLMODE=verify-full` | required client verification mode for central and AP PostgreSQL TCP paths | yes |
-| `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem` | CA bundle rendered by OpenBao Agent and mounted read-only into producer containers | yes |
+| `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem` | CA bundle mirrored from the `stack-secrets` master and mounted read-only into producer containers; host-native APs read it at `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem` | yes |
 | `SCRAPER_FETCHER_ENGINE` | container-local page fetch engine; the only supported value is `nethttp` | no |
-| `YOUTUBE_PRODUCER_A_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_B_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_C_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_D_FETCHER_ENGINE` | compose/OpenBao per-instance source for `SCRAPER_FETCHER_ENGINE`; each value must be `nethttp` | no |
+| `YOUTUBE_PRODUCER_A_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_B_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_C_FETCHER_ENGINE`, `YOUTUBE_PRODUCER_D_FETCHER_ENGINE` | compose/env per-instance source for `SCRAPER_FETCHER_ENGINE`; each value must be `nethttp` | no |
 | `SCRAPER_*` | poller intervals/workers | yes |
 | `SCRAPER_BACKFILL_ENABLED=false` | optional secondary poller identities for coverage; disabled by default | no |
 | `SCRAPER_BACKFILL_*_INTERVAL_SECONDS` | backfill poller intervals for shorts/community/live when enabled | no |
@@ -57,7 +57,7 @@ live_sessions 365d). The a/b/d instances keep the process default `0` so hourly
 batch DELETEs never cross Tailscale; the advisory lock only serializes concurrent
 runs, it does not deduplicate per-instance schedules.
 
-To override the three values, set them in `/run/hololive-bot/compose.env` (the
+To override the three values, set them in `/etc/stack-secrets/hololive-bot/compose.env` (the
 `--env-file` source) and redeploy `youtube-producer-c`. Do NOT export them as
 shell variables around `compose-redeploy-service.sh` — the compose-env shadow
 guard (`compose_env_assert_no_shell_shadow_for_compose_files`) aborts the deploy
@@ -98,9 +98,10 @@ Expected startup and sync markers:
 Photo sync policy: `youtube-producer-c` sets `PHOTO_SYNC_ENABLED=true`; a global Valkey singleton lease keeps it the sole photo sync owner, with TTL-based failover. `youtube-producer-b` is a scraping/polling failover peer only (`PHOTO_SYNC_ENABLED=false`) and does not participate in PhotoSync failover.
 
 PostgreSQL TLS policy: all producer instances use `verify-full`. AP hosts receive
-only the CA bundle at `/run/hololive-bot/certs/postgres-ca.pem`; the central
-PostgreSQL server key lives under `/run/hololive-bot/postgres-tls/` on the
-central host.
+only the CA bundle at `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`
+(containers see it at `/run/hololive-bot/certs/postgres-ca.pem`); the central
+PostgreSQL server key lives under `/etc/stack-secrets/hololive-bot/postgres-tls/`
+on the central host.
 
 ## Metrics
 
@@ -167,7 +168,7 @@ SCRAPER_BACKFILL_TARGET_GROUP=notification
 
 Before any live cadence/backfill change, run the local budget and compose gates, then request explicit operator approval for the config write and redeploy. Rollback restores the previous `SCRAPER_*_SECONDS` and `SCRAPER_BACKFILL_*` values, then redeploys the approved AP services only (`youtube-producer-b` on seoul).
 
-Remote AP backfill rollout must be an env/config change, not a hardcoded service default. Set `SCRAPER_BACKFILL_ENABLED=true` and the selected intervals in `/run/hololive-bot/env` or an approved equivalent env override, then redeploy only after explicit operator approval. Monitor:
+Remote AP backfill rollout must be an env/config change, not a hardcoded service default. Set `SCRAPER_BACKFILL_ENABLED=true` and the selected intervals in `/etc/stack-secrets/hololive-bot/env` or an approved equivalent env override, then redeploy only after explicit operator approval. Monitor:
 
 ```text
 youtube_poller_job_claim_total{poller="shorts_backfill",result="acquired"}
@@ -199,7 +200,7 @@ The remote wrapper covers that host's AP services only. The main-host `youtube-p
 sudo -n env \
   COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml:deploy/compose/docker-compose.main-ap.yml:deploy/compose/docker-compose.main-ap.live-compat.yml \
   COMPOSE_PROFILES=main-ap \
-  COMPOSE_ENV_FILE=/run/hololive-bot/compose.env \
+  COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
   ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
 ```
 
@@ -231,12 +232,13 @@ Host-native AP invariants:
 - The AP host receives only the runtime artifact set: `bin/youtube-producer`,
   `bin/healthcheck`, `bin/youtube-producer-wrapper`, `internal/domain/data`, the
   non-secret host env, and the systemd unit.
-- OpenBao Agent still renders the AP runtime contract under `/run/hololive-bot/`:
+- The AP runtime contract is the static secret set mirrored from the
+  `stack-secrets` master to `/etc/stack-secrets/hololive-bot/`:
   `youtube-producer.env`, `ap-compose.env`, and the cert files listed in this
   runbook. Raw secrets stay out of repository files and command output.
 - PostgreSQL remains central over Tailscale with `POSTGRES_HOST=<tailnet-central>`,
   `POSTGRES_PORT=5433`, `POSTGRES_SSLMODE=verify-full`, and
-  `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`.
+  `POSTGRES_SSLROOTCERT=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`.
 - Valkey remains central over Tailscale with `CACHE_HOST=<tailnet-central>` and
   `CACHE_PORT=6379`.
 - Each AP has a unique `YOUTUBE_PRODUCER_INSTANCE_ID` and `SERVER_PORT`.
@@ -260,10 +262,11 @@ Suggested artifact layout:
     bin/healthcheck
     internal/domain/data/...
 /etc/hololive-bot/youtube-producer-host.env
-/run/hololive-bot/youtube-producer.env
-/run/hololive-bot/certs/postgres-ca.pem
-/run/hololive-bot/certs/hololive-h3.crt
-/run/hololive-bot/certs/hololive-h3.key
+/etc/stack-secrets/hololive-bot/ap-compose.env
+/etc/stack-secrets/hololive-bot/youtube-producer.env
+/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
+/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
+/etc/stack-secrets/hololive-bot/certs/hololive-h3.key
 ```
 
 Host override env should contain only instance-local non-secret values:
@@ -280,11 +283,11 @@ SERVER_PORT=30035
 HOLOLIVE_HTTP_TRANSPORTS=h3
 HOLOLIVE_H3_ADDR=:30035
 HOLOLIVE_METRICS_ADDR=100.100.1.x:30095
-HOLOLIVE_H3_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
-HOLOLIVE_H3_KEY_FILE=/run/hololive-bot/certs/hololive-h3.key
-HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
+HOLOLIVE_H3_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
+HOLOLIVE_H3_KEY_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.key
+HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1
-HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt
+HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 HEALTHCHECK_SERVER_NAME=127.0.0.1
 PHOTO_SYNC_ENABLED=false
 SCRAPER_FETCHER_ENGINE=nethttp
@@ -301,26 +304,33 @@ POSTGRES_SOCKET_PATH=
 POSTGRES_HOST=<tailnet-central>
 POSTGRES_PORT=5433
 POSTGRES_SSLMODE=verify-full
-POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem
-CLIPROXY_BASE_URL=http://<tailnet-central>:8787/v1
+POSTGRES_SSLROOTCERT=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
+CLIPROXY_BASE_URL=http://<build-control-host>:8787/v1
 ```
 
-Systemd unit shape:
+`CLIPROXY_BASE_URL` points at the build/control host, not the central runtime
+host: CLIProxy and the observability stack were deliberately left behind when the
+central data plane moved. `scripts/deploy/ap-host-native-deploy.sh` generates the
+full env and is the authoritative source; this block lists only the keys an
+operator needs to recognize.
+
+Systemd unit shape (templated, one instance per AP):
 
 ```ini
 [Unit]
-Description=Hololive youtube-producer AP
-After=network-online.target openbao-agent-hololive-bot.service
+Description=Hololive youtube-producer AP (%i)
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=hololive
-Group=hololive
+Group=opc
 WorkingDirectory=/opt/hololive-bot/youtube-producer/current
-EnvironmentFile=/run/hololive-bot/youtube-producer.env
+EnvironmentFile=/etc/stack-secrets/hololive-bot/ap-compose.env
+EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-producer.env
 EnvironmentFile=/etc/hololive-bot/youtube-producer-host.env
-ExecStart=/opt/hololive-bot/youtube-producer/current/bin/youtube-producer
+ExecStart=/opt/hololive-bot/youtube-producer/current/bin/youtube-producer-wrapper
 Restart=always
 RestartSec=5s
 TimeoutStopSec=30s
@@ -329,7 +339,8 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/run/hololive-bot /var/log/hololive-bot /tmp
+ReadWritePaths=/var/log/hololive-bot /tmp
+ReadWritePaths=/var/lib/hololive-bot
 
 [Install]
 WantedBy=multi-user.target
@@ -355,11 +366,11 @@ Host-native verification:
 systemctl is-active hololive-youtube-producer@youtube-producer-d.service
 systemctl show hololive-youtube-producer@youtube-producer-d.service \
   -p ActiveState -p SubState -p ExecMainPID -p MemoryCurrent -p NRestarts
-HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
   /opt/hololive-bot/youtube-producer/current/bin/healthcheck \
   https://127.0.0.1:30035/health
-HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
   /opt/hololive-bot/youtube-producer/current/bin/healthcheck --body \
   https://127.0.0.1:30035/ready

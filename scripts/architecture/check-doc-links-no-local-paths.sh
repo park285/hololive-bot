@@ -22,7 +22,7 @@ patterns=(
 # 명시 파일만 면제한다.
 exempt_paths=(
   "docs/agent-workflows/plans/2026-05-21-host-migration-root-to-kapu.md"
-  "docs/current/runbooks/host-migration-root-to-kapu.md"
+  "docs/history/host-migration/host-migration-root-to-kapu.md"
 )
 
 tmp_hits="$(mktemp)"
