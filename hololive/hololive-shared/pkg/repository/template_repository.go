@@ -22,6 +22,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -93,6 +94,19 @@ func (r *TemplateRepository) FindByKeyAndChannel(ctx context.Context, key domain
 // override(ux_notification_templates_channel) 부분 유니크 인덱스를 각각 arbiter로
 // 쓴다. 하나의 INSERT는 인덱스 하나만 추론할 수 있어 변형이 둘로 나뉜다.
 func (r *TemplateRepository) Upsert(ctx context.Context, key domain.TemplateKey, channelID *string, body string) (*domain.NotificationTemplate, error) {
+	tmpl, _, err := r.UpsertWithPreviousBody(ctx, key, channelID, body)
+	return tmpl, err
+}
+
+// UpsertWithPreviousBody는 PostgreSQL 18 RETURNING OLD/NEW로 실제 덮어쓴 본문을
+// 같은 UPSERT 결과에서 돌려준다. 호출자는 별도 선행 SELECT 없이 정확한 revision을
+// 만들 수 있다.
+func (r *TemplateRepository) UpsertWithPreviousBody(
+	ctx context.Context,
+	key domain.TemplateKey,
+	channelID *string,
+	body string,
+) (*domain.NotificationTemplate, *string, error) {
 	query := templateUpsertDefaultSQL
 	args := []any{key, body}
 	if channelID != nil {
@@ -100,11 +114,36 @@ func (r *TemplateRepository) Upsert(ctx context.Context, key domain.TemplateKey,
 		args = []any{key, *channelID, body}
 	}
 
-	var tmpl domain.NotificationTemplate
-	if err := pgxscan.Get(ctx, r.pool, &tmpl, query, args...); err != nil {
-		return nil, fmt.Errorf("upsert template: %w", err)
+	var (
+		tmpl             domain.NotificationTemplate
+		templateKey      string
+		returnedChannel  sql.NullString
+		previousBodyText sql.NullString
+	)
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(
+		&tmpl.ID,
+		&templateKey,
+		&returnedChannel,
+		&tmpl.Body,
+		&tmpl.CreatedAt,
+		&tmpl.UpdatedAt,
+		&previousBodyText,
+	); err != nil {
+		return nil, nil, fmt.Errorf("upsert template: %w", err)
 	}
-	return &tmpl, nil
+	tmpl.TemplateKey = domain.TemplateKey(templateKey)
+	if returnedChannel.Valid {
+		value := returnedChannel.String
+		tmpl.ChannelID = &value
+	}
+
+	var previousBody *string
+	if previousBodyText.Valid {
+		value := previousBodyText.String
+		previousBody = &value
+	}
+
+	return &tmpl, previousBody, nil
 }
 
 func (r *TemplateRepository) DeleteOverride(ctx context.Context, key domain.TemplateKey, channelID string) error {
