@@ -14,7 +14,8 @@
 
 | 역할 | 호스트 | 내용 |
 |---|---|---|
-| 중앙 런타임 | `<tailnet-central>` (`aarch64`) | `hololive-api`, `alarm-worker`, `admin-dashboard`, `holo-postgres`, `valkey-cache`, ingress/proxy, main AP `youtube-producer-c`. 권위 PostgreSQL이 여기 있습니다. |
+| 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | `hololive-api`, `alarm-worker`, `admin-dashboard`, `holo-postgres`, `valkey-cache`, ingress/proxy, main AP `youtube-producer-c`. 권위 PostgreSQL이 여기 있습니다. |
+| Hot standby | `<tailnet-seoul-ap>` (`aarch64`) | `holo-postgres-standby`. 중앙 primary에서 물리 스트리밍 복제를 받는 read-only 복제본입니다. |
 | 빌드/제어 | `<build-control-host>` (`x86_64`) | 모든 컴파일·이미지 빌드·테스트. 런타임 호스트는 검증된 배포 파일과 이미지만 받습니다. |
 | 원격 AP | Osaka `a`, Seoul `b`, Osaka2 `d` | `a`/`d`는 host-native systemd, `b`는 Compose. |
 
@@ -22,13 +23,17 @@
 스택(Jaeger/OTLP, Prometheus, Loki, Grafana, exporter)이 중앙 데이터 평면 이전 때
 의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `OTEL_EXPORTER_OTLP_ENDPOINT`가
 `<build-control-host>`를 가리키는 것은 이전 누락이 아니라 named exception입니다.
-둘째, 같은 호스트의 `holo-postgres`/`valkey-cache`는 롤백 지점입니다. 이 standby는
-`hololive-standby-sync.timer` user unit이 매시 중앙 primary에서 논리 덤프를 받아
-전체를 덮어쓰므로 최대 1시간 지연되며, **유일한 writer가 그 타이머**입니다. 손으로
-쓰지 마십시오 — 다음 동기화가 버립니다. 물리 스트리밍 복제는 primary가 `aarch64`,
-standby가 `x86_64`라 불가능합니다. standby 호스트의 `hololive-compose.service`는
-`disabled`로 두어 재부팅이 두 번째 alarm dispatcher를 띄우지 못하게 합니다. 활성화는
-명시적 롤백 결정을 요구합니다.
+둘째, 같은 호스트의 `holo-postgres`/`valkey-cache`는 **백업 사본**입니다(HA standby가
+아닙니다 — 그 역할은 `<tailnet-seoul-ap>`가 맡습니다). `hololive-db-backup.timer` user
+unit이 매시 중앙 primary에서 논리 덤프를 받아 전체를 덮어쓰므로 최대 1시간 지연되며,
+**유일한 writer가 그 타이머**입니다. 손으로 쓰지 마십시오 — 다음 동기화가 버립니다.
+`<build-control-host>`가 `x86_64`라 물리 복제 대상이 될 수 없어 논리 덤프를 씁니다.
+이 호스트의 `hololive-compose.service`는 `disabled`로 두어 재부팅이 두 번째 alarm
+dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결정을 요구합니다.
+
+Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스트리밍 복제가
+가능합니다. 정상 상태는 `deploy/compose/docker-compose.standby.yml`이 소유하고, 최초
+`pg_basebackup` 부트스트랩과 승격 절차는 `runbooks/postgres-replication.md`가 소유합니다.
 
 호스트마다 달라지는 배포 값은 Compose 기본값이 아니라 각 호스트의
 `/etc/stack-secrets/hololive-bot/compose.env`가 소유합니다: `HOLOLIVE_*_PORT_BIND_IP`,
