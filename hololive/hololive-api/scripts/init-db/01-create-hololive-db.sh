@@ -36,6 +36,11 @@ HOLOLIVE_DB_PASSWORD="${HOLOLIVE_DB_PASSWORD:-$DB_PASSWORD_FALLBACK}"
 HOLOLIVE_MIGRATOR_PASSWORD="${HOLOLIVE_MIGRATOR_PASSWORD:-$DB_PASSWORD_FALLBACK}"
 HOLOLIVE_SCRAPER_PASSWORD="${HOLOLIVE_SCRAPER_PASSWORD:-$DB_PASSWORD_FALLBACK}"
 
+HOLOLIVE_REPLICATOR_USER="${HOLOLIVE_REPLICATOR_USER:-hololive_replicator}"
+# DB_PASSWORD 로 폴백하지 않는다. 값이 비면 복제 역할을 만들지 않아, standby 를 두지 않는
+# 호스트가 실수로 원격 복제 자격을 갖는 일이 없다.
+HOLOLIVE_REPLICATOR_PASSWORD="${HOLOLIVE_REPLICATOR_PASSWORD:-}"
+
 if [ -z "${HOLOLIVE_DB_PASSWORD}" ]; then
   echo "DB password is empty. Set DB_PASSWORD or per-role passwords." >&2
   exit 1
@@ -148,5 +153,22 @@ SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELEC
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I', :'hololive_migrator', :'hololive_user') \gexec
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO %I', :'hololive_migrator', :'hololive_user') \gexec
 EOSQL
+
+if [ -n "${HOLOLIVE_REPLICATOR_PASSWORD}" ]; then
+  psql -v ON_ERROR_STOP=1 \
+    --username "${POSTGRES_USER}" \
+    --dbname "postgres" \
+    --set=hololive_replicator="${HOLOLIVE_REPLICATOR_USER}" \
+    --set=hololive_replicator_password="${HOLOLIVE_REPLICATOR_PASSWORD}" <<'EOSQL'
+SELECT format('CREATE ROLE %I LOGIN REPLICATION PASSWORD %L', :'hololive_replicator', :'hololive_replicator_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'hololive_replicator') \gexec
+
+SELECT format(
+  'ALTER ROLE %I WITH LOGIN REPLICATION NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
+  :'hololive_replicator', :'hololive_replicator_password'
+) \gexec
+EOSQL
+  echo "Streaming replication role provisioned."
+fi
 
 echo "Hololive Postgres hardening completed (roles/databases/privileges)."
