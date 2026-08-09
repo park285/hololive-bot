@@ -155,13 +155,14 @@ Command claim이 만료되어 `outcome_unknown`으로 닫히면 `bot_durable_com
 조사 결과 재발송이 필요한 한 행만 골라 아래 operator artifact를 실행합니다. 이 artifact가 replay 가능 시간과 상태 전이의 유일한 소유자이며, 기존 `attempts` 이력을 보존한 채 `operator_replay_grants`를 1 증가시켜 추가 dispatch 한 번만 허용합니다. `operator_actor`는 64자 이하의 계정/handle, `operator_reason`은 256 bytes 이하의 ticket·incident 근거만 사용하며 secret이나 사용자 원문을 넣지 않습니다. 출력은 `replayed`, `cutoff_expired`, `invalid_operator_metadata`, `not_manual_review`, `not_found` 중 하나입니다.
 
 ```bash
-PGSERVICE=hololive-db-maintenance \
-PGPASSFILE=/etc/stack-secrets/hololive-bot/postgres/pgpass \
-env -u PGPASSWORD psql -w -X -v ON_ERROR_STOP=1 \
+# 중앙 런타임 호스트. 쿼리 파일은 /migrations 밖이라 별도 마운트가 필요합니다.
+sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-api/internal/planes/bot/internal/durability/queries \
+  ./scripts/runtime/db-maintenance-exec.sh \
+  psql -w -X -v ON_ERROR_STOP=1 \
   -v outbox_id='<bot_reply_outbox.id>' \
   -v operator_actor='<operator-handle>' \
   -v operator_reason='<ticket-or-incident-reason>' \
-  -f hololive/hololive-api/internal/planes/bot/internal/durability/queries/reply_outbox_replay_manual_review.sql
+  -f /migrations/reply_outbox_replay_manual_review.sql
 ```
 
 Replay cutoff는 row의 `created_at`부터 144시간입니다. Iris admission retention 168시간보다 24시간 짧게 닫아 operator 판단 뒤 실제 dispatch와 sweep이 지연되더라도 dedup retention 경계를 넘지 않게 합니다. 144시간 경계와 그 이후에는 fail-closed합니다. `cutoff_expired`이면 재발송하지 않습니다. `bot_reply_outbox_replay_audit`에는 grant 시점의 `granted`, 실제 claim 시점의 `replayed` event가 같은 actor/reason과 별도 `recorded_at`으로 append되므로 이후 outbox `updated_at` 변경과 분리해 조사합니다. `invalid_operator_metadata`, `not_manual_review`, `not_found`도 상태를 임의로 고치지 말고 현재 행과 운영 이력을 다시 확인합니다.
@@ -177,12 +178,15 @@ Migration `114_drop_unused_indexes.sql` 적용 전에는 read-only preflight로 
 
 libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
 
-> OpenBao 폐기(2026-08-08) 이후 `stack-secrets` 마스터는 아직 libpq service/pgpass 쌍을 미러하지 않습니다. `libpq-connection.sh`의 file-only 계약(`PGSERVICE`+`PGPASSFILE`, `PGPASSWORD` 금지, symlink 금지)은 그대로 강제되므로, 아래 명령을 쓰려면 `stack-secrets`에 `pg_service.conf`와 pgpass를 먼저 provisioning해 `/etc/stack-secrets/hololive-bot/postgres/`로 미러해야 합니다(approval-gated). 그 전까지 읽기 전용 조사는 `stack-postgres-access` 경로(`docker exec holo-postgres psql -U postgres_admin -d hololive`)를 씁니다.
+> 중앙 런타임 호스트에는 `psql`이 없습니다. `scripts/runtime/db-maintenance-exec.sh`가
+> PostgreSQL 이미지를 일회성으로 띄워 `/migrations`와 `stack-secrets`의 service/pgpass·CA를
+> read-only로 마운트하고 그 안에서 명령을 실행합니다. libpq service 정본은
+> `/etc/stack-secrets/hololive-bot/postgres/{pg_service.conf,pgpass}`(둘 다 `0600 root:root`)이며
+> `hololive_migrator`로 `verify-full` 접속합니다. 이 스크립트를 중앙 런타임 호스트에서 실행하십시오.
 
 ```bash
-PGSERVICE=hololive-db-maintenance \
-PGPASSFILE=/etc/stack-secrets/hololive-bot/postgres/pgpass \
-  env -u PGPASSWORD hololive/hololive-api/scripts/migrations/preflight-114-restore.sh ./migration-114-rollback.sql
+sudo -n ./scripts/runtime/db-maintenance-exec.sh \
+  bash /migrations/preflight-114-restore.sh /tmp/migration-114-rollback.sql
 ```
 
 preflight가 `MISSING`을 보고하면 migration을 적용하지 않습니다. 생성 artifact는 `BEGIN`/`COMMIT`, `CREATE INDEX IF NOT EXISTS`, 조건부 constraint 복원을 포함해 실패 후 재실행할 수 있습니다. Artifact 실행은 별도 rollback 승인이 필요합니다.
@@ -203,9 +207,8 @@ preflight가 `MISSING`을 보고하면 migration을 적용하지 않습니다. �
 - 이전 `hololive-api` image/config가 반드시 필요하면 Iris webhook ingress를 먼저 quiesce하고 현재 durable runtime으로 queue를 drain한 뒤 아래 preflight가 성공해야 합니다. 하나라도 0이 아니면 현재 image를 유지하고 roll forward합니다.
 
   ```bash
-  PGSERVICE=hololive-db-maintenance \
-  PGPASSFILE=/etc/stack-secrets/hololive-bot/postgres/pgpass \
-    env -u PGPASSWORD hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
+  sudo -n ./scripts/runtime/db-maintenance-exec.sh \
+    bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
   ```
 
 - Preflight 성공과 ingress quiescence를 같은 maintenance window에서 유지한 경우에만 이전 image를 재배포합니다. Schema rollback은 계속 [`Migration ordering`](#3-durable-webhook-or-reply-backlog-grows)의 writer quiescence 규칙을 따릅니다.
