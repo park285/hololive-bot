@@ -1450,9 +1450,9 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 		"CACHE_PASSWORD=dummy",
 		"ADMIN_PASS_BCRYPT=dummy",
 		"SESSION_SECRET=dummy",
-		"SEOUL_CACHE_HOST=stub",
-		"SEOUL_POSTGRES_HOST=stub",
-		"SEOUL_CLIPROXY_BASE_URL=https://cliproxy.invalid",
+		"HOLOLIVE_CENTRAL_CACHE_HOST=stub",
+		"HOLOLIVE_CENTRAL_POSTGRES_HOST=stub",
+		"CLIPROXY_BASE_URL=https://cliproxy.invalid",
 		"SEOUL_METRICS_BIND_IP=100.100.1.5",
 	)
 
@@ -1525,6 +1525,8 @@ func writeAPComposeEnvFile(t *testing.T) string {
 		"ADMIN_PASS_BCRYPT=dummy",
 		"CACHE_PASSWORD=dummy",
 		"DB_PASSWORD=dummy",
+		"HOLOLIVE_CENTRAL_CACHE_HOST=dummy",
+		"HOLOLIVE_CENTRAL_POSTGRES_HOST=dummy",
 		"SESSION_SECRET=dummy",
 	})
 }
