@@ -29,7 +29,7 @@ services:
     read_only: true
     network_mode: host
     volumes:
-      - ../nginx/admin-dashboard-ingress.conf:/etc/nginx/admin-dashboard-ingress.conf:ro
+      - ${HOLOLIVE_INGRESS_CONF:-/run/hololive-bot/admin-dashboard-ingress.conf}:/etc/nginx/admin-dashboard-ingress.conf:ro
     command: ["nginx", "-c", "/etc/nginx/admin-dashboard-ingress.conf", "-g", "daemon off;"]
     tmpfs:
       - /tmp:size=16m,mode=1777,uid=101,gid=101
@@ -48,7 +48,7 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
-      test: ["CMD-SHELL", "wget -q -O /dev/null -T 3 http://100.100.1.3:30191/health && wget -q -O /dev/null -T 3 http://100.100.1.3:30192/healthz"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null -T 3 http://${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30191/health && wget -q -O /dev/null -T 3 http://${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30192/healthz"]
 
   holo-postgres:
     environment:
