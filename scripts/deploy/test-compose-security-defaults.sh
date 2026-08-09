@@ -119,9 +119,11 @@ PY
 
 nginx_test_dir="$(mktemp -d)"
 trap 'rm -rf -- "${nginx_test_dir}"' EXIT
-sed 's/100\.100\.1\.3/127.0.0.1/g' \
-  "${ROOT_DIR}/deploy/nginx/admin-dashboard-ingress.conf" \
-  >"${nginx_test_dir}/admin-dashboard-ingress.conf"
+. "${ROOT_DIR}/scripts/deploy/lib/public-bind-mounts.sh"
+HOLOLIVE_BOT_PORT_BIND_IP=127.0.0.1 \
+HOLOLIVE_INGRESS_CONF="${nginx_test_dir}/admin-dashboard-ingress.conf" \
+  prepare_admin_dashboard_ingress_bind_mount "${ROOT_DIR}" \
+  || fail "could not render admin-dashboard-ingress config from the template"
 docker run --rm \
   --network host \
   --read-only \

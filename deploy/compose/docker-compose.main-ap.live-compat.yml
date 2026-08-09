@@ -8,6 +8,10 @@ services:
       POSTGRES_HOST: holo-postgres
       POSTGRES_PORT: "5432"
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
+    ports: !override
+      - "127.0.0.1:30025:30025"
+      - "127.0.0.1:30025:30025/udp"
+      - "${HOLOLIVE_METRICS_PORT_BIND_IP:-127.0.0.1}:30095:30095"
     volumes: !override
       - ../../data:/app/data
       - ${LIVE_LOGS_PATH:?LIVE_LOGS_PATH is required for live-compat overlays}:/app/logs

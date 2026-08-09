@@ -85,7 +85,7 @@ services:
       - "127.0.0.1:30003:30003/udp"
       - "127.0.0.1:30006:30006"
       - "127.0.0.1:30006:30006/udp"
-      - "127.0.0.1:30091:30091"
+      - "${HOLOLIVE_METRICS_PORT_BIND_IP:-127.0.0.1}:30091:30091"
       - "127.0.0.1:30061:30061"
     volumes: !override
       - ../../data:/app/data
@@ -102,6 +102,11 @@ services:
   hololive-alarm-worker:
     env_file: !override
       - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}
+    ports: !override
+      - "127.0.0.1:30007:30007"
+      - "127.0.0.1:30007:30007/udp"
+      - "${HOLOLIVE_METRICS_PORT_BIND_IP:-127.0.0.1}:30097:30097"
+      - "127.0.0.1:30067:30067"
     environment:
       <<: *live-postgres-env
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
