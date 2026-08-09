@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,8 @@ import (
 	shortlinkcontracts "github.com/kapu/hololive-shared/pkg/contracts/shortlink"
 	"gopkg.in/yaml.v3"
 )
+
+const centralIngressBindPlaceholder = "@BIND_IP@"
 
 func repoRootFromConfigTest(t *testing.T) string {
 	t.Helper()
@@ -78,11 +81,11 @@ func TestRepoComposeProdHardenedDefaults(t *testing.T) {
 }
 
 func TestRepoShortLinkIngressBoundary(t *testing.T) {
-	content := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf")
-	listener := "listen 100.100.1.3:30192;"
+	content := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf.template")
+	listener := "listen " + centralIngressBindPlaceholder + ":30192;"
 	server := nginxBlockContaining(t, content, "server {", listener)
 
-	assertExactNginxDirectives(t, server, "allow", []string{"127.0.0.1", "100.100.1.3", "100.100.1.5"})
+	assertExactNginxDirectives(t, server, "allow", []string{"127.0.0.1", centralIngressBindPlaceholder, "100.100.1.5"})
 	assertExactNginxDirectives(t, server, "deny", []string{"all"})
 
 	locationAnchor := "location ^~ " + shortlinkcontracts.YouTubePathPrefix
@@ -111,19 +114,39 @@ func TestRepoShortLinkIngressBoundary(t *testing.T) {
 
 func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 	publicTemplate := readRepoFile(t, "deploy/nginx/holoshi-public-shortlink.conf")
-	centralConfig := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf")
 	if count := len(regexp.MustCompile(`(?m)^\s*location\s+`).FindAllString(publicTemplate, -1)); count != 2 {
 		t.Fatalf("public ingress location count = %d, want 2", count)
 	}
 
+	upstreamBlock := nginxBlockContaining(t, publicTemplate, "upstream shortlink_backend {", "server")
+	upstreamServers := nginxDirectiveValues(upstreamBlock, "server")
+	if len(upstreamServers) != 1 {
+		t.Fatalf("public upstream server directives = %q, want exactly one", upstreamServers)
+	}
+	publicHost, publicPort, found := strings.Cut(upstreamServers[0], ":")
+	if !found || publicHost == "" || publicPort == "" {
+		t.Fatalf("public upstream server %q is not host:port", upstreamServers[0])
+	}
+	if net.ParseIP(publicHost) == nil {
+		t.Fatalf("public upstream host %q is not a literal IP; the public ingress is applied verbatim on the gateway", publicHost)
+	}
+
+	centralConfig := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf.template")
 	centralShortLink := nginxBlockContaining(t, centralConfig, "server {", "location ^~ "+shortlinkcontracts.YouTubePathPrefix)
 	shortLinkListen := nginxDirectiveValues(centralShortLink, "listen")
 	if len(shortLinkListen) != 1 {
 		t.Fatalf("central short-link listen directives = %q, want exactly one", shortLinkListen)
 	}
-	publicUpstream := nginxBlockContaining(t, publicTemplate, "upstream shortlink_backend {", "server")
-	assertExactNginxDirectives(t, publicUpstream, "server", shortLinkListen)
-	assertExactNginxDirectives(t, publicUpstream, "keepalive", []string{"8"})
+	// 중앙 bind IP 의 권위 소유자는 각 호스트의 compose.env 이므로 리포는 IP 일치를 증명할 수 없다.
+	// 여기서 증명 가능한 것은 중앙이 IP 를 하드코딩하지 않는다는 것과 두 파일의 포트가 같다는 것뿐이다.
+	centralHost, centralPort, ok := strings.Cut(shortLinkListen[0], ":")
+	if !ok || centralHost != centralIngressBindPlaceholder {
+		t.Fatalf("central short-link listen = %q, want %s:<port>", shortLinkListen[0], centralIngressBindPlaceholder)
+	}
+	if publicPort != centralPort {
+		t.Fatalf("public upstream port %q != central short-link listen port %q", publicPort, centralPort)
+	}
+	assertExactNginxDirectives(t, upstreamBlock, "keepalive", []string{"8"})
 
 	publicServer := nginxBlockContaining(t, publicTemplate, "server {", "server_name short.holoshi.com;")
 	assertExactNginxDirectives(t, publicServer, "server_name", []string{"short.holoshi.com"})
