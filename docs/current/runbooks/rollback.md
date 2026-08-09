@@ -44,9 +44,8 @@ Runtime service names:
 ```bash
 docker images | grep -E 'hololive-kakao-bot-go|hololive-admin-api|hololive-llm-scheduler'
 test -r /etc/stack-secrets/hololive-bot/compose.env && echo "compose.env OK"
-PGSERVICE=hololive-db-maintenance \
-PGPASSFILE=/etc/stack-secrets/hololive-bot/postgres/pgpass \
-  env -u PGPASSWORD hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
+sudo -n ./scripts/runtime/db-maintenance-exec.sh \
+  bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
 ```
 
 - 구 이미지가 보이지 않으면 → 맨 아래 "구 이미지 재build (이미지 부재 시)" 절로. 현 main에서는 rebuild 불가합니다.
