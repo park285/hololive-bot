@@ -5,6 +5,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
+AP_CENTRAL_HOST="${AP_CENTRAL_HOST:-100.100.1.8}"
+AP_CLIPROXY_HOST="${AP_CLIPROXY_HOST:-100.100.1.3}"
 
 case "$MODE" in
   --dry-run|--apply) ;;
@@ -79,7 +81,7 @@ write_host_env() {
     printf 'SCRAPER_SCHEDULER_WORKER_COUNT=1\n'
     printf 'SCRAPER_BACKFILL_ENABLED=false\n'
     printf 'YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2\n'
-    printf 'POSTGRES_HOST=%s\n' "${AP_POSTGRES_HOST:-100.100.1.8}"
+    printf 'POSTGRES_HOST=%s\n' "${AP_POSTGRES_HOST:-$AP_CENTRAL_HOST}"
     printf 'POSTGRES_PORT=5433\n'
     printf 'POSTGRES_DB=hololive\n'
     printf 'POSTGRES_SSLMODE=verify-full\n'
@@ -88,11 +90,11 @@ write_host_env() {
     printf 'POSTGRES_POOL_MIN_CONNS=2\n'
     printf 'POSTGRES_POOL_MAX_CONNS=8\n'
     printf 'POSTGRES_SOCKET_PATH=\n'
-    printf 'CACHE_HOST=%s\n' "${AP_CACHE_HOST:-100.100.1.8}"
+    printf 'CACHE_HOST=%s\n' "${AP_CACHE_HOST:-$AP_CENTRAL_HOST}"
     printf 'CACHE_PORT=6379\n'
     printf 'CACHE_SOCKET_PATH=\n'
     printf 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings\n'
-    printf 'CLIPROXY_BASE_URL=%s\n' "${AP_CLIPROXY_BASE_URL:-http://100.100.1.3:8787/v1}"
+    printf 'CLIPROXY_BASE_URL=%s\n' "${AP_CLIPROXY_BASE_URL:-http://$AP_CLIPROXY_HOST:8787/v1}"
     printf 'GOMEMLIMIT=384MiB\n'
     printf 'GOGC=100\n'
     printf 'GIN_MODE=release\n'

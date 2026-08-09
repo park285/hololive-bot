@@ -21,24 +21,43 @@ Prefer repository wrappers over raw `docker compose`:
 ## Runtime Env Inputs
 
 `scripts/deploy/compose.sh` injects one Compose interpolation env file with `--env-file`.
-The OpenBao default is:
+The host default is:
 
 ```text
-/run/hololive-bot/compose.env
+/etc/stack-secrets/hololive-bot/compose.env
 ```
 
 Use `COMPOSE_ENV_FILE=<path>` for local tests or transition-period compatibility. The
-legacy monolithic `/run/hololive-bot/env` is no longer a production `env_file` default.
-AP deploy/rollback wrappers set `COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env`
+legacy monolithic `env` file is no longer a production `env_file` default.
+AP deploy/rollback wrappers set `COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env`
 so AP hosts do not receive Iris egress tokens in their Compose interpolation file.
 
 Application-only env is scoped per service:
 
 ```text
-HOLOLIVE_API_ENV_FILE=/run/hololive-bot/bot.env
-HOLOLIVE_ALARM_WORKER_ENV_FILE=/run/hololive-bot/alarm-worker.env
-HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE=/run/hololive-bot/youtube-producer.env
+HOLOLIVE_API_ENV_FILE=/etc/stack-secrets/hololive-bot/bot.env
+HOLOLIVE_ALARM_WORKER_ENV_FILE=/etc/stack-secrets/hololive-bot/alarm-worker.env
+HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE=/etc/stack-secrets/hololive-bot/youtube-producer.env
 ```
+
+### Central endpoint ownership
+
+AP overlays never hardcode the central address. All three (`docker-compose.seoul.yml`,
+`docker-compose.osaka.yml`, `docker-compose.osaka2.yml`) read one key family and fail the
+render when it is absent, so a host move cannot leave an AP silently pointed at the
+retired address:
+
+```text
+HOLOLIVE_CENTRAL_POSTGRES_HOST   required
+HOLOLIVE_CENTRAL_CACHE_HOST      required
+HOLOLIVE_CENTRAL_POSTGRES_PORT   default 5433
+HOLOLIVE_CENTRAL_CACHE_PORT      default 6379
+```
+
+`ap-compose.env` owns those values. `CLIPROXY_BASE_URL` comes from the same file through
+`docker-compose.prod.yml`; AP overlays must not re-declare it. Host-native APs
+(`youtube-producer-a`/`-d`) get the same endpoint from `AP_CENTRAL_HOST` in
+`scripts/deploy/ap-host-native-deploy.sh`.
 
 AP overlays use only `youtube-producer.env` for `youtube-producer` instances, so Iris
 egress tokens stay out of AP producer containers. Osaka/Seoul AP hosts also use
@@ -47,8 +66,8 @@ egress tokens stay out of AP producer containers. Osaka/Seoul AP hosts also use
 `youtube-producer-c`; it still must not receive Iris egress tokens or the
 monolithic Compose env file as an `env_file`.
 
-Deploy this repo-side contract after OpenBao Agent has rendered `compose.env` or
-`ap-compose.env` plus the per-service env files for the target host.
+Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored
+`compose.env` or `ap-compose.env` plus the per-service env files to the target host.
 
 `scripts/deploy/lib/postgres-capacity.sh`가 production mutation entrypoint의 공통 owner입니다.
 `scripts/deploy/compose.sh ... up`, `build-all.sh`, `scripts/deploy/compose-redeploy-service.sh`는
@@ -60,11 +79,11 @@ Compose env file을 전달합니다. 이 검사는 다른 env 값이나 secret�
 
 ## PostgreSQL TLS
 
-`holo-postgres` serves TLS with `ssl=on`. The central OpenBao Agent renders the
-server certificate and key under `/run/hololive-bot/postgres-tls/`, outside the
-client-mounted `certs/` directory. Certificate renewal sends `SIGHUP` to
-`holo-postgres` so PostgreSQL reloads the server material without a container
-recreate.
+`holo-postgres` serves TLS with `ssl=on`. The `stack-secrets` master owns the server
+certificate and key; the host copy lives at `/etc/stack-secrets/hololive-bot/postgres-tls/`
+and mounts read-only at `/run/hololive-bot/postgres-tls/`, outside the client-mounted
+`certs/` directory. Reissuance sends `SIGHUP` to `holo-postgres` so PostgreSQL reloads
+the server material without a container recreate.
 
 All production PostgreSQL clients use `verify-full` with the CA bundle mounted
 at `/run/hololive-bot/certs/postgres-ca.pem`: the five central Go runtimes,
