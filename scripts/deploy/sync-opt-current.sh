@@ -37,6 +37,8 @@ if [[ -d "$OPT_CURRENT" ]]; then
   log "backup -> $BACKUP (exec tree only, latest 3 kept)"
 fi
 
+mkdir -p "$OPT_ROOT"
+
 # staging 은 OPT_ROOT 와 같은 파일시스템에 둔다: cross-device rsync(/tmp 별도 mount) 회피.
 STAGING="$(mktemp -d "${OPT_ROOT}/.staging-current.XXXXXX")"
 cleanup() { rm -rf "$STAGING"; }

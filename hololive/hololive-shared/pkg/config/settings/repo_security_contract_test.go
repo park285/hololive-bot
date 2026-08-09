@@ -137,8 +137,6 @@ func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 	if len(shortLinkListen) != 1 {
 		t.Fatalf("central short-link listen directives = %q, want exactly one", shortLinkListen)
 	}
-	// 중앙 bind IP 의 권위 소유자는 각 호스트의 compose.env 이므로 리포는 IP 일치를 증명할 수 없다.
-	// 여기서 증명 가능한 것은 중앙이 IP 를 하드코딩하지 않는다는 것과 두 파일의 포트가 같다는 것뿐이다.
 	centralHost, centralPort, ok := strings.Cut(shortLinkListen[0], ":")
 	if !ok || centralHost != centralIngressBindPlaceholder {
 		t.Fatalf("central short-link listen = %q, want %s:<port>", shortLinkListen[0], centralIngressBindPlaceholder)
