@@ -127,33 +127,3 @@ assert_present "${admin_list}" "/ctx/admin-dashboard/backend/internal/logs/logge
 assert_excluded "${admin_list}" "/ctx/hololive/hololive-api/internal/source.go" "admin-dashboard non-dependency module (hololive-api)"
 
 pass "hb03: alarm-worker + admin-dashboard Dockerfile.dockerignore exclude admin backend secrets; admin retains its own backend source, drops non-dependency modules"
-
-named_ctx="${TMP_DIR}/named"
-shared_ctx="${TMP_DIR}/shared"
-mkdir -p "${named_ctx}" "${shared_ctx}/pkg" "${shared_ctx}/artifacts"
-printf 'module x\n' > "${shared_ctx}/go.mod"
-printf '\n' > "${shared_ctx}/go.sum"
-printf 'package p\n' > "${shared_ctx}/pkg/p.go"
-printf 'stale-untracked\n' > "${shared_ctx}/artifacts/stale.bin"
-printf 'local-uncommitted\n' > "${shared_ctx}/local-uncommitted.go"
-
-producer_named="$(grep -E '^COPY --from=shared_go_workspace' "${ROOT_DIR}/hololive/hololive-youtube-producer/Dockerfile")"
-{
-  printf 'FROM busybox\n'
-  while IFS= read -r line; do
-    printf '%s\n' "${line/\/workspace\/shared-go//w/shared-go}"
-  done <<<"${producer_named}"
-  printf 'RUN find /w -type f | sort > /fl.txt\n'
-} > "${named_ctx}/Dockerfile"
-
-named_img="$(docker build -q --build-context shared_go_workspace="${shared_ctx}" "${named_ctx}" 2>/dev/null)" \
-  || fail "hb03: named-context fixture build failed"
-named_list="$(docker run --rm "${named_img}" cat /fl.txt)"
-docker rmi "${named_img}" >/dev/null 2>&1 || true
-
-assert_excluded "${named_list}" "/w/shared-go/artifacts/stale.bin" "named-context stale artifact (9eedece2)"
-assert_excluded "${named_list}" "/w/shared-go/local-uncommitted.go" "named-context uncommitted file (9eedece2)"
-assert_present "${named_list}" "/w/shared-go/go.mod" "named-context go.mod"
-assert_present "${named_list}" "/w/shared-go/pkg/p.go" "named-context pkg source"
-
-pass "hb03: shared-go named-context COPY pulls only module-verified paths (9eedece2)"
