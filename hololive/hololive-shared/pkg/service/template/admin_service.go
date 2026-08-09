@@ -91,18 +91,12 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 		return nil, err
 	}
 
-	existing, err := s.repo.FindByKeyAndChannel(ctx, key, channelID)
-	if err != nil {
-		return nil, fmt.Errorf("find template: %w", err)
-	}
-
-	if existing != nil && existing.Body != body {
-		s.createRevision(ctx, existing)
-	}
-
-	result, err := s.repo.Upsert(ctx, key, channelID, body)
+	result, previousBody, err := s.repo.UpsertWithPreviousBody(ctx, key, channelID, body)
 	if err != nil {
 		return nil, fmt.Errorf("upsert template: %w", err)
+	}
+	if previousBody != nil && *previousBody != body {
+		s.createRevision(ctx, result.ID, *previousBody)
 	}
 
 	s.invalidateRendererCache(key, channelID)
@@ -110,11 +104,11 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 	return result, nil
 }
 
-func (s *AdminService) createRevision(ctx context.Context, existing *domain.NotificationTemplate) {
-	if revErr := s.repo.CreateRevision(ctx, existing.ID, existing.Body); revErr != nil {
+func (s *AdminService) createRevision(ctx context.Context, templateID int64, body string) {
+	if revErr := s.repo.CreateRevision(ctx, templateID, body); revErr != nil {
 		s.logger.Warn("failed to create revision", slog.Any("error", revErr))
 	}
-	if pruneErr := s.repo.PruneOldRevisions(ctx, existing.ID, maxRevisions); pruneErr != nil {
+	if pruneErr := s.repo.PruneOldRevisions(ctx, templateID, maxRevisions); pruneErr != nil {
 		s.logger.Warn("failed to prune revisions", slog.Any("error", pruneErr))
 	}
 }
