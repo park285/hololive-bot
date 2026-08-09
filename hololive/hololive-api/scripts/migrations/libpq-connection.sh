@@ -6,7 +6,7 @@ require_libpq_service() {
     return 2
   fi
   if [[ -z "${PGSERVICE:-}" ]]; then
-    echo "PGSERVICE is required; use an OpenBao-rendered libpq service instead of a connection URI" >&2
+    echo "PGSERVICE is required; use a libpq service entry instead of a connection URI" >&2
     return 2
   fi
   if [[ -z "${PGPASSFILE:-}" ]]; then

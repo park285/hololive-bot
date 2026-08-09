@@ -156,7 +156,7 @@ Command claim이 만료되어 `outcome_unknown`으로 닫히면 `bot_durable_com
 
 ```bash
 PGSERVICE=hololive-db-maintenance \
-PGPASSFILE=/run/hololive-bot/postgres/pgpass \
+PGPASSFILE=/etc/stack-secrets/hololive-bot/postgres/pgpass \
 env -u PGPASSWORD psql -w -X -v ON_ERROR_STOP=1 \
   -v outbox_id='<bot_reply_outbox.id>' \
   -v operator_actor='<operator-handle>' \
@@ -175,11 +175,13 @@ Migration 125 이후 runtime은 `bot_webhook_heads`와 `ordering_key` advisory l
 
 Migration `114_drop_unused_indexes.sql` 적용 전에는 read-only preflight로 rollback artifact를 먼저 생성해야 합니다.
 
-OpenBao Agent가 render한 libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
+libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
+
+> OpenBao 폐기(2026-08-08) 이후 `stack-secrets` 마스터는 아직 libpq service/pgpass 쌍을 미러하지 않습니다. `libpq-connection.sh`의 file-only 계약(`PGSERVICE`+`PGPASSFILE`, `PGPASSWORD` 금지, symlink 금지)은 그대로 강제되므로, 아래 명령을 쓰려면 `stack-secrets`에 `pg_service.conf`와 pgpass를 먼저 provisioning해 `/etc/stack-secrets/hololive-bot/postgres/`로 미러해야 합니다(approval-gated). 그 전까지 읽기 전용 조사는 `stack-postgres-access` 경로(`docker exec holo-postgres psql -U postgres_admin -d hololive`)를 씁니다.
 
 ```bash
 PGSERVICE=hololive-db-maintenance \
-PGPASSFILE=/run/hololive-bot/postgres/pgpass \
+PGPASSFILE=/etc/stack-secrets/hololive-bot/postgres/pgpass \
   env -u PGPASSWORD hololive/hololive-api/scripts/migrations/preflight-114-restore.sh ./migration-114-rollback.sql
 ```
 
@@ -202,7 +204,7 @@ preflight가 `MISSING`을 보고하면 migration을 적용하지 않습니다. �
 
   ```bash
   PGSERVICE=hololive-db-maintenance \
-  PGPASSFILE=/run/hololive-bot/postgres/pgpass \
+  PGPASSFILE=/etc/stack-secrets/hololive-bot/postgres/pgpass \
     env -u PGPASSWORD hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
   ```
 

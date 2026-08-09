@@ -62,9 +62,9 @@ provider-first 순서를 지켜 아래 단계를 앞 단계가 검증된 뒤에�
 2. 중앙 `admin-dashboard-ingress`의 source-restricted `/l/*` listener(`100.100.1.7:30192`)를 활성화합니다.
 3. Seoul Nginx의 `http` context에 `deploy/nginx/holoshi-public-shortlink.conf`를 적용해 전용 `short.holoshi.com` TLS/HTTP3 endpoint의 `/l/*`만 `30192`로 전달합니다.
 4. 중앙 호스트에서 `scripts/deploy/shortlink-smoke.sh`를 실행해 listener, central ingress, public ingress의 `302`/`403`/`404` 계약을 모두 검증합니다.
-5. 모든 provider 검증이 통과한 뒤에만 `hololive-alarm-worker`의 `/run/hololive-bot/alarm-worker.env`에 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 설정하고 consumer를 재기동합니다.
+5. 모든 provider 검증이 통과한 뒤에만 `hololive-alarm-worker`의 `/etc/stack-secrets/hololive-bot/alarm-worker.env`에 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 설정하고 consumer를 재기동합니다.
 
-OpenBao KV/template 갱신과 Agent 재기동, Nginx 적용과 reload는 별도 approval-gated 운영 작업입니다. smoke에는 secret이 필요하지 않습니다.
+`stack-secrets` 마스터 갱신과 `tools/sync-host.sh <host> --apply`, Nginx 적용과 reload는 별도 approval-gated 운영 작업입니다. smoke에는 secret이 필요하지 않습니다.
 
 ## Tests
 

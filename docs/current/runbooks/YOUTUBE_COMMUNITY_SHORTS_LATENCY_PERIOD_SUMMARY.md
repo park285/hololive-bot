@@ -35,7 +35,7 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts lat
 
 ```bash
 set -a
-source "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/env}"
+source "${HOLOLIVE_BOT_ENV_FILE:-/etc/stack-secrets/hololive-bot/env}"
 set +a
 
 PGPASSWORD="$DB_PASSWORD" \

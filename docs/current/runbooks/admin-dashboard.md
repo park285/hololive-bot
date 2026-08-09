@@ -25,7 +25,7 @@
 
 ## Key environment variables
 
-시크릿 4종(`ADMIN_PASS_HASH`/`SESSION_SECRET`/`VALKEY_URL`/`HOLO_BOT_API_KEY`)은 2026-07-05부터 compose 보간이 아니라 scoped env_file `${ADMIN_DASHBOARD_ENV_FILE:-/run/hololive-bot/admin-dashboard.env}`(OpenBao Agent 렌더, `0600 root`)로 주입됩니다. env_file 값은 compose 보간을 거치지 않으므로 bcrypt 해시를 이스케이프 없이 원문 그대로 넣습니다.
+시크릿 4종(`ADMIN_PASS_HASH`/`SESSION_SECRET`/`VALKEY_URL`/`HOLO_BOT_API_KEY`)은 2026-07-05부터 compose 보간이 아니라 scoped env_file `${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}`(`stack-secrets` 렌더, `0600 root`)로 주입됩니다. env_file 값은 compose 보간을 거치지 않으므로 bcrypt 해시를 이스케이프 없이 원문 그대로 넣습니다.
 
 | Env | Purpose | Required |
 |---|---|---|
@@ -74,7 +74,7 @@ cd admin-dashboard/frontend && npm ci && npm run lint && npm run build
 ./scripts/deploy/compose-redeploy-service.sh admin-dashboard
 ```
 
-- 중앙 Compose env 정본은 OpenBao 렌더 파일 `/run/hololive-bot/compose.env` (`0600 root`)이므로 중앙 호스트 재배포는 `sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env ./scripts/deploy/compose-redeploy-service.sh admin-dashboard` 형태로 실행합니다.
+- 중앙 Compose env 정본은 `stack-secrets` 정적 파일 `/etc/stack-secrets/hololive-bot/compose.env`이므로 중앙 호스트 재배포는 `sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env ./scripts/deploy/compose-redeploy-service.sh admin-dashboard` 형태로 실행합니다.
 - image build는 `GOWORK=off`로 `admin-dashboard/backend/go.mod`의 published external pin을 사용합니다. `SHARED_GO_WORKSPACE_PATH`는 local CI source 검증에만 쓰이며 image source를 바꾸지 않습니다.
 - 이미지 버전 스탬프는 `HOLO_BOT_VERSION` → `-X main.Version` 으로 주입됩니다.
 - compose 정의: `deploy/compose/docker-compose.prod.yml`의 `admin-dashboard` 서비스, Dockerfile: `admin-dashboard/Dockerfile`.
@@ -98,7 +98,7 @@ source 제한은 `deploy/nginx/admin-dashboard-ingress.conf.template`가 적용�
 설치/재적용:
 
 ```bash
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/compose.env \
+sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
   ./scripts/deploy/compose.sh up -d --no-deps admin-dashboard-ingress
 ```
 
@@ -188,7 +188,7 @@ Diagnosis:
 ```
 
 Mitigation:
-- `/run/hololive-bot/admin-dashboard.env`의 `ADMIN_PASS_HASH`/`SESSION_SECRET` 주입과 해시 형식(`$2b$...`, env_file은 이스케이프 없는 원문) 확인.
+- `/etc/stack-secrets/hololive-bot/admin-dashboard.env`의 `ADMIN_PASS_HASH`/`SESSION_SECRET` 주입과 해시 형식(`$2b$...`, env_file은 이스케이프 없는 원문) 확인.
 - production에서는 기본 compose의 `ALLOWED_ORIGINS` 또는 live-compat의 `ADMIN_DASHBOARD_ALLOWED_ORIGINS` override가 실제 접속 Origin을 포함하는지 확인합니다.
 
 ### 5. 시스템 리소스(인프라) 패널 미동작
