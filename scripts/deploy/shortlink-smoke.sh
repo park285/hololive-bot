@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly VIDEO_ID="${SHORTLINK_SMOKE_VIDEO_ID:-dQw4w9WgXcQ}"
 readonly LISTENER_ORIGIN="${SHORTLINK_LISTENER_ORIGIN:-http://127.0.0.1:30101}"
-readonly CENTRAL_ORIGIN="${SHORTLINK_CENTRAL_ORIGIN:-http://100.100.1.3:30192}"
+readonly CENTRAL_ORIGIN="${SHORTLINK_CENTRAL_ORIGIN:-http://100.100.1.7:30192}"
 readonly PUBLIC_ORIGIN="${SHORTLINK_PUBLIC_ORIGIN:-https://short.holoshi.com}"
 readonly KAKAO_SCRAPER_USER_AGENT="facebookexternalhit/1.1; kakaotalk-scrap/1.0"
 readonly EXPECTED_LOCATION="https://youtube.com/watch?v=${VIDEO_ID}"

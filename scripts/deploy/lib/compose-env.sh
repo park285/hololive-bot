@@ -308,7 +308,7 @@ compose_env_assert_live_compat_for_host_networked_postgres() {
 
     echo "[ERROR] live-compat topology is active (${live_compat_active}) but COMPOSE_FILE has no" >&2
     echo "        live-compat overlay. Deploying now would recreate holo-postgres/valkey on loopback-only" >&2
-    echo "        bindings and drop AP (osaka/seoul/osaka2) off 100.100.1.3 valkey/postgres." >&2
+    echo "        bindings and drop AP (osaka/seoul/osaka2) off the central valkey/postgres bind IP." >&2
     echo "        Add deploy/compose/docker-compose.live-compat.yml, or set" >&2
     echo "        ALLOW_POSTGRES_TOPOLOGY_CHANGE=true only for an intentional topology change." >&2
     return 1

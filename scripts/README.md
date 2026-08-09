@@ -100,7 +100,7 @@ Valkey self-heal 운영 자산(스크립트, systemd unit, 테스트)입니다.
 - `hololive-compose.service` (+ `hololive-compose.service.d/`)
 - `hololive-daily-log-rollup.service`/`.timer`, `hololive-osaka-daily-log-rollup.service`/`.timer`
 - `hololive-main-log-mirror@.service`/`.timer`
-- `admin-dashboard-ingress`는 Compose의 host-networked Nginx 서비스로 `100.100.1.3:30191`을 수신하고 `127.0.0.1:30190`으로 전달합니다.
+- `admin-dashboard-ingress`는 Compose의 host-networked Nginx 서비스로 `100.100.1.7:30191`을 수신하고 `127.0.0.1:30190`으로 전달합니다.
 
 정리 원칙:
 - retired/no-op 스크립트는 유지하지 않습니다.

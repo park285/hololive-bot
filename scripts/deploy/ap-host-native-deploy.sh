@@ -79,7 +79,7 @@ write_host_env() {
     printf 'SCRAPER_SCHEDULER_WORKER_COUNT=1\n'
     printf 'SCRAPER_BACKFILL_ENABLED=false\n'
     printf 'YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2\n'
-    printf 'POSTGRES_HOST=100.100.1.3\n'
+    printf 'POSTGRES_HOST=%s\n' "${AP_POSTGRES_HOST:-100.100.1.7}"
     printf 'POSTGRES_PORT=5433\n'
     printf 'POSTGRES_DB=hololive\n'
     printf 'POSTGRES_SSLMODE=verify-full\n'
@@ -88,11 +88,11 @@ write_host_env() {
     printf 'POSTGRES_POOL_MIN_CONNS=2\n'
     printf 'POSTGRES_POOL_MAX_CONNS=8\n'
     printf 'POSTGRES_SOCKET_PATH=\n'
-    printf 'CACHE_HOST=100.100.1.3\n'
+    printf 'CACHE_HOST=%s\n' "${AP_CACHE_HOST:-100.100.1.7}"
     printf 'CACHE_PORT=6379\n'
     printf 'CACHE_SOCKET_PATH=\n'
     printf 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings\n'
-    printf 'CLIPROXY_BASE_URL=http://100.100.1.3:8787/v1\n'
+    printf 'CLIPROXY_BASE_URL=%s\n' "${AP_CLIPROXY_BASE_URL:-http://100.100.1.3:8787/v1}"
     printf 'GOMEMLIMIT=384MiB\n'
     printf 'GOGC=100\n'
     printf 'GIN_MODE=release\n'
