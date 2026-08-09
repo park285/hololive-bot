@@ -6,8 +6,8 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 compose_config() {
   local env_file="${COMPOSE_ENV_FILE:-}"
-  if [[ -z "${env_file}" && -e /run/hololive-bot/compose.env ]]; then
-    env_file=/run/hololive-bot/compose.env
+  if [[ -z "${env_file}" && -e /etc/stack-secrets/hololive-bot/compose.env ]]; then
+    env_file=/etc/stack-secrets/hololive-bot/compose.env
   fi
 
   local env_args=()

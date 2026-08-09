@@ -27,7 +27,7 @@ containers_list="$4"
 ports_list="$5"
 cd ~/hololive-bot
 
-sudo -n test -r /run/hololive-bot/ap-compose.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 
 read -r -a services <<< "$services_list"
@@ -35,7 +35,7 @@ read -r -a containers <<< "$containers_list"
 read -r -a ports <<< "$ports_list"
 
 idx=0
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
+sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle \
   ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f "$ap_compose_file" ps "${services[@]}"
 
 for container in "${containers[@]}"; do

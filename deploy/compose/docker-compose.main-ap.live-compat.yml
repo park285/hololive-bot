@@ -8,14 +8,18 @@ services:
       POSTGRES_HOST: holo-postgres
       POSTGRES_PORT: "5432"
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
+    ports: !override
+      - "127.0.0.1:30025:30025"
+      - "127.0.0.1:30025:30025/udp"
+      - "${HOLOLIVE_METRICS_PORT_BIND_IP:-127.0.0.1}:30095:30095"
     volumes: !override
       - ../../data:/app/data
       - ${LIVE_LOGS_PATH:?LIVE_LOGS_PATH is required for live-compat overlays}:/app/logs
       - ../../runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
-      - /run/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
-      - /run/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
-      - /run/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - valkey-cache-socket:/var/run/valkey:ro
     networks:
       observability-traces: {}

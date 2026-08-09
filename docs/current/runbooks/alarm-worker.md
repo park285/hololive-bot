@@ -49,12 +49,12 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 provider-first 활성화 순서:
 
 1. `hololive-api`의 `127.0.0.1:30101` short-link listener를 활성화하고 검증합니다.
-2. 중앙 source-restricted Nginx의 `100.100.1.3:30192` ingress를 활성화합니다.
+2. 중앙 source-restricted Nginx의 `100.100.1.7:30192` ingress를 활성화합니다.
 3. Seoul Nginx에 `deploy/nginx/holoshi-public-shortlink.conf`를 적용해 전용 `short.holoshi.com/l/*`만 `30192`로 전달합니다.
 4. 중앙 호스트에서 `scripts/deploy/shortlink-smoke.sh`를 실행해 세 hop의 일반 `302`, Kakao scraper `403`, invalid ID `404`를 모두 확인합니다.
 5. `ALARM_DISPATCH_KARING_ENABLED=false`를 확인한 뒤 `/run/hololive-bot/alarm-worker.env`에 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 설정하고 alarm-worker를 재기동합니다. Karing list template은 명시적 thumbnail 계약을 가지므로 두 기능을 동시에 켜면 alarm-worker가 fail closed합니다.
 
-중앙 live-compat Compose는 `/l/*`만 제공하는 host ingress 전용 HTTP backend를 `127.0.0.1:30101`에 publish합니다. 중앙 source-restricted Nginx가 `100.100.1.3:30192`에서 Seoul gateway 요청만 받아 이 listener로 전달하고, Seoul public Nginx는 `short.holoshi.com/l/*`만 해당 upstream으로 분기합니다.
+중앙 live-compat Compose는 `/l/*`만 제공하는 host ingress 전용 HTTP backend를 `127.0.0.1:30101`에 publish합니다. 중앙 source-restricted Nginx가 `100.100.1.7:30192`에서 Seoul gateway 요청만 받아 이 listener로 전달하고, Seoul public Nginx는 `short.holoshi.com/l/*`만 해당 upstream으로 분기합니다.
 
 ```text
 ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com

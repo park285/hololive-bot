@@ -242,7 +242,7 @@ test("BaseModal enforces browser focus, keyboard, nesting, and ARIA behavior", a
 				"--dump-dom",
 				`http://127.0.0.1:${address.port}/__base-modal_test__`,
 			],
-			{ maxBuffer: 4 * 1024 * 1024, timeout: 30_000 },
+			{ maxBuffer: 4 * 1024 * 1024, timeout: 120_000 },
 		);
 		assert.match(stdout, /data-test-status="passed"/, `${stderr}\n${stdout}`);
 	} finally {

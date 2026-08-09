@@ -128,8 +128,8 @@ for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/
 done
 pass "Compose deploy entrypoints preserve checkout Git index ownership"
 for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
-    grep -q '/run/hololive-bot/ap-compose.env' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} uses AP compose env"
-    if grep -q '/run/hololive-bot/env' "${ROOT_DIR}/${ap_script}"; then
+    grep -q '/etc/stack-secrets/hololive-bot/ap-compose.env' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} uses AP compose env"
+    if grep -q '/etc/stack-secrets/hololive-bot/env' "${ROOT_DIR}/${ap_script}"; then
         fail "${ap_script} must not require legacy monolithic env"
     fi
     grep -q 'ap_remote_bash' "${ROOT_DIR}/${ap_script}" || fail "${ap_script} must pass remote arguments through ap_remote_bash"
@@ -140,7 +140,7 @@ for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
 done
 pass "ap active-active smoke/status use AP compose env and safe remote argv"
 grep -q 'AP prechange compose config skipped' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy allows token-free transition prechange config only with explicit marker"
-grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/run/hololive-bot/(bot|alarm-worker)\\.env'" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy prechange config bypass is limited to AP token/env-file/admin-secret transition"
+grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/etc/stack-secrets/hololive-bot/(bot|alarm-worker)\\.env'" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy prechange config bypass is limited to AP token/env-file/admin-secret transition"
 pass "ap active-active deploy handles token-free prechange transition"
 bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh" \
     || fail "ap deploy propagates the validated Compose release version"

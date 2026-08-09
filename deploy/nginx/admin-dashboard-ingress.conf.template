@@ -39,11 +39,11 @@ http {
     }
 
     server {
-        listen 100.100.1.3:30191;
+        listen @BIND_IP@:30191;
         server_name _;
 
         allow 127.0.0.1;
-        allow 100.100.1.3;
+        allow @BIND_IP@;
         allow 100.100.1.5;
         deny all;
 
@@ -63,11 +63,11 @@ http {
     }
 
     server {
-        listen 100.100.1.3:30192;
+        listen @BIND_IP@:30192;
         server_name _;
 
         allow 127.0.0.1;
-        allow 100.100.1.3;
+        allow @BIND_IP@;
         allow 100.100.1.5;
         deny all;
 

@@ -1,7 +1,7 @@
 # valkey-selfheal.service — 설치 템플릿. /etc/systemd/system/ 에 복사 후 경로·User·권한을 조정한다.
 #
 # 권한 주의:
-#   - recreate tier 는 /run/hololive-bot/env(600 root)를 읽으므로 kapu 로는 실패할 수 있다.
+#   - recreate tier 는 /etc/stack-secrets/hololive-bot/env(600 root)를 읽으므로 kapu 로는 실패할 수 있다.
 #     완전한 결정론 recreate 까지 원하면 env 를 kapu 가 읽도록 권한을 조정한다.
 #   - 설치 전 STATE/JOURNAL 디렉토리 생성: mkdir -p ~/.local/state
 #

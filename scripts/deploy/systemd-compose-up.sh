@@ -48,13 +48,14 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
 fi
 
 wait_for_tailscale_ip() {
+  local want="$1"
   for _ in $(seq 1 90); do
-    if ip -4 addr show tailscale0 2>/dev/null | grep -q '100\.100\.1\.3/32'; then
+    if ip -4 addr show tailscale0 2>/dev/null | grep -qF "${want}/32"; then
       return 0
     fi
     sleep 1
   done
-  echo "tailscale0 missing 100.100.1.3/32 after 90s" >&2
+  echo "tailscale0 missing ${want}/32 after 90s" >&2
   return 1
 }
 
@@ -75,31 +76,41 @@ wait_for_file() {
   return 1
 }
 
-wait_for_tailscale_ip
+COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
+wait_for_file "$COMPOSE_ENV_FILE"
+
+bind_ip="$(sed -n 's/^HOLOLIVE_BOT_PORT_BIND_IP=[[:space:]]*//p' "$COMPOSE_ENV_FILE" | head -1)"
+if [[ -z "$bind_ip" ]]; then
+  echo "HOLOLIVE_BOT_PORT_BIND_IP is missing from $COMPOSE_ENV_FILE" >&2
+  exit 1
+fi
+
+wait_for_tailscale_ip "$bind_ip"
+export HOLOLIVE_BOT_PORT_BIND_IP="$bind_ip"
 
 if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" != "1" ]]; then
   echo "[SECURITY] this host requires the live-compat overlay but HOLOLIVE_ENABLE_LIVE_COMPAT is unset (drop-in missing?)." >&2
-  echo "           refusing to start: prod-only bindings would drop valkey/postgres off 100.100.1.3 (2026-06-27 incident)." >&2
+  echo "           refusing to start: prod-only bindings would drop valkey/postgres off ${bind_ip} (2026-06-27 incident)." >&2
   exit 1
 fi
 
 for file in \
-  /run/hololive-bot/compose.env \
-  /run/hololive-bot/bot.env \
-  /run/hololive-bot/alarm-worker.env \
-  /run/hololive-bot/youtube-producer.env \
-  /run/hololive-bot/admin-dashboard.env \
-  /run/hololive-bot/certs/hololive-h3.crt \
-  /run/hololive-bot/certs/hololive-h3.key \
-  /run/hololive-bot/certs/iris-ca.pem \
-  /run/hololive-bot/certs/postgres-ca.pem \
-  /run/hololive-bot/postgres-tls/server.crt \
-  /run/hololive-bot/postgres-tls/server.key
+  /etc/stack-secrets/hololive-bot/compose.env \
+  /etc/stack-secrets/hololive-bot/bot.env \
+  /etc/stack-secrets/hololive-bot/alarm-worker.env \
+  /etc/stack-secrets/hololive-bot/youtube-producer.env \
+  /etc/stack-secrets/hololive-bot/admin-dashboard.env \
+  /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
+  /etc/stack-secrets/hololive-bot/certs/hololive-h3.key \
+  /etc/stack-secrets/hololive-bot/certs/iris-ca.pem \
+  /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem \
+  /etc/stack-secrets/hololive-bot/postgres-tls/server.crt \
+  /etc/stack-secrets/hololive-bot/postgres-tls/server.key
 do
   wait_for_file "$file"
 done
 
-export COMPOSE_ENV_FILE=/run/hololive-bot/compose.env
+export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 
 base_files=(-f deploy/compose/docker-compose.prod.yml)
 main_ap_files=(-f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml)

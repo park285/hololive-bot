@@ -47,6 +47,12 @@ else
   record_fail "ap-host-native settings dir must be created and writable under systemd hardening"
 fi
 
+if grep -q '^ReadWritePaths=.*stack-secrets' "${DEPLOY}"; then
+  record_fail "ap-host-native must not grant write access to the static secret directory"
+else
+  pass "ap-host-native keeps /etc/stack-secrets read-only under ProtectSystem=strict"
+fi
+
 if grep -Fq 'rollback_contract_dir="$old_target/rollback-contract"' "${DEPLOY}" &&
    grep -Fq '"$host_env" "$rollback_contract_dir/youtube-producer-host.env"' "${DEPLOY}" &&
    grep -Fq '"$unit_file" "$rollback_contract_dir/hololive-youtube-producer@.service"' "${DEPLOY}"; then

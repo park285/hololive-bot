@@ -1,7 +1,7 @@
 [Unit]
 Description=hololive-bot Docker Compose stack
-After=docker.service tailscaled.service network-online.target openbao-agent-hololive-bot.service
-Requires=docker.service openbao-agent-hololive-bot.service
+After=docker.service tailscaled.service network-online.target
+Requires=docker.service
 Wants=network-online.target
 
 [Service]
