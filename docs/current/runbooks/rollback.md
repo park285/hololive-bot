@@ -15,6 +15,7 @@ Docker Compose runtime rollback과 contract/document rollback 판단 기준입�
 이미지는 registry tag가 아니라 호스트 로컬에서 빌드되는 `<service>:prod` single-tag입니다(`hololive-api:prod`, `hololive-alarm-worker:prod`, `hololive-youtube-producer:prod`). redeploy가 매번 같은 tag를 덮어쓰므로 "이전 tag로 되돌리기"는 불가능하고, code rollback의 기본 경로는 **이전 git ref를 checkout한 뒤 redeploy(rebuild)** 하는 것입니다. 예외적으로 5→3 cutover는 구 per-runtime 이미지가 호스트 로컬에 보존되어 있어 rebuild 없이 재생성할 수 있습니다 — 아래 전용 playbook을 따릅니다.
 
 ```bash
+# 빌드 호스트에서만. 런타임 호스트 recreate 는 release.md 의 no-build 경로를 씁니다.
 ./scripts/deploy/compose-redeploy-service.sh <service>
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps <service>
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 <service>

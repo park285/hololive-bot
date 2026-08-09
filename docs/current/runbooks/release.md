@@ -27,30 +27,78 @@ artifact 버전이며 독립 build가 필요하면 서로 달라질 수 있습�
 
 ## Compose service 재배포
 
-Use the repository deploy script for service-level redeploys:
+빌드 호스트와 중앙 런타임 호스트는 서로 다른 머신입니다. 중앙 런타임 호스트에서는
+어떤 빌드도 돌리지 않습니다 — 이미지는 빌드 호스트에서 만들어 전송하고, 런타임
+호스트는 이미 적재된 이미지로 recreate만 합니다.
+
+`scripts/deploy/compose-redeploy-service.sh`는 cutover 전에 `compose build`를
+수행하므로 **빌드 호스트 전용**입니다. 런타임 호스트에서 실행하면 그 호스트에서
+컴파일이 돌고, `/opt/hololive-bot/compose/current`에는 `.git`이 없어
+`org.opencontainers.image.revision`이 `unknown`으로 찍힙니다.
+
+### 1. 빌드 호스트: 이미지 생성과 검증
+
+검토된 revision에서 clean worktree로 빌드하고, 세 항목이 모두 맞는지 확인합니다.
 
 ```bash
-./scripts/deploy/compose-redeploy-service.sh <service>
+docker buildx build --builder <multiarch-builder> --platform linux/arm64 --load \
+  -t <service>:prod-arm64 -f <service-dockerfile> \
+  --build-arg VERSION="$(xargs <VERSION)" --build-arg REVISION="$(git rev-parse HEAD)" .
+
+docker image inspect <service>:prod-arm64 \
+  --format '{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}'
 ```
 
-On the current main production host, include the live-compat overlay because
-`/etc/stack-secrets/hololive-bot/compose.env` preserves the live Postgres and certificate contract:
+`arch=arm64`가 아니거나 revision이 `unknown`·short SHA이면 중단합니다.
+
+### 2. 전송과 승격
 
 ```bash
-sudo -n env COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml \
-  COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
-  ./scripts/deploy/compose-redeploy-service.sh <service>
+docker save <service>:prod-arm64 | gzip -1 \
+  | ssh <central-host> 'gunzip | sudo -n docker load'
+ssh <central-host> 'sudo -n docker tag <service>:prod-arm64 <service>:prod'
 ```
 
-For the main-host active-active AP, include both main-ap overlays:
+승격 전에 롤백 태그를 남깁니다: `docker tag <service>:prod <service>:rollback-<UTC timestamp>`.
+
+### 3. 런타임 호스트: no-build cutover
+
+`/opt/hololive-bot/compose/current`에서 실행합니다. `compose.sh`는 `--build`를 주지
+않으면 빌드하지 않으며, bind-mount 쓰기 권한·public ingress 렌더·health gate
+preflight가 걸립니다. 부분 `up`에는 항상 `--no-deps`를 붙입니다 — `hololive-api`의
+`depends_on`에 `hololive-alarm-worker`가 있어 생략하면 alarm dispatcher가 함께 뜹니다.
 
 ```bash
-sudo -n env \
-  COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.live-compat.yml:deploy/compose/docker-compose.main-ap.yml:deploy/compose/docker-compose.main-ap.live-compat.yml \
-  COMPOSE_PROFILES=main-ap \
-  COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
-  ./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
+
+# 마이그레이션 one-shot 먼저, 종료 코드 0 확인
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  up -d --no-deps hololive-db-migrate
+docker wait hololive-db-migrate
+
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  up -d --no-deps <service>...
 ```
+
+main-host active-active AP는 main-ap overlay 2종과 profile을 함께 넣습니다:
+
+```bash
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh \
+  -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  -f deploy/compose/docker-compose.main-ap.yml \
+  -f deploy/compose/docker-compose.main-ap.live-compat.yml \
+  up -d --no-deps youtube-producer-c
+```
+
+### 4. 수용 증거
+
+recreate 시작 시각을 기록해 두고, 대상 컨테이너의 `StartedAt`이 그 이후이며
+health가 `healthy`, `RestartCount=0`, 실행 중 이미지의 revision이 검토된 SHA와
+일치하는지 확인합니다. 건강한 컨테이너가 다른 이미지 ID로 돌고 있으면 실패한
+rollout입니다. 롤백 태그와 직전 배포 트리는 수용될 때까지 보존합니다.
 
 > 배포 스크립트는 기존 host-network Postgres 런타임에서 live-compat overlay 없이
 > 배포하려는 경로를 fail-closed로 거부한다. live-compat overlay는 이제

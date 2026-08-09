@@ -67,7 +67,7 @@ wait_for_file() {
       return 0
     fi
     if [ -d "$path" ]; then
-      echo "$path is a directory; OpenBao render did not complete cleanly" >&2
+      echo "$path is a directory; stack-secrets sync did not complete cleanly" >&2
       return 1
     fi
     sleep 1
