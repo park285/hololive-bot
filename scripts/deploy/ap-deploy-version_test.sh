@@ -90,6 +90,9 @@ up_line="$(grep -n "up -d --no-build" "$deploy_script" | cut -d: -f1)"
   || fail "AP image build, verification, transfer, load, and no-build up must remain ordered"
 grep -Fq "up -d --no-build" "$deploy_script" \
   || fail "AP cutover must explicitly disable remote Compose builds"
+if grep -Fq -- "--remove-orphans" "$deploy_script"; then
+  fail "AP deploy must preserve independently managed services in the shared Compose project"
+fi
 grep -Fq "actual_revision=\\${literal_dollar}(docker inspect -f" "$deploy_script" \
   || fail "AP completion must inspect the live image revision label"
 grep -Fq 'org.opencontainers.image.revision' "$deploy_script" \
