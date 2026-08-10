@@ -22,6 +22,9 @@ Environment=POSTGRES_FAILOVER_CA_FILE=%d/postgres-ca.pem
 UnsetEnvironment=BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH
 StateDirectory=hololive-postgres-failover
 StateDirectoryMode=0755
+RuntimeDirectory=hololive-postgres-failover
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=no
 UMask=0077
 ExecStart=/usr/bin/bash /usr/local/libexec/hololive-postgres-failover/postgres-failover-launch.sh --dry-run
 TimeoutStartSec=420

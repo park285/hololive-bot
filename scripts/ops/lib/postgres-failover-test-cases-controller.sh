@@ -20,7 +20,8 @@ static_deployment_contracts_are_wired() {
   for pattern in 'ConditionPathExists=!/var/lib/hololive-postgres-fence/fence.intent' 'ConditionPathExists=!/var/lib/hololive-postgres-fence/fenced'; do
     grep -Fq "${pattern}" "${compose_unit}" || { fail "compose unit missing fence condition: ${pattern}"; return; }
   done
-  for pattern in 'postgres-failover-launch.sh' 'UnsetEnvironment=BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH'; do
+  for pattern in 'postgres-failover-launch.sh' 'UnsetEnvironment=BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH' \
+    'RuntimeDirectory=hololive-postgres-failover' 'RuntimeDirectoryMode=0700' 'RuntimeDirectoryPreserve=no'; do
     grep -Fq "${pattern}" "${ROOT_DIR}/scripts/ops/postgres-failover.service" || { fail "failover unit missing trusted launcher contract: ${pattern}"; return; }
   done
   if grep -Fq 'EnvironmentFile=' "${ROOT_DIR}/scripts/ops/postgres-failover.service"; then
