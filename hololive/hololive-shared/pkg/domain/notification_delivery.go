@@ -34,6 +34,16 @@ const (
 	DeliveryKindMemberNewsMonthly DeliveryOutboxKind = "MEMBER_NEWS_MONTHLY"
 )
 
+func (k DeliveryOutboxKind) IsValid() bool {
+	switch k {
+	case DeliveryKindMajorEventWeekly, DeliveryKindMajorEventMonthly,
+		DeliveryKindMemberNewsWeekly, DeliveryKindMemberNewsMonthly:
+		return true
+	default:
+		return false
+	}
+}
+
 type DeliveryOutboxStatus string
 
 const (

@@ -28,6 +28,7 @@ type alarmDispatchRunnerTestConsumer struct {
 	quarantineReason      string
 	scheduledRetry        []domain.AlarmQueueEnvelope
 	scheduledSendingRetry []domain.AlarmQueueEnvelope
+	preSendRequeued       []domain.AlarmQueueEnvelope
 	movedDLQ              []domain.AlarmQueueEnvelope
 	requeued              []domain.AlarmQueueEnvelope
 	releasedClaims        []string
@@ -84,6 +85,11 @@ func (c *alarmDispatchRunnerTestConsumer) RouteFailures(_ context.Context, retry
 func (c *alarmDispatchRunnerTestConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
 	c.scheduledSendingRetry = append(c.scheduledSendingRetry, retryEnvelopes...)
 	c.movedDLQ = append(c.movedDLQ, dlqEnvelopes...)
+	return nil
+}
+
+func (c *alarmDispatchRunnerTestConsumer) RequeuePreSend(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.preSendRequeued = append(c.preSendRequeued, envelopes...)
 	return nil
 }
 
@@ -593,7 +599,7 @@ func TestAlarmDispatchRunnerReturnsErrorWhenPostSendQuarantineFails(t *testing.T
 	assert.Empty(t, consumer.scheduledRetry)
 }
 
-func TestAlarmDispatchRunnerRetriesRenderFailureBeforeMarkSending(t *testing.T) {
+func TestAlarmDispatchRunnerConsumesAttemptForRenderFailureBeforeMarkSending(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
 	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	envelope.YouTubeOutbox = nil
@@ -606,6 +612,10 @@ func TestAlarmDispatchRunnerRetriesRenderFailureBeforeMarkSending(t *testing.T) 
 	require.NoError(t, err)
 	assert.True(t, processed)
 	require.Len(t, consumer.scheduledRetry, 1)
+	require.NotNil(t, consumer.scheduledRetry[0].Retry)
+	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
+	assert.Empty(t, consumer.preSendRequeued)
+	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markSending)
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, sender.messages)

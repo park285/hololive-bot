@@ -37,7 +37,7 @@ func insertDuplicateResult(status Status) InsertResult {
 	}
 
 	switch status {
-	case StatusPending, StatusLeased, StatusRetry, StatusSending, StatusSent, StatusDLQ, StatusQuarantined, StatusCancelled:
+	case StatusShadowed, StatusPending, StatusLeased, StatusRetry, StatusSending, StatusSent, StatusDLQ, StatusQuarantined, StatusCancelled:
 		return DuplicateActive
 	default:
 		return DuplicateActive
@@ -52,7 +52,7 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 	if status == "" {
 		status = StatusPending
 	}
-	if status != StatusPending {
+	if status != StatusPending && status != StatusShadowed {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: unsupported status %q", status)
 	}
 	result := PublishBatchResult{RequestedDeliveries: len(input.Envelopes)}

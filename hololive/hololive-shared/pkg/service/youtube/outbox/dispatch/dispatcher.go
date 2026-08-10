@@ -22,6 +22,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -57,6 +59,18 @@ type Dispatcher struct {
 	started   atomic.Bool
 
 	testHooks dispatcherTestHooks
+}
+
+func (d *Dispatcher) ConfigureHandoff(mode handoff.Mode, publisher YouTubeOutboxHandoff) error {
+	if d == nil || d.send == nil {
+		return fmt.Errorf("configure youtube outbox handoff: dispatcher is nil")
+	}
+	if mode != handoff.ModeOff && publisher == nil {
+		return fmt.Errorf("configure youtube outbox handoff: publisher is required for mode %q", mode)
+	}
+	d.send.handoffMode = mode
+	d.send.handoff = publisher
+	return nil
 }
 
 func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config *dispatchstate.Config) *Dispatcher {

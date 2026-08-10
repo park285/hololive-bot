@@ -192,18 +192,22 @@ func validateLiveDispatchAlarmType(alarmType AlarmType) error {
 }
 
 type AlarmQueueEnvelope struct {
-	DispatchOutboxID  int64                         `json:"dispatch_outbox_id,omitempty"`
-	Notification      AlarmNotification             `json:"notification"`
-	SourceKind        AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
-	YouTubeOutbox     *YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
-	Celebration       *CelebrationDispatchPayload   `json:"celebration,omitempty"`
-	ClaimKeys         []string                      `json:"claim_keys"`
-	EnqueuedAt        string                        `json:"enqueued_at"`
-	Version           uint8                         `json:"version"`
-	Retry             *AlarmQueueRetryMetadata      `json:"retry,omitempty"`
-	SourcePayloadRaw  string                        `json:"source_payload,omitempty"`
-	rawPayload        string                        `json:"-"`
-	normalizedPayload string                        `json:"-"`
+	DispatchOutboxID  int64                          `json:"dispatch_outbox_id,omitempty"`
+	DispatchGroupKey  string                         `json:"dispatch_group_key,omitempty"`
+	SendUnitID        int64                          `json:"send_unit_id,omitempty"`
+	ClientRequestID   string                         `json:"client_request_id,omitempty"`
+	Notification      AlarmNotification              `json:"notification"`
+	SourceKind        AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
+	YouTubeOutbox     *YouTubeOutboxDispatchPayload  `json:"youtube_outbox,omitempty"`
+	Celebration       *CelebrationDispatchPayload    `json:"celebration,omitempty"`
+	DeliveryDigest    *DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
+	ClaimKeys         []string                       `json:"claim_keys"`
+	EnqueuedAt        string                         `json:"enqueued_at"`
+	Version           uint8                          `json:"version"`
+	Retry             *AlarmQueueRetryMetadata       `json:"retry,omitempty"`
+	SourcePayloadRaw  string                         `json:"source_payload,omitempty"`
+	rawPayload        string                         `json:"-"`
+	normalizedPayload string                         `json:"-"`
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -231,6 +235,7 @@ type alarmQueueEnvelopeWire struct {
 	SourceKind       AlarmDispatchSourceKind            `json:"source_kind,omitempty"`
 	YouTubeOutbox    *YouTubeOutboxDispatchPayload      `json:"youtube_outbox,omitempty"`
 	Celebration      *CelebrationDispatchPayload        `json:"celebration,omitempty"`
+	DeliveryDigest   *DeliveryDigestDispatchPayload     `json:"delivery_digest,omitempty"`
 	ClaimKeys        []string                           `json:"claim_keys"`
 	EnqueuedAt       string                             `json:"enqueued_at"`
 	Version          uint8                              `json:"version"`
@@ -294,6 +299,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		SourceKind:       wire.SourceKind,
 		YouTubeOutbox:    wire.YouTubeOutbox,
 		Celebration:      wire.Celebration,
+		DeliveryDigest:   wire.DeliveryDigest,
 		ClaimKeys:        wire.ClaimKeys,
 		EnqueuedAt:       wire.EnqueuedAt,
 		Version:          wire.Version,

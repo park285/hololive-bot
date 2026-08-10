@@ -68,6 +68,9 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 		"hololive/hololive-api/scripts/migrations/065_record_alarm_dispatch_event_collisions.sql",
 		"hololive/hololive-api/scripts/migrations/118_alarm_dispatch_state_shape_check.sql",
 		"hololive/hololive-api/scripts/migrations/122_alarm_dispatch_last_error_size_check.sql",
+		"hololive/hololive-api/scripts/migrations/140_alarm_dispatch_send_units.sql",
+		"hololive/hololive-api/scripts/migrations/141_alarm_dispatch_send_unit_due_index.sql",
+		"hololive/hololive-api/scripts/migrations/142_alarm_dispatch_send_unit_index.sql",
 	} {
 		sql := readRepoMigration(t, migration)
 		if _, err := pool.Exec(ctx, sql); err != nil {
@@ -1272,7 +1275,7 @@ func TestPgxRepositoryClaimDue_ConcurrentWorkersClaimDisjointRows(t *testing.T) 
 	}
 }
 
-func TestPgxRepositoryClaimDue_ConcurrentWorkersSplitOneCanonicalGroup(t *testing.T) {
+func TestPgxRepositoryClaimDue_ConcurrentWorkersKeepOneCanonicalGroupAtomic(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	const roomID = "room-canonical-group"
@@ -1334,11 +1337,12 @@ func TestPgxRepositoryClaimDue_ConcurrentWorkersSplitOneCanonicalGroup(t *testin
 	done.Wait()
 
 	ownerByDeliveryID := make(map[int64]string, len(starts))
+	claimingWorkers := 0
 	for index, workerID := range workerIDs {
 		require.NoErrorf(t, claimErrByWorker[index], "%s ClaimDue must not fail under concurrent claiming", workerID)
-		require.NotEmptyf(t, claimedByWorker[index],
-			"%s claimed nothing: %d rows of one canonical group against a per-worker limit of %d must leave work for both workers",
-			workerID, len(starts), perWorkerLimit)
+		if len(claimedByWorker[index]) > 0 {
+			claimingWorkers++
+		}
 		for _, record := range claimedByWorker[index] {
 			previousOwner, alreadyClaimed := ownerByDeliveryID[record.ID]
 			require.Falsef(t, alreadyClaimed,
@@ -1351,6 +1355,8 @@ func TestPgxRepositoryClaimDue_ConcurrentWorkersSplitOneCanonicalGroup(t *testin
 	}
 	require.Len(t, ownerByDeliveryID, len(starts),
 		"concurrent workers must jointly claim every row of the canonical group exactly once")
+	require.Equal(t, 1, claimingWorkers,
+		"one persisted send unit must be owned by exactly one concurrent worker")
 
 	claimedIDs := make([]int64, 0, len(ownerByDeliveryID))
 	for deliveryID := range ownerByDeliveryID {
@@ -1361,7 +1367,7 @@ func TestPgxRepositoryClaimDue_ConcurrentWorkersSplitOneCanonicalGroup(t *testin
 		"SELECT count(*) FROM alarm_dispatch_deliveries WHERE id = ANY($1) AND room_id = $2", claimedIDs, roomID,
 	).Scan(&groupRows))
 	require.Equal(t, len(starts), groupRows,
-		"the rows split across workers must all belong to the single (room, minute-bucket) group under test")
+		"all rows claimed by one worker must belong to the single persisted send unit")
 
 	for deliveryID, workerID := range ownerByDeliveryID {
 		var storedStatus, storedLockedBy string

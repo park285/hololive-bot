@@ -47,7 +47,7 @@ Remote AP split-host 운영 기준 (4-way active-active):
 
 구 키(`SCRAPER_WORKER_COUNT`, `SCRAPER_VIDEOS_SECONDS`, `SCRAPER_SHORTS_SECONDS`, `SCRAPER_COMMUNITY_SECONDS`, `SCRAPER_STATS_SECONDS`, `SCRAPER_LIVE_SECONDS`)는 더 이상 읽지 않습니다. env에 남아 있어도 오류 없이 무시되므로, 값을 바꿔도 반영되지 않습니다.
 
-원격 AP 재배포 — rsync/build/recreate/검증을 포함한 runtime별 scoped wrapper를 사용합니다. Osaka와 Osaka2는 host-native `systemd`, Seoul은 Compose 경로입니다:
+원격 AP 재배포 — build-host artifact 생성·전송, remote no-build recreate, 검증을 포함한 runtime별 scoped wrapper를 사용합니다. Osaka와 Osaka2는 host-native `systemd`, Seoul은 Compose 경로입니다:
 
 ```bash
 ./scripts/deploy/ap-host-native-deploy.sh osaka --dry-run

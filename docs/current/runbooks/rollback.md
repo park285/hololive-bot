@@ -12,13 +12,75 @@ Docker Compose runtime rollback과 contract/document rollback 판단 기준입�
 
 ## Runtime Rollback
 
-이미지는 registry tag가 아니라 호스트 로컬에서 빌드되는 `<service>:prod` single-tag입니다(`hololive-api:prod`, `hololive-alarm-worker:prod`, `hololive-youtube-producer:prod`). redeploy가 매번 같은 tag를 덮어쓰므로 "이전 tag로 되돌리기"는 불가능하고, code rollback의 기본 경로는 **이전 git ref를 checkout한 뒤 redeploy(rebuild)** 하는 것입니다. 예외적으로 5→3 cutover는 구 per-runtime 이미지가 호스트 로컬에 보존되어 있어 rebuild 없이 재생성할 수 있습니다 — 아래 전용 playbook을 따릅니다.
+중앙 runtime image는 빌드 호스트에서 만들고 런타임 호스트로 전송합니다. 정상 release는
+새 image를 `prod`로 승격하기 전에 기존 `<service>:prod`를
+`<service>:rollback-<UTC timestamp>`로 보존합니다. 따라서 1차 code rollback은
+보존 tag를 `prod`로 되돌린 뒤 runtime host에서 `--no-build --no-deps`로 recreate하는
+것입니다. 필요한 tag가 없거나 손상된 경우에만 이전 git ref를 빌드 호스트의 별도 clean
+worktree에서 rebuild하고, [`release.md`](release.md#compose-service-재배포)의 전송·무빌드
+cutover 절차를 따릅니다. 예외적인 5→3 cutover는 구 per-runtime image와 compose 계약을
+사용하므로 아래 전용 playbook을 따릅니다.
 
 ```bash
-# 빌드 호스트에서만. 런타임 호스트 recreate 는 release.md 의 no-build 경로를 씁니다.
-./scripts/deploy/compose-redeploy-service.sh <service>
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml ps <service>
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=200 <service>
+# 중앙 runtime host에서 rollback tag와 revision을 먼저 확인합니다.
+sudo -n docker image inspect <service>:rollback-<UTC timestamp> \
+  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+sudo -n docker tag <service>:rollback-<UTC timestamp> <service>:prod
+
+export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
+sudo -n ./scripts/deploy/compose.sh \
+  -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  up -d --no-build --no-deps <service>
+```
+
+rollback 후에는 대상 container의 `StartedAt`, health, `RestartCount`, image revision을
+확인하고 rollback tag와 실패한 release image를 원인 분석이 끝날 때까지 보존합니다.
+
+`hololive-alarm-worker`를 send-unit 도입 전 image로 되돌릴 때는 위 일반 절차만으로
+충분하지 않습니다. 먼저 API를 중지하고 tracked drain overlay로 모든 alarm producer를
+끄되 current alarm consumer는 유지합니다. 아래 명령은 central runtime host의
+`/opt/hololive-bot/compose/current`에서 실행합니다.
+
+```bash
+export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
+sudo -n docker stop hololive-api
+sudo -n env COMPOSE_ENV_FILE="$COMPOSE_ENV_FILE" ./scripts/deploy/compose.sh \
+  -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  -f deploy/compose/docker-compose.alarm-worker-rollback-drain.yml \
+  config --quiet
+sudo -n env COMPOSE_ENV_FILE="$COMPOSE_ENV_FILE" ./scripts/deploy/compose.sh \
+  -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  -f deploy/compose/docker-compose.alarm-worker-rollback-drain.yml \
+  up -d --no-build --no-deps --force-recreate hololive-alarm-worker
+
+sudo -n ./scripts/runtime/preflight-alarm-worker-rollback.sh
+```
+
+preflight는 `hololive-api` 정지, current alarm consumer 기동, scheduler·celebration·birthday·
+YouTube handoff producer flag의 실제 container 값, read-only DB session, active send-unit 0을
+모두 확인합니다. 통과 직후에도 drain overlay를 제거하지 않은 채 rollback tag를 `prod`로
+승격하고 같은 overlay로 alarm-worker를 `--no-build --no-deps` recreate합니다. 하나라도
+실패하면 이전 image로 전환하지 않고 current consumer로 fix-forward합니다.
+
+이전 worker가 healthy이고 active send-unit이 다시 생기지 않는지 재확인한 뒤 drain
+overlay 없이 alarm-worker를 recreate해 legacy scheduler를 재개합니다. API는 current
+image를 유지하며 handoff를 강제로 끈 상태로 별도 기동합니다.
+
+```bash
+sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
+  ./scripts/deploy/compose.sh \
+  -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  up -d --no-build --no-deps --force-recreate hololive-alarm-worker
+sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
+  ./scripts/deploy/compose.sh \
+  -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  -f deploy/compose/docker-compose.alarm-worker-rollback-drain.yml \
+  up -d --no-build --no-deps hololive-api
 ```
 
 Runtime service names:

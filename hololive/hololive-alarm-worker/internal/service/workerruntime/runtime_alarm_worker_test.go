@@ -155,10 +155,9 @@ func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
 		t.Fatal("scheduler did not start")
 	}
 
-	shutdownDone := make(chan struct{})
+	shutdownDone := make(chan error, 1)
 	go func() {
-		runtime.Shutdown(t.Context())
-		close(shutdownDone)
+		shutdownDone <- runtime.Shutdown(t.Context())
 	}()
 
 	select {
@@ -167,8 +166,8 @@ func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
 		t.Fatal("scheduler did not observe shutdown cancellation")
 	}
 	select {
-	case <-shutdownDone:
-		t.Fatal("Shutdown returned before scheduler exit")
+	case err := <-shutdownDone:
+		t.Fatalf("Shutdown returned before scheduler exit: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 
@@ -179,7 +178,8 @@ func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
 		t.Fatal("scheduler did not exit after release")
 	}
 	select {
-	case <-shutdownDone:
+	case err := <-shutdownDone:
+		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Shutdown did not return after scheduler exit")
 	}
@@ -207,10 +207,9 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 
 	shutdownCtx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	shutdownDone := make(chan struct{})
+	shutdownDone := make(chan error, 1)
 	go func() {
-		runtime.Shutdown(shutdownCtx)
-		close(shutdownDone)
+		shutdownDone <- runtime.Shutdown(shutdownCtx)
 	}()
 
 	select {
@@ -219,7 +218,8 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 		t.Fatal("shutdown context did not reach its deadline")
 	}
 	select {
-	case <-shutdownDone:
+	case err := <-shutdownDone:
+		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Shutdown blocked past its context deadline")
 	}
@@ -255,5 +255,5 @@ func TestAlarmWorkerRuntimeReportsSchedulerErrorOnErrCh(t *testing.T) {
 		t.Fatal("scheduler error was not reported on errCh")
 	}
 
-	runtime.Shutdown(t.Context())
+	require.NoError(t, runtime.Shutdown(t.Context()))
 }

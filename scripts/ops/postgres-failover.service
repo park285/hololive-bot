@@ -9,13 +9,21 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=root
+User=hololive-pg-failover
+Group=hololive-pg-failover
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-EnvironmentFile=-/etc/stack-secrets/hololive-bot/postgres-failover.env
+LoadCredential=failover.env:/etc/stack-secrets/hololive-bot/postgres-failover.env
+LoadCredential=pgpass:/etc/stack-secrets/hololive-bot/postgres/pgpass
+LoadCredential=postgres-ca.pem:/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
+Environment=POSTGRES_FAILOVER_ENV_FILE=%d/failover.env
+Environment=POSTGRES_FAILOVER_CONTROLLER=/usr/local/libexec/hololive-postgres-failover/postgres-failover.sh
+Environment=POSTGRES_FAILOVER_PGPASS_FILE=%d/pgpass
+Environment=POSTGRES_FAILOVER_CA_FILE=%d/postgres-ca.pem
+UnsetEnvironment=BASH_ENV ENV LD_PRELOAD LD_LIBRARY_PATH
 StateDirectory=hololive-postgres-failover
-StateDirectoryMode=0700
+StateDirectoryMode=0755
 UMask=0077
-ExecStart=/usr/bin/env bash /usr/local/libexec/hololive-postgres-failover/postgres-failover.sh --dry-run
+ExecStart=/usr/bin/bash /usr/local/libexec/hololive-postgres-failover/postgres-failover-launch.sh --dry-run
 TimeoutStartSec=420
 NoNewPrivileges=true
 PrivateTmp=true

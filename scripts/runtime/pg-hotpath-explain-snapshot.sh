@@ -52,7 +52,7 @@ Outputs:
   youtube-outbox-claim-explain.txt
 
 Required catalog indexes:
-  alarm_dispatch_deliveries: idx_alarm_dispatch_deliveries_due
+  alarm_dispatch_deliveries: idx_alarm_dispatch_deliveries_due, idx_alarm_dispatch_deliveries_send_unit, idx_alarm_dispatch_deliveries_send_unit_due
   youtube_notification_outbox: idx_yno_pending_due_created_id
 EOF
 }
@@ -159,7 +159,7 @@ validate_target_indexes() {
     fi
   done < "${output_dir}/target-indexes.txt"
 
-  if [[ "${count}" -ne 2 || "${invalid}" -ne 0 ]]; then
+  if [[ "${count}" -ne 4 || "${invalid}" -ne 0 ]]; then
     echo "[FAIL] required claim indexes are missing, invalid, unready, or structurally incorrect; see ${output_dir}/target-indexes.txt" >&2
     return 1
   fi

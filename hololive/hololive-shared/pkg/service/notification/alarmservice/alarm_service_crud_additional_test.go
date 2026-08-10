@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
+func TestNewAlarmServiceAndClose(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
 
@@ -52,7 +52,6 @@ func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
 	require.NotNil(t, service)
 	assert.Equal(t, []int{10, 3, 1}, service.GetTargetMinutes())
 
-	require.NoError(t, CloseAllAlarmServices(ctx))
 	require.NoError(t, service.Close(ctx))
 }
 

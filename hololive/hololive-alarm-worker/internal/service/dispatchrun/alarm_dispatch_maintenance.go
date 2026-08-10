@@ -19,11 +19,13 @@ import (
 )
 
 const (
-	alarmDispatchRetentionMaxLimit = 10000
-	alarmDispatchRetentionLockKey  = 781512042
+	alarmDispatchRetentionMaxLimit   = 10000
+	alarmDispatchRetentionLockKey    = 781512042
+	alarmDispatchShadowRetentionDays = 14
 )
 
 var alarmDispatchTerminalTimestampColumns = map[dispatchoutbox.Status]string{
+	dispatchoutbox.StatusShadowed:    "created_at",
 	dispatchoutbox.StatusSent:        "sent_at",
 	dispatchoutbox.StatusDLQ:         "dlq_at",
 	dispatchoutbox.StatusQuarantined: "quarantined_at",
@@ -40,6 +42,7 @@ type alarmDispatchMaintenanceObserverStore interface {
 
 type alarmDispatchMaintenanceDataStore interface {
 	DeleteTerminal(ctx context.Context, status dispatchoutbox.Status, retentionDays int, limit int) (int64, error)
+	DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error)
 	DeleteOrphanEvents(ctx context.Context, retentionDays int, limit int) (int64, error)
 }
 
@@ -163,7 +166,12 @@ func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context,
 		}
 		observeAlarmDispatchRetentionDeletedRows(string(target.status), rows)
 	}
-	rows, err := store.DeleteOrphanEvents(ctx, r.effectiveEventDays(), r.effectiveLimit())
+	rows, err := store.DeleteOrphanSendUnits(ctx, r.effectiveLimit())
+	if err != nil {
+		return fmt.Errorf("delete retained orphan alarm dispatch send units: %w", err)
+	}
+	observeAlarmDispatchRetentionDeletedRows("send_unit", rows)
+	rows, err = store.DeleteOrphanEvents(ctx, r.effectiveEventDays(), r.effectiveLimit())
 	if err != nil {
 		return fmt.Errorf("delete retained orphan alarm dispatch events: %w", err)
 	}
@@ -194,6 +202,7 @@ func (r *alarmDispatchMaintenanceRunner) observeBacklog(ctx context.Context, sto
 
 func (r *alarmDispatchMaintenanceRunner) retentionTargets() []alarmDispatchRetentionTarget {
 	return []alarmDispatchRetentionTarget{
+		{status: dispatchoutbox.StatusShadowed, retentionDays: alarmDispatchShadowRetentionDays},
 		{status: dispatchoutbox.StatusSent, retentionDays: r.effectiveDays(r.sentDays, 90)},
 		{status: dispatchoutbox.StatusDLQ, retentionDays: r.effectiveDays(r.dlqDays, 180)},
 		{status: dispatchoutbox.StatusQuarantined, retentionDays: r.effectiveDays(r.quarantinedDays, 180)},
@@ -374,6 +383,14 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 
 func (s alarmDispatchMaintenancePgxStore) DeleteOrphanEvents(ctx context.Context, retentionDays, limit int) (int64, error) {
 	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0368_05.sql"), retentionDays, clampAlarmDispatchRetentionLimit(limit))
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+func (s alarmDispatchMaintenancePgxStore) DeleteOrphanSendUnits(ctx context.Context, limit int) (int64, error) {
+	tag, err := s.db.Exec(ctx, mustSQL("alarm_dispatch_maintenance_0360_05.sql"), clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {
 		return 0, err
 	}

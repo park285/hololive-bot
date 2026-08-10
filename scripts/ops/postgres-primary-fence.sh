@@ -17,7 +17,7 @@ ALLOW_TEST_STATE_DIR="${POSTGRES_PRIMARY_FENCE_ALLOW_TEST_STATE_DIR:-0}"
 ALLOW_NON_ROOT_TEST="${POSTGRES_PRIMARY_FENCE_ALLOW_NON_ROOT_FOR_TEST:-0}"
 FENCED_MARKER="${STATE_DIR}/fenced"
 INTENT_MARKER="${STATE_DIR}/fence.intent"
-LOCK_FILE="${STATE_DIR}/fence.lock"
+LOCK_FILE="${STATE_DIR}/transition.lock"
 NOW="${POSTGRES_PRIMARY_FENCE_NOW:-$(/usr/bin/date +%s)}"
 
 is_token() { [[ "$1" =~ ^[A-Za-z0-9._:-]{8,128}$ ]]; }
@@ -146,11 +146,14 @@ durably_stop_container() {
 disable_container_restart "${AUTOHEAL_CONTAINER}" || exit 1
 disable_container_restart "${POSTGRES_CONTAINER}" || exit 1
 
-ack_token="${REQUEST_ID}"
+fence_token="${REQUEST_ID}"
 if [[ -r "${FENCED_MARKER}" ]]; then
   existing_state="$(marker_value "${FENCED_MARKER}" state)"
   existing_host="$(marker_value "${FENCED_MARKER}" primary_host)"
-  existing_token="$(marker_value "${FENCED_MARKER}" request_id)"
+  existing_token="$(marker_value "${FENCED_MARKER}" fence_token)"
+  if [[ -z "${existing_token}" ]]; then
+    existing_token="$(marker_value "${FENCED_MARKER}" request_id)"
+  fi
   existing_new_primary="$(marker_value "${FENCED_MARKER}" new_primary)"
   existing_fenced_at="$(marker_value "${FENCED_MARKER}" fenced_at)"
   if [[ "${existing_state}" != "fenced" || "${existing_host}" != "${EXPECTED_PRIMARY_HOST}" \
@@ -159,7 +162,7 @@ if [[ -r "${FENCED_MARKER}" ]]; then
     echo "existing fence marker is invalid" >&2
     exit 1
   fi
-  ack_token="${existing_token}"
+  fence_token="${existing_token}"
 else
   atomic_write "${INTENT_MARKER}" <<EOF_INTENT
 state=fencing
@@ -185,6 +188,7 @@ if [[ ! -r "${FENCED_MARKER}" ]]; then
   atomic_write "${FENCED_MARKER}" <<EOF_FENCED
 state=fenced
 request_id=${REQUEST_ID}
+fence_token=${fence_token}
 primary_host=${EXPECTED_PRIMARY_HOST}
 new_primary=${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}
 fenced_at=${NOW}
@@ -192,5 +196,5 @@ EOF_FENCED
 fi
 rm -f -- "${INTENT_MARKER}"
 sync -f "${STATE_DIR}"
-printf 'FENCED|%s|%s:%s|%s\n' \
-  "${EXPECTED_PRIMARY_HOST}" "${NEW_PRIMARY_HOST}" "${NEW_PRIMARY_PORT}" "${ack_token}"
+printf 'FENCED|%s|%s:%s|%s|%s\n' \
+  "${EXPECTED_PRIMARY_HOST}" "${NEW_PRIMARY_HOST}" "${NEW_PRIMARY_PORT}" "${REQUEST_ID}" "${fence_token}"

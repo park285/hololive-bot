@@ -32,8 +32,9 @@ import (
 )
 
 type videoResolution struct {
-	publishedAt *time.Time
-	replay      parser.ReplayStatus
+	publishedAt    *time.Time
+	replay         parser.ReplayStatus
+	budgetDeferred bool
 }
 
 func (p *VideosPoller) resolveVideoMetadata(
@@ -106,6 +107,15 @@ func (p *VideosPoller) resolveVideoWatchMetadata(
 	resolution := resolutionByID[video.VideoID]
 	effectiveEvidence := resolvedVideoPublicationEvidence(pageEvidence, resolution, now)
 	if effectiveEvidence.freshness == videoFreshnessHistorical || !videoNeedsWatchMetadata(video, pageEvidence) {
+		return
+	}
+	if !takeMetadataResolve(ctx) {
+		resolution.budgetDeferred = true
+		resolutionByID[video.VideoID] = resolution
+		slog.InfoContext(ctx, "Video metadata resolve deferred by per-poll allowance",
+			logschema.FieldChannelID, channelID,
+			"video_id", video.VideoID,
+		)
 		return
 	}
 

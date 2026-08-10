@@ -62,7 +62,8 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	var postgres database.Client = &fakePostgresClient{}
 	logger := sharedlogging.NewTestLogger()
 
-	module := BuildDeliveryModule(nil, postgres, logger)
+	module, err := BuildDeliveryModule(nil, postgres, logger)
+	require.NoError(t, err)
 	require.NotNil(t, module)
 	require.NotNil(t, module.Repository)
 	locker := module.Locker
@@ -74,6 +75,16 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 	require.NotNil(t, triggerHandler)
+}
+
+func TestBuildDeliveryModuleRejectsInvalidHandoffMode(t *testing.T) {
+	t.Setenv(deliveryOutboxV3HandoffModeEnv, "dual-write")
+
+	module, err := BuildDeliveryModule(nil, &fakePostgresClient{}, sharedlogging.NewTestLogger())
+
+	require.Error(t, err)
+	assert.Nil(t, module)
+	assert.Contains(t, err.Error(), "unsupported mode")
 }
 
 func TestConvertMemberNewsDigest(t *testing.T) {

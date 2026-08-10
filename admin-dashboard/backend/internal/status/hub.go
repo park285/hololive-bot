@@ -7,19 +7,17 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 const historyCap = 30
 
 type Hub struct {
-	endpoints []ServiceEndpoint
-	clients   map[string]endpointClient
-	sampler   *procSampler
-	mu        sync.Mutex
-	nextID    int64
-	subs      map[int64]chan SystemStats
-	history   []SystemStats
+	endpointSampler *Sampler
+	processSampler  *procSampler
+	mu              sync.Mutex
+	nextID          int64
+	subs            map[int64]chan SystemStats
+	history         []SystemStats
 
 	lifecycleMu sync.Mutex
 	started     bool
@@ -29,13 +27,16 @@ type Hub struct {
 }
 
 func NewHub(endpoints []ServiceEndpoint) *Hub {
+	return NewHubWithSampler(NewSampler(endpoints))
+}
+
+func NewHubWithSampler(sampler *Sampler) *Hub {
 	return &Hub{
-		endpoints: append([]ServiceEndpoint(nil), endpoints...),
-		clients:   endpointClients(endpoints, 2*time.Second),
-		sampler:   &procSampler{},
-		subs:      make(map[int64]chan SystemStats),
-		stop:      make(chan struct{}),
-		done:      make(chan struct{}),
+		endpointSampler: sampler,
+		processSampler:  &procSampler{},
+		subs:            make(map[int64]chan SystemStats),
+		stop:            make(chan struct{}),
+		done:            make(chan struct{}),
 	}
 }
 
@@ -178,13 +179,16 @@ func trySend(ch chan SystemStats, stats *SystemStats) bool {
 }
 
 func (h *Hub) collect(ctx context.Context) SystemStats {
+	endpointSnapshot := h.endpointSampler.sample(ctx)
 	memTotal, memUsed := memoryStats()
 	load1, load5, load15 := loadAverage()
 	threadCount := threadCount()
 	adminGoroutines := runtime.NumGoroutine()
-	serviceRuntime := make([]ServiceRuntimeStats, 0, len(h.endpoints)+1)
+	serviceRuntime := make([]ServiceRuntimeStats, 0, len(endpointSnapshot.endpoints)+1)
 	serviceRuntime = append(serviceRuntime, ServiceRuntimeStats{Name: "admin-dashboard", Count: adminGoroutines, MetricKind: RuntimeMetricGoroutine, Available: true})
-	serviceRuntime = append(serviceRuntime, h.externalRuntimeStats(ctx)...)
+	for i := range endpointSnapshot.endpoints {
+		serviceRuntime = append(serviceRuntime, cloneServiceRuntimeStat(endpointSnapshot.endpoints[i].runtime))
+	}
 	totalGo := 0
 	for _, service := range serviceRuntime {
 		if service.Available && service.MetricKind == RuntimeMetricGoroutine {
@@ -196,7 +200,8 @@ func (h *Hub) collect(ctx context.Context) SystemStats {
 		memoryUsage = float64(memUsed) / float64(memTotal) * 100
 	}
 	return SystemStats{
-		CPUUsage:          h.sampler.cpuUsage(),
+		SampledAt:         endpointSnapshot.sampledAt.UnixMilli(),
+		CPUUsage:          h.processSampler.cpuUsage(),
 		MemoryTotal:       memTotal,
 		MemoryUsed:        memUsed,
 		MemoryUsage:       memoryUsage,
@@ -211,49 +216,12 @@ func (h *Hub) collect(ctx context.Context) SystemStats {
 }
 
 func (h *Hub) externalRuntimeStats(ctx context.Context) []ServiceRuntimeStats {
-	results := make([]ServiceRuntimeStats, len(h.endpoints))
-	var wg sync.WaitGroup
-	for i := range h.endpoints {
-		index := i
-		endpoint := h.endpoints[i]
-		wg.Add(1)
-		panicguard.Go(nil, "admin-dashboard-runtime-status", func() {
-			defer wg.Done()
-			var stat ServiceRuntimeStats
-			if err := panicguard.RunE(nil, "admin-dashboard-runtime-status", func() error {
-				stat = h.fetchRuntime(ctx, endpoint)
-				return nil
-			}); err != nil {
-				errText := err.Error()
-				stat = ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &errText}
-			}
-			results[index] = stat
-		})
+	snapshot := h.endpointSampler.sample(ctx)
+	results := make([]ServiceRuntimeStats, len(snapshot.endpoints))
+	for i := range snapshot.endpoints {
+		results[i] = cloneServiceRuntimeStat(snapshot.endpoints[i].runtime)
 	}
-	wg.Wait()
 	return results
-}
-
-func (h *Hub) fetchRuntime(ctx context.Context, endpoint ServiceEndpoint) ServiceRuntimeStats {
-	result := doHealthGET(ctx, h.clients[endpoint.Name], endpoint)
-	if result.errMsg != "" {
-		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &result.errMsg}
-	}
-	defer func() {
-		if err := result.resp.Body.Close(); err != nil {
-			return
-		}
-	}()
-	var payload healthPayload
-	if err := json.NewDecoder(result.resp.Body).Decode(&payload); err != nil {
-		msg := "invalid health payload: " + err.Error()
-		return ServiceRuntimeStats{Name: endpoint.Name, MetricKind: RuntimeMetricGoroutine, Available: false, Error: &msg}
-	}
-	count := payload.Goroutines
-	if count == 0 {
-		count = componentGoroutines(payload.Components)
-	}
-	return ServiceRuntimeStats{Name: endpoint.Name, Count: count, MetricKind: RuntimeMetricGoroutine, Available: true}
 }
 
 type healthPayload struct {

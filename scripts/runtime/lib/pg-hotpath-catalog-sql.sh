@@ -25,6 +25,8 @@ target_indexes_sql() {
 WITH required(index_name) AS (
     VALUES
         ('idx_alarm_dispatch_deliveries_due'),
+        ('idx_alarm_dispatch_deliveries_send_unit'),
+        ('idx_alarm_dispatch_deliveries_send_unit_due'),
         ('idx_yno_pending_due_created_id')
 ),
 observed AS (
@@ -55,6 +57,8 @@ observed AS (
     WHERE index_namespace.nspname = 'public'
       AND index_class.relname IN (
         'idx_alarm_dispatch_deliveries_due',
+        'idx_alarm_dispatch_deliveries_send_unit',
+        'idx_alarm_dispatch_deliveries_send_unit_due',
         'idx_yno_pending_due_created_id'
       )
 ),
@@ -76,6 +80,16 @@ checked AS (
                     AND observed.indnkeyatts = 2
                     AND observed.key_definitions = ARRAY['next_attempt_at', 'id']::text[]
                     AND observed.predicate = '(status = ANY (ARRAY[''pending''::text, ''retry''::text]))'
+                WHEN 'idx_alarm_dispatch_deliveries_send_unit' THEN
+                    observed.table_name = 'alarm_dispatch_deliveries'
+                    AND observed.indnkeyatts = 1
+                    AND observed.key_definitions = ARRAY['send_unit_id']::text[]
+                    AND observed.predicate = '(send_unit_id IS NOT NULL)'
+                WHEN 'idx_alarm_dispatch_deliveries_send_unit_due' THEN
+                    observed.table_name = 'alarm_dispatch_deliveries'
+                    AND observed.indnkeyatts = 3
+                    AND observed.key_definitions = ARRAY['send_unit_id', 'next_attempt_at', 'id']::text[]
+                    AND observed.predicate = '((send_unit_id IS NOT NULL) AND (status = ANY (ARRAY[''pending''::text, ''retry''::text])))'
                 WHEN 'idx_yno_pending_due_created_id' THEN
                     observed.table_name = 'youtube_notification_outbox'
                     AND observed.indnkeyatts = 3
@@ -107,6 +121,7 @@ SELECT
 FROM pg_stat_user_tables
 WHERE relname IN (
     'alarm_dispatch_deliveries',
+    'alarm_dispatch_send_units',
     'youtube_notification_outbox',
     'youtube_notification_delivery'
 )
@@ -117,21 +132,87 @@ SQL
 alarm_claim_sql() {
   cat <<'SQL'
 -- expected-index: idx_alarm_dispatch_deliveries_due
+-- expected-index: idx_alarm_dispatch_deliveries_send_unit_due
 BEGIN;
 SET LOCAL statement_timeout = '5s';
 EXPLAIN (ANALYZE, BUFFERS)
-WITH picked AS (
-    SELECT id
-    FROM alarm_dispatch_deliveries
-    WHERE status IN ('pending', 'retry')
-      AND next_attempt_at <= NOW()
-    ORDER BY next_attempt_at ASC, id ASC
-    LIMIT 50
+WITH legacy_head AS (
+    SELECT d.id
+    FROM alarm_dispatch_deliveries d
+    WHERE d.send_unit_id IS NULL
+      AND d.status IN ('pending', 'retry')
+      AND d.next_attempt_at <= NOW()
+    ORDER BY d.next_attempt_at ASC, d.id ASC
+    LIMIT 1
     FOR UPDATE SKIP LOCKED
+), due_window AS MATERIALIZED (
+    SELECT d.send_unit_id, d.next_attempt_at, d.id AS delivery_id
+    FROM alarm_dispatch_deliveries d
+    WHERE d.send_unit_id IS NOT NULL
+      AND d.status IN ('pending', 'retry')
+      AND d.next_attempt_at <= NOW()
+      AND NOT EXISTS (SELECT 1 FROM legacy_head)
+    ORDER BY d.next_attempt_at ASC, d.id ASC
+    LIMIT 500
+), unit_candidates AS (
+    SELECT DISTINCT ON (send_unit_id)
+        send_unit_id AS id, next_attempt_at, delivery_id
+    FROM due_window
+    ORDER BY send_unit_id, next_attempt_at ASC, delivery_id ASC
+), locked_units AS (
+    SELECT u.id, candidate.next_attempt_at, candidate.delivery_id,
+        (
+            SELECT count(*)
+            FROM alarm_dispatch_deliveries due
+            WHERE due.send_unit_id = u.id
+              AND due.status IN ('pending', 'retry')
+              AND due.next_attempt_at <= NOW()
+        ) AS delivery_count
+    FROM unit_candidates candidate
+    JOIN alarm_dispatch_send_units u ON u.id = candidate.id
+    ORDER BY candidate.next_attempt_at ASC, candidate.delivery_id ASC
+    LIMIT 50
+    FOR UPDATE OF u SKIP LOCKED
+), ranked_units AS (
+    SELECT id,
+        row_number() OVER (ORDER BY next_attempt_at ASC, delivery_id ASC) AS ordinal,
+        sum(delivery_count) OVER (ORDER BY next_attempt_at ASC, delivery_id ASC ROWS UNBOUNDED PRECEDING) AS cumulative_deliveries
+    FROM locked_units
+), next_units AS (
+    SELECT id
+    FROM ranked_units
+    WHERE cumulative_deliveries <= 50 OR ordinal = 1
+), picked AS (
+    SELECT d.id
+    FROM alarm_dispatch_deliveries d
+    WHERE d.send_unit_id IN (SELECT id FROM next_units)
+      AND d.status IN ('pending', 'retry')
+      AND d.next_attempt_at <= NOW()
+    UNION ALL
+    SELECT id FROM legacy_head
+), updated AS (
+    UPDATE alarm_dispatch_deliveries d
+    SET status = 'leased',
+        locked_by = 'pg-hotpath-explain',
+        locked_at = NOW(),
+        lock_expires_at = NOW() + INTERVAL '60 seconds',
+        updated_at = NOW()
+    FROM picked
+    WHERE d.id = picked.id
+    RETURNING d.id, d.event_id, d.room_id, d.dedupe_key, d.claim_keys, d.delivery_context,
+        d.dispatch_group_key, d.send_unit_id, d.status, d.attempt_count, d.next_attempt_at,
+        d.locked_by, d.locked_at, d.lock_expires_at, d.sending_started_at, d.sent_at,
+        d.dlq_at, d.quarantined_at, d.cancelled_at, d.last_error_code, d.last_error,
+        d.created_at, d.updated_at
 )
-SELECT id
-FROM picked
-ORDER BY id;
+SELECT d.id, d.event_id, d.room_id, d.dedupe_key, d.claim_keys, d.delivery_context,
+    d.dispatch_group_key, d.send_unit_id, COALESCE(u.client_request_id, ''), d.status,
+    d.attempt_count, d.next_attempt_at, d.locked_by, d.locked_at, d.lock_expires_at,
+    d.sending_started_at, d.sent_at, d.dlq_at, d.quarantined_at, d.cancelled_at,
+    d.last_error_code, d.last_error, d.created_at, d.updated_at
+FROM updated d
+LEFT JOIN alarm_dispatch_send_units u ON u.id = d.send_unit_id
+ORDER BY d.next_attempt_at ASC, d.id ASC;
 ROLLBACK;
 SQL
 }

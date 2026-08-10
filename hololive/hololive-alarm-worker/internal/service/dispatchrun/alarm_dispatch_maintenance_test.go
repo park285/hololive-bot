@@ -27,6 +27,7 @@ func TestAlarmDispatchMaintenanceSkipsRetentionWhenAdvisoryLockUnavailable(t *te
 	require.NoError(t, runner.RunOnce(t.Context()))
 	assert.Equal(t, 1, store.lockCalls)
 	assert.Empty(t, store.deletedTerminal)
+	assert.Zero(t, store.deletedSendUnits)
 	assert.Zero(t, store.deletedEvents)
 }
 
@@ -55,11 +56,13 @@ func TestAlarmDispatchMaintenanceDeletesTerminalRowsAndOrphanEventsInChunks(t *t
 
 	require.NoError(t, runner.RunOnce(t.Context()))
 	assert.Equal(t, []dispatchoutbox.Status{
+		dispatchoutbox.StatusShadowed,
 		dispatchoutbox.StatusSent,
 		dispatchoutbox.StatusDLQ,
 		dispatchoutbox.StatusQuarantined,
 		dispatchoutbox.StatusCancelled,
 	}, store.deletedTerminal)
+	assert.Equal(t, 1, store.deletedSendUnits)
 	assert.Equal(t, 1, store.deletedEvents)
 }
 
@@ -69,6 +72,7 @@ func TestAlarmDispatchMaintenanceDoesNotDeleteActiveStatuses(t *testing.T) {
 	assert.False(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusLeased))
 	assert.False(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusSending))
 	assert.True(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusSent))
+	assert.True(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusShadowed))
 }
 
 func TestAlarmDispatchMaintenanceClampsRetentionLimit(t *testing.T) {
@@ -138,7 +142,8 @@ func TestAlarmDispatchMaintenanceObservationFailuresDoNotBlockDeletion(t *testin
 			require.NotPanics(t, func() {
 				require.NoError(t, runner.RunOnce(t.Context()))
 			})
-			assert.Len(t, store.deletedTerminal, 4)
+			assert.Len(t, store.deletedTerminal, 5)
+			assert.Equal(t, 1, store.deletedSendUnits)
 			assert.Equal(t, 1, store.deletedEvents)
 			require.NotNil(t, store.observationDone)
 			require.NotNil(t, store.deletionDone)
@@ -171,6 +176,7 @@ func TestAlarmDispatchMaintenanceParentCancellationIsNotCountedAsFailure(t *test
 	require.NoError(t, err)
 	assert.Zero(t, store.lockCalls)
 	assert.Empty(t, store.deletedTerminal)
+	assert.Zero(t, store.deletedSendUnits)
 	assert.Zero(t, store.deletedEvents)
 	assert.Equal(t, beforeObservation, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total"))
 	assert.Equal(t, beforeRetention, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_retention_failed_total"))
@@ -189,6 +195,7 @@ type alarmDispatchMaintenanceTestStore struct {
 	locked             bool
 	lockCalls          int
 	deletedTerminal    []dispatchoutbox.Status
+	deletedSendUnits   int
 	deletedEvents      int
 	deleteTerminalRows map[dispatchoutbox.Status]int64
 	deleteEventRows    int64
@@ -259,6 +266,11 @@ func (s *alarmDispatchMaintenanceTestStore) DeleteTerminal(ctx context.Context, 
 func (s *alarmDispatchMaintenanceTestStore) DeleteOrphanEvents(context.Context, int, int) (int64, error) {
 	s.deletedEvents++
 	return s.deleteEventRows, nil
+}
+
+func (s *alarmDispatchMaintenanceTestStore) DeleteOrphanSendUnits(context.Context, int) (int64, error) {
+	s.deletedSendUnits++
+	return 0, nil
 }
 
 func alarmDispatchMaintenanceStatusIsDeletable(status dispatchoutbox.Status) bool {

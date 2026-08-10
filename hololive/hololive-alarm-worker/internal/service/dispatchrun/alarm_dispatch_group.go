@@ -87,6 +87,9 @@ func groupAlarmDispatchEnvelopesByKey(
 // 재드레인 봉투가 신규 봉투와 병합되면 그룹 구성이 바뀌어 ClientRequestID가 다르게 재파생되고,
 // 이미 admission된 첫 발송이 dedup에 접히지 않아 중복 발화한다 — 재시도 봉투는 항상 solo 그룹.
 func alarmDispatchRegroupKey(envelope *domain.AlarmQueueEnvelope, keyFunc func(*domain.AlarmQueueEnvelope) string) string {
+	if envelope != nil && envelope.SendUnitID > 0 {
+		return fmt.Sprintf("send-unit|%d", envelope.SendUnitID)
+	}
 	if envelope != nil && envelope.Retry != nil && envelope.Retry.Attempt > 0 {
 		return fmt.Sprintf("retry-solo|%d", envelope.DispatchOutboxID)
 	}
@@ -137,6 +140,14 @@ func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, b
 			envelope.YouTubeOutbox.Identity(),
 		), true
 	}
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
+		return fmt.Sprintf("%s|source|%s|%s|%s",
+			envelope.Notification.RoomID,
+			envelope.SourceKind,
+			envelope.DeliveryDigest.Kind,
+			envelope.DeliveryDigest.Identity(),
+		), true
+	}
 	return "", false
 }
 
@@ -168,6 +179,9 @@ func alarmDispatchKaringGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 		return alarmDispatchGroupKey(envelope)
 	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
+		return alarmDispatchGroupKey(envelope)
+	}
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
 		return alarmDispatchGroupKey(envelope)
 	}
 	phase := "prelive"

@@ -24,6 +24,7 @@ const mod = await import(
 
 test("parseSystemStats supports new runtime contract", () => {
 	const parsed = mod.parseSystemStats({
+		sampledAt: 1_754_803_200_000,
 		cpuUsage: 10,
 		memoryUsage: 20,
 		memoryTotal: 100,
@@ -38,9 +39,31 @@ test("parseSystemStats supports new runtime contract", () => {
 	});
 
 	assert.ok(parsed);
+	assert.equal(parsed?.sampledAt, 1_754_803_200_000);
 	assert.equal(parsed?.threadCount, 7);
 	assert.equal(parsed?.totalGoGoroutines, 42);
 	assert.equal(parsed?.serviceRuntime[0]?.metricKind, "thread");
+});
+
+test("createSystemStatsPoint preserves backend sample time", () => {
+	const stats = mod.parseSystemStats({
+		sampledAt: 1_754_803_200_000,
+		cpuUsage: 10,
+		memoryUsage: 20,
+		memoryTotal: 100,
+		memoryUsed: 20,
+		threadCount: 7,
+		totalGoGoroutines: 42,
+		totalRuntimeUnits: 42,
+		serviceRuntime: [
+			{ name: "admin-dashboard", count: 7, available: true },
+		],
+	});
+	assert.ok(stats);
+	const point = mod.createSystemStatsPoint(stats, "12:00:00");
+	assert.equal(point.timestamp, 1_754_803_200_000);
+	assert.equal(point.time, "12:00:00");
+	assert.equal(point.serviceValues["admin-dashboard"], 7);
 });
 
 test("parseSystemStats still accepts legacy goroutine payload", () => {

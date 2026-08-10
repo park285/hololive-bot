@@ -11,7 +11,7 @@ new_request_id() {
 
 run_fence_hook() {
   validate_hook_script "fence" "${FENCE_SCRIPT}"
-  local request_id output tag host endpoint token extra
+  local request_id output tag host endpoint acknowledged_request token extra
   request_id="$(new_request_id)"
   export POSTGRES_FAILOVER_REQUEST_ID="${request_id}"
   export POSTGRES_FAILOVER_PRIMARY_HOST="${PRIMARY_HOST}"
@@ -29,9 +29,10 @@ run_fence_hook() {
     journal "fence_invalid_ack" "reason=multiple_lines" "primary=${PRIMARY_HOST}:${PRIMARY_PORT}" "request_id=${request_id}"
     return 1
   fi
-  IFS='|' read -r tag host endpoint token extra <<<"${output}"
+  IFS='|' read -r tag host endpoint acknowledged_request token extra <<<"${output}"
   if [[ -n "${extra:-}" || "${tag}" != "FENCED" || "${host}" != "${PRIMARY_HOST}" \
-    || "${endpoint}" != "${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}" ]] || ! is_token "${token:-}"; then
+    || "${endpoint}" != "${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}" \
+    || "${acknowledged_request:-}" != "${request_id}" ]] || ! is_token "${token:-}"; then
     journal "fence_invalid_ack" "primary=${PRIMARY_HOST}:${PRIMARY_PORT}" "request_id=${request_id}"
     return 1
   fi
@@ -99,11 +100,11 @@ EOF_PROMOTED
 
 promote_local() {
   local output command_timeout=$((PROMOTE_TIMEOUT_SEC + 10))
-  journal "promotion_start" "container=${STANDBY_CONTAINER}" "last_primary_lsn=${LAST_PRIMARY_LSN}"
-  output="$(/usr/bin/timeout --foreground --kill-after=5 "${command_timeout}s" \
-    docker exec "${STANDBY_CONTAINER}" psql -X -v ON_ERROR_STOP=1 -At \
-    -U "${LOCAL_DB_USER}" -d "${DB_NAME}" \
-    -c "SELECT pg_promote(true, ${PROMOTE_TIMEOUT_SEC})")" || return 1
+  journal "promotion_start" "local=${LOCAL_HOST}:${LOCAL_PORT}" "last_primary_lsn=${LAST_PRIMARY_LSN}"
+  output="$(PGPASSFILE="${PGPASS_FILE}" PGSSLMODE=verify-full PGSSLROOTCERT="${CA_FILE}" \
+    PGCONNECT_TIMEOUT="${PROBE_TIMEOUT_SEC}" /usr/bin/timeout --foreground --kill-after=5 "${command_timeout}s" \
+    "${PSQL_PATH}" -X -v ON_ERROR_STOP=1 -At -h "${LOCAL_HOST}" -p "${LOCAL_PORT}" \
+    -U "${PROBE_USER}" -d "${DB_NAME}" -c "SELECT pg_promote(true, ${PROMOTE_TIMEOUT_SEC})")" || return 1
   [[ "${output}" == "t" ]] || return 1
   return 0
 }
@@ -150,20 +151,126 @@ validate_transition_marker() {
   token="$(marker_value "${file}" fence_token)"
   lsn="$(marker_value "${file}" last_primary_lsn)"
   is_uint "${timestamp}" || return 1
+  (( 10#${timestamp} <= NOW )) || return 1
   [[ "${old_primary}" == "${PRIMARY_HOST}:${PRIMARY_PORT}" ]] || return 1
   [[ "${new_primary}" == "${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}" ]] || return 1
   is_token "${token}" || return 1
   is_lsn "${lsn}" || return 1
 }
 
-ensure_container_promotion_signal() {
-  container_promotion_signal_exists && return 0
-  if [[ "${MODE}" == "--dry-run" ]]; then
-    journal "promotion_signal_would_be_restored" "path=${CONTAINER_PROMOTED_MARKER}"
+validate_apply_hooks() {
+  [[ -n "${FENCE_SCRIPT}" ]] || die "fence_hook_required"
+  validate_hook_script "fence" "${FENCE_SCRIPT}"
+  if [[ "${REQUIRE_ROUTE_HOOK}" == "1" ]]; then
+    [[ -n "${ROUTE_SCRIPT}" ]] || die "route_hook_required"
+    validate_hook_script "route" "${ROUTE_SCRIPT}"
+  elif [[ -n "${ROUTE_SCRIPT}" ]]; then
+    validate_hook_script "route" "${ROUTE_SCRIPT}"
+  fi
+}
+
+verify_old_primary_not_writable() {
+  local phase="$1" raw
+  if raw="$(primary_status 2>/dev/null)"; then
+    parse_primary_status "${raw}" || die "old_primary_${phase}_invalid_output"
+    if [[ "${PRIMARY_RECOVERY}" == "f" && "${PRIMARY_READ_ONLY}" == "off" ]]; then
+      journal "promotion_blocked" "reason=old_primary_writable_${phase}" "primary=${PRIMARY_HOST}:${PRIMARY_PORT}"
+      return 1
+    fi
+    [[ "${PRIMARY_READ_ONLY}" == "on" ]] || die "old_primary_${phase}_role_inconsistent" "recovery=${PRIMARY_RECOVERY}" "read_only=${PRIMARY_READ_ONLY}"
+    journal "old_primary_${phase}_nonwritable" "recovery=${PRIMARY_RECOVERY}" "read_only=${PRIMARY_READ_ONLY}"
+  fi
+}
+
+promote_and_reconcile_local() {
+  local promote_failed=0
+  if ! promote_local; then
+    promote_failed=1
+    journal "promotion_result_ambiguous" "local=${LOCAL_HOST}:${LOCAL_PORT}"
+  fi
+  LOCAL_RAW="$(local_status)" || {
+    journal "promotion_reconcile_failed" "reason=local_probe_failed" "local=${LOCAL_HOST}:${LOCAL_PORT}"
+    return 1
+  }
+  parse_local_status "${LOCAL_RAW}" || die "post_promotion_probe_invalid_output"
+  if [[ "${LOCAL_RECOVERY}" == "f" && "${LOCAL_READ_ONLY}" == "off" ]]; then
+    if (( promote_failed == 1 )); then
+      journal "promotion_reconciled" "result=primary_after_ambiguous_command"
+    fi
     return 0
   fi
-  write_container_promotion_signal || die "promotion_signal_restore_failed" "path=${CONTAINER_PROMOTED_MARKER}"
-  journal "promotion_signal_restored" "path=${CONTAINER_PROMOTED_MARKER}"
+  if (( promote_failed == 1 )) && [[ "${LOCAL_RECOVERY}" == "t" && "${LOCAL_READ_ONLY}" == "on" ]]; then
+    journal "promotion_not_complete" "result=standby" "intent=${INTENT_MARKER}"
+    return 1
+  fi
+  die "post_promotion_role_invalid" "recovery=${LOCAL_RECOVERY}" "read_only=${LOCAL_READ_ONLY}"
+}
+
+finalize_promoted_local() {
+  local route_result
+  write_promotion_signal || die "promotion_signal_write_failed" "path=${HEALTH_SIGNAL}"
+  journal "promotion_signal_written" "path=${HEALTH_SIGNAL}"
+
+  if complete_route_state; then
+    remove_durable_file "${INTENT_MARKER}" || die "promotion_intent_remove_failed"
+    write_state
+    journal "promotion_complete" "new_primary=${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}" "fence_token=${FENCE_TOKEN}"
+    return 0
+  else
+    route_result=$?
+  fi
+
+  if [[ "${route_result}" == "1" && -r "${PROMOTED_MARKER}" ]]; then
+    remove_durable_file "${INTENT_MARKER}" || die "promotion_intent_remove_failed"
+  fi
+  write_state
+  if [[ "${route_result}" == "1" ]]; then
+    journal "promotion_complete_route_pending" "new_primary=${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}" "fence_token=${FENCE_TOKEN}"
+  else
+    journal "promotion_finalize_persistence_failed" "new_primary=${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}" "fence_token=${FENCE_TOKEN}"
+  fi
+  return "${route_result}"
+}
+
+recover_promotion_intent_on_standby() {
+  local expected_fence_token
+  validate_transition_marker "${INTENT_MARKER}" "promotion-intent" "created_at" || die "invalid_promotion_intent"
+  expected_fence_token="$(marker_value "${INTENT_MARKER}" fence_token)"
+  FENCE_TOKEN="${expected_fence_token}"
+  LAST_PRIMARY_LSN="$(marker_value "${INTENT_MARKER}" last_primary_lsn)"
+  journal "promotion_recovery_detected" "reason=standby_with_intent" "intent=${INTENT_MARKER}"
+
+  if [[ "${MODE}" == "--dry-run" ]]; then
+    freshness_guard || return 1
+    journal "promotion_recovery_would_run" "new_primary=${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}"
+    return 0
+  fi
+  validate_apply_hooks
+  freshness_guard || return 1
+  verify_old_primary_not_writable "intent_pre_fence" || return 1
+  run_fence_hook || return 1
+  if [[ "${FENCE_TOKEN}" != "${expected_fence_token}" ]]; then
+    journal "promotion_blocked" "reason=fence_token_changed_during_recovery"
+    return 1
+  fi
+  verify_old_primary_not_writable "intent_post_fence" || return 1
+
+  LOCAL_RAW="$(local_status)" || die "local_reprobe_failed"
+  parse_local_status "${LOCAL_RAW}" || die "local_reprobe_invalid_output"
+  refresh_now || die "current_time_refresh_failed"
+  freshness_guard || return 1
+  promote_and_reconcile_local || return 1
+  finalize_promoted_local
+}
+
+ensure_promotion_signal() {
+  promotion_signal_exists && return 0
+  if [[ "${MODE}" == "--dry-run" ]]; then
+    journal "promotion_signal_would_be_restored" "path=${HEALTH_SIGNAL}"
+    return 0
+  fi
+  write_promotion_signal || die "promotion_signal_restore_failed" "path=${HEALTH_SIGNAL}"
+  journal "promotion_signal_restored" "path=${HEALTH_SIGNAL}"
 }
 
 recover_or_handle_promoted_primary() {
@@ -171,7 +278,7 @@ recover_or_handle_promoted_primary() {
     validate_transition_marker "${PROMOTED_MARKER}" "primary" "promoted_at" || die "invalid_promoted_marker"
     FENCE_TOKEN="$(marker_value "${PROMOTED_MARKER}" fence_token)"
     LAST_PRIMARY_LSN="$(marker_value "${PROMOTED_MARKER}" last_primary_lsn)"
-    ensure_container_promotion_signal
+    ensure_promotion_signal
     if [[ -e "${INTENT_MARKER}" ]]; then
       validate_transition_marker "${INTENT_MARKER}" "promotion-intent" "created_at" || die "invalid_stale_promotion_intent"
       [[ "$(marker_value "${INTENT_MARKER}" fence_token)" == "${FENCE_TOKEN}" ]] || die "promotion_marker_token_mismatch"
@@ -236,7 +343,7 @@ recover_or_handle_promoted_primary() {
     FENCE_TOKEN="$(marker_value "${INTENT_MARKER}" fence_token)"
     LAST_PRIMARY_LSN="$(marker_value "${INTENT_MARKER}" last_primary_lsn)"
     PROMOTED_AT="$(marker_value "${INTENT_MARKER}" created_at)"
-    ensure_container_promotion_signal
+    ensure_promotion_signal
     journal "promotion_recovery_detected" "reason=primary_without_final_marker"
     if [[ "${MODE}" == "--dry-run" ]]; then
       journal "promotion_finalize_would_run"
@@ -256,5 +363,5 @@ recover_or_handle_promoted_primary() {
     return "${route_rc}"
   fi
 
-  die "unexpected_local_primary_without_marker" "container=${STANDBY_CONTAINER}"
+  die "unexpected_local_primary_without_marker" "local=${LOCAL_HOST}:${LOCAL_PORT}"
 }

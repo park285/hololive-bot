@@ -67,34 +67,14 @@ var sharedBase baseProvider
 // dbSeq는 격리 데이터베이스 이름 충돌 방지용 카운터다.
 var dbSeq atomic.Uint64
 
-// NewPool은 격리된 데이터베이스를 가진 *pgxpool.Pool을 반환한다.
-//
-// 동작:
-//   - TEST_DATABASE_URL이 있으면 그 DSN을, 없으면 testcontainers ephemeral PG를 base로 쓴다.
-//     base는 sync.Once로 테스트 바이너리당 1회만 확보된다(컨테이너 재기동 없음).
-//   - 호출마다 고유 데이터베이스(test_<unique>)를 생성하고, 그 DB에 연결된 pool에
-//     manifest 전체(006 base 포함)를 순서대로 적용해 반환한다.
-//   - t.Cleanup에 DROP DATABASE와 pool close를 등록한다.
-//
-// manifest 전체가 빈 DB에서 재생되는 이유: 006-base-runtime-tables.sql이 레거시
-// 초기 DB 생성 경로의 base 테이블(members, alarms 등)을 manifest 최초 단계에서
-// 멱등 복원한다. 따라서 과거의 base-schema gap이 사라졌고 manifest 전체 chain을
-// 그대로 적용한다.
-//
-// per-schema가 아닌 per-database 격리를 쓰는 이유: prod migration 다수가 idempotent guard로
-// information_schema를 table_schema 한정 없이 조회한다(예: 037이 acl_rooms.list_type 존재 여부를
-// 전체 카탈로그에서 확인). 단일 DB 내 여러 스키마로 격리하면 한 스키마의 변경이 다른 스키마의
-// guard 판정을 오염시킨다. DB 단위로 격리하면 카탈로그가 완전히 분리되어 guard가 정확히 동작한다.
-func NewPool(t testing.TB) *pgxpool.Pool {
+func NewReplayPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 
 	ctx := context.Background()
 	pool := NewBlankPool(t)
-
 	if err := ApplyMigrations(ctx, pool); err != nil {
 		t.Fatalf("dbtest: apply migrations: %v", err)
 	}
-
 	return pool
 }
 
@@ -102,10 +82,16 @@ func NewBlankPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 
 	baseDSN := acquireBaseDSN(t)
+	return newIsolatedPool(t, baseDSN, "")
+}
+
+func newIsolatedPool(t testing.TB, baseDSN, templateName string) *pgxpool.Pool {
+	t.Helper()
+
 	ctx := context.Background()
 	dbName := fmt.Sprintf("test_%d_%d", time.Now().UnixNano(), dbSeq.Add(1))
 
-	createIsolatedDatabase(t, ctx, baseDSN, dbName)
+	createIsolatedDatabase(t, ctx, baseDSN, dbName, templateName)
 	pool := openTestPool(t, ctx, baseDSN, dbName)
 
 	t.Cleanup(func() {
@@ -121,7 +107,7 @@ func NewBlankPool(t testing.TB) *pgxpool.Pool {
 // createIsolatedDatabase는 base DSN의 기본 데이터베이스에 admin pool로 연결해
 // 격리 DB(dbName)를 생성한다. 식별자는 내부 생성(time+seq)이라 인젝션 위험이 없으나
 // quote로 안전하게 감싼다.
-func createIsolatedDatabase(t testing.TB, ctx context.Context, baseDSN, dbName string) {
+func createIsolatedDatabase(t testing.TB, ctx context.Context, baseDSN, dbName, templateName string) {
 	t.Helper()
 
 	adminPool, err := poolForDatabase(ctx, baseDSN, "")
@@ -130,7 +116,11 @@ func createIsolatedDatabase(t testing.TB, ctx context.Context, baseDSN, dbName s
 	}
 	defer adminPool.Close()
 
-	if _, err := adminPool.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", quoteIdent(dbName))); err != nil {
+	statement := fmt.Sprintf("CREATE DATABASE %s", quoteIdent(dbName))
+	if templateName != "" {
+		statement += " TEMPLATE " + quoteIdent(templateName)
+	}
+	if _, err := adminPool.Exec(ctx, statement); err != nil {
 		t.Fatalf("dbtest: create database %s: %v", dbName, err)
 	}
 }

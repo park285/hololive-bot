@@ -231,6 +231,7 @@ func TestShortsPollerWatermarkMissingNotifiesOnlyVerifiedFreshShorts(t *testing.
 	poller := NewShortsPoller(newShortsFreshnessClient(routes), db, 10)
 
 	require.NoError(t, poller.Poll(context.Background(), "UC_ANOMALY"))
+	require.NoError(t, poller.Poll(context.Background(), "UC_ANOMALY"))
 
 	var outboxRows []domain.YouTubeNotificationOutbox
 	require.NoError(t, db.Order("id ASC").Find(&outboxRows).Error)
@@ -625,6 +626,7 @@ func TestShortsPollerReevaluatesDeferredCandidateAfterItMovesBehindWatermark(t *
 
 	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_REORDER"))
 	pageIDs = []string{"new-head", "old-short", "deferred-reordered"}
+	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_REORDER"))
 	require.NoError(t, poller.Poll(context.Background(), "UC_SHORT_DEFER_REORDER"))
 
 	var outboxRows []domain.YouTubeNotificationOutbox

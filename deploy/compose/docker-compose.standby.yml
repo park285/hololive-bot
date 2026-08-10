@@ -54,6 +54,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/postgres/pgpass:/run/hololive-bot/postgres/pgpass:ro
       - /etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
+      - /var/lib/hololive-postgres-failover:/run/hololive-bot/postgres-failover:ro
     ports:
       # Keep loopback by default. Automatic routing requires an explicit tailnet bind in
       # ap-compose.env, e.g. HOLOLIVE_STANDBY_POSTGRES_BIND_IP=100.100.1.5.
@@ -63,15 +64,15 @@ services:
       - /var/run/postgresql:size=16m,mode=3775
     healthcheck:
       # A normal standby must be in recovery and must not carry a promotion signal.
-      # A promoted node is healthy only when the controller wrote the durable PGDATA
-      # signal after pg_promote() completed. An accidental/manual role change stays red.
+      # A promoted node is healthy only when the dedicated controller wrote its
+      # host-side durable signal after pg_promote() completed.
       test:
         - "CMD-SHELL"
         - >-
           role="$$(psql -U postgres_admin -d hololive -p 5432 -Atc 'select pg_is_in_recovery()')" &&
           case "$$role" in
-            t) test ! -e "$$PGDATA/.hololive-promoted" ;;
-            f) grep -qx 'role=primary' "$$PGDATA/.hololive-promoted" ;;
+            t) test ! -e /run/hololive-bot/postgres-failover/health.signal ;;
+            f) grep -qx 'role=primary' /run/hololive-bot/postgres-failover/health.signal ;;
             *) exit 1 ;;
           esac
       interval: 30s

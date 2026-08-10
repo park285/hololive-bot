@@ -81,7 +81,7 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	}
 }
 
-func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context)) error {
+func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context) error) error {
 	err := lifecycle.Run(runtimeOptions(logger, start, shutdown))
 	if err != nil {
 		logError(logger, "Shutdown error", err)
@@ -93,7 +93,7 @@ func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdow
 	return err
 }
 
-func runtimeOptions(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context)) lifecycle.Options {
+func runtimeOptions(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context) error) lifecycle.Options {
 	return lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
 		Start: func(ctx context.Context, errCh chan<- error) {
@@ -109,8 +109,7 @@ func runtimeOptions(logger *slog.Logger, start func(context.Context, chan<- erro
 			logInfo(logger, "Shutting down gracefully...")
 		},
 		Shutdown: func(ctx context.Context) error {
-			shutdown(ctx)
-			return nil
+			return shutdown(ctx)
 		},
 	}
 }
@@ -128,12 +127,14 @@ func logSignal(logger *slog.Logger, sig os.Signal) {
 	}
 }
 
-func Shutdown(ctx context.Context, hooks ShutdownHooks) {
+func Shutdown(ctx context.Context, hooks ShutdownHooks) error {
 	shutdownAlarmScheduler(hooks)
-	shutdownHTTPServer(ctx, hooks)
-	closeWebhookHandler(hooks)
-	shutdownAlarmServices(ctx, hooks)
-	shutdownBot(ctx, hooks)
+	return errors.Join(
+		shutdownHTTPServer(ctx, hooks),
+		closeWebhookHandler(hooks),
+		shutdownAlarmServices(ctx, hooks),
+		shutdownBot(ctx, hooks),
+	)
 }
 
 func shutdownAlarmScheduler(hooks ShutdownHooks) {
@@ -142,40 +143,48 @@ func shutdownAlarmScheduler(hooks ShutdownHooks) {
 	}
 }
 
-func shutdownHTTPServer(ctx context.Context, hooks ShutdownHooks) {
+func shutdownHTTPServer(ctx context.Context, hooks ShutdownHooks) error {
 	if hooks.ShutdownHTTPServer != nil {
 		if err := hooks.ShutdownHTTPServer(ctx); err != nil {
 			logError(hooks.Logger, "HTTP server shutdown error", err)
+			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
 	}
+	return nil
 }
 
-func closeWebhookHandler(hooks ShutdownHooks) {
+func closeWebhookHandler(hooks ShutdownHooks) error {
 	if hooks.WebhookHandlerClose != nil {
 		if err := hooks.WebhookHandlerClose(); err != nil {
 			logError(hooks.Logger, "Iris webhook handler shutdown error", err)
+			return fmt.Errorf("close Iris webhook handler: %w", err)
 		} else {
 			logInfo(hooks.Logger, "Iris webhook handler stopped")
 		}
 	}
+	return nil
 }
 
-func shutdownAlarmServices(ctx context.Context, hooks ShutdownHooks) {
+func shutdownAlarmServices(ctx context.Context, hooks ShutdownHooks) error {
 	if hooks.ShutdownAlarmServices != nil {
 		if err := hooks.ShutdownAlarmServices(ctx); err != nil {
 			logError(hooks.Logger, "Alarm service shutdown error", err)
+			return fmt.Errorf("shutdown alarm service: %w", err)
 		} else {
 			logInfo(hooks.Logger, "Alarm services stopped")
 		}
 	}
+	return nil
 }
 
-func shutdownBot(ctx context.Context, hooks ShutdownHooks) {
+func shutdownBot(ctx context.Context, hooks ShutdownHooks) error {
 	if hooks.ShutdownBot != nil {
 		if err := hooks.ShutdownBot(ctx); err != nil {
 			logError(hooks.Logger, "Error during shutdown", err)
+			return fmt.Errorf("shutdown bot: %w", err)
 		}
 	}
+	return nil
 }
 
 func startAlarmScheduler(ctx context.Context, errCh chan<- error, hooks StartHooks) {

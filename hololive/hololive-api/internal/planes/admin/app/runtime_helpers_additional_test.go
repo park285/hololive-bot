@@ -282,7 +282,9 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 	}
 	nilRuntime.Start(t.Context(), nil)
 	nilRuntime.StartHTTPServer(nil)
-	nilRuntime.Shutdown(t.Context())
+	if err := nilRuntime.Shutdown(t.Context()); err != nil {
+		t.Fatalf("nil Shutdown() error = %v", err)
+	}
 	if err := nilRuntime.ShutdownHTTPServer(t.Context()); err != nil {
 		t.Fatalf("nil ShutdownHTTPServer() error = %v", err)
 	}
@@ -293,7 +295,9 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 	}
 	runtime.Start(t.Context(), make(chan error, 1))
 	runtime.StartHTTPServer(make(chan error, 1))
-	runtime.Shutdown(t.Context())
+	if err := runtime.Shutdown(t.Context()); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
 	if err := runtime.ShutdownHTTPServer(t.Context()); err != nil {
 		t.Fatalf("ShutdownHTTPServer() error = %v", err)
 	}

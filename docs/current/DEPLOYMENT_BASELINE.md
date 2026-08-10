@@ -60,7 +60,7 @@ Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스�
 |---|---|---|
 | `holo-postgres` | Primary PostgreSQL | Bridge-networked; live-compat publishes `<tailnet-central>:5433` explicitly to container `5432`; TLS `ssl=on`; server certificate mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` |
 | `holo-postgres-standby` | Physical hot standby / promotion target | Seoul host; recovery role and controller-written PGDATA promotion signal must agree; tailnet bind is explicit opt-in |
-| `postgres-failover.service` | Fail-closed promotion controller | checked-in unit is dry-run; apply requires trusted fence and route hooks, durable intent/state markers, post-fence old-primary reprobe |
+| `postgres-failover.service` | Fail-closed promotion controller | dedicated `hololive-pg-failover` user, no Docker access; checked-in unit is dry-run; apply requires least-privilege `pg_promote`, trusted fence/route hooks, durable intent/state markers, post-fence old-primary reprobe |
 | `hololive-db-migrate` | Migration job | Runs before app services; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, queue, Pub/Sub | TCP and Unix socket, password required |
 | `admin-dashboard` | Dashboard frontend | Port 30190, not part of Go runtime count |

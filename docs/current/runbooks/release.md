@@ -51,15 +51,25 @@ docker image inspect <service>:prod-arm64 \
 
 `arch=arm64`가 아니거나 revision이 `unknown`·short SHA이면 중단합니다.
 
-### 2. 전송과 승격
+### 2. 롤백 보존, 전송과 승격
+
+현재 `prod` image가 있으면 새 image를 승격하기 전에 UTC timestamp tag로 보존합니다.
+이 tag와 직전 compose tree가 이번 cutover의 1차 rollback artifact입니다.
+
+```bash
+rollback_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+ssh <central-host> "if sudo -n docker image inspect <service>:prod >/dev/null 2>&1; then \
+  sudo -n docker tag <service>:prod <service>:rollback-${rollback_stamp}; fi"
+```
+
+기존 `prod` image가 없는 최초 배포일 때만 `image inspect` 실패를 허용합니다. 기존
+image가 있는데 tag 생성이 실패한 경우에는 전송·승격을 진행하지 않습니다.
 
 ```bash
 docker save <service>:prod-arm64 | gzip -1 \
   | ssh <central-host> 'gunzip | sudo -n docker load'
 ssh <central-host> 'sudo -n docker tag <service>:prod-arm64 <service>:prod'
 ```
-
-승격 전에 롤백 태그를 남깁니다: `docker tag <service>:prod <service>:rollback-<UTC timestamp>`.
 
 ### 3. 런타임 호스트: no-build cutover
 
@@ -165,7 +175,9 @@ The script accepts `DATABASE_URL` or standard `PG*` variables and does not embed
 
 Required index contracts:
 
-- `alarm_dispatch_deliveries` claim: `idx_alarm_dispatch_deliveries_due`
+- `alarm_dispatch_deliveries` claim: `idx_alarm_dispatch_deliveries_due`,
+  `idx_alarm_dispatch_deliveries_send_unit`,
+  `idx_alarm_dispatch_deliveries_send_unit_due`
 - `youtube_notification_outbox` claim: `idx_yno_pending_due_created_id`
 
 The script requires the PostgreSQL 18 `pg_stat_statements` schema. It verifies that both indexes exist, are ready and valid, and match the required table, key order, and partial predicate. PostgreSQL may choose another valid index for a small relation, so plan selection is recorded separately from the catalog contract. `claim-statement-window.txt` takes ordered `pg_stat_statements` snapshots around a bounded observation interval (60 seconds by default), joins exact `(dbid, userid, queryid, toplevel)` identities, and evaluates only the interval deltas for `calls` and `total_exec_time`. Claim classification fingerprints the runtime CTE, `UPDATE`, and `RETURNING` structure from `repository_claim_0053_02.sql` and `dispatcher_claim_0050_01.sql`; alarm maintenance claims and the YouTube revive query are not performance evidence. Ambiguous fingerprints are ignored. The observer SQL excludes its own `hololive-pg-hotpath-stats-observer` marker explicitly. Lifetime means do not affect the gate.

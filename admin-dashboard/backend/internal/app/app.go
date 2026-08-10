@@ -92,7 +92,8 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	}
 	rateLimiter := httputil.NewDefaultLoginFailureRateLimiter()
 	rateLimiter.Start()
-	statsHub := status.NewHub(endpoints)
+	endpointSampler := status.NewSampler(endpoints)
+	statsHub := status.NewHubWithSampler(endpointSampler)
 	startStatsHub(statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다
 	return &Runtime{
 		cfg:             *cfg,
@@ -101,7 +102,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		rateLimiter:     rateLimiter,
 		docker:          dockerClient,
 		holo:            holoClient,
-		statusCollector: status.NewCollector(endpoints, cfg.RuntimeVersion),
+		statusCollector: status.NewCollectorWithSampler(endpointSampler, cfg.RuntimeVersion),
 		statsHub:        statsHub,
 		static:          static.NewHandler(),
 		wsStreams:       make(chan struct{}, maxSystemStatsStreams),

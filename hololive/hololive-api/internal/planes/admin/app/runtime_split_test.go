@@ -25,3 +25,16 @@ func TestBuildAdminAPIRuntime_FailFastOnNilInputs(t *testing.T) {
 	assert.Nil(t, runtime)
 	assert.Equal(t, "logger must not be nil", err.Error())
 }
+
+func TestNormalizeAdminAPIRuntimeInputs_ReturnsValidatedConfig(t *testing.T) {
+	t.Parallel()
+
+	inputCtx := t.Context()
+	appConfig := &settings.Config{}
+	logger := slog.New(slog.DiscardHandler)
+
+	ctx, validatedConfig, err := normalizeAdminAPIRuntimeInputs(inputCtx, appConfig, logger)
+	require.NoError(t, err)
+	assert.Equal(t, inputCtx, ctx)
+	assert.Same(t, appConfig, validatedConfig)
+}

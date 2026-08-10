@@ -46,6 +46,31 @@ func TestAlarmDispatchRunnerMultiEnvelope503StillRetries(t *testing.T) {
 	require.Len(t, consumer.scheduledSendingRetry, 2, "definitive not-admitted status keeps group-size-independent retry")
 }
 
+func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousMultiEnvelopeFailure(t *testing.T) {
+	transportErr := &iris.TransportError{Op: "post", URL: "/reply", Err: errors.New("connection reset")}
+	first := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	first.DispatchOutboxID = 11
+	first.SendUnitID = 7
+	first.ClientRequestID = "hololive-alarm:0123456789abcdef0123456789abcdef"
+	second := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	second.DispatchOutboxID = 12
+	second.SendUnitID = first.SendUnitID
+	second.ClientRequestID = first.ClientRequestID
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
+	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Empty(t, consumer.quarantined)
+	require.Len(t, consumer.scheduledSendingRetry, 2)
+	groups := groupAlarmDispatchEnvelopes(consumer.scheduledSendingRetry)
+	require.Len(t, groups, 1)
+	assert.Equal(t, first.ClientRequestID, alarmDispatchClientRequestID(groups[0], 0, len(groups[0].envelopes)))
+}
+
 func TestAlarmDispatchPostSendFailureIsRetryable(t *testing.T) {
 	t.Parallel()
 

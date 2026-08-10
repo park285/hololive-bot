@@ -5,6 +5,7 @@ import type { SystemStats } from "@/features/stats/types";
 import {
 	MAX_DATA_POINTS,
 	type SystemStatsPoint,
+	createSystemStatsPoint,
 	parseSystemStats,
 	shouldConnectSystemStatsStream,
 } from "../lib/systemStats";
@@ -53,23 +54,8 @@ export const useSystemStatsHistory = () => {
 		enablePing: false,
 		parseMessage: (data) => parseSystemStats(data),
 		onMessage: (data) => {
-			const now = new Date();
-			const timeStr = systemStatsTimeFormatter.format(now);
-
-			const serviceValues = data.serviceRuntime.reduce<Record<string, number>>(
-				(acc, service) => {
-					acc[service.name] = service.available ? service.count : 0;
-					return acc;
-				},
-				{},
-			);
-
-			const point: SystemStatsPoint = {
-				...data,
-				serviceValues,
-				time: timeStr,
-				timestamp: now.getTime(),
-			};
+			const timeStr = systemStatsTimeFormatter.format(new Date(data.sampledAt));
+			const point: SystemStatsPoint = createSystemStatsPoint(data, timeStr);
 
 			startTransition(() => {
 				setCurrentStats(data);

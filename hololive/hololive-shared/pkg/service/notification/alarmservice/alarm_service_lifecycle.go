@@ -22,10 +22,8 @@ package alarmservice
 
 import (
 	"context"
-	stdErrors "errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -45,8 +43,6 @@ const (
 	alarmServiceCloseTimeout = 3 * time.Second
 	alarmPersistTaskTimeout  = alarmServiceCloseTimeout
 )
-
-var alarmServiceRegistry sync.Map // map[*AlarmService]struct{}
 
 var (
 	_ domain.AlarmCRUD          = (*AlarmService)(nil)
@@ -95,25 +91,7 @@ func NewAlarmService(
 	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
 	service.platformMapper = platformmap.NewMapper(cacheClient, memberDataFn, logger)
 
-	registerAlarmService(service)
-
 	return service, nil
-}
-
-func registerAlarmService(service *AlarmService) {
-	if service == nil {
-		return
-	}
-
-	alarmServiceRegistry.Store(service, struct{}{})
-}
-
-func unregisterAlarmService(service *AlarmService) {
-	if service == nil {
-		return
-	}
-
-	alarmServiceRegistry.Delete(service)
 }
 
 func (as *AlarmService) getTargetMinutes() []int {
@@ -148,26 +126,5 @@ func (as *AlarmService) Close(_ context.Context) error {
 	if as == nil {
 		return nil
 	}
-
-	unregisterAlarmService(as)
 	return nil
-}
-
-func CloseAllAlarmServices(ctx context.Context) error {
-	var joinedErr error
-
-	alarmServiceRegistry.Range(func(key, _ any) bool {
-		service, ok := key.(*AlarmService)
-		if !ok || service == nil {
-			return true
-		}
-
-		if err := service.Close(ctx); err != nil {
-			joinedErr = stdErrors.Join(joinedErr, err)
-		}
-
-		return true
-	})
-
-	return joinedErr
 }

@@ -12,11 +12,12 @@ import (
 )
 
 type eventPayloadEnvelope struct {
-	Notification  eventPayloadNotification             `json:"notification"`
-	SourceKind    domain.AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
-	YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
-	Celebration   *domain.CelebrationDispatchPayload   `json:"celebration,omitempty"`
-	Version       uint8                                `json:"version"`
+	Notification   eventPayloadNotification              `json:"notification"`
+	SourceKind     domain.AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
+	YouTubeOutbox  *domain.YouTubeOutboxDispatchPayload  `json:"youtube_outbox,omitempty"`
+	Celebration    *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
+	DeliveryDigest *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
+	Version        uint8                                 `json:"version"`
 }
 
 type eventPayloadNotification struct {
@@ -54,6 +55,10 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 	if err != nil {
 		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch delivery context: %w", err)
 	}
+	dispatchGroupKey := ""
+	if status == StatusPending {
+		dispatchGroupKey = BuildDispatchGroupKeyFromEnvelope(envelope)
+	}
 	return eventInsert{
 			EventKey:    eventKey,
 			PayloadHash: hex.EncodeToString(hash[:]),
@@ -63,12 +68,13 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 			Category:    eventCategory(input),
 			Payload:     payload,
 		}, deliveryInsert{
-			EventKey:        eventKey,
-			RoomID:          input.RoomID,
-			DedupeKey:       dedupeKey,
-			ClaimKeys:       envelope.ClaimKeys,
-			DeliveryContext: deliveryContext,
-			Status:          status,
+			EventKey:         eventKey,
+			RoomID:           input.RoomID,
+			DedupeKey:        dedupeKey,
+			ClaimKeys:        envelope.ClaimKeys,
+			DeliveryContext:  deliveryContext,
+			DispatchGroupKey: dispatchGroupKey,
+			Status:           status,
 		}, nil
 }
 
@@ -93,10 +99,11 @@ func marshalEventPayload(envelope *domain.AlarmQueueEnvelope) ([]byte, error) {
 			ScheduleChangeMessage:       envelope.Notification.ScheduleChangeMessage,
 			ScheduleChangePreviousStart: envelope.Notification.ScheduleChangePreviousStart,
 		},
-		SourceKind:    envelope.SourceKind,
-		YouTubeOutbox: envelope.YouTubeOutbox,
-		Celebration:   envelope.Celebration,
-		Version:       envelope.Version,
+		SourceKind:     envelope.SourceKind,
+		YouTubeOutbox:  envelope.YouTubeOutbox,
+		Celebration:    envelope.Celebration,
+		DeliveryDigest: envelope.DeliveryDigest,
+		Version:        envelope.Version,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {

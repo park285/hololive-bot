@@ -70,10 +70,30 @@ func TestAlarmDispatchMaintenancePGObservationFailureDoesNotContaminateDeletionT
 			}
 
 			require.NoError(t, runner.RunOnce(t.Context()))
-			require.Equal(t, 4, store.deletedTerminal)
+			require.Equal(t, 5, store.deletedTerminal)
+			require.Equal(t, 1, store.deletedSendUnits)
 			require.Equal(t, 1, store.deletedEvents)
 		})
 	}
+}
+
+func TestAlarmDispatchMaintenanceDeletesOnlyOrphanSendUnits(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	store := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
+	var orphanID int64
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		INSERT INTO alarm_dispatch_send_units (unit_key, dispatch_group_key, room_id, client_request_id)
+		VALUES (repeat('a', 64), 'orphan-group', 'orphan-room', 'orphan-request')
+		RETURNING id
+	`).Scan(&orphanID))
+
+	deleted, err := store.DeleteOrphanSendUnits(t.Context(), 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+
+	var remaining int
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_send_units WHERE id = $1", orphanID).Scan(&remaining))
+	require.Zero(t, remaining)
 }
 
 type failingAlarmDispatchPGObserver struct {
@@ -92,9 +112,10 @@ func (s failingAlarmDispatchPGObserver) BacklogSnapshot(ctx context.Context) (al
 }
 
 type recordingAlarmDispatchMaintenanceStore struct {
-	store           alarmDispatchMaintenancePgxStore
-	deletedTerminal int
-	deletedEvents   int
+	store            alarmDispatchMaintenancePgxStore
+	deletedTerminal  int
+	deletedSendUnits int
+	deletedEvents    int
 }
 
 func (s *recordingAlarmDispatchMaintenanceStore) WithAdvisoryLock(
@@ -127,4 +148,12 @@ func (s recordingAlarmDispatchMaintenanceDataStore) DeleteOrphanEvents(
 ) (int64, error) {
 	s.recorder.deletedEvents++
 	return s.store.DeleteOrphanEvents(ctx, retentionDays, limit)
+}
+
+func (s recordingAlarmDispatchMaintenanceDataStore) DeleteOrphanSendUnits(
+	ctx context.Context,
+	limit int,
+) (int64, error) {
+	s.recorder.deletedSendUnits++
+	return s.store.DeleteOrphanSendUnits(ctx, limit)
 }

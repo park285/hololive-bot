@@ -3,5 +3,9 @@
 # only after postgres-failover.env contains reviewed fence and route hooks.
 # The controller still fails closed when either hook is absent or invalid.
 [Service]
+LoadCredential=fence-ssh-key:/etc/stack-secrets/hololive-bot/postgres-failover/id_ed25519
+LoadCredential=fence-known-hosts:/etc/stack-secrets/hololive-bot/postgres-failover/known_hosts
+Environment=POSTGRES_FAILOVER_SSH_IDENTITY_FILE=%d/fence-ssh-key
+Environment=POSTGRES_FAILOVER_SSH_KNOWN_HOSTS_FILE=%d/fence-known-hosts
 ExecStart=
-ExecStart=/usr/bin/env bash /usr/local/libexec/hololive-postgres-failover/postgres-failover.sh --apply
+ExecStart=/usr/bin/bash /usr/local/libexec/hololive-postgres-failover/postgres-failover-launch.sh --apply

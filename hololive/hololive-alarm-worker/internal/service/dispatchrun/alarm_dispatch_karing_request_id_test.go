@@ -105,3 +105,60 @@ func TestAlarmDispatchKaringChunkClientRequestIDUsesOutboxItemIdentity(t *testin
 		karingRequestIDs(t, []domain.AlarmQueueEnvelope{buildOutboxEnvelope(11)}),
 	)
 }
+
+func TestAlarmDispatchPersistedSendUnitUsesDistinctStableKaringChunkIDs(t *testing.T) {
+	build := func(order []int64) []domain.AlarmQueueEnvelope {
+		envelopes := make([]domain.AlarmQueueEnvelope, 0, len(order))
+		for _, id := range order {
+			envelope := alarmDispatchKaringIdentityTestEnvelope("room-1", id)
+			envelope.SendUnitID = 42
+			envelope.ClientRequestID = "hololive-alarm:0123456789abcdef0123456789abcdef"
+			envelopes = append(envelopes, envelope)
+		}
+		return envelopes
+	}
+
+	first := karingRequestIDs(t, build([]int64{1, 2, 3, 4, 5}))
+	second := karingRequestIDs(t, build([]int64{5, 3, 1, 4, 2}))
+
+	require.Len(t, first, 2)
+	assert.NotEqual(t, first[0], first[1])
+	assert.Equal(t, first, second)
+}
+
+func TestAlarmDispatchPersistedOutboxUsesDistinctKaringChunkIDs(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.DispatchOutboxID = 42
+	envelope.SendUnitID = 7
+	envelope.ClientRequestID = "hololive-alarm:fedcba9876543210fedcba9876543210"
+	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
+	envelope.Notification.AlarmType = domain.AlarmTypeCommunity
+	items := make([]domain.YouTubeOutboxItem, 0, 6)
+	for i := range 6 {
+		items = append(items, domain.YouTubeOutboxItem{
+			OutboxID:  int64(100 + i),
+			ContentID: fmt.Sprintf("post-%d", i),
+			Payload:   `{"post_id":"p","content_text":"본문"}`,
+		})
+	}
+	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
+		Kind:       domain.OutboxKindCommunityPost,
+		AlarmType:  domain.AlarmTypeCommunity,
+		ChannelID:  "UCtest",
+		MemberName: "Member",
+		Items:      items,
+	}
+	group := newAlarmDispatchGroup(&envelope)
+
+	first, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, group)
+	require.NoError(t, err)
+	second, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, group)
+	require.NoError(t, err)
+	require.Len(t, first, 2)
+	require.Len(t, second, 2)
+	require.NotNil(t, first[0].ClientRequestID)
+	require.NotNil(t, first[1].ClientRequestID)
+	assert.NotEqual(t, *first[0].ClientRequestID, *first[1].ClientRequestID)
+	assert.Equal(t, *first[0].ClientRequestID, *second[0].ClientRequestID)
+	assert.Equal(t, *first[1].ClientRequestID, *second[1].ClientRequestID)
+}

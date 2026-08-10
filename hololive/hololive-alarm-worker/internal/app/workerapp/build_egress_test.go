@@ -208,6 +208,38 @@ func TestBuildEgressDispatchersRejectMissingInfraWhenEnabled(t *testing.T) {
 	assert.Contains(t, err.Error(), "postgres is required")
 }
 
+func TestBuildYouTubeOutboxDispatcherValidatesV3HandoffActivation(t *testing.T) {
+	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "false")
+	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "shadow")
+
+	scheduler, err := buildYouTubeOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	require.Error(t, err)
+	assert.Nil(t, scheduler)
+	assert.Contains(t, err.Error(), "requires YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true")
+
+	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
+	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "cutover")
+	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "false")
+	scheduler, err = buildYouTubeOutboxDispatcher(
+		&sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}},
+		egress.NewIrisMessageSender(nil),
+		nil,
+	)
+	require.Error(t, err)
+	assert.Nil(t, scheduler)
+	assert.Contains(t, err.Error(), "requires ALARM_DISPATCH_CONSUMER_ENABLED=true")
+
+	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "dual-write")
+	scheduler, err = buildYouTubeOutboxDispatcher(
+		&sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}},
+		egress.NewIrisMessageSender(nil),
+		nil,
+	)
+	require.Error(t, err)
+	assert.Nil(t, scheduler)
+	assert.Contains(t, err.Error(), "unsupported mode")
+}
+
 type claimKeyReleaseRecordingCache struct {
 	cache.Client
 	delManyCalls int

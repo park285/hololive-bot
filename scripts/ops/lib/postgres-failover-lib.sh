@@ -31,6 +31,7 @@ validate_scalar_inputs() {
   done <<EOF_NUMERIC
 PRIMARY_PORT=${PRIMARY_PORT}
 NEW_PRIMARY_PORT=${NEW_PRIMARY_PORT}
+LOCAL_PORT=${LOCAL_PORT}
 FAILURE_THRESHOLD=${FAILURE_THRESHOLD}
 MIN_OUTAGE_SEC=${MIN_OUTAGE_SEC}
 MAX_LAST_HEALTHY_AGE_SEC=${MAX_LAST_HEALTHY_AGE_SEC}
@@ -43,6 +44,7 @@ NOW=${NOW}
 EOF_NUMERIC
   PRIMARY_PORT=$((10#${PRIMARY_PORT}))
   NEW_PRIMARY_PORT=$((10#${NEW_PRIMARY_PORT}))
+  LOCAL_PORT=$((10#${LOCAL_PORT}))
   FAILURE_THRESHOLD=$((10#${FAILURE_THRESHOLD}))
   MIN_OUTAGE_SEC=$((10#${MIN_OUTAGE_SEC}))
   MAX_LAST_HEALTHY_AGE_SEC=$((10#${MAX_LAST_HEALTHY_AGE_SEC}))
@@ -54,6 +56,7 @@ EOF_NUMERIC
   NOW=$((10#${NOW}))
   (( PRIMARY_PORT > 0 && PRIMARY_PORT <= 65535 )) || die "invalid_port" "input=PRIMARY_PORT" "value=${PRIMARY_PORT}"
   (( NEW_PRIMARY_PORT > 0 && NEW_PRIMARY_PORT <= 65535 )) || die "invalid_port" "input=NEW_PRIMARY_PORT" "value=${NEW_PRIMARY_PORT}"
+  (( LOCAL_PORT > 0 && LOCAL_PORT <= 65535 )) || die "invalid_port" "input=LOCAL_PORT" "value=${LOCAL_PORT}"
   (( FAILURE_THRESHOLD > 0 )) || die "invalid_threshold" "value=${FAILURE_THRESHOLD}"
   (( PROBE_TIMEOUT_SEC > 0 )) || die "invalid_probe_timeout" "value=${PROBE_TIMEOUT_SEC}"
   (( PROMOTE_TIMEOUT_SEC > 0 )) || die "invalid_promote_timeout" "value=${PROMOTE_TIMEOUT_SEC}"
@@ -67,19 +70,19 @@ EOF_NUMERIC
   fi
   is_host "${PRIMARY_HOST}" || die "invalid_primary_host" "value=${PRIMARY_HOST}"
   is_host "${NEW_PRIMARY_HOST}" || die "invalid_new_primary_host" "value=${NEW_PRIMARY_HOST}"
-  is_simple_name "${STANDBY_CONTAINER}" || die "invalid_standby_container" "value=${STANDBY_CONTAINER}"
+  is_host "${LOCAL_HOST}" || die "invalid_local_host" "value=${LOCAL_HOST}"
+  is_simple_name "${SERVICE_USER}" || die "invalid_service_user" "value=${SERVICE_USER}"
   is_simple_name "${DB_NAME}" || die "invalid_database_name" "value=${DB_NAME}"
-  is_simple_name "${LOCAL_DB_USER}" || die "invalid_local_database_user" "value=${LOCAL_DB_USER}"
   is_simple_name "${PROBE_USER}" || die "invalid_probe_database_user" "value=${PROBE_USER}"
-  is_clean_abs_path "${CONTAINER_PGPASS_FILE}" || die "invalid_container_pgpass_path" "path=${CONTAINER_PGPASS_FILE}"
-  is_clean_abs_path "${CONTAINER_CA_FILE}" || die "invalid_container_ca_path" "path=${CONTAINER_CA_FILE}"
-  [[ "${CONTAINER_PROMOTED_MARKER}" =~ ^/var/lib/postgresql/pgdata/[A-Za-z0-9._-]+$ ]] || die "invalid_container_promoted_marker" "path=${CONTAINER_PROMOTED_MARKER}"
+  is_clean_abs_path "${PGPASS_FILE}" || die "invalid_pgpass_path" "path=${PGPASS_FILE}"
+  is_clean_abs_path "${CA_FILE}" || die "invalid_ca_path" "path=${CA_FILE}"
+  is_clean_abs_path "${PSQL_PATH}" || die "invalid_psql_path" "path=${PSQL_PATH}"
 }
 path_component_is_trusted() {
   local label="$1" path="$2" owner mode_hex mode
   [[ ! -L "${path}" && -e "${path}" ]] || die "trusted_path_missing_or_symlink" "path_label=${label}" "path=${path}"
   owner="$(stat -c '%u' -- "${path}")" || die "trusted_path_stat_failed" "path_label=${label}" "path=${path}"
-  if [[ "${owner}" != "0" && !( "${ALLOW_NON_ROOT}" == "1" && "${owner}" == "$(/usr/bin/id -u)" ) ]]; then
+  if [[ "${owner}" != "0" && "${owner}" != "$(/usr/bin/id -u)" ]]; then
     die "trusted_path_invalid_owner" "path_label=${label}" "path=${path}" "owner=${owner}"
   fi
   mode_hex="$(stat -c '%f' -- "${path}")" || die "trusted_path_stat_failed" "path_label=${label}" "path=${path}"
@@ -114,13 +117,11 @@ validate_state_dir() {
   real="$(realpath -e -- "${STATE_DIR}")" || die "state_dir_realpath_failed" "path=${STATE_DIR}"
   [[ "${real}" == "${STATE_DIR}" ]] || die "state_dir_symlink_or_noncanonical" "path=${STATE_DIR}" "real=${real}"
   owner="$(stat -c '%u' -- "${STATE_DIR}")" || die "state_dir_stat_failed" "path=${STATE_DIR}"
-  if [[ "${owner}" != "0" && !( "${ALLOW_NON_ROOT}" == "1" && "${owner}" == "$(/usr/bin/id -u)" ) ]]; then
-    die "state_dir_invalid_owner" "path=${STATE_DIR}" "owner=${owner}"
-  fi
+  [[ "${owner}" == "$(/usr/bin/id -u)" ]] || die "state_dir_invalid_owner" "path=${STATE_DIR}" "owner=${owner}"
   mode_hex="$(stat -c '%f' -- "${STATE_DIR}")" || die "state_dir_stat_failed" "path=${STATE_DIR}"
   (( (0x${mode_hex} & 0x0012) == 0 )) || die "state_dir_group_or_world_writable" "path=${STATE_DIR}"
   local managed
-  for managed in "${STATE_FILE}" "${LOCK_FILE}" "${INTENT_MARKER}" "${PROMOTED_MARKER}"; do
+  for managed in "${STATE_FILE}" "${LOCK_FILE}" "${INTENT_MARKER}" "${PROMOTED_MARKER}" "${HEALTH_SIGNAL}"; do
     path_is_direct_child "${managed}" || die "managed_path_outside_state_dir" "path=${managed}"
   done
 }
@@ -191,40 +192,45 @@ marker_value() {
   local file="$1" key="$2"
   awk -F= -v key="${key}" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${file}" 2>/dev/null || true
 }
-container_promotion_signal_exists() {
-  docker exec "${STANDBY_CONTAINER}" grep -qx 'role=primary' "${CONTAINER_PROMOTED_MARKER}" >/dev/null 2>&1
+validate_client_inputs() {
+  local label path private mode_hex
+  [[ -x "${PSQL_PATH}" ]] || die "psql_not_executable" "path=${PSQL_PATH}"
+  validate_trusted_path_chain "psql" "${PSQL_PATH}"
+  for label in pgpass ca; do
+    if [[ "${label}" == "pgpass" ]]; then path="${PGPASS_FILE}"; private=1; else path="${CA_FILE}"; private=0; fi
+    [[ -r "${path}" && -f "${path}" && ! -L "${path}" ]] || die "client_file_unreadable" "file=${label}" "path=${path}"
+    validate_trusted_path_chain "client:${label}" "${path}"
+    if [[ "${private}" == "1" ]]; then
+      mode_hex="$(stat -c '%f' -- "${path}")" || die "client_file_stat_failed" "file=${label}"
+      (( (0x${mode_hex} & 0x003f) == 0 )) || die "client_file_not_private" "file=${label}"
+    fi
+  done
 }
-write_container_promotion_signal() {
-  docker exec "${STANDBY_CONTAINER}" /bin/sh -ec '
-    marker="$1"
-    tmp="${marker}.tmp.$$"
-    umask 077
-    printf "%s\n" "role=primary" >"${tmp}" || { rm -f -- "${tmp}"; exit 1; }
-    chmod 0600 "${tmp}" || { rm -f -- "${tmp}"; exit 1; }
-    sync || { rm -f -- "${tmp}"; exit 1; }
-    mv -f -- "${tmp}" "${marker}" || { rm -f -- "${tmp}"; exit 1; }
-    sync
-  ' sh "${CONTAINER_PROMOTED_MARKER}" >/dev/null
+promotion_signal_exists() {
+  [[ -r "${HEALTH_SIGNAL}" ]] && grep -qx 'role=primary' "${HEALTH_SIGNAL}"
+}
+write_promotion_signal() {
+  local tmp="${HEALTH_SIGNAL}.tmp.$$"
+  umask 022
+  printf 'role=primary\n' >"${tmp}" || return 1
+  chmod 0644 "${tmp}" || { rm -f -- "${tmp}"; return 1; }
+  sync -f "${tmp}" || { rm -f -- "${tmp}"; return 1; }
+  mv -f -- "${tmp}" "${HEALTH_SIGNAL}" || { rm -f -- "${tmp}"; return 1; }
+  sync -f "${HEALTH_SIGNAL}" && sync -f "${STATE_DIR}"
+}
+psql_status() {
+  local host="$1" port="$2" sql="$3" command_timeout=$((PROBE_TIMEOUT_SEC + 2))
+  PGPASSFILE="${PGPASS_FILE}" PGSSLMODE=verify-full PGSSLROOTCERT="${CA_FILE}" \
+    PGCONNECT_TIMEOUT="${PROBE_TIMEOUT_SEC}" PGOPTIONS="-c statement_timeout=${PROBE_TIMEOUT_SEC}s" \
+    /usr/bin/timeout --foreground --kill-after=2 "${command_timeout}s" \
+    "${PSQL_PATH}" -X -v ON_ERROR_STOP=1 -AtF '|' -h "${host}" -p "${port}" \
+    -U "${PROBE_USER}" -d "${DB_NAME}" -c "${sql}"
 }
 local_status() {
-  local command_timeout=$((PROBE_TIMEOUT_SEC + 2))
-  /usr/bin/timeout --foreground --kill-after=2 "${command_timeout}s" \
-    docker exec "${STANDBY_CONTAINER}" psql -X -v ON_ERROR_STOP=1 -AtF '|' \
-    -U "${LOCAL_DB_USER}" -d "${DB_NAME}" \
-    -c "WITH role AS (SELECT pg_is_in_recovery() AS in_recovery) SELECT in_recovery, CASE WHEN in_recovery THEN COALESCE(pg_last_wal_receive_lsn()::text,'0/0') ELSE '0/0' END, CASE WHEN in_recovery THEN COALESCE(pg_last_wal_replay_lsn()::text,'0/0') ELSE '0/0' END, CASE WHEN in_recovery THEN pg_is_wal_replay_paused() ELSE false END, current_setting('transaction_read_only') FROM role"
+  psql_status "${LOCAL_HOST}" "${LOCAL_PORT}" "WITH role AS (SELECT pg_is_in_recovery() AS in_recovery) SELECT in_recovery, CASE WHEN in_recovery THEN COALESCE(pg_last_wal_receive_lsn()::text,'0/0') ELSE '0/0' END, CASE WHEN in_recovery THEN COALESCE(pg_last_wal_replay_lsn()::text,'0/0') ELSE '0/0' END, CASE WHEN in_recovery THEN pg_is_wal_replay_paused() ELSE false END, current_setting('transaction_read_only') FROM role"
 }
 primary_status() {
-  local command_timeout=$((PROBE_TIMEOUT_SEC + 2))
-  /usr/bin/timeout --foreground --kill-after=2 "${command_timeout}s" \
-    docker exec \
-    -e "PGPASSFILE=${CONTAINER_PGPASS_FILE}" \
-    -e "PGSSLMODE=verify-full" \
-    -e "PGSSLROOTCERT=${CONTAINER_CA_FILE}" \
-    -e "PGCONNECT_TIMEOUT=${PROBE_TIMEOUT_SEC}" \
-    -e "PGOPTIONS=-c statement_timeout=${PROBE_TIMEOUT_SEC}s" \
-    "${STANDBY_CONTAINER}" psql -X -v ON_ERROR_STOP=1 -AtF '|' \
-    -h "${PRIMARY_HOST}" -p "${PRIMARY_PORT}" -U "${PROBE_USER}" -d "${DB_NAME}" \
-    -c "SELECT pg_is_in_recovery(), pg_current_wal_lsn()::text, current_setting('transaction_read_only')"
+  psql_status "${PRIMARY_HOST}" "${PRIMARY_PORT}" "SELECT pg_is_in_recovery(), pg_current_wal_lsn()::text, current_setting('transaction_read_only')"
 }
 parse_local_status() {
   local raw="$1" extra
@@ -297,4 +303,17 @@ freshness_guard() {
   (( saved_lag <= MAX_KNOWN_LAG_BYTES )) || { journal "promotion_blocked" "reason=saved_lag_exceeds_budget" "lag_bytes=${saved_lag}"; return 1; }
   local_has_replayed_saved_primary || { journal "promotion_blocked" "reason=saved_primary_lsn_not_replayed" "primary_lsn=${LAST_PRIMARY_LSN}" "replay_lsn=${LOCAL_REPLAY_LSN}"; return 1; }
   return 0
+}
+
+refresh_now() {
+  local refreshed
+  if [[ -n "${POSTGRES_FAILOVER_NOW:-}" ]]; then
+    refreshed="${POSTGRES_FAILOVER_POST_FENCE_NOW:-${POSTGRES_FAILOVER_NOW}}"
+  else
+    refreshed="$(/usr/bin/date +%s)" || return 1
+  fi
+  is_uint "${refreshed}" || return 1
+  refreshed=$((10#${refreshed}))
+  (( refreshed >= NOW )) || return 1
+  NOW="${refreshed}"
 }

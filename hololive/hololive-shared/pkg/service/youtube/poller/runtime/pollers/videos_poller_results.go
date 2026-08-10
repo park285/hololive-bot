@@ -118,6 +118,9 @@ func (p *VideosPoller) buildVideoFreshnessResult(
 	}
 
 	if evidence.freshness == videoFreshnessUnresolved {
+		if resolution.budgetDeferred {
+			return p.buildBudgetDeferredVideoResult(ctx, channelID, video.VideoID)
+		}
 		return p.buildDeferredVideoResult(ctx, channelID, video.VideoID, dbVideo)
 	}
 
@@ -130,6 +133,15 @@ func (p *VideosPoller) buildVideoFreshnessResult(
 	}
 
 	return result
+}
+
+func (p *VideosPoller) buildBudgetDeferredVideoResult(ctx context.Context, channelID, videoID string) videoPollResult {
+	p.deferrals.recordBudgetDeferral(channelID, videoID)
+	slog.InfoContext(ctx, "Video freshness held for metadata allowance",
+		logschema.FieldChannelID, channelID,
+		"video_id", videoID,
+	)
+	return videoPollResult{deferred: true}
 }
 
 func (p *VideosPoller) buildDeferredVideoResult(

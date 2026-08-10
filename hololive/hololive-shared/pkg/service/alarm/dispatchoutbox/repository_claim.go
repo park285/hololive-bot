@@ -30,7 +30,7 @@ func (r *PgxRepository) ClaimDue(ctx context.Context, workerID string, limit int
 	if leaseSeconds <= 0 {
 		leaseSeconds = 60
 	}
-	rows, err := r.pool.Query(ctx, mustSQL("repository_claim_0053_02.sql"), limit, workerID, leaseSeconds)
+	rows, err := r.pool.Query(ctx, mustSQL("repository_claim_0053_02.sql"), limit, workerID, leaseSeconds, maxDeliveriesPerSendUnit)
 	if err != nil {
 		return nil, fmt.Errorf("claim due dispatch deliveries: %w", err)
 	}

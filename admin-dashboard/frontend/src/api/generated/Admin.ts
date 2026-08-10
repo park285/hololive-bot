@@ -91,9 +91,10 @@ export class Admin<
    * @request POST:/admin/api/auth/logout
    */
   handleLogout = (params: RequestParams = {}) =>
-    this.request<void, any>({
+    this.request<StatusOnlyResponse, any>({
       path: `/admin/api/auth/logout`,
       method: "POST",
+      format: "json",
       ...params,
     });
   /**

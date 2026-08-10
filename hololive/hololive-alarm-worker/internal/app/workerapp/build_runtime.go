@@ -2,6 +2,7 @@ package workerapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -49,15 +50,16 @@ type alarmFoundation struct {
 	ChzzkClient    *chzzk.Client
 	TwitchClient   *twitch.Client
 	AlarmCRUD      domain.AlarmCRUD
+	AlarmService   *alarmservice.AlarmService
 	Outbox         dispatchoutbox.Writer
 	Postgres       database.Client
 }
 
-func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err error) (*workerruntime.AlarmWorkerRuntime, error) {
+func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err error) error {
 	if infra != nil && infra.Cleanup != nil {
 		infra.Cleanup()
 	}
-	return nil, fmt.Errorf("build alarm worker runtime: %s: %w", stage, err)
+	return fmt.Errorf("build alarm worker runtime: %s: %w", stage, err)
 }
 
 func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*workerruntime.AlarmWorkerRuntime, error) {
@@ -73,28 +75,43 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *settings.Config, lo
 	if err != nil {
 		return nil, fmt.Errorf("build alarm worker runtime: build infra module: %w", err)
 	}
+	return buildAlarmWorkerRuntimeFromInfra(ctx, appConfig, logger, infra)
+}
 
+func buildAlarmWorkerRuntimeFromInfra(
+	ctx context.Context,
+	appConfig *settings.Config,
+	logger *slog.Logger,
+	infra *sharedmodules.InfraModule,
+) (runtime *workerruntime.AlarmWorkerRuntime, err error) {
 	foundation, err := buildAlarmFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
-		return failAlarmWorkerBuild(infra, "alarm foundation", err)
+		return nil, failAlarmWorkerBuild(infra, "alarm foundation", err)
 	}
+	runtimeOwnsAlarmService := false
+	defer func() {
+		closeErr := closeAlarmServiceOnBuildFailure(ctx, foundation, runtimeOwnsAlarmService)
+		if closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close alarm service after build failure: %w", closeErr))
+		}
+	}()
 
 	scheduler, err := buildRuntimeScheduler(appConfig, infra.Cache, foundation, logger, envutil.String(notificationSchedulerRoleEnv, ""))
 	if err != nil {
-		return failAlarmWorkerBuild(infra, "scheduler", err)
+		return nil, failAlarmWorkerBuild(infra, "scheduler", err)
 	}
 
 	notificationEgress, err := buildNotificationEgress(appConfig, infra, logger)
 	if err != nil {
-		return failAlarmWorkerBuild(infra, "notification egress", err)
+		return nil, failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
 	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
 	if err != nil {
-		return failAlarmWorkerBuild(infra, stage, err)
+		return nil, failAlarmWorkerBuild(infra, stage, err)
 	}
 
-	return &workerruntime.AlarmWorkerRuntime{
+	runtime = &workerruntime.AlarmWorkerRuntime{
 		Config:               appConfig,
 		Logger:               logger,
 		Scheduler:            scheduler,
@@ -104,8 +121,18 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *settings.Config, lo
 		ConfigSubscriber:     BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmCRUD, logger),
 		ServerAddr:           servers.Addr(),
 		HTTPServers:          servers,
+		AlarmService:         foundation.AlarmService,
 		Managed:              lifecycle.NewManaged(infra.Cleanup),
-	}, nil
+	}
+	runtimeOwnsAlarmService = true
+	return runtime, nil
+}
+
+func closeAlarmServiceOnBuildFailure(ctx context.Context, foundation *alarmFoundation, owned bool) error {
+	if owned || foundation == nil || foundation.AlarmService == nil {
+		return nil
+	}
+	return foundation.AlarmService.Close(ctx)
 }
 
 type alarmWorkerBackgroundRunners struct {
@@ -323,6 +350,7 @@ func buildAlarmFoundation(
 		ChzzkClient:    chzzkClient,
 		TwitchClient:   twitchClient,
 		AlarmCRUD:      alarmService,
+		AlarmService:   alarmService,
 		Outbox:         outboxRepository,
 		Postgres:       infra.Postgres,
 	}, nil

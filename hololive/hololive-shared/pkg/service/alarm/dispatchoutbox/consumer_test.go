@@ -392,11 +392,13 @@ type consumerTestRepository struct {
 	quarantineStaleSendingFunc  func(context.Context, time.Duration, int) (int, error)
 	routeFailuresFunc           func(context.Context, []FailureUpdate, string) error
 	routeSendingFailuresFunc    func(context.Context, []FailureUpdate, string) error
+	requeuePreSendFunc          func(context.Context, []FailureUpdate, string) error
 	routedFailureUpdates        []FailureUpdate
 	quarantineUpdates           []TerminalUpdate
 	movedDLQUpdates             []TerminalUpdate
 	routeFailuresCalls          int
 	routeSendingFailuresCalls   int
+	requeuePreSendCalls         int
 	events                      map[int64]EventRecord
 	claimDueCalls               int
 	loadEventsCalls             int
@@ -460,6 +462,15 @@ func (r *consumerTestRepository) RouteSendingFailures(ctx context.Context, updat
 	r.routedFailureUpdates = append([]FailureUpdate(nil), updates...)
 	if r.routeSendingFailuresFunc != nil {
 		return r.routeSendingFailuresFunc(ctx, updates, workerID)
+	}
+	return nil
+}
+
+func (r *consumerTestRepository) RequeuePreSend(ctx context.Context, updates []FailureUpdate, workerID string) error {
+	r.requeuePreSendCalls++
+	r.routedFailureUpdates = append([]FailureUpdate(nil), updates...)
+	if r.requeuePreSendFunc != nil {
+		return r.requeuePreSendFunc(ctx, updates, workerID)
 	}
 	return nil
 }
@@ -627,6 +638,28 @@ func TestConsumerRouteSendingFailuresUsesSendingVariant(t *testing.T) {
 	}
 	if len(repository.routedFailureUpdates) != 1 || repository.routedFailureUpdates[0].TargetStatus != StatusRetry {
 		t.Fatalf("updates = %+v, want single retry-targeted update", repository.routedFailureUpdates)
+	}
+}
+
+func TestConsumerRequeuePreSendPreservesAttemptCount(t *testing.T) {
+	t.Parallel()
+
+	repository := &consumerTestRepository{}
+	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	envelope := domain.AlarmQueueEnvelope{
+		DispatchOutboxID: 7,
+		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 2, LastError: "mark sending"},
+	}
+
+	if err := consumer.RequeuePreSend(context.Background(), []domain.AlarmQueueEnvelope{envelope}); err != nil {
+		t.Fatalf("RequeuePreSend() error = %v", err)
+	}
+
+	if repository.requeuePreSendCalls != 1 || repository.routeSendingFailuresCalls != 0 || repository.routeFailuresCalls != 0 {
+		t.Fatalf("route calls = pre-send:%d sending:%d leased:%d", repository.requeuePreSendCalls, repository.routeSendingFailuresCalls, repository.routeFailuresCalls)
+	}
+	if len(repository.routedFailureUpdates) != 1 || repository.routedFailureUpdates[0].AttemptCount != 2 {
+		t.Fatalf("updates = %+v, want unchanged attempt_count=2", repository.routedFailureUpdates)
 	}
 }
 
