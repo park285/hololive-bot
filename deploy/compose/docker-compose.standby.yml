@@ -1,7 +1,8 @@
 # iris-seoul hot standby (physical streaming replication from the hololive-osaka primary).
 #
-# 이 파일은 standby 의 정상 상태만 소유한다. 최초 pg_basebackup 부트스트랩은 일회성이라
-# docs/current/runbooks/postgres-replication.md 가 소유한다.
+# This file owns both standby steady state and the promoted-node restart posture.
+# Initial pg_basebackup and failover controller activation are documented in
+# docs/current/runbooks/postgres-replication.md.
 #
 #   docker compose --env-file /etc/stack-secrets/hololive-bot/ap-compose.env \
 #     -f deploy/compose/docker-compose.standby.yml up -d holo-postgres-standby
@@ -23,7 +24,7 @@ services:
       - "hot_standby=on"
       - "-c"
       - "hot_standby_feedback=on"
-      # primary 보다 작으면 standby 가 기동을 거부한다. 값은 prod primary 와 동일하게 둔다.
+      # primary보다 작으면 standby가 기동을 거부한다. 값은 prod primary와 동일하게 둔다.
       - "-c"
       - "max_connections=60"
       - "-c"
@@ -54,15 +55,25 @@ services:
       - /etc/stack-secrets/hololive-bot/postgres/pgpass:/run/hololive-bot/postgres/pgpass:ro
       - /etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
     ports:
-      - "127.0.0.1:5434:5432"
+      # Keep loopback by default. Automatic routing requires an explicit tailnet bind in
+      # ap-compose.env, e.g. HOLOLIVE_STANDBY_POSTGRES_BIND_IP=100.100.1.5.
+      - "${HOLOLIVE_STANDBY_POSTGRES_BIND_IP:-127.0.0.1}:${HOLOLIVE_STANDBY_POSTGRES_PORT:-5434}:5432"
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /var/run/postgresql:size=16m,mode=3775
     healthcheck:
-      # 연결 가능만으로는 부족하다 — recovery 상태여야 실제 standby 다.
+      # A normal standby must be in recovery and must not carry a promotion signal.
+      # A promoted node is healthy only when the controller wrote the durable PGDATA
+      # signal after pg_promote() completed. An accidental/manual role change stays red.
       test:
         - "CMD-SHELL"
-        - "psql -U postgres_admin -d hololive -p 5432 -Atc 'select pg_is_in_recovery()' | grep -qx t"
+        - >-
+          role="$$(psql -U postgres_admin -d hololive -p 5432 -Atc 'select pg_is_in_recovery()')" &&
+          case "$$role" in
+            t) test ! -e "$$PGDATA/.hololive-promoted" ;;
+            f) grep -qx 'role=primary' "$$PGDATA/.hololive-promoted" ;;
+            *) exit 1 ;;
+          esac
       interval: 30s
       timeout: 7s
       retries: 3

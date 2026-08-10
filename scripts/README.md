@@ -84,9 +84,16 @@ Compose 설정과 런타임 readiness/health smoke test 스크립트입니다.
 - `pg18_db_usage_optional_concurrent_indexes.sql`
 
 ## 9. ops/
-Valkey self-heal 운영 자산(스크립트, systemd unit, 테스트)입니다.
+Valkey self-heal 및 PostgreSQL failover 운영 자산입니다.
 
 - `./scripts/ops/valkey-selfheal.sh` (+ `valkey-selfheal.service`/`.timer`, `valkey-selfheal_test.sh`)
+- `./scripts/ops/postgres-failover.sh` (+ `.service`/`.timer`, apply/env examples, `postgres-failover_test.sh`)
+- `./scripts/ops/postgres-failover-fence-ssh.sh` - reachable primary용 reference fence hook
+- `./scripts/ops/postgres-primary-fence.sh` - 구 primary에서 compose/DB 재기동을 영속 차단하는 remote action
+
+PostgreSQL controller의 checked-in unit은 dry-run입니다. 실제 승격은 승인된 external fencing과
+route hook을 모두 준비한 뒤 apply drop-in을 설치해야 합니다. 운영 계약은
+`docs/current/runbooks/postgres-replication.md`가 소유합니다.
 
 ## 10. refactor/
 리팩터링 보조 가드 스크립트입니다.

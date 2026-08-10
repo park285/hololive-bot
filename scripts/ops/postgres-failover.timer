@@ -1,0 +1,13 @@
+# Evaluate often; the controller independently requires consecutive failures and
+# a minimum outage duration before it can enter the fencing path.
+[Unit]
+Description=Evaluate Hololive PostgreSQL failover every 15 seconds
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=15s
+AccuracySec=1s
+RandomizedDelaySec=2s
+
+[Install]
+WantedBy=timers.target

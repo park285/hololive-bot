@@ -1,0 +1,29 @@
+# PostgreSQL standby failover watchdog. Install with postgres-failover.timer.
+# The checked-in unit is observation-only; enable mutation with the reviewed
+# postgres-failover-apply.conf.example drop-in after both hooks are provisioned.
+[Unit]
+Description=Hololive PostgreSQL failover controller (single evaluation)
+After=docker.service tailscaled.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=-/etc/stack-secrets/hololive-bot/postgres-failover.env
+StateDirectory=hololive-postgres-failover
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/usr/bin/env bash /usr/local/libexec/hololive-postgres-failover/postgres-failover.sh --dry-run
+TimeoutStartSec=420
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/hololive-postgres-failover

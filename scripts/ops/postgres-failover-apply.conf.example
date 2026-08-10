@@ -1,0 +1,7 @@
+# Install as:
+#   /etc/systemd/system/postgres-failover.service.d/apply.conf
+# only after postgres-failover.env contains reviewed fence and route hooks.
+# The controller still fails closed when either hook is absent or invalid.
+[Service]
+ExecStart=
+ExecStart=/usr/bin/env bash /usr/local/libexec/hololive-postgres-failover/postgres-failover.sh --apply
