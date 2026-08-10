@@ -6,6 +6,7 @@ source "${SCRIPT_DIR}/lib/postgres-failover-test-fixture.sh"
 source "${SCRIPT_DIR}/lib/postgres-failover-test-cases-controller.sh"
 source "${SCRIPT_DIR}/lib/postgres-failover-test-cases-credentials.sh"
 source "${SCRIPT_DIR}/lib/postgres-failover-test-cases-transition.sh"
+source "${SCRIPT_DIR}/lib/postgres-failover-test-cases-hook-ownership.sh"
 
 for test_case in static_deployment_contracts_are_wired launcher_rejects_environment_injection systemd_pgpass_is_materialized_privately invalid_pgpass_credential_shapes_fail_closed \
   healthy_primary_records_fresh_observation standby_ahead_of_primary_fails_closed dry_run_never_fences_or_promotes \
