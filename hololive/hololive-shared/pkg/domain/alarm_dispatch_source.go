@@ -66,6 +66,15 @@ func (p *DeliveryDigestDispatchPayload) Identity() string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
+func (p *DeliveryDigestDispatchPayload) ContentIdentity() string {
+	identity := p.Identity()
+	if identity == "" || p == nil || strings.TrimSpace(p.PreRenderedMessage) == "" {
+		return ""
+	}
+	messageHash := sha256.Sum256([]byte(p.PreRenderedMessage))
+	return identity + ":message_sha256:" + hex.EncodeToString(messageHash[:])
+}
+
 type YouTubeOutboxDispatchPayload struct {
 	OutboxIDs          []int64             `json:"outbox_ids"`
 	Kind               OutboxKind          `json:"kind"`

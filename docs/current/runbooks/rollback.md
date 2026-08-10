@@ -83,6 +83,25 @@ sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
   up -d --no-build --no-deps hololive-api
 ```
 
+delivery digest의 content-sensitive identity를 도입한 revision은 기존 period-only identity와
+rollback 호환되지 않습니다. 해당 revision의 최초 배포 전에는 authoritative DB에서 아래
+read-only preflight가 `0`인지 확인하고 `DELIVERY_OUTBOX_V3_HANDOFF_MODE=off`를 유지한 채
+`hololive-alarm-worker`를 먼저 전환한 뒤 `hololive-api`를 전환합니다.
+
+```sql
+SELECT count(*)
+FROM alarm_dispatch_events
+WHERE category = 'delivery_digest'
+   OR payload ->> 'source_kind' = 'delivery_digest';
+```
+
+content-sensitive delivery digest row가 한 건이라도 생성된 뒤에는 구 period-only API 또는
+alarm-worker image로 되돌리지 않습니다. 구 producer는 같은 kind/period/room을 새 key로
+인식하지 못해 재발송할 수 있고, 구 worker는 메시지가 다른 row를 같은 group으로 합칠 수
+있습니다. 이 경우 API의 scheduler·run-now ingress를 중지하고 handoff를 `off`로 유지한 뒤
+active send unit을 drain하며 current revision을 fix-forward합니다. rollback image 사용은 최초
+v3 digest 생성 전으로만 제한합니다.
+
 Runtime service names:
 
 - `hololive-api`

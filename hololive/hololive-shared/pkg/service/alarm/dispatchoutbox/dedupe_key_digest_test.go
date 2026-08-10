@@ -45,3 +45,72 @@ func TestBuildLedgerRowsDeliveryDigestSharesRoomAgnosticEvent(t *testing.T) {
 		t.Fatalf("shadow delivery allocated send identity: %#v", firstDelivery)
 	}
 }
+
+func TestBuildLedgerRowsDeliveryDigestSeparatesRenderedMessages(t *testing.T) {
+	t.Parallel()
+
+	first := domain.AlarmQueueEnvelope{
+		Notification:   domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: "room-1"},
+		SourceKind:     domain.AlarmDispatchSourceKindDeliveryDigest,
+		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: "2026-08", PreRenderedMessage: "8월 멤버 뉴스 A"},
+		Version:        1,
+	}
+	second := first
+	second.Notification.RoomID = "room-2"
+	second.DeliveryDigest = &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: "2026-08", PreRenderedMessage: "8월 멤버 뉴스 B"}
+
+	firstEvent, _, err := buildLedgerRows(&first, StatusShadowed)
+	if err != nil {
+		t.Fatalf("buildLedgerRows(first) error = %v", err)
+	}
+	secondEvent, _, err := buildLedgerRows(&second, StatusShadowed)
+	if err != nil {
+		t.Fatalf("buildLedgerRows(second) error = %v", err)
+	}
+	if firstEvent.EventKey == secondEvent.EventKey {
+		t.Fatalf("different rendered messages share event key: %q", firstEvent.EventKey)
+	}
+	if bytes.Equal(firstEvent.Payload, secondEvent.Payload) {
+		t.Fatal("different rendered messages produced identical event payloads")
+	}
+}
+
+func TestDeliveryDigestContentIdentityPropagatesThroughPendingSendIdentity(t *testing.T) {
+	t.Parallel()
+
+	first := domain.AlarmQueueEnvelope{
+		Notification:   domain.AlarmNotification{AlarmType: domain.AlarmTypeCommunity, RoomID: "room-1"},
+		SourceKind:     domain.AlarmDispatchSourceKindDeliveryDigest,
+		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: "2026-08", PreRenderedMessage: "8월 멤버 뉴스 A"},
+		Version:        1,
+	}
+	second := first
+	second.DeliveryDigest = &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: "2026-08", PreRenderedMessage: "8월 멤버 뉴스 B"}
+
+	firstEvent, firstDelivery, err := buildLedgerRows(&first, StatusPending)
+	if err != nil {
+		t.Fatalf("buildLedgerRows(first) error = %v", err)
+	}
+	secondEvent, secondDelivery, err := buildLedgerRows(&second, StatusPending)
+	if err != nil {
+		t.Fatalf("buildLedgerRows(second) error = %v", err)
+	}
+	if firstEvent.EventKey == secondEvent.EventKey {
+		t.Fatalf("different rendered messages share event key: %q", firstEvent.EventKey)
+	}
+	if firstDelivery.DedupeKey == secondDelivery.DedupeKey {
+		t.Fatalf("different rendered messages share delivery dedupe key: %q", firstDelivery.DedupeKey)
+	}
+	if firstDelivery.DispatchGroupKey == secondDelivery.DispatchGroupKey {
+		t.Fatalf("different rendered messages share dispatch group key: %q", firstDelivery.DispatchGroupKey)
+	}
+
+	deliveries := []deliveryInsert{firstDelivery, secondDelivery}
+	assignSendUnits(deliveries)
+	if deliveries[0].SendUnitKey == deliveries[1].SendUnitKey {
+		t.Fatalf("different rendered messages share send unit key: %q", deliveries[0].SendUnitKey)
+	}
+	if deliveries[0].ClientRequestID == deliveries[1].ClientRequestID {
+		t.Fatalf("different rendered messages share client request id: %q", deliveries[0].ClientRequestID)
+	}
+}

@@ -80,10 +80,13 @@ EOF_NUMERIC
   is_clean_abs_path "${PSQL_PATH}" || die "invalid_psql_path" "path=${PSQL_PATH}"
 }
 path_component_is_trusted() {
-  local label="$1" path="$2" owner mode_hex mode
+  local label="$1" path="$2" require_root="${3:-0}" owner mode_hex mode
   [[ ! -L "${path}" && -e "${path}" ]] || die "trusted_path_missing_or_symlink" "path_label=${label}" "path=${path}"
   owner="$(stat -c '%u' -- "${path}")" || die "trusted_path_stat_failed" "path_label=${label}" "path=${path}"
-  if [[ "${owner}" != "0" && "${owner}" != "$(/usr/bin/id -u)" ]]; then
+  if [[ "${require_root}" == "1" && "${ALLOW_NON_ROOT}" == "0" && "${owner}" != "0" ]]; then
+    die "trusted_path_invalid_owner" "path_label=${label}" "path=${path}" "owner=${owner}"
+  fi
+  if [[ "${owner}" != "0" && "${owner}" != "${CURRENT_UID}" ]]; then
     die "trusted_path_invalid_owner" "path_label=${label}" "path=${path}" "owner=${owner}"
   fi
   mode_hex="$(stat -c '%f' -- "${path}")" || die "trusted_path_stat_failed" "path_label=${label}" "path=${path}"
@@ -91,17 +94,17 @@ path_component_is_trusted() {
   if (( (mode & 0x0012) != 0 )); then
     # Test fixtures live below the conventional root-owned sticky /tmp. A sticky
     # root directory is safe as a parent because every descendant component is
-    # checked separately and the hook file itself must be owned by the caller.
+    # checked separately and hook ownership is checked by validate_hook_script.
     if [[ ! -d "${path}" || "${owner}" != "0" ]] || (( (mode & 0x0200) == 0 )); then
       die "trusted_path_group_or_world_writable" "path_label=${label}" "path=${path}"
     fi
   fi
 }
 validate_trusted_path_chain() {
-  local label="$1" path="$2" current
+  local label="$1" path="$2" require_root="${3:-0}" current
   current="${path}"
   while :; do
-    path_component_is_trusted "${label}" "${current}"
+    path_component_is_trusted "${label}" "${current}" "${require_root}"
     [[ "${current}" == "/" ]] && break
     current="$(dirname -- "${current}")"
   done
@@ -127,13 +130,17 @@ validate_state_dir() {
   done
 }
 validate_hook_script() {
-  local label="$1" path="$2" real
+  local label="$1" path="$2" real owner
   [[ -n "${path}" ]] || return 1
   [[ "${path}" == /* ]] || die "hook_not_absolute" "hook=${label}" "path=${path}"
   real="$(realpath -e -- "${path}" 2>/dev/null)" || die "hook_missing" "hook=${label}" "path=${path}"
   [[ "${real}" == "${path}" ]] || die "hook_symlink_or_noncanonical" "hook=${label}" "path=${path}" "real=${real}"
   [[ -f "${path}" ]] || die "hook_not_regular_file" "hook=${label}" "path=${path}"
-  validate_trusted_path_chain "hook:${label}" "${path}"
+  owner="$(stat -c '%u' -- "${path}")" || die "hook_stat_failed" "hook=${label}" "path=${path}"
+  if [[ "${owner}" != "0" && ( "${ALLOW_NON_ROOT}" != "1" || "${owner}" != "${CURRENT_UID}" ) ]]; then
+    die "hook_not_root_owned" "hook=${label}" "path=${path}" "owner=${owner}"
+  fi
+  validate_trusted_path_chain "hook:${label}" "${path}" 1
 }
 read_state() {
   [[ -r "${STATE_FILE}" ]] || return 0

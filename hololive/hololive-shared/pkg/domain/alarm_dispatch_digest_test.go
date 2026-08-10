@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"testing"
 )
@@ -20,15 +22,29 @@ func TestDeliveryDigestDispatchPayloadIdentityAndValidation(t *testing.T) {
 	if identity == "" {
 		t.Fatal("Identity() is empty")
 	}
+	messageHash := sha256.Sum256([]byte(payload.PreRenderedMessage))
+	wantContentIdentity := identity + ":message_sha256:" + hex.EncodeToString(messageHash[:])
+	if got := payload.ContentIdentity(); got != wantContentIdentity {
+		t.Fatalf("ContentIdentity() = %q, want %q", got, wantContentIdentity)
+	}
 	changedMessage := *payload
 	changedMessage.PreRenderedMessage = "교정된 주요 이벤트"
 	if changedMessage.Identity() != identity {
 		t.Fatal("message-only edit changed period identity")
 	}
+	if changedMessage.ContentIdentity() == payload.ContentIdentity() {
+		t.Fatal("message-only edit did not change content identity")
+	}
 	changedPeriod := *payload
 	changedPeriod.PeriodKey = "2026-W33"
 	if changedPeriod.Identity() == identity {
 		t.Fatal("period change did not change identity")
+	}
+	if changedPeriod.ContentIdentity() == payload.ContentIdentity() {
+		t.Fatal("period change did not change content identity")
+	}
+	if (&DeliveryDigestDispatchPayload{Kind: payload.Kind, PeriodKey: payload.PeriodKey}).ContentIdentity() != "" {
+		t.Fatal("empty message produced a content identity")
 	}
 }
 

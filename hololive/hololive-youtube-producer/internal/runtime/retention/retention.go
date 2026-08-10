@@ -277,10 +277,14 @@ func deleteBatches(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cu
 		if err != nil {
 			return total, false, err
 		}
-		if exhausted {
+		if deleteBatchesDone(rows, batchSize, exhausted) {
 			return total, exhausted, nil
 		}
 	}
+}
+
+func deleteBatchesDone(rows int64, batchSize int, exhausted bool) bool {
+	return exhausted || rows < int64(batchSize)
 }
 
 func deleteBatch(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int, remainingBatches *int, statementTimeout time.Duration) (deleted int64, exhausted bool, err error) {
