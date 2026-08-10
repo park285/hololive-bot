@@ -24,13 +24,16 @@ type eventInsert struct {
 }
 
 type deliveryInsert struct {
-	EventID         int64
-	EventKey        string
-	RoomID          string
-	DedupeKey       string
-	ClaimKeys       []string
-	DeliveryContext []byte
-	Status          Status
+	EventID          int64
+	EventKey         string
+	RoomID           string
+	DedupeKey        string
+	ClaimKeys        []string
+	DeliveryContext  []byte
+	DispatchGroupKey string
+	SendUnitKey      string
+	ClientRequestID  string
+	Status           Status
 }
 
 type eventBatchRow struct {
@@ -44,12 +47,15 @@ type eventBatchRow struct {
 }
 
 type deliveryBatchRow struct {
-	EventID         int64           `json:"event_id"`
-	RoomID          string          `json:"room_id"`
-	DedupeKey       string          `json:"dedupe_key"`
-	ClaimKeys       []string        `json:"claim_keys"`
-	DeliveryContext json.RawMessage `json:"delivery_context"`
-	Status          string          `json:"status"`
+	EventID          int64           `json:"event_id"`
+	RoomID           string          `json:"room_id"`
+	DedupeKey        string          `json:"dedupe_key"`
+	ClaimKeys        []string        `json:"claim_keys"`
+	DeliveryContext  json.RawMessage `json:"delivery_context"`
+	DispatchGroupKey string          `json:"dispatch_group_key"`
+	SendUnitKey      string          `json:"send_unit_key"`
+	ClientRequestID  string          `json:"client_request_id"`
+	Status           string          `json:"status"`
 }
 
 func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (result0 map[string]int64, result1 int, err error) {
@@ -128,6 +134,9 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 	if err != nil {
 		return 0, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
 	}
+	if err := ensureSendUnits(ctx, tx, raw); err != nil {
+		return 0, err
+	}
 	selected, inserted, err := insertDeliveryBatch(ctx, tx, raw)
 	if err != nil {
 		return 0, err
@@ -138,6 +147,13 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 	return inserted, nil
 }
 
+func ensureSendUnits(ctx context.Context, tx pgx.Tx, raw []byte) error {
+	if _, err := tx.Exec(ctx, mustSQL("repository_insert_0179_01.sql"), jsonbRecordsetParam(raw)); err != nil {
+		return fmt.Errorf("insert dispatch send units: %w", err)
+	}
+	return nil
+}
+
 func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, error) {
 	rows := make([]deliveryBatchRow, 0, len(deliveries))
 	for i := range deliveries {
@@ -146,12 +162,15 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 			return nil, fmt.Errorf("insert dispatch deliveries: missing event id for event_key=%s", delivery.EventKey)
 		}
 		rows = append(rows, deliveryBatchRow{
-			EventID:         delivery.EventID,
-			RoomID:          delivery.RoomID,
-			DedupeKey:       delivery.DedupeKey,
-			ClaimKeys:       delivery.ClaimKeys,
-			DeliveryContext: json.RawMessage(delivery.DeliveryContext),
-			Status:          string(delivery.Status),
+			EventID:          delivery.EventID,
+			RoomID:           delivery.RoomID,
+			DedupeKey:        delivery.DedupeKey,
+			ClaimKeys:        delivery.ClaimKeys,
+			DeliveryContext:  json.RawMessage(delivery.DeliveryContext),
+			DispatchGroupKey: delivery.DispatchGroupKey,
+			SendUnitKey:      delivery.SendUnitKey,
+			ClientRequestID:  delivery.ClientRequestID,
+			Status:           string(delivery.Status),
 		})
 	}
 	return rows, nil
@@ -168,17 +187,19 @@ func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected, 
 func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status, result *PublishBatchResult) ([]eventInsert, []deliveryInsert, []eventCollision, error) {
 	events := make(map[string]eventInsert, len(envelopes))
 	deliveries := make([]deliveryInsert, 0, len(envelopes))
+	seenDeliveries := make(map[string]struct{}, len(envelopes))
 	var collisions []eventCollision
 	for i := range envelopes {
-		event, delivery, err := buildLedgerRows(&envelopes[i], status)
+		collision, err := appendPreparedBatchRow(&envelopes[i], status, events, &deliveries, seenDeliveries, result)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		collision := addPreparedEvent(events, &event, result)
 		if collision != nil {
 			collisions = append(collisions, *collision)
 		}
-		deliveries = append(deliveries, delivery)
+	}
+	if status == StatusPending {
+		assignSendUnits(deliveries)
 	}
 
 	eventRows := make([]eventInsert, 0, len(events))
@@ -186,6 +207,26 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status
 		eventRows = append(eventRows, events[key])
 	}
 	return eventRows, deliveries, collisions, nil
+}
+
+func appendPreparedBatchRow(
+	envelope *domain.AlarmQueueEnvelope,
+	status Status,
+	events map[string]eventInsert,
+	deliveries *[]deliveryInsert,
+	seenDeliveries map[string]struct{},
+	result *PublishBatchResult,
+) (*eventCollision, error) {
+	event, delivery, err := buildLedgerRows(envelope, status)
+	if err != nil {
+		return nil, err
+	}
+	collision := addPreparedEvent(events, &event, result)
+	if _, exists := seenDeliveries[delivery.DedupeKey]; !exists {
+		seenDeliveries[delivery.DedupeKey] = struct{}{}
+		*deliveries = append(*deliveries, delivery)
+	}
+	return collision, nil
 }
 
 func addPreparedEvent(events map[string]eventInsert, event *eventInsert, result *PublishBatchResult) *eventCollision {
@@ -223,7 +264,7 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 		return *result, err
 	}
 	result.InsertedDeliveries = insertedDeliveries
-	result.DuplicateDeliveries = len(deliveries) - insertedDeliveries
+	result.DuplicateDeliveries = result.RequestedDeliveries - insertedDeliveries
 	if recordErr := recordEventCollisions(ctx, tx, collisions); recordErr != nil {
 		err = recordErr
 		return *result, err

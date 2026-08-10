@@ -67,6 +67,9 @@ func buildRawEventKey(input *DedupeInput, canonicalYouTubeIdentity string) strin
 		identity := resolveYouTubeSourceIdentity(input.SourceIdentity, canonicalYouTubeIdentity)
 		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + identity
 	}
+	if input.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest {
+		return "delivery-digest:" + input.SourceIdentity
+	}
 	alarmType := input.AlarmType
 	if alarmType == "" {
 		alarmType = domain.AlarmTypeLive
@@ -137,7 +140,18 @@ func prepareEnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) preparedDed
 	input := envelopeNotificationDedupeInput(&envelope.Notification)
 	applyCelebrationDedupeSource(&input, envelope)
 	canonicalYouTubeIdentity := applyYouTubeOutboxDedupeSource(&input, envelope)
+	applyDeliveryDigestDedupeSource(&input, envelope)
 	return preparedDedupeInput{input: input, canonicalYouTubeIdentity: canonicalYouTubeIdentity}
+}
+
+func applyDeliveryDigestDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) {
+	if envelope.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest || envelope.DeliveryDigest == nil {
+		return
+	}
+	input.SourceKind = envelope.SourceKind
+	input.SourceIdentity = envelope.DeliveryDigest.Identity()
+	input.AlarmType = envelope.Notification.AlarmType
+	input.Category = string(envelope.SourceKind)
 }
 
 func (input *preparedDedupeInput) eventKey() string {

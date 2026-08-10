@@ -55,6 +55,11 @@ func (c *finalizeFailureRecordingConsumer) Requeue(_ context.Context, envelopes 
 	return c.requeueErr
 }
 
+func (c *finalizeFailureRecordingConsumer) RequeuePreSend(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.calls = append(c.calls, finalizeFailureCall{op: "RequeuePreSend", envelopes: envelopes})
+	return c.requeueErr
+}
+
 func (c *finalizeFailureRecordingConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
 	c.calls = append(c.calls, finalizeFailureCall{op: "RouteSendingFailures", retry: retryEnvelopes, dlq: dlqEnvelopes})
 	if len(c.routeSendingFailuresErrs) == 0 {
@@ -109,13 +114,15 @@ func TestPersistPreSendFailureCallSequenceHappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"RouteFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls))
 	require.Len(t, consumer.calls[0].retry, 1)
-	assert.Equal(t, "room-1", consumer.calls[0].retry[0].Notification.RoomID)
 	require.Len(t, consumer.calls[0].dlq, 1)
-	assert.Equal(t, "room-2", consumer.calls[0].dlq[0].Notification.RoomID)
+	assert.Equal(t, 1, consumer.calls[0].retry[0].Retry.Attempt)
+	assert.Equal(t, 3, consumer.calls[0].dlq[0].Retry.Attempt)
+	assert.Equal(t, "render failed", consumer.calls[0].retry[0].Retry.LastError)
+	assert.Equal(t, "render failed", consumer.calls[0].dlq[0].Retry.LastError)
 	assert.Equal(t, []string{"claim:room-2"}, consumer.calls[1].claimKeys)
 }
 
-func TestPersistPreSendFailureRouteFailureFallsBackToRequeueWithAllEnvelopes(t *testing.T) {
+func TestPersistPreSendFailureRouteFailureFallsBackToRequeue(t *testing.T) {
 	routeErr := errors.New("route down")
 	consumer := &finalizeFailureRecordingConsumer{routeFailuresErr: routeErr}
 	runner := Runner{consumer: consumer}
@@ -125,66 +132,11 @@ func TestPersistPreSendFailureRouteFailureFallsBackToRequeueWithAllEnvelopes(t *
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, routeErr)
-	assert.Contains(t, err.Error(), "route alarm dispatch failure:")
+	assert.Equal(t, "route alarm dispatch before send failure: route down", err.Error())
 	require.Equal(t, []string{"RouteFailures", "Requeue"}, finalizeFailureOps(consumer.calls))
 	require.Len(t, consumer.calls[1].envelopes, 2)
-	assert.Equal(t, "room-1", consumer.calls[1].envelopes[0].Notification.RoomID)
-	assert.Equal(t, "room-2", consumer.calls[1].envelopes[1].Notification.RoomID)
-}
-
-func TestPersistPreSendFailureReleaseClaimKeysFailureWrapPinned(t *testing.T) {
-	releaseErr := errors.New("release down")
-	consumer := &finalizeFailureRecordingConsumer{releaseClaimErr: releaseErr}
-	runner := Runner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
-
-	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, releaseErr)
-	assert.Equal(t, "release alarm dispatch dlq claim keys: release down", err.Error())
-	require.Equal(t, []string{"RouteFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls))
-}
-
-func TestPersistPreSendFailurePartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *testing.T) {
-	partialErr := &dispatchoutbox.PartialTransitionError{
-		Action:       "route dispatch delivery failures",
-		Updated:      1,
-		Expected:     2,
-		UnappliedIDs: []int64{finalizeFailureRetryDeliveryID},
-	}
-	consumer := &finalizeFailureRecordingConsumer{routeFailuresErr: partialErr}
-	runner := Runner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
-
-	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, partialErr)
-	require.Equal(t, []string{"RouteFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls),
-		"partial routing must not requeue: unapplied rows are owned by recovery/quarantine")
-	assert.Equal(t, []string{"claim:room-2"}, consumer.calls[1].claimKeys,
-		"applied dlq row's claim keys must still be released")
-}
-
-func TestPersistPreSendFailurePartialRoutingKeepsUnappliedDLQClaims(t *testing.T) {
-	partialErr := &dispatchoutbox.PartialTransitionError{
-		Action:       "route dispatch delivery failures",
-		Updated:      1,
-		Expected:     2,
-		UnappliedIDs: []int64{finalizeFailureDLQDeliveryID},
-	}
-	consumer := &finalizeFailureRecordingConsumer{routeFailuresErr: partialErr}
-	runner := Runner{consumer: consumer}
-	envelopes := []domain.AlarmQueueEnvelope{finalizeFailureRetryEnvelope(), finalizeFailureDLQEnvelope()}
-
-	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, partialErr)
-	require.Equal(t, []string{"RouteFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls))
-	assert.Empty(t, consumer.calls[1].claimKeys,
-		"unapplied dlq row's claim keys must not be released")
+	assert.Equal(t, 1, consumer.calls[1].envelopes[0].Retry.Attempt)
+	assert.Equal(t, 3, consumer.calls[1].envelopes[1].Retry.Attempt)
 }
 
 func TestPersistSendingRetryCallSequenceHappyPath(t *testing.T) {

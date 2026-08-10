@@ -53,7 +53,7 @@ done | LC_ALL=C sort -u > "${tmp_modules}"
 
 (
   cd "${tmp_work_dir}"
-  go work init "${MODULE_DIRS[@]}"
+  GOWORK=off go work init "${MODULE_DIRS[@]}"
 )
 tmp_go_work="${tmp_work_dir}/go.work"
 

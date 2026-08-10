@@ -63,7 +63,6 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 	if infra == nil {
 		return nil, fmt.Errorf("build bot runtime: infra is nil")
 	}
-
 	runtimeViews := buildBotRuntimeDependencyViews(infra)
 
 	botBot, err := orchestration.NewBot(runtimeViews.botDeps)
@@ -106,6 +105,7 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		Logger:               logger,
 		Bot:                  botBot,
 		ConfigSubscriber:     configSubscriber,
+		AlarmService:         infra.AlarmService,
 		ServerAddr:           appConfig.Server.H3Addr,
 		H3Server:             h3Server,
 		ShortLinkServer:      appbootstrap.BuildShortLinkServer(appConfig.Server.ShortLinkAddr),

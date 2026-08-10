@@ -11,6 +11,7 @@ export interface ServiceRuntimeStat {
 }
 
 export interface SystemStats {
+	sampledAt: number;
 	cpuUsage: number;
 	memoryUsage: number;
 	memoryTotal: number;

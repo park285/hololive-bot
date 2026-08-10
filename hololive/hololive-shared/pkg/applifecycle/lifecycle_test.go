@@ -285,8 +285,9 @@ func TestRun_DelegatesStartAndShutdown(t *testing.T) {
 	err := Run(nil, func(_ context.Context, errCh chan<- error) {
 		startCalled.Store(true)
 		errCh <- errors.New("stop runtime")
-	}, func(context.Context) {
+	}, func(context.Context) error {
 		shutdownCalled.Store(true)
+		return nil
 	})
 
 	assert.NoError(t, err)
@@ -300,7 +301,11 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 	ctx := t.Context()
 	calls := make([]string, 0, 5)
 
-	Shutdown(ctx, ShutdownHooks{
+	httpErr := errors.New("http shutdown failed")
+	webhookErr := errors.New("webhook close failed")
+	alarmErr := errors.New("alarm shutdown failed")
+	botErr := errors.New("bot shutdown failed")
+	err := Shutdown(ctx, ShutdownHooks{
 		Logger: slog.New(slog.DiscardHandler),
 		ClearAlarmScheduler: func() bool {
 			calls = append(calls, "clear-alarm-scheduler")
@@ -311,25 +316,25 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 			if gotCtx != ctx {
 				t.Fatal("ShutdownHTTPServer received unexpected context")
 			}
-			return errors.New("http shutdown failed")
+			return httpErr
 		},
 		WebhookHandlerClose: func() error {
 			calls = append(calls, "close-webhook-handler")
-			return errors.New("webhook close failed")
+			return webhookErr
 		},
 		ShutdownAlarmServices: func(gotCtx context.Context) error {
 			calls = append(calls, "shutdown-alarm-services")
 			if gotCtx != ctx {
 				t.Fatal("ShutdownAlarmServices received unexpected context")
 			}
-			return errors.New("alarm shutdown failed")
+			return alarmErr
 		},
 		ShutdownBot: func(gotCtx context.Context) error {
 			calls = append(calls, "shutdown-bot")
 			if gotCtx != ctx {
 				t.Fatal("ShutdownBot received unexpected context")
 			}
-			return errors.New("bot shutdown failed")
+			return botErr
 		},
 	})
 
@@ -340,13 +345,16 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 		"shutdown-alarm-services",
 		"shutdown-bot",
 	}, calls)
+	for _, wantErr := range []error{httpErr, webhookErr, alarmErr, botErr} {
+		assert.ErrorIs(t, err, wantErr)
+	}
 }
 
 func TestShutdown_HandlesNilHooks(t *testing.T) {
 	t.Parallel()
 
 	require.NotPanics(t, func() {
-		Shutdown(context.TODO(), ShutdownHooks{})
+		require.NoError(t, Shutdown(context.TODO(), ShutdownHooks{}))
 	})
 }
 

@@ -10,6 +10,8 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -174,18 +176,62 @@ func buildYouTubeOutboxDispatcher(
 	sender delivery.MessageSender,
 	logger *slog.Logger,
 ) (workerruntime.Scheduler, error) {
-	if !envutil.Bool("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", false) {
-		if logger != nil {
-			logger.Info("YouTube outbox dispatcher disabled")
-		}
+	mode, err := parseYouTubeOutboxHandoffMode()
+	if err != nil {
+		return nil, err
+	}
+	enabled, err := youtubeOutboxDispatcherEnabled(mode, logger)
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
 		return nil, nil
 	}
 	if infra == nil || infra.Postgres == nil {
 		return nil, fmt.Errorf("postgres is required")
 	}
+	if err := validateYouTubeOutboxHandoffConfig(mode); err != nil {
+		return nil, err
+	}
 
+	dispatcher := newYouTubeOutboxDispatcher(infra, sender, logger)
+	if err := configureYouTubeOutboxDispatcher(dispatcher, infra, logger, mode); err != nil {
+		return nil, err
+	}
+	return workerruntime.NewYouTubeOutboxDispatcherRunner(dispatcher, logger), nil
+}
+
+func parseYouTubeOutboxHandoffMode() (handoff.Mode, error) {
+	return handoff.ParseMode(envutil.String("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "off"))
+}
+
+func youtubeOutboxDispatcherEnabled(mode handoff.Mode, logger *slog.Logger) (bool, error) {
+	if envutil.Bool("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", false) {
+		return true, nil
+	}
+	if mode != handoff.ModeOff {
+		return false, fmt.Errorf("youtube outbox v3 handoff mode %q requires YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true", mode)
+	}
+	if logger != nil {
+		logger.Info("YouTube outbox dispatcher disabled")
+	}
+	return false, nil
+}
+
+func validateYouTubeOutboxHandoffConfig(mode handoff.Mode) error {
+	if mode == handoff.ModeCutover && !envutil.Bool("ALARM_DISPATCH_CONSUMER_ENABLED", true) {
+		return fmt.Errorf("youtube outbox v3 cutover requires ALARM_DISPATCH_CONSUMER_ENABLED=true")
+	}
+	return nil
+}
+
+func newYouTubeOutboxDispatcher(
+	infra *sharedmodules.InfraModule,
+	sender delivery.MessageSender,
+	logger *slog.Logger,
+) *dispatch.Dispatcher {
 	dispatchConfig := dispatchstate.DefaultConfig()
-	dispatcher := dispatch.NewDispatcher(
+	return dispatch.NewDispatcher(
 		infra.Postgres.GetPool(),
 		infra.Cache,
 		sender,
@@ -193,5 +239,21 @@ func buildYouTubeOutboxDispatcher(
 		logger,
 		&dispatchConfig,
 	)
-	return workerruntime.NewYouTubeOutboxDispatcherRunner(dispatcher, logger), nil
+}
+
+func configureYouTubeOutboxDispatcher(
+	dispatcher *dispatch.Dispatcher,
+	infra *sharedmodules.InfraModule,
+	logger *slog.Logger,
+	mode handoff.Mode,
+) error {
+	if mode == handoff.ModeOff {
+		return nil
+	}
+	publisher := queue.NewPublisher(
+		infra.Cache,
+		logger,
+		queue.WithOutbox(dispatchoutbox.NewPgxRepository(infra.Postgres, logger)),
+	)
+	return dispatcher.ConfigureHandoff(mode, youtubeOutboxDispatchPublisher{publisher: publisher})
 }

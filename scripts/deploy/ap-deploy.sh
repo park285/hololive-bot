@@ -122,7 +122,8 @@ validate_preview() {
 
 rsync_files_from="$(mktemp)"
 preview_file="$(mktemp)"
-trap 'rm -f "$preview_file" "$rsync_files_from"' EXIT
+image_archive=""
+trap 'rm -f "$preview_file" "$rsync_files_from"; [[ -z "$image_archive" ]] || rm -f "$image_archive"' EXIT
 
 build_rsync_files_from
 rsync_preview | tee "$preview_file"
@@ -140,6 +141,40 @@ fi
 REVISION="$(deploy_source_revision "$REPO_ROOT")"
 export REVISION
 
+IMAGE_REF="hololive-youtube-producer:prod"
+TARGET_PLATFORM="$(
+  remote "set -euo pipefail
+runtime_arch=\$(sudo -n docker info --format '{{.Architecture}}')
+case \"\$runtime_arch\" in
+  aarch64|arm64) printf '%s\\n' linux/arm64 ;;
+  x86_64|amd64) printf '%s\\n' linux/amd64 ;;
+  armv7|armv7l) printf '%s\\n' linux/arm/v7 ;;
+  *)
+    echo \"Unsupported AP Docker architecture: \$runtime_arch\" >&2
+    exit 1
+    ;;
+esac"
+)"
+
+echo "[BUILD] Building $IMAGE_REF for $TARGET_PLATFORM"
+docker buildx build \
+  --platform "$TARGET_PLATFORM" \
+  --provenance=false \
+  --sbom=false \
+  --load \
+  --tag "$IMAGE_REF" \
+  --file "$REPO_ROOT/hololive/hololive-youtube-producer/Dockerfile" \
+  --build-arg "VERSION=$HOLO_API_VERSION" \
+  --build-arg "REVISION=$REVISION" \
+  "$REPO_ROOT"
+built_revision="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE_REF")"
+[[ "$built_revision" == "$REVISION" ]]
+built_platform="$(docker image inspect -f '{{.Os}}/{{.Architecture}}{{if .Variant}}/{{.Variant}}{{end}}' "$IMAGE_REF")"
+[[ "$built_platform" == "$TARGET_PLATFORM" ]]
+image_archive="$(mktemp)"
+docker save --output "$image_archive" "$IMAGE_REF"
+test -s "$image_archive"
+
 services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"
 ports_list="${AP_PORTS[*]}"
@@ -149,10 +184,16 @@ AP_COMPOSE_LEGACY_FILE="$(basename "$AP_COMPOSE_FILE")"
 
 change_id="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="backups/$AP_BACKUP_PREFIX-$change_id"
+rollback_image_tag="hololive-youtube-producer:rollback-$change_id"
 
 remote "set -euo pipefail
 cd ~/hololive-bot
 mkdir -p '$backup_dir'
+if sudo -n docker image inspect '$IMAGE_REF' >/dev/null 2>&1; then
+  sudo -n docker tag '$IMAGE_REF' '$rollback_image_tag'
+  printf '%s\n' '$rollback_image_tag' > '$backup_dir/rollback-image-tag'
+  sudo -n docker image inspect '$rollback_image_tag' >/dev/null
+fi
 prod_prechange_file='$PROD_COMPOSE_FILE'
 if [[ ! -r \"\$prod_prechange_file\" && -r '$PROD_COMPOSE_LEGACY_FILE' ]]; then
   prod_prechange_file='$PROD_COMPOSE_LEGACY_FILE'
@@ -192,6 +233,22 @@ rsync -ai \
   -e "$RSYNC_RSH" \
   "ubuntu@$AP_SSH_HOST:~/"
 
+image_remote_path="$REMOTE_REPO_DIR/$backup_dir/hololive-youtube-producer-prod.tar"
+rsync -ai \
+  "$image_archive" \
+  -e "$RSYNC_RSH" \
+  "ubuntu@$AP_SSH_HOST:~/$image_remote_path"
+
+remote "set -euo pipefail
+cd ~/hololive-bot
+image_archive='$backup_dir/hololive-youtube-producer-prod.tar'
+trap 'rm -f \"\$image_archive\"' EXIT
+sudo -n docker load --input \"\$image_archive\"
+loaded_revision=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' '$IMAGE_REF')
+[[ \"\$loaded_revision\" == '$REVISION' ]]
+loaded_platform=\$(sudo -n docker image inspect -f '{{.Os}}/{{.Architecture}}{{if .Variant}}/{{.Variant}}{{end}}' '$IMAGE_REF')
+[[ \"\$loaded_platform\" == '$TARGET_PLATFORM' ]]"
+
 change_started_at="$(
   remote 'date -u +%Y-%m-%dT%H:%M:%SZ'
 )"
@@ -199,10 +256,7 @@ change_started_at="$(
 remote "set -euo pipefail
 cd ~/hololive-bot
 sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' build $services_list
-built_revision=\$(docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' hololive-youtube-producer:prod)
-[[ \"\$built_revision\" == '$REVISION' ]]
-sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-deps --force-recreate --remove-orphans $services_list
+sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
 echo change_started_at='$change_started_at'"
 
 remote "set -euo pipefail

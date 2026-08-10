@@ -38,6 +38,7 @@ import (
 type BotInfrastructure struct {
 	Deps           *orchestration.Dependencies
 	AlarmCRUD      domain.AlarmCRUD
+	AlarmService   *alarmservice.AlarmService
 	HolodexService *holodexprovider.Service
 	IrisRoomLister IrisRoomLister
 	Postgres       database.Client

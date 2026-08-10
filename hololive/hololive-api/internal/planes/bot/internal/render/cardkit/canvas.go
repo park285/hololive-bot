@@ -34,7 +34,7 @@ func downscaleToWidth(src *image.RGBA, outputWidth int) image.Image {
 	}
 	nh := b.Dy() * outputWidth / b.Dx()
 	dst := image.NewRGBA(image.Rect(0, 0, outputWidth, nh))
-	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, b, xdraw.Src, nil)
+	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, b, xdraw.Src, nil)
 	return dst
 }
 

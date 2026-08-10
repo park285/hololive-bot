@@ -53,6 +53,7 @@ type AlarmWorkerRuntime struct {
 	ConfigSubscriber     *configsub.Subscriber
 	ServerAddr           string
 	HTTPServers          *sharedserver.RuntimeHTTPServers
+	AlarmService         interface{ Close(context.Context) error }
 
 	schedulerMu     sync.Mutex
 	schedulerCancel context.CancelFunc

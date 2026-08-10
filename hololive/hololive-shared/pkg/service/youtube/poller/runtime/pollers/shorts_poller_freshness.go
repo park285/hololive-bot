@@ -98,9 +98,26 @@ func (p *ShortsPoller) classifyShortByFreshness(
 		return classifiedShortCandidate{short: short, class: shortCandidateStoreSilently}
 	}
 	if publishedAt == nil {
+		if !takeMetadataResolve(ctx) {
+			return p.deferShortCandidateForBudget(ctx, channelID, short, rawID)
+		}
 		publishedAt = p.resolveShortPublishedAt(ctx, channelID, short.VideoID)
 	}
 	return p.classifyShortTimestamp(ctx, channelID, short, rawID, publishedAt, now)
+}
+
+func (p *ShortsPoller) deferShortCandidateForBudget(
+	ctx context.Context,
+	channelID string,
+	short *parser.Short,
+	rawID string,
+) classifiedShortCandidate {
+	p.deferrals.recordBudgetDeferral(channelID, rawID)
+	slog.InfoContext(ctx, "Shorts metadata resolve deferred by per-poll allowance",
+		logschema.FieldChannelID, channelID,
+		"video_id", rawID,
+	)
+	return classifiedShortCandidate{short: short, class: shortCandidateDeferred}
 }
 
 func shortPublishedAtEvidence(

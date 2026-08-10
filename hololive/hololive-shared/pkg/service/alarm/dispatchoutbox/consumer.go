@@ -166,6 +166,9 @@ func (c *Consumer) rehydrateEnvelope(ctx context.Context, record *Record, envelo
 
 func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 	envelope.DispatchOutboxID = record.ID
+	envelope.DispatchGroupKey = record.DispatchGroupKey
+	envelope.SendUnitID = record.SendUnitID
+	envelope.ClientRequestID = record.ClientRequestID
 	envelope.ClaimKeys = record.ClaimKeys
 	if record.AttemptCount > 0 {
 		envelope.Retry = &domain.AlarmQueueRetryMetadata{
@@ -265,6 +268,11 @@ func (c *Consumer) RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelop
 func (c *Consumer) RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
 	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
 	return observeRoutedFailures(c.repository.RouteSendingFailures(ctx, updates, c.workerID), updates, retryCount, dlqCount)
+}
+
+func (c *Consumer) RequeuePreSend(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	updates, retryCount, _ := failureUpdatesFromEnvelopes(envelopes, nil)
+	return observeRoutedFailures(c.repository.RequeuePreSend(ctx, updates, c.workerID), updates, retryCount, 0)
 }
 
 func observeRoutedFailures(err error, updates []FailureUpdate, retryCount, dlqCount int) error {

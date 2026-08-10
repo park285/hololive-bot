@@ -69,6 +69,8 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 	var record Record
 	var status string
 	var lockedBy *string
+	var dispatchGroupKey *string
+	var sendUnitID *int64
 	err := row.Scan(
 		&record.ID,
 		&record.EventID,
@@ -76,6 +78,9 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 		&record.DedupeKey,
 		&record.ClaimKeys,
 		&record.DeliveryContext,
+		&dispatchGroupKey,
+		&sendUnitID,
+		&record.ClientRequestID,
 		&status,
 		&record.AttemptCount,
 		&record.NextAttemptAt,
@@ -97,6 +102,12 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 	}
 	if lockedBy != nil {
 		record.LockedBy = *lockedBy
+	}
+	if dispatchGroupKey != nil {
+		record.DispatchGroupKey = *dispatchGroupKey
+	}
+	if sendUnitID != nil {
+		record.SendUnitID = *sendUnitID
 	}
 	record.Status = Status(status)
 	return &record, nil

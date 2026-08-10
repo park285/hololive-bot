@@ -24,23 +24,27 @@ import (
 	"context"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
-func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) {
+func (r *AlarmWorkerRuntime) Shutdown(ctx context.Context) error {
 	if r == nil {
-		return
+		return nil
 	}
 
-	applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
+	return applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger: r.Logger,
 		ClearAlarmScheduler: func() bool {
 			canceled := r.clearAlarmSchedulerCancel()
 			r.waitAlarmScheduler(ctx)
 			return canceled
 		},
-		ShutdownHTTPServer:    r.ShutdownHTTPServer,
-		ShutdownAlarmServices: alarmservice.CloseAllAlarmServices,
+		ShutdownHTTPServer: r.ShutdownHTTPServer,
+		ShutdownAlarmServices: func(ctx context.Context) error {
+			if r.AlarmService == nil {
+				return nil
+			}
+			return r.AlarmService.Close(ctx)
+		},
 	})
 }
 

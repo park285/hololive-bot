@@ -12,16 +12,58 @@ import (
 type AlarmDispatchSourceKind string
 
 const (
-	AlarmDispatchSourceKindYouTubeOutbox AlarmDispatchSourceKind = "youtube_outbox"
-	AlarmDispatchSourceKindCelebration   AlarmDispatchSourceKind = "celebration"
+	AlarmDispatchSourceKindYouTubeOutbox  AlarmDispatchSourceKind = "youtube_outbox"
+	AlarmDispatchSourceKindCelebration    AlarmDispatchSourceKind = "celebration"
+	AlarmDispatchSourceKindDeliveryDigest AlarmDispatchSourceKind = "delivery_digest"
 
-	maxYouTubeOutboxIdentityItems  = 1000
-	maxYouTubeOutboxContentIDBytes = 512
+	maxYouTubeOutboxIdentityItems   = 1000
+	maxYouTubeOutboxContentIDBytes  = 512
+	maxDeliveryDigestPeriodKeyBytes = 256
+	maxDeliveryDigestMessageBytes   = 64 * 1024
 )
 
 var canonicalDispatchValidators = map[AlarmDispatchSourceKind]func(*AlarmQueueEnvelope) error{
-	AlarmDispatchSourceKindYouTubeOutbox: (*AlarmQueueEnvelope).validateYouTubeOutboxDispatch,
-	AlarmDispatchSourceKindCelebration:   (*AlarmQueueEnvelope).validateCelebrationDispatch,
+	AlarmDispatchSourceKindYouTubeOutbox:  (*AlarmQueueEnvelope).validateYouTubeOutboxDispatch,
+	AlarmDispatchSourceKindCelebration:    (*AlarmQueueEnvelope).validateCelebrationDispatch,
+	AlarmDispatchSourceKindDeliveryDigest: (*AlarmQueueEnvelope).validateDeliveryDigestDispatch,
+}
+
+type DeliveryDigestDispatchPayload struct {
+	Kind               DeliveryOutboxKind `json:"kind"`
+	PeriodKey          string             `json:"period_key"`
+	PreRenderedMessage string             `json:"pre_rendered_message"`
+}
+
+func (p *DeliveryDigestDispatchPayload) Validate() error {
+	if p == nil {
+		return fmt.Errorf("delivery digest dispatch payload is nil")
+	}
+	if !p.Kind.IsValid() {
+		return fmt.Errorf("delivery digest dispatch payload kind %q is invalid", p.Kind)
+	}
+	periodKey := strings.TrimSpace(p.PeriodKey)
+	if periodKey == "" {
+		return fmt.Errorf("delivery digest dispatch payload period key is empty")
+	}
+	if len(periodKey) > maxDeliveryDigestPeriodKeyBytes {
+		return fmt.Errorf("delivery digest dispatch payload period key is too long: %d > %d bytes", len(periodKey), maxDeliveryDigestPeriodKeyBytes)
+	}
+	message := strings.TrimSpace(p.PreRenderedMessage)
+	if message == "" {
+		return fmt.Errorf("delivery digest dispatch payload message is empty")
+	}
+	if len(message) > maxDeliveryDigestMessageBytes {
+		return fmt.Errorf("delivery digest dispatch payload message is too long: %d > %d bytes", len(message), maxDeliveryDigestMessageBytes)
+	}
+	return nil
+}
+
+func (p *DeliveryDigestDispatchPayload) Identity() string {
+	if p == nil || !p.Kind.IsValid() || strings.TrimSpace(p.PeriodKey) == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(string(p.Kind) + "\x00" + strings.TrimSpace(p.PeriodKey)))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 type YouTubeOutboxDispatchPayload struct {
@@ -230,6 +272,22 @@ func (e *AlarmQueueEnvelope) validateYouTubeOutboxDispatch() error {
 		return fmt.Errorf("canonical alarm dispatch: %w", err)
 	}
 	return validateCanonicalYouTubeOutboxMatch(&e.Notification, e.YouTubeOutbox)
+}
+
+func (e *AlarmQueueEnvelope) validateDeliveryDigestDispatch() error {
+	if err := validateCanonicalNotification(&e.Notification); err != nil {
+		return err
+	}
+	if e.Notification.AlarmType != AlarmTypeCommunity {
+		return fmt.Errorf("canonical alarm dispatch: delivery digest storage alarm type %q is not community", e.Notification.AlarmType)
+	}
+	if e.DeliveryDigest == nil {
+		return fmt.Errorf("canonical alarm dispatch: delivery digest payload is nil")
+	}
+	if err := e.DeliveryDigest.Validate(); err != nil {
+		return fmt.Errorf("canonical alarm dispatch: %w", err)
+	}
+	return nil
 }
 
 func validateCanonicalNotification(notification *AlarmNotification) error {

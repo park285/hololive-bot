@@ -24,7 +24,6 @@ import (
 	"context"
 	"log/slog"
 	"testing"
-	"time"
 
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 
@@ -52,7 +51,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -62,16 +60,6 @@ func canceledContext() context.Context {
 	cancel()
 
 	return ctx
-}
-
-func closeAlarmServices(t *testing.T) {
-	t.Helper()
-
-	// t.Cleanup 시점에 t.Context()는 이미 canceled 상태이므로 독립 context 사용
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	require.NoError(t, alarmservice.CloseAllAlarmServices(ctx))
 }
 
 func TestInitializeBotDependencies_ContextCanceled(t *testing.T) {
@@ -223,7 +211,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 
 func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 	t.Parallel()
-	t.Cleanup(func() { closeAlarmServices(t) })
 
 	memberData := &stubMemberDataProvider{}
 	deps, err := initAlarmDependencies(
@@ -239,6 +226,7 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, deps)
+	t.Cleanup(func() { require.NoError(t, deps.AlarmService.Close(context.Background())) })
 	assert.Same(t, memberData, deps.MemberDataProvider)
 	assert.NotNil(t, deps.ChzzkClient)
 	assert.NotNil(t, deps.TwitchClient)
@@ -247,7 +235,6 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 
 func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 	t.Parallel()
-	t.Cleanup(func() { closeAlarmServices(t) })
 
 	memberData := &stubMemberDataProvider{}
 	components, err := initAlarmModeComponents(
@@ -264,6 +251,7 @@ func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, components)
+	t.Cleanup(func() { require.NoError(t, components.AlarmService.Close(context.Background())) })
 	assert.Same(t, memberData, components.MemberDataSource)
 	assert.NotNil(t, components.AlarmService)
 	assert.NotNil(t, components.ChzzkClient)

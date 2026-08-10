@@ -22,6 +22,7 @@ package retention
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -34,10 +35,13 @@ import (
 )
 
 const (
-	cleanupLockKey   int64 = 841977302
-	defaultBatchSize       = 1000
-	defaultInterval        = time.Hour
-	batchYield             = 10 * time.Millisecond
+	cleanupLockKey          int64 = 841977302
+	defaultBatchSize              = 1000
+	defaultInterval               = time.Hour
+	batchYield                    = 10 * time.Millisecond
+	maxCleanupBatches             = 64
+	maxCleanupDuration            = 30 * time.Second
+	cleanupStatementTimeout       = 2 * time.Second
 
 	channelSnapshotsDaysEnv = "YOUTUBE_PRODUCER_RETENTION_CHANNEL_SNAPSHOTS_DAYS"
 	liveSessionsDaysEnv     = "YOUTUBE_PRODUCER_RETENTION_LIVE_SESSIONS_DAYS"
@@ -58,6 +62,9 @@ type Config struct {
 	ViewerSamplesDays    int
 	BatchSize            int
 	Interval             time.Duration
+	MaxBatches           int
+	MaxDuration          time.Duration
+	StatementTimeout     time.Duration
 }
 
 func LoadConfig() Config {
@@ -86,9 +93,30 @@ func (c Config) Enabled() bool {
 
 func (c Config) effectiveBatchSize() int {
 	if c.BatchSize > 0 {
-		return c.BatchSize
+		return min(c.BatchSize, defaultBatchSize)
 	}
 	return defaultBatchSize
+}
+
+func (c Config) effectiveMaxBatches() int {
+	if c.MaxBatches > 0 {
+		return min(c.MaxBatches, maxCleanupBatches)
+	}
+	return maxCleanupBatches
+}
+
+func (c Config) effectiveMaxDuration() time.Duration {
+	if c.MaxDuration > 0 {
+		return min(c.MaxDuration, maxCleanupDuration)
+	}
+	return maxCleanupDuration
+}
+
+func (c Config) effectiveStatementTimeout() time.Duration {
+	if c.StatementTimeout > 0 {
+		return min(c.StatementTimeout, cleanupStatementTimeout)
+	}
+	return cleanupStatementTimeout
 }
 
 func (c Config) effectiveInterval() time.Duration {
@@ -137,6 +165,20 @@ func (c *Cleaner) Start(ctx context.Context) {
 }
 
 func (c *Cleaner) Cleanup(ctx context.Context) (int64, error) {
+	runCtx, cancel := context.WithTimeout(ctx, c.config.effectiveMaxDuration())
+	defer cancel()
+
+	deleted, err := c.cleanup(runCtx)
+	if err == nil {
+		return deleted, nil
+	}
+	if ctx.Err() == nil && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+		return deleted, fmt.Errorf("youtube retention cleanup time budget exceeded: %w", errors.Join(context.DeadlineExceeded, err))
+	}
+	return deleted, err
+}
+
+func (c *Cleaner) cleanup(ctx context.Context) (int64, error) {
 	if c.pool == nil {
 		return 0, fmt.Errorf("youtube retention cleaner pool is nil")
 	}
@@ -193,50 +235,99 @@ func (c *Cleaner) targets() []target {
 
 func (c *Cleaner) cleanupTargets(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
 	batchSize := c.config.effectiveBatchSize()
+	remainingBatches := c.config.effectiveMaxBatches()
 	var total int64
 	for _, t := range c.targets() {
-		if t.retentionDays <= 0 {
-			continue
-		}
-		cutoff := cutoffFor(time.Now(), t.retentionDays)
-		deleted, err := deleteBatches(ctx, conn, t.deleteSQL, cutoff, batchSize)
+		deleted, exhausted, err := c.cleanupTarget(ctx, conn, t, batchSize, &remainingBatches)
 		total += deleted
 		if err != nil {
 			return total, fmt.Errorf("cleanup %s: %w", t.name, err)
 		}
-		if deleted > 0 {
-			c.logInfo(t.name, deleted, t.retentionDays, batchSize)
+		if exhausted {
+			c.logBudgetExhausted(t.name, total)
+			return total, nil
 		}
 	}
 	return total, nil
 }
 
-func deleteBatches(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int) (int64, error) {
+func (c *Cleaner) cleanupTarget(ctx context.Context, conn *pgxpool.Conn, t target, batchSize int, remainingBatches *int) (deleted int64, exhausted bool, err error) {
+	if t.retentionDays <= 0 {
+		return 0, false, nil
+	}
+	cutoff := cutoffFor(time.Now(), t.retentionDays)
+	deleted, exhausted, err = deleteBatches(ctx, conn, t.deleteSQL, cutoff, batchSize, remainingBatches, c.config.effectiveStatementTimeout())
+	if err != nil {
+		return deleted, false, err
+	}
+	if deleted > 0 {
+		c.logInfo(t.name, deleted, t.retentionDays, batchSize)
+	}
+	return deleted, exhausted, nil
+}
+
+func deleteBatches(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int, remainingBatches *int, statementTimeout time.Duration) (deleted int64, exhausted bool, err error) {
 	var total int64
 	for {
-		rows, err := deleteOneBatch(ctx, conn, deleteSQL, cutoff, batchSize)
+		if *remainingBatches <= 0 {
+			return total, true, nil
+		}
+		rows, exhausted, err := deleteBatch(ctx, conn, deleteSQL, cutoff, batchSize, remainingBatches, statementTimeout)
 		total += rows
 		if err != nil {
-			return total, err
+			return total, false, err
 		}
-		if rows < int64(batchSize) {
-			return total, nil
-		}
-		if err := yield(ctx); err != nil {
-			return total, err
+		if exhausted {
+			return total, exhausted, nil
 		}
 	}
 }
 
-func deleteOneBatch(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int) (int64, error) {
+func deleteBatch(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int, remainingBatches *int, statementTimeout time.Duration) (deleted int64, exhausted bool, err error) {
+	rows, err := deleteOneBatch(ctx, conn, deleteSQL, cutoff, batchSize, statementTimeout)
+	(*remainingBatches)--
+	if err != nil {
+		return rows, false, err
+	}
+	if rows < int64(batchSize) {
+		return rows, false, nil
+	}
+	if *remainingBatches <= 0 {
+		return rows, true, nil
+	}
+	if err := yield(ctx); err != nil {
+		return rows, false, err
+	}
+	return rows, false, nil
+}
+
+func deleteOneBatch(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int, statementTimeout time.Duration) (int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	tag, err := conn.Exec(ctx, deleteSQL, cutoff, batchSize)
+	statementCtx, cancel := context.WithTimeout(ctx, statementTimeout)
+	defer cancel()
+	tag, err := conn.Exec(statementCtx, deleteSQL, cutoff, batchSize)
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(statementCtx.Err(), context.DeadlineExceeded) {
+			return 0, fmt.Errorf("youtube retention statement time budget exceeded: %w", errors.Join(context.DeadlineExceeded, err))
+		}
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+func (c *Cleaner) logBudgetExhausted(table string, deleted int64) {
+	if c.logger == nil {
+		return
+	}
+	c.logger.Info("Youtube retention cleanup budget exhausted",
+		slog.String("table", table),
+		slog.Int64("deleted", deleted),
+		slog.Int("max_batches", c.config.effectiveMaxBatches()),
+		slog.Duration("max_duration", c.config.effectiveMaxDuration()),
+		slog.Duration("statement_timeout", c.config.effectiveStatementTimeout()),
+	)
 }
 
 func acquireLock(ctx context.Context, conn *pgxpool.Conn) (bool, error) {

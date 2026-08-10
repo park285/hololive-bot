@@ -43,13 +43,10 @@ type alarmModeComponents struct {
 	MemberDataSource domain.MemberDataProvider
 }
 
-func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*AdminAPIRuntime, error) {
-	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
+func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *AdminAPIRuntime, retErr error) {
+	ctx, appConfig, err := normalizeAdminAPIRuntimeInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
-	}
-	if appConfig == nil {
-		return nil, errors.New("config must not be nil")
 	}
 
 	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
@@ -67,6 +64,58 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logge
 	if err != nil {
 		return cleanupAdminAPIRuntimeBuild(infra, "alarm mode", err)
 	}
+	runtimeOwnsAlarmService := false
+	defer func() {
+		retErr = closeUnownedAdminAlarmService(ctx, alarmMode.AlarmService, runtimeOwnsAlarmService, retErr)
+	}()
+
+	runtime, err := buildAdminAPIRuntimeAfterAlarmMode(ctx, appConfig, infra, foundation, alarmMode, logger)
+	if err != nil {
+		return nil, err
+	}
+	runtime.AlarmService = alarmMode.AlarmService
+	runtimeOwnsAlarmService = true
+	return runtime, nil
+}
+
+func closeUnownedAdminAlarmService(
+	ctx context.Context,
+	alarmService *alarmservice.AlarmService,
+	runtimeOwnsAlarmService bool,
+	buildErr error,
+) error {
+	if runtimeOwnsAlarmService || alarmService == nil {
+		return buildErr
+	}
+	if err := alarmService.Close(ctx); err != nil {
+		return errors.Join(buildErr, fmt.Errorf("build admin api runtime: close alarm service: %w", err))
+	}
+	return buildErr
+}
+
+func normalizeAdminAPIRuntimeInputs(
+	ctx context.Context,
+	appConfig *settings.Config,
+	logger *slog.Logger,
+) (context.Context, *settings.Config, error) {
+	if appConfig == nil {
+		return nil, nil, errors.New("config must not be nil")
+	}
+	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ctx, appConfig, nil
+}
+
+func buildAdminAPIRuntimeAfterAlarmMode(
+	ctx context.Context,
+	appConfig *settings.Config,
+	infra *sharedmodules.InfraModule,
+	foundation *scraperHolodexProfileFoundation,
+	alarmMode *alarmModeComponents,
+	logger *slog.Logger,
+) (*AdminAPIRuntime, error) {
 
 	aclService, err := buildAdminAPIACLService(ctx, appConfig, infra, logger)
 	if err != nil {

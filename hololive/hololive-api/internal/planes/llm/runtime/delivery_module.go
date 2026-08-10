@@ -23,10 +23,17 @@ package runtime
 import (
 	"log/slog"
 
+	"github.com/park285/shared-go/pkg/envutil"
+
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
+
+const deliveryOutboxV3HandoffModeEnv = "DELIVERY_OUTBOX_V3_HANDOFF_MODE"
 
 type DeliveryModule struct {
 	Locker     delivery.NotificationLocker
@@ -37,12 +44,25 @@ func BuildDeliveryModule(
 	cacheClient cache.Client,
 	postgres database.Client,
 	logger *slog.Logger,
-) *DeliveryModule {
+) (*DeliveryModule, error) {
 	locker := delivery.NewLocker(cacheClient, logger)
-	repository := delivery.NewOutboxRepository(postgres, logger)
+	mode, err := handoff.ParseMode(envutil.String(deliveryOutboxV3HandoffModeEnv, "off"))
+	if err != nil {
+		return nil, err
+	}
+	var options []delivery.RepositoryOption
+	if mode != handoff.ModeOff {
+		publisher := queue.NewPublisher(
+			cacheClient,
+			logger,
+			queue.WithOutbox(dispatchoutbox.NewPgxRepository(postgres, logger)),
+		)
+		options = append(options, delivery.WithDispatchHandoff(mode, deliveryDispatchPublisher{publisher: publisher}))
+	}
+	repository := delivery.NewOutboxRepository(postgres, logger, options...)
 
 	return &DeliveryModule{
 		Locker:     locker,
 		Repository: repository,
-	}
+	}, nil
 }

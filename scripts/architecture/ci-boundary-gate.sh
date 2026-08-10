@@ -111,6 +111,7 @@ bash "${ROOT_DIR}/scripts/deploy/test-postgres18-runtime-contract.sh"
 "${ROOT_DIR}/scripts/deploy/test-live-compat-cert-mount-scope.sh"
 "${ROOT_DIR}/scripts/deploy/test-removed-runtimes.sh"
 "${ROOT_DIR}/scripts/logs/test-remote-sync-main-logs.sh"
+bash "${ROOT_DIR}/scripts/ops/postgres-failover_test.sh"
 echo
 
 echo "[CI] Run M4 Go module LOC gate"

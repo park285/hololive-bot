@@ -101,7 +101,14 @@
         "operationId": "handle_logout",
         "responses": {
           "200": {
-            "description": "Logout successful"
+            "description": "Logout successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -1759,9 +1766,14 @@
         "required": [
           "services",
           "uptime",
-          "version"
+          "version",
+          "sampled_at"
         ],
         "properties": {
+          "sampled_at": {
+            "type": "integer",
+            "format": "int64"
+          },
           "services": {
             "type": "array",
             "items": {
@@ -2450,7 +2462,8 @@
           "authenticated",
           "username",
           "absolute_expires_at",
-          "session_policy"
+          "session_policy",
+          "csrf_token"
         ],
         "properties": {
           "absolute_expires_at": {
@@ -2459,6 +2472,9 @@
           },
           "authenticated": {
             "type": "boolean"
+          },
+          "csrf_token": {
+            "type": "string"
           },
           "session_policy": {
             "$ref": "#/components/schemas/SessionPolicyResponse"

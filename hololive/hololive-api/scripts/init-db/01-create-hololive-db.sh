@@ -165,6 +165,14 @@ SELECT format(
   'ALTER ROLE %I WITH LOGIN REPLICATION NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
   :'hololive_replicator', :'hololive_replicator_password'
 ) \gexec
+
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'hololive_db', :'hololive_replicator') \gexec
+
+\connect :hololive_db
+SELECT format(
+  'GRANT EXECUTE ON FUNCTION pg_catalog.pg_promote(boolean, integer) TO %I',
+  :'hololive_replicator'
+) \gexec
 EOSQL
   echo "Streaming replication role provisioned."
 fi

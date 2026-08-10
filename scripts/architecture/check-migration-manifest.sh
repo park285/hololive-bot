@@ -215,4 +215,16 @@ for file in "${sql_files[@]}"; do
   exit 1
 done
 
+for file in "${sql_files[@]}"; do
+  prefix="${file%%_*}"
+  if [[ ! "${prefix}" =~ ^[0-9]+$ ]] || (( 10#${prefix} < 140 )); then
+    continue
+  fi
+  if sed 's/--.*$//' "${MIGRATIONS_DIR}/${file}" | grep -qiE '^[[:space:]]*CREATE[[:space:]]+(UNIQUE[[:space:]]+)?INDEX[[:space:]]+(IF[[:space:]]+NOT[[:space:]]+EXISTS[[:space:]]+)?' &&
+     ! sed 's/--.*$//' "${MIGRATIONS_DIR}/${file}" | grep -qiE '^[[:space:]]*CREATE[[:space:]]+(UNIQUE[[:space:]]+)?INDEX[[:space:]]+CONCURRENTLY[[:space:]]+'; then
+    echo "FAIL: ${file} creates a blocking index; use CREATE INDEX CONCURRENTLY in a single-statement migration" >&2
+    exit 1
+  fi
+done
+
 echo "OK: migration manifest matches SQL files"

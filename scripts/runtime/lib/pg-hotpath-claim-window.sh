@@ -33,7 +33,12 @@ start_claims AS MATERIALIZED (
     CROSS JOIN pg_stat_statements statements
     CROSS JOIN LATERAL (
         SELECT
-            statements.query ~* 'WITH[[:space:]]+picked[[:space:]]+AS[[:space:]]*[(]'
+            statements.query ~* 'WITH[[:space:]]+legacy_head[[:space:]]+AS[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+AS[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+AS[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+AS[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*picked[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+alarm_dispatch_deliveries[[:space:]]+d[[:space:]]+SET'
             AND statements.query ~* 'lock_expires_at[[:space:]]*=[[:space:]]*NOW[[:space:]]*[(][)][[:space:]]*[+]'
@@ -94,7 +99,12 @@ finish_claims AS MATERIALIZED (
     CROSS JOIN pg_stat_statements statements
     CROSS JOIN LATERAL (
         SELECT
-            statements.query ~* 'WITH[[:space:]]+picked[[:space:]]+AS[[:space:]]*[(]'
+            statements.query ~* 'WITH[[:space:]]+legacy_head[[:space:]]+AS[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+AS[[:space:]]+MATERIALIZED[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+AS[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+AS[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+AS[[:space:]]*[(]'
+            AND statements.query ~* '[)][[:space:]]*,[[:space:]]*picked[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+alarm_dispatch_deliveries[[:space:]]+d[[:space:]]+SET'
             AND statements.query ~* 'lock_expires_at[[:space:]]*=[[:space:]]*NOW[[:space:]]*[(][)][[:space:]]*[+]'
@@ -292,7 +302,12 @@ claim_query_matches_target() {
   case "${claim_target}" in
     alarm_dispatch)
       query_matches_all_patterns "${normalized_query}" \
-        'with[[:space:]]+picked[[:space:]]+as[[:space:]]*[(]' \
+        'with[[:space:]]+legacy_head[[:space:]]+as[[:space:]]*[(]' \
+        '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+as[[:space:]]+materialized[[:space:]]*[(]' \
+        '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+as[[:space:]]*[(]' \
+        '[)][[:space:]]*,[[:space:]]*ranked_units[[:space:]]+as[[:space:]]*[(]' \
+        '[)][[:space:]]*,[[:space:]]*next_units[[:space:]]+as[[:space:]]*[(]' \
+        '[)][[:space:]]*,[[:space:]]*picked[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+as[[:space:]]*[(]' \
         'update[[:space:]]+alarm_dispatch_deliveries[[:space:]]+d[[:space:]]+set' \
         'lock_expires_at[[:space:]]*=[[:space:]]*now[[:space:]]*[(][)][[:space:]]*[+]' \

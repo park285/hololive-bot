@@ -20,6 +20,8 @@ require "EXPLAIN (ANALYZE, BUFFERS)"
 require "alarm_dispatch_deliveries"
 require "youtube_notification_outbox"
 require "idx_alarm_dispatch_deliveries_due"
+require "idx_alarm_dispatch_deliveries_send_unit"
+require "idx_alarm_dispatch_deliveries_send_unit_due"
 require "idx_yno_pending_due_created_id"
 require "definition_ok"
 require "INTERVAL '5 minutes'"
@@ -98,7 +100,12 @@ if [[ "${alarm_late_fragment_prefix}" == "${alarm_claim_source}" \
 fi
 
 for fragment in \
-  "WITH picked AS (" \
+  "WITH legacy_head AS (" \
+  "), due_window AS MATERIALIZED (" \
+  "), locked_units AS (" \
+  "), ranked_units AS (" \
+  "), next_units AS (" \
+  "), picked AS (" \
   "), updated AS (" \
   "UPDATE alarm_dispatch_deliveries d" \
   "lock_expires_at = NOW() +" \
@@ -217,9 +224,13 @@ if [[ -n "$out_file" ]]; then
     *target-indexes*)
       if [[ "${FAKE_INVALID_TARGET_INDEX:-false}" == "true" ]]; then
         printf '%s\n' 'idx_alarm_dispatch_deliveries_due|t|t|t' > "$out_file"
+        printf '%s\n' 'idx_alarm_dispatch_deliveries_send_unit|t|t|t' >> "$out_file"
+        printf '%s\n' 'idx_alarm_dispatch_deliveries_send_unit_due|t|t|t' >> "$out_file"
         printf '%s\n' 'idx_yno_pending_due_created_id|t|t|f' >> "$out_file"
       else
         printf '%s\n' 'idx_alarm_dispatch_deliveries_due|t|t|t' > "$out_file"
+        printf '%s\n' 'idx_alarm_dispatch_deliveries_send_unit|t|t|t' >> "$out_file"
+        printf '%s\n' 'idx_alarm_dispatch_deliveries_send_unit_due|t|t|t' >> "$out_file"
         printf '%s\n' 'idx_yno_pending_due_created_id|t|t|t' >> "$out_file"
       fi
       ;;

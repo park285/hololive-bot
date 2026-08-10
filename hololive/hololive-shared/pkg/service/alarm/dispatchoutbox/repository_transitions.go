@@ -55,6 +55,15 @@ func (r *PgxRepository) RouteSendingFailures(ctx context.Context, updates []Fail
 	return r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0170_07.sql", "route dispatch delivery sending failures")
 }
 
+func (r *PgxRepository) RequeuePreSend(ctx context.Context, updates []FailureUpdate, workerID string) error {
+	for i := range updates {
+		if updates[i].TargetStatus != StatusRetry {
+			return fmt.Errorf("requeue pre-send dispatch deliveries: unsupported target status %q for delivery %d", updates[i].TargetStatus, updates[i].ID)
+		}
+	}
+	return r.routeFailureUpdates(ctx, updates, workerID, "repository_transitions_0185_08.sql", "requeue pre-send dispatch deliveries")
+}
+
 func (r *PgxRepository) routeFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, queryFile, action string) error {
 	if len(updates) == 0 {
 		return nil

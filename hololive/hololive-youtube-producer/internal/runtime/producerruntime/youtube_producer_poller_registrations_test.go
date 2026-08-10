@@ -98,7 +98,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		worstCaseRequestUnits float64
 	}{
 		{name: "videos", priority: pollscheduler.PriorityNormal, interval: 7 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 9},
-		{name: "shorts", priority: pollscheduler.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
+		{name: "shorts", priority: pollscheduler.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 2},
 		{name: "community", priority: pollscheduler.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
 		{name: "channel_stats", priority: pollscheduler.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupOperational, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 6},
 		{name: "live", priority: pollscheduler.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
@@ -432,7 +432,7 @@ func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testi
 	}
 }
 
-func TestBuildYouTubeProducerChannelPollerRegistrations_FlatWorstCaseRequestUnits(t *testing.T) {
+func TestBuildYouTubeProducerChannelPollerRegistrations_MetadataWorstCaseRequestUnits(t *testing.T) {
 	t.Parallel()
 
 	postgres := newPollerRegistrationTestDB(t)
@@ -462,6 +462,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_FlatWorstCaseRequestUnit
 		byName[registration.Poller.Name()] = registration
 	}
 
-	assert.Equal(t, 1.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
+	assert.Equal(t, 2.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
 	assert.Equal(t, 1.0, byName["community"].WorstCaseRequestUnitsPerRun)
 }

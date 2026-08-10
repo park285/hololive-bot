@@ -56,6 +56,7 @@ type Metrics struct {
 	JobReleaseTotal                   *prometheus.CounterVec
 	OutboxInsertTotal                 *prometheus.CounterVec
 	CommunityShortsDetectedPostsTotal *prometheus.CounterVec
+	MetadataResolveTotal              *prometheus.CounterVec
 }
 
 func NewMetrics() *Metrics {
@@ -160,6 +161,10 @@ func (m *Metrics) registerContentMetrics() {
 		Name: "youtube_poller_community_shorts_detected_posts_total",
 		Help: "커뮤니티/쇼츠 감지 게시물 수",
 	}, []string{"alarm_type"})
+	m.MetadataResolveTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_poller_metadata_resolve_total",
+		Help: "poller별 watch metadata resolve allowance 결과",
+	}, []string{"poller", "result"})
 }
 
 func (m *Metrics) ObserveJobClaim(pollerName, result string) {
@@ -253,6 +258,13 @@ func (m *Metrics) ObserveCommunityShortsDetectedPosts(alarmType domain.AlarmType
 		return
 	}
 	m.CommunityShortsDetectedPostsTotal.WithLabelValues(string(alarmType)).Add(float64(count))
+}
+
+func (m *Metrics) ObserveMetadataResolve(pollerName, result string) {
+	if m == nil || m.MetadataResolveTotal == nil {
+		return
+	}
+	m.MetadataResolveTotal.WithLabelValues(pollerName, result).Inc()
 }
 
 func BoolResult(ok bool, err error) string {
