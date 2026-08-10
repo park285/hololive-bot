@@ -29,11 +29,14 @@ runtime_audit = runtime_audit_path.read_text(encoding="utf-8")
 errors: list[str] = []
 
 image_pattern = re.compile(
-    r"^[ \t]*image:[ \t]*\$\{POSTGRES_IMAGE:-postgres:(18\.[0-9]+(?:-[A-Za-z0-9._-]+)?)@sha256:[0-9a-f]{64}\}[ \t]*$",
+    r"^[ \t]*image:[ \t]*\$\{POSTGRES_IMAGE:-postgres:18\.([0-9]+)(?:-[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}\}[ \t]*$",
     re.MULTILINE,
 )
-if len(image_pattern.findall(compose)) != 1:
+image_matches = image_pattern.findall(compose)
+if len(image_matches) != 1:
     errors.append("expected exactly one digest-pinned PostgreSQL 18 image default")
+elif int(image_matches[0]) < 4:
+    errors.append(f"PostgreSQL image default must be 18.4 or newer, got 18.{image_matches[0]}")
 
 pgdata_pattern = re.compile(
     r"^[ \t]*PGDATA:[ \t]*/var/lib/postgresql/pgdata[ \t]*$",
