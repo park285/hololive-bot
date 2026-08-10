@@ -26,6 +26,16 @@ go_fix_memo_sibling_tree() {
     git -C "${dir}" rev-parse 'HEAD^{tree}' 2>/dev/null || true
 }
 
+go_fix_source_files_in_dir() {
+    local dir="$1"
+    local file
+    git -C "${dir}" ls-files --cached --others --exclude-standard '*.go' |
+        while IFS= read -r file; do
+            is_go_scope_excluded_file "${file}" && continue
+            [[ -f "${dir}/${file}" ]] && printf '%s\n' "${file}"
+        done
+}
+
 go_fix_memo_key() {
     local repo_tree
     repo_tree="$(go_fix_memo_repo_tree)"
@@ -121,33 +131,43 @@ check_go_fix() {
     }
     trap cleanup_go_fix_tmp RETURN
 
-    mkdir -p "${tmp_dir}/repo"
-    if ! tar "${tar_excludes[@]}" -C "${ROOT_DIR}" -cf - . | tar -C "${tmp_dir}/repo" -xf -; then
+    local source_files=()
+    mapfile -t source_files < <(go_source_files)
+
+    mkdir -p "${tmp_dir}/pre-fix-repo"
+    if ! tar "${tar_excludes[@]}" -C "${ROOT_DIR}" -cf - . | tar -C "${tmp_dir}/pre-fix-repo" -xf -; then
         return 1
     fi
+    cp -a "${tmp_dir}/pre-fix-repo" "${tmp_dir}/repo"
 
     local shared_go_dir
     shared_go_dir="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/../shared-go}"
+    local shared_source_files=()
     if grep -q '../shared-go' "${ROOT_DIR}/go.work"; then
         if [[ ! -d "${shared_go_dir}" ]]; then
             echo "active shared-go workspace not found: ${shared_go_dir}" >&2
             return 1
         fi
-        mkdir -p "${tmp_dir}/shared-go"
-        if ! tar "${tar_excludes[@]}" -C "${shared_go_dir}" -cf - . | tar -C "${tmp_dir}/shared-go" -xf -; then
+        mapfile -t shared_source_files < <(go_fix_source_files_in_dir "${shared_go_dir}")
+        mkdir -p "${tmp_dir}/pre-fix-shared-go"
+        if ! tar "${tar_excludes[@]}" -C "${shared_go_dir}" -cf - . | tar -C "${tmp_dir}/pre-fix-shared-go" -xf -; then
             return 1
         fi
+        cp -a "${tmp_dir}/pre-fix-shared-go" "${tmp_dir}/shared-go"
     fi
 
+    local iris_source_files=()
     if grep -q '../iris-client-go' "${ROOT_DIR}/go.work"; then
         if [[ ! -d "${iris_client_go_dir}" ]]; then
             echo "active iris-client-go workspace not found: ${iris_client_go_dir}" >&2
             return 1
         fi
-        mkdir -p "${tmp_dir}/iris-client-go"
-        if ! tar "${tar_excludes[@]}" -C "${iris_client_go_dir}" -cf - . | tar -C "${tmp_dir}/iris-client-go" -xf -; then
+        mapfile -t iris_source_files < <(go_fix_source_files_in_dir "${iris_client_go_dir}")
+        mkdir -p "${tmp_dir}/pre-fix-iris-client-go"
+        if ! tar "${tar_excludes[@]}" -C "${iris_client_go_dir}" -cf - . | tar -C "${tmp_dir}/pre-fix-iris-client-go" -xf -; then
             return 1
         fi
+        cp -a "${tmp_dir}/pre-fix-iris-client-go" "${tmp_dir}/iris-client-go"
     fi
 
     if ! (cd "${tmp_dir}/repo" && go fix "${GO_PACKAGES[@]}"); then
@@ -156,11 +176,24 @@ check_go_fix() {
 
     local changed=()
     local file
-    while IFS= read -r file; do
-        if [[ -f "${tmp_dir}/repo/${file}" ]] && ! cmp -s "${ROOT_DIR}/${file}" "${tmp_dir}/repo/${file}"; then
+    for file in "${source_files[@]}"; do
+        if [[ -f "${tmp_dir}/pre-fix-repo/${file}" ]] \
+            && ! cmp -s "${tmp_dir}/pre-fix-repo/${file}" "${tmp_dir}/repo/${file}"; then
             changed+=("${file}")
         fi
-    done < <(go_source_files)
+    done
+    for file in "${shared_source_files[@]}"; do
+        if [[ -f "${tmp_dir}/pre-fix-shared-go/${file}" ]] \
+            && ! cmp -s "${tmp_dir}/pre-fix-shared-go/${file}" "${tmp_dir}/shared-go/${file}"; then
+            changed+=("../shared-go/${file}")
+        fi
+    done
+    for file in "${iris_source_files[@]}"; do
+        if [[ -f "${tmp_dir}/pre-fix-iris-client-go/${file}" ]] \
+            && ! cmp -s "${tmp_dir}/pre-fix-iris-client-go/${file}" "${tmp_dir}/iris-client-go/${file}"; then
+            changed+=("../iris-client-go/${file}")
+        fi
+    done
 
     if (( ${#changed[@]} > 0 )); then
         echo "go fix would update modern Go compatibility rewrites:" >&2
@@ -169,7 +202,9 @@ check_go_fix() {
         return 1
     fi
 
-    if [[ -n "${memo_key}" && -n "${stamp_file}" ]]; then
+    local final_memo_key
+    final_memo_key="$(go_fix_memo_key)"
+    if [[ -n "${memo_key}" && "${final_memo_key}" == "${memo_key}" && -n "${stamp_file}" ]]; then
         mkdir -p "$(dirname "${stamp_file}")"
         printf '%s' "${memo_key}" >"${stamp_file}"
     fi

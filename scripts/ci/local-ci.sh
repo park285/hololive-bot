@@ -244,6 +244,7 @@ if (( $# != 0 )); then
 fi
 
 run_step "local-ci package scope tests" ./scripts/ci/test-local-ci-packages.sh
+run_step "go fix drift tests" bash ./scripts/ci/local-ci-gofix_test.sh
 run_step "go work sync drift tests" bash ./scripts/ci/go-work-sync-drift_test.sh
 run_step "NilAway input guard tests" bash ./scripts/ci/nilaway-inputs_test.sh
 configure_go_packages
