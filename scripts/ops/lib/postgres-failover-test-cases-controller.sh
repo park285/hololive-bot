@@ -12,6 +12,7 @@ static_deployment_contracts_are_wired() {
     grep -Fq "${pattern}" "${standby_compose}" || { fail "standby compose missing contract: ${pattern}"; return; }
   done
   grep -Fq 'User=hololive-pg-failover' "${ROOT_DIR}/scripts/ops/postgres-failover.service" || { fail "failover controller is not assigned to its dedicated user"; return; }
+  grep -Fq 'POSTGRES_FAILOVER_PSQL_PATH:-/usr/lib/postgresql/18/bin/psql' "${ROOT_DIR}/scripts/ops/postgres-failover.sh" || { fail "failover controller does not pin the canonical PostgreSQL 18 client"; return; }
   if grep -Fq 'docker exec' "${ROOT_DIR}/scripts/ops/postgres-failover.sh" "${ROOT_DIR}/scripts/ops/lib/postgres-failover-lib.sh" "${ROOT_DIR}/scripts/ops/lib/postgres-failover-transition-lib.sh"; then
     fail "failover controller still depends on root-equivalent Docker access"
     return
