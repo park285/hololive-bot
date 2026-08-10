@@ -8,7 +8,17 @@ PRIMARY_FENCE="${ROOT_DIR}/scripts/ops/postgres-primary-fence.sh"
 PRIMARY_UNFENCE="${ROOT_DIR}/scripts/ops/postgres-primary-unfence.sh"
 LAUNCHER="${ROOT_DIR}/scripts/ops/postgres-failover-launch.sh"
 TMP_DIR="$(mktemp -d /tmp/postgres-failover-test.XXXXXX)"
-trap 'rm -rf "${TMP_DIR}"' EXIT
+SYSTEM_CREDENTIAL_TEST_ROOT=""
+cleanup_postgres_failover_fixture() {
+  rm -rf "${TMP_DIR}"
+  if [[ -n "${SYSTEM_CREDENTIAL_TEST_ROOT}" ]]; then
+    case "${SYSTEM_CREDENTIAL_TEST_ROOT}" in
+      /run/credentials/postgres-failover-test.*) rm -rf -- "${SYSTEM_CREDENTIAL_TEST_ROOT}" ;;
+      *) printf 'refusing unexpected credential fixture cleanup: %s\n' "${SYSTEM_CREDENTIAL_TEST_ROOT}" >&2 ;;
+    esac
+  fi
+}
+trap cleanup_postgres_failover_fixture EXIT
 EXEC_ROOT="${TMP_DIR}/exec"; mkdir -p "${EXEC_ROOT}"
 (cd "${ROOT_DIR}" && cp --parents scripts/ops/postgres-failover.sh scripts/ops/lib/postgres-failover-lib.sh scripts/ops/lib/postgres-failover-transition-lib.sh "${EXEC_ROOT}")
 chmod -R go-w "${EXEC_ROOT}"
