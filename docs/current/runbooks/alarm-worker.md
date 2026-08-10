@@ -90,7 +90,7 @@ ALARM_DISPATCH_KARING_ENABLED=false
 
 운영 전환은 다음 조건을 모두 확인한 뒤 별도 승인으로 진행합니다.
 
-1. migration 140~142가 적용되고 `ALARM_DISPATCH_CONSUMER_ENABLED=true`입니다.
+1. migration 141~143이 적용되고 `ALARM_DISPATCH_CONSUMER_ENABLED=true`입니다.
 2. `shadow` 기간 동안 handoff failure가 0이고 legacy 대상 수와 v3 `shadowed` 대상 수가 일치합니다.
 3. v1은 `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`를 유지한 채 `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=cutover`로 바꿉니다. 이 dispatcher가 claim과 handoff를 함께 소유하므로 끄면 안 됩니다.
 4. v2는 producer인 hololive-api에서 `DELIVERY_OUTBOX_V3_HANDOFF_MODE=cutover`를 설정하고, 기존 `notification_delivery_outbox` backlog가 0이 된 뒤에만 alarm-worker의 `DELIVERY_DISPATCHER_ENABLED=false`를 적용합니다.

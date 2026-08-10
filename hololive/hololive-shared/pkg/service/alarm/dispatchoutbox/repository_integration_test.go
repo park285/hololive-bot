@@ -68,9 +68,9 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 		"hololive/hololive-api/scripts/migrations/065_record_alarm_dispatch_event_collisions.sql",
 		"hololive/hololive-api/scripts/migrations/118_alarm_dispatch_state_shape_check.sql",
 		"hololive/hololive-api/scripts/migrations/122_alarm_dispatch_last_error_size_check.sql",
-		"hololive/hololive-api/scripts/migrations/140_alarm_dispatch_send_units.sql",
-		"hololive/hololive-api/scripts/migrations/141_alarm_dispatch_send_unit_due_index.sql",
-		"hololive/hololive-api/scripts/migrations/142_alarm_dispatch_send_unit_index.sql",
+		"hololive/hololive-api/scripts/migrations/141_alarm_dispatch_send_units.sql",
+		"hololive/hololive-api/scripts/migrations/142_alarm_dispatch_send_unit_due_index.sql",
+		"hololive/hololive-api/scripts/migrations/143_alarm_dispatch_send_unit_index.sql",
 	} {
 		sql := readRepoMigration(t, migration)
 		if _, err := pool.Exec(ctx, sql); err != nil {
