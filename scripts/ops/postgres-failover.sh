@@ -98,7 +98,7 @@ verify_root_exec_tree() {
     while :; do
       owner="$(stat -c '%u' -- "${current}")"
       mode_hex="$(stat -c '%f' -- "${current}")"
-      if [[ "${owner}" != "0" && !( "${ALLOW_NON_ROOT}" == "1" && "${owner}" == "${CURRENT_UID}" ) ]]; then
+      if [[ "${owner}" != "0" && ( "${ALLOW_NON_ROOT}" != "1" || "${owner}" != "${CURRENT_UID}" ) ]]; then
         printf '[postgres-failover] executable path has an untrusted owner: %s\n' "${current}" >&2
         exit 1
       fi

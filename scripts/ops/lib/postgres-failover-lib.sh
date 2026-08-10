@@ -164,11 +164,12 @@ read_state() {
   fi
 }
 write_state() {
+  local promotion_state="${1:-${PROMOTION_STATE}}"
   local tmp="${STATE_FILE}.tmp.$$"
   umask 077
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "${STATE_VERSION}" "${FAILURE_COUNT}" "${FIRST_FAILURE_AT}" "${LAST_HEALTHY_AT}" \
-    "${LAST_PRIMARY_LSN}" "${LAST_REPLAY_LSN}" "${PROMOTION_STATE}" "${FENCE_TOKEN}" >"${tmp}" || return 1
+    "${LAST_PRIMARY_LSN}" "${LAST_REPLAY_LSN}" "${promotion_state}" "${FENCE_TOKEN}" >"${tmp}" || return 1
   chmod 0600 "${tmp}" || { rm -f -- "${tmp}"; return 1; }
   sync -f "${tmp}" || { rm -f -- "${tmp}"; return 1; }
   mv -f -- "${tmp}" "${STATE_FILE}" || { rm -f -- "${tmp}"; return 1; }

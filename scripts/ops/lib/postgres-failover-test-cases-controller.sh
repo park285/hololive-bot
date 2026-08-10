@@ -4,6 +4,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   exit 1
 fi
 
+LAUNCHER="${ROOT_DIR}/scripts/ops/postgres-failover-launch.sh"
+
 static_deployment_contracts_are_wired() {
   local standby_compose="${ROOT_DIR}/deploy/compose/docker-compose.standby.yml"
   local compose_unit="${ROOT_DIR}/scripts/systemd/hololive-compose.service"

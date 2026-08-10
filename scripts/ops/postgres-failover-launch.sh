@@ -38,7 +38,8 @@ trusted_path() {
   current="${path}"
   while :; do
     owner="$(/usr/bin/stat -c '%u' -- "${current}")" || return 1
-    if [[ "${owner}" != "0" && !( "${owner}" == "${CURRENT_UID}" && ( "${ALLOW_NON_ROOT_TEST}" == "1" || "${path}" == /run/credentials/* ) ) ]]; then
+    if [[ "${owner}" != "0" \
+      && ( "${owner}" != "${CURRENT_UID}" || ( "${ALLOW_NON_ROOT_TEST}" != "1" && "${path}" != /run/credentials/* ) ) ]]; then
       printf '%s path has an untrusted owner: %s\n' "${label}" "${current}" >&2
       return 1
     fi
@@ -105,7 +106,7 @@ while IFS= read -r raw || [[ -n "${raw}" ]]; do
   fi
   [[ "${value}" =~ ^[A-Za-z0-9_./:@,+-]*$ ]] || { printf 'invalid failover environment value: %s\n' "${key}" >&2; exit 2; }
   printf -v "${key}" '%s' "${value}"
-  export "${key}"
+  export "${key?}"
 done <"${ENV_FILE}"
 
 exec /usr/bin/bash "${CONTROLLER}" "${MODE}"

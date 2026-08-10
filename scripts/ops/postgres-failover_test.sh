@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/postgres-failover-test-fixture.sh"
 source "${SCRIPT_DIR}/lib/postgres-failover-test-cases-controller.sh"
@@ -17,8 +16,4 @@ for test_case in static_deployment_contracts_are_wired launcher_rejects_environm
   primary_unfence_requires_reseeded_streaming_standby fence_and_unfence_share_transition_lock; do
   "${test_case}"
 done
-if (( failures > 0 )); then
-  printf '[FAIL] postgres failover tests failed: %s\n' "${failures}" >&2
-  exit 1
-fi
-printf 'ok: postgres failover tests passed\n'
+finish_postgres_failover_tests
