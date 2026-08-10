@@ -4,9 +4,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   exit 1
 fi
 
-PRIMARY_FENCE="${ROOT_DIR}/scripts/ops/postgres-primary-fence.sh"
-PRIMARY_UNFENCE="${ROOT_DIR}/scripts/ops/postgres-primary-unfence.sh"
-LAUNCHER="${ROOT_DIR}/scripts/ops/postgres-failover-launch.sh"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 TMP_DIR="$(mktemp -d /tmp/postgres-failover-test.XXXXXX)"
 SYSTEM_CREDENTIAL_TEST_ROOT=""
 cleanup_postgres_failover_fixture() {
@@ -27,6 +25,13 @@ if [[ "$(id -u)" == "0" ]]; then CONTROLLER_TEST_MODE=0; else CONTROLLER_TEST_MO
 failures=0
 pass() { printf '[PASS] %s\n' "$*"; }
 fail() { printf '[FAIL] %s\n' "$*" >&2; failures=$((failures + 1)); }
+finish_postgres_failover_tests() {
+  if (( failures > 0 )); then
+    printf '[FAIL] postgres failover tests failed: %s\n' "${failures}" >&2
+    exit 1
+  fi
+  printf 'ok: postgres failover tests passed\n'
+}
 setup_fake_psql() {
   local dir="$1"
   mkdir -p "${dir}"

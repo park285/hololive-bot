@@ -333,7 +333,7 @@ recover_or_handle_promoted_primary() {
         ;;
       *) die "invalid_promoted_route_state" "route_state=${route_state:-empty}" ;;
     esac
-    write_state
+    write_state "${PROMOTION_STATE}"
     journal "already_promoted" "new_primary=${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}" "route_state=${route_state}"
     return 0
   fi

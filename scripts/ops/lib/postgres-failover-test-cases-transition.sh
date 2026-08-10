@@ -4,6 +4,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   exit 1
 fi
 
+PRIMARY_FENCE="${ROOT_DIR}/scripts/ops/postgres-primary-fence.sh"
+PRIMARY_UNFENCE="${ROOT_DIR}/scripts/ops/postgres-primary-unfence.sh"
+
 setup_primary_fence_fake_tools() {
   local root="$1"
   mkdir -p "${root}/bin"
