@@ -22,6 +22,7 @@ LOCAL_HOST="${POSTGRES_FAILOVER_LOCAL_HOST:-${NEW_PRIMARY_HOST}}"
 LOCAL_PORT="${POSTGRES_FAILOVER_LOCAL_PORT:-${NEW_PRIMARY_PORT}}"
 PGPASS_FILE="${POSTGRES_FAILOVER_PGPASS_FILE:-/run/credentials/postgres-failover.service/pgpass}"
 CA_FILE="${POSTGRES_FAILOVER_CA_FILE:-/run/credentials/postgres-failover.service/postgres-ca.pem}"
+RUNTIME_DIR="${POSTGRES_FAILOVER_RUNTIME_DIR:-/run/hololive-postgres-failover}"
 PSQL_PATH="${POSTGRES_FAILOVER_PSQL_PATH:-/usr/lib/postgresql/18/bin/psql}"
 SERVICE_USER="${POSTGRES_FAILOVER_SERVICE_USER:-hololive-pg-failover}"
 STATE_DIR="${POSTGRES_FAILOVER_STATE_DIR:-/var/lib/hololive-postgres-failover}"
@@ -116,6 +117,9 @@ verify_root_exec_tree
 source "${SCRIPT_DIR}/lib/postgres-failover-lib.sh"
 # shellcheck source=scripts/ops/lib/postgres-failover-transition-lib.sh
 source "${SCRIPT_DIR}/lib/postgres-failover-transition-lib.sh"
+
+EPHEMERAL_PGPASS_FILE=""
+trap cleanup_ephemeral_pgpass EXIT
 
 validate_scalar_inputs
 validate_client_inputs

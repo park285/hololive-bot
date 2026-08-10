@@ -76,6 +76,7 @@ EOF_NUMERIC
   is_simple_name "${PROBE_USER}" || die "invalid_probe_database_user" "value=${PROBE_USER}"
   is_clean_abs_path "${PGPASS_FILE}" || die "invalid_pgpass_path" "path=${PGPASS_FILE}"
   is_clean_abs_path "${CA_FILE}" || die "invalid_ca_path" "path=${CA_FILE}"
+  is_clean_abs_path "${RUNTIME_DIR}" || die "invalid_runtime_dir" "path=${RUNTIME_DIR}"
   is_clean_abs_path "${PSQL_PATH}" || die "invalid_psql_path" "path=${PSQL_PATH}"
 }
 path_component_is_trusted() {
@@ -192,6 +193,48 @@ marker_value() {
   local file="$1" key="$2"
   awk -F= -v key="${key}" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${file}" 2>/dev/null || true
 }
+systemd_credential_copy_is_trusted() {
+  local path="$1" owner group mode_hex mode credential_parent credential_root
+  owner="$(stat -c '%u' -- "${path}")" || return 1
+  group="$(stat -c '%g' -- "${path}")" || return 1
+  mode_hex="$(stat -c '%f' -- "${path}")" || return 1
+  mode=$((0x${mode_hex} & 0x01ff))
+  (( mode == 0x0120 )) || return 1
+  credential_parent="$(dirname -- "${path}")"
+  credential_root="$(dirname -- "${credential_parent}")"
+  if [[ "${credential_root}" == "/run/credentials" && "${owner}" == "0" && "${group}" == "0" ]]; then
+    return 0
+  fi
+  [[ "${ALLOW_NON_ROOT}" == "1" && "${credential_root}" == /tmp/*/run/credentials \
+    && "${owner}" == "$(id -u)" && "${group}" == "$(id -g)" ]]
+}
+cleanup_ephemeral_pgpass() {
+  if [[ -n "${EPHEMERAL_PGPASS_FILE:-}" ]]; then
+    rm -f -- "${EPHEMERAL_PGPASS_FILE}" || true
+    EPHEMERAL_PGPASS_FILE=""
+  fi
+}
+materialize_systemd_pgpass() {
+  local source="$1" runtime_real runtime_owner runtime_mode_hex runtime_mode target target_metadata
+  [[ -d "${RUNTIME_DIR}" && ! -L "${RUNTIME_DIR}" ]] || die "runtime_dir_unavailable" "path=${RUNTIME_DIR}"
+  runtime_real="$(realpath -e -- "${RUNTIME_DIR}")" || die "runtime_dir_realpath_failed" "path=${RUNTIME_DIR}"
+  [[ "${runtime_real}" == "${RUNTIME_DIR}" ]] || die "runtime_dir_symlink_or_noncanonical" "path=${RUNTIME_DIR}" "real=${runtime_real}"
+  validate_trusted_path_chain "runtime" "${RUNTIME_DIR}"
+  runtime_owner="$(stat -c '%u' -- "${RUNTIME_DIR}")" || die "runtime_dir_stat_failed" "path=${RUNTIME_DIR}"
+  [[ "${runtime_owner}" == "$(id -u)" ]] || die "runtime_dir_invalid_owner" "path=${RUNTIME_DIR}" "owner=${runtime_owner}"
+  runtime_mode_hex="$(stat -c '%f' -- "${RUNTIME_DIR}")" || die "runtime_dir_stat_failed" "path=${RUNTIME_DIR}"
+  runtime_mode=$((0x${runtime_mode_hex} & 0x01ff))
+  (( runtime_mode == 0x01c0 )) || die "runtime_dir_not_private" "path=${RUNTIME_DIR}"
+  umask 077
+  target="$(mktemp -- "${RUNTIME_DIR}/pgpass.XXXXXX")" || die "pgpass_materialize_create_failed"
+  EPHEMERAL_PGPASS_FILE="${target}"
+  chmod 0600 "${target}" || die "pgpass_materialize_chmod_failed"
+  cat -- "${source}" >"${target}" || die "pgpass_materialize_copy_failed"
+  [[ -f "${target}" && ! -L "${target}" ]] || die "pgpass_materialize_invalid_target"
+  target_metadata="$(stat -c '%u:%g:%a:%h' -- "${target}")" || die "pgpass_materialize_stat_failed"
+  [[ "${target_metadata}" == "$(id -u):$(id -g):600:1" ]] || die "pgpass_materialize_invalid_metadata"
+  PGPASS_FILE="${target}"
+}
 validate_client_inputs() {
   local label path private mode_hex
   [[ -x "${PSQL_PATH}" ]] || die "psql_not_executable" "path=${PSQL_PATH}"
@@ -202,7 +245,10 @@ validate_client_inputs() {
     validate_trusted_path_chain "client:${label}" "${path}"
     if [[ "${private}" == "1" ]]; then
       mode_hex="$(stat -c '%f' -- "${path}")" || die "client_file_stat_failed" "file=${label}"
-      (( (0x${mode_hex} & 0x003f) == 0 )) || die "client_file_not_private" "file=${label}"
+      if (( (0x${mode_hex} & 0x003f) != 0 )); then
+        systemd_credential_copy_is_trusted "${path}" || die "client_file_not_private" "file=${label}"
+        materialize_systemd_pgpass "${path}"
+      fi
     fi
   done
 }

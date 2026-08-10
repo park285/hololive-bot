@@ -34,6 +34,12 @@ setup_fake_psql() {
 #!/usr/bin/env bash
 set -u
 printf '%s\n' "$*" >>"${FAKE_PSQL_LOG:?}"
+if [[ -n "${FAKE_PGPASS_METADATA_LOG:-}" ]]; then
+  stat -c 'mode=%a owner=%u group=%g path=%n' -- "${PGPASSFILE:?}" >>"${FAKE_PGPASS_METADATA_LOG}"
+fi
+if [[ "${FAKE_REQUIRE_PRIVATE_PGPASS:-0}" == "1" && "$(stat -c '%a' -- "${PGPASSFILE:?}")" != "600" ]]; then
+  exit 3
+fi
 args="$*"
 if [[ "${args}" == *"pg_promote"* ]]; then
   case "${FAKE_PROMOTE_RESULT:-success}" in
@@ -78,6 +84,7 @@ setup_case() {
   chmod 0700 "${root}/state" "${root}/hooks"
   setup_fake_psql "${root}/bin"
   : >"${root}/psql.log"
+  : >"${root}/pgpass-metadata.log"
   : >"${root}/hooks.log"
   : >"${root}/primary.count"
   rm -f "${root}/primary.count" "${root}/promoted" "${root}/state/health.signal"
@@ -115,6 +122,7 @@ run_controller() {
   env \
     PATH="${root}/bin:${PATH}" \
     FAKE_PSQL_LOG="${root}/psql.log" \
+    FAKE_PGPASS_METADATA_LOG="${root}/pgpass-metadata.log" \
     FAKE_HOOK_LOG="${root}/hooks.log" \
     FAKE_PROMOTED_FILE="${root}/promoted" \
     FAKE_PRIMARY_COUNT_FILE="${root}/primary.count" \

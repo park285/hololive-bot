@@ -131,7 +131,9 @@ sudo systemctl enable --now postgres-failover.timer
 `systemctl show postgres-failover.service -p User -p Group`은 둘 다
 `hololive-pg-failover`여야 합니다. 이 계정을 `docker` 그룹에 넣지 않습니다. state는
 `StateDirectory=`가 소유하고, pgpass/CA/SSH 파일은 unit과 apply drop-in의
-`LoadCredential=`로만 전달합니다.
+`LoadCredential=`로만 전달합니다. controller는 systemd의 `0440 root:root` pgpass를
+검증한 뒤 service 전용 `RuntimeDirectory=`에 `0600` 임시 passfile로 복사하고 종료 시
+삭제합니다. 영속 `StateDirectory=`에는 credential을 기록하지 않습니다.
 
 기존 primary에는 apply 활성화 전에 admin 세션으로 다음 privilege bootstrap을 별도 승인해
 한 번 적용합니다. 이 SQL은 대상 role이 LOGIN+REPLICATION이면서 non-superuser인지 먼저
