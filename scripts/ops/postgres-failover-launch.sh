@@ -17,6 +17,7 @@ CONTROLLER="${POSTGRES_FAILOVER_CONTROLLER:-/usr/local/libexec/hololive-postgres
 ALLOW_NON_ROOT_TEST="${POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST:-0}"
 SERVICE_USER="${POSTGRES_FAILOVER_SERVICE_USER:-hololive-pg-failover}"
 CURRENT_UID="$(/usr/bin/id -u)"
+CURRENT_GID="$(/usr/bin/id -g)"
 CURRENT_USER="$(/usr/bin/id -un)"
 
 [[ "${ALLOW_NON_ROOT_TEST}" == "0" || "${ALLOW_NON_ROOT_TEST}" == "1" ]] || { printf 'invalid launcher test flag\n' >&2; exit 2; }
@@ -30,7 +31,7 @@ if [[ "${ALLOW_NON_ROOT_TEST}" == "0" && "${CURRENT_USER}" != "${SERVICE_USER}" 
 fi
 
 trusted_path() {
-  local label="$1" path="$2" private="$3" real current owner mode_hex mode file_owner credential_copy
+  local label="$1" path="$2" private="$3" real current owner mode_hex mode file_owner file_group credential_parent credential_root credential_copy
   [[ "${path}" == /* ]] || { printf '%s must be absolute\n' "${label}" >&2; return 1; }
   real="$(/usr/bin/realpath -e -- "${path}")" || { printf '%s is missing\n' "${label}" >&2; return 1; }
   [[ "${real}" == "${path}" && -f "${path}" && ! -L "${path}" ]] || { printf '%s must be a canonical regular file\n' "${label}" >&2; return 1; }
@@ -52,13 +53,16 @@ trusted_path() {
   done
   if [[ "${private}" == "1" ]]; then
     file_owner="$(/usr/bin/stat -c '%u' -- "${path}")" || return 1
+    file_group="$(/usr/bin/stat -c '%g' -- "${path}")" || return 1
     mode_hex="$(/usr/bin/stat -c '%f' -- "${path}")" || return 1
     mode=$((0x${mode_hex} & 0x01ff))
     if (( (mode & 0x003f) != 0 )); then
+      credential_parent="$(/usr/bin/dirname -- "${path}")"
+      credential_root="$(/usr/bin/dirname -- "${credential_parent}")"
       credential_copy=0
-      if [[ "${path}" == /run/credentials/*/* && "${file_owner}" == "0" ]]; then
+      if [[ "${credential_root}" == "/run/credentials" && "${file_owner}" == "0" && "${file_group}" == "0" ]]; then
         credential_copy=1
-      elif [[ "${ALLOW_NON_ROOT_TEST}" == "1" && "${path}" == /tmp/*/run/credentials/*/* && "${file_owner}" == "${CURRENT_UID}" ]]; then
+      elif [[ "${ALLOW_NON_ROOT_TEST}" == "1" && "${credential_root}" == /tmp/*/run/credentials && "${file_owner}" == "${CURRENT_UID}" && "${file_group}" == "${CURRENT_GID}" ]]; then
         credential_copy=1
       fi
       if (( mode != 0x0120 || credential_copy != 1 )); then

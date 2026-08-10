@@ -32,9 +32,19 @@ static_deployment_contracts_are_wired() {
 launcher_rejects_environment_injection() {
   local root payload credential_dir
   root="${TMP_DIR}/launcher"
-  credential_dir="${root}/run/credentials/postgres-failover.service"
-  mkdir -p "${root}/private" "${credential_dir}"
-  chmod 0700 "${root}/private" "${root}/run" "${root}/run/credentials" "${credential_dir}"
+  if [[ "${CONTROLLER_TEST_MODE}" == "0" ]]; then
+    SYSTEM_CREDENTIAL_TEST_ROOT="/run/credentials/postgres-failover-test.$$"
+    credential_dir="${SYSTEM_CREDENTIAL_TEST_ROOT}"
+    test ! -e "${SYSTEM_CREDENTIAL_TEST_ROOT}" || { fail "system credential fixture already exists"; return; }
+    mkdir -p "${credential_dir}"
+    chmod 0700 "${SYSTEM_CREDENTIAL_TEST_ROOT}" "${credential_dir}"
+  else
+    credential_dir="${root}/run/credentials/postgres-failover.service"
+    mkdir -p "${credential_dir}"
+    chmod 0700 "${root}/run" "${root}/run/credentials" "${credential_dir}"
+  fi
+  mkdir -p "${root}/private"
+  chmod 0700 "${root}/private"
   cat >"${root}/private/controller.sh" <<'CONTROLLER'
 #!/usr/bin/env bash
 printf '%s|%s|%s\n' "${PATH}" "${POSTGRES_FAILOVER_PRIMARY_HOST:-}" "$1" >"${FAKE_LAUNCH_LOG:?}"
@@ -76,6 +86,36 @@ ENV_OK
     POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST="${CONTROLLER_TEST_MODE}" \
     /usr/bin/bash "${LAUNCHER}" --dry-run >/dev/null 2>&1; then
     fail "launcher accepted a writable group-readable credential"
+    return
+  fi
+
+  if [[ "${CONTROLLER_TEST_MODE}" == "0" ]]; then
+    chmod 0440 "${credential_dir}/failover.env"
+    chown 0:1 "${credential_dir}/failover.env"
+    if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+      FAKE_LAUNCH_LOG="${root}/launch.log" \
+      POSTGRES_FAILOVER_ENV_FILE="${credential_dir}/failover.env" \
+      POSTGRES_FAILOVER_CONTROLLER="${root}/private/controller.sh" \
+      POSTGRES_FAILOVER_SERVICE_USER="$(id -un)" \
+      POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST="${CONTROLLER_TEST_MODE}" \
+      /usr/bin/bash "${LAUNCHER}" --dry-run >/dev/null 2>&1; then
+      fail "launcher accepted a credential outside root group ownership"
+      return
+    fi
+    chown 0:0 "${credential_dir}/failover.env"
+  fi
+
+  mkdir -p "${credential_dir}/nested"
+  cp "${credential_dir}/failover.env" "${credential_dir}/nested/failover.env"
+  chmod 0440 "${credential_dir}/nested/failover.env"
+  if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    FAKE_LAUNCH_LOG="${root}/launch.log" \
+    POSTGRES_FAILOVER_ENV_FILE="${credential_dir}/nested/failover.env" \
+    POSTGRES_FAILOVER_CONTROLLER="${root}/private/controller.sh" \
+    POSTGRES_FAILOVER_SERVICE_USER="$(id -un)" \
+    POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST="${CONTROLLER_TEST_MODE}" \
+    /usr/bin/bash "${LAUNCHER}" --dry-run >/dev/null 2>&1; then
+    fail "launcher accepted a nested credential path"
     return
   fi
 
