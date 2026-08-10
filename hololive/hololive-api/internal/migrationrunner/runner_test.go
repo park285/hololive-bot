@@ -645,6 +645,83 @@ func TestRealManifestPrefilledLedgerSkipsAll(t *testing.T) {
 	}
 }
 
+func TestLedgerResidueWithoutEpochBaselineRefuses(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	legacyFS := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 legacy.sql\n")},
+		"legacy.sql":           {Data: []byte("CREATE TABLE legacy_epoch_ran(id integer)")},
+	}
+	runMigrations(t, pool, legacyFS, "")
+
+	epochFS := fstest.MapFS{
+		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n")},
+		"001_schema_epoch2_baseline.sql": {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+	}
+	_, err := Run(t.Context(), pool, epochFS, Config{})
+	if err == nil {
+		t.Fatal("Run() error = nil, want refusal on ledger residue without recorded epoch baseline")
+	}
+	if !strings.Contains(err.Error(), "epoch baseline") {
+		t.Fatalf("Run() error = %v, want epoch-baseline refusal", err)
+	}
+	assertTableAbsent(t, pool, "epoch2_baseline_ran")
+
+	_, err = Run(t.Context(), pool, epochFS, Config{BaselineThrough: "001_schema_epoch2_baseline.sql"})
+	if err == nil || !strings.Contains(err.Error(), "epoch baseline") {
+		t.Fatalf("Run() with BaselineThrough error = %v, want residue refusal to resist the watermark knob", err)
+	}
+	assertTableAbsent(t, pool, "epoch2_baseline_ran")
+}
+
+func TestLedgerResidueWithEpochBaselineSkipsBaseline(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	legacyFS := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 legacy.sql\n002 checkpoint.sql\n")},
+		"legacy.sql":           {Data: []byte("CREATE TABLE legacy_epoch_ran(id integer)")},
+		"checkpoint.sql":       {Data: []byte("INSERT INTO schema_migrations (filename) VALUES ('001_schema_epoch2_baseline.sql') ON CONFLICT (filename) DO NOTHING")},
+	}
+	runMigrations(t, pool, legacyFS, "")
+
+	epochFS := fstest.MapFS{
+		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n")},
+		"001_schema_epoch2_baseline.sql": {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+	}
+	result, err := Run(t.Context(), pool, epochFS, Config{})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want checkpointed DB to proceed", err)
+	}
+	if result.Applied != 0 || result.Skipped != 1 || result.Total != 1 {
+		t.Fatalf("result = %+v, want applied=0 skipped=1 total=1", result)
+	}
+	assertTableAbsent(t, pool, "epoch2_baseline_ran")
+}
+
+func TestEpochLedgerWithoutResidueProceeds(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	epochFS := fstest.MapFS{
+		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n")},
+		"001_schema_epoch2_baseline.sql": {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+	}
+	runMigrations(t, pool, epochFS, "")
+
+	nextFS := fstest.MapFS{
+		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n002 002_next.sql\n")},
+		"001_schema_epoch2_baseline.sql": {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+		"002_next.sql":                   {Data: []byte("CREATE TABLE epoch2_next_ran(id integer)")},
+	}
+	result, err := Run(t.Context(), pool, nextFS, Config{})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want residue-free epoch DB to proceed", err)
+	}
+	if result.Applied != 1 || result.Skipped != 1 || result.Total != 2 {
+		t.Fatalf("result = %+v, want applied=1 skipped=1 total=2", result)
+	}
+	assertTablePresent(t, pool, "epoch2_next_ran")
+}
+
 func manifestEntries(t *testing.T) []string {
 	t.Helper()
 

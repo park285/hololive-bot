@@ -98,6 +98,9 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 	if err := reconcileBaseline(ctx, conn, fsys, exec, ledger, entries, cfg); err != nil {
 		return Result{}, err
 	}
+	if err := guardEpochResidue(ctx, conn, ledger, entries); err != nil {
+		return Result{}, err
+	}
 	if err := configureBlockingIndexDropPolicy(ctx, conn, exec, cfg); err != nil {
 		return Result{}, err
 	}
@@ -147,6 +150,34 @@ func reconcileBaseline(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec
 	cfg.logf("existing schema with empty ledger; baselining through %s (no SQL re-run), applying the remainder", through)
 	if err := dbmigrate.Baseline(ctx, fsys, exec.Exec, through, ledger); err != nil {
 		return fmt.Errorf("baseline migrations: %w", err)
+	}
+	return nil
+}
+
+// manifest 밖 ledger 항목(이전 epoch 잔재)이 있는 DB는 checkpoint를 거친 경우에만
+// 진행한다. 멱등 규약 때문에 baseline이 drift 위에서 조용히 no-op 성공하는 사고를 막는
+// 유일한 방어선이다 — reconcileBaseline은 빈 ledger만 다룬다.
+func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate.Ledger, entries []string) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	var residue bool
+	if err := conn.QueryRow(ctx, mustSQL("legacy_residue_present.sql"), entries).Scan(&residue); err != nil {
+		return fmt.Errorf("detect legacy ledger residue: %w", err)
+	}
+	if !residue {
+		return nil
+	}
+	baseline := entries[0]
+	applied, err := ledger.Applied(ctx, pgxRowQuerier{conn: conn}, baseline)
+	if err != nil {
+		return err
+	}
+	if !applied {
+		return fmt.Errorf(
+			"schema_migrations has entries outside the current manifest but epoch baseline %s is not recorded; "+
+				"this database predates the epoch squash without the checkpoint migration — deploy the checkpoint release first",
+			baseline)
 	}
 	return nil
 }
