@@ -149,7 +149,7 @@ func applyDeliveryDigestDedupeSource(input *DedupeInput, envelope *domain.AlarmQ
 		return
 	}
 	input.SourceKind = envelope.SourceKind
-	input.SourceIdentity = envelope.DeliveryDigest.Identity()
+	input.SourceIdentity = envelope.DeliveryDigest.ContentIdentity()
 	input.AlarmType = envelope.Notification.AlarmType
 	input.Category = string(envelope.SourceKind)
 }

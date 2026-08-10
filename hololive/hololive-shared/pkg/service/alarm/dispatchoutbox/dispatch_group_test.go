@@ -54,3 +54,28 @@ func TestBuildDispatchGroupKeySeparatesRoomsAndKeepsEquivalentEventsTogether(t *
 		t.Fatal("different rooms must not share a dispatch group")
 	}
 }
+
+func TestBuildDispatchGroupKeyDeliveryDigestUsesContentIdentity(t *testing.T) {
+	t.Parallel()
+
+	first := &domain.AlarmQueueEnvelope{
+		Notification:   domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeCommunity},
+		SourceKind:     domain.AlarmDispatchSourceKindDeliveryDigest,
+		DeliveryDigest: &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: "2026-08", PreRenderedMessage: "8월 멤버 뉴스 A"},
+	}
+	equivalent := *first
+	otherMessage := equivalent
+	otherMessage.DeliveryDigest = &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: "2026-08", PreRenderedMessage: "8월 멤버 뉴스 B"}
+	otherRoom := equivalent
+	otherRoom.Notification.RoomID = "room-2"
+
+	if BuildDispatchGroupKeyFromEnvelope(first) != BuildDispatchGroupKeyFromEnvelope(&equivalent) {
+		t.Fatal("same rendered message and room must share a dispatch group")
+	}
+	if BuildDispatchGroupKeyFromEnvelope(first) == BuildDispatchGroupKeyFromEnvelope(&otherMessage) {
+		t.Fatal("different rendered messages must not share a dispatch group")
+	}
+	if BuildDispatchGroupKeyFromEnvelope(first) == BuildDispatchGroupKeyFromEnvelope(&otherRoom) {
+		t.Fatal("same rendered message in different rooms must not share a dispatch group")
+	}
+}

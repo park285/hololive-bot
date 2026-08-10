@@ -40,7 +40,7 @@ func dispatchGroupSourceParts(envelope *domain.AlarmQueueEnvelope) []string {
 		return []string{"youtube-outbox", string(envelope.YouTubeOutbox.Kind), envelope.YouTubeOutbox.ChannelID, envelope.YouTubeOutbox.Identity()}
 	}
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
-		return []string{"delivery-digest", string(envelope.DeliveryDigest.Kind), envelope.DeliveryDigest.Identity()}
+		return []string{"delivery-digest", string(envelope.DeliveryDigest.Kind), envelope.DeliveryDigest.ContentIdentity()}
 	}
 	return notificationDispatchGroupParts(&envelope.Notification)
 }

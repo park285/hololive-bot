@@ -145,7 +145,7 @@ func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, b
 			envelope.Notification.RoomID,
 			envelope.SourceKind,
 			envelope.DeliveryDigest.Kind,
-			envelope.DeliveryDigest.Identity(),
+			envelope.DeliveryDigest.ContentIdentity(),
 		), true
 	}
 	return "", false
