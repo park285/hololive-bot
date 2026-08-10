@@ -3,19 +3,28 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_PATH="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
-INIT_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/05-create-pg-stat-statements.sql"
+BOOTSTRAP_CONTRACT_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql"
+EXTENSION_BOOTSTRAP_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/05-create-pg-stat-statements.sql"
 RUNTIME_AUDIT_PATH="${ROOT_DIR}/scripts/maintenance/pg18_runtime_contract.sql"
 
-python3 - "${COMPOSE_PATH}" "${INIT_PATH}" "${RUNTIME_AUDIT_PATH}" <<'PY'
+python3 - \
+  "${COMPOSE_PATH}" \
+  "${BOOTSTRAP_CONTRACT_PATH}" \
+  "${EXTENSION_BOOTSTRAP_PATH}" \
+  "${RUNTIME_AUDIT_PATH}" <<'PY'
 from __future__ import annotations
 
 import pathlib
 import re
 import sys
 
-compose_path, init_path, runtime_audit_path = map(pathlib.Path, sys.argv[1:])
+compose_path, bootstrap_contract_path, extension_bootstrap_path, runtime_audit_path = map(
+    pathlib.Path,
+    sys.argv[1:],
+)
 compose = compose_path.read_text(encoding="utf-8")
-init_sql = init_path.read_text(encoding="utf-8")
+bootstrap_contract = bootstrap_contract_path.read_text(encoding="utf-8")
+extension_bootstrap = extension_bootstrap_path.read_text(encoding="utf-8")
 runtime_audit = runtime_audit_path.read_text(encoding="utf-8")
 errors: list[str] = []
 
@@ -58,10 +67,12 @@ for token in (
     "track_wal_io_timing",
     "compute_query_id",
     "shared_preload_libraries",
-    "CREATE EXTENSION IF NOT EXISTS pg_stat_statements",
 ):
-    if token not in init_sql:
-        errors.append(f"fresh bootstrap is missing {token!r}")
+    if token not in bootstrap_contract:
+        errors.append(f"first bootstrap contract is missing {token!r}")
+
+if "CREATE EXTENSION IF NOT EXISTS pg_stat_statements" not in extension_bootstrap:
+    errors.append("application database bootstrap must create pg_stat_statements after the contract assertion")
 
 for token in (
     "server_version_num",
