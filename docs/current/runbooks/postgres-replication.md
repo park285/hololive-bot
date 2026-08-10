@@ -49,7 +49,7 @@ commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션
 | primary 복제 슬롯 | `iris_seoul_standby` physical slot. standby가 오래 끊기면 슬롯이 WAL을 보존해 primary 디스크가 찰 수 있습니다. |
 | standby 자격 | `/etc/stack-secrets/hololive-bot/postgres/pgpass` (`0600 70:70`). PostgreSQL 컨테이너 uid 70이 읽을 수 있어야 합니다. |
 | standby CA | `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`. `primary_conninfo`와 controller probe가 `sslmode=verify-full`을 사용합니다. |
-| host client | standby 호스트의 `/usr/bin/psql`. controller는 Docker socket 또는 `docker` 그룹을 사용하지 않습니다. |
+| host client | PGDG `postgresql-client-18`의 canonical `/usr/lib/postgresql/18/bin/psql`. `/usr/bin/psql`의 `pg_wrapper` symlink는 trusted-path 검사에서 거부합니다. controller는 Docker socket 또는 `docker` 그룹을 사용하지 않습니다. |
 | failover env | `/etc/stack-secrets/hololive-bot/postgres-failover.env` (`0600 root:root`). systemd `LoadCredential`이 전용 사용자에게 read-only 사본을 전달하고 allowlist launcher가 해석합니다. |
 | fencing backend | 구 primary가 절대로 writer로 재등장하지 않게 하는 외부 증명입니다. SSH reference hook은 호스트가 reachable할 때만 유효합니다. 전원/호스트 상실까지 자동 처리하려면 hypervisor/cloud/PDU 같은 out-of-band fence hook이 필요합니다. |
 | route backend | `HOLOLIVE_CENTRAL_POSTGRES_HOST/PORT`의 권위 owner 또는 안정적 VIP/DNS/proxy를 원자적으로 전환하고, 새 endpoint가 read/write인지 검증해야 합니다. |
@@ -102,7 +102,8 @@ HOLOLIVE_STANDBY_POSTGRES_PORT=5434
 standby 호스트에 unit을 설치하되 처음에는 dry-run timer만 활성화합니다.
 
 ```bash
-command -v psql
+test -x /usr/lib/postgresql/18/bin/psql
+/usr/lib/postgresql/18/bin/psql --version
 sudo install -m0644 scripts/systemd/hololive-postgres-failover.sysusers.conf \
   /usr/lib/sysusers.d/hololive-postgres-failover.conf
 sudo systemd-sysusers /usr/lib/sysusers.d/hololive-postgres-failover.conf
