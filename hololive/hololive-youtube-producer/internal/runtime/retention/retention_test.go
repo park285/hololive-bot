@@ -92,6 +92,27 @@ func TestCleanupStopsAtBatchBudgetAndContinuesNextRun(t *testing.T) {
 	require.EqualValues(t, 1, countRows(t, ctx, pool, "youtube_channel_stats_snapshots"))
 }
 
+func TestCleanupShortTargetPreservesBatchBudgetForNextTarget(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	now := time.Now().UTC()
+
+	insertChannelSnapshot(t, ctx, pool, "short-old", now.AddDate(0, 0, -40))
+	insertLiveSession(t, ctx, pool, "next-old", "ENDED", new(now.AddDate(0, 0, -40)))
+
+	cleaner := NewCleaner(pool, Config{
+		ChannelSnapshotsDays: 30,
+		LiveSessionsDays:     30,
+		BatchSize:            2,
+		MaxBatches:           2,
+	}, nil)
+	deleted, err := cleaner.Cleanup(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, deleted)
+	require.False(t, existsChannelSnapshot(t, ctx, pool, "short-old"))
+	require.False(t, existsLiveSession(t, ctx, pool, "next-old"))
+}
+
 func TestCleanupLiveSessionsDeletesOnlyEnded(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -214,6 +235,14 @@ func existsLiveSession(t *testing.T, ctx context.Context, pool *pgxpool.Pool, vi
 	t.Helper()
 	var exists bool
 	err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM youtube_live_sessions WHERE video_id = $1)", videoID).Scan(&exists)
+	require.NoError(t, err)
+	return exists
+}
+
+func existsChannelSnapshot(t *testing.T, ctx context.Context, pool *pgxpool.Pool, channelID string) bool {
+	t.Helper()
+	var exists bool
+	err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM youtube_channel_stats_snapshots WHERE channel_id = $1)", channelID).Scan(&exists)
 	require.NoError(t, err)
 	return exists
 }
