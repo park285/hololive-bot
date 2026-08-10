@@ -79,7 +79,7 @@ SELECT
   state,
   operation,
   target,
-  count(*) AS handles,
+  count(io_id) AS handles,
   COALESCE(sum(length), 0) AS bytes
 FROM pg_aios
 GROUP BY state, operation, target
