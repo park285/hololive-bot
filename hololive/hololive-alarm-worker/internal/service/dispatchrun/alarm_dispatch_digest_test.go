@@ -49,9 +49,10 @@ func TestDeliveryDigestGroupingAndRenderingUsesContentIdentity(t *testing.T) {
 
 	groups := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{first, second})
 	require.Len(t, groups, 2)
+	renderer, messageStrings := newAlarmDispatchTestRendering(t)
 	seen := make(map[string]struct{}, len(groups))
 	for i := range groups {
-		message, handled, err := renderAlarmDispatchGroupSource(t.Context(), nil, nil, groups[i])
+		message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, messageStrings, groups[i])
 		require.NoError(t, err)
 		require.True(t, handled)
 		seen[message] = struct{}{}
