@@ -30,38 +30,64 @@ static_deployment_contracts_are_wired() {
   pass "standby health, bind, and old-primary boot fencing are wired"
 }
 launcher_rejects_environment_injection() {
-  local root payload
+  local root payload credential_dir
   root="${TMP_DIR}/launcher"
-  mkdir -p "${root}/private"
-  chmod 0700 "${root}/private"
+  credential_dir="${root}/run/credentials/postgres-failover.service"
+  mkdir -p "${root}/private" "${credential_dir}"
+  chmod 0700 "${root}/private" "${root}/run" "${root}/run/credentials" "${credential_dir}"
   cat >"${root}/private/controller.sh" <<'CONTROLLER'
 #!/usr/bin/env bash
 printf '%s|%s|%s\n' "${PATH}" "${POSTGRES_FAILOVER_PRIMARY_HOST:-}" "$1" >"${FAKE_LAUNCH_LOG:?}"
 CONTROLLER
   chmod 0700 "${root}/private/controller.sh"
-  cat >"${root}/private/failover.env" <<'ENV_OK'
+  cat >"${credential_dir}/failover.env" <<'ENV_OK'
 POSTGRES_FAILOVER_PRIMARY_HOST=100.100.1.8
 POSTGRES_FAILOVER_PRIMARY_PORT=5433
 ENV_OK
-  chmod 0600 "${root}/private/failover.env"
+  chmod 0440 "${credential_dir}/failover.env"
   env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
     PATH=/tmp/attacker \
     FAKE_LAUNCH_LOG="${root}/launch.log" \
-    POSTGRES_FAILOVER_ENV_FILE="${root}/private/failover.env" \
+    POSTGRES_FAILOVER_ENV_FILE="${credential_dir}/failover.env" \
     POSTGRES_FAILOVER_CONTROLLER="${root}/private/controller.sh" \
     POSTGRES_FAILOVER_SERVICE_USER="$(id -un)" \
     POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST="${CONTROLLER_TEST_MODE}" \
     /usr/bin/bash "${LAUNCHER}" --dry-run || { fail "trusted launcher rejected valid allowlisted input"; return; }
   grep -Fxq '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|100.100.1.8|--dry-run' "${root}/launch.log" || { cat "${root}/launch.log" >&2; fail "launcher did not sanitize environment"; return; }
 
+  cp "${credential_dir}/failover.env" "${root}/private/group-readable.env"
+  chmod 0440 "${root}/private/group-readable.env"
+  if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    FAKE_LAUNCH_LOG="${root}/launch.log" \
+    POSTGRES_FAILOVER_ENV_FILE="${root}/private/group-readable.env" \
+    POSTGRES_FAILOVER_CONTROLLER="${root}/private/controller.sh" \
+    POSTGRES_FAILOVER_SERVICE_USER="$(id -un)" \
+    POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST="${CONTROLLER_TEST_MODE}" \
+    /usr/bin/bash "${LAUNCHER}" --dry-run >/dev/null 2>&1; then
+    fail "launcher accepted group-readable input outside the credential directory"
+    return
+  fi
+  chmod 0640 "${credential_dir}/failover.env"
+  if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    FAKE_LAUNCH_LOG="${root}/launch.log" \
+    POSTGRES_FAILOVER_ENV_FILE="${credential_dir}/failover.env" \
+    POSTGRES_FAILOVER_CONTROLLER="${root}/private/controller.sh" \
+    POSTGRES_FAILOVER_SERVICE_USER="$(id -un)" \
+    POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST="${CONTROLLER_TEST_MODE}" \
+    /usr/bin/bash "${LAUNCHER}" --dry-run >/dev/null 2>&1; then
+    fail "launcher accepted a writable group-readable credential"
+    return
+  fi
+
   payload="${root}/payload-ran"
-  cat >"${root}/private/failover.env" <<ENV_BAD
+  chmod 0600 "${credential_dir}/failover.env"
+  cat >"${credential_dir}/failover.env" <<ENV_BAD
 BASH_ENV=${root}/payload.sh
 POSTGRES_FAILOVER_PRIMARY_HOST=100.100.1.8
 ENV_BAD
   if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
     FAKE_LAUNCH_LOG="${root}/launch.log" \
-    POSTGRES_FAILOVER_ENV_FILE="${root}/private/failover.env" \
+    POSTGRES_FAILOVER_ENV_FILE="${credential_dir}/failover.env" \
     POSTGRES_FAILOVER_CONTROLLER="${root}/private/controller.sh" \
     POSTGRES_FAILOVER_SERVICE_USER="$(id -un)" \
     POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST="${CONTROLLER_TEST_MODE}" \
