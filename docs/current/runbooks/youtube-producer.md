@@ -186,7 +186,7 @@ Use the scoped deployment wrapper for remote AP active-active rollout when the c
 I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-deploy.sh seoul --apply
 ```
 
-Live `--apply` requires explicit operator approval before execution, with a per-host approval env var (`I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY`, `I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY`, or `I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY`). The wrapper captures a prechange backup under `backups/<host>-active-active-<timestamp>/`, validates compose config, builds only that host's AP services, recreates them with `--no-deps --remove-orphans`, and runs readiness/health/log smoke checks.
+Live `--apply` requires explicit operator approval before execution, with a per-host approval env var (`I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY`, `I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY`, or `I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY`). The wrapper captures a prechange backup under `backups/<host>-active-active-<timestamp>/`, resolves the AP architecture, builds and verifies the image on the build host, preserves the previous remote image under a release-specific rollback tag, transfers and loads the candidate, recreates it with `--no-build --no-deps --remove-orphans`, and runs readiness/health/log smoke checks.
 
 After rollout, the read-only completion check must pass:
 

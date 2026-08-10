@@ -21,6 +21,7 @@
 package botruntime
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -34,7 +35,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
 func TestSingleConsumerProviders_Smoke(t *testing.T) {
@@ -60,10 +60,6 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	})
 
 	t.Run("alarm service", func(t *testing.T) {
-		t.Cleanup(func() {
-			require.NoError(t, alarmservice.CloseAllAlarmServices(t.Context()))
-		})
-
 		service, err := appbootstrap.ProvideAlarmService(
 			[]int{10, 3},
 			cachemocks.NewStrictClient(),
@@ -75,6 +71,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 			logger,
 		)
 		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, service.Close(context.Background())) })
 		require.NotNil(t, service)
 		assert.Equal(t, []int{10, 3, 1}, service.GetTargetMinutes())
 	})

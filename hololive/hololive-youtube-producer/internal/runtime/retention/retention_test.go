@@ -71,6 +71,27 @@ func TestCleanupDeletesOnlyBeforeCutoffInBatches(t *testing.T) {
 	require.EqualValues(t, 2, countRows(t, ctx, pool, "youtube_channel_stats_snapshots"))
 }
 
+func TestCleanupStopsAtBatchBudgetAndContinuesNextRun(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	now := time.Now().UTC()
+
+	for i := range 5 {
+		insertChannelSnapshot(t, ctx, pool, fmt.Sprintf("budget-old-%d", i), now.AddDate(0, 0, -40))
+	}
+
+	cleaner := NewCleaner(pool, Config{ChannelSnapshotsDays: 30, BatchSize: 1, MaxBatches: 2}, nil)
+	deleted, err := cleaner.Cleanup(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, deleted)
+	require.EqualValues(t, 3, countRows(t, ctx, pool, "youtube_channel_stats_snapshots"))
+
+	deleted, err = cleaner.Cleanup(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, deleted)
+	require.EqualValues(t, 1, countRows(t, ctx, pool, "youtube_channel_stats_snapshots"))
+}
+
 func TestCleanupLiveSessionsDeletesOnlyEnded(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

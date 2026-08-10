@@ -59,3 +59,17 @@ func TestConfigEnabled(t *testing.T) {
 	require.True(t, Config{LiveSessionsDays: 1}.Enabled())
 	require.True(t, Config{ViewerSamplesDays: 1}.Enabled())
 }
+
+func TestConfigCleanupBudgetsAreBounded(t *testing.T) {
+	config := Config{
+		BatchSize:        defaultBatchSize * 2,
+		MaxBatches:       maxCleanupBatches * 2,
+		MaxDuration:      maxCleanupDuration * 2,
+		StatementTimeout: cleanupStatementTimeout * 2,
+	}
+
+	require.Equal(t, defaultBatchSize, config.effectiveBatchSize())
+	require.Equal(t, maxCleanupBatches, config.effectiveMaxBatches())
+	require.Equal(t, maxCleanupDuration, config.effectiveMaxDuration())
+	require.Equal(t, cleanupStatementTimeout, config.effectiveStatementTimeout())
+}

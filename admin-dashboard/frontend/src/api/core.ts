@@ -3,6 +3,8 @@ import type {
 	AggregatedStatus as GeneratedAggregatedStatus,
 	Container as GeneratedContainer,
 	DockerContainerListResponse as GeneratedDockerContainerListResponse,
+	SessionStatusResponse as GeneratedSessionStatusResponse,
+	StatusOnlyResponse as GeneratedStatusOnlyResponse,
 } from "@/api/generated/data-contracts";
 import apiClient, { clearCSRFToken, setCSRFToken } from "./client";
 
@@ -16,20 +18,7 @@ export interface HeartbeatResponse {
 	error?: string;
 }
 
-export interface SessionStatusResponse {
-	status: string;
-	authenticated: boolean;
-	username: string;
-	absolute_expires_at: number;
-	csrf_token?: string | null;
-	session_policy: {
-		heartbeat_interval_ms: number;
-		idle_timeout_ms: number;
-		idle_warning_timeout_ms: number;
-		idle_session_ttl_ms: number;
-		absolute_warning_window_ms: number;
-	};
-}
+export type SessionStatusResponse = GeneratedSessionStatusResponse;
 
 export interface DockerContainer {
 	id: string;
@@ -54,10 +43,7 @@ export interface DockerContainersResponse {
 	containers: DockerContainer[];
 }
 
-export interface StatusOnlyResponse {
-	status: string;
-	message?: string | null;
-}
+export type StatusOnlyResponse = GeneratedStatusOnlyResponse;
 
 interface AuthStatusResponse {
 	status?: string;
@@ -119,9 +105,7 @@ export const authApi = {
 
 	getSession: async (): Promise<SessionStatusResponse> => {
 		const { data } = await apiClient.get<SessionStatusResponse>("/auth/session");
-		if (data.csrf_token !== undefined) {
-			setCSRFToken(data.csrf_token);
-		}
+		setCSRFToken(data.csrf_token);
 		return data;
 	},
 

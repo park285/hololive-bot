@@ -65,6 +65,10 @@
       },
       "AggregatedStatus": {
         "properties": {
+          "sampled_at": {
+            "format": "int64",
+            "type": "integer"
+          },
           "services": {
             "items": {
               "$ref": "#/components/schemas/ServiceStatus"
@@ -81,7 +85,8 @@
         "required": [
           "services",
           "uptime",
-          "version"
+          "version",
+          "sampled_at"
         ],
         "type": "object"
       },
@@ -761,6 +766,9 @@
           "authenticated": {
             "type": "boolean"
           },
+          "csrf_token": {
+            "type": "string"
+          },
           "session_policy": {
             "$ref": "#/components/schemas/SessionPolicyResponse"
           },
@@ -776,7 +784,8 @@
           "authenticated",
           "username",
           "absolute_expires_at",
-          "session_policy"
+          "session_policy",
+          "csrf_token"
         ],
         "type": "object"
       },
@@ -1357,6 +1366,13 @@
         "operationId": "handle_logout",
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            },
             "description": "Logout successful"
           }
         },

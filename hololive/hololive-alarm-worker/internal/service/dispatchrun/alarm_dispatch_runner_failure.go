@@ -1,0 +1,273 @@
+package dispatchrun
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+	"github.com/park285/iris-client-go/iris"
+)
+
+func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
+	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []domain.AlarmQueueEnvelope) error {
+		if err := r.consumer.RouteFailures(ctx, retry, dlq); err != nil {
+			return fmt.Errorf("route alarm dispatch before send failure: %w", err)
+		}
+		return nil
+	}, r.consumer.Requeue)
+}
+
+func (r *Runner) finalizeDispatchFailure(
+	ctx context.Context,
+	retryEnvelopes []domain.AlarmQueueEnvelope,
+	dlqEnvelopes []domain.AlarmQueueEnvelope,
+	routeFn func(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error,
+	requeueFn func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error,
+) error {
+	routeErr := routeFn(retryEnvelopes, dlqEnvelopes)
+	releasable := dlqEnvelopes
+	if routeErr != nil {
+		unapplied, partial := unappliedFailureRoutingIDs(routeErr)
+		if !partial {
+			return r.preserveAfterPersistenceFailure(ctx, combineEnvelopes(retryEnvelopes, dlqEnvelopes), requeueFn, routeErr)
+		}
+		// 부분 적용의 미적용 행은 recovery/quarantine 경로 소유 — requeue로 덮어쓰지 않고,
+		// claim key는 실제 dlq로 전이된 부분집합만 해제한다.
+		releasable = envelopesExcludingIDs(dlqEnvelopes, unapplied)
+	}
+	if err := r.consumer.ReleaseClaimKeys(ctx, claimKeysForAlarmDispatchEnvelopes(releasable)); err != nil {
+		if routeErr != nil {
+			return fmt.Errorf("%w: release alarm dispatch dlq claim keys: %w", routeErr, err)
+		}
+		return fmt.Errorf("release alarm dispatch dlq claim keys: %w", err)
+	}
+	return routeErr
+}
+
+func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	requeued := preparePreSendRequeue(envelopes, cause)
+	if err := r.consumer.RequeuePreSend(ctx, requeued); err != nil {
+		return fmt.Errorf("requeue alarm dispatch before send: %w", err)
+	}
+	return nil
+}
+
+func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	if alarmDispatchPostSendFailureIsRetryable(cause, len(envelopes)) ||
+		(hasPersistedClientRequestID(envelopes) && isAlarmDispatchAmbiguousPostSendFailure(cause)) {
+		return r.persistSendingRetry(ctx, envelopes, cause)
+	}
+	if err := r.consumer.Quarantine(ctx, envelopes, cause); err != nil {
+		return fmt.Errorf("quarantine alarm dispatch after send failure: %w", err)
+	}
+	observeAlarmDispatchRunnerPostSendQuarantined(len(envelopes))
+	return nil
+}
+
+func hasPersistedClientRequestID(envelopes []domain.AlarmQueueEnvelope) bool {
+	if len(envelopes) == 0 {
+		return false
+	}
+	want := strings.TrimSpace(envelopes[0].ClientRequestID)
+	if want == "" {
+		return false
+	}
+	for i := 1; i < len(envelopes); i++ {
+		if strings.TrimSpace(envelopes[i].ClientRequestID) != want {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
+	return r.finalizeDispatchFailure(ctx, retryEnvelopes, dlqEnvelopes, func(retry, dlq []domain.AlarmQueueEnvelope) error {
+		if err := r.consumer.RouteSendingFailures(ctx, retry, dlq); err != nil {
+			return fmt.Errorf("route alarm dispatch sending failure: %w", err)
+		}
+		return nil
+	}, func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+		// 'sending' 잔류 행은 leased 전용 Requeue(RouteFailures fence)에 매칭되지 않아
+		// 일시적 infra 오류가 QuarantineStaleSending의 terminal quarantine으로 굳는다.
+		// fallback도 sending fence로 전량 retry 복원한다.
+		return r.consumer.RouteSendingFailures(ctx, envelopes, nil)
+	})
+}
+
+// TransportError/DeadlineExceeded는 응답을 한 번도 받지 못한 경우라 첫 발송이 이미
+// admission됐을 수 있다. 재드레인에서 그룹 구성이 바뀌면 ClientRequestID가 다르게 재파생되어
+// Iris dedup에 접히지 않고 중복 발화하므로, ambiguous 원인은 solo 재그룹핑으로 ID가 그대로
+// 재생산되는 단건 그룹에만 재시도를 허용하고 다건 그룹은 quarantine한다.
+// 429/502/503은 미수용이 확정된 응답이라 그룹 크기와 무관하게 재시도한다.
+func alarmDispatchPostSendFailureIsRetryable(cause error, envelopeCount int) bool {
+	if isAlarmDispatchNotAdmittedRetryableFailure(cause) {
+		return true
+	}
+	return envelopeCount == 1 && isAlarmDispatchAmbiguousPostSendFailure(cause)
+}
+
+func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
+	return isAlarmDispatchNotAdmittedRetryableFailure(cause) || isAlarmDispatchAmbiguousPostSendFailure(cause)
+}
+
+func isAlarmDispatchNotAdmittedRetryableFailure(cause error) bool {
+	var httpErr *iris.HTTPError
+	if errors.As(cause, &httpErr) {
+		return httpErr.StatusCode == 429 || httpErr.StatusCode == 502 || httpErr.StatusCode == 503
+	}
+	return false
+}
+
+func isAlarmDispatchAmbiguousPostSendFailure(cause error) bool {
+	if cause == nil {
+		return false
+	}
+	var transportErr *iris.TransportError
+	if errors.As(cause, &transportErr) {
+		return true
+	}
+	return errors.Is(cause, context.DeadlineExceeded)
+}
+
+func (r *Runner) preserveAfterPersistenceFailure(
+	ctx context.Context,
+	envelopes []domain.AlarmQueueEnvelope,
+	requeueFn func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error,
+	persistErr error,
+) error {
+	if len(envelopes) == 0 {
+		return persistErr
+	}
+	if err := requeueFn(ctx, envelopes); err != nil {
+		return fmt.Errorf("%w: fallback requeue: %w", persistErr, err)
+	}
+	return persistErr
+}
+
+func claimKeysForAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) []string {
+	claimKeys := make([]string, 0, len(envelopes))
+	for i := range envelopes {
+		claimKeys = append(claimKeys, envelopes[i].ClaimKeys...)
+	}
+	return claimKeys
+}
+
+type partialFailureRouting interface {
+	error
+	UnappliedDeliveryIDs() []int64
+}
+
+func unappliedFailureRoutingIDs(err error) ([]int64, bool) {
+	var partial partialFailureRouting
+	if !errors.As(err, &partial) {
+		return nil, false
+	}
+	return partial.UnappliedDeliveryIDs(), true
+}
+
+func combineEnvelopes(a, b []domain.AlarmQueueEnvelope) []domain.AlarmQueueEnvelope {
+	combined := make([]domain.AlarmQueueEnvelope, 0, len(a)+len(b))
+	combined = append(combined, a...)
+	return append(combined, b...)
+}
+
+func envelopesExcludingIDs(envelopes []domain.AlarmQueueEnvelope, ids []int64) []domain.AlarmQueueEnvelope {
+	if len(ids) == 0 {
+		return envelopes
+	}
+	excluded := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		excluded[id] = struct{}{}
+	}
+	kept := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	for i := range envelopes {
+		if _, ok := excluded[envelopes[i].DispatchOutboxID]; ok {
+			continue
+		}
+		kept = append(kept, envelopes[i])
+	}
+	return kept
+}
+
+const (
+	alarmDispatchMaxAttempts          = 3
+	alarmDispatchRetryableMaxAttempts = 6
+)
+
+// attempt*5s 선형 백오프에서 3회는 누적 15s라 Iris 재기동(30~60s)을 넘기지 못하고
+// 대기 물량 전체를 DLQ로 흘린다. 일시적 원인만 6회(누적 75s)로 늘린다.
+func alarmDispatchMaxAttemptsForCause(cause error) int {
+	if isAlarmDispatchRetryablePostSendFailure(cause) {
+		return alarmDispatchRetryableMaxAttempts
+	}
+	return alarmDispatchMaxAttempts
+}
+
+func prepareDispatchFailure(envelopes []domain.AlarmQueueEnvelope, cause error) (retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) {
+	retryEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	dlqEnvelopes = make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	maxAttempts := alarmDispatchMaxAttemptsForCause(cause)
+	for i := range envelopes {
+		updated := envelopes[i]
+		updated.Retry = nextAlarmDispatchRetry(&envelopes[i], cause)
+		if updated.Retry.Attempt >= maxAttempts {
+			dlqEnvelopes = append(dlqEnvelopes, updated)
+			continue
+		}
+		retryEnvelopes = append(retryEnvelopes, updated)
+	}
+	return retryEnvelopes, dlqEnvelopes
+}
+
+func preparePreSendRequeue(envelopes []domain.AlarmQueueEnvelope, cause error) []domain.AlarmQueueEnvelope {
+	requeued := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	for i := range envelopes {
+		updated := envelopes[i]
+		updated.Retry = sameAttemptAlarmDispatchRetry(&envelopes[i], cause)
+		requeued = append(requeued, updated)
+	}
+	return requeued
+}
+
+func sameAttemptAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *domain.AlarmQueueRetryMetadata {
+	retry := &domain.AlarmQueueRetryMetadata{}
+	if envelope.Retry != nil {
+		*retry = *envelope.Retry
+	}
+	retry.LastError = cause.Error()
+	retry.LastErrorCode = dispatchoutbox.ClassifyErrorCode(cause)
+	retry.RetryAfterMS = int64((5 * time.Second) / time.Millisecond)
+	retry.NextVisibleAt = time.Now().UTC().Add(5 * time.Second).Format(time.RFC3339Nano)
+	return retry
+}
+
+const maxHTTPRetryAfter = 5 * time.Minute
+
+func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *domain.AlarmQueueRetryMetadata {
+	retry := &domain.AlarmQueueRetryMetadata{}
+	if envelope.Retry != nil {
+		*retry = *envelope.Retry
+	}
+	retry.Attempt++
+	retry.LastError = cause.Error()
+	retry.LastErrorCode = dispatchoutbox.ClassifyErrorCode(cause)
+	retryAfter := time.Duration(retry.Attempt) * 5 * time.Second
+	var httpErr *iris.HTTPError
+	if errors.As(cause, &httpErr) && httpErr.RetryAfter > retryAfter {
+		hint := httpErr.RetryAfter
+		if hint > maxHTTPRetryAfter {
+			hint = maxHTTPRetryAfter
+			observeAlarmDispatchRetryAfterClamped()
+		}
+		retryAfter = hint
+	}
+	retry.RetryAfterMS = int64(retryAfter / time.Millisecond)
+	retry.NextVisibleAt = time.Now().UTC().Add(retryAfter).Format(time.RFC3339Nano)
+	return retry
+}

@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/png"
 	"net/http"
@@ -98,6 +99,9 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.
 	if err != nil {
 		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
+	if len(first) == 0 {
+		t.Fatal("first RenderCalendarImageContext() returned empty image data")
+	}
 	first[0] = 0
 
 	second, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
@@ -108,6 +112,67 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.
 	assertValidPNG(t, second)
 	if got, want := requests.Load(), int32(1); got != want {
 		t.Fatalf("photo requests = %d, want %d", got, want)
+	}
+}
+
+func TestAwaitCalendarRenderCallRejectsMissingImageData(t *testing.T) {
+	t.Parallel()
+
+	done := make(chan struct{})
+	close(done)
+	call := &calendarRenderCall{done: done}
+
+	data, err := NewCalendarCardRenderer().awaitCalendarRenderCall(t.Context(), calendarCacheKey{}, call)
+	if err == nil {
+		t.Fatal("awaitCalendarRenderCall() error = nil, want missing image data error")
+	}
+	if data != nil {
+		t.Fatalf("awaitCalendarRenderCall() data = %d bytes, want nil", len(data))
+	}
+}
+
+func TestCalendarCardRenderer_CoalescesConcurrentColdRenders(t *testing.T) {
+	pngData := tinyPNG(t)
+	var requests atomic.Int32
+	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requests.Add(1)
+		time.Sleep(40 * time.Millisecond)
+		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+	})))
+
+	renderer := NewCalendarCardRenderer()
+	entries := []domain.CalendarEntry{{
+		Kind: domain.CelebrationKindBirthday,
+		Member: &domain.Member{
+			ShortKoreanName: "페코라",
+			Photo:           "https://yt3.googleusercontent.com/avatar=s88-c",
+		},
+		Day: 15,
+	}}
+
+	start := make(chan struct{})
+	errCh := make(chan error, 12)
+	var wg sync.WaitGroup
+	for range 12 {
+		wg.Go(func() {
+			<-start
+			data, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
+			if err == nil && !isPNGData(data) {
+				err = fmt.Errorf("render returned invalid PNG")
+			}
+			errCh <- err
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("photo requests = %d, want 1 coalesced cold render", got)
 	}
 }
 

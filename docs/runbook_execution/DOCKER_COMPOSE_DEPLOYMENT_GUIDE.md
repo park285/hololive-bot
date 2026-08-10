@@ -66,7 +66,7 @@ split-host 구성에서는 producer AP runtime만 원격 호스트에서 실행�
 - env 정본은 OpenBao KV입니다. 중앙 Valkey는 Tailscale IP에 publish되므로 password 없이 운영하지 않습니다.
 - 중앙 host의 `./scripts/deploy/compose-redeploy-service.sh youtube-producer`는 기본적으로 차단됩니다. 원격 AP overlay 또는 명시적 emergency override 없이 중앙에서 재기동하지 않습니다.
 
-원격 AP 재배포 진입점은 runtime별 host 파라미터화 wrapper입니다. Osaka와 Osaka2는 host-native helper, Seoul은 Compose helper를 사용합니다. rsync/build/recreate/검증 절차는 `docs/current/runbooks/youtube-producer.md`의 Remote AP rollout 섹션을 따릅니다.
+원격 AP 재배포 진입점은 runtime별 host 파라미터화 wrapper입니다. Osaka와 Osaka2는 host-native helper, Seoul은 Compose helper를 사용합니다. 로컬 build/artifact transfer/no-build recreate/검증 절차는 `docs/current/runbooks/youtube-producer.md`의 Remote AP rollout 섹션을 따릅니다.
 
 ```bash
 ./scripts/deploy/ap-host-native-deploy.sh osaka --dry-run
@@ -83,12 +83,12 @@ I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY=true ./scripts/deploy/ap-host-native-deplo
 
 ```bash
 SSH_SEOUL='ssh -i /home/kapu/gemini/hololive-bot/<ssh-key> -o IdentitiesOnly=yes -o HostKeyAlias=<tailnet-seoul-b> ubuntu@<tailnet-seoul-b>'
-$SSH_SEOUL 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.seoul.yml up -d --no-deps --remove-orphans youtube-producer-b'
+$SSH_SEOUL 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.seoul.yml up -d --no-build --no-deps --remove-orphans youtube-producer-b'
 ```
 
 컷오버는 build를 먼저 완료한 뒤 원격 AP를 한 번에 한 호스트씩 교체합니다. `youtube-producer`는 outbox row producer이므로 승인된 active-active guard 없이 여러 호스트에서 동시에 실행하지 않습니다.
 
-원격 AP 호스트에는 source tree를 상시 보관하지 않습니다. 운영 디렉터리에는 `scripts/deploy/ap-rsync-files.txt` 매니페스트가 동기화한 compose/build 파일과 `runtime-config/`, `data/`, `logs/`만 두고 AP compose env는 `/run/hololive-bot/ap-compose.env`, producer app env는 `/run/hololive-bot/youtube-producer.env`에서만 읽습니다. image는 해당 호스트가 동기화된 build context에서 직접 build합니다.
+원격 AP 호스트에는 full source tree를 상시 보관하지 않습니다. 운영 디렉터리에는 `scripts/deploy/ap-rsync-files.txt` 매니페스트가 동기화한 runtime compose 파일과 `runtime-config/`, `data/`, `logs/`만 두고 AP compose env는 `/etc/stack-secrets/hololive-bot/ap-compose.env`, producer app env는 `/etc/stack-secrets/hololive-bot/youtube-producer.env`에서만 읽습니다. image는 build host에서 target architecture로 만들고 revision을 검증한 뒤 전송하며, AP host는 `docker load`와 `--no-build` recreate만 수행합니다.
 
 원격 AP의 bind-mounted `data/`, `logs/`는 컨테이너 `app` (UID `1000`)이 쓰고 `ubuntu`가 읽을 수 있어야 합니다. Osaka/Seoul 모두 host 사용자 `ubuntu`는 UID `1001`이라 chown이 필요하고, `ubuntu`는 `docker` group에 속합니다.
 

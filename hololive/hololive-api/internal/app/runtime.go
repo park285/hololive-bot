@@ -71,20 +71,14 @@ func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, lo
 			Shutdown: llm.Shutdown,
 		},
 		applifecycle.GroupComponent{
-			Name:  "admin",
-			Start: admin.Start,
-			Shutdown: func(ctx context.Context) error {
-				admin.Shutdown(ctx)
-				return nil
-			},
+			Name:     "admin",
+			Start:    admin.Start,
+			Shutdown: admin.Shutdown,
 		},
 		applifecycle.GroupComponent{
-			Name:  "bot",
-			Start: bot.Start,
-			Shutdown: func(ctx context.Context) error {
-				bot.Shutdown(ctx)
-				return nil
-			},
+			Name:     "bot",
+			Start:    bot.Start,
+			Shutdown: bot.Shutdown,
 		},
 	)
 	return runtime, nil

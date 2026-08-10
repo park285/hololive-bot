@@ -12,20 +12,23 @@
 | v2 | `notification_delivery_outbox` | major-event / member-news 다이제스트 | 대문자 `PENDING/SENDING/SENT/FAILED` | LLM 플레인 스케줄러 (`majorevent/scheduler/notification_guard.go:51`, `membernews/scheduler/digest_helper.go:85`) | alarm-worker delivery dispatcher (`build_egress.go:69`) |
 | v3 | `alarm_dispatch_events`/`_deliveries`/`_admin_actions`/`_event_collisions` | `!알람` 라이브·기념일 디스패치 원장 | 소문자 `shadowed/pending/retry/leased/sending/sent/dlq/quarantined/cancelled` | alarm 스케줄러 + celebration publisher (`dispatchoutbox/repository_insert.go:105,205`) | alarm-worker dispatch consumer (`build_egress.go:96`) |
 
-- v1→v3 브리지는 의도만 존재: `docs/superpowers/plans/2026-05-14-youtube-alarm-ssot-realignment.md`
-  ("Final send truth lives in `alarm_dispatch_events`/`_deliveries`"). 도메인 계층에
-  `AlarmDispatchSourceKindYouTubeOutbox` + `YouTubeOutboxDispatchPayload`(`pkg/domain/alarm_dispatch_source.go:12,21`)가
-  준비돼 있으나 이를 채우는 브리지 워커는 미구현이고, v1은 여전히 `SENT`로 자체 종결한다.
-- v2→v3 수렴 계획은 부재하며 데이터 모델이 비호환이다: v3 이벤트는 room-agnostic
-  (058의 payload check가 room 키를 금지), v2는 room별 렌더 완료 메시지를 저장한다.
+- v1 dispatcher는 `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=off|shadow|cutover`를 소유합니다. `shadow`는
+  v3 `shadowed` row와 기존 direct send를 병행하고, `cutover`는 v3 `pending` 저장 성공 후 v1 delivery를
+  완료 처리합니다. 따라서 cutover의 v1 `SENT`는 외부 발송 완료가 아니라 durable handoff 완료를 뜻하며,
+  최종 발송 진실은 v3 delivery에 있습니다.
+- v2 producer repository는 `DELIVERY_OUTBOX_V3_HANDOFF_MODE=off|shadow|cutover` adapter를 가집니다.
+  `DeliveryDigestDispatchPayload`가 kind/period/message를 room-agnostic event로 저장하고 room은 delivery에만
+  남습니다. pre-rendered message 호환은 legacy formatter 제거 전까지 유지하는 bounded compatibility seam이며,
+  비교 전용 `shadowed` delivery는 14일 retention으로 제한됩니다.
 
 ## Phase 1 — v1 → v3 브리지 (SSOT 재정렬 플랜의 완성)
 
-1. 브리지 워커 구현: `youtube_notification_outbox` 클레임 행을 `alarm_dispatch_events`(+deliveries)로
-   변환 게시. 소스 페이로드는 기존 `YouTubeOutboxDispatchPayload` 사용.
-2. v1 종결 상태를 `SENT` 대신 handoff 상태로 전환(SSOT 플랜 원문 요구) — 발송 진실은 v3 원장으로 이동.
-3. 듀얼런: 브리지 shadow 게시(v3 `shadowed`) ↔ 기존 dispatcher 발송을 텔레메트리로 대조.
-4. 컷오버: `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false`, 브리지+v3 consumer가 유일 발송 경로.
+1. 기존 claim owner 안에서 `youtube_notification_outbox` 행을 `alarm_dispatch_events`(+deliveries)로
+   변환 게시합니다. 소스 페이로드는 `YouTubeOutboxDispatchPayload`를 사용합니다.
+2. v1 `SENT`는 cutover에서 handoff 완료를 뜻하며 발송 진실은 v3 원장으로 이동합니다.
+3. 듀얼런: `shadow` 게시 ↔ 기존 dispatcher 발송을 DB와 `hololive_youtube_outbox_v3_handoff_total`로 대조합니다.
+4. 컷오버: `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`, `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=cutover`,
+   `ALARM_DISPATCH_CONSUMER_ENABLED=true`를 함께 유지합니다.
 5. 정리(별도 승인 필요한 파괴적 단계): v1 dispatcher 코드 서브트리
    (`youtube/outbox/internal/delivery/{dispatch,store}/`), compose/CI 게이트 플래그
    (`docker-compose.prod.yml:357`, `ci-notification-egress-gate.sh:112`), 그리고 outbox/delivery 테이블 DROP.
@@ -34,10 +37,11 @@
 
 ## Phase 2 — v2 → v3 (스케줄러 재설계 동반)
 
-1. major-event/member-news 스케줄러 산출을 room별 렌더 메시지에서 room-agnostic 이벤트로 재설계
-   (렌더를 v3 delivery fan-out 단계로 이동).
-2. v3 `kind`에 `MAJOR_EVENT_WEEKLY/MONTHLY`, `MEMBER_NEWS_WEEKLY/MONTHLY` 편입.
-3. 듀얼런 → `DELIVERY_DISPATCHER_ENABLED=false` 컷오버 → `notification_delivery_outbox` +
+1. major-event/member-news producer 산출을 `DeliveryDigestDispatchPayload` room-agnostic 이벤트로 handoff합니다.
+   현재 pre-rendered message는 기존 formatter의 deterministic output을 보존하는 compatibility seam입니다.
+2. `shadow`에서 `hololive_delivery_outbox_v3_handoff_total`과 room/kind/period 집합을 대조한 뒤 producer를
+   `cutover`로 전환합니다.
+3. 기존 backlog가 0이 된 뒤 `DELIVERY_DISPATCHER_ENABLED=false` 컷오버 → `notification_delivery_outbox` +
    `pkg/service/delivery/` 제거(096의 `idx_ndo_pending_due_created_id`는 이때 함께 소멸).
 
 ## Phase 3 — v3 원장 파티셔닝 (보존정책의 복잡도 정리)
@@ -51,3 +55,10 @@ retention 인덱스와 `alarm_dispatch_maintenance.go`의 배치 DELETE가 파�
 
 - v1/v2 테이블·코드의 물리 제거(위 컷오버 완료 전까지). 제거 대상 전수 목록은 Phase 1/2의 정리 단계에 명시.
 - v3로의 강제 통합을 위한 스키마 개조(페이로드 check 완화 등) — room-agnostic 불변식은 유지한다.
+
+## Legacy 제거 체크리스트
+
+1. Shadow 기간의 v1/v2 handoff failure가 0이고 source identity별 row 집합이 일치합니다.
+2. Cutover 후 legacy pending/failed backlog가 0이며 v3 pending/retry oldest age가 정상 범위입니다.
+3. Rollback 창 동안 legacy 테이블과 dispatcher 코드를 유지합니다.
+4. rollback 창 종료와 telemetry 보존 범위를 승인한 뒤에만 legacy 코드·flag·table DROP을 별도 변경으로 수행합니다.

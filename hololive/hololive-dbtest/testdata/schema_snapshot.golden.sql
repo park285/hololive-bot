@@ -1,5 +1,5 @@
 -- hololive schema snapshot (deterministic pg_catalog serialization)
--- objects: enum types, tables, columns, constraints, indexes
+-- objects: enum types, tables, columns, constraints, indexes, reloptions, triggers, sequences, functions
 -- regenerate: SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest
 
 ENUM alarm_type
@@ -42,6 +42,7 @@ TABLE alarm_dispatch_admin_actions
   INDEX CREATE INDEX idx_alarm_dispatch_admin_actions_delivery ON public.alarm_dispatch_admin_actions USING btree (delivery_id)
 
 TABLE alarm_dispatch_deliveries
+  OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
   COLUMN id bigint NOT NULL DEFAULT nextval('alarm_dispatch_deliveries_id_seq'::regclass)
   COLUMN event_id bigint NOT NULL
   COLUMN room_id character varying(100) NOT NULL
@@ -63,13 +64,18 @@ TABLE alarm_dispatch_deliveries
   COLUMN last_error text NOT NULL DEFAULT ''::text
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN dispatch_group_key text
+  COLUMN send_unit_id bigint
   CONSTRAINT alarm_dispatch_deliveries_attempt_check CHECK ((attempt_count >= 0))
   CONSTRAINT alarm_dispatch_deliveries_dedupe_key_check CHECK (((length(dedupe_key) > 0) AND (length(dedupe_key) <= 768)))
+  CONSTRAINT alarm_dispatch_deliveries_dispatch_group_key_check CHECK (((dispatch_group_key IS NULL) OR ((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768))))
   CONSTRAINT alarm_dispatch_deliveries_room_id_check CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
+  CONSTRAINT alarm_dispatch_deliveries_send_unit_pair_check CHECK (((dispatch_group_key IS NULL) = (send_unit_id IS NULL)))
   CONSTRAINT alarm_dispatch_deliveries_status_check CHECK ((status = ANY (ARRAY['shadowed'::text, 'pending'::text, 'retry'::text, 'leased'::text, 'sending'::text, 'sent'::text, 'dlq'::text, 'quarantined'::text, 'cancelled'::text])))
   CONSTRAINT chk_alarm_dispatch_deliveries_last_error_size CHECK ((octet_length(last_error) <= 8192))
   CONSTRAINT chk_alarm_dispatch_deliveries_state_shape CHECK ((((status <> 'leased'::text) OR ((locked_by IS NOT NULL) AND (locked_at IS NOT NULL) AND (lock_expires_at IS NOT NULL))) AND ((status <> 'sending'::text) OR ((locked_by IS NOT NULL) AND (locked_at IS NOT NULL) AND (lock_expires_at IS NOT NULL) AND (sending_started_at IS NOT NULL))) AND ((status <> 'sent'::text) OR (sent_at IS NOT NULL)) AND ((status <> 'dlq'::text) OR (dlq_at IS NOT NULL)) AND ((status <> 'quarantined'::text) OR (quarantined_at IS NOT NULL)) AND ((status <> 'cancelled'::text) OR (cancelled_at IS NOT NULL))))
   CONSTRAINT alarm_dispatch_deliveries_event_id_fkey FOREIGN KEY (event_id) REFERENCES alarm_dispatch_events(id) ON DELETE RESTRICT
+  CONSTRAINT alarm_dispatch_deliveries_send_unit_fk FOREIGN KEY (send_unit_id) REFERENCES alarm_dispatch_send_units(id) ON DELETE RESTRICT
   CONSTRAINT alarm_dispatch_deliveries_pkey PRIMARY KEY (id)
   CONSTRAINT alarm_dispatch_deliveries_dedupe_key_key UNIQUE (dedupe_key)
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_cancelled_retention ON public.alarm_dispatch_deliveries USING btree (cancelled_at, id) WHERE (status = 'cancelled'::text)
@@ -79,6 +85,8 @@ TABLE alarm_dispatch_deliveries
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_leased_expired ON public.alarm_dispatch_deliveries USING btree (lock_expires_at, id) WHERE (status = 'leased'::text)
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_quarantined_retention ON public.alarm_dispatch_deliveries USING btree (quarantined_at, id) WHERE (status = 'quarantined'::text)
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_room_created ON public.alarm_dispatch_deliveries USING btree (room_id, created_at DESC)
+  INDEX CREATE INDEX idx_alarm_dispatch_deliveries_send_unit ON public.alarm_dispatch_deliveries USING btree (send_unit_id) WHERE (send_unit_id IS NOT NULL)
+  INDEX CREATE INDEX idx_alarm_dispatch_deliveries_send_unit_due ON public.alarm_dispatch_deliveries USING btree (send_unit_id, next_attempt_at, id) WHERE ((send_unit_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'retry'::text])))
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_sending_stale ON public.alarm_dispatch_deliveries USING btree (sending_started_at, id) WHERE (status = 'sending'::text)
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_sent_event_room ON public.alarm_dispatch_deliveries USING btree (event_id, room_id, sent_at DESC) WHERE ((status = 'sent'::text) AND (sent_at IS NOT NULL))
   INDEX CREATE INDEX idx_alarm_dispatch_deliveries_sent_retention ON public.alarm_dispatch_deliveries USING btree (sent_at, id) WHERE (status = 'sent'::text)
@@ -129,6 +137,21 @@ TABLE alarm_dispatch_events
   CONSTRAINT alarm_dispatch_events_event_key_key UNIQUE (event_key)
   INDEX CREATE INDEX idx_alarm_dispatch_events_created ON public.alarm_dispatch_events USING btree (created_at, id)
   INDEX CREATE INDEX idx_alarm_dispatch_events_live_stream_created ON public.alarm_dispatch_events USING btree (stream_id, created_at DESC) WHERE (alarm_type = 'LIVE'::alarm_type)
+
+TABLE alarm_dispatch_send_units
+  COLUMN id bigint NOT NULL DEFAULT nextval('alarm_dispatch_send_units_id_seq'::regclass)
+  COLUMN unit_key character(64) NOT NULL
+  COLUMN dispatch_group_key text NOT NULL
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN client_request_id text NOT NULL
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT alarm_dispatch_send_units_client_request_id_check CHECK ((client_request_id ~ '^[A-Za-z0-9._:-]{8,160}$'::text))
+  CONSTRAINT alarm_dispatch_send_units_group_key_check CHECK (((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768)))
+  CONSTRAINT alarm_dispatch_send_units_room_id_check CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
+  CONSTRAINT alarm_dispatch_send_units_unit_key_check CHECK ((unit_key ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT alarm_dispatch_send_units_pkey PRIMARY KEY (id)
+  CONSTRAINT alarm_dispatch_send_units_client_request_id_key UNIQUE (client_request_id)
+  CONSTRAINT alarm_dispatch_send_units_unit_key_key UNIQUE (unit_key)
 
 TABLE alarms
   COLUMN id integer NOT NULL DEFAULT nextval('alarms_id_seq'::regclass)
@@ -190,6 +213,7 @@ TABLE bot_command_executions
   CONSTRAINT bot_command_executions_message_id_key UNIQUE (message_id)
   INDEX CREATE INDEX idx_bot_command_executions_status_claimed ON public.bot_command_executions USING btree (claimed_at, id) WHERE (status = 'claimed'::text)
   INDEX CREATE INDEX idx_bot_command_executions_terminal_updated ON public.bot_command_executions USING btree (updated_at, id) WHERE (status = ANY (ARRAY['succeeded'::text, 'failed'::text, 'outcome_unknown'::text]))
+  TRIGGER CREATE TRIGGER bot_command_execution_terminal_summary_scrub BEFORE INSERT OR UPDATE OF status, result_summary ON bot_command_executions FOR EACH ROW WHEN (new.status = ANY (ARRAY['succeeded'::text, 'failed'::text, 'outcome_unknown'::text])) EXECUTE FUNCTION scrub_bot_command_execution_terminal_summary()
 
 TABLE bot_reply_outbox
   COLUMN id bigint NOT NULL DEFAULT nextval('bot_reply_outbox_id_seq'::regclass)
@@ -232,6 +256,7 @@ TABLE bot_reply_outbox
   INDEX CREATE INDEX idx_bot_reply_outbox_message ON public.bot_reply_outbox USING btree (message_id, ordinal)
   INDEX CREATE INDEX idx_bot_reply_outbox_room_active ON public.bot_reply_outbox USING btree (room_id, id) WHERE (status = ANY (ARRAY['pending'::text, 'submitting'::text, 'accepted'::text, 'retryable_pre_dispatch'::text, 'outcome_unknown'::text]))
   INDEX CREATE INDEX idx_bot_reply_outbox_terminal_updated ON public.bot_reply_outbox USING btree (updated_at, id) WHERE (status = ANY (ARRAY['handoff_completed'::text, 'dead'::text, 'permanent_conflict'::text]))
+  TRIGGER CREATE TRIGGER bot_reply_outbox_replay_claim_audit BEFORE UPDATE ON bot_reply_outbox FOR EACH ROW EXECUTE FUNCTION append_bot_reply_outbox_replay_claim_audit()
 
 TABLE bot_reply_outbox_replay_audit
   COLUMN id bigint NOT NULL DEFAULT nextval('bot_reply_outbox_replay_audit_id_seq'::regclass)
@@ -249,6 +274,7 @@ TABLE bot_reply_outbox_replay_audit
   CONSTRAINT bot_reply_outbox_replay_audit_pkey PRIMARY KEY (id)
   CONSTRAINT bot_reply_outbox_replay_audit_outbox_id_grant_number_event__key UNIQUE (outbox_id, grant_number, event_type)
   INDEX CREATE INDEX idx_bot_reply_outbox_replay_audit_outbox_recorded ON public.bot_reply_outbox_replay_audit USING btree (outbox_id, recorded_at, id)
+  TRIGGER CREATE TRIGGER bot_reply_outbox_replay_audit_immutable BEFORE DELETE OR UPDATE ON bot_reply_outbox_replay_audit FOR EACH ROW EXECUTE FUNCTION reject_bot_reply_outbox_replay_audit_mutation()
 
 TABLE bot_webhook_heads
   COLUMN ordering_key text NOT NULL
@@ -290,6 +316,7 @@ TABLE bot_webhook_inbox
   INDEX CREATE INDEX idx_bot_webhook_inbox_lease_expiry ON public.bot_webhook_inbox USING btree (lease_until, id) WHERE (status = 'processing'::text)
   INDEX CREATE INDEX idx_bot_webhook_inbox_ordering_partition ON public.bot_webhook_inbox USING btree (ordering_key, id) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]))
   INDEX CREATE INDEX idx_bot_webhook_inbox_terminal_updated ON public.bot_webhook_inbox USING btree (updated_at, id) WHERE (status = ANY (ARRAY['dead'::text, 'succeeded'::text]))
+  TRIGGER CREATE TRIGGER bot_webhook_inbox_terminal_payload_scrub BEFORE INSERT OR UPDATE OF status, payload ON bot_webhook_inbox FOR EACH ROW WHEN (new.status = ANY (ARRAY['dead'::text, 'succeeded'::text])) EXECUTE FUNCTION scrub_bot_webhook_inbox_terminal_payload()
 
 TABLE major_event_subscriptions
   COLUMN id integer NOT NULL DEFAULT nextval('major_event_subscriptions_id_seq'::regclass)
@@ -379,6 +406,7 @@ TABLE message_strings
   CONSTRAINT ux_message_strings UNIQUE (namespace, key)
 
 TABLE notification_delivery_outbox
+  OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
   COLUMN id bigint NOT NULL DEFAULT nextval('notification_delivery_outbox_id_seq'::regclass)
   COLUMN kind text NOT NULL
   COLUMN period_key character varying(20) NOT NULL
@@ -471,6 +499,7 @@ TABLE youtube_community_posts
   INDEX CREATE INDEX idx_ycp_channel_first_seen ON public.youtube_community_posts USING btree (channel_id, first_seen_at DESC)
 
 TABLE youtube_community_shorts_alarm_states
+  OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
   COLUMN kind text NOT NULL
   COLUMN post_id character varying(50) NOT NULL
   COLUMN content_id character varying(50) NOT NULL
@@ -503,6 +532,7 @@ TABLE youtube_community_shorts_source_posts
   INDEX CREATE INDEX idx_ycssp_channel_detected ON public.youtube_community_shorts_source_posts USING btree (channel_id, detected_at DESC)
 
 TABLE youtube_content_alarm_tracking
+  OPTIONS autovacuum_analyze_scale_factor=0.05,autovacuum_analyze_threshold=100,autovacuum_vacuum_scale_factor=0.05,autovacuum_vacuum_threshold=100
   COLUMN kind text NOT NULL
   COLUMN content_id character varying(50) NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
@@ -586,6 +616,7 @@ TABLE youtube_milestones
   CONSTRAINT youtube_milestones_unique UNIQUE (channel_id, type, value)
 
 TABLE youtube_notification_delivery
+  OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
   COLUMN id bigint NOT NULL DEFAULT nextval('youtube_notification_delivery_id_seq'::regclass)
   COLUMN outbox_id bigint NOT NULL
   COLUMN room_id character varying(100) NOT NULL
@@ -604,6 +635,7 @@ TABLE youtube_notification_delivery
   INDEX CREATE INDEX idx_ynd_sending_stale ON public.youtube_notification_delivery USING btree (locked_at, id) WHERE (status = 'SENDING'::text)
 
 TABLE youtube_notification_delivery_telemetry
+  OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
   COLUMN id bigint NOT NULL DEFAULT nextval('youtube_notification_delivery_telemetry_id_seq'::regclass)
   COLUMN delivery_id bigint NOT NULL
   COLUMN attempt_ordinal integer NOT NULL
@@ -638,6 +670,7 @@ TABLE youtube_notification_delivery_telemetry
   INDEX CREATE INDEX idx_ydt_pending_next ON public.youtube_notification_delivery_telemetry USING btree (next_attempt_at, event_at) WHERE (logged_at IS NULL)
 
 TABLE youtube_notification_outbox
+  OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
   COLUMN id bigint NOT NULL DEFAULT nextval('youtube_notification_outbox_id_seq'::regclass)
   COLUMN kind text NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
@@ -709,3 +742,65 @@ TABLE youtube_videos
   CONSTRAINT youtube_videos_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_yv_channel_first_seen ON public.youtube_videos USING btree (channel_id, first_seen_at DESC)
   INDEX CREATE INDEX idx_yv_channel_is_short ON public.youtube_videos USING btree (channel_id, is_short)
+
+SEQUENCE acl_rooms_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY acl_rooms.id
+
+SEQUENCE acl_settings_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY acl_settings.id
+
+SEQUENCE alarm_dispatch_admin_actions_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY alarm_dispatch_admin_actions.id
+
+SEQUENCE alarm_dispatch_deliveries_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY alarm_dispatch_deliveries.id
+
+SEQUENCE alarm_dispatch_event_collisions_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY alarm_dispatch_event_collisions.id
+
+SEQUENCE alarm_dispatch_events_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY alarm_dispatch_events.id
+
+SEQUENCE alarm_dispatch_send_units_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY alarm_dispatch_send_units.id
+
+SEQUENCE alarms_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY alarms.id
+
+SEQUENCE bot_command_executions_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY bot_command_executions.id
+
+SEQUENCE bot_reply_outbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY bot_reply_outbox.id
+
+SEQUENCE bot_reply_outbox_replay_audit_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY bot_reply_outbox_replay_audit.id
+
+SEQUENCE bot_webhook_inbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY bot_webhook_inbox.id
+
+SEQUENCE major_event_subscriptions_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY major_event_subscriptions.id
+
+SEQUENCE major_events_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY major_events.id
+
+SEQUENCE member_news_subscriptions_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY member_news_subscriptions.id
+
+SEQUENCE members_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY members.id
+
+SEQUENCE message_strings_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY message_strings.id
+
+SEQUENCE notification_delivery_outbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY notification_delivery_outbox.id
+
+SEQUENCE notification_template_revisions_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY notification_template_revisions.id
+
+SEQUENCE notification_templates_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY notification_templates.id
+
+SEQUENCE youtube_milestone_approaching_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY youtube_milestone_approaching.id
+
+SEQUENCE youtube_milestones_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY youtube_milestones.id
+
+SEQUENCE youtube_notification_delivery_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY youtube_notification_delivery.id
+
+SEQUENCE youtube_notification_delivery_telemetry_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY youtube_notification_delivery_telemetry.id
+
+SEQUENCE youtube_notification_outbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY youtube_notification_outbox.id
+
+SEQUENCE youtube_stats_changes_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY youtube_stats_changes.id
+
+FUNCTION append_bot_reply_outbox_replay_claim_audit() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    granted_actor TEXT;\n    granted_reason TEXT;\nBEGIN\n    IF NEW.status = 'submitting'\n        AND OLD.status <> 'submitting'\n        AND NEW.operator_replay_grants > 0\n    THEN\n        SELECT actor, reason\n        INTO granted_actor, granted_reason\n        FROM public.bot_reply_outbox_replay_audit\n        WHERE outbox_id = NEW.id\n          AND grant_number = NEW.operator_replay_grants\n          AND event_type = 'granted';\n\n        IF NOT FOUND THEN\n            RAISE EXCEPTION 'manual replay grant audit is missing for outbox %, grant %',\n                NEW.id, NEW.operator_replay_grants\n                USING ERRCODE = '23514';\n        END IF;\n\n        INSERT INTO public.bot_reply_outbox_replay_audit (\n            outbox_id, grant_number, event_type, actor, reason\n        ) VALUES (\n            NEW.id, NEW.operator_replay_grants, 'replayed', granted_actor, granted_reason\n        )\n        ON CONFLICT (outbox_id, grant_number, event_type) DO NOTHING;\n    END IF;\n\n    RETURN NEW;\nEND\n"
+
+FUNCTION grant_bot_reply_outbox_manual_replay(requested_outbox_id bigint, operator_actor text, operator_reason text) RETURNS text LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    granted_at TIMESTAMPTZ := clock_timestamp();\n    normalized_actor TEXT := btrim(operator_actor);\n    normalized_reason TEXT := btrim(operator_reason);\n    target_id BIGINT;\n    target_status TEXT;\n    target_created_at TIMESTAMPTZ;\n    target_replay_grants INTEGER;\n    next_grant_number INTEGER;\nBEGIN\n    SELECT id, status, created_at, operator_replay_grants\n    INTO target_id, target_status, target_created_at, target_replay_grants\n    FROM public.bot_reply_outbox\n    WHERE id = requested_outbox_id\n    FOR UPDATE;\n\n    IF NOT FOUND THEN\n        RETURN 'not_found';\n    END IF;\n    IF target_status <> 'manual_review' THEN\n        RETURN 'not_manual_review';\n    END IF;\n    IF granted_at >= target_created_at + interval '144 hours' THEN\n        RETURN 'cutoff_expired';\n    END IF;\n    IF normalized_actor !~ '^[A-Za-z0-9._:@-]{1,64}$'\n        OR octet_length(normalized_reason) NOT BETWEEN 1 AND 256\n        OR normalized_reason ~ '[[:cntrl:]]'\n    THEN\n        RETURN 'invalid_operator_metadata';\n    END IF;\n\n    next_grant_number := target_replay_grants + 1;\n    INSERT INTO public.bot_reply_outbox_replay_audit (\n        outbox_id, grant_number, event_type, actor, reason, recorded_at\n    ) VALUES (\n        target_id, next_grant_number, 'granted', normalized_actor, normalized_reason, granted_at\n    );\n\n    UPDATE public.bot_reply_outbox\n    SET status = 'pending',\n        claim_token = NULL,\n        lease_until = NULL,\n        last_error = '',\n        operator_replay_grants = next_grant_number,\n        available_at = granted_at,\n        updated_at = granted_at\n    WHERE id = target_id;\n\n    RETURN 'replayed';\nEND\n"
+
+FUNCTION reject_bot_reply_outbox_replay_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_replay_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
+
+FUNCTION scrub_bot_command_execution_terminal_summary() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.result_summary := NEW.status;\n    RETURN NEW;\nEND\n"
+
+FUNCTION scrub_bot_webhook_inbox_terminal_payload() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.payload := '{}'::jsonb;\n    RETURN NEW;\nEND\n"

@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,7 @@ func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, res.Code)
 }
 
-func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {
+func TestBuildBotRuntime_RejectsNilAppConfig(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
@@ -57,4 +58,14 @@ func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "app config is nil")
+}
+
+func TestBuildBotRuntime_RejectsNilInfrastructure(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.DiscardHandler)
+	runtime, err := buildBotRuntime(t.Context(), &settings.Config{}, logger, nil)
+	require.Error(t, err)
+	assert.Nil(t, runtime)
+	assert.Contains(t, err.Error(), "infra is nil")
 }

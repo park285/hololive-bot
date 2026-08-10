@@ -41,6 +41,20 @@ type VideosPoller struct {
 	repository batchrepo.BatchRepository
 	maxResults int
 	deferrals  *freshnessDeferrals
+	metrics    *polling.Metrics
+}
+
+func (p *VideosPoller) SetMetrics(m *polling.Metrics) {
+	if p != nil {
+		p.metrics = m
+	}
+}
+
+func (p *VideosPoller) ensureMetrics() *polling.Metrics {
+	if p.metrics != nil {
+		return p.metrics
+	}
+	return polling.NewMetrics()
 }
 
 func NewVideosPoller(scraperClient *scraper.Client, db any, maxResults int) *VideosPoller {
@@ -76,6 +90,7 @@ func (p *VideosPoller) ProxyEnabled() bool {
 }
 
 func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
+	ctx = withMetadataResolveBudget(ctx, p.Name(), p.ensureMetrics())
 	videos, err := p.client.GetRecentVideos(ctx, channelID, p.maxResults)
 	if err != nil {
 		return fmt.Errorf("failed to get recent videos: %w", err)

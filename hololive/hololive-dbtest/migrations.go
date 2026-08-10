@@ -25,6 +25,8 @@ package dbtest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -38,6 +40,36 @@ import (
 	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
+
+func migrationFingerprint() (string, error) {
+	dir, err := resolveMigrationsDir()
+	if err != nil {
+		return "", err
+	}
+	manifestPath := filepath.Join(dir, manifestFileName)
+	entries, err := readManifest(manifestPath)
+	if err != nil {
+		return "", err
+	}
+	migrationFiles := os.DirFS(dir)
+	hash := sha256.New()
+	manifest, err := fs.ReadFile(migrationFiles, manifestFileName)
+	if err != nil {
+		return "", fmt.Errorf("read migration manifest fingerprint: %w", err)
+	}
+	_, _ = hash.Write(manifest)
+	for _, filename := range entries {
+		content, err := fs.ReadFile(migrationFiles, filename)
+		if err != nil {
+			return "", fmt.Errorf("read migration fingerprint %s: %w", filename, err)
+		}
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(filename))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write(content)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
 
 const (
 	// repoRootMarker는 hololive-bot 모노레포 루트를 식별하는 파일이다.

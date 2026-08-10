@@ -51,6 +51,8 @@ export const parseSystemStats = (value: unknown): SystemStats | null => {
 	if (!record) return null;
 
 	const cpuUsage = asNumber(record["cpuUsage"] ?? record["cpu_usage"]);
+	const sampledAt =
+		asNumber(record["sampledAt"] ?? record["sampled_at"]) ?? Date.now();
 	const memoryUsage = asNumber(
 		record["memoryUsage"] ??
 			record["memory_usage"] ??
@@ -127,6 +129,7 @@ export const parseSystemStats = (value: unknown): SystemStats | null => {
 		.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
 	return {
+		sampledAt,
 		cpuUsage,
 		memoryUsage,
 		memoryTotal,
@@ -137,6 +140,22 @@ export const parseSystemStats = (value: unknown): SystemStats | null => {
 		serviceRuntime,
 	};
 };
+
+export const createSystemStatsPoint = (
+	stats: SystemStats,
+	formattedTime: string,
+): SystemStatsPoint => ({
+	...stats,
+	serviceValues: stats.serviceRuntime.reduce<Record<string, number>>(
+		(values, service) => {
+			values[service.name] = service.available ? service.count : 0;
+			return values;
+		},
+		{},
+	),
+	time: formattedTime,
+	timestamp: stats.sampledAt,
+});
 
 export const clamp = (value: number, min: number, max: number) =>
 	Math.min(max, Math.max(min, value));

@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
@@ -52,68 +51,44 @@ type ServiceStatus struct {
 }
 
 type AggregatedStatus struct {
-	Services []ServiceStatus `json:"services"`
-	Uptime   string          `json:"uptime"`
-	Version  string          `json:"version"`
+	Services  []ServiceStatus `json:"services"`
+	Uptime    string          `json:"uptime"`
+	Version   string          `json:"version"`
+	SampledAt int64           `json:"sampled_at"`
 }
 
 type Collector struct {
-	clients   map[string]endpointClient
-	endpoints []ServiceEndpoint
-	start     time.Time
-	version   string
+	sampler *Sampler
+	start   time.Time
+	version string
 }
 
 func NewCollector(endpoints []ServiceEndpoint, version string) *Collector {
+	return NewCollectorWithSampler(NewSampler(endpoints), version)
+}
+
+func NewCollectorWithSampler(sampler *Sampler, version string) *Collector {
 	return &Collector{
-		clients:   endpointClients(endpoints, 3*time.Second),
-		endpoints: append([]ServiceEndpoint(nil), endpoints...),
-		start:     time.Now(),
-		version:   version,
+		sampler: sampler,
+		start:   time.Now(),
+		version: version,
 	}
 }
 
 func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
-	services := make([]ServiceStatus, len(c.endpoints)+1)
+	snapshot := c.sampler.sample(ctx)
+	services := make([]ServiceStatus, len(snapshot.endpoints)+1)
 	zero := uint64(0)
 	services[0] = ServiceStatus{Name: "admin-dashboard", Available: true, ResponseTimeMS: &zero}
-	var wg sync.WaitGroup
-	for i := range c.endpoints {
-		index := i + 1
-		endpoint := c.endpoints[i]
-		wg.Add(1)
-		panicguard.Go(nil, "admin-dashboard-status-endpoint", func() {
-			defer wg.Done()
-			var status ServiceStatus
-			if err := panicguard.RunE(nil, "admin-dashboard-status-endpoint", func() error {
-				status = c.collectEndpoint(ctx, endpoint)
-				return nil
-			}); err != nil {
-				errText := err.Error()
-				status = ServiceStatus{Name: endpoint.Name, Available: false, Error: &errText}
-			}
-			services[index] = status
-		})
+	for i := range snapshot.endpoints {
+		services[i+1] = cloneServiceStatus(snapshot.endpoints[i].status)
 	}
-	wg.Wait()
-	return AggregatedStatus{Services: services, Uptime: FormatDuration(time.Since(c.start)), Version: c.version}
-}
-
-func (c *Collector) collectEndpoint(ctx context.Context, endpoint ServiceEndpoint) ServiceStatus {
-	result := doHealthGET(ctx, c.clients[endpoint.Name], endpoint)
-	if result.errMsg != "" {
-		status := ServiceStatus{Name: endpoint.Name, Available: false, Error: &result.errMsg}
-		if result.measured {
-			status.ResponseTimeMS = &result.latencyMS
-		}
-		return status
+	return AggregatedStatus{
+		Services:  services,
+		Uptime:    FormatDuration(time.Since(c.start)),
+		Version:   c.version,
+		SampledAt: snapshot.sampledAt.UnixMilli(),
 	}
-	defer func() {
-		if err := result.resp.Body.Close(); err != nil {
-			return
-		}
-	}()
-	return ServiceStatus{Name: endpoint.Name, Available: true, ResponseTimeMS: &result.latencyMS}
 }
 
 func FormatDuration(duration time.Duration) string {
@@ -143,6 +118,7 @@ type ServiceRuntimeStats struct {
 }
 
 type SystemStats struct {
+	SampledAt         int64                 `json:"sampledAt"`
 	CPUUsage          float64               `json:"cpuUsage"`
 	MemoryTotal       uint64                `json:"memoryTotal"`
 	MemoryUsed        uint64                `json:"memoryUsed"`

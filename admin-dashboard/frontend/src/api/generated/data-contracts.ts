@@ -30,6 +30,8 @@ export interface AddRoomRequest {
 }
 
 export interface AggregatedStatus {
+  /** @format int64 */
+  sampled_at: number;
   services: ServiceStatus[];
   uptime: string;
   version: string;
@@ -263,6 +265,7 @@ export interface SessionStatusResponse {
   /** @format int64 */
   absolute_expires_at: number;
   authenticated: boolean;
+  csrf_token: string;
   session_policy: SessionPolicyResponse;
   status: string;
   username: string;

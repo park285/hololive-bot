@@ -1,7 +1,6 @@
 package render
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"image"
@@ -18,6 +17,8 @@ type CalendarCardRenderer struct {
 	cacheMu      sync.Mutex
 	cache        map[calendarCacheKey][]byte
 	cacheOrder   []calendarCacheKey
+	renderMu     sync.Mutex
+	inflight     map[calendarCacheKey]*calendarRenderCall
 	diskMu       sync.Mutex
 	diskCacheDir string
 	strings      *messagestrings.Store
@@ -71,22 +72,10 @@ func (r *CalendarCardRenderer) RenderCalendarImageContext(ctx context.Context, m
 	if data, ok := r.cachedImage(cacheKey); ok {
 		return data, nil
 	}
-	result, err := r.renderCalendarImageOnce(ctx, cacheKey, month, year, entries)
-	return calendarRenderResult(result, err)
+	return r.renderCoalesced(ctx, cacheKey, month, year, entries)
 }
 
-func calendarRenderResult(result any, err error) ([]byte, error) {
-	if err != nil {
-		return nil, err
-	}
-	data, ok := result.([]byte)
-	if !ok {
-		return nil, fmt.Errorf("calendar render cache returned %T", result)
-	}
-	return bytes.Clone(data), nil
-}
-
-func (r *CalendarCardRenderer) renderCalendarImageOnce(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) (any, error) {
+func (r *CalendarCardRenderer) renderCalendarImageOnce(ctx context.Context, cacheKey calendarCacheKey, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

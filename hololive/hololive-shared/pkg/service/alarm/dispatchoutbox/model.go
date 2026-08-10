@@ -10,6 +10,7 @@ import (
 type Status string
 
 const (
+	StatusShadowed    Status = "shadowed"
 	StatusPending     Status = "pending"
 	StatusLeased      Status = "leased"
 	StatusRetry       Status = "retry"
@@ -41,6 +42,9 @@ type Record struct {
 	Payload          []byte
 	ClaimKeys        []string
 	DeliveryContext  []byte
+	DispatchGroupKey string
+	SendUnitID       int64
+	ClientRequestID  string
 	Status           Status
 	AttemptCount     int
 	NextAttemptAt    time.Time
@@ -126,6 +130,7 @@ type Repository interface {
 	MarkSent(ctx context.Context, ids []int64, workerID string) error
 	RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error
 	RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error
+	RequeuePreSend(ctx context.Context, updates []FailureUpdate, workerID string) error
 	MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error
 	Quarantine(ctx context.Context, updates []TerminalUpdate, workerID string) error
 	ReleaseLeased(ctx context.Context, ids []int64, workerID string) error

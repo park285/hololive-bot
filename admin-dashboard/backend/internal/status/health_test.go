@@ -15,23 +15,26 @@ import (
 
 func newStubCollector(name, healthPath string, srv *httptest.Server) *Collector {
 	endpoint := ServiceEndpoint{Name: name, URL: srv.URL, HealthPath: healthPath}
-	c := &Collector{
+	sampler := &Sampler{
 		clients:   map[string]endpointClient{name: {client: srv.Client()}},
 		endpoints: []ServiceEndpoint{endpoint},
-		start:     time.Now(),
-		version:   "test",
+		ttl:       defaultEndpointSampleTTL,
+		now:       time.Now,
 	}
-	return c
+	return NewCollectorWithSampler(sampler, "test")
 }
 
 func newStubHub(srv *httptest.Server) *Hub {
 	const name = "svc"
 	const healthPath = "/health"
 	endpoint := ServiceEndpoint{Name: name, URL: srv.URL, HealthPath: healthPath}
-	return &Hub{
+	sampler := &Sampler{
 		endpoints: []ServiceEndpoint{endpoint},
 		clients:   map[string]endpointClient{name: {client: srv.Client()}},
+		ttl:       defaultEndpointSampleTTL,
+		now:       time.Now,
 	}
+	return NewHubWithSampler(sampler)
 }
 
 func TestCollectEndpointSuccess(t *testing.T) {
@@ -43,7 +46,7 @@ func TestCollectEndpointSuccess(t *testing.T) {
 	defer srv.Close()
 
 	c := newStubCollector("svc", "/health", srv)
-	status := c.collectEndpoint(t.Context(), c.endpoints[0])
+	status := c.sampler.sampleEndpoint(t.Context(), c.sampler.endpoints[0]).status
 
 	if gotPath != "/health" {
 		t.Fatalf("requested path = %q, want /health", gotPath)
@@ -69,7 +72,7 @@ func TestCollectEndpointErrorStatus(t *testing.T) {
 	defer srv.Close()
 
 	c := newStubCollector("svc", "/health", srv)
-	status := c.collectEndpoint(t.Context(), c.endpoints[0])
+	status := c.sampler.sampleEndpoint(t.Context(), c.sampler.endpoints[0]).status
 
 	if status.Available {
 		t.Fatal("Available = true, want false")
@@ -97,7 +100,7 @@ func TestFetchRuntimeSuccess(t *testing.T) {
 	defer srv.Close()
 
 	h := newStubHub(srv)
-	stat := h.fetchRuntime(t.Context(), h.endpoints[0])
+	stat := h.endpointSampler.sampleEndpoint(t.Context(), h.endpointSampler.endpoints[0]).runtime
 
 	if gotPath != "/health" {
 		t.Fatalf("requested path = %q, want /health", gotPath)
@@ -126,7 +129,7 @@ func TestFetchRuntimeErrorStatus(t *testing.T) {
 	defer srv.Close()
 
 	h := newStubHub(srv)
-	stat := h.fetchRuntime(t.Context(), h.endpoints[0])
+	stat := h.endpointSampler.sampleEndpoint(t.Context(), h.endpointSampler.endpoints[0]).runtime
 
 	if stat.Available {
 		t.Fatal("Available = true, want false")
@@ -156,7 +159,7 @@ func TestFetchRuntimeComponentFallback(t *testing.T) {
 	defer srv.Close()
 
 	h := newStubHub(srv)
-	stat := h.fetchRuntime(t.Context(), h.endpoints[0])
+	stat := h.endpointSampler.sampleEndpoint(t.Context(), h.endpointSampler.endpoints[0]).runtime
 
 	if !stat.Available {
 		t.Fatal("Available = false, want true")
@@ -176,7 +179,7 @@ func TestFetchRuntimeInvalidPayload(t *testing.T) {
 	defer srv.Close()
 
 	h := newStubHub(srv)
-	stat := h.fetchRuntime(t.Context(), h.endpoints[0])
+	stat := h.endpointSampler.sampleEndpoint(t.Context(), h.endpointSampler.endpoints[0]).runtime
 
 	if stat.Available {
 		t.Fatal("Available = true, want false on invalid payload")
@@ -186,6 +189,42 @@ func TestFetchRuntimeInvalidPayload(t *testing.T) {
 	}
 	if got := *stat.Error; !strings.HasPrefix(got, "invalid health payload: ") {
 		t.Fatalf("Error = %q, want prefix \"invalid health payload: \"", got)
+	}
+}
+
+func TestSamplerSharesSnapshotAcrossCollectorAndHub(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		if _, err := io.WriteString(w, `{"status":"ok","goroutines":12}`); err != nil {
+			t.Errorf("write health response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	endpoint := ServiceEndpoint{Name: "service", URL: server.URL, HealthPath: "/health"}
+	sampler := NewSampler([]ServiceEndpoint{endpoint})
+	now := time.Unix(1_754_803_200, 0)
+	sampler.now = func() time.Time { return now }
+	collector := NewCollectorWithSampler(sampler, "test")
+	hub := NewHubWithSampler(sampler)
+
+	status := collector.Collect(t.Context())
+	runtimeStats := hub.externalRuntimeStats(t.Context())
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("health requests within TTL = %d, want 1", got)
+	}
+	if status.SampledAt != now.UnixMilli() {
+		t.Fatalf("sampled_at = %d, want %d", status.SampledAt, now.UnixMilli())
+	}
+	if len(runtimeStats) != 1 || runtimeStats[0].Count != 12 {
+		t.Fatalf("runtime stats = %+v, want one sample with 12 goroutines", runtimeStats)
+	}
+
+	now = now.Add(defaultEndpointSampleTTL)
+	hub.externalRuntimeStats(t.Context())
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("health requests after TTL = %d, want 2", got)
 	}
 }
 

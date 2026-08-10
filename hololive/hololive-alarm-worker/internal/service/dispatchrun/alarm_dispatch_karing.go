@@ -56,8 +56,12 @@ func buildAlarmDispatchKaringContentListRequests(ctx context.Context, messageStr
 			items = append(items, chunk[i].item)
 			identities = append(identities, chunk[i].identity)
 		}
+		clientRequestID := alarmDispatchKaringChunkClientRequestID(group.roomID, identities)
+		if persisted := persistedAlarmDispatchClientRequestID(group); persisted != "" {
+			clientRequestID = alarmDispatchPersistedKaringChunkClientRequestID(persisted, identities)
+		}
 		req := iris.KaringContentListRequest{
-			ClientRequestID: new(alarmDispatchKaringChunkClientRequestID(group.roomID, identities)),
+			ClientRequestID: new(clientRequestID),
 			Items:           items,
 			ExtraArgs:       buildAlarmDispatchKaringExtraArgs(ctx, messageStrings, group, len(chunk)),
 			TemplateID:      alarmDispatchKaringTemplateID(len(chunk)),
@@ -66,6 +70,14 @@ func buildAlarmDispatchKaringContentListRequests(ctx context.Context, messageStr
 		requests = append(requests, req)
 	}
 	return requests, nil
+}
+
+func alarmDispatchPersistedKaringChunkClientRequestID(persisted string, identities []string) string {
+	parts := make([]string, 0, 2+len(identities))
+	parts = append(parts, "alarm-dispatch-karing-persisted-v1", strings.TrimSpace(persisted))
+	parts = append(parts, identities...)
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return alarmDispatchClientRequestIDNamespace + hex.EncodeToString(sum[:16])
 }
 
 func alarmDispatchKaringChunkClientRequestID(roomID string, identities []string) string {
@@ -77,6 +89,9 @@ func alarmDispatchKaringChunkClientRequestID(roomID string, identities []string)
 }
 
 func alarmDispatchClientRequestID(group alarmDispatchGroup, start, end int) string {
+	if persisted := persistedAlarmDispatchClientRequestID(group); persisted != "" {
+		return persisted
+	}
 	parts := make([]string, 0, 4+len(group.envelopes)*8)
 	parts = append(parts,
 		"alarm-dispatch-v1",
@@ -89,6 +104,25 @@ func alarmDispatchClientRequestID(group alarmDispatchGroup, start, end int) stri
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return alarmDispatchClientRequestIDNamespace + hex.EncodeToString(sum[:16])
+}
+
+func persistedAlarmDispatchClientRequestID(group alarmDispatchGroup) string {
+	if len(group.envelopes) > alarmDispatchKaringMaxItemsPerRequest {
+		return ""
+	}
+	return persistedAlarmDispatchClientRequestIDFromEnvelopes(group.envelopes)
+}
+
+func persistedAlarmDispatchClientRequestIDFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) string {
+	persisted := ""
+	for i := range envelopes {
+		candidate := strings.TrimSpace(envelopes[i].ClientRequestID)
+		if candidate == "" || (persisted != "" && candidate != persisted) {
+			return ""
+		}
+		persisted = candidate
+	}
+	return persisted
 }
 
 func alarmDispatchEnvelopeClientRequestIDParts(envelope *domain.AlarmQueueEnvelope) []string {

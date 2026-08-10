@@ -11,7 +11,7 @@ import (
 
 var errAlarmDispatchRunnerTestMarkSending = errors.New("mark sending partial update")
 
-func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithSendingRetry(t *testing.T) {
+func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithoutConsumingAttempt(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{
 		batches:        [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}},
 		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
@@ -29,11 +29,11 @@ func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithSendingRetry(t *tes
 	require.NoError(t, err)
 	assert.True(t, processed)
 	assert.Empty(t, sender.messages, "메시지는 발송되면 안 된다")
-	require.Len(t, consumer.scheduledSendingRetry, 1,
-		"MarkSending 실패는 이미 커밋된 sending 행을 복원할 수 있는 RouteSendingFailures로 보상해야 한다")
-	require.NotNil(t, consumer.scheduledSendingRetry[0].Retry)
-	assert.Equal(t, 1, consumer.scheduledSendingRetry[0].Retry.Attempt)
-	assert.Contains(t, consumer.scheduledSendingRetry[0].Retry.LastError, errAlarmDispatchRunnerTestMarkSending.Error())
+	require.Len(t, consumer.preSendRequeued, 1)
+	require.NotNil(t, consumer.preSendRequeued[0].Retry)
+	assert.Equal(t, 0, consumer.preSendRequeued[0].Retry.Attempt)
+	assert.Contains(t, consumer.preSendRequeued[0].Retry.LastError, errAlarmDispatchRunnerTestMarkSending.Error())
+	assert.Empty(t, consumer.scheduledSendingRetry, "외부 발송 후 실패 경로를 사용하면 attempt를 소비한다")
 	assert.Empty(t, consumer.scheduledRetry, "leased 전용 RouteFailures로 보상하면 sending 행이 잔류한다")
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
@@ -58,12 +58,14 @@ func TestAlarmDispatchRunnerCompensatesKaringMarkSendingFailureWithSendingRetry(
 	require.NoError(t, err)
 	assert.True(t, processed)
 	assert.Empty(t, sender.karingRequests, "karing 요청은 발송되면 안 된다")
-	require.Len(t, consumer.scheduledSendingRetry, 1)
+	require.Len(t, consumer.preSendRequeued, 1)
+	assert.Equal(t, 0, consumer.preSendRequeued[0].Retry.Attempt)
+	assert.Empty(t, consumer.scheduledSendingRetry)
 	assert.Empty(t, consumer.scheduledRetry)
 	assert.Empty(t, consumer.markDispatched)
 }
 
-func TestAlarmDispatchRunnerMarkSendingFailureMovesExhaustedEnvelopeToDLQ(t *testing.T) {
+func TestAlarmDispatchRunnerMarkSendingFailureDoesNotExhaustExistingAttempt(t *testing.T) {
 	envelope := alarmDispatchRunnerTestEnvelope("room-1", &domain.AlarmQueueRetryMetadata{Attempt: 2})
 	envelope.ClaimKeys = []string{"alarm:dispatch:claim:room-1:stream-1"}
 	consumer := &alarmDispatchRunnerTestConsumer{
@@ -82,8 +84,9 @@ func TestAlarmDispatchRunnerMarkSendingFailureMovesExhaustedEnvelopeToDLQ(t *tes
 	require.NoError(t, err)
 	assert.True(t, processed)
 	assert.Empty(t, consumer.scheduledSendingRetry)
-	require.Len(t, consumer.movedDLQ, 1)
-	require.NotNil(t, consumer.movedDLQ[0].Retry)
-	assert.Equal(t, 3, consumer.movedDLQ[0].Retry.Attempt)
-	assert.Equal(t, []string{"alarm:dispatch:claim:room-1:stream-1"}, consumer.releasedClaims)
+	require.Len(t, consumer.preSendRequeued, 1)
+	require.NotNil(t, consumer.preSendRequeued[0].Retry)
+	assert.Equal(t, 2, consumer.preSendRequeued[0].Retry.Attempt)
+	assert.Empty(t, consumer.movedDLQ)
+	assert.Empty(t, consumer.releasedClaims)
 }

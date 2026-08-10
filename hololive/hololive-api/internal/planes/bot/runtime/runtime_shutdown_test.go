@@ -85,7 +85,9 @@ func TestBotRuntimeShutdown_ClosesWebhookHandler(t *testing.T) {
 	webhookCloser := &testWebhookCloser{}
 	runtime := &BotRuntime{webhookHandlerCloser: webhookCloser}
 
-	runtime.Shutdown(t.Context())
+	if err := runtime.Shutdown(t.Context()); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
 
 	if webhookCloser.calls != 1 {
 		t.Fatalf("webhook CloseContext calls = %d, want %d", webhookCloser.calls, 1)

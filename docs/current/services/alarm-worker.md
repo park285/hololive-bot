@@ -24,6 +24,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Generic `notification_delivery_outbox` consume/send path for major event/member news notification rows
 - Alarm state cache warming and mutation coordination where configured
 - Pending `youtube_notification_outbox` claim/render/send when `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`
+- v1 YouTube outbox의 optional `shadow|cutover` v3 handoff; claim owner는 기존 dispatcher로 유지
 - Birthday and anniversary celebration production. Birthday stream delivery audience is derived from sent deliveries of the matching birthday greeting event; it does not fall back to every alarm room.
 
 ## Provides
@@ -59,6 +60,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - `DELIVERY_DISPATCHER_ENABLED=true` for production generic notification delivery outbox egress
 - `ALARM_DISPATCH_CONSUMER_ENABLED=true` for production alarm dispatch outbox egress
 - `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true` for production YouTube outbox egress
+- `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=off` until an approved shadow/cutover procedure is executed
 - Alarm timing/config env
 - `BIRTHDAY_STREAM_RUNNER_ENABLED=true` only after the birthday stream template is present and full-roster producer discovery has been verified
 
@@ -74,7 +76,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Health: `https://127.0.0.1:30007/health`
 - Ready: `https://127.0.0.1:30007/ready`; authenticated `/internal/ready` reports PostgreSQL, Valkey, and egress flag readiness.
 - Queue: `alarm:dispatch:queue`
-- Metrics: 검토 필요
+- Metrics: `hololive_youtube_outbox_v3_handoff_total`, `hololive_delivery_outbox_v3_handoff_total`, alarm-dispatch backlog/retention metrics
 
 ## Related documents
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
@@ -18,6 +19,8 @@ type SendEngine struct {
 	claims          ClaimResolver
 	auditLogger     *AuditLogger
 	metricsRecorder *MetricsRecorder
+	handoffMode     handoff.Mode
+	handoff         YouTubeOutboxHandoff
 }
 
 type contextMutex chan struct{}

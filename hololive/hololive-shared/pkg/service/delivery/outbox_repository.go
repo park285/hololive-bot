@@ -33,6 +33,7 @@ import (
 	"github.com/park285/shared-go/pkg/retry"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -50,8 +51,10 @@ type outboxBatchRow struct {
 }
 
 type OutboxRepository struct {
-	pool   *pgxpool.Pool
-	logger *slog.Logger
+	pool              *pgxpool.Pool
+	logger            *slog.Logger
+	dispatchMode      handoff.Mode
+	dispatchPublisher DispatchPublisher
 }
 
 const deliveryStatusSending domain.DeliveryOutboxStatus = "SENDING"
@@ -76,18 +79,22 @@ type OutboxItem struct {
 	Message   string
 }
 
-func NewOutboxRepository(postgres database.Client, logger *slog.Logger) *OutboxRepository {
+func NewOutboxRepository(postgres database.Client, logger *slog.Logger, opts ...RepositoryOption) *OutboxRepository {
 	if postgres == nil {
-		return NewOutboxRepositoryFromPool(nil, logger)
+		return NewOutboxRepositoryFromPool(nil, logger, opts...)
 	}
-	return NewOutboxRepositoryFromPool(postgres.GetPool(), logger)
+	return NewOutboxRepositoryFromPool(postgres.GetPool(), logger, opts...)
 }
 
-func NewOutboxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *OutboxRepository {
+func NewOutboxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger, opts ...RepositoryOption) *OutboxRepository {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &OutboxRepository{pool: pool, logger: logger}
+	repository := &OutboxRepository{pool: pool, logger: logger, dispatchMode: handoff.ModeOff}
+	for _, opt := range opts {
+		opt(repository)
+	}
+	return repository
 }
 
 func (r *OutboxRepository) Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
@@ -105,6 +112,13 @@ func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem)
 	if len(items) == 0 {
 		return nil
 	}
+	if handled, err := r.enqueueWithDispatchHandoff(ctx, items); handled {
+		return err
+	}
+	return r.enqueueLegacyBatch(ctx, items)
+}
+
+func (r *OutboxRepository) enqueueLegacyBatch(ctx context.Context, items []OutboxItem) error {
 	if err := r.ensurePool(); err != nil {
 		return err
 	}

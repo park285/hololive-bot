@@ -438,6 +438,8 @@ hololive/hololive-shared/pkg/service/delivery/dispatcher.go
 hololive/hololive-shared/pkg/service/delivery/dispatcher_run.go
 hololive/hololive-shared/pkg/service/delivery/locker.go
 hololive/hololive-shared/pkg/service/delivery/outbox_repository.go
+hololive/hololive-shared/pkg/service/delivery/outbox_handoff_metrics.go
+hololive/hololive-shared/pkg/service/delivery/outbox_repository_handoff.go
 hololive/hololive-shared/pkg/service/delivery/result.go
 hololive/hololive-shared/pkg/service/delivery/runtime_iris_base_url_resolve.go
 hololive/hololive-shared/pkg/service/delivery/runtime_iris_base_url_validation.go
@@ -600,6 +602,7 @@ hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_worker.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_worker_loop.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/freshness_deferrals.go
+hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/request_budget.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/shorts_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/shorts_poller_freshness.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/pollers/sql.go
@@ -684,6 +687,7 @@ hololive/hololive-shared/pkg/service/alarm/dedup/dedup_upcoming.go
 hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_claim.go
 hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_maintenance.go
 hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_transitions.go
+hololive/hololive-shared/pkg/service/alarm/handoff/mode.go
 hololive/hololive-shared/pkg/service/cache/connection.go
 hololive/hololive-shared/pkg/service/cache/hash.go
 hololive/hololive-shared/pkg/service/cache/kv.go

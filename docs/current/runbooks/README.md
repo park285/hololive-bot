@@ -17,7 +17,7 @@
 - `dlq-replay.md` - alarm dispatch DLQ 확인/재처리 기준
 - `release.md` - release checklist
 - `rollback.md` - rollback 기준
-- `postgres-replication.md` - 중앙 primary → Seoul hot standby 물리 스트리밍 복제 부트스트랩·검증·승격
+- `postgres-replication.md` - 중앙 primary → Seoul physical standby 복제와 fail-closed 자동 승격/fencing/route 절차
 - `integration-tests.md` - opt-in integration 테스트 주기 실행 경로
 - `member-cache-v2-rollout.md` - durable epoch 기반 member cache expand/rollback 절차
 - `../../runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md` - release notes template

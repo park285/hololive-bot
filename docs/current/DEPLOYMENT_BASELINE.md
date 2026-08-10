@@ -15,7 +15,7 @@
 | 역할 | 호스트 | 내용 |
 |---|---|---|
 | 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | `hololive-api`, `alarm-worker`, `admin-dashboard`, `holo-postgres`, `valkey-cache`, ingress/proxy, main AP `youtube-producer-c`. 권위 PostgreSQL이 여기 있습니다. |
-| Hot standby | `<tailnet-seoul-ap>` (`aarch64`) | `holo-postgres-standby`. 중앙 primary에서 물리 스트리밍 복제를 받는 read-only 복제본입니다. |
+| Hot standby | `<tailnet-seoul-ap>` (`aarch64`) | `holo-postgres-standby`. 중앙 primary에서 물리 스트리밍 복제를 받는 read-only 복제본이며, 승인된 fencing/route backend가 준비되면 fail-closed controller가 승격합니다. |
 | 빌드/제어 | `<build-control-host>` (`x86_64`) | 모든 컴파일·이미지 빌드·테스트. 런타임 호스트는 검증된 배포 파일과 이미지만 받습니다. |
 | 원격 AP | Osaka `a`, Seoul `b`, Osaka2 `d` | `a`/`d`는 host-native systemd, `b`는 Compose. |
 
@@ -32,8 +32,13 @@ unit이 매시 중앙 primary에서 논리 덤프를 받아 전체를 덮어쓰�
 dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결정을 요구합니다.
 
 Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스트리밍 복제가
-가능합니다. 정상 상태는 `deploy/compose/docker-compose.standby.yml`이 소유하고, 최초
-`pg_basebackup` 부트스트랩과 승격 절차는 `runbooks/postgres-replication.md`가 소유합니다.
+가능합니다. 정상 상태와 승격 뒤 restart posture는
+`deploy/compose/docker-compose.standby.yml`이 소유합니다. 최초 `pg_basebackup`, controller
+설치, fencing/route backend 승인과 재시딩 절차는 `runbooks/postgres-replication.md`가
+소유합니다. checked-in `postgres-failover.service`는 dry-run이며, apply drop-in은 구 primary를
+영속 격리하는 외부 fencing과 권위 DB endpoint를 전환·검증하는 route hook을 모두 준비한
+뒤에만 설치합니다. 비동기 복제이므로 마지막 정상 관측 뒤 전파되지 않은 commit의 RPO는
+0으로 보장되지 않으며 자동 failback은 지원하지 않습니다.
 
 호스트마다 달라지는 배포 값은 Compose 기본값이 아니라 각 호스트의
 `/etc/stack-secrets/hololive-bot/compose.env`가 소유합니다: `HOLOLIVE_*_PORT_BIND_IP`,
@@ -54,11 +59,13 @@ Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스�
 | Service | Purpose | Current notes |
 |---|---|---|
 | `holo-postgres` | Primary PostgreSQL | Bridge-networked; live-compat publishes `<tailnet-central>:5433` explicitly to container `5432`; TLS `ssl=on`; server certificate mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` |
+| `holo-postgres-standby` | Physical hot standby / promotion target | Seoul host; recovery role and controller-written PGDATA promotion signal must agree; tailnet bind is explicit opt-in |
+| `postgres-failover.service` | Fail-closed promotion controller | dedicated `hololive-pg-failover` user, no Docker access; checked-in unit is dry-run; apply requires least-privilege `pg_promote`, trusted fence/route hooks, durable intent/state markers, post-fence old-primary reprobe |
 | `hololive-db-migrate` | Migration job | Runs before app services; uses `PGSSLMODE=verify-full` and `/run/hololive-bot/certs/postgres-ca.pem` |
 | `valkey-cache` | Cache, queue, Pub/Sub | TCP and Unix socket, password required |
 | `admin-dashboard` | Dashboard frontend | Port 30190, not part of Go runtime count |
 | `docker-proxy` | Restricted Docker API proxy | Used instead of mounting the Docker socket directly |
-| `deunhealth` | Autoheal sidecar | Restarts unhealthy labeled containers |
+| `deunhealth` | Autoheal sidecar | Restarts unhealthy labeled containers; old-primary fencing disables and stops it before fencing PostgreSQL |
 
 ## External Boundaries
 
@@ -104,5 +111,7 @@ domain socket monitor connection remained outside the TCP TLS scope.
 ## Related Files
 
 - `deploy/compose/docker-compose.prod.yml`
+- `deploy/compose/docker-compose.standby.yml`
 - `docs/current/PROJECT_MAP.md`
+- `docs/current/runbooks/postgres-replication.md`
 - `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`

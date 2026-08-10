@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -9,6 +11,7 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
 
@@ -33,13 +36,47 @@ func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logg
 		return nil, err
 	}
 
+	var ownedAlarmService *alarmservice.AlarmService
 	defer func() {
-		if retErr != nil {
-			closeIrisClientForCleanup(irisClient, logger)
-			infra.Cleanup()
-		}
+		retErr = cleanupFailedBotInfrastructureBuild(ctx, retErr, ownedAlarmService, irisClient, infra, logger)
 	}()
 
+	infrastructure, alarmService, err := buildBotInfrastructureServices(ctx, appConfig, logger, infra, irisClient)
+	ownedAlarmService = alarmService
+	if err != nil {
+		return nil, err
+	}
+	return infrastructure, nil
+}
+
+func cleanupFailedBotInfrastructureBuild(
+	ctx context.Context,
+	buildErr error,
+	ownedAlarmService *alarmservice.AlarmService,
+	irisClient iris.Client,
+	infra *sharedmodules.InfraModule,
+	logger *slog.Logger,
+) error {
+	if buildErr == nil {
+		return nil
+	}
+	if ownedAlarmService != nil {
+		if err := ownedAlarmService.Close(ctx); err != nil {
+			buildErr = errors.Join(buildErr, fmt.Errorf("close alarm service after bot infrastructure build failure: %w", err))
+		}
+	}
+	closeIrisClientForCleanup(irisClient, logger)
+	infra.Cleanup()
+	return buildErr
+}
+
+func buildBotInfrastructureServices(
+	ctx context.Context,
+	appConfig *settings.Config,
+	logger *slog.Logger,
+	infra *sharedmodules.InfraModule,
+	irisClient iris.Client,
+) (*BotInfrastructure, *alarmservice.AlarmService, error) {
 	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
 	messageStrings := messagestrings.NewStore(infra.Postgres.GetPool(), logger)
 	if err := messageStrings.Load(ctx); err != nil {
@@ -50,17 +87,18 @@ func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logg
 
 	foundation, err := InitScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	alarmYouTubeStack, err := InitAlarmYouTubeStack(ctx, appConfig, infra, foundation, irisClient, formatter, logger)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	ownedAlarmService := alarmYouTubeStack.AlarmMode.AlarmService
 
 	integrationServices, err := InitCoreIntegrationServices(ctx, appConfig, infra, logger)
 	if err != nil {
-		return nil, err
+		return nil, ownedAlarmService, err
 	}
 
 	deps := provideBotDependenciesFromStacks(
@@ -70,12 +108,13 @@ func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logg
 	return &BotInfrastructure{
 		Deps:           deps,
 		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
+		AlarmService:   ownedAlarmService,
 		HolodexService: foundation.HolodexService,
 		IrisRoomLister: buildBotIrisRoomLister(irisClient, logger),
 		Postgres:       infra.Postgres,
 		Cache:          infra.Cache,
 		Cleanup:        composeBotInfrastructureCleanup(infra.Cleanup, irisClient, logger),
-	}, nil
+	}, ownedAlarmService, nil
 }
 
 func buildBotIrisRoomLister(irisClient iris.Client, logger *slog.Logger) IrisRoomLister {

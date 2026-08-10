@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	scaleFactor     = 5
+	scaleFactor     = 4
 	canvasWidth     = 620 * scaleFactor
 	maxCanvasPixels = 48_000_000
 	// 최종 출력 크기(카카오 인라인 표시 근사). 내부는 canvasWidth(고해상도)로 그린 뒤

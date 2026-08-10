@@ -29,6 +29,15 @@ func (d *freshnessDeferrals) recordFailure(channelID, videoID string) int {
 	return d.attempts[key]
 }
 
+func (d *freshnessDeferrals) recordBudgetDeferral(channelID, videoID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	key := channelID + "|" + videoID
+	if _, ok := d.attempts[key]; !ok {
+		d.attempts[key] = 0
+	}
+}
+
 func (d *freshnessDeferrals) clear(channelID, videoID string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

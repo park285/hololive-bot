@@ -26,6 +26,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 )
 
 var (
@@ -45,6 +47,7 @@ var (
 	outboxReviveErrorsTotal prometheus.Counter
 
 	outboxDeliveryRetryAfterClampedTotal prometheus.Counter
+	youtubeOutboxV3HandoffTotal          *prometheus.CounterVec
 )
 
 func initOutboxMetrics() {
@@ -117,6 +120,21 @@ func initOutboxDispatchMetrics() {
 			Help: "Total YouTube outbox delivery HTTP Retry-After hints clamped to the maximum bound.",
 		},
 	)
+	youtubeOutboxV3HandoffTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_v3_handoff_total",
+			Help: "YouTube outbox delivery rows handed to the v3 ledger by mode and result.",
+		},
+		[]string{"mode", "result"},
+	)
+}
+
+func observeYouTubeOutboxHandoff(mode handoff.Mode, result string, rows int) {
+	initOutboxMetrics()
+	if youtubeOutboxV3HandoffTotal == nil || rows <= 0 {
+		return
+	}
+	youtubeOutboxV3HandoffTotal.WithLabelValues(string(mode), result).Add(float64(rows))
 }
 
 func initOutboxDispatchHistograms() {

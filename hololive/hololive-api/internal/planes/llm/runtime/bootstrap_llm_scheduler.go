@@ -234,10 +234,38 @@ func buildLLMSchedulerComponents(
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
 	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, guards, logger)
 
-	deliveryModule := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
+	deliveryModule, err := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build delivery module: %w", err)
+	}
 
+	return buildLLMSchedulerRuntimeComponents(
+		ctx,
+		schedulerConfig,
+		logger,
+		postgresService,
+		cacheService,
+		majorEventRepository,
+		memberNewsService,
+		formatter,
+		deliveryModule,
+		guards,
+	)
+}
+
+func buildLLMSchedulerRuntimeComponents(
+	ctx context.Context,
+	schedulerConfig *settings.LLMSchedulerConfig,
+	logger *slog.Logger,
+	postgresService database.Client,
+	cacheService cache.Client,
+	majorEventRepository *majorevent.Repository,
+	memberNewsService *membernews.Service,
+	formatter *llmSchedulerFormatter,
+	deliveryModule *DeliveryModule,
+	guards *llmGuards,
+) (*LLMSchedulerRuntime, error) {
 	summarizer := buildMajorEventSummarizer(schedulerConfig, cacheService, guards, logger)
-
 	majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler := buildMajorEventComponents(
 		majorEventRepository,
 		formatter,
@@ -307,7 +335,7 @@ func buildLLMSchedulerDeliveryModule(
 	cacheService cache.Client,
 	postgresService database.Client,
 	logger *slog.Logger,
-) *DeliveryModule {
+) (*DeliveryModule, error) {
 	return BuildDeliveryModule(cacheService, postgresService, logger)
 }
 

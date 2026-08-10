@@ -13,16 +13,35 @@ import (
 )
 
 func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, group alarmDispatchGroup) (string, error) {
-	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindCelebration {
-		return renderCelebrationMessage(ctx, renderer, &group.envelopes[0])
-	}
-	if len(group.envelopes) > 0 && group.envelopes[0].SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
-		return renderAlarmDispatchYouTubeOutbox(ctx, renderer, messageStrings, &group.envelopes[0])
+	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, group); handled {
+		return message, err
 	}
 	if len(group.notifications) == 1 {
 		return renderAlarmDispatchNotification(ctx, renderer, messageStrings, &group.notifications[0])
 	}
 	return renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, group)
+}
+
+func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, group alarmDispatchGroup) (message string, handled bool, err error) {
+	if len(group.envelopes) == 0 {
+		return "", false, nil
+	}
+	envelope := &group.envelopes[0]
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration {
+		message, err = renderCelebrationMessage(ctx, renderer, envelope)
+		return message, true, err
+	}
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
+		message, err = renderAlarmDispatchYouTubeOutbox(ctx, renderer, messageStrings, envelope)
+		return message, true, err
+	}
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest {
+		if envelope.DeliveryDigest == nil {
+			return "", true, fmt.Errorf("render delivery digest dispatch: payload is nil")
+		}
+		return envelope.DeliveryDigest.PreRenderedMessage, true, nil
+	}
+	return "", false, nil
 }
 
 func renderAlarmDispatchYouTubeOutbox(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, envelope *domain.AlarmQueueEnvelope) (string, error) {

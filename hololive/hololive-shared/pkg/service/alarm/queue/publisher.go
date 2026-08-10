@@ -123,6 +123,14 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 }
 
 func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+	return p.publishDispatchBatch(ctx, envelopes, dispatchoutbox.StatusPending)
+}
+
+func (p *Publisher) PublishShadowDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+	return p.publishDispatchBatch(ctx, envelopes, dispatchoutbox.StatusShadowed)
+}
+
+func (p *Publisher) publishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
 	startedAt := time.Now()
 	if len(envelopes) == 0 {
 		return dispatchoutbox.PublishBatchResult{}, nil
@@ -144,7 +152,7 @@ func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain
 		observeAlarmDispatchPublishBatch(time.Since(startedAt), &result)
 	}()
 
-	result, err := p.publishEnvelopes(ctx, envelopes)
+	result, err := p.publishEnvelopesWithStatus(ctx, envelopes, status)
 	return result, err
 }
 
@@ -184,19 +192,19 @@ func (p *Publisher) publishEnvelopes(
 	ctx context.Context,
 	envelopes []domain.AlarmQueueEnvelope,
 ) (dispatchoutbox.PublishBatchResult, error) {
-	return p.publishPGFirstBatch(ctx, envelopes)
+	return p.publishEnvelopesWithStatus(ctx, envelopes, dispatchoutbox.StatusPending)
 }
 
-func (p *Publisher) publishPGFirstBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+func (p *Publisher) publishEnvelopesWithStatus(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
 	if p.outbox == nil {
 		return dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}, fmt.Errorf("publish alarm queue batch: pg_first requires outbox repository")
 	}
-	result, err := p.insertOutboxChunks(ctx, envelopes, dispatchoutbox.StatusPending)
+	result, err := p.insertOutboxChunks(ctx, envelopes, status)
 	result.RequestedDeliveries = len(envelopes)
 	if err != nil {
-		return result, fmt.Errorf("publish alarm queue batch: insert pending outbox: %w", err)
+		return result, fmt.Errorf("publish alarm queue batch: insert %s outbox: %w", status, err)
 	}
-	if result.InsertedDeliveries > 0 && p.publishConfig.WakeupEnabled {
+	if status == dispatchoutbox.StatusPending && result.InsertedDeliveries > 0 && p.publishConfig.WakeupEnabled {
 		p.publishWakeup(ctx)
 	}
 	return result, nil

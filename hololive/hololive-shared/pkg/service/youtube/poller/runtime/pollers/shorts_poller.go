@@ -91,6 +91,7 @@ func (p *ShortsPoller) ProxyEnabled() bool {
 }
 
 func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
+	ctx = withMetadataResolveBudget(ctx, p.Name(), p.ensureMetrics())
 	shorts, err := p.client.GetShorts(ctx, channelID, p.maxResults)
 	if err != nil {
 		return fmt.Errorf("failed to get shorts: %w", err)

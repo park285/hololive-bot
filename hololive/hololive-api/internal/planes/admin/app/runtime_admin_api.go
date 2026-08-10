@@ -21,6 +21,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -33,8 +34,9 @@ type AdminAPIRuntime struct {
 	Config *settings.Config
 	Logger *slog.Logger
 
-	ServerAddr  string
-	HTTPServers *sharedserver.RuntimeHTTPServers
+	ServerAddr   string
+	HTTPServers  *sharedserver.RuntimeHTTPServers
+	AlarmService interface{ Close(context.Context) error }
 
 	lifecycle.Managed
 }
