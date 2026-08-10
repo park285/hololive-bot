@@ -1,5 +1,5 @@
--- Must run before role, database, extension, or schema bootstrap scripts.
--- A failed assertion leaves no application-owned database objects behind.
+-- 역할·데이터베이스·확장·스키마 bootstrap보다 먼저 실행해야 한다.
+-- 검증에 실패하면 애플리케이션 소유 DB 객체를 만들지 않는다.
 DO $pg18_contract$
 DECLARE
   server_num integer := current_setting('server_version_num')::integer;

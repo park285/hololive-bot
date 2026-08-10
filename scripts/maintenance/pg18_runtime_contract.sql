@@ -1,9 +1,8 @@
--- PostgreSQL 18.4+ runtime contract audit for hololive-bot.
+-- hololive-bot용 PostgreSQL 18.4+ runtime 계약 검사다.
 --
--- Run this against an existing volume with the bootstrap administrator or a role
--- that can read pg_aios (superuser or pg_read_all_stats). The script is read-only
--- and fails before printing observability snapshots when the deployment contract
--- has drifted.
+-- 기존 volume에서는 bootstrap administrator 또는 pg_aios를 읽을 수 있는 역할
+-- (superuser 또는 pg_read_all_stats)로 실행한다. 이 스크립트는 read-only이며
+-- 배포 계약이 어긋나면 observability snapshot을 출력하기 전에 실패한다.
 \set ON_ERROR_STOP on
 \pset pager off
 
