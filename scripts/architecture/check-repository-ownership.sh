@@ -118,6 +118,10 @@ check_no_imports "youtube-producer direct YouTube dispatch" \
   "hololive/hololive-youtube-producer" \
   'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started'
 
+check_no_imports "youtube-producer write-capable alarm repository" \
+  "hololive/hololive-youtube-producer" \
+  'hololive-shared/pkg/service/alarm"|alarm\.NewRepository'
+
 major_event_hits="$(
   rg -n 'majorevent.*repository|repository.*majorevent' \
     "${ROOT_DIR}/hololive/hololive-api/internal/planes/bot" \

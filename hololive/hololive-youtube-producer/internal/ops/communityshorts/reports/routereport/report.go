@@ -12,7 +12,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
@@ -173,8 +172,8 @@ func buildBaseline(
 		return communityshorts.TargetBaseline{}, fmt.Errorf("collect community shorts route verification report: load members: %w", err)
 	}
 
-	alarmRepository := sharedalarm.NewRepository(session.Postgres, logger)
-	alarms, err := alarmRepository.LoadAll(ctx)
+	alarmReader := sharedproviders.ProvideAlarmReader(session.Postgres, logger)
+	alarms, err := alarmReader.LoadAll(ctx)
 	if err != nil {
 		return communityshorts.TargetBaseline{}, fmt.Errorf("collect community shorts route verification report: load alarms: %w", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -52,8 +52,8 @@ func resolveYouTubePollTargets(
 }
 
 func loadAlarmChannelIDs(ctx context.Context, postgresService database.Client) ([]string, error) {
-	repository := sharedalarm.NewRepository(postgresService, nil)
-	alarmChannelIDs, err := repository.GetAllChannelIDs(ctx)
+	reader := sharedproviders.ProvideAlarmReader(postgresService, nil)
+	alarmChannelIDs, err := reader.GetAllChannelIDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve youtube poll targets: get alarm channel ids: %w", err)
 	}

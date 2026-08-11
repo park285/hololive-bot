@@ -818,6 +818,8 @@ github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/alarm
+github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/alarmread
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/database
@@ -932,6 +934,7 @@ github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/holol
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/alarm/tier -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/service/alarm/tier -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/alarmread -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/auth -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-shared/pkg/service/auth -> github.com/kapu/hololive-shared/pkg/dbx
 github.com/kapu/hololive-shared/pkg/service/auth -> github.com/kapu/hololive-shared/pkg/service/cache
@@ -1271,7 +1274,6 @@ github.com/kapu/hololive-youtube-producer/cmd/runtime/youtube-producer -> github
 github.com/kapu/hololive-youtube-producer/internal/communityshorts -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-youtube-producer/internal/communityshorts -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-youtube-producer/internal/communityshorts -> github.com/kapu/hololive-shared/pkg/providers
-github.com/kapu/hololive-youtube-producer/internal/communityshorts -> github.com/kapu/hololive-shared/pkg/service/alarm
 github.com/kapu/hololive-youtube-producer/internal/communityshorts -> github.com/kapu/hololive-shared/pkg/service/alarm/keys
 github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/channelsummary -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/channelsummary -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics
@@ -1289,7 +1291,6 @@ github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/l
 github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/routereport -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/routereport -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/routereport -> github.com/kapu/hololive-shared/pkg/providers
-github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/routereport -> github.com/kapu/hololive-shared/pkg/service/alarm
 github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/routereport -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics
 github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/routereport -> github.com/kapu/hololive-youtube-producer/internal/communityshorts
 github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/reports/routereport -> github.com/kapu/hololive-youtube-producer/internal/ops/communityshorts/internal/markdown
@@ -1345,7 +1346,6 @@ github.com/kapu/hololive-youtube-producer/internal/runtime/polling -> github.com
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/providers
-github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/alarm
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/alarm/keys
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
