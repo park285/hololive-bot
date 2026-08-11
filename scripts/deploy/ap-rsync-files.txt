@@ -314,6 +314,7 @@ hololive/hololive-shared/pkg/cleanupctx/context.go
 hololive/hololive-shared/pkg/health/health.go
 hololive/hololive-shared/pkg/panicguard/panicguard.go
 hololive/hololive-shared/pkg/pgxutil/rollback.go
+hololive/hololive-shared/pkg/providers/alarm_reader_provider.go
 hololive/hololive-shared/pkg/providers/helpers.go
 hololive/hololive-shared/pkg/providers/holodex_provider.go
 hololive/hololive-shared/pkg/providers/infra_providers.go
@@ -395,6 +396,7 @@ hololive/hololive-shared/pkg/service/alarm/targets.go
 hololive/hololive-shared/pkg/service/internalhttp/json_client.go
 hololive/hololive-shared/pkg/service/alarm/tier/policies.go
 hololive/hololive-shared/pkg/service/alarm/tier/scheduler.go
+hololive/hololive-shared/pkg/service/alarmread/reader.go
 hololive/hololive-shared/pkg/service/auth/config.go
 hololive/hololive-shared/pkg/service/auth/errors.go
 hololive/hololive-shared/pkg/service/auth/models.go

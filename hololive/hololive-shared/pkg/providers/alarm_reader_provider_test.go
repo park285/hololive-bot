@@ -21,13 +21,36 @@
 package providers
 
 import (
-	"log/slog"
+	"context"
+	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarmread"
-	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func ProvideAlarmReader(postgres database.Client, logger *slog.Logger) alarmread.Reader {
-	return alarmread.Restrict(alarm.NewRepository(postgres, logger))
+type poollessDatabaseClient struct{}
+
+func (poollessDatabaseClient) GetPool() *pgxpool.Pool     { return nil }
+func (poollessDatabaseClient) Ping(context.Context) error { return nil }
+func (poollessDatabaseClient) Close() error               { return nil }
+
+func TestProvideAlarmReaderWithholdsWriteMethods(t *testing.T) {
+	reader := ProvideAlarmReader(poollessDatabaseClient{}, nil)
+
+	if _, ok := reader.(interface {
+		Add(context.Context, *domain.Alarm) error
+	}); ok {
+		t.Fatal("ProvideAlarmReader must not expose Add to alarm read consumers")
+	}
+	if _, ok := reader.(interface {
+		Remove(context.Context, string, string) error
+	}); ok {
+		t.Fatal("ProvideAlarmReader must not expose Remove to alarm read consumers")
+	}
+	if _, ok := reader.(interface {
+		ClearByRoom(context.Context, string) (int64, error)
+	}); ok {
+		t.Fatal("ProvideAlarmReader must not expose ClearByRoom to alarm read consumers")
+	}
 }

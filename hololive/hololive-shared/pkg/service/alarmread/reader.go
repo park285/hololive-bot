@@ -33,3 +33,21 @@ type Reader interface {
 	GetAllChannelIDs(ctx context.Context) ([]string, error)
 	LoadAll(ctx context.Context) ([]*domain.Alarm, error)
 }
+
+// alarm.Repository를 Reader로 그대로 넘기면 소비자가 write 메서드로 타입 단언해 되찾을 수 있으므로,
+// 메서드 집합을 실제로 잘라내는 이 wrapper를 거쳐야 경계가 성립한다.
+func Restrict(source Reader) Reader {
+	return restricted{source: source}
+}
+
+type restricted struct {
+	source Reader
+}
+
+func (r restricted) GetAllChannelIDs(ctx context.Context) ([]string, error) {
+	return r.source.GetAllChannelIDs(ctx)
+}
+
+func (r restricted) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
+	return r.source.LoadAll(ctx)
+}
