@@ -114,6 +114,8 @@ check_no_imports "shared-go module" \
   "../shared-go" \
   'github.com/kapu/hololive-|github.com/park285/llm-kakao-bots/hololive'
 
+# outbox.NewDispatcher/OutboxDispatcher는 alarm-worker internal/ 이관으로 컴파일러가 1차 보장한다.
+# 아래 denylist는 회귀 방지용 이중화이며, pkg/service/delivery 항목만은 shared 잔류라 이 검사가 유일한 보장이다.
 check_no_imports "youtube-producer direct YouTube dispatch" \
   "hololive/hololive-youtube-producer" \
   'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started'

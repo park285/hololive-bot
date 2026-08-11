@@ -3,7 +3,7 @@
 INTEGRATION_TEST_PACKAGES=(
     ./hololive/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer
     ./hololive/hololive-api/internal/planes/llm/internal/service/membernews/summarizer
-    ./hololive/hololive-shared/pkg/service/youtube/outbox/dispatch
+    ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch
     ./hololive/hololive-youtube-producer/internal/runtime/ingestionlease
 )
 INTEGRATION_TAG_PACKAGES=(

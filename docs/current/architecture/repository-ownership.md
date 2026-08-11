@@ -40,6 +40,8 @@ Structured allowlist: `repository-ownership.allowlist`.
 Duplicated polling prevention is enforced operationally by Compose env ownership: `youtube-producer` owns `YOUTUBE_INGESTION_ENABLED=true`.
 Duplicated sending prevention is enforced by code and architecture gates: `youtube-producer` and producer runtimes must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.
 
+YouTube outbox dispatcher는 `hololive-alarm-worker/internal/egress/youtubedispatch`에 있으므로 다른 모듈에서 import 자체가 불가능합니다. 즉 이 항목의 1차 보장은 Go `internal/` 컴파일러이고, 게이트의 `outbox\.NewDispatcher`/`OutboxDispatcher` 심볼 denylist는 회귀 방지용 이중화로 유지합니다. 반면 `pkg/service/delivery`는 `hololive-api`(reactive reply)와 `alarm-worker`(proactive egress)의 진성 다중 소비자라 shared에 남으므로, 해당 항목은 게이트가 유일한 보장입니다.
+
 ## Validation
 
 ```bash
