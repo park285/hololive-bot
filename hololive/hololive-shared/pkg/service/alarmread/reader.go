@@ -18,9 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// alarm_state의 non-owner 소비자가 write 메서드에 도달하지 못하게 하는 capability 경계다.
-// alarm.Repository를 직접 넘기면 Add/Remove/ClearByRoom까지 함께 노출되므로, 이 인터페이스를
-// 거치는 것이 repository-ownership.allowlist의 readers 선언을 코드로 강제하는 유일한 수단이다.
 package alarmread
 
 import (
