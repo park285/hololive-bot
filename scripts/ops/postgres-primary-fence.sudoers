@@ -1,0 +1,2 @@
+Cmnd_Alias HOLOLIVE_POSTGRES_PRIMARY_FENCE = /usr/bin/env bash /usr/local/libexec/hololive-postgres-failover/postgres-primary-fence.sh *
+hololive-pg-fence ALL=(root) NOPASSWD: HOLOLIVE_POSTGRES_PRIMARY_FENCE

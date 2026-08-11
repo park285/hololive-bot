@@ -243,7 +243,7 @@ Host-native AP invariants:
   `stack-secrets` master to `/etc/stack-secrets/hololive-bot/`:
   `youtube-producer.env`, `ap-compose.env`, and the cert files listed in this
   runbook. Raw secrets stay out of repository files and command output.
-- PostgreSQL remains central over Tailscale with `POSTGRES_HOST=<tailnet-central>`,
+- PostgreSQL remains central over Tailscale Service with `POSTGRES_HOST=hololive-postgres.tail742dd8.ts.net`,
   `POSTGRES_PORT=5433`, `POSTGRES_SSLMODE=verify-full`, and
   `POSTGRES_SSLROOTCERT=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`.
 - Valkey remains central over Tailscale with `CACHE_HOST=<tailnet-central>` and
@@ -308,7 +308,7 @@ CACHE_SOCKET_PATH=
 CACHE_HOST=<tailnet-central>
 CACHE_PORT=6379
 POSTGRES_SOCKET_PATH=
-POSTGRES_HOST=<tailnet-central>
+POSTGRES_HOST=hololive-postgres.tail742dd8.ts.net
 POSTGRES_PORT=5433
 POSTGRES_SSLMODE=verify-full
 POSTGRES_SSLROOTCERT=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem

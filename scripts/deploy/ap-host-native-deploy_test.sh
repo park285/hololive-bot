@@ -34,6 +34,14 @@ else
   record_fail "ap-host-native must configure the four-instance active-active fleet size"
 fi
 
+if grep -Fq 'AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-hololive-postgres.tail742dd8.ts.net}"' "${DEPLOY}" &&
+   grep -Fq "printf 'POSTGRES_HOST=%s\\n' \"\$AP_POSTGRES_HOST\"" "${DEPLOY}" &&
+   grep -Fq "printf 'CACHE_HOST=%s\\n' \"\${AP_CACHE_HOST:-\$AP_CENTRAL_HOST}\"" "${DEPLOY}"; then
+  pass "ap-host-native separates stable PostgreSQL from the central cache endpoint"
+else
+  record_fail "ap-host-native must use stable PostgreSQL DNS without changing the cache endpoint"
+fi
+
 if grep -Fq 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings' "${DEPLOY}"; then
   pass "ap-host-native settings dir uses persistent varlib path"
 else

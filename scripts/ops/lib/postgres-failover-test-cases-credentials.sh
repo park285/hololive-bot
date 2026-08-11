@@ -117,3 +117,143 @@ invalid_pgpass_credential_shapes_fail_closed() {
   fi
   pass "invalid pgpass credential modes and paths fail closed"
 }
+
+route_credentials_are_required_and_private() {
+  local root credential_dir env_file controller log route_key route_known_hosts
+  local -a launcher_env
+  root="${TMP_DIR}/route-credentials"
+  if [[ "${CONTROLLER_TEST_MODE}" == "0" ]]; then
+    if [[ -z "${SYSTEM_CREDENTIAL_TEST_ROOT}" ]]; then
+      SYSTEM_CREDENTIAL_TEST_ROOT="/run/credentials/postgres-failover-test.$$"
+      test ! -e "${SYSTEM_CREDENTIAL_TEST_ROOT}" || { fail "system credential fixture already exists"; return; }
+      mkdir -p "${SYSTEM_CREDENTIAL_TEST_ROOT}"
+      chmod 0700 "${SYSTEM_CREDENTIAL_TEST_ROOT}"
+    fi
+    credential_dir="${SYSTEM_CREDENTIAL_TEST_ROOT}"
+  else
+    credential_dir="${root}/run/credentials/postgres-failover.service"
+  fi
+  env_file="${credential_dir}/failover.env"
+  controller="${root}/controller.sh"
+  log="${root}/launcher.log"
+  mkdir -p "${root}" "${credential_dir}"
+  chmod 0700 "${root}"
+  if [[ "${CONTROLLER_TEST_MODE}" == "1" ]]; then
+    chmod 0700 "${root}/run" "${root}/run/credentials" "${credential_dir}"
+  fi
+  cat >"${controller}" <<'CONTROLLER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"${FAKE_LAUNCH_LOG:?}"
+CONTROLLER
+  chmod 0700 "${controller}"
+  cat >"${env_file}" <<'ENV_OK'
+POSTGRES_FAILOVER_TAILSCALE_SERVICE=svc:hololive-postgres
+POSTGRES_FAILOVER_ROUTE_SSH_TARGET=hololive-pg-route@100.100.1.5
+POSTGRES_FAILOVER_ROUTE_SSH_HOST_KEY_ALIAS=100.100.1.5
+POSTGRES_FAILOVER_ROUTE_SSH_CONNECT_TIMEOUT_SEC=5
+POSTGRES_FAILOVER_ROUTE_REMOTE_SCRIPT=/usr/local/libexec/hololive-postgres-failover/postgres-route-tailscale.sh
+POSTGRES_FAILOVER_ROUTE_CONFIG_FILE=/etc/hololive-postgres-failover/route.env
+ENV_OK
+  chmod 0600 "${env_file}"
+  route_key="${credential_dir}/route-ssh-key"
+  route_known_hosts="${credential_dir}/route-known-hosts"
+  printf 'private-key\n' >"${route_key}"
+  printf '100.100.1.8 ssh-ed25519 AAAA\n' >"${route_known_hosts}"
+  chmod 0440 "${route_key}" "${route_known_hosts}"
+
+  launcher_env=(
+    "FAKE_LAUNCH_LOG=${log}"
+    "POSTGRES_FAILOVER_ENV_FILE=${env_file}"
+    "POSTGRES_FAILOVER_CONTROLLER=${controller}"
+    "POSTGRES_FAILOVER_SERVICE_USER=$(id -un)"
+    "POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST=${CONTROLLER_TEST_MODE}"
+    "POSTGRES_FAILOVER_ROUTE_SSH_IDENTITY_FILE=${route_key}"
+    "POSTGRES_FAILOVER_ROUTE_SSH_KNOWN_HOSTS_FILE=${route_known_hosts}"
+  )
+  if ! env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH "${launcher_env[@]}" \
+    /usr/bin/bash "${LAUNCHER}" --apply; then
+    fail "launcher rejected valid route credentials"
+    return
+  fi
+  grep -Fxq -- '--apply' "${log}" || { fail "launcher did not execute controller after route credential validation"; return; }
+
+  if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    "${launcher_env[@]}" "POSTGRES_FAILOVER_ROUTE_SSH_IDENTITY_FILE=" \
+    /usr/bin/bash "${LAUNCHER}" --apply >/dev/null 2>&1; then
+    fail "launcher accepted a missing route SSH identity credential"
+    return
+  fi
+
+  chmod 0640 "${route_key}"
+  if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    "${launcher_env[@]}" /usr/bin/bash "${LAUNCHER}" --apply >/dev/null 2>&1; then
+    fail "launcher accepted a group-readable route SSH identity credential"
+    return
+  fi
+  chmod 0440 "${route_key}"
+
+  if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    "${launcher_env[@]}" "POSTGRES_FAILOVER_ROUTE_SSH_KNOWN_HOSTS_FILE=" \
+    /usr/bin/bash "${LAUNCHER}" --apply >/dev/null 2>&1; then
+    fail "launcher accepted a missing route known_hosts credential"
+    return
+  fi
+  chmod 0660 "${route_known_hosts}"
+  if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    "${launcher_env[@]}" /usr/bin/bash "${LAUNCHER}" --apply >/dev/null 2>&1; then
+    fail "launcher accepted a group-writable route known_hosts credential"
+    return
+  fi
+  pass "route SSH credentials are required and private"
+}
+
+route_environment_paths_are_not_injected() {
+  local root credential_dir env_file controller route_key route_known_hosts
+  root="${TMP_DIR}/route-environment"
+  if [[ "${CONTROLLER_TEST_MODE}" == "0" ]]; then
+    if [[ -z "${SYSTEM_CREDENTIAL_TEST_ROOT}" ]]; then
+      SYSTEM_CREDENTIAL_TEST_ROOT="/run/credentials/postgres-failover-test.$$"
+      test ! -e "${SYSTEM_CREDENTIAL_TEST_ROOT}" || { fail "system credential fixture already exists"; return; }
+      mkdir -p "${SYSTEM_CREDENTIAL_TEST_ROOT}"
+      chmod 0700 "${SYSTEM_CREDENTIAL_TEST_ROOT}"
+    fi
+    credential_dir="${SYSTEM_CREDENTIAL_TEST_ROOT}"
+  else
+    credential_dir="${root}/run/credentials/postgres-failover.service"
+  fi
+  env_file="${credential_dir}/failover.env"
+  controller="${root}/controller.sh"
+  mkdir -p "${root}" "${credential_dir}"
+  chmod 0700 "${root}"
+  if [[ "${CONTROLLER_TEST_MODE}" == "1" ]]; then
+    chmod 0700 "${root}/run" "${root}/run/credentials" "${credential_dir}"
+  fi
+  cat >"${controller}" <<'CONTROLLER'
+#!/usr/bin/env bash
+exit 99
+CONTROLLER
+  chmod 0700 "${controller}"
+  route_key="${credential_dir}/route-ssh-key"
+  route_known_hosts="${credential_dir}/route-known-hosts"
+  printf 'private-key\n' >"${route_key}"
+  printf '100.100.1.8 ssh-ed25519 AAAA\n' >"${route_known_hosts}"
+  chmod 0440 "${route_key}" "${route_known_hosts}"
+  cat >"${env_file}" <<'ENV_BAD'
+POSTGRES_FAILOVER_TAILSCALE_SERVICE=svc:hololive-postgres
+POSTGRES_FAILOVER_ROUTE_SSH_IDENTITY_FILE=/tmp/attacker-key
+ENV_BAD
+  chmod 0600 "${env_file}"
+  if env -u BASH_ENV -u ENV -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    "FAKE_LAUNCH_LOG=${root}/launcher.log" \
+    "POSTGRES_FAILOVER_ENV_FILE=${env_file}" \
+    "POSTGRES_FAILOVER_CONTROLLER=${controller}" \
+    "POSTGRES_FAILOVER_SERVICE_USER=$(id -un)" \
+    "POSTGRES_FAILOVER_LAUNCH_ALLOW_NON_ROOT_FOR_TEST=${CONTROLLER_TEST_MODE}" \
+    "POSTGRES_FAILOVER_ROUTE_SSH_IDENTITY_FILE=${route_key}" \
+    "POSTGRES_FAILOVER_ROUTE_SSH_KNOWN_HOSTS_FILE=${route_known_hosts}" \
+    /usr/bin/bash "${LAUNCHER}" --dry-run >/dev/null 2>&1; then
+    fail "launcher accepted a runtime credential path injected through failover.env"
+    return
+  fi
+  pass "route credential runtime paths cannot be injected through failover.env"
+}

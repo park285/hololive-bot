@@ -466,8 +466,8 @@ func assertProdComposeDisallowedPatterns(t *testing.T, content string) {
 func assertProdComposeRequiredPatterns(t *testing.T, content string) {
 	t.Helper()
 
-	if got := strings.Count(content, "POSTGRES_HOST: holo-postgres"); got != 1 {
-		t.Fatalf("docker-compose.prod.yml POSTGRES_HOST holo-postgres anchor count = %d, want 1", got)
+	if got := strings.Count(content, "POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}"); got != 1 {
+		t.Fatalf("docker-compose.prod.yml POSTGRES_HOST holo-postgres-default anchor count = %d, want 1", got)
 	}
 	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}"); got != 1 {
 		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE verify-full default count = %d, want 1", got)
@@ -480,7 +480,7 @@ func assertProdComposeRequiredPatterns(t *testing.T, content string) {
 		"holo-postgres:",
 		"    networks:",
 		"x-postgres-env: &postgres-env",
-		"  POSTGRES_PORT: \"5432\"",
+		"  POSTGRES_PORT: \"${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}\"",
 		"  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}",
 		"  IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-}",
 		"--unixsocketperm 660",

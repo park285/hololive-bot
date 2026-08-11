@@ -6,6 +6,8 @@ MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
 AP_CENTRAL_HOST="${AP_CENTRAL_HOST:-100.100.1.8}"
+AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-hololive-postgres.tail742dd8.ts.net}"
+AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
 AP_CLIPROXY_HOST="${AP_CLIPROXY_HOST:-100.100.1.3}"
 
 case "$MODE" in
@@ -31,6 +33,10 @@ if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
 fi
 if [[ ! "$AP_SWAPFILE_SIZE_MIB" =~ ^[1-9][0-9]*$ ]]; then
   echo "AP_SWAPFILE_SIZE_MIB must be a positive integer" >&2
+  exit 2
+fi
+if [[ ! "$AP_POSTGRES_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#${AP_POSTGRES_PORT} < 1 || 10#${AP_POSTGRES_PORT} > 65535 )); then
+  echo "AP_POSTGRES_PORT must be a valid TCP port" >&2
   exit 2
 fi
 
@@ -81,8 +87,8 @@ write_host_env() {
     printf 'SCRAPER_SCHEDULER_WORKER_COUNT=1\n'
     printf 'SCRAPER_BACKFILL_ENABLED=false\n'
     printf 'YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2\n'
-    printf 'POSTGRES_HOST=%s\n' "${AP_POSTGRES_HOST:-$AP_CENTRAL_HOST}"
-    printf 'POSTGRES_PORT=5433\n'
+    printf 'POSTGRES_HOST=%s\n' "$AP_POSTGRES_HOST"
+    printf 'POSTGRES_PORT=%s\n' "$AP_POSTGRES_PORT"
     printf 'POSTGRES_DB=hololive\n'
     printf 'POSTGRES_SSLMODE=verify-full\n'
     printf 'POSTGRES_SSLROOTCERT=/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem\n'
