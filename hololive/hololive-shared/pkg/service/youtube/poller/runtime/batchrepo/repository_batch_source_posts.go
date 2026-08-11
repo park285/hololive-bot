@@ -25,8 +25,8 @@ import (
 	"time"
 
 	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
-	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 type sourcePostKey struct {

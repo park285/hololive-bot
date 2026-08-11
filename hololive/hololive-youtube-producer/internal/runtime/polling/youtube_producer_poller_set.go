@@ -25,9 +25,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
 )
 
 type youTubeProducerPollerSet struct {

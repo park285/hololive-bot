@@ -35,7 +35,7 @@ import (
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatch"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 )
 
 type Scheduler interface {
@@ -72,7 +72,7 @@ type notificationEgressRunner struct {
 }
 
 type youtubeOutboxDispatcherRunner struct {
-	dispatcher *dispatch.Dispatcher
+	dispatcher *youtubedispatch.Dispatcher
 	logger     *slog.Logger
 }
 
@@ -83,7 +83,7 @@ func NewNotificationEgressRunner(runners []NamedScheduler, logger *slog.Logger) 
 	}
 }
 
-func NewYouTubeOutboxDispatcherRunner(dispatcher *dispatch.Dispatcher, logger *slog.Logger) Scheduler {
+func NewYouTubeOutboxDispatcherRunner(dispatcher *youtubedispatch.Dispatcher, logger *slog.Logger) Scheduler {
 	return youtubeOutboxDispatcherRunner{dispatcher: dispatcher, logger: logger}
 }
 

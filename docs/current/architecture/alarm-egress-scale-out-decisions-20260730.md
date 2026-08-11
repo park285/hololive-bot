@@ -133,7 +133,7 @@ scripts/architecture/ci-notification-egress-gate.sh
 |---|---|---|
 | alarm dispatch outbox (`dispatchoutbox`) | `repository_claim_0053_02.sql`의 `FOR UPDATE SKIP LOCKED` | 행 단위 배타성만. 그룹 원자성은 성립하지 않음 — (a) 참조 |
 | generic notification delivery outbox (`pkg/service/delivery`) | `outbox_repository_0129_03.sql`의 `FOR UPDATE OF o SKIP LOCKED` + `locked_by`/`lock_expires_at` lease | 없음. lease 만료 회수와 stale worker fence는 고정되어 있으나(`TestFetchAndLock_ReclaimsExpiredLease`, `TestMarkSent_FenceRejectsStaleWorkerAfterReclaim`), 두 워커가 동시에 `FetchAndLock`을 호출하는 시나리오를 고정하는 테스트는 없음 |
-| YouTube outbox (`youtube/outbox/dispatch`) | `dispatcher_claim_0050_01.sql`의 `FOR UPDATE SKIP LOCKED` | 별개 `Dispatcher` 인스턴스 2개가 하나의 DB를 공유해 같은 delivery row를 경합해도 post당 1회만 전송이 시작됨 — `TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOncePerPost`. community post와 short kind에 한함 |
+| YouTube outbox (`alarm-worker/internal/egress/youtubedispatch`) | `dispatcher_claim_0050_01.sql`의 `FOR UPDATE SKIP LOCKED` | 별개 `Dispatcher` 인스턴스 2개가 하나의 DB를 공유해 같은 delivery row를 경합해도 post당 1회만 전송이 시작됨 — `TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOncePerPost`. community post와 short kind에 한함 |
 
 "락이 있다"와 "중복 전송이 불가능하다"는 다른 명제입니다. (a)가 바로 그 반례로, `dispatchoutbox`는 행 락이 정상 동작하는데도 그룹 단위 불변식은 지켜지지 않습니다. 세 경로 중 cross-instance 중복 전송 불가가 테스트로 고정된 것은 YouTube outbox 경로뿐이며, 그것도 두 kind에 한정됩니다. egress 전용 인스턴스를 실제로 띄우기 전에 나머지 두 경로를 각각 확인해야 합니다.
 
@@ -146,8 +146,8 @@ hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/repository_claim.go
 hololive/hololive-shared/pkg/service/delivery/outbox_repository.go
   OutboxRepository.FetchAndLock — 동일 형태의 단일 statement claim
 hololive/hololive-shared/pkg/service/delivery/queries/outbox_repository_0129_03.sql
-hololive/hololive-shared/pkg/service/youtube/outbox/dispatch/queries/dispatcher_claim_0050_01.sql
-hololive/hololive-shared/pkg/service/youtube/outbox/dispatch/dispatcher_claim_gate_test.go
+hololive/hololive-alarm-worker/internal/egress/youtubedispatch/queries/dispatcher_claim_0050_01.sql
+hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher_claim_gate_test.go
   두 Dispatcher 인스턴스 경합 테스트
 
 hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_claim_0053_02.sql
@@ -168,7 +168,7 @@ hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_runne
 hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_metrics.go
   현재 메트릭 집합 — 분절 counter 없음
 
-hololive/hololive-shared/pkg/service/youtube/outbox/dispatch/dispatcher.go
+hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher.go
   Dispatcher.Start — aggregateSyncLoop / telemetryLoop / cleanupLoop / reviveLoop
 
 hololive/hololive-shared/pkg/service/alarm/dedup/fallback.go

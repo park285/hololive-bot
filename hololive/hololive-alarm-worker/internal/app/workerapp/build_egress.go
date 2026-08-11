@@ -20,10 +20,10 @@ import (
 	envutil "github.com/park285/shared-go/pkg/envutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
@@ -229,9 +229,9 @@ func newYouTubeOutboxDispatcher(
 	infra *sharedmodules.InfraModule,
 	sender delivery.MessageSender,
 	logger *slog.Logger,
-) *dispatch.Dispatcher {
+) *youtubedispatch.Dispatcher {
 	dispatchConfig := dispatchstate.DefaultConfig()
-	return dispatch.NewDispatcher(
+	return youtubedispatch.NewDispatcher(
 		infra.Postgres.GetPool(),
 		infra.Cache,
 		sender,
@@ -242,7 +242,7 @@ func newYouTubeOutboxDispatcher(
 }
 
 func configureYouTubeOutboxDispatcher(
-	dispatcher *dispatch.Dispatcher,
+	dispatcher *youtubedispatch.Dispatcher,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 	mode handoff.Mode,

@@ -3,6 +3,7 @@ module github.com/kapu/hololive-youtube-producer
 go 1.26.5
 
 require (
+	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kapu/hololive-dbtest v0.0.0
@@ -43,7 +44,6 @@ require (
 	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
-	github.com/georgysavva/scany/v2 v2.1.4 // indirect
 	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect

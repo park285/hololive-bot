@@ -12,7 +12,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
@@ -102,8 +101,8 @@ func CollectTargetBaseline(ctx context.Context, appConfig *settings.Config, logg
 		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: load members: %w", err)
 	}
 
-	alarmRepository := sharedalarm.NewRepository(databaseResources.Service, logger)
-	alarms, err := alarmRepository.LoadAll(ctx)
+	alarmReader := sharedproviders.ProvideAlarmReader(databaseResources.Service, logger)
+	alarms, err := alarmReader.LoadAll(ctx)
 	if err != nil {
 		return TargetBaseline{}, fmt.Errorf("collect community shorts target baseline: load alarms: %w", err)
 	}

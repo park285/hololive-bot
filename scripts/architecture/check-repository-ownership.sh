@@ -114,9 +114,15 @@ check_no_imports "shared-go module" \
   "../shared-go" \
   'github.com/kapu/hololive-|github.com/park285/llm-kakao-bots/hololive'
 
+# dispatch 심볼은 alarm-worker internal/ 이관으로 컴파일러가 보장하지만, pkg/service/delivery는
+# shared 잔류라 이 grep이 유일한 보장이다. 전체를 중복으로 보고 지우면 delivery 경계가 열린다.
 check_no_imports "youtube-producer direct YouTube dispatch" \
   "hololive/hololive-youtube-producer" \
   'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started'
+
+check_no_imports "youtube-producer write-capable alarm repository" \
+  "hololive/hololive-youtube-producer" \
+  'hololive-shared/pkg/service/alarm"|alarm\.NewRepository'
 
 major_event_hits="$(
   rg -n 'majorevent.*repository|repository.*majorevent' \
