@@ -14,7 +14,7 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
 	"github.com/stretchr/testify/require"
 )
 

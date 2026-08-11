@@ -11,9 +11,9 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
 )
 
 const defaultLiveBatchChannelChunkSize = 40

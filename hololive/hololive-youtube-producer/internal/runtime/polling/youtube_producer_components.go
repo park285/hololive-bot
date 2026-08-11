@@ -11,10 +11,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/pollers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
 )
 
 func buildYouTubeProducerComponents(
