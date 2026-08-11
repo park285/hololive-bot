@@ -30,6 +30,49 @@ static_deployment_contracts_are_wired() {
     fail "failover unit still lets systemd inject the configuration file"
     return
   fi
+  grep -Fq '${NEW_PRIMARY_PORT} ${TAILSCALE_SERVICE}' "${ROOT_DIR}/scripts/ops/postgres-failover-fence-ssh.sh" || {
+    fail "SSH fencing does not bind the durable fence to the drained Tailscale Service"
+    return
+  }
+  for pattern in \
+    'PermitUserEnvironment no' \
+    'AuthorizedKeysFile /etc/ssh/authorized_keys/hololive-pg-fence' \
+    'ForceCommand /usr/local/libexec/hololive-postgres-failover/postgres-failover-ssh-dispatch.sh fence' \
+    'AuthorizedKeysFile /etc/ssh/authorized_keys/hololive-pg-route' \
+    'ForceCommand /usr/local/libexec/hololive-postgres-failover/postgres-failover-ssh-dispatch.sh route' \
+    'DisableForwarding yes'; do
+    grep -Fq "${pattern}" "${ROOT_DIR}/scripts/ops/hololive-postgres-failover.sshd.conf" || {
+      fail "SSH server command confinement is missing: ${pattern}"
+      return
+    }
+  done
+  grep -Fq '/var/empty /bin/dash' "${ROOT_DIR}/scripts/systemd/hololive-postgres-fence.sysusers.conf" || {
+    fail "fence SSH account does not use the non-Bash restricted runtime profile"
+    return
+  }
+  grep -Fq '/var/empty /bin/dash' "${ROOT_DIR}/scripts/systemd/hololive-postgres-route.sysusers.conf" || {
+    fail "route SSH account does not use the non-Bash restricted runtime profile"
+    return
+  }
+  for pattern in 'POSTGRES_FAILOVER_ROUTE_COMMAND=/usr/local/libexec/hololive-postgres-failover/postgres-failover-route-ssh.sh' \
+    'POSTGRES_FAILOVER_SSH_TARGET=hololive-pg-fence@100.100.1.8' \
+    'POSTGRES_FAILOVER_ROUTE_SSH_TARGET=hololive-pg-route@100.100.1.5' \
+    'POSTGRES_FAILOVER_TAILSCALE_SERVICE=svc:hololive-postgres'; do
+    grep -Fq "${pattern}" "${ROOT_DIR}/scripts/ops/postgres-failover.env.example" || {
+      fail "failover environment example is missing: ${pattern}"
+      return
+    }
+  done
+  for pattern in \
+    'LoadCredential=route-ssh-key:/etc/stack-secrets/hololive-bot/postgres-failover/route_id_ed25519' \
+    'LoadCredential=route-known-hosts:/etc/stack-secrets/hololive-bot/postgres-failover/route_known_hosts' \
+    'Environment=POSTGRES_FAILOVER_ROUTE_SSH_IDENTITY_FILE=%d/route-ssh-key' \
+    'Environment=POSTGRES_FAILOVER_ROUTE_SSH_KNOWN_HOSTS_FILE=%d/route-known-hosts'; do
+    grep -Fq "${pattern}" "${ROOT_DIR}/scripts/ops/postgres-failover-apply.conf.example" || {
+      fail "apply drop-in is missing: ${pattern}"
+      return
+    }
+  done
   pass "standby health, bind, and old-primary boot fencing are wired"
 }
 launcher_rejects_environment_injection() {

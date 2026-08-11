@@ -1,0 +1,2 @@
+Cmnd_Alias HOLOLIVE_POSTGRES_TAILSCALE_ROUTE = /usr/bin/env bash /usr/local/libexec/hololive-postgres-failover/postgres-route-tailscale.sh --config /etc/hololive-postgres-failover/route.env *
+hololive-pg-route ALL=(root) NOPASSWD: HOLOLIVE_POSTGRES_TAILSCALE_ROUTE

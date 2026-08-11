@@ -15,12 +15,13 @@ SSH_KNOWN_HOSTS_FILE="${POSTGRES_FAILOVER_SSH_KNOWN_HOSTS_FILE:?POSTGRES_FAILOVE
 SSH_HOST_KEY_ALIAS="${POSTGRES_FAILOVER_SSH_HOST_KEY_ALIAS:-${PRIMARY_HOST}}"
 SSH_CONNECT_TIMEOUT_SEC="${POSTGRES_FAILOVER_SSH_CONNECT_TIMEOUT_SEC:-5}"
 REMOTE_FENCE_SCRIPT="${POSTGRES_FAILOVER_REMOTE_FENCE_SCRIPT:-/usr/local/libexec/hololive-postgres-failover/postgres-primary-fence.sh}"
+TAILSCALE_SERVICE="${POSTGRES_FAILOVER_TAILSCALE_SERVICE:?POSTGRES_FAILOVER_TAILSCALE_SERVICE is required}"
 
 is_token() { [[ "$1" =~ ^[A-Za-z0-9._:-]{8,128}$ ]]; }
 is_host() { [[ "$1" =~ ^[A-Za-z0-9._:-]+$ ]]; }
 
 secure_file() {
-  local label="$1" path="$2" private="$3" real owner mode_hex current
+  local label="$1" path="$2" private="$3" real owner mode_hex current file_group credential_root
   [[ "${path}" == /* ]] || { echo "${label} must be absolute" >&2; return 1; }
   real="$(realpath -e -- "${path}")" || { echo "${label} missing: ${path}" >&2; return 1; }
   [[ "${real}" == "${path}" && -f "${path}" ]] || { echo "${label} must be a canonical regular file" >&2; return 1; }
@@ -36,29 +37,41 @@ secure_file() {
   done
   if [[ "${private}" == "1" ]]; then
     mode_hex="$(stat -c '%f' -- "${path}")"
-    (( (0x${mode_hex} & 0x003f) == 0 )) || { echo "${label} must not grant group/world permissions" >&2; return 1; }
+    if (( (0x${mode_hex} & 0x003f) != 0 )); then
+      file_group="$(stat -c '%g' -- "${path}")" || return 1
+      credential_root="$(dirname -- "$(dirname -- "${path}")")"
+      [[ "${credential_root}" == "/run/credentials" && "${owner}" == "0" && "${file_group}" == "0" \
+        && $((0x${mode_hex} & 0x01ff)) == $((8#0440)) ]] \
+        || { echo "${label} must not grant group/world permissions" >&2; return 1; }
+    fi
   fi
 }
 
 is_host "${PRIMARY_HOST}" || { echo "invalid primary host" >&2; exit 2; }
 is_host "${NEW_PRIMARY_HOST}" || { echo "invalid new primary host" >&2; exit 2; }
-[[ "${NEW_PRIMARY_PORT}" =~ ^[0-9]+$ && ${#NEW_PRIMARY_PORT} -le 5 ]] \
-  && (( 10#${NEW_PRIMARY_PORT} > 0 && 10#${NEW_PRIMARY_PORT} <= 65535 )) \
-  || { echo "invalid new primary port" >&2; exit 2; }
+if [[ ! "${NEW_PRIMARY_PORT}" =~ ^[0-9]+$ || ${#NEW_PRIMARY_PORT} -gt 5 ]] \
+  || (( 10#${NEW_PRIMARY_PORT} <= 0 || 10#${NEW_PRIMARY_PORT} > 65535 )); then
+  echo "invalid new primary port" >&2
+  exit 2
+fi
 is_token "${REQUEST_ID}" || { echo "invalid request id" >&2; exit 2; }
 [[ "${SSH_TARGET}" =~ ^[A-Za-z0-9._-]+@[A-Za-z0-9._:-]+$ ]] || { echo "invalid SSH target" >&2; exit 2; }
 [[ "${SSH_HOST_KEY_ALIAS}" =~ ^[A-Za-z0-9._:-]+$ ]] || { echo "invalid SSH host key alias" >&2; exit 2; }
-[[ "${SSH_CONNECT_TIMEOUT_SEC}" =~ ^[1-9][0-9]*$ && ${#SSH_CONNECT_TIMEOUT_SEC} -le 3 ]] \
-  && (( 10#${SSH_CONNECT_TIMEOUT_SEC} <= 300 )) \
-  || { echo "invalid SSH timeout" >&2; exit 2; }
+if [[ ! "${SSH_CONNECT_TIMEOUT_SEC}" =~ ^[1-9][0-9]*$ || ${#SSH_CONNECT_TIMEOUT_SEC} -gt 3 ]] \
+  || (( 10#${SSH_CONNECT_TIMEOUT_SEC} > 300 )); then
+  echo "invalid SSH timeout" >&2
+  exit 2
+fi
 [[ "${REMOTE_FENCE_SCRIPT}" =~ ^/[A-Za-z0-9._/-]+$ \
   && "${REMOTE_FENCE_SCRIPT}" != *'/../'* \
   && "${REMOTE_FENCE_SCRIPT}" != *'/./'* \
   && "${REMOTE_FENCE_SCRIPT}" != *//* ]] || { echo "invalid remote fence script path" >&2; exit 2; }
+[[ "${TAILSCALE_SERVICE}" =~ ^svc:[a-z0-9][a-z0-9-]{0,62}$ ]] \
+  || { echo "invalid Tailscale service" >&2; exit 2; }
 secure_file "SSH identity" "${SSH_IDENTITY_FILE}" 1
 secure_file "SSH known_hosts" "${SSH_KNOWN_HOSTS_FILE}" 0
 
-remote_command="sudo -n /usr/bin/env bash ${REMOTE_FENCE_SCRIPT} ${REQUEST_ID} ${PRIMARY_HOST} ${NEW_PRIMARY_HOST} ${NEW_PRIMARY_PORT}"
+remote_command="/usr/bin/sudo -n /usr/bin/env bash ${REMOTE_FENCE_SCRIPT} ${REQUEST_ID} ${PRIMARY_HOST} ${NEW_PRIMARY_HOST} ${NEW_PRIMARY_PORT} ${TAILSCALE_SERVICE}"
 exec ssh -F /dev/null \
   -i "${SSH_IDENTITY_FILE}" \
   -o IdentitiesOnly=yes \

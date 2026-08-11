@@ -36,7 +36,8 @@ x-app-service: &app-service
   # 의도된 차등: 앱은 수동 정지를 존중(unless-stopped), DB/인프라는 x-restart-logging의 always를 유지한다.
   restart: unless-stopped
 
-x-public-dns: &public-dns
+x-tailnet-dns: &tailnet-dns
+  - ${TAILSCALE_DNS_RESOLVER:-100.100.100.100}
   - 8.8.8.8
   - 1.1.1.1
 
@@ -112,8 +113,8 @@ x-cache-env: &cache-env
   CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}
 
 x-postgres-env: &postgres-env
-  POSTGRES_HOST: holo-postgres
-  POSTGRES_PORT: "5432"
+  POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}
+  POSTGRES_PORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
   POSTGRES_SOCKET_PATH: ""
   POSTGRES_DB: hololive
   POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
@@ -342,8 +343,8 @@ services:
     restart: "no"
     stop_grace_period: 10s
     environment:
-      PGHOST: holo-postgres
-      PGPORT: "5432"
+      PGHOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}
+      PGPORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
       PGDATABASE: hololive
       PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
       PGPASSWORD: ${HOLOLIVE_MIGRATOR_PASSWORD:-${DB_PASSWORD}}
@@ -360,6 +361,7 @@ services:
     volumes:
       - ../../hololive/hololive-api/scripts/migrations:/migrations:ro
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+    dns: *tailnet-dns
     depends_on:
       holo-postgres:
         condition: service_healthy
@@ -442,6 +444,7 @@ services:
       - "${HOLOLIVE_RUNTIME_GID:-1002}"
       - "1000"
     extra_hosts: *iris-extra-hosts
+    dns: *tailnet-dns
     depends_on: *db-cache-depends
     deploy: *deploy-384m
     healthcheck:
@@ -509,7 +512,7 @@ services:
       GOGC: "80"
       GOMEMLIMIT: "1024MiB"
       GIN_MODE: release
-    dns: *public-dns
+    dns: *tailnet-dns
     ports:
       - "127.0.0.1:30001:30001"
       - "127.0.0.1:30001:30001/udp"
@@ -583,7 +586,7 @@ services:
       GOMEMLIMIT: "320MiB"
       GIN_MODE: release
       LOG_DIR: /app/logs
-    dns: *public-dns
+    dns: *tailnet-dns
     ports:
       - "127.0.0.1:30005:30005"
       - "127.0.0.1:30005:30005/udp"

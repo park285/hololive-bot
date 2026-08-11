@@ -5,8 +5,8 @@
 services:
   youtube-producer-c:
     environment:
-      POSTGRES_HOST: holo-postgres
-      POSTGRES_PORT: "5432"
+      POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}
+      POSTGRES_PORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
     ports: !override
       - "127.0.0.1:30025:30025"

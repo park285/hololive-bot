@@ -52,6 +52,8 @@ expect_fail_contains() {
     pass "${label}"
 }
 
+"${ROOT_DIR}/scripts/deploy/test-compose-postgres-routing.sh"
+
 expect_eq "$(compose_service_resolve_build_target hololive-api)" "hololive-api" "build target hololive-api"
 expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm-worker" "build alias alarm-worker"
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"

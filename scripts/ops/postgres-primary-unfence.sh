@@ -8,6 +8,7 @@ CURRENT_PRIMARY_HOST="${3:-}"
 CURRENT_PRIMARY_PORT="${4:-}"
 STATE_DIR="${POSTGRES_PRIMARY_UNFENCE_STATE_DIR:-/var/lib/hololive-postgres-fence}"
 POSTGRES_CONTAINER="${POSTGRES_PRIMARY_UNFENCE_CONTAINER:-holo-postgres}"
+AUTOHEAL_CONTAINER="${POSTGRES_PRIMARY_UNFENCE_AUTOHEAL_CONTAINER:-deunhealth}"
 COMPOSE_UNIT="${POSTGRES_PRIMARY_UNFENCE_COMPOSE_UNIT:-hololive-compose.service}"
 DB_NAME="${POSTGRES_PRIMARY_UNFENCE_DB_NAME:-hololive}"
 DB_USER="${POSTGRES_PRIMARY_UNFENCE_DB_USER:-postgres_admin}"
@@ -35,11 +36,14 @@ fi
 is_token "${FENCE_TOKEN}" || { printf 'invalid fence token\n' >&2; exit 2; }
 is_host "${EXPECTED_PRIMARY_HOST}" || { printf 'invalid expected host\n' >&2; exit 2; }
 is_host "${CURRENT_PRIMARY_HOST}" || { printf 'invalid current primary host\n' >&2; exit 2; }
-[[ "${CURRENT_PRIMARY_PORT}" =~ ^[0-9]+$ && ${#CURRENT_PRIMARY_PORT} -le 5 ]] \
-  && (( 10#${CURRENT_PRIMARY_PORT} > 0 && 10#${CURRENT_PRIMARY_PORT} <= 65535 )) \
-  || { printf 'invalid current primary port\n' >&2; exit 2; }
+if [[ ! "${CURRENT_PRIMARY_PORT}" =~ ^[0-9]+$ || ${#CURRENT_PRIMARY_PORT} -gt 5 ]] \
+  || (( 10#${CURRENT_PRIMARY_PORT} <= 0 || 10#${CURRENT_PRIMARY_PORT} > 65535 )); then
+  printf 'invalid current primary port\n' >&2
+  exit 2
+fi
 CURRENT_PRIMARY_PORT=$((10#${CURRENT_PRIMARY_PORT}))
 is_name "${POSTGRES_CONTAINER}" || { printf 'invalid postgres container\n' >&2; exit 2; }
+is_name "${AUTOHEAL_CONTAINER}" || { printf 'invalid autoheal container\n' >&2; exit 2; }
 is_name "${DB_NAME}" || { printf 'invalid database name\n' >&2; exit 2; }
 is_name "${DB_USER}" || { printf 'invalid database user\n' >&2; exit 2; }
 is_name "${PROBE_USER}" || { printf 'invalid probe user\n' >&2; exit 2; }
@@ -87,10 +91,14 @@ ip -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | grep -Fxq -- "${
   printf 'expected old-primary address is not configured on this host\n' >&2
   exit 1
 }
-if systemctl is-active --quiet "${COMPOSE_UNIT}"; then
-  printf 'compose unit must remain stopped while unfencing\n' >&2
-  exit 1
-fi
+unit_active="$(systemctl show "${COMPOSE_UNIT}" -p ActiveState --value)" || { printf 'cannot inspect compose unit state\n' >&2; exit 1; }
+unit_sub="$(systemctl show "${COMPOSE_UNIT}" -p SubState --value)" || { printf 'cannot inspect compose unit substate\n' >&2; exit 1; }
+unit_reload="$(systemctl show "${COMPOSE_UNIT}" -p NeedDaemonReload --value)" || { printf 'cannot inspect compose unit reload state\n' >&2; exit 1; }
+[[ "${unit_reload}" == "no" ]] || { printf 'compose unit requires daemon-reload before unfencing\n' >&2; exit 1; }
+case "${unit_active}|${unit_sub}" in
+  active\|exited|inactive\|dead) ;;
+  *) printf 'compose unit is transitioning during unfence\n' >&2; exit 1 ;;
+esac
 
 running="$(docker inspect -f '{{.State.Running}}' "${POSTGRES_CONTAINER}" 2>/dev/null || printf 'unknown')"
 restart_policy="$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "${POSTGRES_CONTAINER}" 2>/dev/null || printf 'unknown')"
@@ -132,6 +140,34 @@ remote_status="$(PGPASSFILE="${PGPASS_FILE}" PGSSLMODE=verify-full PGSSLROOTCERT
   }
 [[ "${remote_status}" == "f|off" ]] || { printf 'current endpoint is not a read/write primary\n' >&2; exit 1; }
 verify_local_standby || { printf 'local standby changed state during verification\n' >&2; exit 1; }
+
+restore_compose_lifecycle() {
+  local autoheal_running postgres_running autoheal_restart postgres_restart
+  docker update --restart=always "${POSTGRES_CONTAINER}" >/dev/null || return 1
+  docker update --restart=always "${AUTOHEAL_CONTAINER}" >/dev/null || return 1
+  autoheal_running="$(docker inspect -f '{{.State.Running}}' "${AUTOHEAL_CONTAINER}" 2>/dev/null || printf 'unknown')"
+  if [[ "${autoheal_running}" != "true" ]]; then
+    docker start "${AUTOHEAL_CONTAINER}" >/dev/null || return 1
+  fi
+  postgres_running="$(docker inspect -f '{{.State.Running}}' "${POSTGRES_CONTAINER}" 2>/dev/null || printf 'unknown')"
+  autoheal_running="$(docker inspect -f '{{.State.Running}}' "${AUTOHEAL_CONTAINER}" 2>/dev/null || printf 'unknown')"
+  postgres_restart="$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "${POSTGRES_CONTAINER}" 2>/dev/null || printf 'unknown')"
+  autoheal_restart="$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "${AUTOHEAL_CONTAINER}" 2>/dev/null || printf 'unknown')"
+  [[ "${postgres_running}" == "true" && "${autoheal_running}" == "true" \
+    && "${postgres_restart}" == "always" && "${autoheal_restart}" == "always" ]]
+}
+
+restore_failed_lifecycle_fence() {
+  docker update --restart=no "${AUTOHEAL_CONTAINER}" >/dev/null 2>&1 || true
+  docker update --restart=no "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
+  docker stop -t 15 "${AUTOHEAL_CONTAINER}" >/dev/null 2>&1 || true
+}
+
+if ! restore_compose_lifecycle || ! verify_local_standby; then
+  restore_failed_lifecycle_fence
+  printf 'could not restore the reseeded standby Compose lifecycle\n' >&2
+  exit 1
+fi
 
 rm -f -- "${FENCED_MARKER}"
 sync -f "${STATE_DIR}"
