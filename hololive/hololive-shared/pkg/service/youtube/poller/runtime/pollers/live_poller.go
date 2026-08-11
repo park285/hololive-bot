@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 

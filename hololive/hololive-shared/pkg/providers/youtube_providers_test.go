@@ -16,9 +16,9 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/kapu/hololive-shared/internal/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"

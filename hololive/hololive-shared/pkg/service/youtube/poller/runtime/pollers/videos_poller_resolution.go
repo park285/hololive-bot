@@ -27,7 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 
-	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 

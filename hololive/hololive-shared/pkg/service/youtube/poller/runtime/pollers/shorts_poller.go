@@ -26,13 +26,13 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/service/youtube/logschema"
-	yttimestamp "github.com/kapu/hololive-shared/internal/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 type ShortsPoller struct {

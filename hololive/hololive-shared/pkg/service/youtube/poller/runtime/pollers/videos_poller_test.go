@@ -10,10 +10,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
 // videosTabHTML: /videos 경로로 제공하는 최소 YouTube 응답 HTML

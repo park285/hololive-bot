@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/service/youtube/alarmtiming"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )

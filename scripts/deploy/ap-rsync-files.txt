@@ -520,7 +520,7 @@ hololive/hololive-shared/pkg/service/template/sql.go
 hololive/hololive-shared/pkg/service/twitch/client.go
 hololive/hololive-shared/pkg/service/twitch/client_streams.go
 hololive/hololive-shared/pkg/service/twitch/types.go
-hololive/hololive-shared/internal/service/youtube/alarmtiming/timing.go
+hololive/hololive-shared/pkg/service/youtube/alarmtiming/timing.go
 hololive/hololive-shared/internal/service/youtube/contentid/canonical.go
 hololive/hololive-shared/pkg/service/youtube/interfaces.go
 hololive/hololive-shared/pkg/service/youtube/admission/deferred.go
@@ -528,8 +528,8 @@ hololive/hololive-shared/internal/service/youtube/apiservice/interfaces.go
 hololive/hololive-shared/internal/service/youtube/apiservice/service.go
 hololive/hololive-shared/internal/service/youtube/apiservice/service_channel_statistics.go
 hololive/hololive-shared/internal/service/youtube/apiservice/service_read.go
-hololive/hololive-shared/internal/service/youtube/livestatus/deferred.go
-hololive/hololive-shared/internal/service/youtube/logschema/community_shorts_alarm.go
+hololive/hololive-shared/pkg/service/youtube/livestatus/deferred.go
+hololive/hololive-shared/pkg/service/youtube/logschema/community_shorts_alarm.go
 hololive/hololive-shared/pkg/service/youtube/outbox/analytics/channel_summary.go
 hololive/hololive-shared/pkg/service/youtube/outbox/analytics/helpers.go
 hololive/hololive-shared/pkg/service/youtube/outbox/analytics/latency_period.go
@@ -660,9 +660,9 @@ hololive/hololive-shared/pkg/service/youtube/scraper/scraping/structure_alerts.g
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/upcoming_parser.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/videos.go
 hololive/hololive-shared/pkg/service/youtube/scraper/scraping/videos_rss.go
-hololive/hololive-shared/internal/service/youtube/scraper/ua/provider.go
+hololive/hololive-shared/pkg/service/youtube/scraper/ua/provider.go
 hololive/hololive-shared/pkg/service/youtube/service.go
-hololive/hololive-shared/internal/service/youtube/timestamp/canonical.go
+hololive/hololive-shared/pkg/service/youtube/timestamp/canonical.go
 hololive/hololive-shared/pkg/service/youtube/tracking/observation/alarm_state_repository.go
 hololive/hololive-shared/pkg/service/youtube/tracking/observation/alarm_state_repository_claim.go
 hololive/hololive-shared/pkg/service/youtube/tracking/observation/alarm_state_repository_upsert.go
