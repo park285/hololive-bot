@@ -5,6 +5,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# mktemp -d 는 0700 을 강제하지만 그 아래 mkdir 은 호출자 umask 를 상속한다. umask 002 인
+# 셸에서는 fake psql 의 bin 디렉터리가 group-writable 로 생겨, 컨트롤러의 trusted-path 가드가
+# reason=trusted_path_group_or_world_writable 로 fail-closed 하며 10 개 케이스가 거짓 실패한다.
+# 가드는 옳으므로 픽스처를 production 과 같은 권한으로 만든다. 가드 발동을 검증하는 케이스는
+# 명시적 chmod 0777 을 쓰므로 이 값에 영향받지 않는다.
+umask 022
 TMP_DIR="$(mktemp -d /tmp/postgres-failover-test.XXXXXX)"
 SYSTEM_CREDENTIAL_TEST_ROOT=""
 cleanup_postgres_failover_fixture() {
