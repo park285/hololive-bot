@@ -2,6 +2,7 @@ package holodexprovider
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -32,9 +33,19 @@ func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan *streamF
 		return state.streams(), nil
 	}
 
-	cacheStreamsByOrg(ctx, plan, state.streams())
+	streams := state.streams()
+	if primary.AllFailed() && len(streams) == 0 {
+		if err != nil {
+			return nil, fmt.Errorf("get %s: primary and scraper fallback failed: %w", plan.operation, err)
+		}
+		if secondary.Result.Successes == 0 {
+			return nil, fmt.Errorf("get %s: primary failed and scraper fallback did not succeed (outcome=%s)", plan.operation, secondary.Outcome)
+		}
+	}
 
-	return state.streams(), nil
+	cacheStreamsByOrg(ctx, plan, streams)
+
+	return streams, nil
 }
 
 func newStreamFetchState() *streamFetchState {

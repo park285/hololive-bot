@@ -3,6 +3,9 @@ package holodexprovider
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -118,6 +121,56 @@ func TestGetLiveStreamsByOrg_CapsProviderResults(t *testing.T) {
 	}
 	if len(streams) != 50 {
 		t.Fatalf("len(streams) = %d, want 50", len(streams))
+	}
+}
+
+func TestGetLiveStreamsByOrg_ReturnsErrorAndSkipsCacheWhenAllSourcesFail(t *testing.T) {
+	t.Parallel()
+
+	primaryErr := fmt.Errorf("holodex unavailable")
+	requester := &MockRequester{
+		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
+			return nil, primaryErr
+		},
+	}
+	scraperServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "scraper unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(scraperServer.Close)
+	scraperService := newScraperServiceForTest(scraperServer.Client(), slog.Default(), scraperServer.URL, nil)
+	service := newServiceForFallbackTestWithScraper(requester, scraperService)
+
+	streams, err := service.GetLiveStreamsByOrg(context.Background(), constants.HolodexAPIParams.OrgHololive)
+	if err == nil {
+		t.Fatal("GetLiveStreamsByOrg() error = nil, want non-nil when all sources fail")
+	}
+	if len(streams) != 0 {
+		t.Fatalf("GetLiveStreamsByOrg() len = %d, want 0", len(streams))
+	}
+	if _, found := service.cacheManager.GetLiveStreamsByOrg(context.Background(), constants.HolodexAPIParams.OrgHololive); found {
+		t.Fatal("all-source failure must not cache an empty stream result")
+	}
+}
+
+func TestGetLiveStreamsByOrg_ReturnsErrorWhenPrimaryFailsWithoutScraper(t *testing.T) {
+	t.Parallel()
+
+	requester := &MockRequester{
+		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
+			return nil, fmt.Errorf("holodex unavailable")
+		},
+	}
+	service := newServiceForFallbackTest(requester)
+
+	streams, err := service.GetLiveStreamsByOrg(context.Background(), constants.HolodexAPIParams.OrgHololive)
+	if err == nil {
+		t.Fatal("GetLiveStreamsByOrg() error = nil, want non-nil when primary fails without scraper")
+	}
+	if len(streams) != 0 {
+		t.Fatalf("GetLiveStreamsByOrg() len = %d, want 0", len(streams))
+	}
+	if _, found := service.cacheManager.GetLiveStreamsByOrg(context.Background(), constants.HolodexAPIParams.OrgHololive); found {
+		t.Fatal("primary failure without scraper must not cache an empty stream result")
 	}
 }
 
