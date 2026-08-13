@@ -148,12 +148,23 @@ func (r *Runtime) Run() error {
 func (r *Runtime) Close() {
 	// statsHub는 endpointSampler를 공유하므로, 먼저 멈추지 않으면 hub의 다음 tick이 이미
 	// 닫힌 transport로 샘플링해 구독 중인 대시보드에 거짓 DOWN을 방송한다.
+	r.stopBackgroundServices()
+	r.closeRemoteClients()
+	if r.sessions != nil {
+		r.sessions.Close()
+	}
+}
+
+func (r *Runtime) stopBackgroundServices() {
 	if r.rateLimiter != nil {
 		r.rateLimiter.Stop()
 	}
 	if r.statsHub != nil {
 		r.statsHub.Stop()
 	}
+}
+
+func (r *Runtime) closeRemoteClients() {
 	if r.holo != nil {
 		if err := r.holo.Close(); err != nil {
 			r.logger.Warn("close holo admin client", slog.Any("error", err))
@@ -163,9 +174,6 @@ func (r *Runtime) Close() {
 		if err := r.endpointSampler.Close(); err != nil {
 			r.logger.Warn("close status endpoint sampler", slog.Any("error", err))
 		}
-	}
-	if r.sessions != nil {
-		r.sessions.Close()
 	}
 }
 

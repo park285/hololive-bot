@@ -170,17 +170,21 @@ func (s *Service) resetRoomMaps() {
 
 func (s *Service) populateRoomsFromRecords(rooms []Room) {
 	for _, room := range rooms {
-		roomID := stringutil.TrimSpace(room.RoomID)
-		if roomID == "" {
-			continue
-		}
+		s.populateRoomFromRecord(room)
+	}
+}
 
-		switch room.ListType {
-		case listTypeBlacklist:
-			s.blacklistRooms[roomID] = struct{}{}
-		case listTypeWhitelist:
-			s.whitelistRooms[roomID] = struct{}{}
-		}
+func (s *Service) populateRoomFromRecord(room Room) {
+	roomID := stringutil.TrimSpace(room.RoomID)
+	if roomID == "" {
+		return
+	}
+
+	switch room.ListType {
+	case listTypeBlacklist:
+		s.blacklistRooms[roomID] = struct{}{}
+	case listTypeWhitelist:
+		s.whitelistRooms[roomID] = struct{}{}
 	}
 }
 

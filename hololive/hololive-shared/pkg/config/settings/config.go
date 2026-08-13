@@ -128,16 +128,12 @@ func buildConfig(
 	}
 
 	return &Config{
-		Iris:    irisConfig,
-		Server:  loadServerConfig(),
-		Kakao:   kakaoConfig,
-		Holodex: loadHolodexConfig(),
-		YouTube: loadYouTubeConfig(),
-		Ingestion: IngestionConfig{
-			YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
-			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
-			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
-		},
+		Iris:                   irisConfig,
+		Server:                 loadServerConfig(),
+		Kakao:                  kakaoConfig,
+		Holodex:                loadHolodexConfig(),
+		YouTube:                loadYouTubeConfig(),
+		Ingestion:              loadIngestionConfig(communityShortsBigBangCutoverAt),
 		Valkey:                 loadValkeyConfig(),
 		Postgres:               loadPostgresConfig(),
 		Notification:           loadNotificationConfig(),
@@ -168,6 +164,14 @@ func buildConfig(
 		CORS:                 loadCORSConfig(corsAllowedOrigins, corsMissingInProduction, options),
 		Version:              sharedenv.String("APP_VERSION", "1.1.0-go"),
 	}, nil
+}
+
+func loadIngestionConfig(communityShortsBigBangCutoverAt time.Time) IngestionConfig {
+	return IngestionConfig{
+		YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
+		PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
+		CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
+	}
 }
 
 func loadCORSConfig(
