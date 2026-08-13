@@ -128,13 +128,9 @@ func buildConfig(
 	}
 
 	return &Config{
-		Iris:   irisConfig,
-		Server: loadServerConfig(),
-		Kakao: KakaoConfig{
-			Rooms:      kakaoConfig.Rooms,
-			ACLEnabled: kakaoConfig.ACLEnabled,
-			ACLMode:    kakaoConfig.ACLMode,
-		},
+		Iris:                   irisConfig,
+		Server:                 loadServerConfig(),
+		Kakao:                  newKakaoConfig(kakaoConfig.Rooms, kakaoConfig.ACLEnabled, kakaoConfig.ACLMode),
 		Holodex:                loadHolodexConfig(),
 		YouTube:                loadYouTubeConfig(),
 		Ingestion:              loadIngestionConfig(communityShortsBigBangCutoverAt),
@@ -168,6 +164,10 @@ func buildConfig(
 		CORS:                 loadCORSConfig(corsAllowedOrigins, corsMissingInProduction, options),
 		Version:              sharedenv.String("APP_VERSION", "1.1.0-go"),
 	}, nil
+}
+
+func newKakaoConfig(rooms []string, enabled bool, mode string) KakaoConfig {
+	return KakaoConfig{Rooms: rooms, ACLEnabled: enabled, ACLMode: mode}
 }
 
 func loadIngestionConfig(communityShortsBigBangCutoverAt time.Time) IngestionConfig {
