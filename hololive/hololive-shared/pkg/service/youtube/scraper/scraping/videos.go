@@ -2,6 +2,7 @@ package scraping
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -77,7 +78,11 @@ func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResul
 		c.markVideoRSSBackoff(ctx, channelID)
 	}
 
-	if rssVideos, recovered := c.getRecentVideosFromRSSFallback(ctx, channelID, maxResults, videos); recovered {
+	rssVideos, recovered, rssErr := c.getRecentVideosFromRSSFallback(ctx, channelID, maxResults)
+	if rssErr != nil {
+		return nil, fmt.Errorf("get recent videos: html page and rss fallback failed: %w", errors.Join(err, rssErr))
+	}
+	if recovered {
 		return rssVideos, nil
 	}
 
@@ -106,22 +111,22 @@ func (c *Client) getRecentVideosFromRSSBackoff(ctx context.Context, channelID st
 	return nil, false
 }
 
-func (c *Client) getRecentVideosFromRSSFallback(ctx context.Context, channelID string, maxResults int, pageVideos []*parser.Video) ([]*parser.Video, bool) {
+func (c *Client) getRecentVideosFromRSSFallback(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, bool, error) {
 	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults, RSSFetchPolicy)
 	if rssErr != nil {
 		slog.Debug("recent videos rss fallback failed",
 			"channel_id", channelID,
 			"error", rssErr.Error())
-		return pageVideos, true
+		return nil, false, rssErr
 	}
 	if len(rssVideos) == 0 {
-		return nil, false
+		return nil, false, nil
 	}
 
 	logStructureWarning("recent_videos", channelID, "html parser recovered via rss fallback",
 		"channel_id", channelID,
 		"count", len(rssVideos))
-	return rssVideos, true
+	return rssVideos, true, nil
 }
 
 func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID string, maxResults int) ([]*parser.Video, error) {
