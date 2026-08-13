@@ -314,7 +314,7 @@ recover_or_handle_promoted_primary() {
         journal "route_retry_would_run" "new_primary=${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}"
         return 0
       fi
-      if run_route_hook; then
+      if verify_old_primary_not_writable "route_retry" && run_route_hook; then
         write_promoted_marker "complete" || die "promoted_marker_write_failed" "route_state=complete"
         PROMOTION_STATE="promoted"
         write_state

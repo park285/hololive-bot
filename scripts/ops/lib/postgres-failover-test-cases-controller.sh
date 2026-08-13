@@ -346,6 +346,22 @@ route_failure_is_persisted_and_retried_without_repromotion() {
   [[ "$(grep -Fc 'pg_promote' "${root}/psql.log")" == "1" ]] || { cat "${root}/psql.log" >&2; fail "route retry issued another promotion"; return; }
   pass "route failure retries without a second promotion"
 }
+writable_old_primary_blocks_route_retry() {
+  local root; root="$(setup_case route-retry-writable)"
+  seed_ready_state "${root}"
+  if FAKE_ROUTE_OUTPUT='INVALID|100.100.1.5:5434|wrong-token' run_controller "${root}" --apply 'down,down'; then
+    fail "invalid route acknowledgement unexpectedly completed promotion"
+    return
+  fi
+  grep -Fq 'route_state=pending' "${root}/state/promoted" || { cat "${root}/state/promoted" >&2; fail "route failure was not durably marked pending"; return; }
+  if run_controller "${root}" --apply up; then
+    fail "route retry advertised the VIP while the old primary still accepted writes"
+    return
+  fi
+  grep -Fq 'reason=old_primary_writable_route_retry' "${root}/err.log" || { cat "${root}/err.log" >&2; fail "missing route-retry writable-primary guard"; return; }
+  grep -Fq 'route_state=pending' "${root}/state/promoted" || { cat "${root}/state/promoted" >&2; fail "blocked route retry must leave the route pending"; return; }
+  pass "route retry re-verifies the old primary before advertising the VIP"
+}
 stale_observation_blocks_promotion() {
   local root; root="$(setup_case stale)"
   seed_ready_state "${root}" 1 1 1
