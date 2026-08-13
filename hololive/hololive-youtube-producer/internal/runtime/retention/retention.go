@@ -25,8 +25,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
@@ -134,11 +136,18 @@ type viewerSampleCleaner interface {
 	Cleanup(ctx context.Context) (int64, error)
 }
 
+type batchExecutor interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
 type Cleaner struct {
 	pool          *pgxpool.Pool
 	config        Config
 	logger        *slog.Logger
 	viewerCleaner viewerSampleCleaner
+
+	cursorMu     sync.Mutex
+	targetCursor int
 }
 
 func NewCleaner(pool *pgxpool.Pool, config Config, logger *slog.Logger) *Cleaner {
@@ -233,25 +242,39 @@ func (c *Cleaner) targets() []target {
 	}
 }
 
-func (c *Cleaner) cleanupTargets(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
+func (c *Cleaner) cleanupTargets(ctx context.Context, conn batchExecutor) (int64, error) {
 	batchSize := c.config.effectiveBatchSize()
 	remainingBatches := c.config.effectiveMaxBatches()
+	targets := c.targets()
+	start := c.nextTargetStart(len(targets))
 	var total int64
-	for _, t := range c.targets() {
+	for i := range targets {
+		t := targets[(start+i)%len(targets)]
 		deleted, exhausted, err := c.cleanupTarget(ctx, conn, t, batchSize, &remainingBatches)
 		total += deleted
 		if err != nil {
 			return total, fmt.Errorf("cleanup %s: %w", t.name, err)
 		}
 		if exhausted {
-			c.logBudgetExhausted(t.name, total)
+			c.logBudgetExhausted(t.name, deleted)
 			return total, nil
 		}
 	}
 	return total, nil
 }
 
-func (c *Cleaner) cleanupTarget(ctx context.Context, conn *pgxpool.Conn, t target, batchSize int, remainingBatches *int) (deleted int64, exhausted bool, err error) {
+func (c *Cleaner) nextTargetStart(count int) int {
+	if count <= 0 {
+		return 0
+	}
+	c.cursorMu.Lock()
+	defer c.cursorMu.Unlock()
+	start := c.targetCursor % count
+	c.targetCursor = (start + 1) % count
+	return start
+}
+
+func (c *Cleaner) cleanupTarget(ctx context.Context, conn batchExecutor, t target, batchSize int, remainingBatches *int) (deleted int64, exhausted bool, err error) {
 	if t.retentionDays <= 0 {
 		return 0, false, nil
 	}
@@ -266,7 +289,7 @@ func (c *Cleaner) cleanupTarget(ctx context.Context, conn *pgxpool.Conn, t targe
 	return deleted, exhausted, nil
 }
 
-func deleteBatches(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int, remainingBatches *int, statementTimeout time.Duration) (deleted int64, exhausted bool, err error) {
+func deleteBatches(ctx context.Context, conn batchExecutor, deleteSQL string, cutoff time.Time, batchSize int, remainingBatches *int, statementTimeout time.Duration) (deleted int64, exhausted bool, err error) {
 	var total int64
 	for {
 		if *remainingBatches <= 0 {
@@ -287,7 +310,7 @@ func deleteBatchesDone(rows int64, batchSize int, exhausted bool) bool {
 	return exhausted || rows < int64(batchSize)
 }
 
-func deleteBatch(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int, remainingBatches *int, statementTimeout time.Duration) (deleted int64, exhausted bool, err error) {
+func deleteBatch(ctx context.Context, conn batchExecutor, deleteSQL string, cutoff time.Time, batchSize int, remainingBatches *int, statementTimeout time.Duration) (deleted int64, exhausted bool, err error) {
 	rows, err := deleteOneBatch(ctx, conn, deleteSQL, cutoff, batchSize, statementTimeout)
 	(*remainingBatches)--
 	if err != nil {
@@ -305,7 +328,7 @@ func deleteBatch(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cuto
 	return rows, false, nil
 }
 
-func deleteOneBatch(ctx context.Context, conn *pgxpool.Conn, deleteSQL string, cutoff time.Time, batchSize int, statementTimeout time.Duration) (int64, error) {
+func deleteOneBatch(ctx context.Context, conn batchExecutor, deleteSQL string, cutoff time.Time, batchSize int, statementTimeout time.Duration) (int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
