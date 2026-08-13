@@ -80,6 +80,14 @@ func newHoloHTTPClient(baseURL string) (*http.Client, error) {
 	return internalhttp.NewClientForURLStrict(baseURL, holoClientTimeout, nil)
 }
 
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+
+	return internalhttp.CloseClient(c.http)
+}
+
 const maxProxyBodyBytes = 8 << 20
 
 func (c *Client) Proxy(ctx context.Context, method, path string, query url.Values, body []byte) (ProxyResponse, error) {

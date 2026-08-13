@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
@@ -19,13 +20,18 @@ func buildAdminAPIACLService(
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*acl.Service, error) {
+	defaultMode, err := acl.ParseACLModeStrict(appConfig.Kakao.ACLMode)
+	if err != nil {
+		return nil, fmt.Errorf("invalid KAKAO_ACL_MODE: %w", err)
+	}
+
 	return acl.NewACLService(
 		ctx,
 		infra.Postgres,
 		infra.Cache,
 		logger,
 		appConfig.Kakao.ACLEnabled,
-		acl.ParseACLMode(appConfig.Kakao.ACLMode),
+		defaultMode,
 		appConfig.Kakao.Rooms,
 	)
 }

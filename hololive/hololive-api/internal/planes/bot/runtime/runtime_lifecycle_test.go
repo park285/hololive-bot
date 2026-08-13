@@ -203,8 +203,8 @@ func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("Run() error = %v", err)
+		if err == nil || !strings.Contains(err.Error(), "HTTP/3 server error") {
+			t.Fatalf("unexpected Run() error: %v", err)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("Run() did not exit on server error")

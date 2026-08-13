@@ -58,6 +58,21 @@ func TestInitCoreIntegrationServicesReturnsACLInitializationError(t *testing.T) 
 	assert.ErrorContains(t, err, "postgres service is nil")
 }
 
+func TestInitCoreIntegrationServicesRejectsInvalidACLMode(t *testing.T) {
+	t.Parallel()
+
+	services, err := InitCoreIntegrationServices(
+		context.Background(),
+		&settings.Config{Kakao: settings.KakaoConfig{ACLMode: "not-a-mode"}},
+		&sharedmodules.InfraModule{},
+		slog.New(slog.DiscardHandler),
+	)
+
+	require.Nil(t, services)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "invalid KAKAO_ACL_MODE")
+}
+
 func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 	t.Parallel()
 

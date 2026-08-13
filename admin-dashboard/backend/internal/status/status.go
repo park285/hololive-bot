@@ -2,6 +2,7 @@ package status
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -43,6 +44,18 @@ func endpointClients(endpoints []ServiceEndpoint, timeout time.Duration) map[str
 	return clients
 }
 
+func closeEndpointClients(clients map[string]endpointClient) error {
+	var errs []error
+
+	for name, entry := range clients {
+		if err := internalhttp.CloseClient(entry.client); err != nil {
+			errs = append(errs, fmt.Errorf("close status endpoint %s: %w", name, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
 type ServiceStatus struct {
 	Name           string  `json:"name"`
 	Available      bool    `json:"available"`
@@ -58,13 +71,17 @@ type AggregatedStatus struct {
 }
 
 type Collector struct {
-	sampler *Sampler
-	start   time.Time
-	version string
+	sampler     *Sampler
+	ownsSampler bool
+	start       time.Time
+	version     string
 }
 
 func NewCollector(endpoints []ServiceEndpoint, version string) *Collector {
-	return NewCollectorWithSampler(NewSampler(endpoints), version)
+	collector := NewCollectorWithSampler(NewSampler(endpoints), version)
+	collector.ownsSampler = true
+
+	return collector
 }
 
 func NewCollectorWithSampler(sampler *Sampler, version string) *Collector {
@@ -73,6 +90,15 @@ func NewCollectorWithSampler(sampler *Sampler, version string) *Collector {
 		start:   time.Now(),
 		version: version,
 	}
+}
+
+// 넘겨받은 sampler는 호출자가 다른 소비자와 공유할 수 있으므로 여기서 닫지 않는다.
+func (c *Collector) Close() error {
+	if c == nil || !c.ownsSampler {
+		return nil
+	}
+
+	return c.sampler.Close()
 }
 
 func (c *Collector) Collect(ctx context.Context) AggregatedStatus {

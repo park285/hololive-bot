@@ -36,7 +36,8 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 		},
 	}
 
-	services, err := appbootstrap.InitCoreIntegrationServices(t.Context(), &settings.Config{}, infra, logger)
+	config := &settings.Config{Kakao: settings.KakaoConfig{ACLMode: "whitelist"}}
+	services, err := appbootstrap.InitCoreIntegrationServices(t.Context(), config, infra, logger)
 	require.NoError(t, err)
 	require.NotNil(t, services)
 	assert.NotNil(t, services.CommandBuilders)
@@ -60,7 +61,8 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 		},
 	}
 
-	integrationServices, err := appbootstrap.InitCoreIntegrationServices(t.Context(), &settings.Config{}, infra, logger)
+	config := &settings.Config{Kakao: settings.KakaoConfig{ACLMode: "whitelist"}}
+	integrationServices, err := appbootstrap.InitCoreIntegrationServices(t.Context(), config, infra, logger)
 	require.NoError(t, err)
 
 	modules := buildBotDependencyModules(

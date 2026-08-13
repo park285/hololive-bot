@@ -29,6 +29,9 @@ type Sampler struct {
 
 	mu     sync.Mutex
 	cached endpointSnapshot
+
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func NewSampler(endpoints []ServiceEndpoint) *Sampler {
@@ -38,6 +41,18 @@ func NewSampler(endpoints []ServiceEndpoint) *Sampler {
 		ttl:       defaultEndpointSampleTTL,
 		now:       time.Now,
 	}
+}
+
+func (s *Sampler) Close() error {
+	if s == nil {
+		return nil
+	}
+
+	s.closeOnce.Do(func() {
+		s.closeErr = closeEndpointClients(s.clients)
+	})
+
+	return s.closeErr
 }
 
 func (s *Sampler) sample(ctx context.Context) endpointSnapshot {

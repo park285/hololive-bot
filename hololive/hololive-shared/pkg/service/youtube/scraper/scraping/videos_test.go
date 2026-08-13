@@ -464,3 +464,49 @@ func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&videosPageCalls))
 	assert.Equal(t, int32(0), atomic.LoadInt32(&rssCalls))
 }
+
+func TestGetRecentVideos_ReturnsErrorWhenHTMLAndRSSFail(t *testing.T) {
+	var videosPageCalls int32
+	var rssCalls int32
+
+	client := NewClient(
+		WithRateLimiter(ratelimiter.New(0)),
+		WithHTTPClient(&http.Client{
+			Timeout: 5 * time.Second,
+			Transport: videosRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				var body string
+				switch {
+				case strings.HasSuffix(req.URL.Path, "/videos"):
+					atomic.AddInt32(&videosPageCalls, 1)
+					body = "<html><body>missing initial data</body></html>"
+				case strings.HasSuffix(req.URL.Path, "/feeds/videos.xml"):
+					atomic.AddInt32(&rssCalls, 1)
+					body = "<feed><entry"
+				default:
+					return &http.Response{
+						StatusCode: http.StatusNotFound,
+						Body:       io.NopCloser(strings.NewReader("not found")),
+						Header:     make(http.Header),
+						Request:    req,
+					}, nil
+				}
+
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Header:     make(http.Header),
+					Request:    req,
+				}, nil
+			}),
+		}),
+	)
+
+	videos, err := client.GetRecentVideos(context.Background(), "UC_TEST", 10)
+	require.Error(t, err)
+	require.Nil(t, videos)
+	require.True(t, errors.Is(err, parser.ErrParserDrift))
+	assert.Contains(t, err.Error(), "recent_videos parser drift at extract_yt_initial_data")
+	assert.Contains(t, err.Error(), "recent_videos_rss parser drift at parse_rss_feed")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&videosPageCalls))
+	assert.Equal(t, int32(1), atomic.LoadInt32(&rssCalls))
+}

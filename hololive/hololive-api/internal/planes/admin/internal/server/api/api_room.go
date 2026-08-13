@@ -260,25 +260,52 @@ func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
 
 func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 	ctx := c.Request.Context()
-	if req.Enabled != nil {
-		if err := h.acl.SetEnabled(ctx, *req.Enabled); err != nil {
-			h.safeLogger().Error("Failed to set ACL enabled", slog.Bool("enabled", *req.Enabled), slog.Any("error", err))
-			sharedserver.RespondError(c, 500, "Failed to set ACL enabled", nil)
-
-			return false
-		}
+	mode, ok := h.parseACLMode(c, req.Mode)
+	if !ok {
+		return false
 	}
 
-	if req.Mode != nil {
-		mode := acl.ParseACLMode(*req.Mode)
-		if err := h.acl.SetMode(ctx, mode); err != nil {
-			h.safeLogger().Error("Failed to set ACL mode", slog.String("mode", *req.Mode), slog.Any("error", err))
-			sharedserver.RespondError(c, 500, "Failed to set ACL mode", nil)
+	if !h.setACLEnabled(c, ctx, req.Enabled) {
+		return false
+	}
+	return h.setACLMode(c, ctx, req.Mode, mode)
+}
 
-			return false
-		}
+func (h *RoomHandler) parseACLMode(c *gin.Context, rawMode *string) (acl.ACLMode, bool) {
+	if rawMode == nil {
+		return "", true
 	}
 
+	mode, err := acl.ParseACLModeStrict(*rawMode)
+	if err != nil {
+		h.safeLogger().Warn("Invalid ACL mode", slog.String("mode", *rawMode), slog.Any("error", err))
+		sharedserver.RespondError(c, 400, "invalid ACL mode", nil)
+		return "", false
+	}
+	return mode, true
+}
+
+func (h *RoomHandler) setACLEnabled(c *gin.Context, ctx context.Context, enabled *bool) bool {
+	if enabled == nil {
+		return true
+	}
+	if err := h.acl.SetEnabled(ctx, *enabled); err != nil {
+		h.safeLogger().Error("Failed to set ACL enabled", slog.Bool("enabled", *enabled), slog.Any("error", err))
+		sharedserver.RespondError(c, 500, "Failed to set ACL enabled", nil)
+		return false
+	}
+	return true
+}
+
+func (h *RoomHandler) setACLMode(c *gin.Context, ctx context.Context, rawMode *string, mode acl.ACLMode) bool {
+	if rawMode == nil {
+		return true
+	}
+	if err := h.acl.SetMode(ctx, mode); err != nil {
+		h.safeLogger().Error("Failed to set ACL mode", slog.String("mode", *rawMode), slog.Any("error", err))
+		sharedserver.RespondError(c, 500, "Failed to set ACL mode", nil)
+		return false
+	}
 	return true
 }
 

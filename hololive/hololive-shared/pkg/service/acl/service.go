@@ -48,6 +48,11 @@ func ParseACLMode(s string) ACLMode {
 	}
 }
 
+// ParseACLModeStrict는 invalid 값을 whitelist 기본값으로 바꾸지 않는 검증 경계용 parser다.
+func ParseACLModeStrict(s string) (ACLMode, error) {
+	return parseACLModeStrict(s)
+}
+
 func normalizeACLModeStrict(mode ACLMode) (ACLMode, error) {
 	switch mode {
 	case ACLModeWhitelist, ACLModeBlacklist:
@@ -66,6 +71,17 @@ func parseACLModeStrict(s string) (ACLMode, error) {
 		return ACLModeBlacklist, nil
 	default:
 		return "", fmt.Errorf("unsupported acl mode: %q", s)
+	}
+}
+
+func parseACLEnabledStrict(s string) (bool, error) {
+	switch stringutil.Normalize(s) {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("unsupported acl enabled value: %q", s)
 	}
 }
 
@@ -181,11 +197,7 @@ func NewACLService(
 
 	// 시작 시 로드 (PostgreSQL → 메모리/Valkey)
 	if err := service.loadFromDatabase(ctx, defaultEnabled, normalizedMode, normalizedRooms); err != nil {
-		logger.Warn("Failed to load ACL from database, using defaults", slog.Any("error", err))
-
-		service.enabled = defaultEnabled
-		service.mode = normalizedMode
-		service.addDefaultRooms(normalizedRooms)
+		return nil, fmt.Errorf("load ACL from database: %w", err)
 	}
 
 	logger.Info("ACL service initialized",
@@ -207,13 +219,6 @@ func aclStoreFromClient(postgres database.Client) (aclStore, error) {
 		return nil, fmt.Errorf("postgres pool is nil")
 	}
 	return newPgxACLStore(pool), nil
-}
-
-func (s *Service) addDefaultRooms(rooms []string) {
-	targetRooms := s.activeRoomsMap()
-	for _, r := range rooms {
-		targetRooms[r] = struct{}{}
-	}
 }
 
 // activeRoomsMap: 현재 활성 모드의 방 목록 맵을 반환한다 (잠금 없음, 호출자가 관리).

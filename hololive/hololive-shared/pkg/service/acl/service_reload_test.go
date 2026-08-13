@@ -177,3 +177,24 @@ func TestReloadRejectsUnparsableMode(t *testing.T) {
 		t.Fatal("failed reload must leave the previous room set intact")
 	}
 }
+
+func TestReloadRejectsUnparsableEnabledSetting(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeACLStore()
+	store.settings[dbKeyEnabled] = "not-a-bool"
+	store.settings[dbKeyMode] = "whitelist"
+
+	service := newReloadTestService(store, newReloadTestCache())
+	service.enabled = false
+	service.whitelistRooms["room-keep"] = struct{}{}
+
+	if err := service.Reload(t.Context()); err == nil {
+		t.Fatal("Reload must fail on an unparsable enabled setting")
+	}
+
+	enabled, _, _ := service.GetACLStatus()
+	if enabled {
+		t.Fatal("failed reload must leave ACL disabled state intact")
+	}
+}

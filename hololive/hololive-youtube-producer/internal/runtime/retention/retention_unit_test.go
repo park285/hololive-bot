@@ -21,9 +21,16 @@
 package retention
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,4 +79,71 @@ func TestConfigCleanupBudgetsAreBounded(t *testing.T) {
 	require.Equal(t, maxCleanupBatches, config.effectiveMaxBatches())
 	require.Equal(t, maxCleanupDuration, config.effectiveMaxDuration())
 	require.Equal(t, cleanupStatementTimeout, config.effectiveStatementTimeout())
+}
+
+type fakeBatchExecutor struct {
+	rowsPerExec int64
+	statements  []string
+}
+
+func (f *fakeBatchExecutor) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	f.statements = append(f.statements, sql)
+	return pgconn.NewCommandTag(fmt.Sprintf("DELETE %d", f.rowsPerExec)), nil
+}
+
+func TestCleanupTargetsRotatesStartAcrossTicks(t *testing.T) {
+	cleaner := NewCleaner(nil, Config{
+		ChannelSnapshotsDays: 30,
+		LiveSessionsDays:     30,
+		BatchSize:            1,
+		MaxBatches:           1,
+	}, nil)
+
+	firstTick := &fakeBatchExecutor{rowsPerExec: 1}
+	deleted, err := cleaner.cleanupTargets(t.Context(), firstTick)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+	require.Equal(t, []string{deleteChannelSnapshotsSQL}, firstTick.statements)
+
+	secondTick := &fakeBatchExecutor{rowsPerExec: 1}
+	deleted, err = cleaner.cleanupTargets(t.Context(), secondTick)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+	require.Equal(t, []string{deleteLiveSessionsSQL}, secondTick.statements)
+
+	thirdTick := &fakeBatchExecutor{rowsPerExec: 1}
+	_, err = cleaner.cleanupTargets(t.Context(), thirdTick)
+	require.NoError(t, err)
+	require.Equal(t, []string{deleteChannelSnapshotsSQL}, thirdTick.statements)
+}
+
+func TestCleanupTargetsBudgetExhaustedLogsStarvedTargetCount(t *testing.T) {
+	var logs bytes.Buffer
+	cleaner := NewCleaner(nil, Config{
+		ChannelSnapshotsDays: 30,
+		LiveSessionsDays:     30,
+		BatchSize:            2,
+		MaxBatches:           1,
+	}, slog.New(slog.NewJSONHandler(&logs, nil)))
+
+	deleted, err := cleaner.cleanupTargets(t.Context(), &fakeBatchExecutor{rowsPerExec: 1})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+
+	entry := findLogEntry(t, logs.String(), "Youtube retention cleanup budget exhausted")
+	require.Equal(t, "youtube_live_sessions", entry["table"])
+	require.EqualValues(t, 0, entry["deleted"])
+}
+
+func findLogEntry(t *testing.T, logOutput, msg string) map[string]any {
+	t.Helper()
+	for line := range strings.SplitSeq(strings.TrimSpace(logOutput), "\n") {
+		entry := map[string]any{}
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["msg"] == msg {
+			return entry
+		}
+	}
+	t.Fatalf("log entry %q not found in %q", msg, logOutput)
+	return nil
 }

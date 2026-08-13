@@ -56,6 +56,7 @@ type Runtime struct {
 	docker          *docker.Client
 	holo            *holo.Client
 	statusCollector *status.Collector
+	endpointSampler *status.Sampler
 	statsHub        *status.Hub
 	static          static.Handler
 	wsStreams       chan struct{}
@@ -103,6 +104,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		docker:          dockerClient,
 		holo:            holoClient,
 		statusCollector: status.NewCollectorWithSampler(endpointSampler, cfg.RuntimeVersion),
+		endpointSampler: endpointSampler,
 		statsHub:        statsHub,
 		static:          static.NewHandler(),
 		wsStreams:       make(chan struct{}, maxSystemStatsStreams),
@@ -144,14 +146,34 @@ func (r *Runtime) Run() error {
 }
 
 func (r *Runtime) Close() {
+	// statsHub는 endpointSampler를 공유하므로, 먼저 멈추지 않으면 hub의 다음 tick이 이미
+	// 닫힌 transport로 샘플링해 구독 중인 대시보드에 거짓 DOWN을 방송한다.
+	r.stopBackgroundServices()
+	r.closeRemoteClients()
+	if r.sessions != nil {
+		r.sessions.Close()
+	}
+}
+
+func (r *Runtime) stopBackgroundServices() {
 	if r.rateLimiter != nil {
 		r.rateLimiter.Stop()
 	}
 	if r.statsHub != nil {
 		r.statsHub.Stop()
 	}
-	if r.sessions != nil {
-		r.sessions.Close()
+}
+
+func (r *Runtime) closeRemoteClients() {
+	if r.holo != nil {
+		if err := r.holo.Close(); err != nil {
+			r.logger.Warn("close holo admin client", slog.Any("error", err))
+		}
+	}
+	if r.endpointSampler != nil {
+		if err := r.endpointSampler.Close(); err != nil {
+			r.logger.Warn("close status endpoint sampler", slog.Any("error", err))
+		}
 	}
 }
 

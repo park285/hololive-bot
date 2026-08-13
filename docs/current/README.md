@@ -22,6 +22,7 @@
 ## Contracts
 
 - `contracts/README.md`
+- `contracts/schedule-hololive-tv-api.md` - observed external schedule API usage map and reference
 - `contracts/membernews.md`
 - `contracts/majorevent.md`
 - `contracts/trigger.md`

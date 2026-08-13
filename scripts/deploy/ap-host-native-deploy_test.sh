@@ -86,6 +86,14 @@ else
   record_fail "ap-host-native deploy must seal rollback checksums before publishing previous or installing the new contract"
 fi
 
+status_line="$(grep -nF 'CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$AP_NAME"' "${DEPLOY}" | tail -1 | cut -d: -f1)"
+completion_line="$(grep -nF 'CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"' "${DEPLOY}" | tail -1 | cut -d: -f1)"
+if [[ -n "${status_line}" && -n "${completion_line}" ]] && (( status_line < completion_line )); then
+  pass "ap-host-native deploy runs the shared completion gate after status inspection"
+else
+  record_fail "ap-host-native deploy must forward change_started_at to the completion gate after status inspection"
+fi
+
 tmp="$(mktemp -d)"
 cleanup() {
   rm -rf "${tmp}"

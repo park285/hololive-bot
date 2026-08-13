@@ -328,6 +328,33 @@ func TestNewACLService_ExistingDBStateWins(t *testing.T) {
 	}
 }
 
+func TestNewACLService_ReturnsInvalidDatabaseStateError(t *testing.T) {
+	t.Parallel()
+
+	pool, cacheMock, _ := newACLServiceWithPgx(t)
+	mustCreateACLSetting(t, pool, dbKeyEnabled, "not-a-bool")
+
+	dbClient := &dbmocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
+	service, err := NewACLService(
+		t.Context(),
+		dbClient,
+		cacheMock,
+		slog.New(slog.DiscardHandler),
+		true,
+		ACLModeWhitelist,
+		[]string{"default-room"},
+	)
+	if service != nil {
+		t.Fatal("NewACLService returned a service for invalid database state")
+	}
+	if err == nil {
+		t.Fatal("NewACLService error = nil, want invalid database state error")
+	}
+	if !strings.Contains(err.Error(), "invalid ACL enabled setting") {
+		t.Fatalf("NewACLService error = %v, want invalid enabled setting", err)
+	}
+}
+
 func TestACLService_SetEnabledAddRemoveRoom(t *testing.T) {
 	pool, cacheMock, calls := newACLServiceWithPgx(t)
 	service := newACLServiceFromPool(t, pool, cacheMock, false, nil)
@@ -1121,6 +1148,60 @@ func TestACLService_LoadFromDatabase_ReturnsInitCreateError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			runACLLoadFromDatabaseInitCreateErrorCase(t, tc)
+		})
+	}
+}
+
+func TestACLService_LoadFromDatabase_RejectsInvalidStoredValues(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		setup     func(*fakeACLStore)
+		wantError string
+	}{
+		{
+			name: "enabled",
+			setup: func(store *fakeACLStore) {
+				store.settings[dbKeyEnabled] = "not-a-bool"
+				store.settings[dbKeyMode] = string(ACLModeWhitelist)
+			},
+			wantError: "invalid ACL enabled setting",
+		},
+		{
+			name: "mode",
+			setup: func(store *fakeACLStore) {
+				store.settings[dbKeyEnabled] = "true"
+				store.settings[dbKeyMode] = "not-a-mode"
+			},
+			wantError: "unsupported acl mode",
+		},
+		{
+			name: "list type",
+			setup: func(store *fakeACLStore) {
+				store.settings[dbKeyEnabled] = "true"
+				store.settings[dbKeyMode] = string(ACLModeWhitelist)
+				store.rooms[roomKey{roomID: "room-a", listType: "not-a-list"}] = struct{}{}
+			},
+			wantError: "invalid ACL room",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			store := newFakeACLStore()
+			tc.setup(store)
+			service := newACLServiceFromFakeStore(t, store, newACLRoomSetStatefulCacheForLoad(), true)
+
+			err := service.loadFromDatabase(t.Context(), true, ACLModeWhitelist, []string{"default-room"})
+			if err == nil {
+				t.Fatal("loadFromDatabase error = nil, want invalid stored value error")
+			}
+			if !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("loadFromDatabase error = %v, want %q", err, tc.wantError)
+			}
 		})
 	}
 }

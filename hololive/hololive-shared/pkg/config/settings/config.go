@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -121,18 +122,18 @@ func buildConfig(
 	if err != nil {
 		return nil, fmt.Errorf("load tracing config: %w", err)
 	}
+	kakaoConfig, err := loadKakaoConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load Kakao config: %w", err)
+	}
 
 	return &Config{
-		Iris:    irisConfig,
-		Server:  loadServerConfig(),
-		Kakao:   loadKakaoConfig(),
-		Holodex: loadHolodexConfig(),
-		YouTube: loadYouTubeConfig(),
-		Ingestion: IngestionConfig{
-			YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
-			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
-			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
-		},
+		Iris:                   irisConfig,
+		Server:                 loadServerConfig(),
+		Kakao:                  newKakaoConfig(kakaoConfig.Rooms, kakaoConfig.ACLEnabled, kakaoConfig.ACLMode),
+		Holodex:                loadHolodexConfig(),
+		YouTube:                loadYouTubeConfig(),
+		Ingestion:              loadIngestionConfig(communityShortsBigBangCutoverAt),
 		Valkey:                 loadValkeyConfig(),
 		Postgres:               loadPostgresConfig(),
 		Notification:           loadNotificationConfig(),
@@ -163,6 +164,18 @@ func buildConfig(
 		CORS:                 loadCORSConfig(corsAllowedOrigins, corsMissingInProduction, options),
 		Version:              sharedenv.String("APP_VERSION", "1.1.0-go"),
 	}, nil
+}
+
+func newKakaoConfig(rooms []string, enabled bool, mode string) KakaoConfig {
+	return KakaoConfig{Rooms: rooms, ACLEnabled: enabled, ACLMode: mode}
+}
+
+func loadIngestionConfig(communityShortsBigBangCutoverAt time.Time) IngestionConfig {
+	return IngestionConfig{
+		YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
+		PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
+		CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
+	}
 }
 
 func loadCORSConfig(
@@ -200,11 +213,51 @@ func loadIrisConfig(webhookToken, botToken string) IrisConfig {
 	}
 }
 
-func loadKakaoConfig() KakaoConfig {
-	return KakaoConfig{
+func loadKakaoConfig() (*KakaoConfig, error) {
+	enabled, err := loadKakaoACLEnabled()
+	if err != nil {
+		return nil, err
+	}
+	mode, err := loadKakaoACLMode()
+	if err != nil {
+		return nil, err
+	}
+
+	return &KakaoConfig{
 		Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
-		ACLEnabled: sharedenv.Bool("KAKAO_ACL_ENABLED", true),
-		ACLMode:    sharedenv.String("KAKAO_ACL_MODE", "whitelist"),
+		ACLEnabled: enabled,
+		ACLMode:    mode,
+	}, nil
+}
+
+func loadKakaoACLEnabled() (bool, error) {
+	const key = "KAKAO_ACL_ENABLED"
+	raw, found := os.LookupEnv(key)
+	if !found {
+		return true, nil
+	}
+	if strings.TrimSpace(raw) == "" {
+		return false, fmt.Errorf("%s must not be empty", key)
+	}
+	enabled, err := sharedenv.BoolE(key, true)
+	if err != nil {
+		return false, err
+	}
+	return enabled, nil
+}
+
+func loadKakaoACLMode() (string, error) {
+	const key = "KAKAO_ACL_MODE"
+	raw, found := os.LookupEnv(key)
+	if !found {
+		return "whitelist", nil
+	}
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "whitelist", "blacklist":
+		return mode, nil
+	default:
+		return "", fmt.Errorf("invalid %s: %q", key, raw)
 	}
 }
 

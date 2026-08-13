@@ -471,3 +471,17 @@ func TestParseACLMode(t *testing.T) {
 		})
 	}
 }
+
+func TestParseACLModeStrictRejectsUnknownValue(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []string{"", "unknown"} {
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+
+			if _, err := ParseACLModeStrict(input); err == nil {
+				t.Fatalf("ParseACLModeStrict(%q) error = nil, want invalid mode error", input)
+			}
+		})
+	}
+}
