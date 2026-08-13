@@ -22,6 +22,7 @@ package producerruntime
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -93,14 +94,21 @@ func (r *YouTubeProducerRuntime) Close() {
 }
 
 func (r *YouTubeProducerRuntime) Run() error {
+	var runtimeErr error
 	err := lifecycle.Run(lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
 		Start:           r.startRuntime,
 		OnSignal:        r.handleShutdownSignal,
-		OnError:         r.handleRuntimeError,
-		Shutdown:        r.shutdownRuntime,
+		OnError: func(err error) {
+			runtimeErr = err
+			r.handleRuntimeError(err)
+		},
+		Shutdown: r.shutdownRuntime,
 	})
-	if err != nil {
+	if runtimeErr != nil && !errors.Is(err, runtimeErr) {
+		err = errors.Join(runtimeErr, err)
+	}
+	if err != nil && runtimeErr == nil {
 		r.handleRuntimeError(err)
 	}
 	return err
