@@ -1381,11 +1381,6 @@ func renderComposeConfigWithEnvOverrides(t *testing.T, overrides map[string]stri
 	return renderComposeConfigWithEnvFileAndOverrides(t, writeCentralComposeEnvFile(t), overrides, files...)
 }
 
-func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files ...string) renderedCompose {
-	t.Helper()
-	return renderComposeConfigWithEnvFileAndOverrides(t, composeEnvFile, nil, files...)
-}
-
 func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile string, overrides map[string]string, files ...string) renderedCompose {
 	t.Helper()
 
