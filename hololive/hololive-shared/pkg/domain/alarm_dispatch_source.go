@@ -68,10 +68,14 @@ func (p *DeliveryDigestDispatchPayload) Identity() string {
 
 func (p *DeliveryDigestDispatchPayload) ContentIdentity() string {
 	identity := p.Identity()
-	if identity == "" || p == nil || strings.TrimSpace(p.PreRenderedMessage) == "" {
+	if identity == "" {
 		return ""
 	}
-	messageHash := sha256.Sum256([]byte(p.PreRenderedMessage))
+	message := strings.TrimSpace(p.PreRenderedMessage)
+	if message == "" {
+		return ""
+	}
+	messageHash := sha256.Sum256([]byte(message))
 	return identity + ":message_sha256:" + hex.EncodeToString(messageHash[:])
 }
 

@@ -76,3 +76,28 @@ func TestAlarmQueueEnvelopeRoundTripsDeliveryDigest(t *testing.T) {
 		t.Fatalf("DeliveryDigest = %#v", decoded.DeliveryDigest)
 	}
 }
+
+func TestDeliveryDigestContentIdentityIgnoresSurroundingWhitespace(t *testing.T) {
+	t.Parallel()
+
+	payload := &DeliveryDigestDispatchPayload{
+		Kind:               DeliveryKindMajorEventWeekly,
+		PeriodKey:          "2026-W32",
+		PreRenderedMessage: "이번 주 주요 이벤트",
+	}
+	padded := *payload
+	padded.PreRenderedMessage = "\n  " + payload.PreRenderedMessage + "  \n"
+
+	if err := padded.Validate(); err != nil {
+		t.Fatalf("padded Validate() error = %v", err)
+	}
+
+	if got, want := padded.ContentIdentity(), payload.ContentIdentity(); got != want {
+		t.Fatalf("ContentIdentity() = %q, want %q; a re-render that only shifts trailing whitespace must not resend the digest", got, want)
+	}
+
+	var nilPayload *DeliveryDigestDispatchPayload
+	if got := nilPayload.ContentIdentity(); got != "" {
+		t.Fatalf("nil ContentIdentity() = %q, want empty", got)
+	}
+}
