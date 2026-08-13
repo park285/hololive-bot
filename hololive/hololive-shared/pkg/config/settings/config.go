@@ -128,9 +128,13 @@ func buildConfig(
 	}
 
 	return &Config{
-		Iris:                   irisConfig,
-		Server:                 loadServerConfig(),
-		Kakao:                  kakaoConfig,
+		Iris:   irisConfig,
+		Server: loadServerConfig(),
+		Kakao: KakaoConfig{
+			Rooms:      kakaoConfig.Rooms,
+			ACLEnabled: kakaoConfig.ACLEnabled,
+			ACLMode:    kakaoConfig.ACLMode,
+		},
 		Holodex:                loadHolodexConfig(),
 		YouTube:                loadYouTubeConfig(),
 		Ingestion:              loadIngestionConfig(communityShortsBigBangCutoverAt),
@@ -209,17 +213,17 @@ func loadIrisConfig(webhookToken, botToken string) IrisConfig {
 	}
 }
 
-func loadKakaoConfig() (KakaoConfig, error) {
+func loadKakaoConfig() (*KakaoConfig, error) {
 	enabled, err := loadKakaoACLEnabled()
 	if err != nil {
-		return KakaoConfig{}, err
+		return nil, err
 	}
 	mode, err := loadKakaoACLMode()
 	if err != nil {
-		return KakaoConfig{}, err
+		return nil, err
 	}
 
-	return KakaoConfig{
+	return &KakaoConfig{
 		Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
 		ACLEnabled: enabled,
 		ACLMode:    mode,
