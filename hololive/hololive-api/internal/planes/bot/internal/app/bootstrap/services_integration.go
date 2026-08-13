@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -18,10 +19,15 @@ func InitCoreIntegrationServices(
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*CoreIntegrationServices, error) {
+	defaultMode, err := acl.ParseACLModeStrict(appConfig.Kakao.ACLMode)
+	if err != nil {
+		return nil, fmt.Errorf("invalid KAKAO_ACL_MODE: %w", err)
+	}
+
 	aclService, err := ProvideACLService(
 		ctx,
 		appConfig.Kakao.ACLEnabled,
-		acl.ParseACLMode(appConfig.Kakao.ACLMode),
+		defaultMode,
 		appConfig.Kakao.Rooms,
 		infra.Postgres,
 		infra.Cache,

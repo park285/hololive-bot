@@ -260,6 +260,18 @@ func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
 
 func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 	ctx := c.Request.Context()
+	var mode acl.ACLMode
+	if req.Mode != nil {
+		parsed, err := acl.ParseACLModeStrict(*req.Mode)
+		if err != nil {
+			h.safeLogger().Warn("Invalid ACL mode", slog.String("mode", *req.Mode), slog.Any("error", err))
+			sharedserver.RespondError(c, 400, "invalid ACL mode", nil)
+
+			return false
+		}
+		mode = parsed
+	}
+
 	if req.Enabled != nil {
 		if err := h.acl.SetEnabled(ctx, *req.Enabled); err != nil {
 			h.safeLogger().Error("Failed to set ACL enabled", slog.Bool("enabled", *req.Enabled), slog.Any("error", err))
@@ -270,7 +282,6 @@ func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 	}
 
 	if req.Mode != nil {
-		mode := acl.ParseACLMode(*req.Mode)
 		if err := h.acl.SetMode(ctx, mode); err != nil {
 			h.safeLogger().Error("Failed to set ACL mode", slog.String("mode", *req.Mode), slog.Any("error", err))
 			sharedserver.RespondError(c, 500, "Failed to set ACL mode", nil)

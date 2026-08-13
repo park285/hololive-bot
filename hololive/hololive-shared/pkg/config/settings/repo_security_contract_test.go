@@ -80,6 +80,22 @@ func TestRepoComposeProdHardenedDefaults(t *testing.T) {
 	assertProdComposeNonEgressIsolation(t, content)
 }
 
+func TestRepoComposeProdPreservesExplicitBlankACLValues(t *testing.T) {
+	cfg := renderComposeConfigWithEnvOverrides(t, map[string]string{
+		"KAKAO_ACL_ENABLED": "",
+		"KAKAO_ACL_MODE":    "",
+	}, "deploy/compose/docker-compose.prod.yml")
+
+	for _, service := range []string{"hololive-api", "hololive-alarm-worker"} {
+		env := composeEnvironment(t, cfg, service)
+		for _, key := range []string{"KAKAO_ACL_ENABLED", "KAKAO_ACL_MODE"} {
+			if env[key] != "" {
+				t.Fatalf("%s %s = %q, want explicit blank preserved", service, key, env[key])
+			}
+		}
+	}
+}
+
 func TestRepoShortLinkIngressBoundary(t *testing.T) {
 	content := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf.template")
 	listener := "listen " + centralIngressBindPlaceholder + ":30192;"
@@ -1356,10 +1372,21 @@ func composeServiceBlock(t *testing.T, content, service string) string {
 func renderComposeConfig(t *testing.T, files ...string) renderedCompose {
 	t.Helper()
 
-	return renderComposeConfigWithEnvFile(t, writeCentralComposeEnvFile(t), files...)
+	return renderComposeConfigWithEnvFileAndOverrides(t, writeCentralComposeEnvFile(t), nil, files...)
+}
+
+func renderComposeConfigWithEnvOverrides(t *testing.T, overrides map[string]string, files ...string) renderedCompose {
+	t.Helper()
+
+	return renderComposeConfigWithEnvFileAndOverrides(t, writeCentralComposeEnvFile(t), overrides, files...)
 }
 
 func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files ...string) renderedCompose {
+	t.Helper()
+	return renderComposeConfigWithEnvFileAndOverrides(t, composeEnvFile, nil, files...)
+}
+
+func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile string, overrides map[string]string, files ...string) renderedCompose {
 	t.Helper()
 
 	if _, err := exec.LookPath("docker"); err != nil {
@@ -1372,7 +1399,7 @@ func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files .
 	repoRoot := repoRootFromConfigTest(t)
 	appEnvFile := writeCentralAppEnvFile(t)
 	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(environmentWithoutKeys(os.Environ(), overrides),
 		"COMPOSE_ENV_FILE="+composeEnvFile,
 		"HOLOLIVE_API_ENV_FILE="+appEnvFile,
 		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+appEnvFile,
@@ -1386,6 +1413,9 @@ func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files .
 		"SESSION_SECRET=dummy",
 		"LIVE_LOGS_PATH=/srv/hololive-logs-dummy",
 	)
+	for key, value := range overrides {
+		cmd.Env = append(cmd.Env, key+"="+value)
+	}
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1403,6 +1433,23 @@ func renderComposeConfigWithEnvFile(t *testing.T, composeEnvFile string, files .
 	}
 
 	return cfg
+}
+
+func environmentWithoutKeys(environment []string, excluded map[string]string) []string {
+	if len(excluded) == 0 {
+		return environment
+	}
+	filtered := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		key, _, found := strings.Cut(entry, "=")
+		if found {
+			if _, skip := excluded[key]; skip {
+				continue
+			}
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
 }
 
 func dockerComposeConfigCommand(t *testing.T, ctx context.Context, files []string) *exec.Cmd {

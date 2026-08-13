@@ -92,7 +92,11 @@ func (s *Service) loadEnabledSetting(ctx context.Context, defaultEnabled bool) (
 			return false, fmt.Errorf("failed to initialize ACL enabled setting: %w", err)
 		}
 	default:
-		s.enabled = value == "true"
+		enabled, parseErr := parseACLEnabledStrict(value)
+		if parseErr != nil {
+			return false, fmt.Errorf("invalid ACL enabled setting: %w", parseErr)
+		}
+		s.enabled = enabled
 	}
 
 	return isFirstInit, nil
@@ -140,8 +144,23 @@ func (s *Service) loadRoomsFromDatabase(ctx context.Context) ([]Room, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load ACL rooms: %w", err)
 	}
+	if err := validateRoomListTypes(rooms); err != nil {
+		return nil, err
+	}
 
 	return rooms, nil
+}
+
+func validateRoomListTypes(rooms []Room) error {
+	for _, room := range rooms {
+		switch room.ListType {
+		case listTypeWhitelist, listTypeBlacklist:
+		default:
+			return fmt.Errorf("invalid ACL room %q list_type: %q", room.RoomID, room.ListType)
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) resetRoomMaps() {
@@ -156,12 +175,12 @@ func (s *Service) populateRoomsFromRecords(rooms []Room) {
 			continue
 		}
 
-		if room.ListType == listTypeBlacklist {
+		switch room.ListType {
+		case listTypeBlacklist:
 			s.blacklistRooms[roomID] = struct{}{}
-			continue
+		case listTypeWhitelist:
+			s.whitelistRooms[roomID] = struct{}{}
 		}
-
-		s.whitelistRooms[roomID] = struct{}{}
 	}
 }
 

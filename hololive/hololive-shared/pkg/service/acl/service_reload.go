@@ -62,7 +62,11 @@ func (s *Service) readSettingsFromDatabase(ctx context.Context) (enabled bool, m
 		return false, "", fmt.Errorf("reload ACL enabled setting: %w", err)
 	}
 	if enabledFound {
-		enabled = enabledValue == "true"
+		parsed, parseErr := parseACLEnabledStrict(enabledValue)
+		if parseErr != nil {
+			return false, "", fmt.Errorf("reload ACL enabled setting: %w", parseErr)
+		}
+		enabled = parsed
 	}
 
 	modeValue, modeFound, err := s.store.GetSetting(ctx, dbKeyMode)
