@@ -28,7 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
@@ -134,10 +133,6 @@ func cutoffFor(now time.Time, retentionDays int) time.Time {
 
 type viewerSampleCleaner interface {
 	Cleanup(ctx context.Context) (int64, error)
-}
-
-type batchExecutor interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 }
 
 type Cleaner struct {
