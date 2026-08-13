@@ -1,6 +1,7 @@
 package applifecycle
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -281,18 +282,71 @@ func TestRun_DelegatesStartAndShutdown(t *testing.T) {
 
 	var startCalled atomic.Bool
 	var shutdownCalled atomic.Bool
+	runtimeErr := errors.New("stop runtime")
 
 	err := Run(nil, func(_ context.Context, errCh chan<- error) {
 		startCalled.Store(true)
-		errCh <- errors.New("stop runtime")
+		errCh <- runtimeErr
 	}, func(context.Context) error {
 		shutdownCalled.Store(true)
 		return nil
 	})
 
-	assert.NoError(t, err)
+	assert.ErrorIs(t, err, runtimeErr)
 	assert.True(t, startCalled.Load())
 	assert.True(t, shutdownCalled.Load())
+}
+
+func TestRun_LogsRuntimeAndShutdownErrorsAtTheirOwners(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		runtimeErr      error
+		shutdownErr     error
+		wantShutdownLog bool
+	}{
+		{name: "runtime", runtimeErr: errors.New("runtime failed")},
+		{name: "both", runtimeErr: errors.New("runtime failed"), shutdownErr: errors.New("shutdown failed"), wantShutdownLog: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var output bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&output, nil))
+			err := Run(logger, func(_ context.Context, errCh chan<- error) {
+				errCh <- tc.runtimeErr
+			}, func(context.Context) error {
+				return tc.shutdownErr
+			})
+
+			if tc.runtimeErr != nil {
+				assert.ErrorIs(t, err, tc.runtimeErr)
+			}
+			if tc.shutdownErr != nil {
+				assert.ErrorIs(t, err, tc.shutdownErr)
+			}
+			assert.True(t, bytes.Contains(output.Bytes(), []byte("Server error")))
+			assert.Equal(t, tc.wantShutdownLog, bytes.Contains(output.Bytes(), []byte("Shutdown error")))
+		})
+	}
+}
+
+func TestRuntimeOptions_LogsShutdownError(t *testing.T) {
+	t.Parallel()
+
+	shutdownErr := errors.New("shutdown failed")
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+	opts := runtimeOptions(logger, func(context.Context, chan<- error) {}, func(context.Context) error {
+		return shutdownErr
+	})
+
+	err := opts.Shutdown(t.Context())
+	assert.ErrorIs(t, err, shutdownErr)
+	assert.True(t, bytes.Contains(output.Bytes(), []byte("Shutdown error")))
 }
 
 func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
