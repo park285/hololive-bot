@@ -67,6 +67,9 @@ func (p *DeliveryDigestDispatchPayload) Identity() string {
 }
 
 func (p *DeliveryDigestDispatchPayload) ContentIdentity() string {
+	if p == nil {
+		return ""
+	}
 	identity := p.Identity()
 	if identity == "" {
 		return ""
