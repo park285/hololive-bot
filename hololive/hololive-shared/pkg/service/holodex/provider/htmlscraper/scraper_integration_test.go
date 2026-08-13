@@ -1,22 +1,4 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+//go:build integration
 
 package htmlscraper
 
@@ -24,57 +6,48 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"net/http"
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/pkg/httputil"
+
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 이 테스트는 -tags=integration 플래그로만 실행됩니다.
-func TestScraperLiveIntegration(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
+func TestOfficialScheduleAPILiveIntegration(t *testing.T) {
+	config := settings.DefaultOfficialScheduleConfig()
 	service := &Service{
-		httpClient: &http.Client{
-			Timeout: settings.DefaultOfficialScheduleConfig().Timeout,
-		},
-		logger:        logger,
-		baseURL:       settings.DefaultOfficialScheduleConfig().BaseURL,
-		memberNameMap: make(map[string]string),
+		httpClient:           httputil.NewExternalAPIClient(config.Timeout),
+		logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		officialSchedule:     config,
+		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
+		identityIndex:        officialScheduleIdentityIndex{},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	streams, err := service.fetchAllStreams(ctx)
+	streams, err := service.fetchOfficialScheduleAPI(ctx)
 	if err != nil {
-		t.Fatalf("fetchAllStreams 실패: %v", err)
+		t.Fatalf("fetchOfficialScheduleAPI() error = %v", err)
 	}
-
-	if len(streams) == 0 {
-		t.Fatal("스트림을 찾지 못함 - HTML 구조가 변경되었을 수 있음")
+	for index, stream := range streams {
+		validateOfficialScheduleIntegrationStream(t, index, stream)
 	}
+}
 
-	t.Logf("스크래핑 성공: %d 개의 스트림을 찾음", len(streams))
-
-	// 첫 번째 스트림 정보 검증
-	for i, stream := range streams {
-		if i >= 5 {
-			break
-		}
-
-		t.Logf("   스트림 %d: ID=%s, ChannelName=%s, Scheduled=%v",
-			i+1, stream.ID, stream.ChannelName, stream.StartScheduled)
-
-		if stream.ID == "" {
-			t.Errorf("스트림 %d: ID가 비어있음", i+1)
-		}
-		if stream.ChannelName == "" {
-			t.Errorf("스트림 %d: ChannelName이 비어있음", i+1)
-		}
-		if stream.Link == nil || *stream.Link == "" {
-			t.Errorf("스트림 %d: Link가 비어있음", i+1)
-		}
+func validateOfficialScheduleIntegrationStream(t *testing.T, index int, stream *domain.Stream) {
+	t.Helper()
+	if stream == nil || stream.ID == "" {
+		t.Fatalf("stream %d has no identity: %#v", index, stream)
+	}
+	if stream.Status != domain.StreamStatusUpcoming || stream.StartActual != nil {
+		t.Fatalf("stream %d violated live-truth ownership: %#v", index, stream)
+	}
+	if stream.StartScheduled == nil || stream.StartScheduled.Location().String() != "Asia/Tokyo" {
+		t.Fatalf("stream %d has invalid schedule time: %#v", index, stream.StartScheduled)
+	}
+	if stream.Link == nil || *stream.Link == "" {
+		t.Fatalf("stream %d has no canonical YouTube URL", index)
 	}
 }

@@ -69,16 +69,12 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 		primaryFilter: func(streams []*domain.Stream) []*domain.Stream {
 			return filterStreamsByStatus(streams, domain.StreamStatusLive)
 		},
-		scraperFilter: func(streams []*domain.Stream) []*domain.Stream {
-			return filterStreamsByStatus(streams, domain.StreamStatusLive)
-		},
 		retryKey: fmt.Sprintf("live_streams_%s", strings.ToLower(resolvedOrg)),
 		retry: func(retryCtx context.Context, org string, _ int) {
 			if _, err := h.GetLiveStreamsByOrg(retryCtx, org); err != nil && h.logger != nil {
 				h.logger.Warn("holodex live streams retry failed", slog.String("org", org), slog.Any("error", err))
 			}
 		},
-		fallbackLogMessage: "Primary org fetch returned no live streams, using scraper fallback",
 	})
 }
 
@@ -107,7 +103,7 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 		primaryFilter: func(streams []*domain.Stream) []*domain.Stream {
 			return h.filter.FilterUpcomingStreams(filterStreamsByStatus(streams, domain.StreamStatusUpcoming))
 		},
-		scraperFilter: func(streams []*domain.Stream) []*domain.Stream {
+		fallbackFilter: func(streams []*domain.Stream) []*domain.Stream {
 			return h.filter.FilterUpcomingStreams(filterStreamsByStatus(streams, domain.StreamStatusUpcoming))
 		},
 		retryKey: fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours),
@@ -116,7 +112,7 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 				h.logger.Warn("holodex upcoming streams retry failed", slog.String("org", org), slog.Int("hours", hours), slog.Any("error", err))
 			}
 		},
-		fallbackLogMessage: "Primary org fetch returned no upcoming streams, using scraper fallback",
+		fallbackLogMessage: "Holodex upcoming stream source failed; using official schedule API",
 	})
 }
 
@@ -130,7 +126,7 @@ type streamFetchPlan struct {
 	cacheGet           func(ctx context.Context, org string, hours int) ([]*domain.Stream, bool)
 	cacheSet           func(ctx context.Context, org string, hours int, streams []*domain.Stream)
 	primaryFilter      func(streams []*domain.Stream) []*domain.Stream
-	scraperFilter      func(streams []*domain.Stream) []*domain.Stream
+	fallbackFilter     func(streams []*domain.Stream) []*domain.Stream
 	retry              func(ctx context.Context, org string, hours int)
 }
 
@@ -241,10 +237,6 @@ func limitStreamList(streams []*domain.Stream) []*domain.Stream {
 		return streams
 	}
 	return streams[:limit]
-}
-
-func supportsScraperFallback(org string) bool {
-	return org == constants.HolodexAPIParams.OrgHololive
 }
 
 func normalizeStreamOrg(org string) string {
