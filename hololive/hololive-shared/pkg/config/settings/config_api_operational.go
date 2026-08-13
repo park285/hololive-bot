@@ -1,6 +1,10 @@
 package settings
 
-import "time"
+import (
+	"time"
+
+	sharedenv "github.com/park285/shared-go/pkg/envutil"
+)
 
 type DistributedRateLimitConfig struct {
 	Enabled    bool
@@ -27,6 +31,11 @@ type OfficialScheduleConfig struct {
 	Timeout      time.Duration
 	CacheExpiry  time.Duration
 	PageCacheTTL time.Duration
+}
+
+type OfficialScheduleRuntimeConfig struct {
+	OfficialSchedule     OfficialScheduleConfig
+	MaxResponseBodyBytes int64
 }
 
 type OfficialProfileConfig struct {
@@ -120,6 +129,19 @@ func DefaultOfficialScheduleConfig() OfficialScheduleConfig {
 	}
 }
 
+func LoadOfficialScheduleRuntimeConfig() OfficialScheduleRuntimeConfig {
+	defaults := DefaultOfficialScheduleConfig()
+	return OfficialScheduleRuntimeConfig{
+		OfficialSchedule: OfficialScheduleConfig{
+			BaseURL:      sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", defaults.BaseURL),
+			Timeout:      time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", int(defaults.Timeout/time.Second))) * time.Second,
+			CacheExpiry:  time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", int(defaults.CacheExpiry/time.Second))) * time.Second,
+			PageCacheTTL: time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", int(defaults.PageCacheTTL/time.Second))) * time.Second,
+		},
+		MaxResponseBodyBytes: int64(sharedenv.Int("MAX_RESPONSE_BODY_BYTES", int(DefaultMaxResponseBodyBytes))),
+	}
+}
+
 func DefaultOfficialProfileConfig() OfficialProfileConfig {
 	return OfficialProfileConfig{
 		BaseURL:        "https://hololive.hololivepro.com/talents",
@@ -131,4 +153,4 @@ func DefaultOfficialProfileConfig() OfficialProfileConfig {
 	}
 }
 
-const DefaultMaxResponseBodyBytes int64 = 2 << 20 // 2MiB
+const DefaultMaxResponseBodyBytes int64 = 2 << 20

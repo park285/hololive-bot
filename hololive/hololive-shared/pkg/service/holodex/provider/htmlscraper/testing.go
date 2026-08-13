@@ -2,9 +2,11 @@ package htmlscraper
 
 import (
 	"context"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"log/slog"
 	"net/http"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 func NewTestServiceWithHTTPClient(
@@ -13,11 +15,17 @@ func NewTestServiceWithHTTPClient(
 	baseURL string,
 	fetchUpcoming func(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error),
 ) *Service {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	config := settings.DefaultOfficialScheduleConfig()
+	config.BaseURL = baseURL
 	return &Service{
-		httpClient:    httpClient,
-		logger:        logger,
-		baseURL:       baseURL,
-		fetchUpcoming: fetchUpcoming,
-		memberNameMap: make(map[string]string),
+		httpClient:           httpClient,
+		logger:               logger,
+		officialSchedule:     config,
+		maxResponseBodyBytes: settings.DefaultMaxResponseBodyBytes,
+		fetchUpcoming:        fetchUpcoming,
+		identityIndex:        officialScheduleIdentityIndex{},
 	}
 }

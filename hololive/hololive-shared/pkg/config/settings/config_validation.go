@@ -22,6 +22,7 @@ package settings
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -75,6 +76,9 @@ func (c *Config) validateRuntimeConfigs() error {
 	if err := validateHolodexConfig(&c.Holodex); err != nil {
 		return err
 	}
+	if err := validateOfficialScheduleConfig(&c.OfficialSchedule, c.MaxResponseBodyBytes); err != nil {
+		return err
+	}
 	if err := validateCORSConfig(c.Environment, c.CORS); err != nil {
 		return err
 	}
@@ -94,6 +98,45 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	}
 	if fallback.DeadlineMargin < 0 {
 		return fmt.Errorf("HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS must be >= 0")
+	}
+	return nil
+}
+
+func validateOfficialScheduleConfig(config *OfficialScheduleConfig, maxResponseBodyBytes int64) error {
+	if config == nil {
+		return fmt.Errorf("official schedule config is required")
+	}
+	if err := validateOfficialScheduleBaseURL(config.BaseURL); err != nil {
+		return err
+	}
+	if config.Timeout <= 0 {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive")
+	}
+	if config.CacheExpiry <= 0 {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS must be positive")
+	}
+	if config.PageCacheTTL < 0 {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS must be >= 0")
+	}
+	if maxResponseBodyBytes <= 0 {
+		return fmt.Errorf("MAX_RESPONSE_BODY_BYTES must be positive")
+	}
+	return nil
+}
+
+func validateOfficialScheduleBaseURL(rawURL string) error {
+	baseURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return fmt.Errorf("parse OFFICIAL_SCHEDULE_BASE_URL: %w", err)
+	}
+	if baseURL.Scheme != "https" || baseURL.Host == "" {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_BASE_URL must be an HTTPS origin")
+	}
+	if baseURL.User != nil || (baseURL.Path != "" && baseURL.Path != "/") {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_BASE_URL must not contain userinfo or path")
+	}
+	if baseURL.RawQuery != "" || baseURL.Fragment != "" {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_BASE_URL must not contain query or fragment")
 	}
 	return nil
 }

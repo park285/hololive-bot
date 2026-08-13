@@ -1,200 +1,363 @@
 package htmlscraper
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/PuerkitoBio/goquery"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/pkg/httputil"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const officialScheduleAPIPath = "/api/list/2"
+
+type officialScheduleSourceError struct {
+	reason     officialScheduleReason
+	statusCode int
+	err        error
+}
+
+func (e *officialScheduleSourceError) Error() string {
+	if e == nil || e.err == nil {
+		return ""
+	}
+	return e.err.Error()
+}
+
+func (e *officialScheduleSourceError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.err
+}
+
 func (s *Service) fetchAllStreams(ctx context.Context) ([]*domain.Stream, error) {
 	if cached, ok := s.getOfficialPageCache(); ok {
-		s.logger.Debug("Official schedule page cache hit",
-			slog.String("key", OfficialSchedulePageCacheKey),
-			slog.Int("streams", len(cached)))
-		observeOfficialScheduleFallback("official_schedule_page", "hit", officialScheduleFallbackReasonMatched)
+		s.observeOfficialScheduleResult("hit", cached)
 		return cached, nil
 	}
 
-	result, err, shared := s.officialGroup.Do(OfficialSchedulePageCacheKey, func() (any, error) {
-		if cached, ok := s.getOfficialPageCache(); ok {
-			return cached, nil
-		}
-
-		streams, fetchErr := s.fetchAllStreamsFromOrigin(ctx)
-		if fetchErr != nil {
-			return nil, fetchErr
-		}
-
-		s.setOfficialPageCache(streams)
-		return streams, nil
+	resultCh := s.officialGroup.DoChan(officialScheduleCacheKey, func() (any, error) {
+		return s.loadOfficialScheduleOrigin(ctx)
 	})
-	if err != nil {
-		observeOfficialScheduleFallback("official_schedule_page", "error", classifyOfficialScheduleFallbackReason(err, 0))
-		return nil, fmt.Errorf("load official schedule page: %w", err)
-	}
-
-	streams, ok := result.([]*domain.Stream)
-	if !ok {
-		return nil, fmt.Errorf("invalid official schedule page cache result: %T", result)
-	}
-	if shared {
-		s.logger.Debug("Official schedule page request deduplicated",
-			slog.String("key", OfficialSchedulePageCacheKey),
-			slog.Int("streams", len(streams)))
-	}
-	observeOfficialScheduleFallback("official_schedule_page", "hit", classifyOfficialScheduleFallbackReason(nil, len(streams)))
-	return CloneStreams(streams), nil
+	return s.waitOfficialScheduleResult(ctx, resultCh)
 }
 
-func (s *Service) fetchAllStreamsFromOrigin(ctx context.Context) ([]*domain.Stream, error) {
-	doc, err := s.loadOfficialScheduleDocument(ctx)
+func (s *Service) loadOfficialScheduleOrigin(ctx context.Context) ([]*domain.Stream, error) {
+	if cached, ok := s.getOfficialPageCache(); ok {
+		return cached, nil
+	}
+
+	originCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.officialSchedule.Timeout)
+	defer cancel()
+	streams, err := s.fetchOfficialScheduleAPI(originCtx)
 	if err != nil {
 		return nil, err
 	}
-
-	streams, parseErrors := s.parseOfficialScheduleDocument(doc)
-	if len(streams) == 0 {
-		return nil, &StructureChangedError{
-			Message:     "No streams found - HTML structure may have changed",
-			ParseErrors: parseErrors,
-		}
-	}
-
-	s.logOfficialScheduleParseSummary(streams, parseErrors)
+	s.setOfficialPageCache(streams)
 	return streams, nil
 }
 
-func (s *Service) loadOfficialScheduleDocument(ctx context.Context) (*goquery.Document, error) {
-	req, err := s.newOfficialScheduleRequest(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, officialScheduleRequestError(err, resp == nil))
-	}
-	if resp == nil {
-		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("HTTP request failed: nil response"))
-	}
-	if err := validateOfficialScheduleResponse(resp); err != nil {
-		return nil, err
-	}
-	defer s.closeOfficialScheduleResponse(resp)
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonParse, fmt.Errorf("HTML parse failed: %w", err))
-	}
-	return doc, nil
-}
-
-func (s *Service) closeOfficialScheduleResponse(resp *http.Response) {
-	if closeErr := resp.Body.Close(); closeErr != nil && s.logger != nil {
-		s.logger.Warn("Failed to close official schedule response body", "error", closeErr)
+func (s *Service) waitOfficialScheduleResult(ctx context.Context, resultCh <-chan singleflight.Result) ([]*domain.Stream, error) {
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait for official schedule API: %w", ctx.Err())
+	case result := <-resultCh:
+		return s.resolveOfficialScheduleResult(result.Val, result.Err, result.Shared)
 	}
 }
 
-func (s *Service) newOfficialScheduleRequest(ctx context.Context) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+"/lives/hololive", http.NoBody)
+func (s *Service) resolveOfficialScheduleResult(value any, err error, shared bool) ([]*domain.Stream, error) {
 	if err != nil {
-		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonUnknown, fmt.Errorf("failed to create scraper request: %w", err))
+		reason := classifyOfficialScheduleReason(err, 0)
+		observeOfficialScheduleFallback("official_schedule_page", "error", reason)
+		return nil, fmt.Errorf("load official schedule API: %w", err)
 	}
+
+	streams, ok := value.([]*domain.Stream)
+	if !ok {
+		return nil, fmt.Errorf("invalid official schedule cache result: %T", value)
+	}
+	if shared {
+		s.logger.Debug("Official schedule API request deduplicated",
+			slog.String("key", officialScheduleCacheKey),
+			slog.Int("streams", len(streams)))
+	}
+	s.observeOfficialScheduleResult("hit", streams)
+	return cloneStreams(streams), nil
+}
+
+func (s *Service) observeOfficialScheduleResult(outcome string, streams []*domain.Stream) {
+	observeOfficialScheduleFallback("official_schedule_page", outcome, classifyOfficialScheduleReason(nil, len(streams)))
+}
+
+func (s *Service) fetchOfficialScheduleAPI(ctx context.Context) ([]*domain.Stream, error) {
+	started := time.Now()
+	outcome := "error"
+	reason := officialScheduleReasonUnknown
+	defer func() {
+		observeOfficialScheduleRequest(outcome, reason, time.Since(started))
+	}()
+
+	req, err := s.newOfficialScheduleAPIRequest(ctx)
+	if err != nil {
+		reason = classifyOfficialScheduleReason(err, 0)
+		return nil, err
+	}
+	body, err := s.executeOfficialScheduleAPIRequest(req)
+	if err != nil {
+		reason = classifyOfficialScheduleReason(err, 0)
+		s.logOfficialScheduleAPIError(err)
+		return nil, err
+	}
+
+	streams, stats, err := s.decodeOfficialScheduleAPI(body)
+	observeOfficialScheduleRows(stats)
+	if err != nil {
+		reason = classifyOfficialScheduleReason(err, 0)
+		s.logOfficialScheduleAPIError(err)
+		return nil, err
+	}
+
+	outcome = "success"
+	reason = classifyOfficialScheduleReason(nil, len(streams))
+	markOfficialScheduleSuccess()
+	return streams, nil
+}
+
+func (s *Service) newOfficialScheduleAPIRequest(ctx context.Context) (*http.Request, error) {
+	baseURL, err := url.Parse(strings.TrimSpace(s.officialSchedule.BaseURL))
+	if err != nil {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonRequest, 0, fmt.Errorf("parse official schedule base URL: %w", err))
+	}
+	if err := validateOfficialScheduleAPIBaseURL(baseURL); err != nil {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonRequest, 0, err)
+	}
+	baseURL.Path = officialScheduleAPIPath
+	baseURL.RawQuery = ""
+	baseURL.Fragment = ""
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL.String(), http.NoBody)
+	if err != nil {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonRequest, 0, fmt.Errorf("create official schedule API request: %w", err))
+	}
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; HololiveBot/1.0)")
 	return req, nil
 }
 
-func officialScheduleRequestError(err error, nilResponse bool) error {
-	if nilResponse {
-		err = fmt.Errorf("nil response: %w", err)
+func validateOfficialScheduleAPIBaseURL(baseURL *url.URL) error {
+	if baseURL == nil || baseURL.Scheme != "https" || baseURL.Host == "" {
+		return fmt.Errorf("official schedule base URL must be an HTTPS origin")
 	}
-	return fmt.Errorf("HTTP request failed: %w", err)
-}
-
-func validateOfficialScheduleResponse(resp *http.Response) error {
-	if resp == nil {
-		return wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("HTTP request failed: nil response"))
+	if baseURL.User != nil || (baseURL.Path != "" && baseURL.Path != "/") {
+		return fmt.Errorf("official schedule base URL must not contain userinfo or path")
 	}
-	if resp.Body == nil {
-		return wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("HTTP request failed: nil response body"))
-	}
-	if resp.StatusCode != http.StatusOK {
-		return wrapOfficialScheduleError(officialScheduleFallbackReasonNetwork, fmt.Errorf("unexpected status code: %d", resp.StatusCode))
+	if baseURL.RawQuery != "" || baseURL.Fragment != "" {
+		return fmt.Errorf("official schedule base URL must not contain query or fragment")
 	}
 	return nil
 }
 
-func (s *Service) parseOfficialScheduleDocument(doc *goquery.Document) (result0 []*domain.Stream, result1 int) {
-	streams := make([]*domain.Stream, 0)
-	parseErrors := 0
-	currentDate := ""
-
-	doc.Find(".container .col-12").Each(func(i int, container *goquery.Selection) {
-		dateHeader := container.Find(".navbar-inverse .holodule.navbar-text")
-		if dateHeader.Length() > 0 {
-			currentDate = officialScheduleDateText(dateHeader)
-			s.logger.Debug("Found date section", slog.String("date", currentDate))
-			return
-		}
-
-		streams, parseErrors = s.appendOfficialScheduleContainerStreams(streams, parseErrors, container, currentDate)
-	})
-
-	return streams, parseErrors
-}
-
-func officialScheduleDateText(dateHeader *goquery.Selection) string {
-	dateText := stringutil.TrimSpace(dateHeader.Text())
-	dateText = strings.Split(dateText, "(")[0]
-	return stringutil.TrimSpace(dateText)
-}
-
-func (s *Service) appendOfficialScheduleContainerStreams(
-	streams []*domain.Stream,
-	parseErrors int,
-	container *goquery.Selection,
-	currentDate string,
-) (result0 []*domain.Stream, result1 int) {
-	container.Find("a.thumbnail").Each(func(j int, sel *goquery.Selection) {
-		stream, err := s.parseStreamElement(sel, currentDate)
-		if err != nil {
-			parseErrors++
-			s.logger.Debug("Failed to parse stream element",
-				slog.String("date", currentDate),
-				slog.Any("error", err))
-			return
-		}
-		if stream != nil {
-			streams = append(streams, stream)
-		}
-	})
-	return streams, parseErrors
-}
-
-func (s *Service) logOfficialScheduleParseSummary(streams []*domain.Stream, parseErrors int) {
-	if parseErrors > len(streams)/2 {
-		s.logger.Warn("High parse error rate detected",
-			slog.Int("successes", len(streams)),
-			slog.Int("errors", parseErrors))
+func (s *Service) executeOfficialScheduleAPIRequest(req *http.Request) ([]byte, error) {
+	if s.httpClient == nil {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonTransport, 0, fmt.Errorf("official schedule HTTP client is nil"))
 	}
 
-	s.logger.Info("Scraper fetched all streams",
-		slog.Int("total", len(streams)),
-		slog.Int("parse_errors", parseErrors))
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, officialScheduleRequestFailure(resp, err)
+	}
+	if err := validateOfficialScheduleResponse(resp); err != nil {
+		return nil, err
+	}
+	return s.readOfficialScheduleAPIResponse(resp)
+}
+
+func officialScheduleRequestFailure(resp *http.Response, requestErr error) error {
+	if resp != nil && resp.Body != nil {
+		requestErr = errors.Join(requestErr, httputil.DrainAndClose(resp.Body, httputil.DefaultDrainLimit))
+	}
+	reason := officialScheduleReasonTransport
+	if errors.Is(requestErr, context.Canceled) || errors.Is(requestErr, context.DeadlineExceeded) {
+		reason = officialScheduleReasonContext
+	}
+	return newOfficialScheduleSourceError(reason, 0, fmt.Errorf("request official schedule API: %w", requestErr))
+}
+
+func validateOfficialScheduleResponse(resp *http.Response) error {
+	if resp == nil {
+		return newOfficialScheduleSourceError(officialScheduleReasonTransport, 0, fmt.Errorf("request official schedule API: nil response"))
+	}
+	if resp.Body == nil {
+		return newOfficialScheduleSourceError(officialScheduleReasonTransport, resp.StatusCode, fmt.Errorf("request official schedule API: nil response body"))
+	}
+	return nil
+}
+
+func (s *Service) readOfficialScheduleAPIResponse(resp *http.Response) ([]byte, error) {
+	if err := validateOfficialScheduleStatus(resp); err != nil {
+		return nil, err
+	}
+	if err := validateOfficialScheduleResponseContentType(resp); err != nil {
+		return nil, err
+	}
+	return s.readOfficialScheduleResponseBody(resp)
+}
+
+func validateOfficialScheduleStatus(resp *http.Response) error {
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	closeErr := httputil.DrainAndClose(resp.Body, httputil.DefaultDrainLimit)
+	statusErr := fmt.Errorf("official schedule API returned status %d", resp.StatusCode)
+	return newOfficialScheduleSourceError(officialScheduleReasonStatus, resp.StatusCode, errors.Join(statusErr, closeErr))
+}
+
+func validateOfficialScheduleResponseContentType(resp *http.Response) error {
+	if err := validateOfficialScheduleContentType(resp.Header.Get("Content-Type")); err != nil {
+		closeErr := httputil.DrainAndClose(resp.Body, httputil.DefaultDrainLimit)
+		return newOfficialScheduleSourceError(officialScheduleReasonContentType, resp.StatusCode, errors.Join(err, closeErr))
+	}
+	return nil
+}
+
+func (s *Service) readOfficialScheduleResponseBody(resp *http.Response) ([]byte, error) {
+	body, err := httputil.ReadAllAndClose(resp.Body, s.maxResponseBodyBytes)
+	if err != nil {
+		return nil, newOfficialScheduleSourceError(
+			officialScheduleBodyReadReason(err),
+			resp.StatusCode,
+			fmt.Errorf("read official schedule API response: %w", err),
+		)
+	}
+	observeOfficialScheduleResponseBytes(len(body))
+	return body, nil
+}
+
+func officialScheduleBodyReadReason(err error) officialScheduleReason {
+	if errors.Is(err, httputil.ErrResponseBodyTooLarge) {
+		return officialScheduleReasonOversize
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return officialScheduleReasonContext
+	}
+	return officialScheduleReasonTransport
+}
+
+func validateOfficialScheduleContentType(contentType string) error {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return fmt.Errorf("parse official schedule content type: %w", err)
+	}
+	if !strings.EqualFold(mediaType, "application/json") {
+		return fmt.Errorf("unexpected official schedule content type: %s", mediaType)
+	}
+	return nil
+}
+
+func (s *Service) decodeOfficialScheduleAPI(body []byte) ([]*domain.Stream, officialScheduleRowStats, error) {
+	groups, err := decodeOfficialScheduleGroups(body)
+	if err != nil {
+		return nil, officialScheduleRowStats{}, err
+	}
+	rows, err := decodeOfficialScheduleRows(groups)
+	if err != nil {
+		return nil, officialScheduleRowStats{}, err
+	}
+	return s.mapOfficialScheduleRows(rows)
+}
+
+func decodeOfficialScheduleGroups(body []byte) ([]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(body)
+	if !json.Valid(trimmed) {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonDecode, 0, fmt.Errorf("decode official schedule response: invalid JSON"))
+	}
+	if len(trimmed) == 0 || trimmed[0] != 0x7b {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("official schedule response root must be an object"))
+	}
+
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &root); err != nil {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonDecode, 0, fmt.Errorf("decode official schedule response: %w", err))
+	}
+	rawGroups, ok := root["dateGroupList"]
+	if !ok {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("official schedule response missing dateGroupList"))
+	}
+	groups, err := decodeRawJSONArray(rawGroups, "dateGroupList")
+	if err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
+func decodeOfficialScheduleRows(groups []json.RawMessage) ([]json.RawMessage, error) {
+	rows := make([]json.RawMessage, 0)
+	for index, rawGroup := range groups {
+		var group map[string]json.RawMessage
+		if err := json.Unmarshal(rawGroup, &group); err != nil {
+			return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("decode official schedule group %d: %w", index, err))
+		}
+		rawRows, ok := group["videoList"]
+		if !ok {
+			return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("official schedule group %d missing videoList", index))
+		}
+		groupRows, err := decodeRawJSONArray(rawRows, fmt.Sprintf("dateGroupList[%d].videoList", index))
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, groupRows...)
+	}
+	return rows, nil
+}
+
+func decodeRawJSONArray(raw json.RawMessage, field string) ([]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("official schedule field %s must be an array", field))
+	}
+
+	var values []json.RawMessage
+	if err := json.Unmarshal(trimmed, &values); err != nil {
+		return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("decode official schedule field %s: %w", field, err))
+	}
+	return values, nil
+}
+
+func newOfficialScheduleSourceError(reason officialScheduleReason, statusCode int, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &officialScheduleSourceError{reason: reason, statusCode: statusCode, err: err}
+}
+
+func (s *Service) logOfficialScheduleAPIError(err error) {
+	var sourceErr *officialScheduleSourceError
+	if errors.As(err, &sourceErr) {
+		s.logger.Warn("Official schedule API request failed",
+			slog.String("reason", string(sourceErr.reason)),
+			slog.Int("status_code", sourceErr.statusCode),
+			slog.Any("error", sourceErr.err))
+		return
+	}
+	s.logger.Warn("Official schedule API processing failed",
+		slog.String("reason", string(classifyOfficialScheduleReason(err, 0))),
+		slog.Any("error", err))
 }
 
 func (s *Service) getOfficialPageCache() ([]*domain.Stream, bool) {
-	ttl := settings.DefaultOfficialScheduleConfig().PageCacheTTL
+	ttl := s.officialSchedule.PageCacheTTL
 	if ttl <= 0 {
 		return nil, false
 	}
@@ -202,26 +365,23 @@ func (s *Service) getOfficialPageCache() ([]*domain.Stream, bool) {
 	now := s.now()
 	s.officialPageMu.RLock()
 	defer s.officialPageMu.RUnlock()
-
 	if s.officialPage.expiresAt.IsZero() || !now.Before(s.officialPage.expiresAt) {
 		return nil, false
 	}
-	return CloneStreams(s.officialPage.streams), true
+	return cloneStreams(s.officialPage.streams), true
 }
 
 func (s *Service) setOfficialPageCache(streams []*domain.Stream) {
-	ttl := settings.DefaultOfficialScheduleConfig().PageCacheTTL
-	if ttl <= 0 {
+	if s.officialSchedule.PageCacheTTL <= 0 {
 		return
 	}
 
 	s.officialPageMu.Lock()
-	defer s.officialPageMu.Unlock()
-
 	s.officialPage = officialSchedulePageCache{
-		streams:   CloneStreams(streams),
-		expiresAt: s.now().Add(ttl),
+		streams:   cloneStreams(streams),
+		expiresAt: s.now().Add(s.officialSchedule.PageCacheTTL),
 	}
+	s.officialPageMu.Unlock()
 }
 
 func (s *Service) now() time.Time {
@@ -231,18 +391,18 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
-func CloneStreams(streams []*domain.Stream) []*domain.Stream {
+func cloneStreams(streams []*domain.Stream) []*domain.Stream {
 	if streams == nil {
 		return nil
 	}
 	cloned := make([]*domain.Stream, 0, len(streams))
 	for _, stream := range streams {
-		cloned = append(cloned, CloneStream(stream))
+		cloned = append(cloned, cloneStream(stream))
 	}
 	return cloned
 }
 
-func CloneStream(stream *domain.Stream) *domain.Stream {
+func cloneStream(stream *domain.Stream) *domain.Stream {
 	if stream == nil {
 		return nil
 	}
@@ -279,6 +439,14 @@ func cloneChannelPtr(value *domain.Channel) *domain.Channel {
 		return nil
 	}
 	cloned := *value
+	cloned.EnglishName = cloneStringPtr(value.EnglishName)
+	cloned.Photo = cloneStringPtr(value.Photo)
+	cloned.Twitter = cloneStringPtr(value.Twitter)
+	cloned.VideoCount = cloneIntPtr(value.VideoCount)
+	cloned.SubscriberCount = cloneIntPtr(value.SubscriberCount)
+	cloned.Org = cloneStringPtr(value.Org)
+	cloned.Suborg = cloneStringPtr(value.Suborg)
+	cloned.Group = cloneStringPtr(value.Group)
 	return &cloned
 }
 
