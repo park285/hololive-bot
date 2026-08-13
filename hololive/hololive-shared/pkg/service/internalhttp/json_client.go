@@ -44,6 +44,8 @@ func NewClientForURLStrict(rawURL string, timeout time.Duration, _ *slog.Logger)
 		return httputil.NewInternalServiceClient(timeout), nil
 	}
 
+	// sharedh3의 closeFn은 transport.Close() 래퍼이고 그 transport는 반환된 client에 실려 있다.
+	// 소유자가 CloseClient로 회수하므로 핸들을 호출 경로마다 들고 다니지 않는다.
 	client, _, err := sharedh3.NewClient(timeout, sharedh3.ClientOptions{
 		CACertFile: sharedenv.StringAny(internalH3CACertFileEnv, hololiveH3CertFileEnv),
 		ServerName: sharedenv.StringAny(internalH3ServerNameEnv, hololiveH3ServerNameEnv),
