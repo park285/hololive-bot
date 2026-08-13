@@ -28,6 +28,10 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `settings.md` - settings/config update Pub/Sub
 - `iris-boundary.md` - Iris external boundary
 
+## Observed External API References
+
+- `schedule-hololive-tv-api.md` - `schedule.hololive.tv`의 미문서 `/api/list[/{group}]` 사용법 맵, group inventory, 관찰 schema. 현재 저장소 contract ID나 consumer를 추가하지 않음
+
 ## Update Rules
 
 계약 변경 PR은 변경 종류에 따라 다음 파일을 함께 검토합니다.
