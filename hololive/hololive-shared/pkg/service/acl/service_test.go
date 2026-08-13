@@ -476,7 +476,6 @@ func TestParseACLModeStrictRejectsUnknownValue(t *testing.T) {
 	t.Parallel()
 
 	for _, input := range []string{"", "unknown"} {
-		input := input
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 
