@@ -50,5 +50,5 @@ func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
 		return true
 	}
 
-	return apiclient.IsTimeoutError(err)
+	return false
 }

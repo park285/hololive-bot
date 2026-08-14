@@ -95,6 +95,24 @@ func TestProvideMajorEventLLMClient_EmptyModel(t *testing.T) {
 	}
 }
 
+func TestProvideMajorEventLLMClient_InitErrorReturnsNil(t *testing.T) {
+	var buf bytes.Buffer
+	logger := newUnsanitizedTestLogger(&buf)
+
+	client := ProvideMajorEventLLMClient(settings.CliproxyConfig{
+		Enabled: true,
+		APIKey:  "   ",
+		BaseURL: "https://example.com/v1",
+		Model:   "gpt-test",
+	}, nil, logger)
+	if client != nil {
+		t.Fatal("expected nil when generator construction fails")
+	}
+	if !strings.Contains(buf.String(), "initialization failed") {
+		t.Error("expected error log about initialization failure")
+	}
+}
+
 func TestProvideMajorEventLLMClient_Success(t *testing.T) {
 	var buf bytes.Buffer
 	logger := newUnsanitizedTestLogger(&buf)

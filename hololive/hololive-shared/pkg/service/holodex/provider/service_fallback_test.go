@@ -513,19 +513,19 @@ func TestShouldUseFallbackTimeout(t *testing.T) {
 			name:     "DeadlineExceeded with active ctx",
 			ctx:      activeCtx,
 			err:      context.DeadlineExceeded,
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "wrapped timeout with active ctx",
 			ctx:      activeCtx,
 			err:      fmt.Errorf("request: %w", context.DeadlineExceeded),
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "net timeout with active ctx",
 			ctx:      activeCtx,
 			err:      &mockTimeoutError{msg: "i/o timeout", timeout: true},
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "일반 에러는 폴백 안함",

@@ -116,13 +116,17 @@ func newTestClient(t *testing.T, model string) *llm.OpenAIClient {
 	t.Helper()
 	baseURL := testCliproxyBaseURL()
 	t.Logf("Model: %s, BaseURL: %s", model, baseURL)
-	return llm.NewClient(
+	client, err := llm.NewClient(
 		baseURL,
 		os.Getenv("CLIPROXY_API_KEY"),
 		model,
 		slog.New(slog.NewTextHandler(os.Stdout, nil)),
 		llm.WithChatCompletions(),
 	)
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	return client
 }
 
 func TestIntegration_Summarize_RawJSON_GPT(t *testing.T) {

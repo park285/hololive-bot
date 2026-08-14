@@ -124,7 +124,7 @@ func newTestMemberNewsClient(t *testing.T) LLMClient {
 
 	t.Logf("Model: %s, BaseURL: %s (Chat Completions)", modelName, baseURL)
 
-	return llm.NewClient(
+	client, err := llm.NewClient(
 		baseURL,
 		os.Getenv("CLIPROXY_API_KEY"),
 		modelName,
@@ -134,6 +134,10 @@ func newTestMemberNewsClient(t *testing.T) LLMClient {
 		llm.WithWebSearch(false),
 		llm.WithChatCompletions(),
 	)
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	return client
 }
 
 func integrationCandidates() []model.FilteredCandidate {

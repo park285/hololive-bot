@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -255,65 +254,6 @@ func (s *mockDedupCacheState) setRawString(key, value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.strings[key] = value
-}
-
-func fallbackKeyCount(fb *LocalFallback) int {
-	count := 0
-	fb.keys.Range(func(_, _ any) bool {
-		count++
-		return true
-	})
-	return count
-}
-
-func TestLocalFallback_TryClaimReleaseAndExpiry(t *testing.T) {
-	current := time.Date(2026, 3, 4, 8, 0, 0, 0, time.UTC)
-	fb := NewLocalFallback(newTestLogger())
-	fb.now = func() time.Time { return current }
-
-	assert.True(t, fb.tryClaim("claim:key", time.Minute))
-	assert.False(t, fb.tryClaim("claim:key", time.Minute))
-
-	fb.ReleaseClaims([]string{"claim:key"})
-	assert.True(t, fb.tryClaim("claim:key", time.Minute))
-	assert.False(t, fb.tryClaim("claim:key", time.Minute))
-
-	current = current.Add(2 * time.Minute)
-	assert.True(t, fb.tryClaim("claim:key", time.Minute))
-}
-
-func TestLocalFallback_CleanupExpiredEntriesOnCapacity(t *testing.T) {
-	current := time.Date(2026, 3, 4, 8, 0, 0, 0, time.UTC)
-	fb := NewLocalFallback(newTestLogger())
-	fb.now = func() time.Time { return current }
-
-	for i := range constants.LocalFallbackCleanupMaxKeys {
-		require.True(t, fb.tryClaim(fmt.Sprintf("expired:%d", i), time.Second))
-	}
-	require.Equal(t, constants.LocalFallbackCleanupMaxKeys, fallbackKeyCount(fb))
-
-	current = current.Add(2 * time.Second)
-	require.True(t, fb.tryClaim("fresh:key", time.Minute))
-	assert.Equal(t, 1, fallbackKeyCount(fb))
-}
-
-func TestNormalizeFallbackTTL(t *testing.T) {
-	tests := []struct {
-		name     string
-		ttl      time.Duration
-		expected time.Duration
-	}{
-		{"zero -> default", 0, constants.LocalFallbackDedupTTL},
-		{"over max -> default", time.Hour, constants.LocalFallbackDedupTTL},
-		{"within range", 5 * time.Minute, 5 * time.Minute},
-		{"exact max", constants.LocalFallbackDedupTTL, constants.LocalFallbackDedupTTL},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.expected, normalizeFallbackTTL(tc.ttl))
-		})
-	}
 }
 
 func TestService_TryClaimNotification_ClaimKeyCategoryAndSchedulePolicy(t *testing.T) {
@@ -657,7 +597,7 @@ func TestService_WasUpcomingEventNotifiedRecently_InvalidPayloadReturnsError(t *
 	assert.ErrorContains(t, err, "was upcoming event notified recently: get cache data")
 }
 
-func TestService_TryClaimNotification_FallbackClaimOnSetNXFailure(t *testing.T) {
+func TestService_TryClaimNotification_SetNXFailureDoesNotAcquire(t *testing.T) {
 	cacheMock := &cachemocks.Client{
 		SetNXFunc: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
 			return false, errors.New("valkey outage")
@@ -672,17 +612,8 @@ func TestService_TryClaimNotification_FallbackClaimOnSetNXFailure(t *testing.T) 
 
 	key, acquired, err := service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
 	require.NoError(t, err)
-	assert.True(t, acquired)
-
-	_, acquired, err = service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
-	require.NoError(t, err)
-	assert.False(t, acquired, "SETNX 실패 시에도 로컬 폴백으로 중복 차단돼야 함")
-
-	require.NoError(t, service.ReleaseClaims(t.Context(), []string{key}))
-
-	_, acquired, err = service.TryClaimNotification(t.Context(), "room1", "vid1", start, 5)
-	require.NoError(t, err)
-	assert.True(t, acquired, "release 후에는 재 claim 가능해야 함")
+	assert.False(t, acquired)
+	assert.NotEmpty(t, key)
 }
 
 func TestService_ReleaseClaims_WrapsDelManyError(t *testing.T) {
@@ -765,7 +696,7 @@ func TestService_TryClaimPair_Key1ContendedNeverTouchesKey2(t *testing.T) {
 	assert.False(t, key2Claimed, "key1 패자가 key2를 선점하면 승자 0명 race가 재발한다")
 }
 
-func TestService_TryClaimPair_SetNXError_Fallback(t *testing.T) {
+func TestService_TryClaimPair_SetNXErrorDoesNotAcquire(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	cacheMock.SetNXFunc = func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {
 		return false, errors.New("pipeline broken")
@@ -773,15 +704,11 @@ func TestService_TryClaimPair_SetNXError_Fallback(t *testing.T) {
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	a1, a2 := service.TryClaimPair(t.Context(), "fb:k1", "fb:k2", 5*time.Minute)
-	assert.True(t, a1, "fallback grants first claim")
-	assert.True(t, a2, "fallback grants first claim")
-
-	a1, a2 = service.TryClaimPair(t.Context(), "fb:k1", "fb:k2", 5*time.Minute)
-	assert.False(t, a1, "fallback dedup blocks second claim")
-	assert.False(t, a2, "fallback dedup blocks second claim")
+	assert.False(t, a1)
+	assert.False(t, a2)
 }
 
-func TestService_TryClaimPair_Key2Error_Fallback(t *testing.T) {
+func TestService_TryClaimPair_Key2ErrorDoesNotAcquireKey2(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
 	baseSetNX := cacheMock.SetNXFunc
 	cacheMock.SetNXFunc = func(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
@@ -793,10 +720,6 @@ func TestService_TryClaimPair_Key2Error_Fallback(t *testing.T) {
 	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
 	a1, a2 := service.TryClaimPair(t.Context(), "pk:k1", "pk:k2", 5*time.Minute)
-	assert.True(t, a1, "key1 acquired")
-	assert.True(t, a2, "key2 falls back and grants first claim")
-
-	a1Again, a2Again := service.TryClaimPair(t.Context(), "pk:k1b", "pk:k2", 5*time.Minute)
-	assert.True(t, a1Again, "fresh key1 acquired")
-	assert.False(t, a2Again, "key2 fallback dedup blocks second claim")
+	assert.True(t, a1)
+	assert.False(t, a2)
 }

@@ -25,6 +25,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -56,7 +57,7 @@ type OpenAIClient struct {
 	costTracker     CostTracker
 }
 
-func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
+func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) (*OpenAIClient, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -68,15 +69,14 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		opt(o)
 	}
 
-	var generator sharedllm.JSONGenerator
 	generator, err := sharedllm.NewOpenAICompatibleJSONGenerator(sharedllm.OpenAICompatibleConfig{
 		BaseURL:                      baseURL,
 		APIKey:                       apiKey,
 		HTTPClient:                   newLLMHTTPClient(),
-		AllowChatCompletionsFallback: true,
+		AllowChatCompletionsFallback: false,
 	})
 	if err != nil {
-		generator = errorJSONGenerator{err: err}
+		return nil, fmt.Errorf("create openai compatible json generator: %w", err)
 	}
 
 	return &OpenAIClient{
@@ -89,7 +89,7 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		chatCompletions: o.ChatCompletions,
 		logger:          logger,
 		costTracker:     o.CostTracker,
-	}
+	}, nil
 }
 
 // Cloudflare가 Go HTTP/2 fingerprint를 차단하므로 HTTP/2를 끈 프로파일을 쓴다.
@@ -218,12 +218,4 @@ func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []s
 		attrs = append(attrs, slog.String("prompt_sha256_8", hex.EncodeToString(sum[:8])))
 	}
 	return attrs
-}
-
-type errorJSONGenerator struct {
-	err error
-}
-
-func (g errorJSONGenerator) GenerateJSON(context.Context, sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
-	return sharedllm.JSONResponse{}, g.err
 }
