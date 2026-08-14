@@ -36,7 +36,6 @@ import (
 	"testing"
 
 	"github.com/openai/openai-go/v3"
-	json "github.com/park285/shared-go/pkg/json"
 	sharedllm "github.com/park285/shared-go/pkg/llm"
 )
 
@@ -332,36 +331,6 @@ func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
 	}
 }
 
-func TestOpenAIClientGenerateJSON_SanitizesDiscoveredEventsOnlyAfterFallback(t *testing.T) {
-	generator := &fakeJSONGenerator{
-		resp: sharedllm.JSONResponse{
-			Text:         `{"summary":"ok","discovered_events":[{"id":"a"}]}`,
-			Model:        "gpt-test",
-			FallbackUsed: true,
-		},
-	}
-	client := &OpenAIClient{
-		generator:  generator,
-		model:      "gpt-test",
-		schemaName: "event_summary",
-		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
-
-	got, err := client.GenerateJSON(context.Background(), "system", "user", map[string]any{"type": "object"})
-	if err != nil {
-		t.Fatalf("GenerateJSON() error = %v", err)
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(got), &payload); err != nil {
-		t.Fatalf("unmarshal sanitized json: %v", err)
-	}
-	events, ok := payload["discovered_events"].([]any)
-	if !ok || len(events) != 0 {
-		t.Fatalf("discovered_events = %#v, want empty array", payload["discovered_events"])
-	}
-}
-
 type fakeJSONGenerator struct {
 	called bool
 	resp   sharedllm.JSONResponse
@@ -385,74 +354,5 @@ func TestSafeLLMProviderError_RedactsEmptyOutputDiagnostics(t *testing.T) {
 	}
 	if !strings.Contains(safeErr.Error(), "error_type=openai_empty_output") {
 		t.Fatalf("safeLLMProviderError missing empty-output type, got: %s", safeErr.Error())
-	}
-}
-
-func TestSuppressDiscoveredEvents_NoField(t *testing.T) {
-	raw := `{"summary":"ok","items":[1,2,3]}`
-
-	sanitized, err := suppressFallbackDiscoveredEvents(raw)
-	if err != nil {
-		t.Fatalf("suppressFallbackDiscoveredEvents() error = %v", err)
-	}
-	if sanitized != raw {
-		t.Fatalf("suppressFallbackDiscoveredEvents() = %q, want original %q", sanitized, raw)
-	}
-}
-
-func TestSuppressDiscoveredEvents_WithField(t *testing.T) {
-	raw := `{"summary":"ok","discovered_events":[{"id":"a"}]}`
-
-	sanitized, err := suppressFallbackDiscoveredEvents(raw)
-	if err != nil {
-		t.Fatalf("suppressFallbackDiscoveredEvents() error = %v", err)
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(sanitized), &payload); err != nil {
-		t.Fatalf("unmarshal sanitized json: %v", err)
-	}
-
-	if payload["summary"] != "ok" {
-		t.Fatalf("summary = %v, want %q", payload["summary"], "ok")
-	}
-
-	events, ok := payload["discovered_events"].([]any)
-	if !ok {
-		t.Fatalf("discovered_events type = %T, want []any", payload["discovered_events"])
-	}
-	if len(events) != 0 {
-		t.Fatalf("discovered_events length = %d, want 0", len(events))
-	}
-}
-
-func TestSuppressDiscoveredEvents_InvalidJSON(t *testing.T) {
-	_, err := suppressFallbackDiscoveredEvents(`{"summary":`)
-	if err == nil {
-		t.Fatal("invalid json should return error")
-	}
-}
-
-func TestApplyFallbackPostProcess_SkipsWhenNoFallback(t *testing.T) {
-	client := &OpenAIClient{schemaName: "event_summary"}
-
-	raw := `{"summary":"ok","discovered_events":[{"id":"a"}]}`
-	got := client.applyFallbackPostProcess(raw, false)
-	if got != raw {
-		t.Fatalf("applyFallbackPostProcess() = %q, want original %q", got, raw)
-	}
-}
-
-func TestApplyFallbackPostProcess_SanitizesEventSummary(t *testing.T) {
-	client := &OpenAIClient{schemaName: "event_summary"}
-
-	got := client.applyFallbackPostProcess(`{"summary":"ok","discovered_events":[{"id":"a"}]}`, true)
-
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(got), &payload); err != nil {
-		t.Fatalf("unmarshal sanitized json: %v", err)
-	}
-	if events, ok := payload["discovered_events"].([]any); !ok || len(events) != 0 {
-		t.Fatalf("discovered_events = %#v, want empty array", payload["discovered_events"])
 	}
 }

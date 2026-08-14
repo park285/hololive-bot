@@ -212,8 +212,6 @@ func ProvideMajorEventAdjudicatorClient(cliproxy settings.CliproxyConfig, llmCon
 		enabled:        llmConfig.MajorEvent.Enabled,
 		model:          model,
 		incompleteWarn: "Major event consensus adjudicator LLM configuration incomplete, skipping",
-		// event_summary 스키마는 fallback 발생 시 discovered_events 억제가 필요하고, 그 판정에는
-		// openaipreset이 감추는 FallbackUsed 신호가 있어야 하므로 hololive OpenAIClient를 유지한다.
 		newClient: func(baseURL, apiKey, model string, logger *slog.Logger) (llm.Client, error) {
 			return llm.NewClient(baseURL, apiKey, model, logger,
 				llm.WithSchemaName("event_summary"),
