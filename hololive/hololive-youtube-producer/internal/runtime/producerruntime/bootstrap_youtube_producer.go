@@ -206,7 +206,6 @@ func newYouTubeProducerRuntime(
 		ConfigSubscriber:        configSubscriber,
 		PollTargetRefresher:     youtubeDeps.pollTargetRefresher,
 		RetentionCleaner:        buildRetentionCleaner(infra, logger),
-		CommunityObservation:    communityObservationRunnerFrom(youtubeDeps.communityObservation),
 		ServerAddr:              httpServers.Addr(),
 		HTTPServers:             httpServers,
 		Readiness:               readinessState,

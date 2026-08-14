@@ -26,8 +26,6 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
 )
 
-var _ communityObservationRunner = (*pollers.CommunityObservationConsumer)(nil)
-
 const activeActivePollTargetRefreshMaxJitter = 2 * time.Second
 
 type ingestionRuntimeYouTubeState struct {
@@ -41,7 +39,6 @@ type ingestionRuntimeYouTubeDependencies struct {
 	pollerRegistrations     []providers.ChannelPollerRegistration
 	pollTargetRefresher     *polltarget.Refresher
 	runActiveActiveRecovery func(context.Context)
-	communityObservation    *pollers.CommunityObservationConsumer
 }
 
 func resolveIngestionRuntimeYouTubeState(
@@ -152,12 +149,6 @@ func buildProducerYouTubeDependencies(
 	}
 	deps.runActiveActiveRecovery = buildActiveActiveRecoveryLoop(appConfig, jobClaimer, readinessState, deps.scraperScheduler, logger)
 	deps.pollTargetRefresher = buildPollTargetRefresher(appConfig, infra, deps, state, logger)
-	deps.communityObservation = pollers.NewCommunityObservationConsumer(
-		postgresPool(infra),
-		polling.CommunityKeywords(),
-		communityObservationLeaseOwner(appConfig),
-		logger,
-	)
 	return deps, nil
 }
 
@@ -338,22 +329,4 @@ func postgresPool(infra *youtubeProducerInfrastructure) *pgxpool.Pool {
 		return nil
 	}
 	return infra.postgresService.GetPool()
-}
-
-func communityObservationLeaseOwner(appConfig *settings.Config) string {
-	if appConfig == nil {
-		return youtubeProducerRuntimeName
-	}
-	owner := strings.TrimSpace(appConfig.Scraper.ActiveActive.InstanceID)
-	if owner == "" {
-		return youtubeProducerRuntimeName
-	}
-	return owner
-}
-
-func communityObservationRunnerFrom(consumer *pollers.CommunityObservationConsumer) communityObservationRunner {
-	if consumer == nil {
-		return nil
-	}
-	return consumer
 }

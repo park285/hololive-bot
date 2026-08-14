@@ -7,10 +7,10 @@ Module and runtime inventory for the `hololive-bot` workspace.
 | Module | Language | Path | Role | Port |
 |--------|----------|------|------|------|
 | `hololive-alarm-worker` | Go 1.26 | `hololive/hololive-alarm-worker/` | Alarm checker, dispatch queue consumer, and proactive egress worker | 30007 |
-| `hololive-api` | Go 1.26 | `hololive/hololive-api/` | Unified runtime hosting bot/admin/llm planes in one process | 30001/30003/30006 |
+| `hololive-api` | Go 1.26 | `hololive/hololive-api/` | Unified runtime hosting bot/admin/llm planes and the YouTube Community consume plane | 30001/30003/30006 |
 | `hololive-dbtest` | Go 1.26 | `hololive/hololive-dbtest/` | PostgreSQL testcontainers harness and production migration replay support | - |
 | `hololive-youtube-collector` | Go 1.26 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | Independent Community YouTube collector: YouTube.js fetch/normalize/`source_observation_outbox` Publish as a central singleton. No Holodex key, no canonical community tables, no live/shorts/videos/stats | 30045 |
-| `hololive-youtube-producer` | Go 1.26 | `hololive/hololive-youtube-producer/` | YouTube producer AP runtime: live/shorts/videos/stats, Holodex live discovery, community observation consume/canonical persist, outbox production, active-active coordination (Seoul b + main-host c + Osaka host-native a/d), readiness, and Holodex photo sync | 30005/30015/30025/30035 |
+| `hololive-youtube-producer` | Go 1.26 | `hololive/hololive-youtube-producer/` | YouTube producer AP runtime: live/shorts/videos/stats, Holodex live discovery, outbox production, active-active coordination (Seoul b + main-host c + Osaka host-native a/d), readiness, and Holodex photo sync | 30005/30015/30025/30035 |
 | `hololive-shared` | Go 1.26 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.26 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
 | `admin-dashboard-backend` | Go 1.26 | `admin-dashboard/backend/` | Admin dashboard Go backend (auth/session, holo API relay, Docker control, embedded frontend serving) | 30190 |
@@ -46,7 +46,7 @@ Module and runtime inventory for the `hololive-bot` workspace.
 - Service ownership: `SERVICE_OWNERSHIP.md`
 - Runtime runbook index: `runbooks/README.md`
 - Deployment baseline: `DEPLOYMENT_BASELINE.md`
-- YouTube notification split: `youtube-collector` owns Community YouTube.js fetch/normalize/`source_observation_outbox` Publish; `youtube-producer` owns producer AP responsibilities up to `youtube_notification_outbox`, observation consume/canonical persist, active-active coordination/readiness, and Holodex photo sync (`c` singleton lease; `b` excluded); `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
+- YouTube notification split: `youtube-collector` owns Community YouTube.js fetch/normalize/`source_observation_outbox` Publish; `hololive-api` YouTube plane owns Community observation consume/canonical persist; `youtube-producer` owns remaining producer AP polling up to `youtube_notification_outbox`, active-active coordination/readiness, and Holodex photo sync (`c` singleton lease; `b` excluded); `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
 - Birthday stream split: `youtube-producer` discovers LIVE/UPCOMING sessions for the enabled operational roster independently of ordinary subscriptions; `alarm-worker` resolves recipients from `status='sent'` deliveries of the matching birthday greeting event and relies on the dispatch ledger for late-room convergence.
 
 ## Maintenance

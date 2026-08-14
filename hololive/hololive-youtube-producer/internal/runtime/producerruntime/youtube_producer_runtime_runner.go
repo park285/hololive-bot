@@ -49,12 +49,11 @@ type YouTubeProducerRuntime struct {
 	Config      *settings.Config
 	Logger      *slog.Logger
 
-	ScraperScheduler     *scheduler.Scheduler
-	PhotoSync            photoSyncService
-	ConfigSubscriber     *configsub.Subscriber
-	PollTargetRefresher  *polltarget.Refresher
-	RetentionCleaner     *retention.Cleaner
-	CommunityObservation communityObservationRunner
+	ScraperScheduler    *scheduler.Scheduler
+	PhotoSync           photoSyncService
+	ConfigSubscriber    *configsub.Subscriber
+	PollTargetRefresher *polltarget.Refresher
+	RetentionCleaner    *retention.Cleaner
 
 	ServerAddr  string
 	HTTPServers *sharedserver.RuntimeHTTPServers
@@ -66,10 +65,6 @@ type YouTubeProducerRuntime struct {
 	backgroundWG            sync.WaitGroup
 	activeBackgrounds       atomic.Int64
 	lifecycle.Managed
-}
-
-type communityObservationRunner interface {
-	Start(context.Context)
 }
 
 func (r *YouTubeProducerRuntime) runtimeName() string {

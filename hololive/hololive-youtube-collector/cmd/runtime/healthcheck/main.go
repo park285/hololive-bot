@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	"github.com/park285/shared-go/pkg/healthprobe"

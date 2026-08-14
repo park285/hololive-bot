@@ -80,6 +80,7 @@ compose_up_build=false
 compose_up_after_separator=false
 compose_scale_overrides=()
 compose_command_seen=false
+compose_command_index=-1
 previous=""
 previous_option=""
 for arg in "$@"; do
@@ -135,6 +136,7 @@ for arg in "$@"; do
                 ;;
             *)
                 compose_command_seen=true
+                compose_command_index="${#compose_args[@]}"
                 ;;
         esac
     fi
@@ -184,6 +186,9 @@ fi
 if [[ ${#compose_files[@]} -eq 0 ]]; then
     compose_files=(deploy/compose/docker-compose.prod.yml)
     compose_args=(-f deploy/compose/docker-compose.prod.yml "${compose_args[@]}")
+    if (( compose_command_index >= 0 )); then
+        compose_command_index=$((compose_command_index + 2))
+    fi
 fi
 
 SHARED_GO_WORKSPACE_PATH="$(resolve_required_workspace_path \
@@ -228,6 +233,41 @@ export COMPOSE_ENV_FILE
 
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
+
+collector_disable_value="${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}"
+if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR"; then
+    collector_disable_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR")"
+fi
+case "${collector_disable_value}" in
+    ""|0) ;;
+    1)
+        collector_disable_overlay="deploy/compose/docker-compose.youtube-collector-disabled.yml"
+        collector_disable_present=false
+        for file in "${compose_files[@]}"; do
+            if [[ "${file##*/}" == "${collector_disable_overlay##*/}" ]]; then
+                collector_disable_present=true
+                break
+            fi
+        done
+        if [[ "${collector_disable_present}" == false ]]; then
+            compose_files+=("${collector_disable_overlay}")
+            if (( compose_command_index >= 0 )); then
+                compose_args=(
+                    "${compose_args[@]:0:compose_command_index}"
+                    -f "${collector_disable_overlay}"
+                    "${compose_args[@]:compose_command_index}"
+                )
+            else
+                compose_args+=(-f "${collector_disable_overlay}")
+            fi
+        fi
+        ;;
+    *)
+        echo "[ERROR] HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR must be 0 or 1" >&2
+        exit 1
+        ;;
+esac
+
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${compose_files[@]}"
 compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 
@@ -288,7 +328,17 @@ if [[ "${compose_invokes_up}" == true ]]; then
     if [[ ${#up_service_targets[@]} -eq 0 ]]; then
         bind_preflight_required=true
         removed_runtime_cleanup_required=true
+        collector_disabled=false
+        for file in "${compose_files[@]}"; do
+            if [[ "${file##*/}" == "docker-compose.youtube-collector-disabled.yml" ]]; then
+                collector_disabled=true
+                break
+            fi
+        done
         gate_targets=(hololive-api hololive-alarm-worker admin-dashboard)
+        if [[ "${collector_disabled}" == false ]]; then
+            gate_targets+=(youtube-collector)
+        fi
         for file in "${compose_files[@]}"; do
             if [[ "${file##*/}" == "docker-compose.live-compat.yml" ]]; then
                 public_ingress_preflight_required=true

@@ -979,15 +979,7 @@ func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 		subjects[i] = fmt.Sprintf("video-%03d", i+1)
 		kinds[i] = string(contract.KindViewerSample)
 	}
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		)
-		SELECT $1, input.subject_key, input.observation_kind,
-		       50, 60000, TRUE, clock_timestamp() + INTERVAL '1 hour'
-		FROM unnest($2::text[], $3::text[]) AS input(subject_key, observation_kind)
-	`, proof.ProjectionGeneration, subjects, kinds); err != nil {
+	if _, err := pool.Exec(ctx, mustTestSQL("insert_publish_targets.sql"), proof.ProjectionGeneration, subjects, kinds); err != nil {
 		t.Fatal(err)
 	}
 	observations := make([]contract.Envelope, MaxPublishBatchSize)
@@ -1017,6 +1009,143 @@ func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 	if got := counter.queries.Load(); got != 3 {
 		t.Fatalf("target fence queries = %d, want constant 3", got)
 	}
+}
+
+func TestPublishBatchStatementCountIsConstant(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_global")
+	subjects := make([]string, MaxPublishBatchSize-1)
+	kinds := make([]string, MaxPublishBatchSize-1)
+	for i := range subjects {
+		subjects[i] = fmt.Sprintf("video-%03d", i+1)
+		kinds[i] = string(contract.KindViewerSample)
+	}
+	if _, err := pool.Exec(ctx, mustTestSQL("insert_publish_targets.sql"), proof.ProjectionGeneration, subjects, kinds); err != nil {
+		t.Fatal(err)
+	}
+	counter := &targetQueryCounter{}
+	config := pool.Config()
+	config.ConnConfig.Tracer = counter
+	tracedPool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tracedPool.Close()
+	repository := NewRepository(tracedPool)
+	for _, size := range []int{1, 361, MaxPublishBatchSize} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			input := viewerPublishBatch(t, proof, size)
+			encoded, contracts, err := encodePublishBatch(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tx, err := tracedPool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			counter.queries.Store(0)
+			if _, err := repository.publishBatchTx(ctx, tx, input, encoded, contracts); err != nil {
+				_ = tx.Rollback(ctx)
+				t.Fatalf("publish %d observations: %v", size, err)
+			}
+			if got := counter.queries.Load(); got != 6 {
+				_ = tx.Rollback(ctx)
+				t.Fatalf("publish statements = %d, want constant 6", got)
+			}
+			if err := tx.Rollback(ctx); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestPublishBatchRejectsOversizedEncodedSetBeforeDatabaseAccess(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	counter := &targetQueryCounter{}
+	config := pool.Config()
+	config.ConnConfig.Tracer = counter
+	tracedPool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tracedPool.Close()
+
+	proof := contract.LeaseProof{
+		JobKey: "job:oversized", CollectionJobKind: "community_collect",
+		OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
+		ScheduledFor: time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC),
+	}
+	size := MaxPublishBatchBytes/100_000 + 2
+	observations := make([]contract.Envelope, size)
+	checkpoints := make([]CheckpointEntry, size)
+	for i := range observations {
+		observations[i] = oversizedCommunityEnvelope(t, proof, i)
+		checkpoints[i] = checkpointForEnvelope(observations[i])
+	}
+	input := PublishBatchInput{
+		Lease: proof,
+		Checkpoint: CheckpointUpdate{
+			Entries: checkpoints, CollectionLatency: time.Second,
+		},
+		Observations: observations,
+	}
+	counter.queries.Store(0)
+	_, err = NewRepository(tracedPool).PublishBatch(ctx, input)
+	if !errors.Is(err, ErrInvalidEnvelope) {
+		t.Fatalf("error = %v, want invalid envelope", err)
+	}
+	if got := counter.queries.Load(); got != 0 {
+		t.Fatalf("database statements = %d, want 0", got)
+	}
+}
+
+func viewerPublishBatch(t *testing.T, proof contract.LeaseProof, size int) PublishBatchInput {
+	t.Helper()
+	observations := make([]contract.Envelope, size)
+	checkpoints := make([]CheckpointEntry, size)
+	for i := range observations {
+		observations[i] = viewerEnvelopeFor(t, proof, 1, fmt.Sprintf("video-%03d", i), int64(i+1))
+		checkpoints[i] = checkpointForEnvelope(observations[i])
+	}
+	return PublishBatchInput{
+		Lease: proof,
+		Checkpoint: CheckpointUpdate{
+			Entries:           checkpoints,
+			CollectionLatency: time.Second,
+		},
+		Observations: observations,
+	}
+}
+
+func oversizedCommunityEnvelope(t *testing.T, proof contract.LeaseProof, ordinal int) contract.Envelope {
+	t.Helper()
+	subject := fmt.Sprintf("UC_OVERSIZED_%03d", ordinal)
+	payload, err := contract.MarshalPayloadV1(contract.CommunityPayloadV1{
+		ChannelID: subject,
+		Posts: []contract.CommunityPostV1{{
+			PostID: fmt.Sprintf("post-%03d", ordinal), ChannelID: subject,
+			ContentText: strings.Repeat("x", 100_000),
+		}},
+		Coverage: contract.CommunityPageCoverageV1{
+			ChannelID: subject, MaxResults: 10, PageCount: 1, Exhausted: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := contract.PrepareEnvelope(contract.Envelope{
+		Provider: contract.ProviderYouTubeJS, ObservationKind: contract.KindCommunityPage,
+		SubjectKey: subject, SchemaVersion: 1, ContractGeneration: 1,
+		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
+		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
+		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: proof,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return envelope
 }
 
 func assertPublishSideEffects(t *testing.T, pool *pgxpool.Pool, observations, queue, checkpoints, collisions int) {

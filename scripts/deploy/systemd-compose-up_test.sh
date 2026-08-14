@@ -17,6 +17,24 @@ else
   pass "root exec-tree ownership enforcement has no opt-in bypass"
 fi
 
+if grep -E 'compose\.sh .* up -d( |$)' "${WRAPPER}" | grep -Evq ' up -d --no-build( |$)'; then
+  record_fail "root systemd startup must never build images on the runtime host"
+else
+  pass "root systemd startup is pinned to --no-build"
+fi
+
+COLLECTOR_DISABLE_OVERLAY="${ROOT_DIR}/deploy/compose/docker-compose.youtube-collector-disabled.yml"
+if [[ ! -f "${COLLECTOR_DISABLE_OVERLAY}" ]]; then
+  record_fail "youtube-collector persistent disable overlay is missing"
+elif ! grep -Eq '^[[:space:]]+replicas:[[:space:]]+0$' "${COLLECTOR_DISABLE_OVERLAY}"; then
+  record_fail "youtube-collector disable overlay must scale the service to zero"
+elif ! grep -Fq 'HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR' "${ROOT_DIR}/scripts/deploy/compose.sh" ||
+     ! grep -Fq 'docker-compose.youtube-collector-disabled.yml' "${ROOT_DIR}/scripts/deploy/compose.sh"; then
+  record_fail "the shared compose entrypoint must enforce the persistent youtube-collector disable flag"
+else
+  pass "youtube-collector persistent disable is owned by the shared compose entrypoint"
+fi
+
 if [[ ! -f "${DOWN_WRAPPER}" ]]; then
   record_fail "root systemd ExecStop wrapper source is missing"
 elif grep -Eq '/(home|root/work)' "${DOWN_WRAPPER}"; then

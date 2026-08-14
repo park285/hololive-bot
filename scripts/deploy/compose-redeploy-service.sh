@@ -53,6 +53,12 @@ contains_compose_file() {
     return 1
 }
 
+contains_ap_compose_file() {
+    contains_compose_file docker-compose.osaka.yml \
+        || contains_compose_file docker-compose.osaka2.yml \
+        || contains_compose_file docker-compose.seoul.yml
+}
+
 usage() {
     echo "Usage: $0 <service|all>"
     echo
@@ -169,6 +175,24 @@ for index in "${!COMPOSE_FILE_PATHS[@]}"; do
 done
 COMPOSE_FILE="$(IFS=:; printf '%s' "${COMPOSE_FILE_PATHS[*]}")"
 
+SERVICE="$1"
+if ! TARGET="$(compose_service_resolve_redeploy_target "${SERVICE}")"; then
+    echo "[ERROR] Unsupported service: ${SERVICE}" >&2
+    echo >&2
+    usage >&2
+    exit 1
+fi
+
+if contains_ap_compose_file && [[ "${TARGET}" == "youtube-collector" ]]; then
+    echo "[ERROR] youtube-collector is central-only and cannot be redeployed with an AP compose overlay" >&2
+    exit 1
+fi
+
+if contains_ap_compose_file && [[ -z "${TARGET}" ]]; then
+    echo "[ERROR] all-service redeploy is not supported with an AP compose overlay; use the host-specific AP deploy entrypoint" >&2
+    exit 1
+fi
+
 SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
     "${SHARED_GO_WORKSPACE_PATH:-}" \
     "${ROOT_DIR}/../shared-go" \
@@ -204,18 +228,8 @@ elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
     exit 1
 fi
 
-SERVICE="$1"
-if ! TARGET="$(compose_service_resolve_redeploy_target "${SERVICE}")"; then
-    echo "[ERROR] Unsupported service: ${SERVICE}" >&2
-    echo >&2
-    usage >&2
-    exit 1
-fi
-
 if [[ "${TARGET}" == "youtube-producer" ]] \
-   && ! contains_compose_file docker-compose.osaka.yml \
-   && ! contains_compose_file docker-compose.osaka2.yml \
-   && ! contains_compose_file docker-compose.seoul.yml \
+   && ! contains_ap_compose_file \
    && [[ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]]; then
     echo "[ERROR] youtube-producer is remote-AP-owned; central redeploy requires ALLOW_CENTRAL_YOUTUBE_PRODUCER=true" >&2
     exit 1
@@ -233,9 +247,7 @@ if [[ "${TARGET}" == "youtube-producer-c" ]]; then
 fi
 
 if [[ -z "${TARGET}" ]] \
-   && ! contains_compose_file docker-compose.osaka.yml \
-   && ! contains_compose_file docker-compose.osaka2.yml \
-   && ! contains_compose_file docker-compose.seoul.yml \
+   && ! contains_ap_compose_file \
    && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] \
    && [[ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]]; then
     echo "[ERROR] Central all-service deploy cannot enable the remote-owned oracle profile" >&2

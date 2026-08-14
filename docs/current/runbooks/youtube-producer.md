@@ -4,7 +4,7 @@
 
 ## Role
 
-`youtube-producer`는 YouTube scraping/polling, outbox production, Community observation consume, active-active AP runtime을 담당합니다. Community YouTube fetch는 `youtube-collector`가 소유하며 producer는 `community`/`community_backfill` poller를 등록하지 않습니다. Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. Osaka `youtube-producer-a`(30005, host `<tailnet-osaka-a>`)와 Osaka2 `youtube-producer-d`(30035, host `<tailnet-osaka2-d>`)는 tiny VPS host-native `systemd` 런타임으로 live 운영 중이며, repo-side Docker Compose overlays는 compose 경로/계약 검증용으로 유지합니다. 모든 AP는 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
+`youtube-producer`는 YouTube scraping/polling, outbox production, active-active AP runtime을 담당합니다. Community YouTube fetch는 `youtube-collector`가, Community consume는 `hololive-api` YouTube plane이 소유하며 producer는 `community`/`community_backfill` poller를 등록하지 않습니다. Seoul 호스트에서 `youtube-producer-b`(30015, `deploy/compose/docker-compose.seoul.yml`)가, 메인 호스트에서 `youtube-producer-c`(30025, `deploy/compose/docker-compose.main-ap.yml`, profile `main-ap`)가 동시에 실행됩니다. Osaka `youtube-producer-a`(30005, host `<tailnet-osaka-a>`)와 Osaka2 `youtube-producer-d`(30035, host `<tailnet-osaka2-d>`)는 tiny VPS host-native `systemd` 런타임으로 live 운영 중이며, repo-side Docker Compose overlays는 compose 경로/계약 검증용으로 유지합니다. 모든 AP는 메인 valkey의 동일 lease 백엔드(`production` namespace)를 공유하며, Valkey JobRunGuard가 같은 `poller + channel`의 중복 Poll을 막습니다. 원격 AP 호스트는 `scripts/deploy/ap-hosts/<host>.conf`로 정의되고 `ap-*` 스크립트가 공통 운영 경로를 제공합니다.
 
 ## Normal status
 
@@ -150,7 +150,7 @@ YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2
 
 The pre-rename keys (`SCRAPER_SHORTS_SECONDS`, `SCRAPER_COMMUNITY_SECONDS`, `SCRAPER_LIVE_SECONDS`, `SCRAPER_VIDEOS_SECONDS`, `SCRAPER_STATS_SECONDS`, `SCRAPER_WORKER_COUNT`) are no longer read; leaving them in an env file changes nothing.
 
-Community collection cadence is owned by central `youtube-collector`. Collector uses `communityPrimaryPollInterval` (shorts interval when set, otherwise `SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS`). Producer does not fetch Community posts; persist is `CommunityObservationConsumer` only.
+Community collection cadence is owned by central `youtube-collector`. Collector uses `communityPrimaryPollInterval` (shorts interval when set, otherwise `SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS`). Producer does not fetch or persist Community observations; consume is owned by the `hololive-api` YouTube plane.
 
 Optional backfill pollers use separate names (`shorts_backfill`, `live_backfill`) and separate cooldown keys. They reuse the same persistence/outbox path, so duplicate delivery is still guarded by `(kind, content_id)` idempotency and `alarm-worker` delivery claims. `community_backfill` is not registered. Backfill remains disabled by default:
 

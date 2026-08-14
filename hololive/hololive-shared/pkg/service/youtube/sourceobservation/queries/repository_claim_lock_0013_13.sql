@@ -31,4 +31,4 @@ WHERE queue.observation_id = $1
   AND queue.status = 'PROCESSING'
   AND queue.lease_token = $2
   AND queue.lease_expires_at > NOW()
-FOR UPDATE OF queue, observation
+FOR UPDATE OF queue

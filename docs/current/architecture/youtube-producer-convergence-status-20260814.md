@@ -9,7 +9,7 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
 ## 저장소 스냅샷
 
 - Branch: `feat/schedule-api-and-community-observation`
-- HEAD: `5248898cd`
+- HEAD: `4934d4358` plus local Task 4 WIP
 - `origin/main` 이후 commit:
   - `4c6faafcc feat(schedule): replace official HTML scraper with API-only source`
   - `e073d3896 Document community source observation vertical slice`
@@ -18,7 +18,7 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
 - production에는 migration `144`와 `youtube-collector`가 적용되지 않았다.
 - 현재 worktree는 Community vertical slice와 runtime wiring을 포함한 대규모 로컬 WIP이며 release candidate가 아니다.
 - 2026-08-14 read-only 관측 당시 `hololive-api`, `alarm-worker`, producer `a/b/c/d`는 healthy였고 중앙 `youtube-collector`는 배포되지 않았다.
-- 2026-08-14 통합 contract v2.1의 Task 1 foundation, Task 2 target projection/PostgreSQL job fence, Task 3 three-provider collector adapters는 로컬 구현과 targeted validation을 완료했다. Task 4 API YouTube plane 이후 runtime 전환은 시작하지 않았다.
+- 2026-08-14 통합 contract v2.1의 Task 1–3과 Task 4 API YouTube plane/Community consume 이전은 로컬 구현과 targeted validation을 완료했다. Task 5–8 reconciler와 Task 9 producer 제거는 시작하지 않았다.
 - source observation identity는 Go `encoding/json` 관례 대신 `source-observation-canonical-json-v1` safe-integer JCS subset과 language-neutral fixture로 고정했다. collector runtime은 계속 Go다.
 
 ## 현재 진척
@@ -30,7 +30,7 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
 | Target projection/job fence | generation rebuild, DB lease owner, set-based publish fence와 stale-holder regression. `viewer_sample`은 video ID roster | Task 2 로컬 검증 완료 | Task 4 API lifecycle에서 `LiveHeadViewerVideoIDs`로 viewer roster를 채운다 |
 | Community domain processor | `pkg/service/youtube/community` WIP | 로컬 구현 | consumer ownership을 API로 이동 |
 | 독립 collector module | typed registry, `YouTubeCollector` config, Holodex/Official/YouTube.js adapters, Community registry 흡수. Compose가 `HOLODEX_API_KEY`를 전달 | Task 3 로컬 검증 완료 | AP fleet 배포, Task 4 ownership 이전 |
-| Community observation consume | producer consumer WIP | 로컬 구현 | API YouTube plane으로 이동하고 producer 경로 삭제 |
+| Community observation consume | API YouTube plane claim/finalize, producer production wiring 삭제 | Task 4 로컬 검증 완료 | Task 5–8 reducer와 production apply |
 | Videos/Shorts | collector `youtubejs_content`가 observation을 발행; producer poller가 아직 canonical write를 소유 | collector 수집 로컬 완료, canonical 미전환 | API reconciler로 분리 |
 | Live/Viewer | collector Holodex/YouTube.js adapter 로컬; producer fallback path는 production에 잔존 | collector 수집 로컬 완료, canonical 미전환 | source-neutral observation과 monotonic reconciliation 구현 |
 | Profile/Photo | YouTube.js `youtubejs_channel` adapter 로컬; Holodex live API는 profile 미발행; producer sync 잔존 | collector 일부 로컬 완료 | variant 보존 및 API projection 규칙 구현 |
@@ -57,10 +57,10 @@ Community vertical slice와 Task 3 collector adapters는 로컬에서 구현되�
 ### 목표 설계와 충돌하는 내용
 
 1. 현재 collector 문서는 중앙 Community singleton을 규정하지만 목표는 AP collector fleet이다.
-2. canonical consumer가 아직 `youtube-producer`에 있고 `hololive-api`에는 YouTube plane이 없다.
+2. videos/shorts/live/stats canonical write는 아직 producer가 소유한다. Community consume만 API YouTube plane으로 옮겼다.
 3. collector Holodex/Official adapter는 로컬 observation publisher지만 production 수집과 canonical write는 아직 producer/API 내부 provider 호출에 남아 있다.
 4. producer의 Community direct-persist 코드가 registration 제거 뒤에도 남아 있어 최종 owner 경계가 깨끗하지 않다.
-5. API YouTube plane lifecycle이 아직 없어 target projection refresh를 production runtime에서 기동하지 않는다. Task 2 package와 collector reader/fence는 구현됐지만 Task 4 전에는 production-ready end-to-end path가 아니다.
+5. live end due-finalizer와 retention/replay worker 본문은 Task 6/8 소유라 plane config만 있고 loop는 시작하지 않는다.
 6. `scripts/deploy/ap-rsync-files.txt`는 삭제된 authority/community 경로를 제거하고 현재 youtube-producer `go list -deps` 누락 파일을 보강했다. `scripts/deploy/check-ap-rsync-manifest.sh`와 scoped `git diff --check`는 통과한다.
 
 ## 확정된 목표 전제
@@ -164,6 +164,27 @@ go test -run '^$' -bench '^BenchmarkCanonicalizeJSON1MiB$' -benchmem \
 ```
 
 Go runtime/settings/sourceobservation package와 Node helper test 42개가 통과했다. race도 collector `internal/runtime/...`에서 통과했다. `BenchmarkCanonicalizeJSON1MiB-12`는 `25874544 ns/op`, `11532227 B/op`, `56 allocs/op`이다. 성능 개선 주장은 하지 않는다. YouTube.js process lifetime는 `youtubejs.Helper`, helper HTTP는 `youtubejs.RPC`이다. Community-only scheduler reference는 제거됐고 adapter는 producer/canonical/notification ownership을 import하지 않는다. 이는 Task 3 collector adapter만 검증하며 Task 4 API YouTube plane, producer 제거, AP deployment와 production readiness는 증명하지 않는다.
+
+Task 4 최종 상태에서 다음 targeted check가 통과했다.
+
+```text
+go test -count=1 \
+  ./hololive/hololive-api/internal/planes/youtube/... \
+  ./hololive/hololive-shared/pkg/service/youtube/community \
+  ./hololive/hololive-shared/pkg/service/youtube/sourceobservation \
+  ./hololive/hololive-shared/pkg/config/settings \
+  ./hololive/hololive-youtube-producer/internal/runtime/pollers \
+  ./hololive/hololive-youtube-producer/internal/runtime/producerruntime \
+  ./hololive/hololive-youtube-producer/internal/runtime/readiness
+
+go test -race -count=1 \
+  ./hololive/hololive-api/internal/planes/youtube/... \
+  ./hololive/hololive-shared/pkg/service/youtube/sourceobservation
+
+bash scripts/ci/check-postgres-capacity.sh
+```
+
+API shutdown join, invalid-item isolation, transaction rollback, replay 비중복, viewer-empty projection, YouTube plane budget fail-closed, compose capacity `allocated=55 reserve=5`가 통과했다. producer production path에 Community consume type/wiring이 없다. 이는 Task 4의 로컬 invariant만 검증하며 Task 5–8 reducer, Task 9 producer 제거, production apply를 증명하지 않는다.
 
 현재 알려진 hygiene failure는 없다. `scripts/deploy/ap-rsync-files.txt`의 삭제 경로·누락 의존성·EOF blank line은 보강했고 `scripts/deploy/check-ap-rsync-manifest.sh`가 통과한다.
 

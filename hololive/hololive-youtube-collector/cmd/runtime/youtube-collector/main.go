@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	_ "time/tzdata"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"

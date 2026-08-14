@@ -84,7 +84,7 @@ for scale_args in \
     assert_entrypoint_blocked "compose wrapper scale ${scale_args}" \
         "${tmp}/default.env" 'connection budget exhausted' \
         "${root}/scripts/deploy/compose.sh" -f deploy/compose/docker-compose.prod.yml "${args[@]}"
-    grep -q 'max=60 allocated=61 reserve=-1' "${tmp}/out"
+    grep -q 'max=60 allocated=63 reserve=-3' "${tmp}/out"
 done
 
 for scale_case in \

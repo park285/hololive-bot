@@ -224,6 +224,21 @@ func TestBuildPolicyTargetsDoesNotPlantViewerSampleOnChannelIDs(t *testing.T) {
 	}
 }
 
+func TestBuildPolicyTargetsEmptyViewerRosterSucceeds(t *testing.T) {
+	targets, _, err := BuildPolicyTargets(PolicyInputs{
+		NotificationChannelIDs: []string{"UC_NOTIFY"},
+		OperationalChannelIDs:  []string{"UC_OPS"},
+	}, defaultPolicySchedules())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range targets {
+		if target.ObservationKind == contract.KindViewerSample {
+			t.Fatalf("empty viewer roster planted viewer_sample on %q", target.SubjectKey)
+		}
+	}
+}
+
 func TestBuildPolicyTargetsRejectsChannelIDAsViewerVideo(t *testing.T) {
 	_, _, err := BuildPolicyTargets(PolicyInputs{
 		ViewerVideoIDs: []string{"UCoperationalchannel0001"},

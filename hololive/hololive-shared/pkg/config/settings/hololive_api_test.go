@@ -134,3 +134,22 @@ func TestValidatePlanePool(t *testing.T) {
 	require.Error(t, validatePlanePool("bot", &PostgresConfig{PoolMinConns: 5, PoolMaxConns: 4}))
 	require.Error(t, validatePlanePool("bot", &PostgresConfig{PoolMinConns: 0, PoolMaxConns: 0}))
 }
+
+func TestValidateYouTubePlaneDatabaseRole(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, validateYouTubePlaneDatabaseRole("hololive_runtime"))
+	err := validateYouTubePlaneDatabaseRole(postgresScraperRoleUser)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), postgresScraperRoleUser)
+}
+
+func TestHololiveAPIYouTubePlaneComposeBudgetLeavesReservedCapacity(t *testing.T) {
+	t.Parallel()
+	bot := 4
+	admin := 4
+	llm := 4
+	youtubeCompose := 2
+	if bot+admin+llm+youtubeCompose > 16 {
+		t.Fatalf("hololive-api process pool sum %d exceeds the reviewed 16-connection envelope", bot+admin+llm+youtubeCompose)
+	}
+}

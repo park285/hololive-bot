@@ -13,7 +13,7 @@
 
 ## Role
 
-Community vertical slice collector입니다. YouTube.js (`youtubei.js`) community fetch, normalize, `source_collection_checkpoints`와 `source_observation_outbox` Publish만 소유합니다. Canonical community persist와 notification outbox는 `youtube-producer`가 소유합니다.
+Community vertical slice collector입니다. YouTube.js (`youtubei.js`) community fetch, normalize, `source_collection_checkpoints`와 `source_observation_outbox` Publish만 소유합니다. Canonical community persist와 notification outbox는 `hololive-api` YouTube plane이 소유합니다.
 
 ## Owns
 
@@ -25,7 +25,7 @@ Community vertical slice collector입니다. YouTube.js (`youtubei.js`) communit
 
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
-| Community observations | PostgreSQL outbox | `source_observation_outbox` (`source_kind=youtube_community`) | `youtube-producer` consumer |
+| Community observations | PostgreSQL outbox | `source_observation_outbox` (`source_kind=youtube_community`) | `hololive-api` YouTube plane |
 | Collector health | H3 | `/health` | Compose healthcheck |
 
 ## Consumes

@@ -33,12 +33,12 @@ ENV
   "${root}/scripts/ci/postgres-capacity-policy.tsv" \
   "${tmp}/safe.env" >"${tmp}/out"
 grep -q "source=target-env:${tmp}/safe.env" "${tmp}/out"
-grep -q 'allocated=52 reserve=8' "${tmp}/out"
+grep -q 'allocated=54 reserve=6' "${tmp}/out"
 "${root}/scripts/ci/check-postgres-capacity.sh" \
   "${root}/deploy/compose/docker-compose.prod.yml" \
   "${root}/scripts/ci/postgres-capacity-policy.tsv" \
   "${tmp}/safe.env" --target-env-only >"${tmp}/out"
-grep -q 'allocated=52 reserve=8' "${tmp}/out"
+grep -q 'allocated=54 reserve=6' "${tmp}/out"
 
 : >"${tmp}/default.env"
 if "${root}/scripts/ci/check-postgres-capacity.sh" \
@@ -49,7 +49,7 @@ if "${root}/scripts/ci/check-postgres-capacity.sh" \
 	echo "capacity gate accepted producer scale 2 above the server budget" >&2
 	exit 1
 fi
-grep -q 'max=60 allocated=61 reserve=-1' "${tmp}/out"
+grep -q 'max=60 allocated=63 reserve=-3' "${tmp}/out"
 
 for invalid_scale in \
   '--scale=youtube-producer' \

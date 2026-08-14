@@ -13,20 +13,22 @@ import (
 	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
 
 	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
+	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedlifecycle "github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
-// Runtime은 bot ingress, admin API, LLM scheduler plane을 하나의 Go 프로세스에서
-// 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
+// Runtime은 bot ingress, admin API, LLM scheduler, YouTube plane을 하나의 Go
+// 프로세스에서 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
 type Runtime struct {
 	Config *settings.HololiveAPIConfig
 	Logger *slog.Logger
 
-	Bot   *botruntime2.BotRuntime
-	Admin *app.AdminAPIRuntime
-	LLM   *llmruntime.LLMSchedulerRuntime
+	Bot     *botruntime2.BotRuntime
+	Admin   *app.AdminAPIRuntime
+	LLM     *llmruntime.LLMSchedulerRuntime
+	YouTube *youtuberuntime.Runtime
 
 	group *applifecycle.GroupRuntime
 }
@@ -57,30 +59,50 @@ func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, lo
 		return nil, fmt.Errorf("build bot plane: %w", err)
 	}
 
-	runtime := &Runtime{
-		Config: appConfig,
-		Logger: logger,
-		Bot:    bot,
-		Admin:  admin,
-		LLM:    llm,
+	var youtube *youtuberuntime.Runtime
+	if appConfig.YouTube.Enabled {
+		youtube, err = youtuberuntime.Build(ctx, appConfig.YouTube, appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
+		if err != nil {
+			bot.Close()
+			admin.Close()
+			llm.Close()
+			return nil, fmt.Errorf("build youtube plane: %w", err)
+		}
 	}
-	runtime.group = applifecycle.NewGroupRuntime(logger,
-		applifecycle.GroupComponent{
+
+	runtime := &Runtime{
+		Config:  appConfig,
+		Logger:  logger,
+		Bot:     bot,
+		Admin:   admin,
+		LLM:     llm,
+		YouTube: youtube,
+	}
+	components := []applifecycle.GroupComponent{
+		{
 			Name:     "llm",
 			Start:    llm.Start,
 			Shutdown: llm.Shutdown,
 		},
-		applifecycle.GroupComponent{
+		{
 			Name:     "admin",
 			Start:    admin.Start,
 			Shutdown: admin.Shutdown,
 		},
-		applifecycle.GroupComponent{
+		{
 			Name:     "bot",
 			Start:    bot.Start,
 			Shutdown: bot.Shutdown,
 		},
-	)
+	}
+	if youtube != nil {
+		components = append([]applifecycle.GroupComponent{{
+			Name:     "youtube",
+			Start:    youtube.Start,
+			Shutdown: youtube.Shutdown,
+		}}, components...)
+	}
+	runtime.group = applifecycle.NewGroupRuntime(logger, components...)
 	return runtime, nil
 }
 
@@ -123,5 +145,8 @@ func (r *Runtime) Close() {
 	}
 	if r.LLM != nil {
 		r.LLM.Close()
+	}
+	if r.YouTube != nil {
+		r.YouTube.Close()
 	}
 }

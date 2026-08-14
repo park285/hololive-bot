@@ -51,6 +51,18 @@ func TestStateResponseSingleOwnerStartsLeaseAvailable(t *testing.T) {
 	}
 }
 
+func TestStateResponseDoesNotGateOnCommunityObservation(t *testing.T) {
+	state := New("youtube-producer", Features{YouTubeEnabled: true})
+	state.MarkRunning()
+	statusCode, payload := state.Response()
+	if statusCode != http.StatusOK {
+		t.Fatalf("producer readiness = %d, %v", statusCode, payload)
+	}
+	if _, ok := payload["community_observation_available"]; ok {
+		t.Fatal("producer readiness must not expose community consume ownership")
+	}
+}
+
 func TestStateResponseIncludesScraperFetcherEngine(t *testing.T) {
 	state := New("youtube-producer", Features{
 		YouTubeEnabled:       true,

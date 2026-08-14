@@ -16,13 +16,14 @@ const (
 	defaultAdminAPIPort = 30006
 )
 
-// HololiveAPIConfig는 단일 hololive-api 프로세스가 호스팅하는 세 논리적 plane을 담는다.
-// 각 plane은 자체 bounded DB pool을 explicit bulkhead로 유지하고, 프로세스 전역의
-// logging·GC·signal 처리는 부모 runtime이 소유한다.
+// HololiveAPIConfig는 단일 hololive-api 프로세스가 호스팅하는 bot/admin/llm HTTP plane과
+// YouTube background plane을 담는다. 각 plane은 자체 bounded DB pool을 explicit bulkhead로
+// 유지하고, 프로세스 전역의 logging·GC·signal 처리는 부모 runtime이 소유한다.
 type HololiveAPIConfig struct {
 	Bot     *Config
 	Admin   *Config
 	LLM     *LLMSchedulerConfig
+	YouTube YouTubePlaneConfig
 	Logging LoggingConfig
 	Tracing TracingConfig
 }
@@ -47,6 +48,7 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 		Bot:     botConfig,
 		Admin:   adminConfig,
 		LLM:     llmConfig,
+		YouTube: loadYouTubePlaneConfig(),
 		Logging: botConfig.Logging,
 		Tracing: botConfig.Tracing,
 	}
@@ -117,6 +119,12 @@ func (c *HololiveAPIConfig) Validate() error {
 	if err := c.validatePlanePools(); err != nil {
 		return err
 	}
+	if err := c.YouTube.Validate(); err != nil {
+		return fmt.Errorf("youtube plane: %w", err)
+	}
+	if err := validateYouTubePlaneDatabaseRole(c.Bot.Postgres.User); err != nil {
+		return err
+	}
 	return validateHololiveAPIListenerPorts(c)
 }
 
@@ -180,6 +188,13 @@ func validateAlarmProviderScheme(environment string, parsed *url.URL) error {
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return fmt.Errorf("ALARM_INTERNAL_URL scheme must be http or https")
+	}
+	return nil
+}
+
+func validateYouTubePlaneDatabaseRole(user string) error {
+	if strings.TrimSpace(user) == postgresScraperRoleUser {
+		return fmt.Errorf("youtube plane must not use %s", postgresScraperRoleUser)
 	}
 	return nil
 }

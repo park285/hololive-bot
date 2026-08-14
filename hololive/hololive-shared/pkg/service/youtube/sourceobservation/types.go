@@ -12,6 +12,7 @@ import (
 
 const (
 	MaxPublishBatchSize  = 1024
+	MaxPublishBatchBytes = 8 << 20
 	MaxClaimBatchSize    = 100
 	MaxCheckpointCount   = 1024
 	MaxAttempts          = 64

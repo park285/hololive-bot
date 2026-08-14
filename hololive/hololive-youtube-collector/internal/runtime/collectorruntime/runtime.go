@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
@@ -28,6 +29,7 @@ type Runtime struct {
 	Logger    *slog.Logger
 	Scheduler *leaseScheduler
 	servers   *sharedserver.RuntimeHTTPServers
+	helper    *youtubejs.Helper
 	cleanup   func()
 	lifecycle.Managed
 }
@@ -78,6 +80,10 @@ func assembleRuntime(
 	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, appConfig.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
 		opts.EnableGzip = true
 		opts.ReadyResponder = func(c *gin.Context) {
+			if infra.youtubejs == nil || infra.youtubejs.Exited() {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "runtime": runtimeName, "dependency": "youtubejs"})
+				return
+			}
 			c.JSON(http.StatusOK, gin.H{"status": "ready", "runtime": runtimeName})
 		}
 	})
@@ -94,6 +100,7 @@ func assembleRuntime(
 		Logger:    logger,
 		Scheduler: sched,
 		servers:   servers,
+		helper:    infra.youtubejs,
 		cleanup:   infra.cleanup,
 	}
 	runtime.Managed = lifecycle.NewManaged(infra.cleanup)
@@ -124,6 +131,28 @@ func (r *Runtime) Run() error {
 }
 
 func (r *Runtime) start(ctx context.Context, errCh chan<- error) {
+	if r.helper != nil {
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-r.helper.Done():
+				if ctx.Err() != nil {
+					return
+				}
+				err := r.helper.ExitError()
+				if err == nil {
+					err = fmt.Errorf("youtube.js helper exited")
+				} else {
+					err = fmt.Errorf("youtube.js helper exited: %w", err)
+				}
+				select {
+				case errCh <- err:
+				case <-ctx.Done():
+				}
+			}
+		}()
+	}
 	if r.Scheduler != nil {
 		r.Scheduler.Start(ctx)
 		r.Logger.Info("Scraper scheduler started", slog.String("runtime", runtimeName))

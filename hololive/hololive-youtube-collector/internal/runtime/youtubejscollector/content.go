@@ -34,13 +34,20 @@ func (r *ContentRunner) Collect(ctx context.Context, input collectutil.RunInput)
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js content client is not configured")
 	}
 	started := time.Now()
-	videos, err := r.fetchKind(ctx, input, "videos")
-	if err != nil {
-		return collectutil.RunOutput{}, err
+	var videos *contract.Envelope
+	var shorts *contract.Envelope
+	var err error
+	if subjectEnabled(input, contract.KindVideoList) {
+		videos, err = r.fetchKind(ctx, input, "videos")
+		if err != nil {
+			return collectutil.RunOutput{}, err
+		}
 	}
-	shorts, err := r.fetchKind(ctx, input, "shorts")
-	if err != nil {
-		return collectutil.RunOutput{}, err
+	if subjectEnabled(input, contract.KindShortsList) {
+		shorts, err = r.fetchKind(ctx, input, "shorts")
+		if err != nil {
+			return collectutil.RunOutput{}, err
+		}
 	}
 	envelopes := make([]contract.Envelope, 0, 2)
 	if videos != nil {
@@ -50,6 +57,19 @@ func (r *ContentRunner) Collect(ctx context.Context, input collectutil.RunInput)
 		envelopes = append(envelopes, *shorts)
 	}
 	return collectutil.Output(envelopes, started)
+}
+
+func subjectEnabled(input collectutil.RunInput, kind contract.ObservationKind) bool {
+	subjects, configured := input.EnabledSubjects[kind]
+	if !configured {
+		return true
+	}
+	for _, subject := range subjects {
+		if subject == input.Spec.SubjectKey {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *ContentRunner) fetchKind(ctx context.Context, input collectutil.RunInput, kind string) (*contract.Envelope, error) {

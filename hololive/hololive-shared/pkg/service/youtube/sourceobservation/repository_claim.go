@@ -30,6 +30,31 @@ func (r *Repository) ClaimBatch(ctx context.Context, options ClaimOptions) (Clai
 	})
 }
 
+func (r *Repository) ProbeClaim(ctx context.Context, options ClaimOptions) error {
+	if err := r.validate(); err != nil {
+		return err
+	}
+	if err := options.validate(); err != nil {
+		return err
+	}
+	leaseToken, err := newLeaseToken()
+	if err != nil {
+		return fmt.Errorf("probe source observation claim: create lease token: %w", err)
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("probe source observation claim: begin: %w", err)
+	}
+	if _, err := claimObservations(ctx, tx, options, leaseToken); err != nil {
+		_ = tx.Rollback(ctx)
+		return fmt.Errorf("probe source observation claim: %w", err)
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		return fmt.Errorf("probe source observation claim: rollback: %w", err)
+	}
+	return nil
+}
+
 func claimObservations(
 	ctx context.Context,
 	tx dbx.Tx,

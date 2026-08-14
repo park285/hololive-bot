@@ -52,6 +52,34 @@ type Helper struct {
 	endpoint   string
 }
 
+func (h *Helper) Done() <-chan struct{} {
+	if h == nil {
+		closed := make(chan struct{})
+		close(closed)
+		return closed
+	}
+	return h.waited
+}
+
+func (h *Helper) Exited() bool {
+	if h == nil || h.waited == nil {
+		return true
+	}
+	select {
+	case <-h.waited:
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *Helper) ExitError() error {
+	if h == nil || !h.Exited() {
+		return nil
+	}
+	return h.waitErr
+}
+
 func NewRPC(httpClient *http.Client, endpoint string, limiter *ratelimiter.RateLimiter) *RPC {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: defaultHelperTimeout}

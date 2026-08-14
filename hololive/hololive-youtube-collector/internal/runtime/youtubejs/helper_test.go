@@ -3,6 +3,7 @@ package youtubejs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -138,5 +139,24 @@ func TestHelperProcessEnvOmitsSecrets(t *testing.T) {
 		if strings.Contains(joined, forbidden) {
 			t.Fatalf("helper env leaked %s: %#v", forbidden, got)
 		}
+	}
+}
+
+func TestHelperExitStateBecomesObservable(t *testing.T) {
+	waited := make(chan struct{})
+	helper := &Helper{waited: waited}
+	if helper.Exited() {
+		t.Fatal("helper must be running before wait completion")
+	}
+	waitErr := errors.New("fixture exit")
+	helper.waitErr = waitErr
+	close(waited)
+	if !helper.Exited() || !errors.Is(helper.ExitError(), waitErr) {
+		t.Fatalf("helper exit state = exited:%t err:%v", helper.Exited(), helper.ExitError())
+	}
+	select {
+	case <-helper.Done():
+	default:
+		t.Fatal("helper done channel must close after exit")
 	}
 }

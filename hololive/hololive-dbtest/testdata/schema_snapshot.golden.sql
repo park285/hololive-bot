@@ -535,6 +535,7 @@ TABLE source_observation_collisions
   CONSTRAINT fk_source_observation_collision_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
   CONSTRAINT source_observation_collisions_existing_observation_id_fkey FOREIGN KEY (existing_observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT source_observation_collisions_pkey PRIMARY KEY (id)
+  INDEX CREATE INDEX idx_source_observation_collisions_existing_observation ON public.source_observation_collisions USING btree (existing_observation_id)
   INDEX CREATE INDEX idx_source_observation_collisions_occurred ON public.source_observation_collisions USING btree (occurred_at, id)
 
 TABLE source_observation_consumer_offsets
@@ -598,7 +599,21 @@ TABLE source_observation_replay_requests
   CONSTRAINT fk_source_observation_replay_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
   CONSTRAINT source_observation_replay_requests_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT source_observation_replay_requests_pkey PRIMARY KEY (id)
+  INDEX CREATE INDEX idx_source_observation_replay_observation_status ON public.source_observation_replay_requests USING btree (observation_id, status)
   INDEX CREATE INDEX idx_source_observation_replay_pending ON public.source_observation_replay_requests USING btree (requested_at, id) WHERE (status = 'PENDING'::text)
+
+TABLE source_observation_subject_heads
+  COLUMN provider text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN source_observation_id bigint NOT NULL
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_source_observation_subject_head_bounds CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256)))
+  CONSTRAINT chk_source_observation_subject_head_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT fk_source_observation_subject_head_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
+  CONSTRAINT source_observation_subject_heads_pkey PRIMARY KEY (provider, observation_kind, subject_key)
 
 TABLE source_observations
   COLUMN id bigint NOT NULL DEFAULT nextval('source_observations_id_seq'::regclass)
@@ -637,6 +652,7 @@ TABLE source_observations
   CONSTRAINT source_observations_pkey PRIMARY KEY (id)
   CONSTRAINT uq_source_observation_identity UNIQUE (provider, observation_kind, subject_key, observation_key, schema_version, contract_generation)
   INDEX CREATE INDEX idx_source_observations_kind_id ON public.source_observations USING btree (observation_kind, id)
+  INDEX CREATE INDEX idx_source_observations_kind_received_id ON public.source_observations USING btree (observation_kind, received_at, id)
   INDEX CREATE INDEX idx_source_observations_received ON public.source_observations USING btree (received_at, id)
   INDEX CREATE INDEX idx_source_observations_subject_time ON public.source_observations USING btree (observation_kind, subject_key, scheduled_for DESC, id DESC)
 
@@ -874,6 +890,7 @@ TABLE youtube_live_reconciliation_heads
   CONSTRAINT youtube_live_reconciliation_h_end_candidate_observation_id_fkey FOREIGN KEY (end_candidate_observation_id) REFERENCES source_observations(id) ON DELETE RESTRICT
   CONSTRAINT youtube_live_reconciliation_heads_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_youtube_live_reconciliation_due ON public.youtube_live_reconciliation_heads USING btree (next_end_check_at, video_id) WHERE (next_end_check_at IS NOT NULL)
+  INDEX CREATE INDEX idx_youtube_live_reconciliation_end_candidate ON public.youtube_live_reconciliation_heads USING btree (end_candidate_observation_id) WHERE (end_candidate_observation_id IS NOT NULL)
 
 TABLE youtube_live_sessions
   COLUMN video_id character varying(20) NOT NULL
@@ -1120,6 +1137,14 @@ SEQUENCE youtube_stats_changes_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2
 FUNCTION append_bot_reply_outbox_replay_claim_audit() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    granted_actor TEXT;\n    granted_reason TEXT;\nBEGIN\n    IF NEW.status = 'submitting'\n        AND OLD.status <> 'submitting'\n        AND NEW.operator_replay_grants > 0\n    THEN\n        SELECT actor, reason\n        INTO granted_actor, granted_reason\n        FROM public.bot_reply_outbox_replay_audit\n        WHERE outbox_id = NEW.id\n          AND grant_number = NEW.operator_replay_grants\n          AND event_type = 'granted';\n\n        IF NOT FOUND THEN\n            RAISE EXCEPTION 'manual replay grant audit is missing for outbox %, grant %',\n                NEW.id, NEW.operator_replay_grants\n                USING ERRCODE = '23514';\n        END IF;\n\n        INSERT INTO public.bot_reply_outbox_replay_audit (\n            outbox_id, grant_number, event_type, actor, reason\n        ) VALUES (\n            NEW.id, NEW.operator_replay_grants, 'replayed', granted_actor, granted_reason\n        )\n        ON CONFLICT (outbox_id, grant_number, event_type) DO NOTHING;\n    END IF;\n\n    RETURN NEW;\nEND\n"
 
 FUNCTION grant_bot_reply_outbox_manual_replay(requested_outbox_id bigint, operator_actor text, operator_reason text) RETURNS text LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    granted_at TIMESTAMPTZ := clock_timestamp();\n    normalized_actor TEXT := btrim(operator_actor);\n    normalized_reason TEXT := btrim(operator_reason);\n    target_id BIGINT;\n    target_status TEXT;\n    target_created_at TIMESTAMPTZ;\n    target_replay_grants INTEGER;\n    next_grant_number INTEGER;\nBEGIN\n    SELECT id, status, created_at, operator_replay_grants\n    INTO target_id, target_status, target_created_at, target_replay_grants\n    FROM public.bot_reply_outbox\n    WHERE id = requested_outbox_id\n    FOR UPDATE;\n\n    IF NOT FOUND THEN\n        RETURN 'not_found';\n    END IF;\n    IF target_status <> 'manual_review' THEN\n        RETURN 'not_manual_review';\n    END IF;\n    IF granted_at >= target_created_at + interval '144 hours' THEN\n        RETURN 'cutoff_expired';\n    END IF;\n    IF normalized_actor !~ '^[A-Za-z0-9._:@-]{1,64}$'\n        OR octet_length(normalized_reason) NOT BETWEEN 1 AND 256\n        OR normalized_reason ~ '[[:cntrl:]]'\n    THEN\n        RETURN 'invalid_operator_metadata';\n    END IF;\n\n    next_grant_number := target_replay_grants + 1;\n    INSERT INTO public.bot_reply_outbox_replay_audit (\n        outbox_id, grant_number, event_type, actor, reason, recorded_at\n    ) VALUES (\n        target_id, next_grant_number, 'granted', normalized_actor, normalized_reason, granted_at\n    );\n\n    UPDATE public.bot_reply_outbox\n    SET status = 'pending',\n        claim_token = NULL,\n        lease_until = NULL,\n        last_error = '',\n        operator_replay_grants = next_grant_number,\n        available_at = granted_at,\n        updated_at = granted_at\n    WHERE id = target_id;\n\n    RETURN 'replayed';\nEND\n"
+
+FUNCTION lock_observation_contract(requested_provider text, requested_observation_kind text) RETURNS TABLE(current_schema_version smallint, current_generation bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT contract.current_schema_version,\n           contract.current_generation\n    FROM public.observation_contract_generations AS contract\n    WHERE contract.provider = requested_provider\n      AND contract.observation_kind = requested_observation_kind\n    FOR SHARE OF contract\n"
+
+FUNCTION lock_source_observation(requested_observation_id bigint) RETURNS TABLE(provider text, observation_kind text, subject_key text, observation_key text, schema_version smallint, contract_generation bigint, evidence_sha256 text) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT observation.provider,\n           observation.observation_kind,\n           observation.subject_key,\n           observation.observation_key,\n           observation.schema_version,\n           observation.contract_generation,\n           observation.evidence_sha256\n    FROM public.source_observations AS observation\n    WHERE observation.id = requested_observation_id\n    FOR SHARE OF observation\n"
+
+FUNCTION lock_source_observation_identity(requested_provider text, requested_observation_kind text, requested_subject_key text, requested_observation_key text, requested_schema_version smallint, requested_contract_generation bigint) RETURNS TABLE(id bigint, evidence_sha256 text) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT observation.id,\n           observation.evidence_sha256\n    FROM public.source_observations AS observation\n    WHERE observation.provider = requested_provider\n      AND observation.observation_kind = requested_observation_kind\n      AND observation.subject_key = requested_subject_key\n      AND observation.observation_key = requested_observation_key\n      AND observation.schema_version = requested_schema_version\n      AND observation.contract_generation = requested_contract_generation\n    FOR SHARE OF observation\n"
+
+FUNCTION lock_youtube_collection_projection(requested_generation bigint) RETURNS TABLE(generation bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    SELECT projection.generation\n    FROM public.youtube_collection_projection_generations AS projection\n    WHERE projection.generation = requested_generation\n      AND projection.status = 'CURRENT'\n      AND projection.valid_until > clock_timestamp()\n    FOR SHARE OF projection\n"
 
 FUNCTION reject_bot_reply_outbox_replay_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_replay_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 

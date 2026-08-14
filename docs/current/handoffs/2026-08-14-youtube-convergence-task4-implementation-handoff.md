@@ -2,7 +2,7 @@
 
 이 문서 전체를 다음 구현 세션의 prompt로 사용하십시오.
 
-> **선행 상태 — 2026-08-14:** Task 1–3과 Task 4 진입 차단 이슈(H1/F1, M1, M2, M4, M3)는 로컬 구현·targeted validation을 완료했습니다. 새 세션에서 그 수정을 다시 하지 마십시오. 이 문서의 완료 목표는 Task 4뿐입니다.
+> **선행 상태 — 2026-08-14:** Task 1–4는 로컬 구현·targeted validation을 완료했습니다. 새 세션에서 Task 4를 다시 구현하지 마십시오. Task 5–10은 이 문서 범위가 아닙니다.
 
 ## 역할과 단일 완료 목표
 
@@ -74,12 +74,23 @@ Canonical source of truth는 두 번째 문서의 v2.1 contract입니다. 규범
 - collector `syncCandidates`는 GLOBAL job을 먼저 enqueue하고 queue full에서 다른 runner를 중단하지 않음 (M4)
 - collector Compose는 `HOLODEX_API_KEY`/`HOLODEX_API_KEY_1` interpolation (M2). 값이 비면 collect-time fail-closed
 
-아직 열려 있는 것 (Task 4가 닫음):
+Task 4가 닫은 것:
 
-- canonical consumer가 producer `CommunityObservationConsumer`에 있음
-- API YouTube plane lifecycle/pool/worker가 없음
-- target projection refresh를 production runtime이 기동하지 않음
-- `youtube_live_reconciliation_heads`는 schema만 있고 Task 6 전까지 비어 있을 수 있음. 빈 viewer roster는 정상 fail-closed
+- `hololive-api` YouTube plane config/validation, dedicated pool, claim workers, target projection refresh
+- Community claim/finalize ownership은 API plane. producer production consume wiring 삭제
+- `youtube_live_reconciliation_heads`는 schema만 있고 Task 6 전까지 비어 있을 수 있음. 빈 viewer roster는 정상
+
+의도적으로 남긴 항목:
+
+- Artifact: live-end/retention/replay worker 본문 없음, config만 존재
+- Owner: Task 6/8
+- Trigger: live end due-finalizer와 retention 정책 구현
+- Exit: 해당 Task가 plane loop를 기동할 때 config 키를 재사용
+
+- Artifact: compose `YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS` default 2 (계약 권장 4보다 작음)
+- Owner: process-wide postgres capacity policy
+- Trigger: Task 9가 producer 4×8 pool을 제거할 때
+- Exit: reserve를 유지한 채 compose default를 4/3/2로 올린다
 
 ## 수정 전 bounded discovery
 

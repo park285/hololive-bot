@@ -36,14 +36,14 @@ func (c *Consumer) Consume(ctx context.Context, options ClaimOptions) error {
 	}
 	var consumeErrors []error
 	for i := range batch.Observations {
-		if err := c.consumeOne(ctx, batch.Observations[i], batch.ConsumerName); err != nil {
+		if err := c.ConsumeObservation(ctx, batch.Observations[i], batch.ConsumerName); err != nil {
 			consumeErrors = append(consumeErrors, err)
 		}
 	}
 	return errors.Join(consumeErrors...)
 }
 
-func (c *Consumer) consumeOne(
+func (c *Consumer) ConsumeObservation(
 	ctx context.Context,
 	observation Observation,
 	consumerName string,
@@ -57,6 +57,7 @@ func (c *Consumer) consumeOne(
 		LeaseToken:    observation.LeaseToken,
 	}
 	var persisted community.Batch
+	canonicalApplied := false
 	result, err := c.repo.Finalize(ctx, claim, func(
 		ctx context.Context,
 		tx dbx.Tx,
@@ -68,6 +69,20 @@ func (c *Consumer) consumeOne(
 		payload, err := decodeCommunityPayload(claimed)
 		if err != nil {
 			return ReconcileResult{}, err
+		}
+		if err := lockCommunitySubject(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID); err != nil {
+			return ReconcileResult{}, err
+		}
+		head, err := loadCommunitySubjectHead(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID)
+		if err != nil {
+			return ReconcileResult{}, err
+		}
+		if head.supersedes(claimed) {
+			return ReconcileResult{Applications: []Application{{
+				EntityKind: "community_subject_head",
+				EntityKey:  payload.ChannelID,
+				Decision:   "STALE_SKIPPED",
+			}}}, nil
 		}
 		watermark, initialized, err := loadCommunityWatermark(ctx, tx, payload.ChannelID)
 		if err != nil {
@@ -83,7 +98,16 @@ func (c *Consumer) consumeOne(
 		if err := c.writer.PersistTx(ctx, tx, persisted); err != nil {
 			return ReconcileResult{}, err
 		}
-		applications := make([]Application, 0, len(persisted.Posts))
+		if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
+			return ReconcileResult{}, err
+		}
+		canonicalApplied = true
+		applications := make([]Application, 0, len(persisted.Posts)+1)
+		applications = append(applications, Application{
+			EntityKind: "community_subject_head",
+			EntityKey:  payload.ChannelID,
+			Decision:   "APPLIED",
+		})
 		for i := range persisted.Posts {
 			applications = append(applications, Application{
 				EntityKind: "community_post",
@@ -96,7 +120,7 @@ func (c *Consumer) consumeOne(
 	if err != nil {
 		return err
 	}
-	if !result.Unsupported && persisted.Posts != nil {
+	if !result.Unsupported && canonicalApplied {
 		c.writer.AfterCommit(ctx, persisted)
 	}
 	return nil

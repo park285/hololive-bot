@@ -54,6 +54,9 @@ func (p *CommunityPayloadV1) normalizeAndValidate(subjectKey string) error {
 	if len(p.Posts) > MaxCommunityPosts {
 		return fmt.Errorf("validate community payload: post count exceeds %d", MaxCommunityPosts)
 	}
+	if p.Posts == nil {
+		p.Posts = []CommunityPostV1{}
+	}
 	seen := make(map[string]struct{}, len(p.Posts))
 	for i := range p.Posts {
 		if err := p.Posts[i].validate(p.ChannelID); err != nil {

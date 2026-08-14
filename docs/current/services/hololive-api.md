@@ -13,7 +13,7 @@
 
 ## Role
 
-bot/admin/llm plane을 한 프로세스에서 호스팅하는 통합 runtime입니다.
+bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서 호스팅하는 통합 runtime입니다.
 
 - Bot plane: Kakao/Iris webhook ingress와 사용자 명령 routing, reply orchestration.
 - LLM plane: major event/member news scheduling, LLM digest 생성, internal subscription/trigger 제공.
@@ -25,6 +25,7 @@ bot/admin/llm plane을 한 프로세스에서 호스팅하는 통합 runtime입�
 - Major event/member news subscription, digest generation, internal trigger endpoints, LLM summary cache and notification intent production (llm plane)
 - Dashboard-facing admin HTTP API, operational trigger client facade, alarm HTTP compatibility facade during migration (admin plane)
 - Bot-side clients for major event, member news, and alarm operations
+- Community observation claim/finalize and canonical persist (YouTube plane)
 
 ## Provides
 

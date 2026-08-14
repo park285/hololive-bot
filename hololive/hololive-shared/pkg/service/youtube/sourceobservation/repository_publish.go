@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -107,8 +106,12 @@ func (r *Repository) PublishBatch(
 	if err := validatePublishBatch(input); err != nil {
 		return PublishBatchResult{}, fmt.Errorf("publish source observation batch: %w", err)
 	}
+	encoded, contracts, err := encodePublishBatch(input)
+	if err != nil {
+		return PublishBatchResult{}, err
+	}
 	return dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (PublishBatchResult, error) {
-		return r.publishBatchTx(ctx, tx, input)
+		return r.publishBatchTx(ctx, tx, input, encoded, contracts)
 	})
 }
 
@@ -116,78 +119,174 @@ func (r *Repository) publishBatchTx(
 	ctx context.Context,
 	tx dbx.Tx,
 	input PublishBatchInput,
+	encoded []byte,
+	contracts []byte,
 ) (PublishBatchResult, error) {
 	if err := r.fenceVerifier.Verify(ctx, tx, input.Lease, input.Observations); err != nil {
 		return PublishBatchResult{}, fmt.Errorf("publish source observation batch: verify job fence: %w", err)
 	}
-	for i := range input.Observations {
-		if err := verifyCurrentContract(ctx, tx, input.Observations[i]); err != nil {
-			return PublishBatchResult{}, fmt.Errorf("publish source observation batch: observation %d: %w", i, err)
-		}
+	if err := verifyCurrentContracts(ctx, tx, contracts); err != nil {
+		return PublishBatchResult{}, err
 	}
-	order := sortedObservationIndexes(input.Observations)
-	for _, index := range order {
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_identity_advisory_lock_0005_05.sql"),
-			observationIdentity(input.Observations[index]),
-		); err != nil {
-			return PublishBatchResult{}, fmt.Errorf("publish source observation batch: lock identity: %w", err)
-		}
+	result, collision, err := publishObservationSet(ctx, tx, encoded, len(input.Observations))
+	if err != nil {
+		return PublishBatchResult{}, err
 	}
-	existing := make([]existingObservation, len(input.Observations))
-	hasCollision := false
-	for i := range input.Observations {
-		candidate, err := loadExistingObservation(ctx, tx, input.Observations[i])
-		if err != nil {
-			return PublishBatchResult{}, err
-		}
-		existing[i] = candidate
-		if candidate.found && candidate.evidenceSHA256 != input.Observations[i].EvidenceSHA256 {
-			hasCollision = true
-		}
+	errorCode := ""
+	if collision {
+		errorCode = "observation_collision"
 	}
-	if hasCollision {
-		result := PublishBatchResult{Results: make([]PublishedObservation, len(input.Observations))}
-		for i := range input.Observations {
-			result.Results[i] = PublishedObservation{ObservationID: existing[i].id, Outcome: PublishCollision}
-			if !existing[i].found || existing[i].evidenceSHA256 == input.Observations[i].EvidenceSHA256 {
-				continue
-			}
-			if err := insertCollision(ctx, tx, existing[i], input.Observations[i]); err != nil {
-				return PublishBatchResult{}, err
-			}
-		}
-		if err := completeCollectionJob(ctx, tx, input.Lease, "observation_collision"); err != nil {
-			return PublishBatchResult{}, err
-		}
-		return result, nil
-	}
-
-	result := PublishBatchResult{Results: make([]PublishedObservation, len(input.Observations))}
-	for i := range input.Observations {
-		if existing[i].found {
-			result.Results[i] = PublishedObservation{ObservationID: existing[i].id, Outcome: PublishDuplicate}
-			continue
-		}
-		observationID, err := insertObservation(ctx, tx, input.Observations[i])
-		if err != nil {
-			return PublishBatchResult{}, err
-		}
-		if _, err := tx.Exec(ctx, mustSQL("repository_queue_insert_0008_08.sql"), observationID); err != nil {
-			return PublishBatchResult{}, fmt.Errorf("publish source observation batch: insert queue row: %w", err)
-		}
-		result.Results[i] = PublishedObservation{ObservationID: observationID, Outcome: PublishInserted}
-	}
-	for i := range input.Checkpoint.Entries {
-		if err := upsertCheckpoint(ctx, tx, input.Checkpoint.Entries[i], input.Checkpoint.CollectionLatency); err != nil {
-			return PublishBatchResult{}, err
-		}
-	}
-	if err := completeCollectionJob(ctx, tx, input.Lease, ""); err != nil {
+	if err := completeCollectionJob(ctx, tx, input.Lease, errorCode); err != nil {
 		return PublishBatchResult{}, err
 	}
 	return result, nil
+}
+
+type publishBatchRow struct {
+	Ordinal              int                      `json:"ordinal"`
+	Identity             string                   `json:"identity"`
+	Provider             contract.Provider        `json:"provider"`
+	ObservationKind      contract.ObservationKind `json:"observation_kind"`
+	SubjectKey           string                   `json:"subject_key"`
+	ObservationKey       string                   `json:"observation_key"`
+	SchemaVersion        int16                    `json:"schema_version"`
+	ContractGeneration   int64                    `json:"contract_generation"`
+	ScheduledFor         time.Time                `json:"scheduled_for"`
+	ObservedAt           time.Time                `json:"observed_at"`
+	SourceEventAt        *time.Time               `json:"source_event_at"`
+	ScopeSHA256          string                   `json:"scope_sha256"`
+	Completeness         contract.Completeness    `json:"completeness"`
+	Continuity           contract.Continuity      `json:"continuity"`
+	Payload              json.RawMessage          `json:"payload"`
+	PayloadSHA256        string                   `json:"payload_sha256"`
+	EvidenceSHA256       string                   `json:"evidence_sha256"`
+	CollectorInstance    string                   `json:"collector_instance"`
+	JobKey               string                   `json:"job_key"`
+	CollectionJobKind    string                   `json:"collection_job_kind"`
+	FenceEpoch           int64                    `json:"fence_epoch"`
+	ProjectionGeneration int64                    `json:"projection_generation"`
+	CollectionLatencyMS  int64                    `json:"collection_latency_ms"`
+	Cursor               json.RawMessage          `json:"cursor"`
+}
+
+type publishContractRow struct {
+	Provider           contract.Provider        `json:"provider"`
+	ObservationKind    contract.ObservationKind `json:"observation_kind"`
+	SchemaVersion      int16                    `json:"schema_version"`
+	ContractGeneration int64                    `json:"contract_generation"`
+}
+
+func encodePublishBatch(input PublishBatchInput) ([]byte, []byte, error) {
+	checkpoints := make(map[checkpointBinding]CheckpointEntry, len(input.Checkpoint.Entries))
+	for i := range input.Checkpoint.Entries {
+		entry := input.Checkpoint.Entries[i]
+		checkpoints[checkpointBindingForEntry(entry)] = entry
+	}
+	aggregateBytes := 0
+	for i := range input.Observations {
+		observation := input.Observations[i]
+		checkpoint := checkpoints[checkpointBindingForObservation(observation)]
+		inputBytes := len(observation.Payload) + len(checkpoint.Cursor)
+		if inputBytes > MaxPublishBatchBytes-aggregateBytes {
+			return nil, nil, fmt.Errorf(
+				"publish source observation batch: %w: aggregate payload and cursor bytes exceed %d",
+				ErrInvalidEnvelope,
+				MaxPublishBatchBytes,
+			)
+		}
+		aggregateBytes += inputBytes
+	}
+	rows := make([]publishBatchRow, len(input.Observations))
+	contracts := make([]publishContractRow, len(input.Observations))
+	for i := range input.Observations {
+		observation := input.Observations[i]
+		checkpoint := checkpoints[checkpointBindingForObservation(observation)]
+		rows[i] = publishBatchRow{
+			Ordinal: i, Identity: observationIdentity(observation),
+			Provider: observation.Provider, ObservationKind: observation.ObservationKind,
+			SubjectKey: observation.SubjectKey, ObservationKey: observation.ObservationKey,
+			SchemaVersion: observation.SchemaVersion, ContractGeneration: observation.ContractGeneration,
+			ScheduledFor: observation.ScheduledFor, ObservedAt: observation.ObservedAt,
+			SourceEventAt: observation.SourceEventAt, ScopeSHA256: observation.ScopeSHA256,
+			Completeness: observation.Completeness, Continuity: observation.Continuity,
+			Payload: observation.Payload, PayloadSHA256: observation.PayloadSHA256,
+			EvidenceSHA256: observation.EvidenceSHA256, CollectorInstance: observation.CollectorInstance,
+			JobKey: observation.Lease.JobKey, CollectionJobKind: observation.Lease.CollectionJobKind,
+			FenceEpoch: observation.Lease.FenceEpoch, ProjectionGeneration: observation.Lease.ProjectionGeneration,
+			CollectionLatencyMS: input.Checkpoint.CollectionLatency.Milliseconds(), Cursor: checkpoint.Cursor,
+		}
+		contracts[i] = publishContractRow{
+			Provider: observation.Provider, ObservationKind: observation.ObservationKind,
+			SchemaVersion: observation.SchemaVersion, ContractGeneration: observation.ContractGeneration,
+		}
+	}
+	encoded, err := json.Marshal(rows)
+	if err != nil {
+		return nil, nil, fmt.Errorf("publish source observation batch: encode set: %w", err)
+	}
+	if len(encoded) > MaxPublishBatchBytes {
+		return nil, nil, fmt.Errorf(
+			"publish source observation batch: %w: encoded batch exceeds %d bytes",
+			ErrInvalidEnvelope,
+			MaxPublishBatchBytes,
+		)
+	}
+	contractEncoded, err := json.Marshal(contracts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("publish source observation batch: encode contracts: %w", err)
+	}
+	return encoded, contractEncoded, nil
+}
+
+func verifyCurrentContracts(ctx context.Context, tx dbx.Tx, encoded []byte) error {
+	var current bool
+	if err := tx.QueryRow(ctx, mustSQL("repository_contract_batch_current_0031_31.sql"), string(encoded)).Scan(&current); err != nil {
+		return fmt.Errorf("publish source observation batch: verify current contracts: %w", err)
+	}
+	if !current {
+		return fmt.Errorf("publish source observation batch: %w", ErrStaleContract)
+	}
+	return nil
+}
+
+func publishObservationSet(
+	ctx context.Context,
+	tx dbx.Tx,
+	encoded []byte,
+	want int,
+) (PublishBatchResult, bool, error) {
+	rows, err := tx.Query(ctx, mustSQL("repository_publish_set_0032_32.sql"), string(encoded))
+	if err != nil {
+		return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: execute set: %w", err)
+	}
+	defer rows.Close()
+	result := PublishBatchResult{Results: make([]PublishedObservation, want)}
+	seen := make([]bool, want)
+	collision := false
+	for rows.Next() {
+		var ordinal int
+		var observationID int64
+		var outcome PublishOutcome
+		if err := rows.Scan(&ordinal, &observationID, &outcome); err != nil {
+			return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: scan set result: %w", err)
+		}
+		if ordinal < 0 || ordinal >= want || seen[ordinal] ||
+			outcome != PublishInserted && outcome != PublishDuplicate && outcome != PublishCollision {
+			return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: invalid set result")
+		}
+		seen[ordinal] = true
+		result.Results[ordinal] = PublishedObservation{ObservationID: observationID, Outcome: outcome}
+		collision = collision || outcome == PublishCollision
+	}
+	if err := rows.Err(); err != nil {
+		return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: read set result: %w", err)
+	}
+	for i := range seen {
+		if !seen[i] {
+			return PublishBatchResult{}, false, fmt.Errorf("publish source observation batch: incomplete set result")
+		}
+	}
+	return result, collision, nil
 }
 
 func validatePublishBatch(input PublishBatchInput) error {
@@ -318,149 +417,6 @@ func checkpointBindingForEntry(entry CheckpointEntry) checkpointBinding {
 	}
 }
 
-func verifyCurrentContract(ctx context.Context, tx dbx.Tx, observation contract.Envelope) error {
-	var schema int16
-	var generation int64
-	err := tx.QueryRow(
-		ctx,
-		mustSQL("repository_contract_current_0004_04.sql"),
-		observation.Provider,
-		observation.ObservationKind,
-	).Scan(&schema, &generation)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrStaleContract
-	}
-	if err != nil {
-		return fmt.Errorf("verify current observation contract: %w", err)
-	}
-	if schema != observation.SchemaVersion || generation != observation.ContractGeneration {
-		return ErrStaleContract
-	}
-	return nil
-}
-
-type existingObservation struct {
-	id             int64
-	evidenceSHA256 string
-	found          bool
-}
-
-func loadExistingObservation(
-	ctx context.Context,
-	tx dbx.Tx,
-	observation contract.Envelope,
-) (existingObservation, error) {
-	var existing existingObservation
-	err := tx.QueryRow(
-		ctx,
-		mustSQL("repository_observation_identity_0006_06.sql"),
-		observation.Provider,
-		observation.ObservationKind,
-		observation.SubjectKey,
-		observation.ObservationKey,
-		observation.SchemaVersion,
-		observation.ContractGeneration,
-	).Scan(&existing.id, &existing.evidenceSHA256)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return existingObservation{}, nil
-	}
-	if err != nil {
-		return existingObservation{}, fmt.Errorf("publish source observation batch: preflight identity: %w", err)
-	}
-	existing.found = true
-	return existing, nil
-}
-
-func insertObservation(ctx context.Context, tx dbx.Tx, observation contract.Envelope) (int64, error) {
-	var observationID int64
-	err := tx.QueryRow(
-		ctx,
-		mustSQL("repository_observation_insert_0007_07.sql"),
-		observation.Provider,
-		observation.ObservationKind,
-		observation.SubjectKey,
-		observation.ObservationKey,
-		observation.SchemaVersion,
-		observation.ContractGeneration,
-		observation.ScheduledFor,
-		observation.ObservedAt,
-		observation.SourceEventAt,
-		observation.ScopeSHA256,
-		observation.Completeness,
-		observation.Continuity,
-		string(observation.Payload),
-		observation.PayloadSHA256,
-		observation.EvidenceSHA256,
-		observation.CollectorInstance,
-		observation.Lease.JobKey,
-		observation.Lease.CollectionJobKind,
-		observation.Lease.FenceEpoch,
-		observation.Lease.ProjectionGeneration,
-	).Scan(&observationID)
-	if err != nil {
-		return 0, fmt.Errorf("publish source observation batch: insert immutable evidence: %w", err)
-	}
-	return observationID, nil
-}
-
-func insertCollision(
-	ctx context.Context,
-	tx dbx.Tx,
-	existing existingObservation,
-	attempted contract.Envelope,
-) error {
-	if _, err := tx.Exec(
-		ctx,
-		mustSQL("repository_collision_insert_0009_09.sql"),
-		existing.id,
-		attempted.Provider,
-		attempted.ObservationKind,
-		attempted.SubjectKey,
-		attempted.ObservationKey,
-		attempted.SchemaVersion,
-		attempted.ContractGeneration,
-		existing.evidenceSHA256,
-		attempted.EvidenceSHA256,
-		attempted.PayloadSHA256,
-		attempted.CollectorInstance,
-		attempted.Lease.JobKey,
-		attempted.Lease.FenceEpoch,
-	); err != nil {
-		return fmt.Errorf("publish source observation batch: insert collision audit: %w", err)
-	}
-	return nil
-}
-
-func upsertCheckpoint(
-	ctx context.Context,
-	tx dbx.Tx,
-	entry CheckpointEntry,
-	collectionLatency time.Duration,
-) error {
-	var cursor any
-	if len(entry.Cursor) > 0 {
-		cursor = string(entry.Cursor)
-	}
-	if _, err := tx.Exec(
-		ctx,
-		mustSQL("repository_checkpoint_upsert_0010_10.sql"),
-		entry.Provider,
-		entry.ObservationKind,
-		entry.SubjectKey,
-		entry.ScopeSHA256,
-		entry.ContractGeneration,
-		entry.LastObservationKey,
-		entry.LastEvidenceSHA256,
-		entry.LastScheduledFor,
-		collectionLatency.Milliseconds(),
-		entry.Continuity,
-		cursor,
-	); err != nil {
-		return fmt.Errorf("publish source observation batch: upsert checkpoint: %w", err)
-	}
-	return nil
-}
-
 func completeCollectionJob(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -489,17 +445,6 @@ func completeCollectionJob(
 		return fmt.Errorf("publish source observation batch: complete collection job: %w", err)
 	}
 	return nil
-}
-
-func sortedObservationIndexes(observations []contract.Envelope) []int {
-	indexes := make([]int, len(observations))
-	for i := range indexes {
-		indexes[i] = i
-	}
-	sort.Slice(indexes, func(i, j int) bool {
-		return observationIdentity(observations[indexes[i]]) < observationIdentity(observations[indexes[j]])
-	})
-	return indexes
 }
 
 func observationIdentity(observation contract.Envelope) string {

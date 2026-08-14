@@ -55,7 +55,7 @@ func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
 	if _, err := repository.Acquire(ctx, spec, "collector-b"); !errors.Is(err, ErrNotAcquired) {
 		t.Fatalf("concurrent acquire error = %v", err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE youtube_collection_job_leases SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' WHERE job_key = $1`, spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 	second, err := repository.Acquire(ctx, spec, "collector-b")
@@ -90,7 +90,7 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 		t.Fatalf("second global acquire error = %v", err)
 	}
 	var active int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM youtube_collection_job_leases WHERE job_key = $1 AND slot_state = 'ACTIVE'`, spec.JobKey).Scan(&active); err != nil {
+	if err := pool.QueryRow(ctx, mustTestSQL("active_lease_count.sql"), spec.JobKey).Scan(&active); err != nil {
 		t.Fatal(err)
 	}
 	if active != 1 {
@@ -113,6 +113,43 @@ func TestHolodexGlobalCandidatesUseFastestIntervalWhenKindsDiffer(t *testing.T) 
 	if len(candidates) != 1 || candidates[0].PollInterval != 2*time.Minute {
 		t.Fatalf("candidates = %#v", candidates)
 	}
+	if _, err := repository.Acquire(ctx, candidates[0], "collector-a"); err != nil {
+		t.Fatalf("acquire mixed-cadence global candidate: %v", err)
+	}
+}
+
+func TestCandidatesEventuallyIncludeSubjectsBeyondAcquisitionBatch(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{
+		{"channel:a", contract.KindCommunityPage, time.Minute, true},
+		{"channel:b", contract.KindCommunityPage, time.Minute, true},
+		{"channel:c", contract.KindCommunityPage, time.Minute, true},
+	})
+	repository := newTestRepository(t, pool)
+	first, err := repository.Candidates(ctx, contract.ProviderYouTubeJS, "community_collect", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 2 {
+		t.Fatalf("first candidates = %#v", first)
+	}
+	for i := range first {
+		lease, err := repository.Acquire(ctx, first[i], "collector-a")
+		if err != nil {
+			t.Fatalf("acquire first candidate %d: %v", i, err)
+		}
+		if err := lease.Complete(ctx); err != nil {
+			t.Fatalf("complete first candidate %d: %v", i, err)
+		}
+	}
+	second, err := repository.Candidates(ctx, contract.ProviderYouTubeJS, "community_collect", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 1 || second[0].SubjectKey != "channel:c" {
+		t.Fatalf("second candidates = %#v", second)
+	}
 }
 
 func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
@@ -128,11 +165,7 @@ func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 	if err := lease.Complete(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `
-		UPDATE youtube_collection_job_leases
-		SET next_due_at = clock_timestamp() - INTERVAL '10 minutes'
-		WHERE job_key = $1
-	`, spec.JobKey); err != nil {
+	if _, err := pool.Exec(ctx, mustTestSQL("make_lease_overdue.sql"), spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 	coalesced, err := repository.Acquire(ctx, spec, "collector-b")
@@ -140,7 +173,7 @@ func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 		t.Fatal(err)
 	}
 	var recent bool
-	if err := pool.QueryRow(ctx, `SELECT $1 >= clock_timestamp() - INTERVAL '1 minute' AND $1 <= clock_timestamp()`, coalesced.Proof().ScheduledFor).Scan(&recent); err != nil {
+	if err := pool.QueryRow(ctx, mustTestSQL("scheduled_for_is_recent.sql"), coalesced.Proof().ScheduledFor).Scan(&recent); err != nil {
 		t.Fatal(err)
 	}
 	if !recent {
@@ -168,7 +201,7 @@ func TestDeferAndReleasePreserveScheduledSlot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", action, err)
 			}
-			if _, err := pool.Exec(ctx, `UPDATE youtube_collection_job_leases SET retry_not_before = clock_timestamp() - INTERVAL '1 millisecond' WHERE job_key = $1`, spec.JobKey); err != nil {
+			if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
 				t.Fatal(err)
 			}
 			second, err := repository.Acquire(ctx, spec, "collector-b")
@@ -182,11 +215,33 @@ func TestDeferAndReleasePreserveScheduledSlot(t *testing.T) {
 	}
 }
 
+func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	lease, err := repository.Acquire(ctx, communityJob("channel:a", time.Minute), "collector-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.Defer(ctx, time.Now().UTC(), "rate_limited"); err != nil {
+		t.Fatalf("defer short retry: %v", err)
+	}
+	var state string
+	var retryAt time.Time
+	if err := pool.QueryRow(ctx, mustTestSQL("lease_deferred_state.sql"), lease.Proof().JobKey).Scan(&state, &retryAt); err != nil {
+		t.Fatal(err)
+	}
+	if state != "DEFERRED" || retryAt.Before(time.Now().UTC()) || retryAt.After(time.Now().UTC().Add(repository.config.MaxRetryDelay)) {
+		t.Fatalf("deferred state=%s retry_at=%s", state, retryAt)
+	}
+}
+
 func TestProjectionExpiryBlocksAcquisition(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	generation := seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
-	if _, err := pool.Exec(ctx, `UPDATE youtube_collection_projection_generations SET valid_until = clock_timestamp() - INTERVAL '1 second' WHERE generation = $1`, generation); err != nil {
+	if _, err := pool.Exec(ctx, mustTestSQL("expire_projection.sql"), generation); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := newTestRepository(t, pool).Acquire(ctx, communityJob("channel:a", time.Minute), "collector-a"); !errors.Is(err, ErrProjectionStale) {
@@ -278,21 +333,11 @@ func seedProjection(t *testing.T, pool *pgxpool.Pool, targets []leaseTarget) int
 	t.Helper()
 	ctx := context.Background()
 	var generation int64
-	if err := pool.QueryRow(ctx, `
-		INSERT INTO youtube_collection_projection_generations (
-			status, row_count, projection_sha256, valid_until, activated_at
-		) VALUES ('CURRENT', $1, repeat('a', 64), clock_timestamp() + INTERVAL '1 hour', clock_timestamp())
-		RETURNING generation
-	`, len(targets)).Scan(&generation); err != nil {
+	if err := pool.QueryRow(ctx, mustTestSQL("insert_projection.sql"), len(targets)).Scan(&generation); err != nil {
 		t.Fatal(err)
 	}
 	for _, target := range targets {
-		if _, err := pool.Exec(ctx, `
-			INSERT INTO youtube_collection_targets (
-				projection_generation, subject_key, observation_kind,
-				priority, poll_interval_ms, enabled, valid_until
-			) VALUES ($1, $2, $3, 50, $4, $5, clock_timestamp() + INTERVAL '1 hour')
-		`, generation, target.subject, target.kind, target.interval.Milliseconds(), target.enabled); err != nil {
+		if _, err := pool.Exec(ctx, mustTestSQL("insert_target.sql"), generation, target.subject, target.kind, target.interval.Milliseconds(), target.enabled); err != nil {
 			t.Fatal(err)
 		}
 	}

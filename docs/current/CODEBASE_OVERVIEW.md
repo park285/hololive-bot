@@ -34,9 +34,9 @@ The current production runtime set is four Go binaries:
 
 | Runtime | Path | Main responsibility | Typical port |
 |---|---|---|---:|
-| `hololive-api` | `hololive/hololive-api/` | Bot/admin/llm planes: webhook ingress + command routing (bot), admin control plane (admin), major event/member news scheduling + LLM-backed work (llm) | 30001/30003/30006 |
+| `hololive-api` | `hololive/hololive-api/` | Bot/admin/llm planes plus YouTube Community consume | 30001/30003/30006 |
 | `alarm-worker` | `hololive/hololive-alarm-worker/` | Alarm checks, queue consumption, proactive notification egress | 30007 |
-| `youtube-producer` | `hololive/hololive-youtube-producer/` | YouTube polling/scraping except Community fetch, observation consume, YouTube outbox production, Holodex photo sync | 30015 |
+| `youtube-producer` | `hololive/hololive-youtube-producer/` | YouTube polling/scraping except Community fetch/consume, YouTube outbox production, Holodex photo sync | 30015 |
 | `youtube-collector` | `hololive/hololive-youtube-collector/cmd/runtime/youtube-collector` | Community YouTube.js fetch/normalize and `source_observation_outbox` Publish (required central singleton; AP overlays pin `central-only`) | 30045 |
 
 ## Shared Libraries
@@ -72,16 +72,17 @@ The `hololive-api` bot plane owns webhook ingress and user-facing command routin
 youtube-collector
   -> YouTube.js community fetch/normalize
   -> PostgreSQL source_observation_outbox Publish
+hololive-api YouTube plane
+  -> community observation consume + canonical persist
 youtube-producer
   -> live/shorts/videos/stats polling and Holodex-backed live discovery
-  -> community observation consume + canonical persist
   -> PostgreSQL youtube_notification_outbox
   -> alarm-worker
   -> room resolution, rendering, retry, delivery rows
   -> Iris / Kakao egress
 ```
 
-Community notifications require both `youtube-collector` (central singleton) and `youtube-producer` consumer. Producer does not fetch Community posts. Live discovery requires Holodex; official-schedule API is Holodex upcoming/channel-schedule secondary, not live truth.
+Community notifications require both `youtube-collector` (central singleton) and the `hololive-api` YouTube plane consumer. Producer does not fetch or consume Community posts. Live discovery requires Holodex; official-schedule API is Holodex upcoming/channel-schedule secondary, not live truth.
 
 The key ownership split is that `youtube-producer` produces YouTube outbox rows and owns 4-way active-active poll coordination/readiness (Seoul `b` + main `c` + Osaka host-native `a` + Osaka2 host-native `d`), while `alarm-worker` owns final delivery. Duplicate suppression depends on Valkey `JobRunGuard`, database identities such as `(kind, content_id)`, and the dispatch worker's delivery claims.
 

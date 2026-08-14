@@ -160,6 +160,30 @@ jobs:
           GOWORK: "off"
         run: bash scripts/ci/public-pr-frontend-gate.sh
 
+  collector-helper:
+    name: collector-helper
+    needs: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: hololive/hololive-youtube-collector/youtubejs/package-lock.json
+
+      - name: YouTube.js helper tests
+        run: bash scripts/ci/public-pr-collector-helper-gate.sh
+
   fast-gate:
     name: fast-gate
     if: always()
@@ -167,6 +191,7 @@ jobs:
       - policy
       - go-modules
       - frontend
+      - collector-helper
     runs-on: ubuntu-latest
     timeout-minutes: 5
     defaults:
@@ -178,7 +203,9 @@ jobs:
           POLICY_RESULT: ${{ needs.policy.result }}
           GO_MODULES_RESULT: ${{ needs.go-modules.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
+          COLLECTOR_HELPER_RESULT: ${{ needs.collector-helper.result }}
         run: |
           test "${POLICY_RESULT}" = "success"
           test "${GO_MODULES_RESULT}" = "success"
           test "${FRONTEND_RESULT}" = "success"
+          test "${COLLECTOR_HELPER_RESULT}" = "success"

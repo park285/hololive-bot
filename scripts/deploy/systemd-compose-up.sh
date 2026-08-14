@@ -124,6 +124,6 @@ if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" == "1" ]]; then
   )
 fi
 
-./scripts/deploy/compose.sh "${base_files[@]}" up -d
+./scripts/deploy/compose.sh "${base_files[@]}" up -d --no-build
 
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh "${main_ap_files[@]}" up -d youtube-producer-c
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh "${main_ap_files[@]}" up -d --no-build youtube-producer-c

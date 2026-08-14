@@ -423,6 +423,189 @@ func TestTypedCoverageBindsLiveAndMetadataEntries(t *testing.T) {
 	}
 }
 
+func TestTypedCoverageBindsItemTimes(t *testing.T) {
+	windowStart := time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC)
+	windowEnd := windowStart.Add(time.Hour)
+	tests := []struct {
+		name    string
+		kind    ObservationKind
+		payload json.RawMessage
+	}{
+		{
+			name: "video before coverage",
+			kind: KindVideoList,
+			payload: mustMarshalPayload(t, VideoListV1{
+				ChannelID: "UC_TEST",
+				Videos: []VideoListItemV1{{
+					VideoID: "video-1", ChannelID: "UC_TEST", PublishedAt: timePointer(windowStart.Add(-time.Second)),
+				}},
+				Coverage: ChannelListCoverageV1{
+					ChannelID: "UC_TEST", MaxResults: 10,
+					Filters: VideoListFiltersV1{PublishedAfter: &windowStart, PublishedBefore: &windowEnd},
+				},
+			}),
+		},
+		{
+			name: "video after coverage",
+			kind: KindVideoList,
+			payload: mustMarshalPayload(t, VideoListV1{
+				ChannelID: "UC_TEST",
+				Videos: []VideoListItemV1{{
+					VideoID: "video-1", ChannelID: "UC_TEST", PublishedAt: timePointer(windowEnd.Add(time.Second)),
+				}},
+				Coverage: ChannelListCoverageV1{
+					ChannelID: "UC_TEST", MaxResults: 10,
+					Filters: VideoListFiltersV1{PublishedAfter: &windowStart, PublishedBefore: &windowEnd},
+				},
+			}),
+		},
+		{
+			name: "schedule before coverage",
+			kind: KindSchedule,
+			payload: mustMarshalPayload(t, ScheduleSnapshotV1{
+				GroupKey: "UC_TEST",
+				Items: []ScheduleItemV1{{
+					ExternalID: "schedule-1", Title: "title", ScheduledAt: windowStart.Add(-time.Second),
+				}},
+				Coverage: ScheduleCoverageV1{GroupKey: "UC_TEST", WindowStart: &windowStart, WindowEnd: &windowEnd},
+			}),
+		},
+		{
+			name: "schedule after coverage",
+			kind: KindSchedule,
+			payload: mustMarshalPayload(t, ScheduleSnapshotV1{
+				GroupKey: "UC_TEST",
+				Items: []ScheduleItemV1{{
+					ExternalID: "schedule-1", Title: "title", ScheduledAt: windowEnd.Add(time.Second),
+				}},
+				Coverage: ScheduleCoverageV1{GroupKey: "UC_TEST", WindowStart: &windowStart, WindowEnd: &windowEnd},
+			}),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := PrepareEnvelope(newPaginatedEnvelope(t, tt.kind, tt.payload, CompletenessPartial))
+			if err == nil || !strings.Contains(err.Error(), "outside coverage") {
+				t.Fatalf("error = %v, want outside coverage", err)
+			}
+		})
+	}
+
+	for _, tt := range []struct {
+		name    string
+		kind    ObservationKind
+		payload any
+	}{
+		{
+			name: "video boundaries",
+			kind: KindVideoList,
+			payload: VideoListV1{
+				ChannelID: "UC_TEST",
+				Videos: []VideoListItemV1{
+					{VideoID: "video-start", ChannelID: "UC_TEST", PublishedAt: &windowStart},
+					{VideoID: "video-end", ChannelID: "UC_TEST", PublishedAt: &windowEnd},
+				},
+				Coverage: ChannelListCoverageV1{
+					ChannelID: "UC_TEST", MaxResults: 10,
+					Filters: VideoListFiltersV1{PublishedAfter: &windowStart, PublishedBefore: &windowEnd},
+				},
+			},
+		},
+		{
+			name: "schedule boundaries",
+			kind: KindSchedule,
+			payload: ScheduleSnapshotV1{
+				GroupKey: "UC_TEST",
+				Items: []ScheduleItemV1{
+					{ExternalID: "schedule-start", Title: "title", ScheduledAt: windowStart},
+					{ExternalID: "schedule-end", Title: "title", ScheduledAt: windowEnd},
+				},
+				Coverage: ScheduleCoverageV1{GroupKey: "UC_TEST", WindowStart: &windowStart, WindowEnd: &windowEnd},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := mustMarshalPayload(t, tt.payload)
+			if _, err := PrepareEnvelope(newPaginatedEnvelope(t, tt.kind, payload, CompletenessPartial)); err != nil {
+				t.Fatalf("boundary item rejected: %v", err)
+			}
+		})
+	}
+}
+
+func TestRequiredCollectionFieldsCanonicalizeMissingAndNullToEmpty(t *testing.T) {
+	tests := []struct {
+		name       string
+		kind       ObservationKind
+		missing    string
+		nullValue  string
+		emptyValue string
+	}{
+		{
+			name:       "community posts",
+			kind:       KindCommunityPage,
+			missing:    `{"channel_id":"UC_TEST","coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true}}`,
+			nullValue:  `{"channel_id":"UC_TEST","posts":null,"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true}}`,
+			emptyValue: `{"channel_id":"UC_TEST","posts":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true}}`,
+		},
+		{
+			name:       "video list",
+			kind:       KindVideoList,
+			missing:    `{"channel_id":"UC_TEST","coverage":{"channel_id":"UC_TEST","max_results":10,"exhausted":false,"filters":{"include_upcoming":false}}}`,
+			nullValue:  `{"channel_id":"UC_TEST","videos":null,"coverage":{"channel_id":"UC_TEST","max_results":10,"exhausted":false,"filters":{"include_upcoming":false}}}`,
+			emptyValue: `{"channel_id":"UC_TEST","videos":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"exhausted":false,"filters":{"include_upcoming":false}}}`,
+		},
+		{
+			name:       "shorts list",
+			kind:       KindShortsList,
+			missing:    `{"channel_id":"UC_TEST","coverage":{"channel_id":"UC_TEST","max_results":10,"exhausted":false}}`,
+			nullValue:  `{"channel_id":"UC_TEST","videos":null,"coverage":{"channel_id":"UC_TEST","max_results":10,"exhausted":false}}`,
+			emptyValue: `{"channel_id":"UC_TEST","videos":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"exhausted":false}}`,
+		},
+		{
+			name:       "live sessions",
+			kind:       KindLiveSnapshot,
+			missing:    `{"coverage":{"requested_channel_ids":["UC_TEST"],"group_key":"UC_TEST","filters":{"statuses":["LIVE"]}}}`,
+			nullValue:  `{"sessions":null,"coverage":{"requested_channel_ids":["UC_TEST"],"group_key":"UC_TEST","filters":{"statuses":["LIVE"]}}}`,
+			emptyValue: `{"sessions":[],"coverage":{"requested_channel_ids":["UC_TEST"],"group_key":"UC_TEST","filters":{"statuses":["LIVE"]}}}`,
+		},
+		{
+			name:       "photo variants",
+			kind:       KindChannelPhoto,
+			missing:    `{"channel_id":"UC_TEST","coverage":{"channel_id":"UC_TEST","variants":["avatar"]}}`,
+			nullValue:  `{"channel_id":"UC_TEST","variants":null,"coverage":{"channel_id":"UC_TEST","variants":["avatar"]}}`,
+			emptyValue: `{"channel_id":"UC_TEST","variants":[],"coverage":{"channel_id":"UC_TEST","variants":["avatar"]}}`,
+		},
+		{
+			name:       "schedule items",
+			kind:       KindSchedule,
+			missing:    `{"group_key":"UC_TEST","coverage":{"group_key":"UC_TEST"}}`,
+			nullValue:  `{"group_key":"UC_TEST","items":null,"coverage":{"group_key":"UC_TEST"}}`,
+			emptyValue: `{"group_key":"UC_TEST","items":[],"coverage":{"group_key":"UC_TEST"}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var canonicalPayload string
+			var payloadSHA256 string
+			for i, raw := range []string{tt.missing, tt.nullValue, tt.emptyValue} {
+				prepared, err := PrepareEnvelope(newPaginatedEnvelope(t, tt.kind, json.RawMessage(raw), CompletenessPartial))
+				if err != nil {
+					t.Fatalf("variant %d: %v", i, err)
+				}
+				if i == 0 {
+					canonicalPayload = string(prepared.Payload)
+					payloadSHA256 = prepared.PayloadSHA256
+					continue
+				}
+				if string(prepared.Payload) != canonicalPayload || prepared.PayloadSHA256 != payloadSHA256 {
+					t.Fatalf("variant %d did not canonicalize: payload=%s hash=%s", i, prepared.Payload, prepared.PayloadSHA256)
+				}
+			}
+		})
+	}
+}
+
 func TestChannelPhotoCanonicalOrderingIncludesAllVariantFields(t *testing.T) {
 	fingerprintA := strings.Repeat("a", 64)
 	fingerprintB := strings.Repeat("b", 64)
@@ -541,6 +724,10 @@ func mustMarshalPayload(t *testing.T, value any) json.RawMessage {
 		t.Fatalf("marshal payload: %v", err)
 	}
 	return payload
+}
+
+func timePointer(value time.Time) *time.Time {
+	return &value
 }
 
 func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload json.RawMessage, completeness Completeness) Envelope {

@@ -24,9 +24,9 @@ as repo-side contract definitions and compose-path validation inputs.
 ## Owns
 
 - YouTube polling/scraping scheduler when `YOUTUBE_INGESTION_ENABLED=true`
-- Community observation consume/canonical persist (`CommunityObservationConsumer`); Community YouTube fetch/Publish is owned by `youtube-collector`
+- Community YouTube fetch/Publish is owned by `youtube-collector`; Community consume/canonical persist is owned by the `hololive-api` YouTube plane
 - Holodex photo sync on AP-C (`PHOTO_SYNC_ENABLED=true`), guarded by a global Valkey singleton lease with TTL failover. AP-B (`PHOTO_SYNC_ENABLED=false`) is a scraping/polling failover peer only and does not participate in PhotoSync.
-- Shorts/live/stats polling; Community fetch is owned by `youtube-collector`; producer community path is `CommunityObservationConsumer` persist only
+- Shorts/live/stats polling; Community fetch is owned by `youtube-collector`; Community persist is not on this runtime
 - Poll target separation: videos/shorts use notification subscriptions; Community collection uses the same notification roster on `youtube-collector`. Channel stats and Holodex-backed LIVE/UPCOMING discovery use the enabled operational roster. The live batch scheduler keeps one global job and chunks the roster at execution time.
 - `youtube_notification_outbox` production paths for YouTube-derived events
 - Time-series retention cleanup for `youtube_channel_stats_snapshots`, `youtube_live_sessions`, and `youtube_live_viewer_samples` (bounded batch deletes, advisory-locked single-runner, default off)

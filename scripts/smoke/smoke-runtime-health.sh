@@ -11,6 +11,7 @@ checks=(
   "llm-scheduler|https://127.0.0.1:30003/health|compose-healthcheck:hololive-api"
   "youtube-producer-c|https://127.0.0.1:30025/health|compose-healthcheck:youtube-producer-c:main-ap"
   "youtube-collector|https://127.0.0.1:30045/health|compose-healthcheck:youtube-collector"
+  "youtube-collector-ready|https://127.0.0.1:30045/ready|compose-healthcheck:youtube-collector"
 )
 
 compose_exec() {

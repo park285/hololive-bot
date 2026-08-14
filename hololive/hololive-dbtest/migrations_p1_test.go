@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
 
 // reloptions는 schema_snapshot.golden.sql 직렬화(컬럼·제약·인덱스)에 포함되지 않아
@@ -93,6 +94,12 @@ func TestSourceObservationMigrationReplaysWithoutRegressingContracts(t *testing.
 		"153_source_observation_collisions_occurred_index.sql",
 		"154_source_observation_replay_pending_index.sql",
 		"155_youtube_live_reconciliation_due_index.sql",
+		"156_source_observation_lock_api.sql",
+		"157_source_observations_kind_received_index.sql",
+		"158_source_observation_collision_fk_index.sql",
+		"159_source_observation_replay_fk_index.sql",
+		"160_youtube_live_reconciliation_candidate_fk_index.sql",
+		"161_source_observation_subject_heads.sql",
 	}
 	if _, err := pool.Exec(ctx, `
 		UPDATE observation_contract_generations
@@ -149,11 +156,19 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 144 source observation migration: %v", err)
 	}
+	lockAPI, err := os.ReadFile(filepath.Join(dir, "156_source_observation_lock_api.sql"))
+	if err != nil {
+		t.Fatalf("read 156 source observation lock API migration: %v", err)
+	}
+	subjectHeads, err := os.ReadFile(filepath.Join(dir, "161_source_observation_subject_heads.sql"))
+	if err != nil {
+		t.Fatalf("read 161 source observation subject heads migration: %v", err)
+	}
 	grantPreexistingScraperPrivileges(t, pool, roles.scraper)
 	sql := strings.NewReplacer(
 		"hololive_scraper", roles.scraper,
 		"hololive_runtime", roles.runtime,
-	).Replace(string(raw))
+	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads))
 	if _, err := pool.Exec(ctx, sql); err != nil {
 		t.Fatalf("apply source observation migration with isolated roles: %v", err)
 	}
@@ -172,6 +187,26 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	}
 	assertPreexistingScraperPrivilegesRevoked(t, pool, roles.scraper)
 	assertObservationGrantMatrix(t, pool, roles)
+	assertObservationLockAPIAccess(t, pool, roles)
+}
+
+func TestSourceObservationLockAPIMigrationIsAtomic(t *testing.T) {
+	dir, err := resolveMigrationsDir()
+	if err != nil {
+		t.Fatalf("resolve migrations dir: %v", err)
+	}
+	// #nosec G304 -- 리포 내 마이그레이션 SSOT 디렉터리의 고정 파일명만 읽는다(사용자 입력 아님).
+	raw, err := os.ReadFile(filepath.Join(dir, "156_source_observation_lock_api.sql"))
+	if err != nil {
+		t.Fatalf("read 156 source observation lock API migration: %v", err)
+	}
+	segments, err := sqlsplit.Segments(string(raw))
+	if err != nil {
+		t.Fatalf("parse 156 source observation lock API migration: %v", err)
+	}
+	if len(segments) != 1 || !segments[0].Transactional {
+		t.Fatalf("156 migration segments = %#v, want one transactional segment", segments)
+	}
 }
 
 type observationGrantRoles struct {
@@ -318,6 +353,7 @@ var sourceObservationTables = []string{
 	"source_observation_consumer_offsets",
 	"source_observation_replay_requests",
 	"source_observation_applications",
+	"source_observation_subject_heads",
 	"source_reconciliation_conflicts",
 	"youtube_live_reconciliation_heads",
 }
@@ -355,6 +391,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"source_observation_consumer_offsets":       observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_observation_replay_requests":        observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"source_observation_applications":           observationPrivileges("SELECT", "INSERT", "DELETE"),
+			"source_observation_subject_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_reconciliation_conflicts":           observationPrivileges("SELECT", "INSERT", "DELETE"),
 			"youtube_live_reconciliation_heads":         observationPrivileges("SELECT", "INSERT", "UPDATE"),
 		},
@@ -413,6 +450,70 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			}
 		}
 	}
+}
+
+func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
+	t.Helper()
+	dir, err := resolveMigrationsDir()
+	if err != nil {
+		t.Fatalf("resolve migrations dir for observation lock API check: %v", err)
+	}
+	queryDir := filepath.Clean(filepath.Join(dir, "../../../hololive-shared/pkg/service/youtube/sourceobservation/queries"))
+	roleSQLPath := filepath.Clean(filepath.Join(dir, "../../../hololive-dbtest/testdata/queries/set_local_role.sql"))
+	checks := map[string][]observationRoleQuery{
+		roles.scraper: {
+			{name: "repository_projection_current_0002_02.sql", args: []any{int64(0)}},
+			{name: "repository_contract_current_0004_04.sql", args: []any{"youtubejs", "community_page"}},
+			{name: "repository_observation_identity_0006_06.sql", args: []any{"youtubejs", "community_page", "missing", "missing", int16(1), int64(1)}},
+		},
+		roles.runtime: {
+			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
+			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
+		},
+	}
+	for role, queries := range checks {
+		tx, err := pool.Begin(context.Background())
+		if err != nil {
+			t.Fatalf("begin observation lock API check for %s: %v", role, err)
+		}
+		quoted := pgx.Identifier{role}.Sanitize()
+		roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": quoted})
+		if _, err := tx.Exec(context.Background(), roleSQL); err != nil {
+			_ = tx.Rollback(context.Background())
+			t.Fatalf("set observation lock API role %s: %v", role, err)
+		}
+		for _, check := range queries {
+			query := readObservationRoleSQL(t, filepath.Join(queryDir, check.name), nil)
+			rows, err := tx.Query(context.Background(), query, check.args...)
+			if err != nil {
+				_ = tx.Rollback(context.Background())
+				t.Fatalf("execute observation lock API query %s as %s: %v", check.name, role, err)
+			}
+			rows.Close()
+		}
+		if err := tx.Rollback(context.Background()); err != nil {
+			t.Fatalf("rollback observation lock API check for %s: %v", role, err)
+		}
+	}
+}
+
+type observationRoleQuery struct {
+	name string
+	args []any
+}
+
+func readObservationRoleSQL(t *testing.T, path string, replacements map[string]string) string {
+	t.Helper()
+	// #nosec G304 -- 리포 내부의 고정 SQL 자산 경로만 호출자가 전달한다.
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read observation role SQL %s: %v", filepath.Base(path), err)
+	}
+	query := string(raw)
+	for old, replacement := range replacements {
+		query = strings.ReplaceAll(query, old, replacement)
+	}
+	return query
 }
 
 func observationPrivileges(privileges ...string) map[string]bool {

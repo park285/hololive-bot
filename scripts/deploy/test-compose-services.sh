@@ -75,6 +75,17 @@ for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-a
     expect_fail "redeploy target rejects retired runtime ${removed}" compose_service_resolve_redeploy_target "${removed}"
 done
 
+for ap_overlay in docker-compose.osaka.yml docker-compose.osaka2.yml docker-compose.seoul.yml; do
+    expect_fail_contains "${ap_overlay} rejects explicit collector redeploy" \
+        "youtube-collector is central-only" \
+        env COMPOSE_FILE="deploy/compose/docker-compose.prod.yml:deploy/compose/${ap_overlay}" \
+        "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" youtube-collector
+    expect_fail_contains "${ap_overlay} rejects topology-unsafe all-service redeploy" \
+        "all-service redeploy is not supported with an AP compose overlay" \
+        env COMPOSE_FILE="deploy/compose/docker-compose.prod.yml:deploy/compose/${ap_overlay}" \
+        "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" all
+done
+
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
 expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
 expect_eq "$(compose_service_resolve_log_target youtube-producer)" "youtube-producer" "log target youtube-producer"

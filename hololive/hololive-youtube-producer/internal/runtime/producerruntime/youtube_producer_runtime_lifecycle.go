@@ -69,12 +69,6 @@ func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, er
 		})
 		r.Logger.Info("YouTube retention cleaner started", slog.String("runtime", r.runtimeName()))
 	}
-	if r.CommunityObservation != nil {
-		r.startBackgroundService(prefix+"-community-observation", func() {
-			r.CommunityObservation.Start(ctx)
-		})
-		r.Logger.Info("Community observation consumer started", slog.String("runtime", r.runtimeName()))
-	}
 }
 
 func (r *YouTubeProducerRuntime) startBackgroundService(name string, run func()) {

@@ -94,6 +94,25 @@ func TestContentRunnerOmitsMissingShortsTab(t *testing.T) {
 	}
 }
 
+func TestContentRunnerFetchesAndEmitsOnlyEnabledKind(t *testing.T) {
+	t.Parallel()
+	var videos youtubejs.ContentResult
+	loadJSON(t, "videos.json", &videos)
+	fake := &contentFake{results: map[string]youtubejs.ContentResult{"videos": videos}}
+	input := youtubeInput("UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList)
+	input.EnabledSubjects = map[contract.ObservationKind][]string{
+		contract.KindVideoList:  {"UC_TEST"},
+		contract.KindShortsList: {},
+	}
+	output, err := NewContentRunner(fake, 10).Collect(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fake.calls != 1 || len(output.Observations) != 1 || output.Observations[0].ObservationKind != contract.KindVideoList {
+		t.Fatalf("calls=%d observations=%#v", fake.calls, output.Observations)
+	}
+}
+
 func TestChannelRunnerEmitsFixtureKinds(t *testing.T) {
 	t.Parallel()
 	var result youtubejs.ChannelResult
@@ -108,6 +127,30 @@ func TestChannelRunnerEmitsFixtureKinds(t *testing.T) {
 	}
 	if len(output.Observations) != 4 {
 		t.Fatalf("observations = %d", len(output.Observations))
+	}
+}
+
+func TestChannelRunnerEmitsOnlyEnabledKinds(t *testing.T) {
+	t.Parallel()
+	var result youtubejs.ChannelResult
+	loadJSON(t, "channel.json", &result)
+	fake := &channelFake{result: result}
+	input := youtubeInput(
+		"UC_TEST", "youtubejs_channel",
+		contract.KindLiveSnapshot, contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+	)
+	input.EnabledSubjects = map[contract.ObservationKind][]string{
+		contract.KindLiveSnapshot:   {},
+		contract.KindChannelStats:   {"UC_TEST"},
+		contract.KindChannelProfile: {},
+		contract.KindChannelPhoto:   {},
+	}
+	output, err := NewChannelRunner(fake).Collect(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fake.calls != 1 || len(output.Observations) != 1 || output.Observations[0].ObservationKind != contract.KindChannelStats {
+		t.Fatalf("calls=%d observations=%#v", fake.calls, output.Observations)
 	}
 }
 
@@ -252,9 +295,11 @@ func (f *contentFake) FetchContent(_ context.Context, request youtubejs.ContentR
 
 type channelFake struct {
 	result youtubejs.ChannelResult
+	calls  int
 }
 
 func (f *channelFake) FetchChannel(context.Context, youtubejs.ChannelRequest) (youtubejs.ChannelResult, error) {
+	f.calls++
 	return f.result, nil
 }
 

@@ -44,11 +44,7 @@ func (r *Repository) Candidates(ctx context.Context, provider contract.Provider,
 		return nil, fmt.Errorf("list collection job candidates: %w: provider has no emissions", ErrInvalidJob)
 	}
 	var generation int64
-	if err := r.pool.QueryRow(ctx, `
-		SELECT generation
-		FROM youtube_collection_projection_generations
-		WHERE status = 'CURRENT' AND valid_until > clock_timestamp()
-	`).Scan(&generation); errors.Is(err, pgx.ErrNoRows) {
+	if err := r.pool.QueryRow(ctx, mustSQL("repository_projection_current_0144_01.sql")).Scan(&generation); errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrProjectionStale
 	} else if err != nil {
 		return nil, fmt.Errorf("list collection job candidates: load current projection: %w", err)
@@ -72,19 +68,15 @@ func (r *Repository) Candidates(ctx context.Context, provider contract.Provider,
 		}}, nil
 	}
 
-	rows, err := r.pool.Query(ctx, `
-		SELECT subject_key,
-		       MIN(poll_interval_ms),
-		       MAX(poll_interval_ms)
-		FROM youtube_collection_targets
-		WHERE projection_generation = $1
-		  AND observation_kind = ANY($2::text[])
-		  AND enabled = TRUE
-		  AND valid_until > clock_timestamp()
-		GROUP BY subject_key
-		ORDER BY MAX(priority) DESC, subject_key
-		LIMIT $3
-	`, generation, kindValues, limit)
+	rows, err := r.pool.Query(
+		ctx,
+		mustSQL("repository_candidates_0144_02.sql"),
+		generation,
+		kindValues,
+		limit,
+		string(provider),
+		jobKind,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("list collection job candidates: query targets: %w", err)
 	}
@@ -117,15 +109,12 @@ func (r *Repository) EnabledSubjects(ctx context.Context, generation int64, kind
 	if r == nil || r.pool == nil || generation <= 0 || !kind.Valid() {
 		return nil, fmt.Errorf("list enabled collection subjects: %w", ErrInvalidJob)
 	}
-	rows, err := r.pool.Query(ctx, `
-		SELECT subject_key
-		FROM youtube_collection_targets
-		WHERE projection_generation = $1
-		  AND observation_kind = $2
-		  AND enabled = TRUE
-		  AND valid_until > clock_timestamp()
-		ORDER BY subject_key
-	`, generation, string(kind))
+	rows, err := r.pool.Query(
+		ctx,
+		mustSQL("repository_enabled_subjects_0144_03.sql"),
+		generation,
+		string(kind),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled collection subjects: query targets: %w", err)
 	}
@@ -155,17 +144,14 @@ func (r *Repository) loadCandidateInterval(
 	var minIntervalMS int64
 	var maxIntervalMS int64
 	exact := membership == sourceobservation.JobMembershipExactSubject
-	err := r.pool.QueryRow(ctx, `
-		SELECT COUNT(*),
-		       COALESCE(MIN(poll_interval_ms), 0),
-		       COALESCE(MAX(poll_interval_ms), 0)
-		FROM youtube_collection_targets
-		WHERE projection_generation = $1
-		  AND observation_kind = ANY($2::text[])
-		  AND enabled = TRUE
-		  AND valid_until > clock_timestamp()
-		  AND (NOT $3 OR subject_key = $4)
-	`, generation, kinds, exact, subject).Scan(&count, &minIntervalMS, &maxIntervalMS)
+	err := r.pool.QueryRow(
+		ctx,
+		mustSQL("repository_target_bundle_0144_04.sql"),
+		generation,
+		kinds,
+		exact,
+		subject,
+	).Scan(&count, &minIntervalMS, &maxIntervalMS)
 	if err != nil {
 		return 0, fmt.Errorf("list collection job candidates: inspect global target set: %w", err)
 	}
@@ -208,12 +194,7 @@ func (r *Repository) acquireTx(
 	kinds []contract.ObservationKind,
 ) (contract.LeaseProof, error) {
 	var generation int64
-	err := tx.QueryRow(ctx, `
-		SELECT generation
-		FROM youtube_collection_projection_generations
-		WHERE status = 'CURRENT' AND valid_until > clock_timestamp()
-		FOR SHARE
-	`).Scan(&generation)
+	err := tx.QueryRow(ctx, mustSQL("repository_projection_lock_0144_05.sql")).Scan(&generation)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return contract.LeaseProof{}, ErrProjectionStale
 	}
@@ -228,34 +209,26 @@ func (r *Repository) acquireTx(
 	var minIntervalMS int64
 	var maxIntervalMS int64
 	exact := definition.Membership == sourceobservation.JobMembershipExactSubject
-	err = tx.QueryRow(ctx, `
-		SELECT COUNT(*),
-		       COALESCE(MIN(poll_interval_ms), 0),
-		       COALESCE(MAX(poll_interval_ms), 0)
-		FROM youtube_collection_targets
-		WHERE projection_generation = $1
-		  AND observation_kind = ANY($2::text[])
-		  AND enabled = TRUE
-		  AND valid_until > clock_timestamp()
-		  AND (NOT $3 OR subject_key = $4)
-	`, generation, kindValues, exact, spec.SubjectKey).Scan(&targetCount, &minIntervalMS, &maxIntervalMS)
+	err = tx.QueryRow(
+		ctx,
+		mustSQL("repository_target_bundle_0144_04.sql"),
+		generation,
+		kindValues,
+		exact,
+		spec.SubjectKey,
+	).Scan(&targetCount, &minIntervalMS, &maxIntervalMS)
 	if err != nil {
 		return contract.LeaseProof{}, fmt.Errorf("acquire collection job lease: verify target set: %w", err)
 	}
 	if targetCount == 0 {
 		return contract.LeaseProof{}, ErrTargetDisabled
 	}
-	if minIntervalMS != spec.PollInterval.Milliseconds() || maxIntervalMS != minIntervalMS {
+	if minIntervalMS != spec.PollInterval.Milliseconds() ||
+		definition.Membership != sourceobservation.JobMembershipCurrentProjection && maxIntervalMS != minIntervalMS {
 		return contract.LeaseProof{}, fmt.Errorf("acquire collection job lease: %w: target cadence does not match job", ErrInvalidJob)
 	}
 
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO youtube_collection_job_leases (
-			job_key, provider, job_class, collection_job_kind, subject_key,
-			projection_generation, poll_interval_ms, scheduled_for, next_due_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp(), clock_timestamp())
-		ON CONFLICT (job_key) DO NOTHING
-	`, spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey,
+	if _, err := tx.Exec(ctx, mustSQL("repository_lease_insert_0144_06.sql"), spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey,
 		generation, spec.PollInterval.Milliseconds()); err != nil {
 		return contract.LeaseProof{}, fmt.Errorf("acquire collection job lease: create job row: %w", err)
 	}
@@ -263,12 +236,8 @@ func (r *Repository) acquireTx(
 	var storedClass string
 	var storedKind string
 	var storedSubject string
-	err = tx.QueryRow(ctx, `
-		SELECT provider, job_class, collection_job_kind, subject_key
-		FROM youtube_collection_job_leases
-		WHERE job_key = $1
-		FOR UPDATE
-	`, spec.JobKey).Scan(&storedProvider, &storedClass, &storedKind, &storedSubject)
+	err = tx.QueryRow(ctx, mustSQL("repository_lease_lock_0144_07.sql"), spec.JobKey).
+		Scan(&storedProvider, &storedClass, &storedKind, &storedSubject)
 	if err != nil {
 		return contract.LeaseProof{}, fmt.Errorf("acquire collection job lease: lock job row: %w", err)
 	}
@@ -277,35 +246,15 @@ func (r *Repository) acquireTx(
 	}
 
 	var proof contract.LeaseProof
-	err = tx.QueryRow(ctx, `
-		UPDATE youtube_collection_job_leases
-		SET owner_instance = $2,
-		    fence_epoch = fence_epoch + 1,
-		    projection_generation = $3,
-		    poll_interval_ms = $4,
-		    scheduled_for = CASE
-		        WHEN slot_state = 'IDLE' THEN date_bin(
-		            $4::bigint * INTERVAL '1 millisecond',
-		            clock_timestamp(),
-		            next_due_at
-		        )
-		        ELSE scheduled_for
-		    END,
-		    slot_state = 'ACTIVE',
-		    retry_not_before = NULL,
-		    lease_expires_at = clock_timestamp() + ($5::bigint * INTERVAL '1 millisecond'),
-		    last_error_code = NULL,
-		    updated_at = clock_timestamp()
-		WHERE job_key = $1
-		  AND (
-		      (slot_state = 'IDLE' AND next_due_at <= clock_timestamp())
-		      OR (slot_state = 'DEFERRED' AND retry_not_before <= clock_timestamp())
-		      OR (slot_state = 'ACTIVE' AND lease_expires_at <= clock_timestamp())
-		  )
-		  AND (owner_instance IS NULL OR lease_expires_at <= clock_timestamp())
-		RETURNING job_key, collection_job_kind, owner_instance,
-		          fence_epoch, projection_generation, scheduled_for
-	`, spec.JobKey, owner, generation, spec.PollInterval.Milliseconds(), r.config.LeaseTTL.Milliseconds()).Scan(
+	err = tx.QueryRow(
+		ctx,
+		mustSQL("repository_lease_acquire_0144_08.sql"),
+		spec.JobKey,
+		owner,
+		generation,
+		spec.PollInterval.Milliseconds(),
+		r.config.LeaseTTL.Milliseconds(),
+	).Scan(
 		&proof.JobKey, &proof.CollectionJobKind, &proof.OwnerInstance,
 		&proof.FenceEpoch, &proof.ProjectionGeneration, &proof.ScheduledFor,
 	)
@@ -337,26 +286,7 @@ func (l *JobLease) Renew(ctx context.Context) error {
 		return fmt.Errorf("renew collection job lease: %w", ErrFenceLost)
 	}
 	var jobKey string
-	err := l.repository.pool.QueryRow(ctx, `
-		UPDATE youtube_collection_job_leases AS job
-		SET lease_expires_at = clock_timestamp() + ($6::bigint * INTERVAL '1 millisecond'),
-		    updated_at = clock_timestamp()
-		WHERE job.job_key = $1
-		  AND job.owner_instance = $2
-		  AND job.fence_epoch = $3
-		  AND job.projection_generation = $4
-		  AND job.scheduled_for = $5
-		  AND job.slot_state = 'ACTIVE'
-		  AND job.lease_expires_at > clock_timestamp()
-		  AND EXISTS (
-		      SELECT 1
-		      FROM youtube_collection_projection_generations AS generation
-		      WHERE generation.generation = job.projection_generation
-		        AND generation.status = 'CURRENT'
-		        AND generation.valid_until > clock_timestamp()
-		  )
-		RETURNING job.job_key
-	`, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+	err := l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_renew_0144_09.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor, l.repository.config.LeaseTTL.Milliseconds()).Scan(&jobKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrFenceLost
@@ -385,19 +315,7 @@ func (l *JobLease) Release(ctx context.Context) error {
 	}
 	delay := deterministicJitter(l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
 	var jobKey string
-	err := l.repository.pool.QueryRow(ctx, `
-		UPDATE youtube_collection_job_leases
-		SET slot_state = 'DEFERRED',
-		    owner_instance = NULL,
-		    lease_expires_at = NULL,
-		    retry_not_before = clock_timestamp() + ($6::bigint * INTERVAL '1 millisecond'),
-		    last_error_code = 'shutdown_release',
-		    updated_at = clock_timestamp()
-		WHERE job_key = $1 AND owner_instance = $2 AND fence_epoch = $3
-		  AND projection_generation = $4 AND scheduled_for = $5
-		  AND slot_state = 'ACTIVE' AND lease_expires_at > clock_timestamp()
-		RETURNING job_key
-	`, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+	err := l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_release_0144_10.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor, delay.Milliseconds()).Scan(&jobKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrFenceLost
@@ -415,40 +333,12 @@ func (l *JobLease) finish(ctx context.Context, code string, retryAt time.Time, a
 	var jobKey string
 	var err error
 	if action == "complete" {
-		err = l.repository.pool.QueryRow(ctx, `
-			UPDATE youtube_collection_job_leases
-			SET slot_state = 'IDLE',
-			    owner_instance = NULL,
-			    lease_expires_at = NULL,
-			    retry_not_before = NULL,
-			    last_completed_at = clock_timestamp(),
-			    last_error_code = NULL,
-			    next_due_at = scheduled_for + (poll_interval_ms * INTERVAL '1 millisecond'),
-			    updated_at = clock_timestamp()
-			WHERE job_key = $1 AND owner_instance = $2 AND fence_epoch = $3
-			  AND projection_generation = $4 AND scheduled_for = $5
-			  AND slot_state = 'ACTIVE' AND lease_expires_at > clock_timestamp()
-			RETURNING job_key
-		`, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+		err = l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_complete_0144_11.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 			l.proof.ProjectionGeneration, l.proof.ScheduledFor).Scan(&jobKey)
 	} else {
 		minDelay := l.repository.config.MinRetryDelay
 		maxDelay := l.repository.config.MaxRetryDelay
-		err = l.repository.pool.QueryRow(ctx, `
-			UPDATE youtube_collection_job_leases
-			SET slot_state = 'DEFERRED',
-			    owner_instance = NULL,
-			    lease_expires_at = NULL,
-			    retry_not_before = $6,
-			    last_error_code = $7,
-			    updated_at = clock_timestamp()
-			WHERE job_key = $1 AND owner_instance = $2 AND fence_epoch = $3
-			  AND projection_generation = $4 AND scheduled_for = $5
-			  AND slot_state = 'ACTIVE' AND lease_expires_at > clock_timestamp()
-			  AND $6 >= clock_timestamp() + ($8::bigint * INTERVAL '1 millisecond')
-			  AND $6 <= clock_timestamp() + ($9::bigint * INTERVAL '1 millisecond')
-			RETURNING job_key
-		`, l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
+		err = l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_defer_0144_12.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 			l.proof.ProjectionGeneration, l.proof.ScheduledFor, retryAt, code,
 			minDelay.Milliseconds(), maxDelay.Milliseconds()).Scan(&jobKey)
 	}

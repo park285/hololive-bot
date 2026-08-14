@@ -5,6 +5,4 @@ SELECT provider,
        schema_version,
        contract_generation,
        evidence_sha256
-FROM source_observations
-WHERE id = $1
-FOR SHARE
+FROM lock_source_observation($1)

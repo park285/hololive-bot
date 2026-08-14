@@ -36,9 +36,9 @@ Structured allowlist: `repository-ownership.allowlist`.
 | Runtime | Enabled role | Must stay disabled |
 |---|---|---|
 | `youtube-collector` | Community YouTube.js fetch/normalize and `source_observation_outbox` Publish | Canonical community persist, observation claim/finalize, Iris send, outbox dispatch |
-| `youtube-producer` | YouTube scraping/polling except Community fetch, observation consume/canonical persist, `youtube_notification_outbox` production, and Holodex photo sync (a/c singleton lease) | Iris send, direct outbox dispatch |
+| `youtube-producer` | YouTube scraping/polling except Community fetch/consume, `youtube_notification_outbox` production, and Holodex photo sync (a/c singleton lease) | Iris send, direct outbox dispatch, Community consume |
 
-Duplicated polling prevention is enforced operationally by Compose env ownership: `youtube-producer` and `youtube-collector` own `YOUTUBE_INGESTION_ENABLED=true` on their own processes. Collector poller identity is `community_collect`; producer does not register a `community` poller and persists through `CommunityObservationConsumer`.
+Duplicated polling prevention is enforced operationally by Compose env ownership: `youtube-producer` and `youtube-collector` own `YOUTUBE_INGESTION_ENABLED=true` on their own processes. Collector poller identity is `community_collect`; producer does not register a `community` poller. Community consume/canonical persist is owned by the `hololive-api` YouTube plane.
 Duplicated sending prevention is enforced by code and architecture gates: `youtube-producer` and producer runtimes must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.
 `internal/runtime/communitycollector` must not import persist helpers (`batchrepo`, `PersistCommunityPosts`, producer `pollers`).
 

@@ -74,8 +74,6 @@ LABEL org.opencontainers.image.title="hololive-youtube-collector" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"
 
-RUN apk add --no-cache tzdata ca-certificates
-
 ENV TZ=Asia/Seoul \
     USER=app \
     HOME=/tmp \
@@ -86,6 +84,7 @@ WORKDIR /app
 
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
+COPY --from=builder --link /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder --link --chown=1000:1000 /dist ./
 COPY --from=youtubejs --chown=1000:1000 /app/youtubejs ./youtubejs
 
@@ -96,7 +95,7 @@ ENV GOGC=100 \
 EXPOSE 30045/tcp 30045/udp 30096/tcp
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["./bin/healthcheck", "https://127.0.0.1:30045/health"]
+    CMD ["./bin/healthcheck", "https://127.0.0.1:30045/ready"]
 
 USER 1000:1000
 

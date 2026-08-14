@@ -38,6 +38,14 @@ func (r *ChannelRunner) Collect(ctx context.Context, input collectutil.RunInput)
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js channel client is not configured")
 	}
 	started := time.Now()
+	enabled := make(map[contract.ObservationKind]bool, len(r.Emissions()))
+	for _, kind := range r.Emissions() {
+		enabled[kind] = subjectEnabled(input, kind)
+	}
+	if !enabled[contract.KindLiveSnapshot] && !enabled[contract.KindChannelStats] &&
+		!enabled[contract.KindChannelProfile] && !enabled[contract.KindChannelPhoto] {
+		return collectutil.Output(nil, started)
+	}
 	result, err := r.client.FetchChannel(ctx, youtubejs.ChannelRequest{
 		ChannelID:         input.Spec.SubjectKey,
 		MaxPages:          input.MaxPages,
@@ -51,26 +59,28 @@ func (r *ChannelRunner) Collect(ctx context.Context, input collectutil.RunInput)
 		return collectutil.RunOutput{}, err
 	}
 	envelopes := make([]contract.Envelope, 0, 4)
-	live, err := r.envelope(input, contract.KindLiveSnapshot, completeness, continuity, liveSnapshotPayload(input.Spec.SubjectKey, result.LiveSessions))
-	if err != nil {
-		return collectutil.RunOutput{}, err
+	if enabled[contract.KindLiveSnapshot] {
+		live, err := r.envelope(input, contract.KindLiveSnapshot, completeness, continuity, liveSnapshotPayload(input.Spec.SubjectKey, result.LiveSessions))
+		if err != nil {
+			return collectutil.RunOutput{}, err
+		}
+		envelopes = append(envelopes, live)
 	}
-	envelopes = append(envelopes, live)
-	if stats, ok := channelStatsPayload(input.Spec.SubjectKey, result.Stats); ok {
+	if stats, ok := channelStatsPayload(input.Spec.SubjectKey, result.Stats); ok && enabled[contract.KindChannelStats] {
 		envelope, err := r.envelope(input, contract.KindChannelStats, completeness, continuity, stats)
 		if err != nil {
 			return collectutil.RunOutput{}, err
 		}
 		envelopes = append(envelopes, envelope)
 	}
-	if profile, ok := channelProfilePayload(input.Spec.SubjectKey, result.Profile); ok {
+	if profile, ok := channelProfilePayload(input.Spec.SubjectKey, result.Profile); ok && enabled[contract.KindChannelProfile] {
 		envelope, err := r.envelope(input, contract.KindChannelProfile, completeness, continuity, profile)
 		if err != nil {
 			return collectutil.RunOutput{}, err
 		}
 		envelopes = append(envelopes, envelope)
 	}
-	if photo, ok := channelPhotoPayload(input.Spec.SubjectKey, result.Photo); ok {
+	if photo, ok := channelPhotoPayload(input.Spec.SubjectKey, result.Photo); ok && enabled[contract.KindChannelPhoto] {
 		envelope, err := r.envelope(input, contract.KindChannelPhoto, completeness, continuity, photo)
 		if err != nil {
 			return collectutil.RunOutput{}, err

@@ -11,13 +11,7 @@ func LiveHeadViewerVideoIDs(ctx context.Context, tx dbx.Tx) ([]string, error) {
 	if tx == nil {
 		return nil, fmt.Errorf("%w: transaction is not configured", ErrInputRead)
 	}
-	rows, err := tx.Query(ctx, `
-		SELECT video_id
-		FROM youtube_live_reconciliation_heads
-		WHERE status IN ('UPCOMING', 'LIVE')
-		ORDER BY video_id
-		LIMIT $1
-	`, MaxInputChannelCount)
+	rows, err := tx.Query(ctx, mustSQL("live_head_viewer_video_ids.sql"), MaxInputChannelCount+1)
 	if err != nil {
 		return nil, fmt.Errorf("%w: load live head videos: %w", ErrInputRead, err)
 	}
@@ -32,6 +26,9 @@ func LiveHeadViewerVideoIDs(ctx context.Context, tx dbx.Tx) ([]string, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("%w: read live head videos: %w", ErrInputRead, err)
+	}
+	if len(videos) > MaxInputChannelCount {
+		return nil, fmt.Errorf("%w: viewer video count exceeds %d", ErrInvalidProjection, MaxInputChannelCount)
 	}
 	return videos, nil
 }

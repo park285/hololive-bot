@@ -229,7 +229,20 @@ func (p *VideoListV1) normalizeAndValidate(subject string) error {
 	if err := p.Coverage.normalizeAndValidate(subject); err != nil {
 		return err
 	}
-	return normalizeVideos(p.ChannelID, &p.Videos)
+	if err := normalizeVideos(p.ChannelID, &p.Videos); err != nil {
+		return err
+	}
+	for i := range p.Videos {
+		publishedAt := p.Videos[i].PublishedAt
+		if publishedAt == nil {
+			continue
+		}
+		if p.Coverage.Filters.PublishedAfter != nil && publishedAt.Before(*p.Coverage.Filters.PublishedAfter) ||
+			p.Coverage.Filters.PublishedBefore != nil && publishedAt.After(*p.Coverage.Filters.PublishedBefore) {
+			return fmt.Errorf("video published time is outside coverage")
+		}
+	}
+	return nil
 }
 
 func (p *ShortsListV1) normalizeAndValidate(subject string) error {
@@ -245,6 +258,9 @@ func (p *ShortsListV1) normalizeAndValidate(subject string) error {
 func normalizeVideos(channelID string, videos *[]VideoListItemV1) error {
 	if len(*videos) > 1000 {
 		return fmt.Errorf("video count exceeds 1000")
+	}
+	if *videos == nil {
+		*videos = []VideoListItemV1{}
 	}
 	seen := make(map[string]struct{}, len(*videos))
 	for i := range *videos {
@@ -291,6 +307,9 @@ func (p *LiveSnapshotV1) normalizeAndValidate(subject string) error {
 	}
 	if len(p.Sessions) > 1000 {
 		return fmt.Errorf("live session count exceeds 1000")
+	}
+	if p.Sessions == nil {
+		p.Sessions = []LiveSessionV1{}
 	}
 	seen := make(map[string]struct{}, len(p.Sessions))
 	for i := range p.Sessions {
@@ -433,6 +452,9 @@ func (p *ChannelPhotoV1) normalizeAndValidate(subject string) error {
 	if len(p.Variants) > 20 {
 		return fmt.Errorf("photo variant count exceeds 20")
 	}
+	if p.Variants == nil {
+		p.Variants = []PhotoVariantV1{}
+	}
 	for i := range p.Variants {
 		variant := &p.Variants[i]
 		if variant.Kind != "avatar" && variant.Kind != "banner" {
@@ -487,6 +509,9 @@ func (p *ScheduleSnapshotV1) normalizeAndValidate(subject string) error {
 	if len(p.Items) > 2000 {
 		return fmt.Errorf("schedule item count exceeds 2000")
 	}
+	if p.Items == nil {
+		p.Items = []ScheduleItemV1{}
+	}
 	seen := make(map[string]struct{}, len(p.Items))
 	for i := range p.Items {
 		item := &p.Items[i]
@@ -507,6 +532,10 @@ func (p *ScheduleSnapshotV1) normalizeAndValidate(subject string) error {
 			return fmt.Errorf("schedule item title or scheduled time is invalid")
 		}
 		item.ScheduledAt = item.ScheduledAt.UTC()
+		if p.Coverage.WindowStart != nil && item.ScheduledAt.Before(*p.Coverage.WindowStart) ||
+			p.Coverage.WindowEnd != nil && item.ScheduledAt.After(*p.Coverage.WindowEnd) {
+			return fmt.Errorf("schedule item time is outside coverage")
+		}
 		if err := normalizeOptionalTime(&item.EndedAt); err != nil {
 			return fmt.Errorf("schedule ended at: %w", err)
 		}

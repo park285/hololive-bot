@@ -6,12 +6,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # 렌더 전용 더미 env — 필수 보간 변수(:?)만 채운다. live 값과 무관.
 STUB_COMPOSE_ENV="$(mktemp)"
 STUB_MIGRATION_OVERRIDE_ENV="$(mktemp)"
+STUB_COLLECTOR_DISABLED_ENV="$(mktemp)"
 STUB_AP_COMPOSE_ENV="$(mktemp)"
 STUB_APP_ENV="$(mktemp)"
 STUB_YOUTUBE_PRODUCER_ENV="$(mktemp)"
 STUB_ADMIN_DASHBOARD_ENV="$(mktemp)"
 cleanup() {
-    rm -f "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}" "${STUB_ADMIN_DASHBOARD_ENV}"
+    rm -f "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}" "${STUB_COLLECTOR_DISABLED_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}" "${STUB_ADMIN_DASHBOARD_ENV}"
 }
 trap cleanup EXIT
 cat >"${STUB_COMPOSE_ENV}" <<'EOF'
@@ -26,6 +27,10 @@ EOF
 cp "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}"
 cat >>"${STUB_MIGRATION_OVERRIDE_ENV}" <<'EOF'
 MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true
+EOF
+cp "${STUB_COMPOSE_ENV}" "${STUB_COLLECTOR_DISABLED_ENV}"
+cat >>"${STUB_COLLECTOR_DISABLED_ENV}" <<'EOF'
+HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR=1
 EOF
 cat >"${STUB_AP_COMPOSE_ENV}" <<'EOF'
 CACHE_PASSWORD=stub
@@ -89,12 +94,13 @@ render() {
 main_render="$(render oracle "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 default_render="$(render "" "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 migration_override_render="$(render oracle "${STUB_MIGRATION_OVERRIDE_ENV}" "${PROD_OVERLAYS[@]}")"
+collector_disabled_render="$(render oracle "${STUB_COLLECTOR_DISABLED_ENV}" "${PROD_OVERLAYS[@]}")"
 ap_render="$(render main-ap "${STUB_COMPOSE_ENV}" "${MAIN_AP_OVERLAYS[@]}")"
 osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
 osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka2.yml)")"
 seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
 
-MAIN_RENDER="${main_render}" DEFAULT_RENDER="${default_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" AP_RENDER="${ap_render}" \
+MAIN_RENDER="${main_render}" DEFAULT_RENDER="${default_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" COLLECTOR_DISABLED_RENDER="${collector_disabled_render}" AP_RENDER="${ap_render}" \
     OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'
 import json
 import os
@@ -130,6 +136,7 @@ def has_udp_published(svc, target_port):
 main = json.loads(os.environ["MAIN_RENDER"])["services"]
 default_services = json.loads(os.environ["DEFAULT_RENDER"])["services"]
 migration_override = json.loads(os.environ["MIGRATION_OVERRIDE_RENDER"])["services"]
+collector_disabled = json.loads(os.environ["COLLECTOR_DISABLED_RENDER"])["services"]
 ap = json.loads(os.environ["AP_RENDER"])["services"]
 
 migration_env = (main.get("hololive-db-migrate") or {}).get("environment") or {}
@@ -154,7 +161,7 @@ H3_HEALTH = {
     ),
     "hololive-alarm-worker": (["https://127.0.0.1:30007/health"], None),
     "youtube-producer": (["https://127.0.0.1:30005/health"], None),
-    "youtube-collector": (["https://127.0.0.1:30045/health"], 30045),
+    "youtube-collector": (["https://127.0.0.1:30045/ready"], 30045),
 }
 
 for name, (urls, udp_port) in H3_HEALTH.items():
@@ -175,8 +182,8 @@ check("youtube-collector present in default central render", "youtube-collector"
 check("youtube-collector present in oracle render", collector is not None)
 if collector is not None:
     check(
-        "youtube-collector healthcheck is https://127.0.0.1:30045/health",
-        healthcheck_url(collector) == "https://127.0.0.1:30045/health",
+        "youtube-collector healthcheck is https://127.0.0.1:30045/ready",
+        healthcheck_url(collector) == "https://127.0.0.1:30045/ready",
     )
     check("youtube-collector healthcheck timeout is 7s", healthcheck_timeout(collector) == "7s")
     check("youtube-collector publishes 30045/udp", has_udp_published(collector, 30045))
@@ -192,6 +199,12 @@ if collector is not None:
         check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
     for holodex_key in ("HOLODEX_API_KEY", "HOLODEX_API_KEY_1"):
         check(f"youtube-collector receives {holodex_key}", env.get(holodex_key) == "stub")
+
+disabled_collector = collector_disabled.get("youtube-collector") or {}
+check(
+    "youtube-collector persistent disable renders replicas zero through compose.sh",
+    (disabled_collector.get("deploy") or {}).get("replicas") == 0,
+)
 
 for name in ("hololive-api", "hololive-alarm-worker"):
     env = (main.get(name) or {}).get("environment") or {}
@@ -330,4 +343,5 @@ grep -Fq 'alarm-worker|https://127.0.0.1:30007/health|compose-healthcheck:hololi
 grep -Fq 'alarm-worker-ready|https://127.0.0.1:30007/ready|compose-healthcheck:hololive-alarm-worker' "${SMOKE_SCRIPT}"
 grep -Fq 'youtube-producer-c|https://127.0.0.1:30025/health|compose-healthcheck:youtube-producer-c:main-ap' "${SMOKE_SCRIPT}"
 grep -Fq 'youtube-collector|https://127.0.0.1:30045/health|compose-healthcheck:youtube-collector' "${SMOKE_SCRIPT}"
+grep -Fq 'youtube-collector-ready|https://127.0.0.1:30045/ready|compose-healthcheck:youtube-collector' "${SMOKE_SCRIPT}"
 echo "[PASS] runtime smoke probes are h3-only"

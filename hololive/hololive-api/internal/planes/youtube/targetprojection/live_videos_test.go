@@ -2,6 +2,7 @@ package targetprojection
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -11,10 +12,7 @@ import (
 func TestLiveHeadViewerVideoIDsReturnsActiveVideosOnly(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_reconciliation_heads (video_id, status)
-		VALUES ('vid-ended', 'ENDED'), ('vid-live', 'LIVE'), ('vid-soon', 'UPCOMING')
-	`); err != nil {
+	if _, err := pool.Exec(ctx, mustTestSQL("insert_live_head_fixture.sql")); err != nil {
 		t.Fatal(err)
 	}
 	videos, err := dbx.InPgxTxWithResult(ctx, pool, func(tx dbx.Tx) ([]string, error) {
@@ -25,5 +23,19 @@ func TestLiveHeadViewerVideoIDsReturnsActiveVideosOnly(t *testing.T) {
 	}
 	if len(videos) != 2 || videos[0] != "vid-live" || videos[1] != "vid-soon" {
 		t.Fatalf("videos = %#v", videos)
+	}
+}
+
+func TestLiveHeadViewerVideoIDsRejectsOverflow(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	if _, err := pool.Exec(ctx, mustTestSQL("insert_live_head_overflow.sql"), MaxInputChannelCount+1); err != nil {
+		t.Fatal(err)
+	}
+	_, err := dbx.InPgxTxWithResult(ctx, pool, func(tx dbx.Tx) ([]string, error) {
+		return LiveHeadViewerVideoIDs(ctx, tx)
+	})
+	if !errors.Is(err, ErrInvalidProjection) {
+		t.Fatalf("error = %v, want invalid projection", err)
 	}
 }
