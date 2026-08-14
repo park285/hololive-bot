@@ -49,6 +49,11 @@ type YouTubePlaneConfig struct {
 	LiveEndFinalizer    YouTubePlaneLiveEndFinalizerConfig
 	ContentAbsenceGrace time.Duration
 	LiveEndGrace        time.Duration
+
+	ProfileClearMinObservations int
+	ProfileClearStability       time.Duration
+	PhotoChangeMinObservations  int
+	PhotoChangeStability        time.Duration
 }
 
 func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
@@ -139,6 +144,9 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	if err := loadLiveEndGrace(&config, defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
+	if err := loadProfilePhotoStability(&config, defaults); err != nil {
+		return YouTubePlaneConfig{}, err
+	}
 	return config, nil
 }
 
@@ -157,6 +165,37 @@ func loadLiveEndGrace(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) e
 		return err
 	}
 	config.LiveEndGrace = value
+	return nil
+}
+
+func loadProfilePhotoStability(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+	var err error
+	if config.ProfileClearMinObservations, err = sharedenv.IntE(
+		"YOUTUBE_PLANE_PROFILE_CLEAR_MIN_OBSERVATIONS",
+		defaults.ProfileClearMinObservations,
+	); err != nil {
+		return err
+	}
+	if config.ProfileClearStability, err = strictDurationUnitEnv(
+		"YOUTUBE_PLANE_PROFILE_CLEAR_STABILITY_SECONDS",
+		defaults.ProfileClearStability,
+		time.Second,
+	); err != nil {
+		return err
+	}
+	if config.PhotoChangeMinObservations, err = sharedenv.IntE(
+		"YOUTUBE_PLANE_PHOTO_CHANGE_MIN_OBSERVATIONS",
+		defaults.PhotoChangeMinObservations,
+	); err != nil {
+		return err
+	}
+	if config.PhotoChangeStability, err = strictDurationUnitEnv(
+		"YOUTUBE_PLANE_PHOTO_CHANGE_STABILITY_SECONDS",
+		defaults.PhotoChangeStability,
+		time.Second,
+	); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -237,7 +276,13 @@ func (c YouTubePlaneConfig) Validate() error {
 	if err := c.validateContentAbsenceGrace(); err != nil {
 		return err
 	}
-	return c.validateLiveEndGrace()
+	if err := c.validateLiveEndGrace(); err != nil {
+		return err
+	}
+	if err := c.validateProfileClear(); err != nil {
+		return err
+	}
+	return c.validatePhotoChange()
 }
 
 func (c YouTubePlaneConfig) validateContentAbsenceGrace() error {
@@ -250,6 +295,40 @@ func (c YouTubePlaneConfig) validateContentAbsenceGrace() error {
 func (c YouTubePlaneConfig) validateLiveEndGrace() error {
 	if c.LiveEndGrace < 0 || c.LiveEndGrace > 24*time.Hour {
 		return errors.New("youtube plane live end grace must be between 0 and 24h")
+	}
+	return nil
+}
+
+func (c YouTubePlaneConfig) validateProfileClear() error {
+	return validateStabilityPair(
+		"profile clear",
+		c.ProfileClearMinObservations,
+		c.ProfileClearStability,
+	)
+}
+
+func (c YouTubePlaneConfig) validatePhotoChange() error {
+	return validateStabilityPair(
+		"photo change",
+		c.PhotoChangeMinObservations,
+		c.PhotoChangeStability,
+	)
+}
+
+func validateStabilityPair(name string, minObservations int, stability time.Duration) error {
+	if minObservations < 0 || minObservations > 100 {
+		return fmt.Errorf("youtube plane %s min observations must be between 0 and 100", name)
+	}
+	if stability < 0 || stability > 24*time.Hour {
+		return fmt.Errorf("youtube plane %s stability must be between 0 and 24h", name)
+	}
+	enabledCount := minObservations > 0
+	enabledDuration := stability > 0
+	if enabledCount != enabledDuration {
+		return fmt.Errorf("youtube plane %s min observations and stability must be enabled together", name)
+	}
+	if enabledCount && minObservations < 2 {
+		return fmt.Errorf("youtube plane %s min observations must be at least 2 when enabled", name)
 	}
 	return nil
 }

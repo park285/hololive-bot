@@ -37,7 +37,6 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 
 	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
@@ -85,53 +84,9 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		[]string{"UC_STATS_A"},
 	)
 
-	if len(registrations) != 1 {
-		t.Fatalf("len(registrations) = %d, want 1", len(registrations))
+	if len(registrations) != 0 {
+		t.Fatalf("len(registrations) = %d, want 0", len(registrations))
 	}
-
-	expected := []struct {
-		name                  string
-		priority              pollscheduler.Priority
-		interval              time.Duration
-		group                 providers.ChannelTargetGroup
-		worstCaseAttempts     int
-		worstCaseRequestUnits float64
-	}{
-		{name: "channel_stats", priority: pollscheduler.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupOperational, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 6},
-	}
-
-	for idx, reg := range registrations {
-		assertDefaultRegistration(t, idx, &reg, expected[idx])
-	}
-}
-
-func assertDefaultRegistration(t *testing.T, idx int, reg *providers.ChannelPollerRegistration, expected struct {
-	name                  string
-	priority              pollscheduler.Priority
-	interval              time.Duration
-	group                 providers.ChannelTargetGroup
-	worstCaseAttempts     int
-	worstCaseRequestUnits float64
-}) {
-	t.Helper()
-	require.NotNil(t, reg.Poller, "registrations[%d].Poller", idx)
-	require.Equal(t, expected.name, reg.Poller.Name(), "registrations[%d].Poller.Name()", idx)
-	require.Equal(t, expected.priority, reg.Priority, "registrations[%d].Priority", idx)
-	require.Equal(t, expected.interval, reg.Interval, "registrations[%d].Interval", idx)
-	require.Equal(t, expected.group, reg.TargetGroup, "registrations[%d].TargetGroup", idx)
-	require.Equal(t, 1, reg.RequestsPerRun, "registrations[%d].RequestsPerRun", idx)
-	require.Equal(t, expected.worstCaseAttempts, reg.WorstCaseAttempts, "registrations[%d].WorstCaseAttempts", idx)
-	require.Equal(t, expected.worstCaseRequestUnits, reg.WorstCaseRequestUnitsPerRun, "registrations[%d].WorstCaseRequestUnitsPerRun", idx)
-	assertDefaultRegistrationChannels(t, idx, reg)
-}
-
-func assertDefaultRegistrationChannels(t *testing.T, idx int, reg *providers.ChannelPollerRegistration) {
-	t.Helper()
-	if reg.Poller.Name() == "channel_stats" {
-		require.Equal(t, []string{"UC_STATS_A"}, reg.ChannelIDs, "registrations[%d].ChannelIDs", idx)
-		return
-	}
-	require.Equal(t, []string{"UC_NOTIFY_A", "UC_NOTIFY_B"}, reg.ChannelIDs, "registrations[%d].ChannelIDs", idx)
 }
 
 func TestBuildYouTubeProducerChannelPollerRegistrations_AllExplicit(t *testing.T) {
@@ -291,7 +246,7 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:videos")
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:live")
-	require.Contains(t, schedulerJobKeys(t, scheduler), "UC_STATS:channel_stats")
+	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_STATS:channel_stats")
 }
 
 func TestTieredPollerRefreshRemovesEmptyNotificationTargets(t *testing.T) {
@@ -427,13 +382,13 @@ func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testi
 	if scheduler == nil {
 		t.Fatal("scheduler is nil")
 	}
-	if len(registrations) != 1 {
-		t.Fatalf("len(registrations) = %d, want 1", len(registrations))
+	if len(registrations) != 0 {
+		t.Fatalf("len(registrations) = %d, want 0", len(registrations))
 	}
 
 	applied := scheduler.SetProxyEnabled(false)
-	if applied != 1 {
-		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 1", applied)
+	if applied != 0 {
+		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 0", applied)
 	}
 }
 
@@ -467,7 +422,9 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_MetadataWorstCaseRequest
 		byName[registration.Poller.Name()] = registration
 	}
 
-	assert.Equal(t, 6.0, byName["channel_stats"].WorstCaseRequestUnitsPerRun)
+	if _, ok := byName["channel_stats"]; ok {
+		t.Fatal("producer registrations must omit channel_stats poller")
+	}
 	if _, ok := byName["community"]; ok {
 		t.Fatal("producer registrations must omit community poller")
 	}

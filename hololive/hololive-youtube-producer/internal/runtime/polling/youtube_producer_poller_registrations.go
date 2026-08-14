@@ -23,11 +23,9 @@ package polling
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -72,13 +70,7 @@ func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 	operationalChannelIDs []string,
 	logger *slog.Logger,
 ) []providers.ChannelPollerRegistration {
-	if scraperConfig == nil {
-		scraperConfig = &settings.ScraperConfig{}
-	}
-	poll := scraperConfig.PollOrDefault()
-	pool := postgres.GetPool()
-	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, pool)
-	return buildFlatYouTubeProducerChannelPollerRegistrations(&pollers, poll, notificationChannelIDs, operationalChannelIDs)
+	return nil
 }
 
 func appendBackfillChannelPollerRegistrations(
@@ -97,31 +89,7 @@ func buildFlatYouTubeProducerChannelPollerRegistrations(
 	notificationChannelIDs []string,
 	operationalChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
-	return []providers.ChannelPollerRegistration{
-		buildStatsRegistration(pollers.stats, poll.Stats, operationalChannelIDs),
-	}
-}
-
-func tryBuildTieredChannelPollerRegistrations(
-	ctx context.Context,
-	enabled bool,
-	pool *pgxpool.Pool,
-	pollers *youTubeProducerPollerSet,
-	poll settings.ScraperPoll,
-	targets polltarget.Targets,
-	logger *slog.Logger,
-) ([]providers.ChannelPollerRegistration, bool) {
-	if !enabled {
-		return nil, false
-	}
-	tieredTargets, tierErr := polltarget.ClassifyByActivity(ctx, pool, targets, time.Now())
-	if tierErr != nil {
-		if logger != nil {
-			logger.Warn("youtube_producer_poll_tiering_fallback_to_flat", slog.Any("error", tierErr))
-		}
-		return nil, false
-	}
-	return buildTieredYouTubeProducerChannelPollerRegistrations(pollers, poll, &tieredTargets), true
+	return nil
 }
 
 func buildTieredYouTubeProducerChannelPollerRegistrations(
@@ -129,7 +97,5 @@ func buildTieredYouTubeProducerChannelPollerRegistrations(
 	poll settings.ScraperPoll,
 	targets *polltarget.TieredTargets,
 ) []providers.ChannelPollerRegistration {
-	return []providers.ChannelPollerRegistration{
-		buildStatsRegistration(pollers.stats, poll.Stats, targets.OperationalChannelIDs),
-	}
+	return nil
 }

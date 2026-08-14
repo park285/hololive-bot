@@ -690,6 +690,99 @@ TABLE youtube_channel_latest_stats
   COLUMN updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
   CONSTRAINT youtube_channel_latest_stats_pkey PRIMARY KEY (channel_id)
 
+TABLE youtube_channel_photo_heads
+  COLUMN channel_id text NOT NULL
+  COLUMN kind text NOT NULL
+  COLUMN identity text NOT NULL DEFAULT ''::text
+  COLUMN url text NOT NULL DEFAULT ''::text
+  COLUMN width integer NOT NULL DEFAULT 0
+  COLUMN height integer NOT NULL DEFAULT 0
+  COLUMN effective_at timestamp with time zone
+  COLUMN candidate_identity text NOT NULL DEFAULT ''::text
+  COLUMN candidate_url text NOT NULL DEFAULT ''::text
+  COLUMN candidate_width integer NOT NULL DEFAULT 0
+  COLUMN candidate_height integer NOT NULL DEFAULT 0
+  COLUMN candidate_slots smallint NOT NULL DEFAULT 0
+  COLUMN candidate_first_scheduled_for timestamp with time zone
+  COLUMN candidate_last_scheduled_for timestamp with time zone
+  COLUMN candidate_first_received_at timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_photo_head_bounds CHECK (((length(identity) <= 520) AND (length(url) <= 2048) AND (length(candidate_identity) <= 520) AND (length(candidate_url) <= 2048) AND ((width >= 0) AND (width <= 20000)) AND ((height >= 0) AND (height <= 20000)) AND ((candidate_width >= 0) AND (candidate_width <= 20000)) AND ((candidate_height >= 0) AND (candidate_height <= 20000)) AND ((candidate_slots >= 0) AND (candidate_slots <= 32767))))
+  CONSTRAINT chk_youtube_photo_head_channel CHECK (((length(channel_id) >= 1) AND (length(channel_id) <= 64)))
+  CONSTRAINT chk_youtube_photo_head_kind CHECK ((kind = ANY (ARRAY['avatar'::text, 'banner'::text])))
+  CONSTRAINT youtube_channel_photo_heads_pkey PRIMARY KEY (channel_id, kind)
+
+TABLE youtube_channel_photo_variants
+  COLUMN channel_id text NOT NULL
+  COLUMN kind text NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN url text NOT NULL
+  COLUMN width integer NOT NULL DEFAULT 0
+  COLUMN height integer NOT NULL DEFAULT 0
+  COLUMN stable_media_id text NOT NULL DEFAULT ''::text
+  COLUMN content_fingerprint text NOT NULL DEFAULT ''::text
+  COLUMN observation_id bigint
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  CONSTRAINT chk_youtube_photo_variant_channel CHECK (((length(channel_id) >= 1) AND (length(channel_id) <= 64)))
+  CONSTRAINT chk_youtube_photo_variant_dims CHECK ((((width >= 0) AND (width <= 20000)) AND ((height >= 0) AND (height <= 20000))))
+  CONSTRAINT chk_youtube_photo_variant_identity CHECK (((length(stable_media_id) <= 512) AND ((content_fingerprint = ''::text) OR (content_fingerprint ~ '^[0-9a-f]{64}$'::text))))
+  CONSTRAINT chk_youtube_photo_variant_kind CHECK ((kind = ANY (ARRAY['avatar'::text, 'banner'::text])))
+  CONSTRAINT chk_youtube_photo_variant_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
+  CONSTRAINT chk_youtube_photo_variant_url CHECK ((((length(url) >= 8) AND (length(url) <= 2048)) AND (url ~~ 'https://%'::text)))
+  CONSTRAINT youtube_channel_photo_variants_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_channel_photo_variants_pkey PRIMARY KEY (channel_id, kind, provider, scheduled_for)
+
+TABLE youtube_channel_profile_evidence
+  COLUMN channel_id text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN observation_id bigint
+  COLUMN handle_present boolean NOT NULL
+  COLUMN handle text NOT NULL DEFAULT ''::text
+  COLUMN description_present boolean NOT NULL
+  COLUMN description text NOT NULL DEFAULT ''::text
+  COLUMN country_present boolean NOT NULL
+  COLUMN country text NOT NULL DEFAULT ''::text
+  COLUMN joined_date_present boolean NOT NULL
+  COLUMN joined_date text NOT NULL DEFAULT ''::text
+  COLUMN complete boolean NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  CONSTRAINT chk_youtube_profile_evidence_bounds CHECK (((length(handle) <= 256) AND (octet_length(description) <= 4096) AND (length(country) <= 50) AND (length(joined_date) <= 256)))
+  CONSTRAINT chk_youtube_profile_evidence_channel CHECK (((length(channel_id) >= 1) AND (length(channel_id) <= 64)))
+  CONSTRAINT chk_youtube_profile_evidence_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
+  CONSTRAINT youtube_channel_profile_evidence_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_channel_profile_evidence_pkey PRIMARY KEY (channel_id, scheduled_for, provider)
+
+TABLE youtube_channel_profile_heads
+  COLUMN channel_id text NOT NULL
+  COLUMN handle_set boolean NOT NULL DEFAULT false
+  COLUMN handle text NOT NULL DEFAULT ''::text
+  COLUMN handle_effective_at timestamp with time zone
+  COLUMN description_set boolean NOT NULL DEFAULT false
+  COLUMN description text NOT NULL DEFAULT ''::text
+  COLUMN description_effective_at timestamp with time zone
+  COLUMN description_empty_slots smallint NOT NULL DEFAULT 0
+  COLUMN description_empty_first_scheduled_for timestamp with time zone
+  COLUMN description_empty_last_scheduled_for timestamp with time zone
+  COLUMN description_empty_first_received_at timestamp with time zone
+  COLUMN country_set boolean NOT NULL DEFAULT false
+  COLUMN country text NOT NULL DEFAULT ''::text
+  COLUMN country_effective_at timestamp with time zone
+  COLUMN country_empty_slots smallint NOT NULL DEFAULT 0
+  COLUMN country_empty_first_scheduled_for timestamp with time zone
+  COLUMN country_empty_last_scheduled_for timestamp with time zone
+  COLUMN country_empty_first_received_at timestamp with time zone
+  COLUMN joined_date_set boolean NOT NULL DEFAULT false
+  COLUMN joined_date text NOT NULL DEFAULT ''::text
+  COLUMN joined_date_effective_at timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_profile_head_bounds CHECK (((length(handle) <= 256) AND (octet_length(description) <= 4096) AND (length(country) <= 50) AND (length(joined_date) <= 256) AND ((description_empty_slots >= 0) AND (description_empty_slots <= 32767)) AND ((country_empty_slots >= 0) AND (country_empty_slots <= 32767))))
+  CONSTRAINT chk_youtube_profile_head_channel CHECK (((length(channel_id) >= 1) AND (length(channel_id) <= 64)))
+  CONSTRAINT youtube_channel_profile_heads_pkey PRIMARY KEY (channel_id)
+
 TABLE youtube_channel_profiles
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN avatar jsonb
@@ -697,16 +790,52 @@ TABLE youtube_channel_profiles
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT youtube_channel_profiles_pkey PRIMARY KEY (channel_id)
 
+TABLE youtube_channel_stats_evidence
+  COLUMN channel_id text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN observation_id bigint
+  COLUMN subscriber_count bigint
+  COLUMN view_count bigint
+  COLUMN video_count bigint
+  COLUMN subscriber_covered boolean NOT NULL
+  COLUMN view_covered boolean NOT NULL
+  COLUMN video_covered boolean NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  CONSTRAINT chk_youtube_stats_evidence_channel CHECK (((length(channel_id) >= 1) AND (length(channel_id) <= 64)))
+  CONSTRAINT chk_youtube_stats_evidence_counts CHECK ((((subscriber_count IS NULL) OR (subscriber_count >= 0)) AND ((view_count IS NULL) OR (view_count >= 0)) AND ((video_count IS NULL) OR (video_count >= 0))))
+  CONSTRAINT chk_youtube_stats_evidence_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
+  CONSTRAINT youtube_channel_stats_evidence_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_channel_stats_evidence_pkey PRIMARY KEY (channel_id, scheduled_for, provider)
+
+TABLE youtube_channel_stats_heads
+  COLUMN channel_id text NOT NULL
+  COLUMN last_resolved_scheduled_for timestamp with time zone
+  COLUMN last_resolved_subscriber_count bigint
+  COLUMN last_resolved_view_count bigint
+  COLUMN last_resolved_video_count bigint
+  COLUMN prior_resolved_scheduled_for timestamp with time zone
+  COLUMN prior_resolved_subscriber_count bigint
+  COLUMN prior_resolved_view_count bigint
+  COLUMN prior_resolved_video_count bigint
+  COLUMN unresolved_scheduled_for timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_stats_head_channel CHECK (((length(channel_id) >= 1) AND (length(channel_id) <= 64)))
+  CONSTRAINT chk_youtube_stats_head_counts CHECK ((((last_resolved_subscriber_count IS NULL) OR (last_resolved_subscriber_count >= 0)) AND ((last_resolved_view_count IS NULL) OR (last_resolved_view_count >= 0)) AND ((last_resolved_video_count IS NULL) OR (last_resolved_video_count >= 0)) AND ((prior_resolved_subscriber_count IS NULL) OR (prior_resolved_subscriber_count >= 0)) AND ((prior_resolved_view_count IS NULL) OR (prior_resolved_view_count >= 0)) AND ((prior_resolved_video_count IS NULL) OR (prior_resolved_video_count >= 0))))
+  CONSTRAINT youtube_channel_stats_heads_pkey PRIMARY KEY (channel_id)
+
 TABLE youtube_channel_stats_snapshots
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN captured_at timestamp with time zone NOT NULL
-  COLUMN subscriber_count bigint NOT NULL DEFAULT 0
-  COLUMN view_count bigint NOT NULL DEFAULT 0
-  COLUMN video_count bigint NOT NULL DEFAULT 0
+  COLUMN subscriber_count bigint
+  COLUMN view_count bigint
+  COLUMN video_count bigint
   COLUMN joined_date bigint
   COLUMN description text
   COLUMN country character varying(50)
   COLUMN handle character varying(100)
+  CONSTRAINT chk_ycss_counts_nonneg CHECK ((((subscriber_count IS NULL) OR (subscriber_count >= 0)) AND ((view_count IS NULL) OR (view_count >= 0)) AND ((video_count IS NULL) OR (video_count >= 0))))
   CONSTRAINT youtube_channel_stats_snapshots_pkey PRIMARY KEY (channel_id, captured_at)
   INDEX CREATE INDEX idx_ycss_captured_at_brin ON public.youtube_channel_stats_snapshots USING brin (captured_at)
 

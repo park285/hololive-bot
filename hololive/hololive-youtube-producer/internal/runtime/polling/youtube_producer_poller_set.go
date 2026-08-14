@@ -33,7 +33,6 @@ import (
 type youTubeProducerPollerSet struct {
 	videos           scheduler.Poller
 	shorts           scheduler.Poller
-	stats            scheduler.Poller
 	live             scheduler.Poller
 	liveBatch        *pollers.LivePoller
 	liveBatchEnabled bool
@@ -94,7 +93,7 @@ func CommunityKeywords() []string {
 }
 
 func newYouTubeProducerPollerSet(
-	scraperClient *scraper.Client,
+	_ *scraper.Client,
 	_ pollers.LiveStatusProvider,
 	db any,
 ) youTubeProducerPollerSet {
@@ -103,7 +102,6 @@ func newYouTubeProducerPollerSet(
 		return youTubeProducerPollerSet{
 			videos:           newUnavailableYouTubeProducerPoller("videos"),
 			shorts:           newUnavailableYouTubeProducerPoller("shorts"),
-			stats:            newUnavailableYouTubeProducerPoller("channel_stats"),
 			live:             unavailableLive,
 			liveBatch:        nil,
 			liveBatchEnabled: false,
@@ -112,7 +110,6 @@ func newYouTubeProducerPollerSet(
 	return youTubeProducerPollerSet{
 		videos:           newUnavailableYouTubeProducerPoller("videos"),
 		shorts:           newUnavailableYouTubeProducerPoller("shorts"),
-		stats:            pollers.NewChannelStatsPoller(scraperClient, db),
 		live:             unavailableLive,
 		liveBatch:        nil,
 		liveBatchEnabled: false,

@@ -105,9 +105,7 @@ func serializeRegistrations(registrations []providers.ChannelPollerRegistration)
 }
 
 func TestBuildYouTubeProducerChannelPollerRegistrationsGolden(t *testing.T) {
-	statsOnly := []string{
-		"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-	}
+	statsOnly := []string{}
 	cases := []struct {
 		name       string
 		tiering    bool

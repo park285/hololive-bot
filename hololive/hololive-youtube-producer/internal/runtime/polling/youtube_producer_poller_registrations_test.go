@@ -17,7 +17,6 @@ import (
 
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	pollerruntime "github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 	"github.com/stretchr/testify/require"
@@ -85,7 +84,7 @@ func TestBuildRegistrationsAddsEnabledBackfillPollers(t *testing.T) {
 	for _, registration := range registrations {
 		name := registration.Poller.Name()
 		switch name {
-		case "videos", "shorts", "shorts_backfill", "live", "live_batch", "live_backfill", "live_backfill_batch":
+		case "videos", "shorts", "shorts_backfill", "live", "live_batch", "live_backfill", "live_backfill_batch", "channel_stats":
 			t.Fatalf("producer must not register %q", name)
 		}
 	}
@@ -187,8 +186,6 @@ func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 			OperationalChannelIDs:        []string{"UC_STATS"},
 		},
 	)
-	stats := requireRegistration(t, registrations, "channel_stats")
-	require.Equal(t, polling.BudgetPriorityLow, stats.BudgetProfile.Priority)
 	for _, registration := range registrations {
 		name := registration.Poller.Name()
 		if name == "videos" || name == "shorts" || name == "shorts_backfill" {
@@ -251,11 +248,11 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 		TargetGroup:    "notification",
 	}, []string{"UC_A", "UC_B"})
 
-	stats := requireRegistration(t, registrations, "channel_stats")
-	require.Equal(t, 2*float64(scraper.FetchPageMaxAttempts), stats.BudgetProfile.SourceUnits[polling.BudgetSourceYouTubeScraper])
-	require.Equal(t, float64(1), stats.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
-	require.Equal(t, polling.BudgetBurstPrimary, stats.BudgetProfile.BurstClass)
-	require.Equal(t, polling.BudgetPriorityLow, stats.BudgetProfile.Priority)
+	for _, registration := range registrations {
+		if registration.Poller != nil && registration.Poller.Name() == "channel_stats" {
+			t.Fatal("producer must not register channel_stats")
+		}
+	}
 }
 
 func TestValidateRegistrationBudgetProfilesRequiresExplicitProfiles(t *testing.T) {
@@ -316,7 +313,7 @@ func TestEstimateYouTubeProducerSourceBudgetKeepsSustainedIndependentOfAPCount(t
 	threeAPs := estimateYouTubeProducerSourceBudget(registrations, 3, 2)
 
 	require.Equal(t, twoAPs.SustainedRPMBySource, threeAPs.SustainedRPMBySource)
-	require.Greater(t, twoAPs.SustainedRPMBySource[polling.BudgetSourceYouTubeScraper], float64(0))
+	require.Zero(t, twoAPs.SustainedRPMBySource[polling.BudgetSourceYouTubeScraper])
 	for source := range twoAPs.BurstInflightBySource {
 		require.Equal(t, 4, twoAPs.BurstInflightBySource[source])
 		require.Equal(t, 6, threeAPs.BurstInflightBySource[source])

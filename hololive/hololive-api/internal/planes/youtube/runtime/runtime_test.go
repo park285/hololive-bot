@@ -20,13 +20,14 @@ import (
 
 func TestRuntimeClaimsLiveViewerAndScheduleKinds(t *testing.T) {
 	t.Parallel()
-	got := make(map[contract.ObservationKind]bool, 6)
+	got := make(map[contract.ObservationKind]bool, 9)
 	for _, kind := range youtubePlaneClaimKinds() {
 		got[kind] = true
 	}
 	for _, kind := range []contract.ObservationKind{
 		contract.KindCommunityPage, contract.KindVideoList, contract.KindShortsList,
 		contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindSchedule,
+		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	} {
 		if !got[kind] {
 			t.Fatalf("missing claim kind %s", kind)

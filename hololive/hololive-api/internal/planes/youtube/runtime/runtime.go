@@ -125,7 +125,13 @@ func newRuntime(
 		pool:      pool,
 		closePool: cleanup,
 		claimer:   repo,
-		consumer:  sourceobservation.NewConsumerWithGraces(repo, writer, nil, plane.ContentAbsenceGrace, plane.LiveEndGrace),
+		consumer: sourceobservation.NewConsumerWithGraces(repo, writer, nil, plane.ContentAbsenceGrace, plane.LiveEndGrace).
+			WithChannelPolicy(sourceobservation.ChannelPolicy{
+				ProfileClearMinObservations: plane.ProfileClearMinObservations,
+				ProfileClearStability:       plane.ProfileClearStability,
+				PhotoChangeMinObservations:  plane.PhotoChangeMinObservations,
+				PhotoChangeStability:        plane.PhotoChangeStability,
+			}),
 		refresher: refresher,
 		finalizer: repo,
 		builder: targetprojection.PolicyBuilder{
@@ -230,6 +236,9 @@ func youtubePlaneClaimKinds() []contract.ObservationKind {
 		contract.KindLiveSnapshot,
 		contract.KindViewerSample,
 		contract.KindSchedule,
+		contract.KindChannelStats,
+		contract.KindChannelProfile,
+		contract.KindChannelPhoto,
 	}
 }
 

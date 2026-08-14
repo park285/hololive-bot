@@ -24,7 +24,7 @@ func TestProductionRegistrationsOmitVideosShortsAndShortsBackfill(t *testing.T) 
 		for _, registration := range registrations {
 			name := registration.Poller.Name()
 			switch name {
-			case "videos", "shorts", "shorts_backfill", "live", "live_batch", "live_backfill", "live_backfill_batch":
+			case "videos", "shorts", "shorts_backfill", "live", "live_batch", "live_backfill", "live_backfill_batch", "channel_stats":
 				t.Fatalf("production-reachable producer wiring registered %q", name)
 			}
 		}

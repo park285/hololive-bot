@@ -196,6 +196,81 @@ func TestYouTubePlaneConfigRejectsInvalidLiveEndGrace(t *testing.T) {
 	}
 }
 
+func TestDefaultYouTubePlaneConfigDisablesUnapprovedProfilePhotoStability(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultYouTubePlaneConfig()
+	if cfg.ProfileClearMinObservations != 0 || cfg.ProfileClearStability != 0 {
+		t.Fatalf("unapproved profile clear defaults = %d %s", cfg.ProfileClearMinObservations, cfg.ProfileClearStability)
+	}
+	if cfg.PhotoChangeMinObservations != 0 || cfg.PhotoChangeStability != 0 {
+		t.Fatalf("unapproved photo change defaults = %d %s", cfg.PhotoChangeMinObservations, cfg.PhotoChangeStability)
+	}
+}
+
+func TestLoadYouTubePlaneConfigProfilePhotoStabilityOverride(t *testing.T) {
+	t.Setenv("YOUTUBE_PLANE_PROFILE_CLEAR_MIN_OBSERVATIONS", "2")
+	t.Setenv("YOUTUBE_PLANE_PROFILE_CLEAR_STABILITY_SECONDS", "3600")
+	t.Setenv("YOUTUBE_PLANE_PHOTO_CHANGE_MIN_OBSERVATIONS", "3")
+	t.Setenv("YOUTUBE_PLANE_PHOTO_CHANGE_STABILITY_SECONDS", "7200")
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
+	if cfg.ProfileClearMinObservations != 2 || cfg.ProfileClearStability != time.Hour {
+		t.Fatalf("profile clear override = %d %s", cfg.ProfileClearMinObservations, cfg.ProfileClearStability)
+	}
+	if cfg.PhotoChangeMinObservations != 3 || cfg.PhotoChangeStability != 2*time.Hour {
+		t.Fatalf("photo change override = %d %s", cfg.PhotoChangeMinObservations, cfg.PhotoChangeStability)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("overridden profile/photo stability: %v", err)
+	}
+}
+
+func TestYouTubePlaneConfigRejectsInvalidProfilePhotoStability(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		mutate  func(*YouTubePlaneConfig)
+		wantErr string
+	}{
+		{
+			name:    "profile clear half enabled",
+			mutate:  func(c *YouTubePlaneConfig) { c.ProfileClearMinObservations = 2 },
+			wantErr: "profile clear min observations and stability must be enabled together",
+		},
+		{
+			name: "profile clear below threshold",
+			mutate: func(c *YouTubePlaneConfig) {
+				c.ProfileClearMinObservations = 1
+				c.ProfileClearStability = time.Hour
+			},
+			wantErr: "profile clear min observations must be at least 2",
+		},
+		{
+			name:    "photo change half enabled",
+			mutate:  func(c *YouTubePlaneConfig) { c.PhotoChangeStability = time.Hour },
+			wantErr: "photo change min observations and stability must be enabled together",
+		},
+		{
+			name:    "photo change overflow",
+			mutate:  func(c *YouTubePlaneConfig) { c.PhotoChangeMinObservations = 101 },
+			wantErr: "photo change min observations must be between 0 and 100",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := DefaultYouTubePlaneConfig()
+			tt.mutate(&cfg)
+			err := cfg.Validate()
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Validate() = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestLoadYouTubePlaneConfigRejectsInvalidExplicitValues(t *testing.T) {
 	tests := []struct {
 		name  string

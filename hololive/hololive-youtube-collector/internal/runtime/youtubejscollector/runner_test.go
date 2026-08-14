@@ -130,6 +130,45 @@ func TestChannelRunnerEmitsFixtureKinds(t *testing.T) {
 	}
 }
 
+func TestChannelPhotoDoesNotFetchMediaOrSynthesizeFingerprint(t *testing.T) {
+	t.Parallel()
+	var result youtubejs.ChannelResult
+	loadJSON(t, "channel.json", &result)
+	fake := &channelFake{result: result}
+	output, err := NewChannelRunner(fake).Collect(context.Background(), youtubeInput(
+		"UC_TEST", "youtubejs_channel",
+		contract.KindLiveSnapshot, contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fake.calls != 1 {
+		t.Fatalf("channel fetch calls = %d, want 1", fake.calls)
+	}
+	var payload contract.ChannelPhotoV1
+	found := false
+	for i := range output.Observations {
+		if output.Observations[i].ObservationKind != contract.KindChannelPhoto {
+			continue
+		}
+		if err := json.Unmarshal(output.Observations[i].Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("missing channel_photo observation")
+	}
+	if len(payload.Variants) == 0 {
+		t.Fatal("expected photo variants")
+	}
+	for _, variant := range payload.Variants {
+		if variant.StableMediaID != "" || variant.ContentFingerprint != "" {
+			t.Fatalf("collector synthesized photo identity: %#v", variant)
+		}
+	}
+}
+
 func TestChannelRunnerEmitsOnlyEnabledKinds(t *testing.T) {
 	t.Parallel()
 	var result youtubejs.ChannelResult

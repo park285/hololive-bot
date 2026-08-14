@@ -21,12 +21,20 @@ type CanonicalWriter interface {
 	AfterCommitVideos(context.Context, []*domain.YouTubeContentAlarmTracking)
 }
 
+type ChannelPolicy struct {
+	ProfileClearMinObservations int
+	ProfileClearStability       time.Duration
+	PhotoChangeMinObservations  int
+	PhotoChangeStability        time.Duration
+}
+
 type Consumer struct {
 	repo      *Repository
 	writer    CanonicalWriter
 	keywords  []string
 	grace     time.Duration
 	liveGrace time.Duration
+	channel   ChannelPolicy
 }
 
 func NewConsumer(repo *Repository, writer CanonicalWriter, keywords []string) *Consumer {
@@ -56,6 +64,14 @@ func NewConsumerWithGraces(
 		grace:     grace,
 		liveGrace: liveGrace,
 	}
+}
+
+func (c *Consumer) WithChannelPolicy(policy ChannelPolicy) *Consumer {
+	if c == nil {
+		return nil
+	}
+	c.channel = policy
+	return c
 }
 
 func (c *Consumer) Consume(ctx context.Context, options ClaimOptions) error {
@@ -142,6 +158,21 @@ func (c *Consumer) finalizeObservation(
 	case contract.KindSchedule:
 		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
 			_, rec, err := c.reconcileSchedule(ctx, tx, claimed)
+			return rec, err
+		})
+	case contract.KindChannelStats:
+		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileStats(ctx, tx, claimed)
+			return rec, err
+		})
+	case contract.KindChannelProfile:
+		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileProfile(ctx, tx, claimed)
+			return rec, err
+		})
+	case contract.KindChannelPhoto:
+		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcilePhoto(ctx, tx, claimed)
 			return rec, err
 		})
 	default:
