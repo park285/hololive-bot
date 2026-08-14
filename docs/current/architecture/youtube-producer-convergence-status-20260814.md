@@ -9,14 +9,14 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
 ## 저장소 스냅샷
 
 - Branch: `feat/schedule-api-and-community-observation`
-- HEAD: `4934d4358` plus local Task 4 WIP
-- `origin/main` 이후 commit:
+- Task 4 baseline: `161618788`; 현재 worktree는 이 baseline 위의 local hardening
+- 주요 선행 commit:
   - `4c6faafcc feat(schedule): replace official HTML scraper with API-only source`
   - `e073d3896 Document community source observation vertical slice`
   - `0d68ad2b0 Add source observation PostgreSQL infrastructure`
   - `5248898cd Add source observation contract and repository`
-- production에는 migration `144`와 `youtube-collector`가 적용되지 않았다.
-- 현재 worktree는 Community vertical slice와 runtime wiring을 포함한 대규모 로컬 WIP이며 release candidate가 아니다.
+- 2026-08-14 read-only evidence 기준 production에는 migration `144`와 `youtube-collector`가 적용되지 않았다. 따라서 rollout 전 manifest `144`–`161` 전체를 순서대로 적용해야 한다.
+- 현재 worktree는 Task 4 config/shutdown/readiness hardening을 포함하며 publish·deploy 판단은 별도 gate 소유다.
 - 2026-08-14 read-only 관측 당시 `hololive-api`, `alarm-worker`, producer `a/b/c/d`는 healthy였고 중앙 `youtube-collector`는 배포되지 않았다.
 - 2026-08-14 통합 contract v2.1의 Task 1–3과 Task 4 API YouTube plane/Community consume 이전은 로컬 구현과 targeted validation을 완료했다. Task 5–8 reconciler와 Task 9 producer 제거는 시작하지 않았다.
 - source observation identity는 Go `encoding/json` 관례 대신 `source-observation-canonical-json-v1` safe-integer JCS subset과 language-neutral fixture로 고정했다. collector runtime은 계속 Go다.

@@ -28,6 +28,7 @@ const (
 	notificationSchedulerRoleOff    = "off"
 
 	postgresScraperRoleUser = "hololive_scraper"
+	postgresRuntimeRoleUser = "hololive_runtime"
 )
 
 // proactive notification egress 소유를 거부하는 bot runtime config 로더다.

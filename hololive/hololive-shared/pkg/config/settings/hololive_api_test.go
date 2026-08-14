@@ -138,9 +138,11 @@ func TestValidatePlanePool(t *testing.T) {
 func TestValidateYouTubePlaneDatabaseRole(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, validateYouTubePlaneDatabaseRole("hololive_runtime"))
-	err := validateYouTubePlaneDatabaseRole(postgresScraperRoleUser)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), postgresScraperRoleUser)
+	for _, user := range []string{postgresScraperRoleUser, "postgres_admin", ""} {
+		err := validateYouTubePlaneDatabaseRole(user)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), postgresRuntimeRoleUser)
+	}
 }
 
 func TestHololiveAPIYouTubePlaneComposeBudgetLeavesReservedCapacity(t *testing.T) {

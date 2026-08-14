@@ -13,15 +13,18 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 const (
-	communityConsumerName = "hololive-api-youtube"
-	communityLeaseOwner   = "hololive-api"
-	scraperDatabaseRole   = "hololive_scraper"
+	communityConsumerName  = "hololive-api-youtube"
+	communityLeaseOwner    = "hololive-api"
+	scraperDatabaseRole    = "hololive_scraper"
+	runtimeDatabaseRole    = "hololive_runtime"
+	youtubeHealthComponent = "youtube"
 )
 
 type observationClaimer interface {
@@ -51,17 +54,18 @@ type Runtime struct {
 	builder   targetprojection.Builder
 	now       func() time.Time
 
-	dbSem     chan struct{}
-	workCh    chan sourceobservation.Observation
-	claim     sourceobservation.ClaimOptions
-	runCancel context.CancelFunc
-	claiming  atomic.Bool
-	ready     atomic.Bool
-	degraded  atomic.Bool
-	loopWG    sync.WaitGroup
-	workerWG  sync.WaitGroup
-	closeWork sync.Once
-	inFlight  sync.Map
+	dbSem      chan struct{}
+	workCh     chan sourceobservation.Observation
+	claim      sourceobservation.ClaimOptions
+	runCancel  context.CancelFunc
+	started    atomic.Bool
+	claiming   atomic.Bool
+	ready      atomic.Bool
+	degraded   atomic.Bool
+	loopDone   chan struct{}
+	workerDone chan struct{}
+	closeWork  sync.Once
+	inFlight   sync.Map
 }
 
 func Build(ctx context.Context, plane settings.YouTubePlaneConfig, postgres settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
@@ -71,8 +75,8 @@ func Build(ctx context.Context, plane settings.YouTubePlaneConfig, postgres sett
 	if err := plane.Validate(); err != nil {
 		return nil, fmt.Errorf("build youtube plane: %w", err)
 	}
-	if strings.TrimSpace(postgres.User) == scraperDatabaseRole {
-		return nil, fmt.Errorf("build youtube plane: must not use %s", scraperDatabaseRole)
+	if strings.TrimSpace(postgres.User) != runtimeDatabaseRole {
+		return nil, fmt.Errorf("build youtube plane: requires POSTGRES_USER=%s", runtimeDatabaseRole)
 	}
 	postgres.PoolMinConns = plane.PostgresPoolMinConns
 	postgres.PoolMaxConns = plane.PostgresPoolMaxConns
@@ -121,9 +125,11 @@ func newRuntime(
 			Reader:    rosterReader{},
 			Schedules: targetprojection.DefaultPolicySchedules(),
 		},
-		now:    func() time.Time { return time.Now().UTC() },
-		dbSem:  make(chan struct{}, plane.DBOperationConcurrency),
-		workCh: make(chan sourceobservation.Observation, plane.ConsumerWorkers),
+		now:        func() time.Time { return time.Now().UTC() },
+		dbSem:      make(chan struct{}, plane.DBOperationConcurrency),
+		workCh:     make(chan sourceobservation.Observation, plane.ConsumerWorkers),
+		loopDone:   make(chan struct{}, 2),
+		workerDone: make(chan struct{}, plane.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
 			ConsumerName:  communityConsumerName,
 			LeaseOwner:    communityLeaseOwner,
@@ -150,17 +156,19 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil || !r.Config.Enabled {
 		return
 	}
+	if !r.started.CompareAndSwap(false, true) {
+		return
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	r.runCancel = cancel
 	r.claiming.Store(true)
+	r.ready.Store(true)
+	r.publishHealth()
 	for i := 0; i < r.Config.ConsumerWorkers; i++ {
-		r.workerWG.Add(1)
-		go r.runWorker()
+		go r.runWorker(runCtx, errCh)
 	}
-	r.loopWG.Add(2)
 	go r.runClaimLoop(runCtx, errCh)
 	go r.runProjectionLoop(runCtx, errCh)
-	r.ready.Store(true)
 }
 
 func (r *Runtime) Shutdown(ctx context.Context) error {
@@ -168,31 +176,26 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	r.ready.Store(false)
+	r.publishHealth()
+	if !r.started.CompareAndSwap(true, false) {
+		return nil
+	}
 	r.claiming.Store(false)
 	if r.runCancel != nil {
 		r.runCancel()
 	}
-	r.loopWG.Wait()
+	shutdownCtx, cancel := context.WithTimeout(ctx, r.Config.ShutdownTimeout)
+	defer cancel()
+	if err := waitForCompletions(shutdownCtx, r.loopDone, 2, "youtube supervisor loops"); err != nil {
+		return err
+	}
 	r.closeWork.Do(func() {
 		close(r.workCh)
 	})
-	done := make(chan struct{})
-	go func() {
-		r.workerWG.Wait()
-		close(done)
-	}()
-	timeout := r.Config.TransactionTimeout
-	if r.Config.ShutdownTimeout > timeout {
-		timeout = r.Config.ShutdownTimeout
+	if err := waitForCompletions(shutdownCtx, r.workerDone, r.Config.ConsumerWorkers, "youtube workers"); err != nil {
+		return err
 	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-done:
-	case <-timer.C:
-	}
-	r.releaseInFlight()
-	return nil
+	return r.releaseInFlight(shutdownCtx)
 }
 
 func (r *Runtime) Close() {
@@ -204,6 +207,7 @@ func (r *Runtime) Close() {
 		r.closePool = nil
 	}
 	r.pool = nil
+	health.RemoveComponent(youtubeHealthComponent)
 }
 
 func (r *Runtime) Ready() bool {
@@ -222,4 +226,22 @@ func (r *Runtime) withDB(ctx context.Context, fn func(context.Context) error) er
 	}
 	defer func() { <-r.dbSem }()
 	return fn(ctx)
+}
+
+func (r *Runtime) publishHealth() {
+	health.SetComponent(youtubeHealthComponent, health.ComponentStatus{
+		Ready:    r.Ready(),
+		Degraded: r.Degraded(),
+	})
+}
+
+func waitForCompletions(ctx context.Context, done <-chan struct{}, count int, owner string) error {
+	for completed := 0; completed < count; completed++ {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return fmt.Errorf("%s did not join: %w", owner, ctx.Err())
+		}
+	}
+	return nil
 }

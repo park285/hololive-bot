@@ -43,12 +43,16 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 	}
 
 	configureHololiveAPIPlanes(botConfig, adminConfig, llmConfig)
+	youtubeConfig, err := loadYouTubePlaneConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load hololive-api youtube plane: %w", err)
+	}
 
 	config := &HololiveAPIConfig{
 		Bot:     botConfig,
 		Admin:   adminConfig,
 		LLM:     llmConfig,
-		YouTube: loadYouTubePlaneConfig(),
+		YouTube: youtubeConfig,
 		Logging: botConfig.Logging,
 		Tracing: botConfig.Tracing,
 	}
@@ -193,8 +197,8 @@ func validateAlarmProviderScheme(environment string, parsed *url.URL) error {
 }
 
 func validateYouTubePlaneDatabaseRole(user string) error {
-	if strings.TrimSpace(user) == postgresScraperRoleUser {
-		return fmt.Errorf("youtube plane must not use %s", postgresScraperRoleUser)
+	if strings.TrimSpace(user) != postgresRuntimeRoleUser {
+		return fmt.Errorf("youtube plane requires POSTGRES_USER=%s", postgresRuntimeRoleUser)
 	}
 	return nil
 }

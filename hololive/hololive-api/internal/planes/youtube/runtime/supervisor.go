@@ -7,12 +7,14 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 func (r *Runtime) runClaimLoop(ctx context.Context, errCh chan<- error) {
-	defer r.loopWG.Done()
+	defer func() { r.loopDone <- struct{}{} }()
 	ticker := time.NewTicker(r.Config.ClaimInterval)
 	defer ticker.Stop()
 	if r.stopAfterClaimError(ctx, errCh, r.claimTick(ctx)) {
@@ -34,19 +36,19 @@ func (r *Runtime) stopAfterClaimError(ctx context.Context, errCh chan<- error, e
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, context.Canceled) || !r.claiming.Load() {
+	if !r.claiming.Load() || (errors.Is(err, context.Canceled) && ctx.Err() != nil) {
 		return true
 	}
-	if permanentObservationError(err) {
-		r.reportLoopError(ctx, errCh, "claim community observations", err)
-		return true
+	if retryableObservationError(err) {
+		r.Logger.Error("youtube plane claim tick failed", slog.Any("error", err))
+		return false
 	}
-	r.Logger.Error("youtube plane claim tick failed", slog.Any("error", err))
-	return false
+	r.reportLoopError(ctx, errCh, "claim community observations", err)
+	return true
 }
 
 func (r *Runtime) runProjectionLoop(ctx context.Context, errCh chan<- error) {
-	defer r.loopWG.Done()
+	defer func() { r.loopDone <- struct{}{} }()
 	ticker := time.NewTicker(r.Config.TargetProjection.Interval)
 	defer ticker.Stop()
 	for {
@@ -54,21 +56,41 @@ func (r *Runtime) runProjectionLoop(ctx context.Context, errCh chan<- error) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := r.refreshProjection(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				if !isInputReadError(err) && permanentObservationError(err) {
-					r.reportLoopError(ctx, errCh, "refresh target projection", err)
-					return
-				}
-				r.Logger.Error("youtube plane projection refresh failed", slog.Any("error", err))
+			err := r.refreshProjection(ctx)
+			if err == nil {
+				continue
 			}
+			if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+				return
+			}
+			if isInputReadError(err) || retryableObservationError(err) {
+				r.Logger.Error("youtube plane projection refresh failed", slog.Any("error", err))
+				continue
+			}
+			r.reportLoopError(ctx, errCh, "refresh target projection", err)
+			return
 		}
 	}
 }
 
-func (r *Runtime) runWorker() {
-	defer r.workerWG.Done()
-	for observation := range r.workCh {
-		r.processObservation(context.Background(), observation)
+func (r *Runtime) runWorker(ctx context.Context, errCh chan<- error) {
+	defer func() { r.workerDone <- struct{}{} }()
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case observation, ok := <-r.workCh:
+			if !ok {
+				return
+			}
+			if err := r.processObservation(ctx, observation); err != nil {
+				r.reportLoopError(ctx, errCh, "consume community observation", err)
+				return
+			}
+		}
 	}
 }
 
@@ -97,9 +119,8 @@ func (r *Runtime) claimTick(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runtime) processObservation(ctx context.Context, observation sourceobservation.Observation) {
+func (r *Runtime) processObservation(ctx context.Context, observation sourceobservation.Observation) error {
 	r.remember(observation)
-	defer r.forget(observation.ID)
 	txCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
 	defer cancel()
 	err := r.withDB(txCtx, func(ctx context.Context) error {
@@ -114,11 +135,16 @@ func (r *Runtime) processObservation(ctx context.Context, observation sourceobse
 		return r.consumer.ConsumeObservation(ctx, observation, r.claim.ConsumerName)
 	})
 	if err == nil {
-		return
+		r.forget(observation.ID)
+		return nil
 	}
-	if errors.Is(err, context.Canceled) {
-		r.retryObservation(observation, err)
-		return
+	if errors.Is(err, sourceobservation.ErrClaimLost) {
+		youtubeClaimLostTotal.Inc()
+		r.forget(observation.ID)
+		return nil
+	}
+	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		return nil
 	}
 	r.Logger.Error("youtube plane consume failed",
 		slog.Int64("observation_id", observation.ID),
@@ -126,7 +152,20 @@ func (r *Runtime) processObservation(ctx context.Context, observation sourceobse
 		slog.String("subject_key", observation.SubjectKey),
 		slog.Any("error", err),
 	)
-	r.retryObservation(observation, err)
+	if !retryableObservationError(err) {
+		r.forget(observation.ID)
+		return err
+	}
+	retryErr := r.retryObservation(ctx, observation, err)
+	if errors.Is(retryErr, sourceobservation.ErrClaimLost) {
+		youtubeClaimLostTotal.Inc()
+		retryErr = nil
+	}
+	r.forget(observation.ID)
+	if retryErr != nil {
+		return fmt.Errorf("retry observation %d: %w", observation.ID, retryErr)
+	}
+	return nil
 }
 
 func (r *Runtime) refreshProjection(ctx context.Context) error {
@@ -137,11 +176,14 @@ func (r *Runtime) refreshProjection(ctx context.Context) error {
 	})
 	if err == nil {
 		r.degraded.Store(false)
+		if r.started.Load() {
+			r.publishHealth()
+		}
 		return nil
 	}
-	if isInputReadError(err) {
-		r.degraded.Store(true)
-		return err
+	r.degraded.Store(true)
+	if r.started.Load() {
+		r.publishHealth()
 	}
 	return err
 }
@@ -154,40 +196,64 @@ func (r *Runtime) forget(id int64) {
 	r.inFlight.Delete(id)
 }
 
-func (r *Runtime) releaseInFlight() {
+func (r *Runtime) releaseInFlight(ctx context.Context) error {
+	var releaseErrors []error
 	r.inFlight.Range(func(key, value any) bool {
 		observation, ok := value.(sourceobservation.Observation)
 		if !ok {
-			r.inFlight.Delete(key)
+			releaseErrors = append(releaseErrors, fmt.Errorf("release youtube observation: invalid in-flight value for %v", key))
 			return true
 		}
-		r.retryObservation(observation, errors.New("youtube plane shutting down"))
+		err := r.retryObservation(ctx, observation, errors.New("youtube plane shutting down"))
+		if errors.Is(err, sourceobservation.ErrClaimLost) {
+			youtubeClaimLostTotal.Inc()
+			err = nil
+		}
+		if err != nil {
+			releaseErrors = append(releaseErrors, fmt.Errorf("release observation %d: %w", observation.ID, err))
+			return ctx.Err() == nil
+		}
 		r.inFlight.Delete(key)
 		return true
 	})
+	return errors.Join(releaseErrors...)
 }
 
-func (r *Runtime) retryObservation(observation sourceobservation.Observation, cause error) {
-	timeout := r.Config.TransactionTimeout
-	if timeout <= 0 {
-		timeout = time.Second
+func (r *Runtime) retryObservation(ctx context.Context, observation sourceobservation.Observation, cause error) error {
+	if r.Config.TransactionTimeout <= 0 {
+		return errors.New("youtube plane transaction timeout must be positive")
 	}
-	retryCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	retryCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
 	defer cancel()
-	_ = r.withDB(retryCtx, func(ctx context.Context) error {
-		_, err := r.claimer.Retry(ctx, sourceobservation.RetryInput{
+	return r.withDB(retryCtx, func(ctx context.Context) error {
+		status, err := r.claimer.Retry(ctx, sourceobservation.RetryInput{
 			ObservationID: observation.ID,
 			LeaseToken:    observation.LeaseToken,
-			Delay:         0,
+			Delay:         r.Config.ClaimInterval,
 			ErrorCode:     "youtube_plane_retry",
 			ErrorDetail:   boundedError(cause),
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		switch status {
+		case contract.StatusPending:
+			return nil
+		case contract.StatusDeadLetter:
+			r.degraded.Store(true)
+			if r.started.Load() {
+				r.publishHealth()
+			}
+			return nil
+		default:
+			return fmt.Errorf("retry observation %d: invalid status %q", observation.ID, status)
+		}
 	})
 }
 
 func (r *Runtime) reportLoopError(ctx context.Context, errCh chan<- error, action string, err error) {
 	r.ready.Store(false)
+	r.publishHealth()
 	wrapped := fmt.Errorf("%s: %w", action, err)
 	if errCh == nil {
 		return
@@ -202,8 +268,20 @@ func isInputReadError(err error) bool {
 	return errors.Is(err, targetprojection.ErrInputRead)
 }
 
-func permanentObservationError(err error) bool {
-	return errors.Is(err, sourceobservation.ErrInvalidRepository)
+func retryableObservationError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || pgconn.SafeToRetry(err) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	switch pgErr.Code {
+	case "40001", "40P01", "55P03":
+		return true
+	default:
+		return false
+	}
 }
 
 func boundedError(err error) string {

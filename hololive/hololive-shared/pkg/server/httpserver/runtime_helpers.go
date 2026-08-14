@@ -192,7 +192,12 @@ func registerRuntimeReadyRoute(router *gin.Engine, readyResponder func(*gin.Cont
 		return
 	}
 	router.GET("/ready", func(c *gin.Context) {
-		c.JSON(http.StatusOK, health.Get())
+		response, ready := health.GetReadiness()
+		status := http.StatusOK
+		if !ready {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, response)
 	})
 }
 

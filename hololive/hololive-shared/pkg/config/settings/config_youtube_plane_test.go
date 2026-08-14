@@ -35,6 +35,11 @@ func TestYouTubePlaneConfigValidateFailsClosed(t *testing.T) {
 			wantErr: "pool min exceeds max",
 		},
 		{
+			name:    "pool exceeds process budget",
+			mutate:  func(c *YouTubePlaneConfig) { c.PostgresPoolMaxConns = 17 },
+			wantErr: "pool max must not exceed 16",
+		},
+		{
 			name:    "no reserved connection",
 			mutate:  func(c *YouTubePlaneConfig) { c.DBOperationConcurrency = 4 },
 			wantErr: "leave one pool connection reserved",
@@ -56,6 +61,16 @@ func TestYouTubePlaneConfigValidateFailsClosed(t *testing.T) {
 			name:    "zero transaction timeout",
 			mutate:  func(c *YouTubePlaneConfig) { c.TransactionTimeout = 0 },
 			wantErr: "transaction timeout must be positive",
+		},
+		{
+			name:    "transaction timeout exceeds repository contract",
+			mutate:  func(c *YouTubePlaneConfig) { c.TransactionTimeout = 61 * time.Second },
+			wantErr: "transaction timeout must be between 1s and 1m",
+		},
+		{
+			name:    "shutdown cannot cover release",
+			mutate:  func(c *YouTubePlaneConfig) { c.ShutdownTimeout = 15 * time.Second },
+			wantErr: "shutdown timeout must cover transaction and claim release timeouts",
 		},
 	}
 	for _, tt := range tests {
@@ -85,7 +100,10 @@ func TestLoadYouTubePlaneConfigNonDefaultOverride(t *testing.T) {
 	t.Setenv("YOUTUBE_PLANE_TARGET_PROJECTION_INTERVAL_MS", "7000")
 	t.Setenv("YOUTUBE_PLANE_TARGET_PROJECTION_VALIDITY_SECONDS", "1800")
 
-	cfg := loadYouTubePlaneConfig()
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
 	if cfg.PostgresPoolMaxConns != 2 || cfg.ConsumerWorkers != 1 || cfg.DBOperationConcurrency != 1 {
 		t.Fatalf("override pool/worker budget = %d %d %d", cfg.PostgresPoolMaxConns, cfg.ConsumerWorkers, cfg.DBOperationConcurrency)
 	}
@@ -100,5 +118,55 @@ func TestLoadYouTubePlaneConfigNonDefaultOverride(t *testing.T) {
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("overridden config: %v", err)
+	}
+}
+
+func TestLoadYouTubePlaneConfigRejectsInvalidExplicitValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "invalid bool", key: "YOUTUBE_PLANE_ENABLED", value: "not-a-bool"},
+		{name: "invalid integer", key: "YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS", value: "not-an-int"},
+		{name: "overflowing duration", key: "YOUTUBE_PLANE_CLAIM_LEASE_SECONDS", value: "9223372036854775807"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.key, tt.value)
+			_, err := loadYouTubePlaneConfig()
+			if err == nil || !strings.Contains(err.Error(), tt.key) {
+				t.Fatalf("loadYouTubePlaneConfig() error = %v, want key %s", err, tt.key)
+			}
+		})
+	}
+}
+
+func TestLoadYouTubePlaneConfigPreservesExplicitInvalidBounds(t *testing.T) {
+	t.Setenv("YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS", "0")
+
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
+	if cfg.PostgresPoolMaxConns != 0 {
+		t.Fatalf("PostgresPoolMaxConns = %d, want explicit 0", cfg.PostgresPoolMaxConns)
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want invalid explicit bound")
+	}
+}
+
+func TestLoadHololiveAPIRuntimeRejectsInvalidYouTubePlaneEnv(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	clearTracingEnv(t)
+	setRequiredLoadEnv(t)
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
+	t.Setenv("YOUTUBE_PLANE_ENABLED", "not-a-bool")
+
+	_, err := LoadHololiveAPIRuntime()
+	if err == nil || !strings.Contains(err.Error(), "YOUTUBE_PLANE_ENABLED") {
+		t.Fatalf("LoadHololiveAPIRuntime() error = %v, want invalid YouTube plane env", err)
 	}
 }
