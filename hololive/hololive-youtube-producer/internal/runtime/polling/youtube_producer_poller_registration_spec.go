@@ -28,7 +28,6 @@ import (
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
-	"github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
 )
 
 type registrationSpec struct {
@@ -64,14 +63,6 @@ func buildStatsRegistration(statsPoller scheduler.Poller, interval time.Duration
 	})
 }
 
-func videosWorstCaseRequestUnits() float64 {
-	return pollers.VideosWorstCaseRequestUnits()
-}
-
 func channelStatsWorstCaseRequestUnits() float64 {
 	return float64(scraper.FetchPageMaxAttempts * 2)
-}
-
-func shortsWorstCaseRequestUnits() float64 {
-	return pollers.ShortsWorstCaseRequestUnits()
 }

@@ -91,13 +91,22 @@ func loadCommunityWatermark(
 	q dbx.Querier,
 	channelID string,
 ) (*domain.YouTubeContentWatermark, bool, error) {
+	return loadTypedWatermark(ctx, q, channelID, domain.WatermarkTypeCommunityPost)
+}
+
+func loadTypedWatermark(
+	ctx context.Context,
+	q dbx.Querier,
+	channelID string,
+	watermarkType domain.WatermarkType,
+) (*domain.YouTubeContentWatermark, bool, error) {
 	var watermark domain.YouTubeContentWatermark
 	var lastContentID *string
 	err := q.QueryRow(
 		ctx,
 		mustSQL("repository_community_watermark_0014_14.sql"),
 		channelID,
-		domain.WatermarkTypeCommunityPost,
+		watermarkType,
 	).Scan(
 		&watermark.ChannelID,
 		&watermark.WatermarkType,

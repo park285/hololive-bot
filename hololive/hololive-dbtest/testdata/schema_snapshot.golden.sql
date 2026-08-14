@@ -830,6 +830,23 @@ TABLE youtube_community_shorts_source_posts
   CONSTRAINT youtube_community_shorts_source_posts_pkey PRIMARY KEY (kind, post_id)
   INDEX CREATE INDEX idx_ycssp_channel_detected ON public.youtube_community_shorts_source_posts USING btree (channel_id, detected_at DESC)
 
+TABLE youtube_content_absence_slots
+  COLUMN channel_id character varying(50) NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN observation_id bigint
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN scope_sha256 text NOT NULL
+  COLUMN coverage jsonb NOT NULL
+  CONSTRAINT chk_youtube_content_absence_bounds CHECK (((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 50)))
+  CONSTRAINT chk_youtube_content_absence_coverage CHECK (((jsonb_typeof(coverage) = 'object'::text) AND (octet_length((coverage)::text) <= 8192)))
+  CONSTRAINT chk_youtube_content_absence_hashes CHECK (((evidence_sha256 ~ '^[0-9a-f]{64}$'::text) AND (scope_sha256 ~ '^[0-9a-f]{64}$'::text)))
+  CONSTRAINT chk_youtube_content_absence_kind CHECK ((observation_kind = ANY (ARRAY['video_list'::text, 'shorts_list'::text])))
+  CONSTRAINT youtube_content_absence_slots_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_content_absence_slots_pkey PRIMARY KEY (channel_id, observation_kind, scheduled_for)
+
 TABLE youtube_content_alarm_tracking
   OPTIONS autovacuum_analyze_scale_factor=0.05,autovacuum_analyze_threshold=100,autovacuum_vacuum_scale_factor=0.05,autovacuum_vacuum_threshold=100
   COLUMN kind text NOT NULL
@@ -854,6 +871,40 @@ TABLE youtube_content_alarm_tracking
   INDEX CREATE INDEX idx_ycat_delivery_status ON public.youtube_content_alarm_tracking USING btree (delivery_status, detected_at DESC)
   INDEX CREATE INDEX idx_ycat_detected_at ON public.youtube_content_alarm_tracking USING btree (detected_at DESC)
   INDEX CREATE INDEX idx_ycat_kind_content ON public.youtube_content_alarm_tracking USING btree (kind, content_id)
+
+TABLE youtube_content_channel_heads
+  COLUMN channel_id character varying(50) NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN earliest_complete_effective_at timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_content_channel_head_bounds CHECK (((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 50)))
+  CONSTRAINT chk_youtube_content_channel_head_kind CHECK ((observation_kind = ANY (ARRAY['video_list'::text, 'shorts_list'::text])))
+  CONSTRAINT youtube_content_channel_heads_pkey PRIMARY KEY (channel_id, observation_kind)
+
+TABLE youtube_content_evidence_clocks
+  COLUMN video_id character varying(20) NOT NULL
+  COLUMN first_positive_effective_at timestamp with time zone NOT NULL
+  COLUMN last_positive_effective_at timestamp with time zone NOT NULL
+  COLUMN last_positive_received_at timestamp with time zone NOT NULL
+  COLUMN last_positive_value_sha256 text NOT NULL
+  COLUMN last_positive_scope_sha256 text NOT NULL
+  COLUMN last_positive_coverage jsonb NOT NULL
+  COLUMN last_negative_effective_at timestamp with time zone
+  COLUMN last_negative_received_at timestamp with time zone
+  COLUMN first_absence_scheduled_for timestamp with time zone
+  COLUMN second_absence_scheduled_for timestamp with time zone
+  COLUMN last_absence_observation_id bigint
+  COLUMN missing_since_effective_at timestamp with time zone
+  COLUMN consecutive_absence_slots smallint NOT NULL DEFAULT 0
+  COLUMN withdrawn_at timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_content_clock_coverage CHECK (((jsonb_typeof(last_positive_coverage) = 'object'::text) AND (octet_length((last_positive_coverage)::text) <= 8192)))
+  CONSTRAINT chk_youtube_content_clock_hashes CHECK (((last_positive_value_sha256 ~ '^[0-9a-f]{64}$'::text) AND (last_positive_scope_sha256 ~ '^[0-9a-f]{64}$'::text)))
+  CONSTRAINT chk_youtube_content_clock_video_id CHECK (((length((video_id)::text) >= 1) AND (length((video_id)::text) <= 20)))
+  CONSTRAINT youtube_content_evidence_clocks_consecutive_absence_slots_check CHECK (((consecutive_absence_slots >= 0) AND (consecutive_absence_slots <= 32767)))
+  CONSTRAINT youtube_content_evidence_clock_last_absence_observation_id_fkey FOREIGN KEY (last_absence_observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_content_evidence_clocks_video_id_fkey FOREIGN KEY (video_id) REFERENCES youtube_videos(video_id) ON DELETE CASCADE
+  CONSTRAINT youtube_content_evidence_clocks_pkey PRIMARY KEY (video_id)
 
 TABLE youtube_content_watermarks
   COLUMN channel_id character varying(64) NOT NULL

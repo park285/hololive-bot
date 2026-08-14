@@ -116,8 +116,35 @@ func TestLoadYouTubePlaneConfigNonDefaultOverride(t *testing.T) {
 	if cfg.TargetProjection.Interval != 7*time.Second || cfg.TargetProjection.Validity != 30*time.Minute {
 		t.Fatalf("override projection = %#v", cfg.TargetProjection)
 	}
+	if cfg.ContentAbsenceGrace != 0 {
+		t.Fatalf("default content absence grace = %s", cfg.ContentAbsenceGrace)
+	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("overridden config: %v", err)
+	}
+}
+
+func TestLoadYouTubePlaneConfigContentAbsenceGraceOverride(t *testing.T) {
+	t.Setenv("YOUTUBE_PLANE_CONTENT_ABSENCE_GRACE_SECONDS", "90")
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
+	if cfg.ContentAbsenceGrace != 90*time.Second {
+		t.Fatalf("ContentAbsenceGrace = %s, want 90s", cfg.ContentAbsenceGrace)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("overridden content absence grace: %v", err)
+	}
+}
+
+func TestYouTubePlaneConfigRejectsInvalidContentAbsenceGrace(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultYouTubePlaneConfig()
+	cfg.ContentAbsenceGrace = 25 * time.Hour
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "content absence grace") {
+		t.Fatalf("Validate() = %v", err)
 	}
 }
 

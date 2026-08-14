@@ -88,7 +88,7 @@ func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRat
 			},
 		},
 		newPollerRegistrationTestDB(t),
-		repeatChannelIDs("UC_NOTIFY_", 12),
+		repeatChannelIDs("UC_NOTIFY_", 25),
 		repeatChannelIDs("UC_STATS_", 111),
 		polling.BuildSharedClient(&settings.ScraperConfig{}, nil, nil),
 		nil,
@@ -115,7 +115,7 @@ func TestBuildYouTubeProducerYouTubeComponents_AllowsBudgetSafeDefaultPollConfig
 
 	require.NoError(t, err)
 	require.NotNil(t, scheduler)
-	require.Len(t, registrations, 4)
+	require.Len(t, registrations, 2)
 }
 
 func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWithinRaisedRPMBudget(t *testing.T) {

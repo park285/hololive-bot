@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
@@ -186,3 +187,16 @@ func (w failWriter) PersistTx(context.Context, dbx.Tx, community.Batch) error {
 }
 
 func (failWriter) AfterCommit(context.Context, community.Batch) {}
+
+func (w failWriter) PersistVideosTx(
+	context.Context,
+	dbx.Tx,
+	[]*domain.YouTubeVideo,
+	[]*domain.YouTubeNotificationOutbox,
+	[]*domain.YouTubeContentAlarmTracking,
+	*domain.YouTubeContentWatermark,
+) error {
+	return w.err
+}
+
+func (failWriter) AfterCommitVideos(context.Context, []*domain.YouTubeContentAlarmTracking) {}

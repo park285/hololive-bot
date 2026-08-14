@@ -82,8 +82,13 @@ func TestBuildRegistrationsAddsEnabledBackfillPollers(t *testing.T) {
 		TargetGroup:    "notification",
 	}, []string{"UC_A", "UC_B"})
 
-	assertBackfillRegistration(t, registrations, "shorts_backfill", 5*time.Minute)
 	assertBackfillRegistration(t, registrations, "live_backfill", 3*time.Minute)
+	for _, registration := range registrations {
+		name := registration.Poller.Name()
+		if name == "videos" || name == "shorts" || name == "shorts_backfill" {
+			t.Fatalf("producer must not register %q", name)
+		}
+	}
 }
 
 func TestBuildRegistrationsLeavesOutputUnchangedWhenBackfillDisabled(t *testing.T) {
@@ -164,8 +169,6 @@ func TestTieredAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
 
 func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 	pollers := newYouTubeProducerPollerSet(nil, nil, nil)
-	videosName := pollers.videos.Name()
-	shortsName := pollers.shorts.Name()
 	poll := settings.ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
@@ -184,12 +187,14 @@ func TestTieredRegistrationBudgetPriorityMatrixSpotChecks(t *testing.T) {
 			OperationalChannelIDs:        []string{"UC_STATS"},
 		},
 	)
-
-	videosCold := requireRegistrationForTargetGroup(t, registrations, videosName, providers.ChannelTargetGroupCold)
-	require.Equal(t, polling.BudgetPriorityNormal, videosCold.BudgetProfile.Priority)
-
-	shortsCold := requireRegistrationForTargetGroup(t, registrations, shortsName, providers.ChannelTargetGroupCold)
-	require.Equal(t, polling.BudgetPriorityLow, shortsCold.BudgetProfile.Priority)
+	stats := requireRegistration(t, registrations, "channel_stats")
+	require.Equal(t, polling.BudgetPriorityLow, stats.BudgetProfile.Priority)
+	for _, registration := range registrations {
+		name := registration.Poller.Name()
+		if name == "videos" || name == "shorts" || name == "shorts_backfill" {
+			t.Fatalf("tiered producer must not register %q", name)
+		}
+	}
 }
 
 func TestProducerRegistrationsOmitCommunityPoller(t *testing.T) {
@@ -251,12 +256,6 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
 	require.Equal(t, polling.BudgetBurstPrimary, live.BudgetProfile.BurstClass)
 	require.Equal(t, polling.BudgetPriorityHigh, live.BudgetProfile.Priority)
-
-	videos := requireRegistration(t, registrations, "videos")
-	require.Greater(t, videos.BudgetProfile.SourceUnits[polling.BudgetSourceYouTubeScraper], float64(0))
-	require.Equal(t, float64(1), videos.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
-	require.Equal(t, polling.BudgetBurstPrimary, videos.BudgetProfile.BurstClass)
-	require.Equal(t, polling.BudgetPriorityNormal, videos.BudgetProfile.Priority)
 
 	liveBackfill := requireRegistration(t, registrations, "live_backfill_batch")
 	require.Equal(t, polling.BudgetBurstBackfill, liveBackfill.BudgetProfile.BurstClass)

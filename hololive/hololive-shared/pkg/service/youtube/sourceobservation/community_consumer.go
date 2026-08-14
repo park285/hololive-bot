@@ -5,25 +5,40 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/content"
 )
 
 type CanonicalWriter interface {
 	PersistTx(context.Context, dbx.Tx, community.Batch) error
 	AfterCommit(context.Context, community.Batch)
+	PersistVideosTx(context.Context, dbx.Tx, []*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox, []*domain.YouTubeContentAlarmTracking, *domain.YouTubeContentWatermark) error
+	AfterCommitVideos(context.Context, []*domain.YouTubeContentAlarmTracking)
 }
 
 type Consumer struct {
 	repo     *Repository
 	writer   CanonicalWriter
 	keywords []string
+	grace    time.Duration
 }
 
 func NewConsumer(repo *Repository, writer CanonicalWriter, keywords []string) *Consumer {
-	return &Consumer{repo: repo, writer: writer, keywords: community.NormalizeKeywords(keywords)}
+	return NewConsumerWithAbsenceGrace(repo, writer, keywords, 0)
+}
+
+func NewConsumerWithAbsenceGrace(
+	repo *Repository,
+	writer CanonicalWriter,
+	keywords []string,
+	grace time.Duration,
+) *Consumer {
+	return &Consumer{repo: repo, writer: writer, keywords: community.NormalizeKeywords(keywords), grace: grace}
 }
 
 func (c *Consumer) Consume(ctx context.Context, options ClaimOptions) error {
@@ -57,73 +72,84 @@ func (c *Consumer) ConsumeObservation(
 		LeaseToken:    observation.LeaseToken,
 	}
 	var persisted community.Batch
+	var contentDecision content.Decision
+	var appliedKind contract.ObservationKind
 	canonicalApplied := false
 	result, err := c.repo.Finalize(ctx, claim, func(
 		ctx context.Context,
 		tx dbx.Tx,
 		claimed Observation,
 	) (ReconcileResult, error) {
-		if claimed.ObservationKind != contract.KindCommunityPage {
-			return ReconcileResult{}, fmt.Errorf("community consumer received kind %q", claimed.ObservationKind)
-		}
-		payload, err := decodeCommunityPayload(claimed)
-		if err != nil {
-			return ReconcileResult{}, err
-		}
-		if err := lockCommunitySubject(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID); err != nil {
-			return ReconcileResult{}, err
-		}
-		head, err := loadCommunitySubjectHead(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID)
-		if err != nil {
-			return ReconcileResult{}, err
-		}
-		if head.supersedes(claimed) {
-			return ReconcileResult{Applications: []Application{{
-				EntityKind: "community_subject_head",
-				EntityKey:  payload.ChannelID,
-				Decision:   "STALE_SKIPPED",
-			}}}, nil
-		}
-		watermark, initialized, err := loadCommunityWatermark(ctx, tx, payload.ChannelID)
-		if err != nil {
-			return ReconcileResult{}, err
-		}
-		persisted = community.ArtifactsFromPayload(
-			payload,
-			initialized,
-			watermark,
-			claimed.EffectiveAt,
-			c.keywords,
-		)
-		if err := c.writer.PersistTx(ctx, tx, persisted); err != nil {
-			return ReconcileResult{}, err
-		}
-		if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
-			return ReconcileResult{}, err
-		}
-		canonicalApplied = true
-		applications := make([]Application, 0, len(persisted.Posts)+1)
-		applications = append(applications, Application{
-			EntityKind: "community_subject_head",
-			EntityKey:  payload.ChannelID,
-			Decision:   "APPLIED",
-		})
-		for i := range persisted.Posts {
-			applications = append(applications, Application{
-				EntityKind: "community_post",
-				EntityKey:  persisted.Posts[i].PostID,
-				Decision:   "APPLIED",
-			})
-		}
-		return ReconcileResult{Applications: applications}, nil
+		return c.finalizeObservation(ctx, tx, claimed, &persisted, &contentDecision, &appliedKind, &canonicalApplied)
 	})
 	if err != nil {
 		return err
 	}
-	if !result.Unsupported && canonicalApplied {
-		c.writer.AfterCommit(ctx, persisted)
+	if result.Unsupported || !canonicalApplied {
+		return nil
 	}
+	if appliedKind == contract.KindCommunityPage {
+		c.writer.AfterCommit(ctx, persisted)
+		return nil
+	}
+	_, _, tracking := contentArtifacts(Observation{}, contentDecision)
+	c.writer.AfterCommitVideos(ctx, tracking)
 	return nil
+}
+
+func (c *Consumer) finalizeObservation(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed Observation,
+	persisted *community.Batch,
+	contentDecision *content.Decision,
+	appliedKind *contract.ObservationKind,
+	canonicalApplied *bool,
+) (ReconcileResult, error) {
+	switch claimed.ObservationKind {
+	case contract.KindCommunityPage:
+		return c.finalizeCommunity(ctx, tx, claimed, persisted, appliedKind, canonicalApplied)
+	case contract.KindVideoList, contract.KindShortsList:
+		return c.finalizeContent(ctx, tx, claimed, contentDecision, appliedKind, canonicalApplied)
+	default:
+		return ReconcileResult{}, fmt.Errorf("youtube consumer received kind %q", claimed.ObservationKind)
+	}
+}
+
+func (c *Consumer) finalizeCommunity(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed Observation,
+	persisted *community.Batch,
+	appliedKind *contract.ObservationKind,
+	canonicalApplied *bool,
+) (ReconcileResult, error) {
+	batch, rec, applied, err := c.reconcileCommunity(ctx, tx, claimed)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	*persisted = batch
+	*appliedKind = claimed.ObservationKind
+	*canonicalApplied = applied
+	return rec, nil
+}
+
+func (c *Consumer) finalizeContent(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed Observation,
+	contentDecision *content.Decision,
+	appliedKind *contract.ObservationKind,
+	canonicalApplied *bool,
+) (ReconcileResult, error) {
+	decision, rec, err := c.reconcileContent(ctx, tx, claimed)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	*contentDecision = decision
+	*appliedKind = claimed.ObservationKind
+	*canonicalApplied = true
+	return rec, nil
 }
 
 func decodeCommunityPayload(observation Observation) (contract.CommunityPayloadV1, error) {

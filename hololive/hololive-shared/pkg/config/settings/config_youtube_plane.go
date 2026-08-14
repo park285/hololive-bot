@@ -42,11 +42,12 @@ type YouTubePlaneConfig struct {
 	ClaimInterval          time.Duration
 	TransactionTimeout     time.Duration
 
-	ShutdownTimeout  time.Duration
-	Retention        YouTubePlaneRetentionConfig
-	Replay           YouTubePlaneRetentionConfig
-	TargetProjection YouTubePlaneTargetProjectionConfig
-	LiveEndFinalizer YouTubePlaneLiveEndFinalizerConfig
+	ShutdownTimeout     time.Duration
+	Retention           YouTubePlaneRetentionConfig
+	Replay              YouTubePlaneRetentionConfig
+	TargetProjection    YouTubePlaneTargetProjectionConfig
+	LiveEndFinalizer    YouTubePlaneLiveEndFinalizerConfig
+	ContentAbsenceGrace time.Duration
 }
 
 func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
@@ -126,7 +127,19 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	if config.LiveEndFinalizer.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_FINALIZER_INTERVAL_SECONDS", time.Minute, time.Second); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
+	if err := loadContentAbsenceGrace(&config, defaults); err != nil {
+		return YouTubePlaneConfig{}, err
+	}
 	return config, nil
+}
+
+func loadContentAbsenceGrace(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+	value, err := strictDurationUnitEnv("YOUTUBE_PLANE_CONTENT_ABSENCE_GRACE_SECONDS", defaults.ContentAbsenceGrace, time.Second)
+	if err != nil {
+		return err
+	}
+	config.ContentAbsenceGrace = value
+	return nil
 }
 
 func strictDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
@@ -202,6 +215,13 @@ func (c YouTubePlaneConfig) Validate() error {
 	}
 	if c.LiveEndFinalizer.Enabled && c.LiveEndFinalizer.Interval <= 0 {
 		return errors.New("youtube plane live end finalizer interval must be positive when enabled")
+	}
+	return c.validateContentAbsenceGrace()
+}
+
+func (c YouTubePlaneConfig) validateContentAbsenceGrace() error {
+	if c.ContentAbsenceGrace < 0 || c.ContentAbsenceGrace > 24*time.Hour {
+		return errors.New("youtube plane content absence grace must be between 0 and 24h")
 	}
 	return nil
 }

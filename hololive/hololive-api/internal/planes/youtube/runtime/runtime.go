@@ -119,7 +119,7 @@ func newRuntime(
 		pool:      pool,
 		closePool: cleanup,
 		claimer:   repo,
-		consumer:  sourceobservation.NewConsumer(repo, writer, nil),
+		consumer:  sourceobservation.NewConsumerWithAbsenceGrace(repo, writer, nil, plane.ContentAbsenceGrace),
 		refresher: refresher,
 		builder: targetprojection.PolicyBuilder{
 			Reader:    rosterReader{},
@@ -131,9 +131,13 @@ func newRuntime(
 		loopDone:   make(chan struct{}, 2),
 		workerDone: make(chan struct{}, plane.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
-			ConsumerName:  communityConsumerName,
-			LeaseOwner:    communityLeaseOwner,
-			Kinds:         []contract.ObservationKind{contract.KindCommunityPage},
+			ConsumerName: communityConsumerName,
+			LeaseOwner:   communityLeaseOwner,
+			Kinds: []contract.ObservationKind{
+				contract.KindCommunityPage,
+				contract.KindVideoList,
+				contract.KindShortsList,
+			},
 			Limit:         plane.ClaimBatchSize,
 			LeaseDuration: plane.ClaimLease,
 		},

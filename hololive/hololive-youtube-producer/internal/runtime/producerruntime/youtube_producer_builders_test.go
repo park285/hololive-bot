@@ -308,15 +308,13 @@ func TestBuildYouTubeProducerChannelPollerRegistrations(t *testing.T) {
 		nil,
 	)
 
-	require.Len(t, registrations, 4)
+	require.Len(t, registrations, 2)
 
 	expected := []struct {
 		name     string
 		priority pollscheduler.Priority
 		interval int64
 	}{
-		{name: "videos", priority: pollscheduler.PriorityNormal, interval: int64(7 * time.Minute)},
-		{name: "shorts", priority: pollscheduler.PriorityLow, interval: int64(11 * time.Minute)},
 		{name: "channel_stats", priority: pollscheduler.PriorityLow, interval: int64(4 * time.Hour)},
 		{name: "live", priority: pollscheduler.PriorityHigh, interval: int64(3 * time.Minute)},
 	}
@@ -377,11 +375,11 @@ func TestBuildYouTubeProducerYouTubeComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, scraperScheduler)
-	require.Len(t, registrations, 4)
+	require.Len(t, registrations, 2)
 
-	assert.Equal(t, 4, schedulerJobCount(t, scraperScheduler))
+	assert.Equal(t, 2, schedulerJobCount(t, scraperScheduler))
 	assert.Equal(t, 7, scraperScheduler.WorkerCount())
-	assert.Equal(t, 4, scraperScheduler.SetProxyEnabled(false))
+	assert.Equal(t, 2, scraperScheduler.SetProxyEnabled(false))
 }
 
 func TestBuildIngestionRuntimeGlobalBudgetWiringDisabledKeepsActiveInstanceCount(t *testing.T) {

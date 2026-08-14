@@ -110,8 +110,8 @@ func newYouTubeProducerPollerSet(
 		}
 	}
 	return youTubeProducerPollerSet{
-		videos:           pollers.NewVideosPoller(scraperClient, db, defaultChannelPollerMaxResults),
-		shorts:           pollers.NewShortsPoller(scraperClient, db, defaultChannelPollerMaxResults),
+		videos:           newUnavailableYouTubeProducerPoller("videos"),
+		shorts:           newUnavailableYouTubeProducerPoller("shorts"),
 		stats:            pollers.NewChannelStatsPoller(scraperClient, db),
 		live:             livePoller,
 		liveBatch:        livePoller,

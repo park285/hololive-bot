@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
@@ -25,4 +26,19 @@ func (w batchCanonicalWriter) PersistTx(ctx context.Context, tx dbx.Tx, batch co
 
 func (w batchCanonicalWriter) AfterCommit(ctx context.Context, batch community.Batch) {
 	w.repo.RecordCommunityLatencyAfterCommit(ctx, batch.Tracking)
+}
+
+func (w batchCanonicalWriter) PersistVideosTx(
+	ctx context.Context,
+	tx dbx.Tx,
+	videos []*domain.YouTubeVideo,
+	notifications []*domain.YouTubeNotificationOutbox,
+	tracking []*domain.YouTubeContentAlarmTracking,
+	watermark *domain.YouTubeContentWatermark,
+) error {
+	return w.repo.PersistVideosTx(ctx, tx, videos, notifications, tracking, watermark)
+}
+
+func (w batchCanonicalWriter) AfterCommitVideos(ctx context.Context, tracking []*domain.YouTubeContentAlarmTracking) {
+	w.repo.RecordCommunityLatencyAfterCommit(ctx, tracking)
 }

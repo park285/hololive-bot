@@ -356,6 +356,9 @@ var sourceObservationTables = []string{
 	"source_observation_subject_heads",
 	"source_reconciliation_conflicts",
 	"youtube_live_reconciliation_heads",
+	"youtube_content_evidence_clocks",
+	"youtube_content_absence_slots",
+	"youtube_content_channel_heads",
 }
 
 var sourceObservationSequences = []string{
@@ -394,6 +397,9 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"source_observation_subject_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_reconciliation_conflicts":           observationPrivileges("SELECT", "INSERT", "DELETE"),
 			"youtube_live_reconciliation_heads":         observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_content_evidence_clocks":           observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_content_absence_slots":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_content_channel_heads":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 		},
 	}
 	sequencePrivileges := map[string]map[string]map[string]bool{

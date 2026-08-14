@@ -85,8 +85,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		[]string{"UC_STATS_A"},
 	)
 
-	if len(registrations) != 4 {
-		t.Fatalf("len(registrations) = %d, want 4", len(registrations))
+	if len(registrations) != 2 {
+		t.Fatalf("len(registrations) = %d, want 2", len(registrations))
 	}
 
 	expected := []struct {
@@ -97,8 +97,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		worstCaseAttempts     int
 		worstCaseRequestUnits float64
 	}{
-		{name: "videos", priority: pollscheduler.PriorityNormal, interval: 7 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 9},
-		{name: "shorts", priority: pollscheduler.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 2},
 		{name: "channel_stats", priority: pollscheduler.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupOperational, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 6},
 		{name: "live", priority: pollscheduler.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
 	}
@@ -213,8 +211,9 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieredTargetsReduceRPM(t
 	flat := polling.BuildRegistrations(activityDB, &flatConfig, ratelimiter.New(time.Second), nil, notificationIDs, statsIDs)
 	tiered := polling.BuildRegistrations(activityDB, &appConfig, ratelimiter.New(time.Second), nil, notificationIDs, statsIDs)
 
-	require.Greater(t, len(tiered), len(flat))
-	require.Less(t, polling.EstimateResolvedPollerRPM(tiered), polling.EstimateResolvedPollerRPM(flat))
+	require.Equal(t, len(flat), len(tiered))
+	assertNoContentPollers(t, flat)
+	assertNoContentPollers(t, tiered)
 }
 
 func TestBuildYouTubeProducerChannelPollerRegistrations_TieringDisabledByDefault(t *testing.T) {
@@ -250,7 +249,18 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_TieringEnabledWithAllAct
 	postgres := &databasemocks.Client{GetPoolFunc: func() *pgxpool.Pool { return pool }}
 	registrations := polling.BuildRegistrations(postgres, &appConfig, ratelimiter.New(time.Second), nil, []string{"UC_ACTIVE"}, []string{"UC_STATS"})
 
-	require.True(t, polltarget.HasTieredNotificationRegistration(registrations))
+	require.False(t, polltarget.HasTieredNotificationRegistration(registrations))
+	assertNoContentPollers(t, registrations)
+}
+
+func assertNoContentPollers(t *testing.T, registrations []providers.ChannelPollerRegistration) {
+	t.Helper()
+	for _, registration := range registrations {
+		name := registration.Poller.Name()
+		if name == "videos" || name == "shorts" || name == "shorts_backfill" {
+			t.Fatalf("producer must not register %q", name)
+		}
+	}
 }
 
 func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
@@ -280,9 +290,7 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 
 	syncer.SyncAt(t.Context(), polltarget.Targets{NotificationChannelIDs: notificationIDs, OperationalChannelIDs: statsIDs}, now)
 
-	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_ACTIVE:videos"))
-	require.Equal(t, 20*time.Minute, schedulerJobInterval(t, scheduler, "UC_WARM:videos"))
-	require.Equal(t, 60*time.Minute, schedulerJobInterval(t, scheduler, "UC_COLD:videos"))
+	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:videos")
 	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_ACTIVE:live"))
 	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_WARM:live"))
 	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_COLD:live"))
@@ -421,13 +429,13 @@ func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testi
 	if scheduler == nil {
 		t.Fatal("scheduler is nil")
 	}
-	if len(registrations) != 4 {
-		t.Fatalf("len(registrations) = %d, want 4", len(registrations))
+	if len(registrations) != 2 {
+		t.Fatalf("len(registrations) = %d, want 2", len(registrations))
 	}
 
 	applied := scheduler.SetProxyEnabled(false)
-	if applied != 4 {
-		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 4", applied)
+	if applied != 2 {
+		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 2", applied)
 	}
 }
 
@@ -461,8 +469,14 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_MetadataWorstCaseRequest
 		byName[registration.Poller.Name()] = registration
 	}
 
-	assert.Equal(t, 2.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
+	assert.Equal(t, 6.0, byName["channel_stats"].WorstCaseRequestUnitsPerRun)
 	if _, ok := byName["community"]; ok {
 		t.Fatal("producer registrations must omit community poller")
+	}
+	if _, ok := byName["videos"]; ok {
+		t.Fatal("producer registrations must omit videos poller")
+	}
+	if _, ok := byName["shorts"]; ok {
+		t.Fatal("producer registrations must omit shorts poller")
 	}
 }
