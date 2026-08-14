@@ -21,6 +21,12 @@ type replayObservation struct {
 	evidenceSHA256     string
 }
 
+type replayQueueState struct {
+	status           string
+	previousAttempts int
+	replayCount      int
+}
+
 func (r *Repository) RequestReplay(ctx context.Context, input ReplayInput) (ReplayResult, error) {
 	if err := r.validate(); err != nil {
 		return ReplayResult{}, err
@@ -39,16 +45,113 @@ func (r *Repository) RequestReplay(ctx context.Context, input ReplayInput) (Repl
 	})
 }
 
+func (r *Repository) ProcessNextReplay(ctx context.Context) (bool, error) {
+	if err := r.validate(); err != nil {
+		return false, err
+	}
+	return dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (bool, error) {
+		return r.processNextReplayTx(ctx, tx)
+	})
+}
+
 func (r *Repository) requestReplayTx(
 	ctx context.Context,
 	tx dbx.Tx,
 	input ReplayInput,
 ) (ReplayResult, error) {
+	observation, err := loadReplayObservation(ctx, tx, input.ObservationID)
+	if err != nil {
+		return ReplayResult{}, err
+	}
+	queue, err := loadReplayQueueState(ctx, tx, input.ObservationID)
+	if err != nil {
+		return ReplayResult{}, err
+	}
+	requestID, err := insertReplayRequest(ctx, tx, input, observation, queue.previousAttempts)
+	if err != nil {
+		return ReplayResult{}, err
+	}
+	return r.applyReplayDecision(ctx, tx, requestID, input.ObservationID, observation, queue)
+}
+
+func (r *Repository) processNextReplayTx(ctx context.Context, tx dbx.Tx) (bool, error) {
+	requestID, observationID, err := lockPendingReplay(ctx, tx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if observationID <= 0 {
+		_, err := rejectReplay(ctx, tx, ReplayResult{RequestID: requestID}, "observation_not_found")
+		return true, err
+	}
+	observation, err := loadReplayObservation(ctx, tx, observationID)
+	if err != nil {
+		if errors.Is(err, errReplayObservationMissing) {
+			_, err := rejectReplay(ctx, tx, ReplayResult{RequestID: requestID}, "observation_not_found")
+			return true, err
+		}
+		return false, err
+	}
+	queue, err := loadReplayQueueState(ctx, tx, observationID)
+	if err != nil {
+		return false, err
+	}
+	if _, err := r.applyReplayDecision(ctx, tx, requestID, observationID, observation, queue); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *Repository) applyReplayDecision(
+	ctx context.Context,
+	tx dbx.Tx,
+	requestID int64,
+	observationID int64,
+	observation replayObservation,
+	queue replayQueueState,
+) (ReplayResult, error) {
+	result := ReplayResult{RequestID: requestID}
+	version := ContractVersion{
+		Provider:   observation.provider,
+		Kind:       observation.kind,
+		Schema:     observation.schemaVersion,
+		Generation: observation.contractGeneration,
+	}
+	if !r.supported.Supports(version) {
+		return rejectReplay(ctx, tx, result, "unsupported_contract")
+	}
+	if queue.status == string(contract.StatusProcessing) {
+		return rejectReplay(ctx, tx, result, "observation_processing")
+	}
+	if queue.status == string(contract.StatusPending) {
+		return rejectReplay(ctx, tx, result, "observation_pending")
+	}
+	if queue.replayCount >= MaxReplayCount {
+		return rejectReplay(ctx, tx, result, "replay_limit_exhausted")
+	}
+	if err := activateReplayQueue(ctx, tx, observationID, queue.replayCount+1); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return rejectReplay(ctx, tx, result, "queue_state_changed")
+		}
+		return ReplayResult{}, err
+	}
+	if _, err := tx.Exec(ctx, mustSQL("repository_replay_request_apply_0025_25.sql"), requestID); err != nil {
+		return ReplayResult{}, fmt.Errorf("request source observation replay: apply audit: %w", err)
+	}
+	result.Applied = true
+	return result, nil
+}
+
+var errReplayObservationMissing = errors.New("request source observation replay: observation not found")
+
+func loadReplayObservation(ctx context.Context, tx dbx.Tx, observationID int64) (replayObservation, error) {
 	var observation replayObservation
 	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_replay_observation_0020_20.sql"),
-		input.ObservationID,
+		observationID,
 	).Scan(
 		&observation.provider,
 		&observation.kind,
@@ -59,33 +162,47 @@ func (r *Repository) requestReplayTx(
 		&observation.evidenceSHA256,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ReplayResult{}, fmt.Errorf("request source observation replay: observation not found")
+		return replayObservation{}, errReplayObservationMissing
 	}
 	if err != nil {
-		return ReplayResult{}, fmt.Errorf("request source observation replay: load observation: %w", err)
+		return replayObservation{}, fmt.Errorf("request source observation replay: load observation: %w", err)
 	}
-	var status string
-	var previousAttempts int
-	var replayCount int
-	err = tx.QueryRow(
+	return observation, nil
+}
+
+func loadReplayQueueState(ctx context.Context, tx dbx.Tx, observationID int64) (replayQueueState, error) {
+	var queue replayQueueState
+	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_replay_queue_0021_21.sql"),
-		input.ObservationID,
-	).Scan(&status, &previousAttempts, &replayCount)
+		observationID,
+	).Scan(&queue.status, &queue.previousAttempts, &queue.replayCount)
 	if errors.Is(err, pgx.ErrNoRows) {
-		status = "MISSING"
+		queue.status = "MISSING"
 		if err := tx.QueryRow(
 			ctx,
 			mustSQL("repository_replay_count_0022_22.sql"),
-			input.ObservationID,
-		).Scan(&replayCount); err != nil {
-			return ReplayResult{}, fmt.Errorf("request source observation replay: count prior replay: %w", err)
+			observationID,
+		).Scan(&queue.replayCount); err != nil {
+			return replayQueueState{}, fmt.Errorf("request source observation replay: count prior replay: %w", err)
 		}
-	} else if err != nil {
-		return ReplayResult{}, fmt.Errorf("request source observation replay: lock queue row: %w", err)
+		return queue, nil
 	}
+	if err != nil {
+		return replayQueueState{}, fmt.Errorf("request source observation replay: lock queue row: %w", err)
+	}
+	return queue, nil
+}
+
+func insertReplayRequest(
+	ctx context.Context,
+	tx dbx.Tx,
+	input ReplayInput,
+	observation replayObservation,
+	previousAttempts int,
+) (int64, error) {
 	var requestID int64
-	err = tx.QueryRow(
+	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_replay_request_insert_0023_23.sql"),
 		input.ObservationID,
@@ -99,45 +216,42 @@ func (r *Repository) requestReplayTx(
 		previousAttempts,
 	).Scan(&requestID)
 	if err != nil {
-		return ReplayResult{}, fmt.Errorf("request source observation replay: insert audit: %w", err)
+		return 0, fmt.Errorf("request source observation replay: insert audit: %w", err)
 	}
-	result := ReplayResult{RequestID: requestID}
-	version := ContractVersion{
-		Provider:   observation.provider,
-		Kind:       observation.kind,
-		Schema:     observation.schemaVersion,
-		Generation: observation.contractGeneration,
+	return requestID, nil
+}
+
+func lockPendingReplay(ctx context.Context, tx dbx.Tx) (int64, int64, error) {
+	var requestID int64
+	var observationID *int64
+	err := tx.QueryRow(ctx, mustSQL("repository_replay_pending_lock_0080_80.sql")).Scan(&requestID, &observationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, 0, err
+		}
+		return 0, 0, fmt.Errorf("process source observation replay: lock pending: %w", err)
 	}
-	if !r.supported.Supports(version) {
-		return rejectReplay(ctx, tx, result, "unsupported_contract")
+	if observationID == nil {
+		return requestID, 0, nil
 	}
-	if status == string(contract.StatusProcessing) {
-		return rejectReplay(ctx, tx, result, "observation_processing")
-	}
-	if status == string(contract.StatusPending) {
-		return rejectReplay(ctx, tx, result, "observation_pending")
-	}
-	if replayCount >= MaxReplayCount {
-		return rejectReplay(ctx, tx, result, "replay_limit_exhausted")
-	}
-	var observationID int64
-	err = tx.QueryRow(
+	return requestID, *observationID, nil
+}
+
+func activateReplayQueue(ctx context.Context, tx dbx.Tx, observationID int64, replayCount int) error {
+	var activatedID int64
+	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_replay_queue_activate_0024_24.sql"),
-		input.ObservationID,
-		replayCount+1,
-	).Scan(&observationID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return rejectReplay(ctx, tx, result, "queue_state_changed")
-	}
+		observationID,
+		replayCount,
+	).Scan(&activatedID)
 	if err != nil {
-		return ReplayResult{}, fmt.Errorf("request source observation replay: reactivate queue: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		return fmt.Errorf("request source observation replay: reactivate queue: %w", err)
 	}
-	if _, err := tx.Exec(ctx, mustSQL("repository_replay_request_apply_0025_25.sql"), requestID); err != nil {
-		return ReplayResult{}, fmt.Errorf("request source observation replay: apply audit: %w", err)
-	}
-	result.Applied = true
-	return result, nil
+	return nil
 }
 
 func rejectReplay(

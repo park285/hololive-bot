@@ -18,6 +18,21 @@ func TestDefaultYouTubePlaneConfigValidates(t *testing.T) {
 	if !cfg.LiveEndFinalizer.Enabled || cfg.LiveEndFinalizer.Interval != time.Minute {
 		t.Fatalf("default live end finalizer = %#v", cfg.LiveEndFinalizer)
 	}
+	if cfg.Retention.Enabled || cfg.Replay.Enabled {
+		t.Fatalf("retention/replay must stay disabled until enabled: %#v %#v", cfg.Retention, cfg.Replay)
+	}
+	if cfg.Retention.BatchSize != 1000 || cfg.Retention.Interval != time.Hour {
+		t.Fatalf("default retention batch/interval = %#v", cfg.Retention)
+	}
+	if cfg.Retention.ChannelStatsAge != 180*24*time.Hour ||
+		cfg.Retention.LiveSnapshotAge != 365*24*time.Hour ||
+		cfg.Retention.ViewerSampleAge != 30*24*time.Hour {
+		t.Fatalf("inventoried evidence ages = %#v", cfg.Retention)
+	}
+	if cfg.Retention.QueueProcessedAge != 0 || cfg.Retention.QueueDLQAge != 0 ||
+		cfg.Retention.CollisionAge != 0 || cfg.Retention.ReplayAuditAge != 0 {
+		t.Fatalf("uninventoried retention ages must stay disabled: %#v", cfg.Retention)
+	}
 }
 
 func TestYouTubePlaneConfigValidateFailsClosed(t *testing.T) {
@@ -74,6 +89,31 @@ func TestYouTubePlaneConfigValidateFailsClosed(t *testing.T) {
 			name:    "shutdown cannot cover release",
 			mutate:  func(c *YouTubePlaneConfig) { c.ShutdownTimeout = 15 * time.Second },
 			wantErr: "shutdown timeout must cover transaction and claim release timeouts",
+		},
+		{
+			name:    "retention batch too large",
+			mutate:  func(c *YouTubePlaneConfig) { c.Retention.BatchSize = 1001 },
+			wantErr: "retention batch size must be between 1 and 1000",
+		},
+		{
+			name:    "retention batch zero",
+			mutate:  func(c *YouTubePlaneConfig) { c.Retention.BatchSize = 0 },
+			wantErr: "retention batch size must be between 1 and 1000",
+		},
+		{
+			name:    "retention enabled without interval",
+			mutate:  func(c *YouTubePlaneConfig) { c.Retention.Enabled = true; c.Retention.Interval = 0 },
+			wantErr: "retention interval must be positive when enabled",
+		},
+		{
+			name:    "negative queue processed age",
+			mutate:  func(c *YouTubePlaneConfig) { c.Retention.QueueProcessedAge = -time.Hour },
+			wantErr: "queue processed retention must be between 0 and 3650 days",
+		},
+		{
+			name:    "replay batch too large",
+			mutate:  func(c *YouTubePlaneConfig) { c.Replay.BatchSize = 1001 },
+			wantErr: "replay batch size must be between 1 and 1000",
 		},
 	}
 	for _, tt := range tests {
@@ -154,6 +194,60 @@ func TestYouTubePlaneConfigRejectsInvalidContentAbsenceGrace(t *testing.T) {
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "content absence grace") {
 		t.Fatalf("Validate() = %v", err)
+	}
+}
+
+func TestLoadYouTubePlaneConfigRetentionOverride(t *testing.T) {
+	t.Setenv("YOUTUBE_PLANE_RETENTION_ENABLED", "true")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_INTERVAL_SECONDS", "1800")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_BATCH_SIZE", "25")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS", "7")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_QUEUE_DLQ_DAYS", "14")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_COLLISION_DAYS", "21")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS", "28")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_CHANNEL_STATS_DAYS", "90")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_LIVE_SNAPSHOT_DAYS", "120")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_VIEWER_SAMPLE_DAYS", "10")
+	t.Setenv("YOUTUBE_PLANE_REPLAY_ENABLED", "true")
+	t.Setenv("YOUTUBE_PLANE_REPLAY_INTERVAL_SECONDS", "45")
+	t.Setenv("YOUTUBE_PLANE_REPLAY_BATCH_SIZE", "8")
+
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
+	if !cfg.Retention.Enabled || cfg.Retention.Interval != 30*time.Minute || cfg.Retention.BatchSize != 25 {
+		t.Fatalf("retention override = %#v", cfg.Retention)
+	}
+	if cfg.Retention.QueueProcessedAge != 7*24*time.Hour || cfg.Retention.QueueDLQAge != 14*24*time.Hour {
+		t.Fatalf("queue ages = %s %s", cfg.Retention.QueueProcessedAge, cfg.Retention.QueueDLQAge)
+	}
+	if cfg.Retention.CollisionAge != 21*24*time.Hour || cfg.Retention.ReplayAuditAge != 28*24*time.Hour {
+		t.Fatalf("audit ages = %s %s", cfg.Retention.CollisionAge, cfg.Retention.ReplayAuditAge)
+	}
+	if cfg.Retention.ChannelStatsAge != 90*24*time.Hour ||
+		cfg.Retention.LiveSnapshotAge != 120*24*time.Hour ||
+		cfg.Retention.ViewerSampleAge != 10*24*time.Hour {
+		t.Fatalf("evidence ages = %#v", cfg.Retention)
+	}
+	if !cfg.Replay.Enabled || cfg.Replay.Interval != 45*time.Second || cfg.Replay.BatchSize != 8 {
+		t.Fatalf("replay override = %#v", cfg.Replay)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("overridden retention: %v", err)
+	}
+}
+
+func TestLoadYouTubePlaneConfigRetentionCanDisableInventoriedAges(t *testing.T) {
+	t.Setenv("YOUTUBE_PLANE_RETENTION_CHANNEL_STATS_DAYS", "0")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_LIVE_SNAPSHOT_DAYS", "0")
+	t.Setenv("YOUTUBE_PLANE_RETENTION_VIEWER_SAMPLE_DAYS", "0")
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
+	if cfg.Retention.ChannelStatsAge != 0 || cfg.Retention.LiveSnapshotAge != 0 || cfg.Retention.ViewerSampleAge != 0 {
+		t.Fatalf("disabled inventoried ages = %#v", cfg.Retention)
 	}
 }
 
@@ -280,6 +374,7 @@ func TestLoadYouTubePlaneConfigRejectsInvalidExplicitValues(t *testing.T) {
 		{name: "invalid bool", key: "YOUTUBE_PLANE_ENABLED", value: "not-a-bool"},
 		{name: "invalid integer", key: "YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS", value: "not-an-int"},
 		{name: "overflowing duration", key: "YOUTUBE_PLANE_CLAIM_LEASE_SECONDS", value: "9223372036854775807"},
+		{name: "overflowing retention days", key: "YOUTUBE_PLANE_RETENTION_CHANNEL_STATS_DAYS", value: "9223372036854775807"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

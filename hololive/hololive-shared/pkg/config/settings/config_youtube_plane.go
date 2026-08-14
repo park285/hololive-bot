@@ -15,8 +15,22 @@ const (
 )
 
 type YouTubePlaneRetentionConfig struct {
-	Enabled  bool
-	Interval time.Duration
+	Enabled           bool
+	Interval          time.Duration
+	BatchSize         int
+	QueueProcessedAge time.Duration
+	QueueDLQAge       time.Duration
+	CollisionAge      time.Duration
+	ReplayAuditAge    time.Duration
+	ChannelStatsAge   time.Duration
+	LiveSnapshotAge   time.Duration
+	ViewerSampleAge   time.Duration
+}
+
+type YouTubePlaneReplayConfig struct {
+	Enabled   bool
+	Interval  time.Duration
+	BatchSize int
 }
 
 type YouTubePlaneTargetProjectionConfig struct {
@@ -44,7 +58,7 @@ type YouTubePlaneConfig struct {
 
 	ShutdownTimeout     time.Duration
 	Retention           YouTubePlaneRetentionConfig
-	Replay              YouTubePlaneRetentionConfig
+	Replay              YouTubePlaneReplayConfig
 	TargetProjection    YouTubePlaneTargetProjectionConfig
 	LiveEndFinalizer    YouTubePlaneLiveEndFinalizerConfig
 	ContentAbsenceGrace time.Duration
@@ -68,6 +82,8 @@ func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 		ClaimInterval:          2 * time.Second,
 		TransactionTimeout:     10 * time.Second,
 		ShutdownTimeout:        30 * time.Second,
+		Retention:              defaultYouTubePlaneRetentionConfig(),
+		Replay:                 defaultYouTubePlaneReplayConfig(),
 		TargetProjection: YouTubePlaneTargetProjectionConfig{
 			Interval: 5 * time.Second,
 			Validity: time.Hour,
@@ -114,16 +130,10 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	if config.ShutdownTimeout, err = strictDurationUnitEnv("YOUTUBE_PLANE_SHUTDOWN_TIMEOUT_SECONDS", defaults.ShutdownTimeout, time.Second); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if config.Retention.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_RETENTION_ENABLED", false); err != nil {
+	if err := loadYouTubePlaneRetention(&config); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if config.Retention.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_RETENTION_INTERVAL_SECONDS", time.Hour, time.Second); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.Replay.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_REPLAY_ENABLED", false); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.Replay.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_REPLAY_INTERVAL_SECONDS", time.Hour, time.Second); err != nil {
+	if err := loadYouTubePlaneReplay(&config); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
 	if config.TargetProjection.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_INTERVAL_MS", defaults.TargetProjection.Interval, time.Millisecond); err != nil {
@@ -264,11 +274,11 @@ func (c YouTubePlaneConfig) Validate() error {
 	if c.TargetProjection.Validity < 5*time.Second || c.TargetProjection.Validity > 24*time.Hour {
 		return errors.New("youtube plane target projection validity must be between 5s and 24h")
 	}
-	if c.Retention.Enabled && c.Retention.Interval <= 0 {
-		return errors.New("youtube plane retention interval must be positive when enabled")
+	if err := c.validateRetention(); err != nil {
+		return err
 	}
-	if c.Replay.Enabled && c.Replay.Interval <= 0 {
-		return errors.New("youtube plane replay interval must be positive when enabled")
+	if err := c.validateReplay(); err != nil {
+		return err
 	}
 	if c.LiveEndFinalizer.Enabled && c.LiveEndFinalizer.Interval <= 0 {
 		return errors.New("youtube plane live end finalizer interval must be positive when enabled")

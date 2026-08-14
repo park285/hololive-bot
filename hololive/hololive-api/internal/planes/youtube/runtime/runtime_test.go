@@ -521,7 +521,7 @@ func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *R
 		now:        func() time.Time { return time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC) },
 		dbSem:      make(chan struct{}, cfg.DBOperationConcurrency),
 		workCh:     make(chan sourceobservation.Observation, cfg.ConsumerWorkers),
-		loopDone:   make(chan struct{}, 3),
+		loopDone:   make(chan struct{}, youtubeSupervisorLoopCapacity),
 		workerDone: make(chan struct{}, cfg.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
 			ConsumerName:  communityConsumerName,

@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	communityConsumerName  = "hololive-api-youtube"
-	communityLeaseOwner    = "hololive-api"
-	scraperDatabaseRole    = "hololive_scraper"
-	runtimeDatabaseRole    = "hololive_runtime"
-	youtubeHealthComponent = "youtube"
+	communityConsumerName         = "hololive-api-youtube"
+	communityLeaseOwner           = "hololive-api"
+	scraperDatabaseRole           = "hololive_scraper"
+	runtimeDatabaseRole           = "hololive_runtime"
+	youtubeHealthComponent        = "youtube"
+	youtubeSupervisorLoopCapacity = 5
 )
 
 type observationClaimer interface {
@@ -46,6 +47,14 @@ type liveEndFinalizer interface {
 	FinalizeNextDueLiveEnd(context.Context, time.Duration) (bool, error)
 }
 
+type observationRetainer interface {
+	RunRetentionTick(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error)
+}
+
+type observationReplayer interface {
+	ProcessNextReplay(context.Context) (bool, error)
+}
+
 type Runtime struct {
 	Config settings.YouTubePlaneConfig
 	Logger *slog.Logger
@@ -56,6 +65,8 @@ type Runtime struct {
 	consumer  observationConsumer
 	refresher projectionRefresher
 	finalizer liveEndFinalizer
+	retainer  observationRetainer
+	replayer  observationReplayer
 	builder   targetprojection.Builder
 	now       func() time.Time
 
@@ -134,6 +145,8 @@ func newRuntime(
 			}),
 		refresher: refresher,
 		finalizer: repo,
+		retainer:  repo,
+		replayer:  repo,
 		builder: targetprojection.PolicyBuilder{
 			Reader:    rosterReader{},
 			Schedules: targetprojection.DefaultPolicySchedules(),
@@ -141,7 +154,7 @@ func newRuntime(
 		now:        func() time.Time { return time.Now().UTC() },
 		dbSem:      make(chan struct{}, plane.DBOperationConcurrency),
 		workCh:     make(chan sourceobservation.Observation, plane.ConsumerWorkers),
-		loopDone:   make(chan struct{}, 3),
+		loopDone:   make(chan struct{}, youtubeSupervisorLoopCapacity),
 		workerDone: make(chan struct{}, plane.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
 			ConsumerName:  communityConsumerName,
@@ -186,6 +199,14 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	if r.Config.LiveEndFinalizer.Enabled {
 		r.loopCount++
 		go r.runLiveEndLoop(runCtx, errCh)
+	}
+	if r.Config.Retention.Enabled {
+		r.loopCount++
+		go r.runRetentionLoop(runCtx, errCh)
+	}
+	if r.Config.Replay.Enabled {
+		r.loopCount++
+		go r.runReplayLoop(runCtx, errCh)
 	}
 }
 

@@ -9,7 +9,7 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
 ## 저장소 스냅샷
 
 - Branch: `feat/schedule-api-and-community-observation`
-- Task 6 baseline: `443764a8d`; Task 7 stats/profile/photo reducer는 이 baseline 위의 local worktree
+- Task 7 baseline: `9b451a8b6`; Task 8 retention/replay는 이 baseline 위의 local worktree
 - 주요 선행 commit:
   - `4c6faafcc feat(schedule): replace official HTML scraper with API-only source`
   - `e073d3896 Document community source observation vertical slice`
@@ -18,7 +18,7 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
 - 2026-08-14 read-only evidence 기준 production에는 migration `144`와 `youtube-collector`가 적용되지 않았다. 따라서 rollout 전 manifest `144`–`161` 전체를 순서대로 적용해야 한다.
 - 현재 worktree는 Task 4 config/shutdown/readiness hardening을 포함하며 publish·deploy 판단은 별도 gate 소유다.
 - 2026-08-14 read-only 관측 당시 `hololive-api`, `alarm-worker`, producer `a/b/c/d`는 healthy였고 중앙 `youtube-collector`는 배포되지 않았다.
-- 2026-08-14 통합 contract v2.1의 Task 1–7은 로컬 구현과 targeted validation을 완료했다. Task 8 retention/replay와 Task 9 producer 제거는 시작하지 않았다.
+- 2026-08-14 통합 contract v2.1의 Task 1–8은 로컬 구현과 targeted validation을 완료했다. Task 9 producer 제거는 시작하지 않았다.
 - source observation identity는 Go `encoding/json` 관례 대신 `source-observation-canonical-json-v1` safe-integer JCS subset과 language-neutral fixture로 고정했다. collector runtime은 계속 Go다.
 
 ## 현재 진척
@@ -60,7 +60,7 @@ Community vertical slice와 Task 3 collector adapters는 로컬에서 구현되�
 2. Community부터 photo까지 canonical consume는 API YouTube plane이다. producer 모듈과 members.photo PhotoSync, retention/replay worker는 남아 있다.
 3. collector Holodex/Official adapter는 로컬 observation publisher지만 production 수집과 canonical write는 아직 producer/API 내부 provider 호출에 남아 있다.
 4. producer의 Community direct-persist 코드가 registration 제거 뒤에도 남아 있어 최종 owner 경계가 깨끗하지 않다.
-5. retention/replay worker 본문은 Task 8 소유라 plane config만 있고 loop는 시작하지 않는다. live-end due-finalizer는 Task 6에서 API plane이 소유한다.
+5. retention/replay worker는 API YouTube plane이 소유한다. producer 모듈과 AP collector fleet 전환은 Task 9다.
 6. `scripts/deploy/ap-rsync-files.txt`는 삭제된 authority/community 경로를 제거하고 현재 youtube-producer `go list -deps` 누락 파일을 보강했다. `scripts/deploy/check-ap-rsync-manifest.sh`와 scoped `git diff --check`는 통과한다.
 
 ## 확정된 목표 전제

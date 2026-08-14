@@ -4,7 +4,7 @@ LEFT JOIN source_observation_queue AS queue
   ON queue.observation_id = observation.id
 WHERE observation.observation_kind = $1
   AND observation.received_at < $2
-  AND (queue.observation_id IS NULL OR queue.status IN ('PROCESSED', 'DEAD_LETTER'))
+  AND queue.observation_id IS NULL
   AND NOT EXISTS (
       SELECT 1
       FROM source_observation_replay_requests AS replay
