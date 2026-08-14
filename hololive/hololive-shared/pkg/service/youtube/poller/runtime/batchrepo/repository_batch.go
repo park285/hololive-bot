@@ -28,6 +28,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
@@ -154,6 +155,30 @@ func (r *PgxBatchRepository) PersistCommunityPosts(ctx context.Context, posts []
 	}
 	r.persistLatencyClassificationsAfterCommit(ctx, trackingRows)
 	return nil
+}
+
+func (r *PgxBatchRepository) PersistCommunityPostsTx(
+	ctx context.Context,
+	tx dbx.Tx,
+	posts []*domain.YouTubeCommunityPost,
+	notifications []*domain.YouTubeNotificationOutbox,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+	watermark *domain.YouTubeContentWatermark,
+) error {
+	if tx == nil {
+		return fmt.Errorf("persist community posts: tx is nil")
+	}
+	if err := validateCommunityNotificationPublishedAt(posts, notifications); err != nil {
+		return fmt.Errorf("validate community notifications: %w", err)
+	}
+	return r.persistCommunityPostsTx(ctx, tx, posts, notifications, trackingRows, watermark)
+}
+
+func (r *PgxBatchRepository) RecordCommunityLatencyAfterCommit(
+	ctx context.Context,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+) {
+	r.persistLatencyClassificationsAfterCommit(ctx, trackingRows)
 }
 
 func (r *PgxBatchRepository) persistVideosTx(

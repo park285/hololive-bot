@@ -85,8 +85,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		[]string{"UC_STATS_A"},
 	)
 
-	if len(registrations) != 5 {
-		t.Fatalf("len(registrations) = %d, want 5", len(registrations))
+	if len(registrations) != 4 {
+		t.Fatalf("len(registrations) = %d, want 4", len(registrations))
 	}
 
 	expected := []struct {
@@ -99,7 +99,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 	}{
 		{name: "videos", priority: pollscheduler.PriorityNormal, interval: 7 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 9},
 		{name: "shorts", priority: pollscheduler.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 2},
-		{name: "community", priority: pollscheduler.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
 		{name: "channel_stats", priority: pollscheduler.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupOperational, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 6},
 		{name: "live", priority: pollscheduler.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
 	}
@@ -422,13 +421,13 @@ func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testi
 	if scheduler == nil {
 		t.Fatal("scheduler is nil")
 	}
-	if len(registrations) != 5 {
-		t.Fatalf("len(registrations) = %d, want 5", len(registrations))
+	if len(registrations) != 4 {
+		t.Fatalf("len(registrations) = %d, want 4", len(registrations))
 	}
 
 	applied := scheduler.SetProxyEnabled(false)
-	if applied != 5 {
-		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 5", applied)
+	if applied != 4 {
+		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 4", applied)
 	}
 }
 
@@ -463,5 +462,7 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_MetadataWorstCaseRequest
 	}
 
 	assert.Equal(t, 2.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
-	assert.Equal(t, 1.0, byName["community"].WorstCaseRequestUnitsPerRun)
+	if _, ok := byName["community"]; ok {
+		t.Fatal("producer registrations must omit community poller")
+	}
 }

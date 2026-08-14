@@ -142,6 +142,16 @@ func LoadOfficialScheduleRuntimeConfig() OfficialScheduleRuntimeConfig {
 	}
 }
 
+func (c *Config) OfficialScheduleRuntime() OfficialScheduleRuntimeConfig {
+	if c == nil {
+		return LoadOfficialScheduleRuntimeConfig()
+	}
+	return OfficialScheduleRuntimeConfig{
+		OfficialSchedule:     c.OfficialSchedule,
+		MaxResponseBodyBytes: c.MaxResponseBodyBytes,
+	}
+}
+
 func DefaultOfficialProfileConfig() OfficialProfileConfig {
 	return OfficialProfileConfig{
 		BaseURL:        "https://hololive.hololivepro.com/talents",

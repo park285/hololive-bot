@@ -10,6 +10,7 @@
 - `hololive-api` (통합 런타임 — bot plane `30001`, llm plane `30003`, admin plane `30006`)
 - `hololive-alarm-worker` (`30007`)
 - `youtube-producer` (4-way AP: osaka `30005` / seoul `30015` / main `30025` / osaka2 `30035`)
+- `youtube-collector` (central singleton `30045`; required for Community notifications)
 - `holo-postgres` (`5433`)
 - `valkey-cache` (`6379`)
 
@@ -37,17 +38,22 @@ sudo find data logs -type f -exec chmod 660 {} +
 
 ## YouTube producer 런타임
 
-`docker-compose.prod.yml` 기준 현재 YouTube 수집과 photo sync 책임은 `youtube-producer` 서비스가 소유하며, 런타임은 4-way active-active 인스턴스로 실행됩니다 (osaka `youtube-producer-a` `30005`, seoul `youtube-producer-b` `30015`, main `youtube-producer-c` `30025`, osaka2 `youtube-producer-d` `30035`). seoul `b`·main `c`는 compose 컨테이너로, osaka `a`·osaka2 `d`는 host-native `systemd` 런타임으로 실행됩니다.
+`docker-compose.prod.yml` 기준 YouTube shorts/live/videos/stats와 photo sync는 `youtube-producer`가 소유하며, Community fetch/Publish는 중앙 `youtube-collector`가 소유합니다. producer 런타임은 4-way active-active 인스턴스로 실행됩니다 (osaka `youtube-producer-a` `30005`, seoul `youtube-producer-b` `30015`, main `youtube-producer-c` `30025`, osaka2 `youtube-producer-d` `30035`). seoul `b`·main `c`는 compose 컨테이너로, osaka `a`·osaka2 `d`는 host-native `systemd` 런타임으로 실행됩니다.
 
+- `youtube-collector` (central singleton, no compose profile): `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true`, `YOUTUBE_INGESTION_ENABLED=true`
+  - Community fetch/normalize/`source_observation_outbox` Publish
+  - DB role `hololive_scraper`
+  - AP overlays pin this service to profile `central-only`
 - `youtube-producer` (base 정의, 인스턴스 overlay가 포트·instance id·PhotoSync 참여를 override — `youtube-producer-b`는 PhotoSync 미참여): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=true`
-  - YouTube ingestion scheduler
-  - YouTube producer scheduler
+  - YouTube ingestion scheduler (shorts/live/videos/stats)
+  - Community observation consume/canonical persist
   - YouTube outbox row production; final send is owned by `alarm-worker`
   - Holodex photo sync
   - `config:update` 구독 (`scraper_proxy` 반영)
 
 운영 라우팅 고정:
-- YouTube 커뮤니티/쇼츠 알람은 전체 운영 채널에서 `youtube-producer`가 outbox row를 만들고 `alarm-worker`가 claim/render/final send를 수행합니다.
+- YouTube 쇼츠/라이브 알람은 `youtube-producer`가 outbox row를 만들고 `alarm-worker`가 claim/render/final send를 수행합니다.
+- YouTube 커뮤니티 알람은 중앙 `youtube-collector`가 `source_observation_outbox`에 Publish하고, `youtube-producer` consumer가 canonical persist/`youtube_notification_outbox`를 쓴 뒤 `alarm-worker`가 send합니다. collector는 기본 central `up`에 포함되며 AP overlays는 profile `central-only`로 막습니다.
 - 이 라우팅에는 별도 rollout key나 canary fallback을 두지 않습니다. compose에는 이 경로를 분기하는 env가 없습니다.
 - `youtube-producer` 실행 권한은 `YOUTUBE_PRODUCER_RUNTIME_ALLOWED`로 한 번 더 제한합니다. base 기본값은 `false`이고 Seoul Compose overlay, Osaka·Osaka2 host-native env, `main-ap` profile에서만 `true`입니다. Osaka·Osaka2 Compose overlay에도 계약 검증을 위해 같은 값이 유지됩니다.
 
@@ -61,7 +67,7 @@ split-host 구성에서는 producer AP runtime만 원격 호스트에서 실행�
 - Osaka2 runtime: `youtube-producer-d` (`<tailnet-osaka2-d>`, host-native `systemd`, port `30035`, overlay `docker-compose.osaka2.yml`은 계약 검증용)
 - Seoul runtime: `youtube-producer-b` (`<tailnet-seoul-b>`, overlay `docker-compose.seoul.yml`, port `30015`)
 - main-host runtime: `youtube-producer-c` (`docker-compose.main-ap.yml`, profile `main-ap`, port `30025`)
-- 기존 state/control: `holo-postgres` (`<tailnet-central>:5433`), `valkey-cache` (`<tailnet-central>:6379`), CLIProxy (`http://<tailnet-central>:8787/v1`), `hololive-api` (통합 런타임 — bot/llm/admin plane)
+- 기존 state/control: `holo-postgres` (`<tailnet-central>:5433`), `valkey-cache` (`<tailnet-central>:6379`), CLIProxy (`http://<tailnet-central>:8787/v1`), `hololive-api` (통합 런타임 — bot/llm/admin plane), `youtube-collector` (Community singleton)
 - 원격 AP compose env file: OpenBao Agent가 렌더링한 `/run/hololive-bot/ap-compose.env` (`COMPOSE_ENV_FILE=/run/hololive-bot/ap-compose.env`)
 - env 정본은 OpenBao KV입니다. 중앙 Valkey는 Tailscale IP에 publish되므로 password 없이 운영하지 않습니다.
 - 중앙 host의 `./scripts/deploy/compose-redeploy-service.sh youtube-producer`는 기본적으로 차단됩니다. 원격 AP overlay 또는 명시적 emergency override 없이 중앙에서 재기동하지 않습니다.
@@ -281,7 +287,7 @@ docker logs -f hololive-youtube-producer-c
 ## DB migration
 
 초기화/마이그레이션은 `hololive-db-migrate`가 담당합니다.
-`./scripts/deploy/compose-redeploy-service.sh`로 app runtime(`hololive-api`, `hololive-alarm-worker`, `youtube-producer`, `youtube-producer-c`, `all`)을 재배포하면 runtime cutover 전에 `hololive-db-migrate`를 먼저 실행합니다.
+`./scripts/deploy/compose-redeploy-service.sh`로 app runtime(`hololive-api`, `hololive-alarm-worker`, `youtube-collector`, `youtube-producer`, `youtube-producer-c`, `all`)을 재배포하면 runtime cutover 전에 `hololive-db-migrate`를 먼저 실행합니다.
 
 ```bash
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml up --build hololive-db-migrate

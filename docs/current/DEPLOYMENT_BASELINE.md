@@ -14,7 +14,7 @@
 
 | 역할 | 호스트 | 내용 |
 |---|---|---|
-| 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | `hololive-api`, `alarm-worker`, `admin-dashboard`, `holo-postgres`, `valkey-cache`, ingress/proxy, main AP `youtube-producer-c`. 권위 PostgreSQL이 여기 있습니다. |
+| 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | `hololive-api`, `alarm-worker`, `admin-dashboard`, `holo-postgres`, `valkey-cache`, ingress/proxy, main AP `youtube-producer-c`, required Community singleton `youtube-collector`. 권위 PostgreSQL이 여기 있습니다. |
 | Hot standby | `<tailnet-seoul-ap>` (`aarch64`) | `holo-postgres-standby`. 중앙 primary에서 물리 스트리밍 복제를 받는 read-only 복제본이며, 승인된 fencing/route backend가 준비되면 fail-closed controller가 승격합니다. |
 | 빌드/제어 | `<build-control-host>` (`x86_64`) | 모든 컴파일·이미지 빌드·테스트. 런타임 호스트는 검증된 배포 파일과 이미지만 받습니다. |
 | 원격 AP | Osaka `a`, Seoul `b`, Osaka2 `d` | `a`/`d`는 host-native systemd, `b`는 Compose. |
@@ -53,6 +53,7 @@ Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스�
 | `hololive-api` | `hololive-api` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, docker-proxy |
 | `alarm-worker` | `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
 | `youtube-producer` | `youtube-producer` | 30005 | app file log, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
+| `youtube-collector` | `youtube-collector` | 30045 | app file log, cache, PostgreSQL, scraper | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
 
 ## Infra Services
 
@@ -92,7 +93,7 @@ place.
 
 The production client set uses `verify-full` with
 `/run/hololive-bot/certs/postgres-ca.pem`: `hololive-api`, `alarm-worker`,
-central `youtube-producer`, `youtube-producer-c`,
+central `youtube-producer`, `youtube-collector`, `youtube-producer-c`,
 `hololive-db-migrate`, Seoul `youtube-producer-b`, and staged Osaka APs
 `youtube-producer-a`/`youtube-producer-d` when they are rolled out.
 

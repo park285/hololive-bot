@@ -2,4 +2,5 @@
 off|hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate
 off|hololive/hololive-alarm-worker|./cmd/alarm-worker|hololive-alarm-worker
 off|hololive/hololive-youtube-producer|./cmd/runtime/youtube-producer|youtube-producer
+off|hololive/hololive-youtube-collector|./cmd/runtime/youtube-collector|youtube-collector
 off|admin-dashboard/backend|./cmd/admin-dashboard|admin-dashboard

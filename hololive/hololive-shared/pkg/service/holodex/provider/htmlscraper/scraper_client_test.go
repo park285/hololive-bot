@@ -32,7 +32,7 @@ func TestOfficialScheduleAPINilResponse(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nil HTTP response")
 	}
-	if got := err.Error(); !strings.Contains(got, "nil response") {
+	if got := err.Error(); !strings.Contains(got, "nil *Response") && !strings.Contains(got, "nil response") {
 		t.Fatalf("error = %q, want nil response context", got)
 	}
 }

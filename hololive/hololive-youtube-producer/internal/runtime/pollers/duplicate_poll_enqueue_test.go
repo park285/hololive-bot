@@ -56,14 +56,13 @@ func TestCommunityPollerDuplicatePollEnqueuesExactlyOnce(t *testing.T) {
 	)
 
 	poller := NewCommunityPoller(client, db, 10, nil)
-	ctx := context.Background()
 
-	require.NoError(t, poller.Poll(ctx, channelID))
+	persistCommunityFromClient(t, poller, channelID)
 	requireDuplicatePollSingleEnqueuedState(t, db, domain.OutboxKindCommunityPost, postID)
 
 	rewindDuplicatePollWatermark(t, db, channelID, domain.WatermarkTypeCommunityPost, lastContent)
 
-	require.NoError(t, poller.Poll(ctx, channelID))
+	persistCommunityFromClient(t, poller, channelID)
 	requireDuplicatePollSingleEnqueuedState(t, db, domain.OutboxKindCommunityPost, postID)
 
 	var postCount int64

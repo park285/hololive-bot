@@ -109,7 +109,7 @@ func (p *LivePoller) PollBatch(ctx context.Context, channelIDs []string) map[str
 		return nil
 	}
 	if p.liveStatusProvider == nil {
-		return p.pollBatchViaSinglePoll(ctx, ids)
+		return liveBatchErrorForAll(ids, errors.New("live poller requires Holodex live status provider"))
 	}
 
 	streams, failures, err := p.fetchChannelsLiveStatusBatch(ctx, ids)
@@ -164,19 +164,6 @@ func (p *LivePoller) pollBatchChannel(
 		return fmt.Errorf("failed to get live streams: %w", fetchErr)
 	}
 	return p.pollLiveStreams(ctx, channelID, streams, now)
-}
-
-func (p *LivePoller) pollBatchViaSinglePoll(ctx context.Context, channelIDs []string) map[string]error {
-	errs := make(map[string]error)
-	for _, channelID := range channelIDs {
-		if err := p.Poll(ctx, channelID); err != nil {
-			errs[channelID] = err
-		}
-	}
-	if len(errs) == 0 {
-		return nil
-	}
-	return errs
 }
 
 func (p *LivePoller) pollLiveStreams(ctx context.Context, channelID string, streams []*domain.Stream, now time.Time) error {
@@ -249,22 +236,14 @@ func liveBatchErrorForAll(channelIDs []string, err error) map[string]error {
 }
 
 func (p *LivePoller) fetchLiveStreams(ctx context.Context, channelID string) ([]*domain.Stream, map[string]error, error) {
-	if p.liveStatusProvider != nil {
-		if detailed, ok := p.liveStatusProvider.(LiveStatusWithFailuresProvider); ok {
-			return detailed.GetChannelsLiveStatusWithFailures(ctx, []string{channelID})
-		}
-		streams, err := p.liveStatusProvider.GetChannelsLiveStatus(ctx, []string{channelID})
-		return streams, nil, err
+	if p == nil || p.liveStatusProvider == nil {
+		return nil, nil, errors.New("live poller requires Holodex live status provider")
 	}
-	if p.client == nil {
-		return nil, nil, errors.New("live poller has no status provider or scraper client")
+	if detailed, ok := p.liveStatusProvider.(LiveStatusWithFailuresProvider); ok {
+		return detailed.GetChannelsLiveStatusWithFailures(ctx, []string{channelID})
 	}
-
-	events, err := p.client.GetUpcomingEvents(ctx, channelID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return streamsFromUpcomingEvents(channelID, events), nil, nil
+	streams, err := p.liveStatusProvider.GetChannelsLiveStatus(ctx, []string{channelID})
+	return streams, nil, err
 }
 
 func (p *LivePoller) pollStream(ctx context.Context, channelID string, stream *domain.Stream, now time.Time) error {

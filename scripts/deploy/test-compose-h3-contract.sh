@@ -85,13 +85,14 @@ render() {
 }
 
 main_render="$(render oracle "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
+default_render="$(render "" "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 migration_override_render="$(render oracle "${STUB_MIGRATION_OVERRIDE_ENV}" "${PROD_OVERLAYS[@]}")"
 ap_render="$(render main-ap "${STUB_COMPOSE_ENV}" "${MAIN_AP_OVERLAYS[@]}")"
 osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
 osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka2.yml)")"
 seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
 
-MAIN_RENDER="${main_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" AP_RENDER="${ap_render}" \
+MAIN_RENDER="${main_render}" DEFAULT_RENDER="${default_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" AP_RENDER="${ap_render}" \
     OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'
 import json
 import os
@@ -125,6 +126,7 @@ def has_udp_published(svc, target_port):
 
 
 main = json.loads(os.environ["MAIN_RENDER"])["services"]
+default_services = json.loads(os.environ["DEFAULT_RENDER"])["services"]
 migration_override = json.loads(os.environ["MIGRATION_OVERRIDE_RENDER"])["services"]
 ap = json.loads(os.environ["AP_RENDER"])["services"]
 
@@ -150,6 +152,7 @@ H3_HEALTH = {
     ),
     "hololive-alarm-worker": (["https://127.0.0.1:30007/health"], None),
     "youtube-producer": (["https://127.0.0.1:30005/health"], None),
+    "youtube-collector": (["https://127.0.0.1:30045/health"], 30045),
 }
 
 for name, (urls, udp_port) in H3_HEALTH.items():
@@ -164,6 +167,29 @@ for name, (urls, udp_port) in H3_HEALTH.items():
     check(f"{name} healthcheck timeout is {expected_timeout}", healthcheck_timeout(svc) == expected_timeout)
     if udp_port is not None:
         check(f"{name} publishes {udp_port}/udp", has_udp_published(svc, udp_port))
+
+collector = main.get("youtube-collector")
+check("youtube-collector present in default central render", "youtube-collector" in default_services)
+check("youtube-collector present in oracle render", collector is not None)
+if collector is not None:
+    check(
+        "youtube-collector healthcheck is https://127.0.0.1:30045/health",
+        healthcheck_url(collector) == "https://127.0.0.1:30045/health",
+    )
+    check("youtube-collector healthcheck timeout is 7s", healthcheck_timeout(collector) == "7s")
+    check("youtube-collector publishes 30045/udp", has_udp_published(collector, 30045))
+    env = collector.get("environment") or {}
+    check("youtube-collector HOLOLIVE_H3_ADDR is :30045", env.get("HOLOLIVE_H3_ADDR") == ":30045")
+    check("youtube-collector HOLOLIVE_METRICS_ADDR is :30096", env.get("HOLOLIVE_METRICS_ADDR") == ":30096")
+    check("youtube-collector POSTGRES_USER is hololive_scraper", env.get("POSTGRES_USER") == "hololive_scraper")
+    check("youtube-collector entrypoint is youtube-collector", (collector.get("entrypoint") or [""])[-1].endswith("youtube-collector"))
+    check("youtube-collector does not enable producer runtime", env.get("YOUTUBE_PRODUCER_RUNTIME_ALLOWED") == "false")
+    check("youtube-collector runtime is allowed", env.get("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED") == "true")
+    check("youtube-collector has no compose profile", not (collector.get("profiles") or []))
+    for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
+        check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
+    for holodex_key in ("HOLODEX_API_KEY", "HOLODEX_API_KEY_1"):
+        check(f"youtube-collector does not receive {holodex_key}", holodex_key not in env)
 
 for name in ("hololive-api", "hololive-alarm-worker"):
     env = (main.get(name) or {}).get("environment") or {}
@@ -251,6 +277,7 @@ for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
     env = svc.get("environment") or {}
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"{name} does not receive {iris_key}", iris_key not in env)
+    check(f"youtube-collector absent from {name} AP render", "youtube-collector" not in services)
 
 H2C_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")
 
@@ -300,4 +327,5 @@ grep -Fq 'llm-scheduler|https://127.0.0.1:30003/health|compose-healthcheck:holol
 grep -Fq 'alarm-worker|https://127.0.0.1:30007/health|compose-healthcheck:hololive-alarm-worker' "${SMOKE_SCRIPT}"
 grep -Fq 'alarm-worker-ready|https://127.0.0.1:30007/ready|compose-healthcheck:hololive-alarm-worker' "${SMOKE_SCRIPT}"
 grep -Fq 'youtube-producer-c|https://127.0.0.1:30025/health|compose-healthcheck:youtube-producer-c:main-ap' "${SMOKE_SCRIPT}"
+grep -Fq 'youtube-collector|https://127.0.0.1:30045/health|compose-healthcheck:youtube-collector' "${SMOKE_SCRIPT}"
 echo "[PASS] runtime smoke probes are h3-only"

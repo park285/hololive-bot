@@ -11,8 +11,8 @@ import (
 )
 
 func (r *Repository) ClaimBatch(ctx context.Context, options ClaimOptions) (ClaimedBatch, error) {
-	if r == nil || r.pool == nil {
-		return ClaimedBatch{}, ErrInvalidRepository
+	if err := r.validate(); err != nil {
+		return ClaimedBatch{}, err
 	}
 	if err := options.validate(); err != nil {
 		return ClaimedBatch{}, err
@@ -21,57 +21,39 @@ func (r *Repository) ClaimBatch(ctx context.Context, options ClaimOptions) (Clai
 	if err != nil {
 		return ClaimedBatch{}, fmt.Errorf("claim source observations: create lease token: %w", err)
 	}
-
 	return dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (ClaimedBatch, error) {
-		return claimBatchTx(ctx, tx, options, leaseToken)
+		observations, err := claimObservations(ctx, tx, options, leaseToken)
+		if err != nil {
+			return ClaimedBatch{}, err
+		}
+		return ClaimedBatch{ConsumerName: options.ConsumerName, Observations: observations}, nil
 	})
-}
-
-func claimBatchTx(
-	ctx context.Context,
-	tx dbx.Tx,
-	options ClaimOptions,
-	leaseToken string,
-) (ClaimedBatch, error) {
-	fence, err := loadAuthority(ctx, tx, options.SourceKind, true)
-	if err != nil {
-		return ClaimedBatch{}, err
-	}
-	batch := ClaimedBatch{Fence: fence, ConsumerName: options.ConsumerName}
-	if fence.Mode == contract.AuthorityModeLegacy {
-		return batch, nil
-	}
-
-	batch.Observations, err = claimObservations(ctx, tx, options, leaseToken, fence.Generation)
-	if err != nil {
-		return ClaimedBatch{}, err
-	}
-	return batch, nil
 }
 
 func claimObservations(
 	ctx context.Context,
-	tx dbx.Querier,
+	tx dbx.Tx,
 	options ClaimOptions,
 	leaseToken string,
-	generation int64,
 ) ([]Observation, error) {
+	kinds := make([]string, len(options.Kinds))
+	for i := range options.Kinds {
+		kinds[i] = string(options.Kinds[i])
+	}
 	rows, err := tx.Query(
 		ctx,
-		mustSQL("repository_claim_0006_06.sql"),
-		options.SourceKind,
+		mustSQL("repository_claim_0012_12.sql"),
+		kinds,
 		options.Limit,
 		options.LeaseOwner,
 		leaseToken,
 		options.LeaseDuration.Milliseconds(),
 		MaxAttempts,
-		generation,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("claim source observations: %w", err)
 	}
 	defer rows.Close()
-
 	observations := make([]Observation, 0, options.Limit)
 	for rows.Next() {
 		observation, err := scanObservation(rows)
@@ -88,21 +70,33 @@ func claimObservations(
 
 func scanObservation(row pgx.Row) (Observation, error) {
 	var observation Observation
-	var sourceKind string
+	var provider string
+	var kind string
 	var completeness string
 	var continuity string
 	if err := row.Scan(
 		&observation.ID,
-		&sourceKind,
-		&observation.SourceKey,
+		&provider,
+		&kind,
+		&observation.SubjectKey,
 		&observation.ObservationKey,
 		&observation.SchemaVersion,
-		&observation.Generation,
+		&observation.ContractGeneration,
+		&observation.ScheduledFor,
 		&observation.ObservedAt,
+		&observation.SourceEventAt,
+		&observation.ReceivedAt,
+		&observation.ScopeSHA256,
 		&completeness,
 		&continuity,
 		&observation.Payload,
 		&observation.PayloadSHA256,
+		&observation.EvidenceSHA256,
+		&observation.CollectorInstance,
+		&observation.JobKey,
+		&observation.CollectionJobKind,
+		&observation.FenceEpoch,
+		&observation.ProjectionGeneration,
 		&observation.AttemptCount,
 		&observation.LeaseOwner,
 		&observation.LeaseToken,
@@ -110,8 +104,15 @@ func scanObservation(row pgx.Row) (Observation, error) {
 	); err != nil {
 		return Observation{}, fmt.Errorf("claim source observations: scan row: %w", err)
 	}
-	observation.SourceKind = contract.SourceKind(sourceKind)
+	observation.Provider = contract.Provider(provider)
+	observation.ObservationKind = contract.ObservationKind(kind)
 	observation.Completeness = contract.Completeness(completeness)
 	observation.Continuity = contract.Continuity(continuity)
+	observation.EffectiveAt, observation.SourceEventFallback = contract.EffectiveAt(contract.ObservationClock{
+		ObservationKind: observation.ObservationKind,
+		ScheduledFor:    observation.ScheduledFor,
+		SourceEventAt:   observation.SourceEventAt,
+		ReceivedAt:      observation.ReceivedAt,
+	}, contract.DefaultMaxSourceEventFutureSkew)
 	return observation, nil
 }

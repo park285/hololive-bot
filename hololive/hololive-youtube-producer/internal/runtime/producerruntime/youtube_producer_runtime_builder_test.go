@@ -112,6 +112,7 @@ func TestBuildIngestionRuntimeSpec(t *testing.T) {
 		assert.Equal(t, youtubeProducerRuntimeName, spec.name)
 		assert.False(t, spec.features.youtubeEnabled)
 		assert.True(t, spec.features.photoSyncEnabled)
+		assert.False(t, spec.features.activeActiveEnabled)
 	})
 }
 
@@ -262,8 +263,8 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			)
 			require.NoError(t, err)
 			require.NotNil(t, scraperScheduler)
-			require.Len(t, registrations, 5)
-			assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
+			require.Len(t, registrations, 4)
+			assert.Equal(t, 4, schedulerJobCount(t, scraperScheduler))
 
 			configSubscriber := configupdates.BuildSubscriber(
 				infra.cacheService,

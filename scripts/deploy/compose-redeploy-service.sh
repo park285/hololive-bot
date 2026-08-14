@@ -62,7 +62,7 @@ usage() {
 
 target_requires_db_migration() {
     case "${TARGET}" in
-        hololive-api|hololive-alarm-worker|youtube-producer-c|"")
+        hololive-api|hololive-alarm-worker|youtube-collector|youtube-producer-c|"")
             return 0
             ;;
         youtube-producer)
@@ -104,7 +104,7 @@ resolve_revision_services() {
     LIVE_REVISION_SERVICES=()
 
     case "${TARGET}" in
-        hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|admin-dashboard)
+        hololive-api|hololive-alarm-worker|youtube-collector|youtube-producer|youtube-producer-c|admin-dashboard)
             BUILT_REVISION_SERVICES=("${TARGET}")
             LIVE_REVISION_SERVICES=("${TARGET}")
             ;;
@@ -112,8 +112,8 @@ resolve_revision_services() {
             BUILT_REVISION_SERVICES=(hololive-db-migrate)
             ;;
         "")
-            BUILT_REVISION_SERVICES=(hololive-api hololive-alarm-worker admin-dashboard)
-            LIVE_REVISION_SERVICES=(hololive-api hololive-alarm-worker admin-dashboard)
+            BUILT_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)
+            LIVE_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)
             if [[ ",${COMPOSE_PROFILES:-}," == *",main-ap,"* ]]; then
                 BUILT_REVISION_SERVICES+=(youtube-producer-c)
                 LIVE_REVISION_SERVICES+=(youtube-producer-c)
@@ -255,7 +255,7 @@ postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}"
 
 REVISION_ENABLED=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|hololive-db-migrate|admin-dashboard|"")
+    hololive-api|hololive-alarm-worker|youtube-collector|youtube-producer|youtube-producer-c|hololive-db-migrate|admin-dashboard|"")
         REVISION_ENABLED=true
         REVISION="$(deploy_source_revision "${ROOT_DIR}")"
         export REVISION
@@ -282,7 +282,7 @@ echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 build_target=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|hololive-db-migrate|admin-dashboard)
+    hololive-api|hololive-alarm-worker|youtube-collector|youtube-producer|youtube-producer-c|hololive-db-migrate|admin-dashboard)
         build_target=true
         ;;
     "")
@@ -294,7 +294,7 @@ if [[ "${build_target}" == true ]]; then
     # producer Dockerfile은 빌드 컨텍스트를 ap-rsync 매니페스트로 프루닝하므로,
     # 매니페스트 누락은 원격 rsync뿐 아니라 이 로컬 빌드도 깨뜨린다.
     case "${TARGET}" in
-        youtube-producer|youtube-producer-c|"")
+        youtube-collector|youtube-producer|youtube-producer-c|"")
             bash "${ROOT_DIR}/scripts/deploy/check-ap-rsync-manifest.sh"
             ;;
     esac
@@ -346,12 +346,12 @@ if [[ -n "${TARGET}" ]]; then
         verify_cutover_image_revisions
     fi
 else
-    cutover_capture_restart_baseline hololive-api hololive-alarm-worker
+    cutover_capture_restart_baseline hololive-api hololive-alarm-worker youtube-collector
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
-    if ! cutover_health_gate hololive-api hololive-alarm-worker; then
+    if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector; then
         echo "[ERROR] health gate failed after all-service redeploy" >&2
         exit 1
     fi

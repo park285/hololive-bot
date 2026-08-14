@@ -74,7 +74,8 @@ func buildIngestionRuntime(ctx context.Context, appConfig *settings.Config, logg
 
 	logIngestionRuntimeConfigured(ctx, logger, spec.name, features, appConfig.Scraper.FetcherEngine)
 
-	infra, err := initYouTubeProducerInfrastructureFn(ctx, appConfig, logger)
+	initInfra := initYouTubeProducerInfrastructureFn
+	infra, err := initInfra(ctx, appConfig, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +92,12 @@ func buildIngestionRuntime(ctx context.Context, appConfig *settings.Config, logg
 			slog.Any("error", warnErr),
 		)
 	}
-	if err := acquireIngestionLeaseIfEnabled(ctx, infra, logger, spec.name, features.youtubeEnabled && !features.activeActiveEnabled, &youtubeState); err != nil {
+	if err := acquireIngestionLeaseIfEnabled(ctx, infra, logger, spec.name, ingestionLeaseEnabled(features), &youtubeState); err != nil {
 		infra.cleanup()
 		return nil, err
 	}
 
-	youtubeDeps, err := buildIngestionRuntimeYouTubeDependencies(ctx, appConfig, logger, infra, features.youtubeEnabled, &youtubeState, readinessState)
+	youtubeDeps, err := buildIngestionRuntimeYouTubeDependencies(ctx, appConfig, logger, infra, features, &youtubeState, readinessState)
 	if err != nil {
 		cleanupIngestionRuntimeStartupFailure(ctx, infra, logger, spec.name, &youtubeState)
 		return nil, err
@@ -161,6 +162,10 @@ func acquireIngestionLeaseIfEnabled(
 	return nil
 }
 
+func ingestionLeaseEnabled(features ingestionRuntimeFeatures) bool {
+	return features.youtubeEnabled && !features.activeActiveEnabled
+}
+
 func cleanupIngestionRuntimeStartupFailure(ctx context.Context, infra *youtubeProducerInfrastructure, logger *slog.Logger, runtimeName string, state *ingestionRuntimeYouTubeState) {
 	if state != nil && state.ingestionLease != nil {
 		if err := state.ingestionLease.Release(context.WithoutCancel(ctx)); err != nil && logger != nil {
@@ -201,6 +206,7 @@ func newYouTubeProducerRuntime(
 		ConfigSubscriber:        configSubscriber,
 		PollTargetRefresher:     youtubeDeps.pollTargetRefresher,
 		RetentionCleaner:        buildRetentionCleaner(infra, logger),
+		CommunityObservation:    communityObservationRunnerFrom(youtubeDeps.communityObservation),
 		ServerAddr:              httpServers.Addr(),
 		HTTPServers:             httpServers,
 		Readiness:               readinessState,

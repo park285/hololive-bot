@@ -80,6 +80,7 @@ dockerfiles=(
     hololive/hololive-api/Dockerfile
     hololive/hololive-alarm-worker/Dockerfile
     hololive/hololive-youtube-producer/Dockerfile
+    hololive/hololive-youtube-collector/Dockerfile
     admin-dashboard/Dockerfile
 )
 for dockerfile in "${dockerfiles[@]}"; do
@@ -95,7 +96,7 @@ for dockerfile in "${dockerfiles[@]}"; do
 done
 
 compose_file="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
-for service in hololive-db-migrate hololive-alarm-worker hololive-api youtube-producer admin-dashboard; do
+for service in hololive-db-migrate hololive-alarm-worker hololive-api youtube-producer youtube-collector admin-dashboard; do
     block="$(awk -v service="${service}" '
         $0 == "services:" { service_section = 1; next }
         service_section && $0 == "  " service ":" { found = 1; next }

@@ -52,7 +52,9 @@ func validRuntimeRoleConfig() *Config {
 			FetcherEngine: ScraperFetcherEngineNetHTTP,
 			Backfill:      ScraperBackfillConfig{TargetGroup: "notification"},
 		},
-		Environment: "production",
+		OfficialSchedule:     DefaultOfficialScheduleConfig(),
+		MaxResponseBodyBytes: DefaultMaxResponseBodyBytes,
+		Environment:          "production",
 	}
 }
 
@@ -108,6 +110,57 @@ func TestValidateYouTubeProducerRuntimeRejectsYouTubeOutboxDispatcher(t *testing
 	err := validRuntimeRoleConfig().ValidateYouTubeProducerRuntime()
 	if err == nil || !strings.Contains(err.Error(), youTubeOutboxDispatcherEnabledEnv) {
 		t.Fatalf("ValidateYouTubeProducerRuntime() error = %v, want YouTube outbox dispatcher rejection", err)
+	}
+}
+
+func TestValidateYouTubeCollectorRuntimeRejectsYouTubeOutboxDispatcher(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
+
+	cfg := validRuntimeRoleConfig()
+	cfg.Postgres.User = postgresScraperRoleUser
+	err := cfg.ValidateYouTubeCollectorRuntime()
+	if err == nil || !strings.Contains(err.Error(), youTubeOutboxDispatcherEnabledEnv) {
+		t.Fatalf("ValidateYouTubeCollectorRuntime() error = %v, want YouTube outbox dispatcher rejection", err)
+	}
+}
+
+func TestValidateYouTubeCollectorRuntimeRequiresScraperPostgresUser(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	err := validRuntimeRoleConfig().ValidateYouTubeCollectorRuntime()
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER=hololive_scraper") {
+		t.Fatalf("ValidateYouTubeCollectorRuntime() error = %v, want scraper postgres user", err)
+	}
+}
+
+func TestValidateYouTubeProducerRuntimeRejectsScraperPostgresUser(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	cfg := validRuntimeRoleConfig()
+	cfg.Postgres.User = postgresScraperRoleUser
+	err := cfg.ValidateYouTubeProducerRuntime()
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER=hololive_scraper") {
+		t.Fatalf("ValidateYouTubeProducerRuntime() error = %v, want scraper postgres user rejection", err)
+	}
+}
+
+func TestValidateYouTubeCollectorRuntimeRejectsActiveActive(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	cfg := validRuntimeRoleConfig()
+	cfg.Postgres.User = postgresScraperRoleUser
+	cfg.Scraper.ActiveActive.Enabled = true
+	err := cfg.ValidateYouTubeCollectorRuntime()
+	if err == nil || !strings.Contains(err.Error(), "YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED") {
+		t.Fatalf("ValidateYouTubeCollectorRuntime() error = %v, want active-active rejection", err)
+	}
+}
+
+func TestValidateYouTubeCollectorRuntimeAllowsMissingHolodexAPIKey(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	cfg := validRuntimeRoleConfig()
+	cfg.Postgres.User = postgresScraperRoleUser
+	cfg.Holodex.APIKey = ""
+	if err := cfg.ValidateYouTubeCollectorRuntime(); err != nil {
+		t.Fatalf("ValidateYouTubeCollectorRuntime() error = %v, want nil without Holodex key", err)
 	}
 }
 

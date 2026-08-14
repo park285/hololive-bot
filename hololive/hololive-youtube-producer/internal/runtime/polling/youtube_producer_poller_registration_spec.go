@@ -75,7 +75,3 @@ func channelStatsWorstCaseRequestUnits() float64 {
 func shortsWorstCaseRequestUnits() float64 {
 	return pollers.ShortsWorstCaseRequestUnits()
 }
-
-func communityWorstCaseRequestUnits() float64 {
-	return 1.0
-}

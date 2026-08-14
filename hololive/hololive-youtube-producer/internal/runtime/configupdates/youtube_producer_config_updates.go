@@ -31,6 +31,7 @@ import (
 
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
@@ -56,7 +57,11 @@ func buildYouTubeProducerConfigApplyFn(
 ) func(contractssettings.ConfigUpdateV1) {
 	return configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
-			sharedsettings.ApplyScraperProxyToggle(payload.Enabled, ytStack.GetService(), holodexService, scraperScheduler, logger)
+			var youtubeService youtube.Service
+			if ytStack != nil {
+				youtubeService = ytStack.GetService()
+			}
+			sharedsettings.ApplyScraperProxyToggle(payload.Enabled, youtubeService, holodexService, scraperScheduler, logger)
 			current := settingsService.Get()
 			current.ScraperProxyEnabled = payload.Enabled
 			if err := settingsService.Update(current); err != nil {

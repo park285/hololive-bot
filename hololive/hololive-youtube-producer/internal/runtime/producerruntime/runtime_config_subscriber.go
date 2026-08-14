@@ -3,9 +3,10 @@ package producerruntime
 import (
 	"log/slog"
 
+	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/configupdates"
 )
@@ -32,11 +33,18 @@ func buildRuntimeConfigSubscriber(
 	desiredProxyState := infra.settingsService.Get().ScraperProxyEnabled
 	sharedsettings.ApplyScraperProxyToggle(
 		desiredProxyState,
-		infra.ytStack.GetService(),
+		youtubeServiceFromStack(infra.ytStack),
 		infra.holodexService,
 		scraperScheduler,
 		logger,
 	)
 
 	return configSubscriber
+}
+
+func youtubeServiceFromStack(ytStack *providers.YouTubeStack) youtube.Service {
+	if ytStack == nil {
+		return nil
+	}
+	return ytStack.GetService()
 }

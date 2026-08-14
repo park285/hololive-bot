@@ -78,3 +78,22 @@ func TestLoadOfficialScheduleRuntimeConfig(t *testing.T) {
 		t.Fatalf("MaxResponseBodyBytes = %d", config.MaxResponseBodyBytes)
 	}
 }
+
+func TestConfigOfficialScheduleRuntimeUsesLoadedFields(t *testing.T) {
+	cfg := &Config{
+		OfficialSchedule: OfficialScheduleConfig{
+			BaseURL:      "https://schedule.from-config.example",
+			Timeout:      3 * time.Second,
+			CacheExpiry:  2 * time.Minute,
+			PageCacheTTL: 4 * time.Second,
+		},
+		MaxResponseBodyBytes: 8192,
+	}
+	runtime := cfg.OfficialScheduleRuntime()
+	if runtime.OfficialSchedule.BaseURL != "https://schedule.from-config.example" {
+		t.Fatalf("BaseURL = %q", runtime.OfficialSchedule.BaseURL)
+	}
+	if runtime.MaxResponseBodyBytes != 8192 {
+		t.Fatalf("MaxResponseBodyBytes = %d", runtime.MaxResponseBodyBytes)
+	}
+}

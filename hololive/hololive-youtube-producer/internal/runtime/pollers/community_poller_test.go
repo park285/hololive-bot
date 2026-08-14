@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -16,7 +19,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	sharedpolling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
@@ -63,7 +68,7 @@ func TestCommunityPollerPollPersistsPublishedAtAndDetectedAt(t *testing.T) {
 	defer slog.SetDefault(previousDefaultLogger)
 
 	metricBefore := testutil.ToFloat64(communityShortsDetectedPostsTotal.WithLabelValues(string(domain.AlarmTypeCommunity)))
-	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+	persistCommunityFromClient(t, poller, "UC_TEST")
 
 	canonicalPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 
@@ -143,7 +148,7 @@ func TestCommunityPollerPollTreatsCanonicalWatermarkAsSameUpstreamPostID(t *test
 	)
 
 	poller := NewCommunityPoller(client, db, 10, nil)
-	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+	persistCommunityFromClient(t, poller, "UC_TEST")
 
 	var postCount int64
 	require.NoError(t, db.Model(&domain.YouTubeCommunityPost{}).Count(&postCount).Error)
@@ -197,10 +202,10 @@ func TestCommunityPollerPollKeepsCanonicalIDStableAcrossRescrapes(t *testing.T) 
 	)
 
 	poller := NewCommunityPoller(client, db, 10, nil)
-	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+	persistCommunityFromClient(t, poller, "UC_TEST")
 
 	postsHTML = "<script>var ytInitialData = " + secondPostsJSON + ";</script>"
-	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+	persistCommunityFromClient(t, poller, "UC_TEST")
 
 	var postCount int64
 	require.NoError(t, db.Model(&domain.YouTubeCommunityPost{}).Count(&postCount).Error)
@@ -270,7 +275,7 @@ func TestCommunityPollerPollDeduplicatesCollectedPostsByCanonicalPostID(t *testi
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	defer slog.SetDefault(previousDefaultLogger)
 
-	require.NoError(t, poller.Poll(context.Background(), "UC_DUPLICATE_COMMUNITY"))
+	persistCommunityFromClient(t, poller, "UC_DUPLICATE_COMMUNITY")
 
 	var postCount int64
 	require.NoError(t, db.Model(&domain.YouTubeCommunityPost{}).Count(&postCount).Error)
@@ -356,7 +361,7 @@ func TestCommunityPoller_MissingPublishedAtEnqueuesImmediately(t *testing.T) {
 	)
 
 	poller := NewCommunityPoller(client, db, 10, nil)
-	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+	persistCommunityFromClient(t, poller, "UC_TEST")
 
 	assert.Zero(t, resolveCalls)
 
@@ -432,7 +437,7 @@ func TestCommunityPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) 
 	)
 
 	poller := NewCommunityPoller(client, db, 10, nil)
-	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+	persistCommunityFromClient(t, poller, "UC_TEST")
 
 	var outbox domain.YouTubeNotificationOutbox
 	require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
@@ -456,11 +461,94 @@ func TestCommunityPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) 
 	assert.Equal(t, "community:post-1", watermark.LastContentID)
 }
 
-func TestCommunityPollerMatchesKeywordsUsesNormalizedKeywords(t *testing.T) {
-	poller := &CommunityPoller{keywords: normalizeCommunityKeywords([]string{" HoloLive ", "", "STREAM", "stream"})}
-
+func TestCommunityPollerStoresNormalizedKeywords(t *testing.T) {
+	poller := &CommunityPoller{keywords: community.NormalizeKeywords([]string{" HoloLive ", "", "STREAM", "stream"})}
 	require.Equal(t, []string{"hololive", "stream"}, poller.keywords)
-	require.True(t, poller.matchesKeywords("Tonight's HOLOLIVE schedule"))
-	require.True(t, poller.matchesKeywords("late night stream"))
-	require.False(t, poller.matchesKeywords("unrelated post"))
+}
+
+func TestCommunityPollerSourceDoesNotCallGetCommunityPosts(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("community_poller.go")
+	require.NoError(t, err)
+	if strings.Contains(string(src), "GetCommunityPosts") {
+		t.Fatal("producer CommunityPoller must not call GetCommunityPosts")
+	}
+}
+
+func TestProducerProductionSourceDoesNotShipCollectorRuntime(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join("..", "..", "..")
+	forbidden := []string{
+		"BuildYouTubeCollectorRuntime",
+		"youtubeCollectorSpec",
+		"communityCollectorOnly",
+		"BuildCommunityCollectorComponents",
+		"internal/runtime/communitycollector",
+	}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		src, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if strings.Contains(filepath.ToSlash(rel), "cmd/runtime/youtube-collector/") {
+			t.Errorf("%s must not ship collector runtime", rel)
+		}
+		body := string(src)
+		for _, token := range forbidden {
+			if strings.Contains(body, token) {
+				t.Errorf("%s must not contain %q", path, token)
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestProducerProductionSourceDoesNotCallGetCommunityPosts(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join("..", "..", "..")
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		src, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if strings.Contains(string(src), "GetCommunityPosts") {
+			t.Errorf("%s must not call GetCommunityPosts", path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func persistCommunityFromClient(t *testing.T, poller *CommunityPoller, channelID string) {
+	t.Helper()
+	posts, err := poller.client.GetCommunityPosts(context.Background(), channelID, poller.maxResults)
+	require.NoError(t, err)
+	require.NoError(t, poller.persistCollected(
+		context.Background(),
+		channelID,
+		sharedpolling.NormalizeCollectedCommunityPostsByCanonicalPostID(posts),
+	))
 }

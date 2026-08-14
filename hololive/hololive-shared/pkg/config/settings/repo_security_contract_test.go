@@ -488,8 +488,8 @@ func assertProdComposeRequiredPatterns(t *testing.T, content string) {
 	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}"); got != 1 {
 		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE verify-full default count = %d, want 1", got)
 	}
-	if got := strings.Count(content, "*postgres-env"); got != 3 {
-		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 3", got)
+	if got := strings.Count(content, "*postgres-env"); got != 4 {
+		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 4", got)
 	}
 
 	required := []string{
@@ -539,7 +539,7 @@ func assertProdComposeEgressEnvFiles(t *testing.T, content string) {
 func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
 	t.Helper()
 
-	nonEgress := []string{"youtube-producer", "admin-dashboard"}
+	nonEgress := []string{"youtube-producer", "youtube-collector", "admin-dashboard"}
 	for _, service := range nonEgress {
 		block := composeServiceBlock(t, content, service)
 		assertNonEgressEnvFilePolicy(t, service, block)
@@ -611,6 +611,7 @@ func assertProdRenderedValkeySocketIsolation(t *testing.T, cfg renderedCompose) 
 		"hololive-api":          true,
 		"hololive-alarm-worker": true,
 		"youtube-producer":      true,
+		"youtube-collector":     true,
 	}
 	for service := range cfg.Services {
 		mountsSocket := false
@@ -638,7 +639,7 @@ func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-producer"} {
+	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-producer", "youtube-collector"} {
 		env := composeEnvironment(t, cfg, service)
 		if env["POSTGRES_HOST"] != "holo-postgres" {
 			t.Fatalf("%s POSTGRES_HOST = %q, want holo-postgres", service, env["POSTGRES_HOST"])
@@ -655,7 +656,7 @@ func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
 func assertProdRenderedNonEgressSecretIsolation(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{"youtube-producer", "admin-dashboard"} {
+	for _, service := range []string{"youtube-producer", "youtube-collector", "admin-dashboard"} {
 		env := composeEnvironment(t, cfg, service)
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; ok {
@@ -697,10 +698,13 @@ func assertProdRenderedEgressRuntimeKeys(t *testing.T, cfg renderedCompose) {
 func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{"youtube-producer"} {
+	for _, service := range []string{"youtube-producer", "youtube-collector"} {
 		env := composeEnvironment(t, cfg, service)
 		if _, ok := env["API_SECRET_KEY"]; !ok {
 			t.Fatalf("%s missing scoped API_SECRET_KEY mapping", service)
+		}
+		if env["HOLOLIVE_HTTP_TRANSPORTS"] != "h3" {
+			t.Fatalf("%s HOLOLIVE_HTTP_TRANSPORTS = %q, want h3", service, env["HOLOLIVE_HTTP_TRANSPORTS"])
 		}
 	}
 
@@ -710,8 +714,14 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 			t.Fatalf("youtube-producer missing scoped %s mapping", key)
 		}
 	}
-	if producerEnv["HOLOLIVE_HTTP_TRANSPORTS"] != "h3" {
-		t.Fatalf("youtube-producer HOLOLIVE_HTTP_TRANSPORTS = %q, want h3", producerEnv["HOLOLIVE_HTTP_TRANSPORTS"])
+	collectorEnv := composeEnvironment(t, cfg, "youtube-collector")
+	for _, key := range []string{"HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
+		if _, ok := collectorEnv[key]; ok {
+			t.Fatalf("youtube-collector rendered with %s", key)
+		}
+	}
+	if collectorEnv["POSTGRES_USER"] != "hololive_scraper" {
+		t.Fatalf("youtube-collector POSTGRES_USER = %q, want hololive_scraper", collectorEnv["POSTGRES_USER"])
 	}
 }
 
@@ -725,7 +735,7 @@ func assertProdRenderedNoRuntimeConfigMount(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{"youtube-producer", "admin-dashboard"} {
+	for _, service := range []string{"youtube-producer", "youtube-collector", "admin-dashboard"} {
 		for _, target := range composeVolumeTargets(t, cfg, service) {
 			if target == "/app/runtime-config" {
 				t.Fatalf("%s still mounts runtime-config", service)
@@ -741,6 +751,7 @@ func assertProdRenderedPortAndCertScope(t *testing.T, cfg renderedCompose) {
 		"hololive-api":          true,
 		"hololive-alarm-worker": true,
 		"youtube-producer":      true,
+		"youtube-collector":     true,
 	}
 	for serviceName, service := range cfg.Services {
 		for _, port := range composePorts(t, serviceName, service) {
@@ -819,7 +830,7 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 			t.Fatalf("live overlay must not restore monolithic env_file for %s", service)
 		}
 	}
-	for _, service := range []string{"youtube-producer", "admin-dashboard"} {
+	for _, service := range []string{"youtube-producer", "youtube-collector", "admin-dashboard"} {
 		block := composeServiceBlock(t, overlay, service)
 		if strings.Contains(block, "env_file:") {
 			t.Fatalf("live overlay must keep nonEgress %s scoped without env_file", service)
@@ -875,7 +886,7 @@ func assertLiveCompatRenderedPostgres(t *testing.T, cfg renderedCompose) {
 		t.Fatalf("holo-postgres PGPORT = %q, want 5432", postgresEnv["PGPORT"])
 	}
 
-	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-producer"} {
+	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-producer", "youtube-collector"} {
 		env := composeEnvironment(t, cfg, service)
 		if env["POSTGRES_HOST"] != "holo-postgres" || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != "verify-full" {
 			t.Fatalf("%s POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
@@ -887,7 +898,11 @@ func assertLiveCompatRenderedPostgres(t *testing.T, cfg renderedCompose) {
 			t.Fatalf("%s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", service, env["POSTGRES_SSLROOTCERT"])
 		}
 		targets := strings.Join(composeVolumeTargets(t, cfg, service), "\n")
-		for _, target := range []string{"/app/data", "/app/logs", "/app/runtime-config", "/run/hololive-bot/certs", "/var/run/valkey"} {
+		required := []string{"/app/data", "/app/logs", "/run/hololive-bot/certs", "/var/run/valkey"}
+		if service != "youtube-collector" {
+			required = append(required, "/app/runtime-config")
+		}
+		for _, target := range required {
 			if !strings.Contains(targets, target) {
 				t.Fatalf("%s missing live-compat volume target %s in %q", service, target, targets)
 			}
@@ -919,7 +934,7 @@ func assertLiveCompatEgressSecrets(t *testing.T, cfg renderedCompose) {
 func assertLiveCompatNonEgressSecrets(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{"youtube-producer", "admin-dashboard"} {
+	for _, service := range []string{"youtube-producer", "youtube-collector", "admin-dashboard"} {
 		env := composeEnvironment(t, cfg, service)
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; ok {
@@ -1045,7 +1060,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 		{
 			name:     "base prod",
 			files:    []string{"deploy/compose/docker-compose.prod.yml"},
-			services: []string{"hololive-api", "hololive-alarm-worker", "youtube-producer"},
+			services: []string{"hololive-api", "hololive-alarm-worker", "youtube-producer", "youtube-collector"},
 		},
 		{
 			name: "live-compat",
@@ -1053,7 +1068,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 				"deploy/compose/docker-compose.prod.yml",
 				"deploy/compose/docker-compose.live-compat.yml",
 			},
-			services: []string{"hololive-api", "hololive-alarm-worker", "youtube-producer"},
+			services: []string{"hololive-api", "hololive-alarm-worker", "youtube-producer", "youtube-collector"},
 		},
 		{
 			name: "main-ap live-compat",

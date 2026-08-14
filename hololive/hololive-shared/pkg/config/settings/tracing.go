@@ -37,6 +37,7 @@ const (
 	tracingYouTubeProducerBEnabledEnv = "OTEL_YOUTUBE_PRODUCER_B_ENABLED"
 	tracingYouTubeProducerCEnabledEnv = "OTEL_YOUTUBE_PRODUCER_C_ENABLED"
 	tracingYouTubeProducerDEnabledEnv = "OTEL_YOUTUBE_PRODUCER_D_ENABLED"
+	tracingYouTubeCollectorEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_ENABLED"
 )
 
 type tracingRuntime uint8
@@ -45,6 +46,7 @@ const (
 	tracingRuntimeHololiveAPI tracingRuntime = iota + 1
 	tracingRuntimeAlarmWorker
 	tracingRuntimeYouTubeProducer
+	tracingRuntimeYouTubeCollector
 )
 
 type TracingConfig struct {
@@ -96,6 +98,8 @@ func tracingEnabledEnv(runtime tracingRuntime, producerInstanceID string) (strin
 		return tracingAlarmWorkerEnabledEnv, nil
 	case tracingRuntimeYouTubeProducer:
 		return tracingEnabledEnvForYouTubeProducer(producerInstanceID)
+	case tracingRuntimeYouTubeCollector:
+		return tracingYouTubeCollectorEnabledEnv, nil
 	default:
 		return "", fmt.Errorf("unsupported tracing runtime %d", runtime)
 	}

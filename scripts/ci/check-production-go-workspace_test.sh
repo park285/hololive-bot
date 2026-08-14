@@ -15,6 +15,8 @@ fixture_files=(
   hololive/hololive-alarm-worker/go.mod
   hololive/hololive-youtube-producer/Dockerfile
   hololive/hololive-youtube-producer/go.mod
+  hololive/hololive-youtube-collector/Dockerfile
+  hololive/hololive-youtube-collector/go.mod
   hololive/hololive-shared/go.mod
   hololive/hololive-dbtest/go.mod
   deploy/compose/docker-compose.prod.yml

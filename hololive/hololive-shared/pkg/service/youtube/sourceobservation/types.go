@@ -11,95 +11,197 @@ import (
 )
 
 const (
-	MaxClaimBatchSize = 100
-	MaxAttempts       = 8
-	maxParityBytes    = 16 << 10
-	maxErrorCodeBytes = 128
-	maxErrorTextBytes = 2048
+	MaxPublishBatchSize  = 100
+	MaxClaimBatchSize    = 100
+	MaxCheckpointCount   = 100
+	MaxAttempts          = 64
+	MaxReplayCount       = 16
+	MaxCollectionLatency = 24 * time.Hour
+	maxErrorCodeBytes    = 128
+	maxErrorTextBytes    = 2048
 )
 
 var (
-	ErrAuthorityMissing     = errors.New("source observation authority fence is missing")
-	ErrAuthorityInactive    = errors.New("source observation authority is inactive")
-	ErrStaleGeneration      = errors.New("source observation authority generation is stale")
+	ErrInvalidEnvelope      = errors.New("source observation envelope is invalid")
+	ErrStaleContract        = errors.New("source observation contract is stale")
+	ErrCollectionFenceLost  = errors.New("collection job fence was lost")
+	ErrProjectionStale      = errors.New("collection projection is stale")
+	ErrTargetDisabled       = errors.New("collection target is disabled")
 	ErrClaimLost            = errors.New("source observation claim was lost")
-	ErrObservationCollision = errors.New("source observation identity has conflicting payload")
+	ErrObservationCollision = errors.New("source observation identity has conflicting evidence")
+	ErrUnsupportedContract  = errors.New("source observation contract is unsupported")
 	ErrInvalidRepository    = errors.New("source observation repository is not configured")
 )
 
-type AuthorityFence struct {
-	SourceKind contract.SourceKind
-	Mode       contract.AuthorityMode
+type ContractVersion struct {
+	Provider   contract.Provider
+	Kind       contract.ObservationKind
+	Schema     int16
 	Generation int64
 }
 
+type SupportedContractSet interface {
+	Supports(ContractVersion) bool
+}
+
+type StaticSupportedContracts map[ContractVersion]struct{}
+
+func (s StaticSupportedContracts) Supports(version ContractVersion) bool {
+	_, ok := s[version]
+	return ok
+}
+
+func InitialSupportedContracts() StaticSupportedContracts {
+	result := make(StaticSupportedContracts)
+	for _, version := range []ContractVersion{
+		{contract.ProviderYouTubeJS, contract.KindCommunityPage, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindVideoList, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindShortsList, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindLiveSnapshot, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindViewerSample, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindChannelStats, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindChannelProfile, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindChannelPhoto, 1, 1},
+		{contract.ProviderHolodex, contract.KindLiveSnapshot, 1, 1},
+		{contract.ProviderHolodex, contract.KindViewerSample, 1, 1},
+		{contract.ProviderHolodex, contract.KindSchedule, 1, 1},
+		{contract.ProviderHolodex, contract.KindChannelStats, 1, 1},
+		{contract.ProviderHolodex, contract.KindChannelProfile, 1, 1},
+		{contract.ProviderHolodex, contract.KindChannelPhoto, 1, 1},
+		{contract.ProviderHololiveOfficial, contract.KindSchedule, 1, 1},
+	} {
+		result[version] = struct{}{}
+	}
+	return result
+}
+
+type CheckpointEntry struct {
+	Provider           contract.Provider
+	ObservationKind    contract.ObservationKind
+	SubjectKey         string
+	ScopeSHA256        string
+	ContractGeneration int64
+	LastObservationKey string
+	LastEvidenceSHA256 string
+	LastScheduledFor   time.Time
+	Continuity         contract.Continuity
+	Cursor             json.RawMessage
+}
+
+type CheckpointUpdate struct {
+	Entries           []CheckpointEntry
+	CollectionLatency time.Duration
+}
+
+type PublishBatchInput struct {
+	Lease        contract.LeaseProof
+	Checkpoint   CheckpointUpdate
+	Observations []contract.Envelope
+}
+
+type PublishOutcome string
+
+const (
+	PublishInserted  PublishOutcome = "INSERTED"
+	PublishDuplicate PublishOutcome = "DUPLICATE"
+	PublishCollision PublishOutcome = "COLLISION"
+)
+
+type PublishedObservation struct {
+	ObservationID int64
+	Outcome       PublishOutcome
+}
+
+type PublishBatchResult struct {
+	Results []PublishedObservation
+}
+
 type Observation struct {
-	ID             int64
-	SourceKind     contract.SourceKind
-	SourceKey      string
-	ObservationKey string
-	SchemaVersion  int16
-	Generation     int64
-	ObservedAt     time.Time
-	Completeness   contract.Completeness
-	Continuity     contract.Continuity
-	Payload        json.RawMessage
-	PayloadSHA256  string
-	AttemptCount   int
-	LeaseOwner     string
-	LeaseToken     string
-	LeaseExpiresAt time.Time
+	ID                   int64
+	Provider             contract.Provider
+	ObservationKind      contract.ObservationKind
+	SubjectKey           string
+	ObservationKey       string
+	SchemaVersion        int16
+	ContractGeneration   int64
+	ScheduledFor         time.Time
+	ObservedAt           time.Time
+	SourceEventAt        *time.Time
+	ReceivedAt           time.Time
+	ScopeSHA256          string
+	Completeness         contract.Completeness
+	Continuity           contract.Continuity
+	Payload              json.RawMessage
+	PayloadSHA256        string
+	EvidenceSHA256       string
+	CollectorInstance    string
+	JobKey               string
+	CollectionJobKind    string
+	FenceEpoch           int64
+	ProjectionGeneration int64
+	AttemptCount         int
+	LeaseOwner           string
+	LeaseToken           string
+	LeaseExpiresAt       time.Time
+	EffectiveAt          time.Time
+	SourceEventFallback  bool
+}
+
+func (o Observation) ContractVersion() ContractVersion {
+	return ContractVersion{Provider: o.Provider, Kind: o.ObservationKind, Schema: o.SchemaVersion, Generation: o.ContractGeneration}
 }
 
 func (o Observation) Envelope() contract.Envelope {
 	return contract.Envelope{
-		SourceKind:      o.SourceKind,
-		SourceKey:       o.SourceKey,
-		ObservationKey: o.ObservationKey,
-		SchemaVersion:  o.SchemaVersion,
-		Generation:     o.Generation,
-		ObservedAt:     o.ObservedAt,
-		Completeness:   o.Completeness,
-		Continuity:     o.Continuity,
-		Payload:        o.Payload,
-		PayloadSHA256:  o.PayloadSHA256,
+		Provider: o.Provider, ObservationKind: o.ObservationKind, SubjectKey: o.SubjectKey,
+		ObservationKey: o.ObservationKey, SchemaVersion: o.SchemaVersion,
+		ContractGeneration: o.ContractGeneration, ScheduledFor: o.ScheduledFor,
+		ObservedAt: o.ObservedAt, SourceEventAt: o.SourceEventAt, ScopeSHA256: o.ScopeSHA256,
+		Completeness: o.Completeness, Continuity: o.Continuity, Payload: o.Payload,
+		PayloadSHA256: o.PayloadSHA256, EvidenceSHA256: o.EvidenceSHA256,
+		CollectorInstance: o.CollectorInstance,
+		Lease: contract.LeaseProof{
+			JobKey: o.JobKey, CollectionJobKind: o.CollectionJobKind,
+			OwnerInstance: o.CollectorInstance, FenceEpoch: o.FenceEpoch,
+			ProjectionGeneration: o.ProjectionGeneration, ScheduledFor: o.ScheduledFor,
+		},
 	}
 }
 
-type PublishResult struct {
-	Changed       bool
-	Inserted      bool
-	ObservationID int64
-	Fence         AuthorityFence
-}
-
 type ClaimOptions struct {
-	SourceKind    contract.SourceKind
 	ConsumerName  string
 	LeaseOwner    string
+	Kinds         []contract.ObservationKind
 	Limit         int
 	LeaseDuration time.Duration
 }
 
 type ClaimedBatch struct {
-	Fence        AuthorityFence
 	ConsumerName string
 	Observations []Observation
 }
 
-type Completion struct {
-	ConsumerName       string
-	ObservationID      int64
-	SourceKind         contract.SourceKind
-	LeaseToken         string
-	ExpectedGeneration int64
-	ParityStatus       contract.ParityStatus
-	ParityDetail       json.RawMessage
+type Claim struct {
+	ConsumerName  string
+	ObservationID int64
+	LeaseToken    string
+}
+
+type Application struct {
+	EntityKind string
+	EntityKey  string
+	Decision   string
+}
+
+type ReconcileResult struct {
+	Applications        []Application
+	Unsupported         bool
+	EffectiveAt         time.Time
+	SourceEventFallback bool
 }
 
 type RetryInput struct {
 	ObservationID int64
-	SourceKind    contract.SourceKind
 	LeaseToken    string
 	Delay         time.Duration
 	ErrorCode     string
@@ -108,98 +210,54 @@ type RetryInput struct {
 
 type DeadLetterInput struct {
 	ObservationID int64
-	SourceKind    contract.SourceKind
 	LeaseToken    string
 	ErrorCode     string
 	ErrorDetail   string
 }
 
+type ReplayInput struct {
+	ObservationID int64
+	RequestedBy   string
+	Reason        string
+}
+
+type ReplayResult struct {
+	RequestID     int64
+	Applied       bool
+	RejectionCode string
+}
+
+type RetentionQuery struct {
+	Kind   contract.ObservationKind
+	Before time.Time
+	Limit  int
+}
+
 func (o ClaimOptions) validate() error {
-	if err := validateSourceKind(o.SourceKind); err != nil {
+	if err := validateText("consumer name", o.ConsumerName, 128); err != nil {
 		return fmt.Errorf("validate source observation claim: %w", err)
 	}
-	if err := validateText("consumer name", o.ConsumerName, 128); err != nil {
-		return err
-	}
 	if err := validateText("lease owner", o.LeaseOwner, 128); err != nil {
-		return err
+		return fmt.Errorf("validate source observation claim: %w", err)
 	}
-	if o.Limit <= 0 || o.Limit > MaxClaimBatchSize {
+	if len(o.Kinds) == 0 || len(o.Kinds) > 9 {
+		return fmt.Errorf("validate source observation claim: kind count must be between 1 and 9")
+	}
+	seen := make(map[contract.ObservationKind]struct{}, len(o.Kinds))
+	for _, kind := range o.Kinds {
+		if !kind.Valid() {
+			return fmt.Errorf("validate source observation claim: invalid kind %q", kind)
+		}
+		if _, ok := seen[kind]; ok {
+			return fmt.Errorf("validate source observation claim: duplicate kind %q", kind)
+		}
+		seen[kind] = struct{}{}
+	}
+	if o.Limit < 1 || o.Limit > MaxClaimBatchSize {
 		return fmt.Errorf("validate source observation claim: limit must be between 1 and %d", MaxClaimBatchSize)
 	}
 	if o.LeaseDuration < time.Second || o.LeaseDuration > 10*time.Minute {
 		return fmt.Errorf("validate source observation claim: lease duration must be between 1 second and 10 minutes")
-	}
-	return nil
-}
-
-func (c Completion) validate() error {
-	if err := validateText("consumer name", c.ConsumerName, 128); err != nil {
-		return err
-	}
-	if c.ObservationID <= 0 {
-		return fmt.Errorf("validate source observation completion: observation id must be positive")
-	}
-	if err := validateSourceKind(c.SourceKind); err != nil {
-		return fmt.Errorf("validate source observation completion: %w", err)
-	}
-	if !lowercaseHexToken(c.LeaseToken) {
-		return fmt.Errorf("validate source observation completion: lease token must be 64 lowercase hexadecimal characters")
-	}
-	if c.ExpectedGeneration <= 0 {
-		return fmt.Errorf("validate source observation completion: expected generation must be positive")
-	}
-	if !c.ParityStatus.Valid() {
-		return fmt.Errorf("validate source observation completion: invalid parity status %q", c.ParityStatus)
-	}
-	if err := validateParityDetail(c.ParityDetail); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r RetryInput) validate() error {
-	if r.ObservationID <= 0 {
-		return fmt.Errorf("validate source observation retry: observation id must be positive")
-	}
-	if err := validateSourceKind(r.SourceKind); err != nil {
-		return fmt.Errorf("validate source observation retry: %w", err)
-	}
-	if !lowercaseHexToken(r.LeaseToken) {
-		return fmt.Errorf("validate source observation retry: lease token must be 64 lowercase hexadecimal characters")
-	}
-	if r.Delay < 0 || r.Delay > 24*time.Hour {
-		return fmt.Errorf("validate source observation retry: delay must be between zero and 24 hours")
-	}
-	return validateErrorFields("retry", r.ErrorCode, r.ErrorDetail)
-}
-
-func (d DeadLetterInput) validate() error {
-	if d.ObservationID <= 0 {
-		return fmt.Errorf("validate source observation dead letter: observation id must be positive")
-	}
-	if err := validateSourceKind(d.SourceKind); err != nil {
-		return fmt.Errorf("validate source observation dead letter: %w", err)
-	}
-	if !lowercaseHexToken(d.LeaseToken) {
-		return fmt.Errorf("validate source observation dead letter: lease token must be 64 lowercase hexadecimal characters")
-	}
-	return validateErrorFields("dead letter", d.ErrorCode, d.ErrorDetail)
-}
-
-func validateParityDetail(detail json.RawMessage) error {
-	if len(detail) == 0 {
-		return nil
-	}
-	if len(detail) > maxParityBytes {
-		return fmt.Errorf("validate source observation completion: parity detail exceeds %d bytes", maxParityBytes)
-	}
-	var object map[string]any
-	if err := json.Unmarshal(detail, &object); err != nil {
-		return fmt.Errorf("validate source observation completion: parity detail must be a JSON object: %w", err)
-	}
-	if object == nil {
-		return fmt.Errorf("validate source observation completion: parity detail must be a JSON object")
 	}
 	return nil
 }

@@ -115,7 +115,7 @@ func TestBuildYouTubeProducerYouTubeComponents_AllowsBudgetSafeDefaultPollConfig
 
 	require.NoError(t, err)
 	require.NotNil(t, scheduler)
-	require.Len(t, registrations, 5)
+	require.Len(t, registrations, 4)
 }
 
 func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWithinRaisedRPMBudget(t *testing.T) {

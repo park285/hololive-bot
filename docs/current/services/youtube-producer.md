@@ -24,9 +24,10 @@ as repo-side contract definitions and compose-path validation inputs.
 ## Owns
 
 - YouTube polling/scraping scheduler when `YOUTUBE_INGESTION_ENABLED=true`
+- Community observation consume/canonical persist (`CommunityObservationConsumer`); Community YouTube fetch/Publish is owned by `youtube-collector`
 - Holodex photo sync on AP-C (`PHOTO_SYNC_ENABLED=true`), guarded by a global Valkey singleton lease with TTL failover. AP-B (`PHOTO_SYNC_ENABLED=false`) is a scraping/polling failover peer only and does not participate in PhotoSync.
-- Community/shorts/live/stats polling configuration
-- Poll target separation: videos/shorts/community use notification subscriptions, while channel stats and Holodex-backed LIVE/UPCOMING discovery use the enabled operational roster. The live batch scheduler keeps one global job and chunks the roster at execution time.
+- Shorts/live/stats polling; Community fetch is owned by `youtube-collector`; producer community path is `CommunityObservationConsumer` persist only
+- Poll target separation: videos/shorts use notification subscriptions; Community collection uses the same notification roster on `youtube-collector`. Channel stats and Holodex-backed LIVE/UPCOMING discovery use the enabled operational roster. The live batch scheduler keeps one global job and chunks the roster at execution time.
 - `youtube_notification_outbox` production paths for YouTube-derived events
 - Time-series retention cleanup for `youtube_channel_stats_snapshots`, `youtube_live_sessions`, and `youtube_live_viewer_samples` (bounded batch deletes, advisory-locked single-runner, default off)
 
@@ -58,6 +59,7 @@ Batch size and interval default to `1000` rows/batch and `1h`.
 |---|---|---|
 | PostgreSQL | YouTube channel/outbox/tracking state over `verify-full` TLS with `/run/hololive-bot/certs/postgres-ca.pem` | scraping and handoff pipeline fail |
 | Valkey | cache/config/coordination | stale targets or degraded queue behavior |
+| Holodex | LIVE/UPCOMING discovery via shared `GetChannelsLiveStatus`; official-schedule `GET /api/list/2` is Holodex secondary only | producer live discovery fails closed |
 
 ## Must not own
 
@@ -75,6 +77,7 @@ Batch size and interval default to `1000` rows/batch and `1h`.
 - `YOUTUBE_PRODUCER_LEASE_NAMESPACE` shared by all APs in the same environment (`production`)
 - `PHOTO_SYNC_ENABLED=true` on `youtube-producer-c`, `PHOTO_SYNC_ENABLED=false` on `youtube-producer-b`
 - `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`
+- `HOLODEX_API_KEY` (live discovery fail-closed; official-schedule API is not live truth)
 - scraper interval env values
 
 Host-native tiny VPS APs keep the same application contract but receive env
@@ -95,7 +98,7 @@ scraper-only by default with `PHOTO_SYNC_ENABLED=false`,
 - Health: remote AP local H3 port (`30005`/`30015`/`30035`), AP-C `https://127.0.0.1:30025/health`
 - Ready: remote AP local H3 port (`30005`/`30015`/`30035`), AP-C `https://127.0.0.1:30025/ready`, all with `mode=active-active`
 - Metrics: `youtube_poller_job_claim_total`, `youtube_poller_job_lease_renew_total`, `youtube_poller_job_mark_completed_total`, `youtube_poller_job_release_total`, `youtube_poller_outbox_insert_total`
-- Target metrics: `hololive_youtube_poll_target_refresh_accepted_target_count{target_type="notification|operational"}`. `youtube_producer_live_discovery_subscription_fallback` means the Holodex provider is absent and full-roster LIVE discovery is not active.
+- Target metrics: `hololive_youtube_poll_target_refresh_accepted_target_count{target_type="notification|operational"}`. Producer live discovery requires Holodex; startup fails closed if the shared Holodex live-status provider is absent.
 
 ## Related documents
 

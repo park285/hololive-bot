@@ -451,6 +451,219 @@ TABLE notification_templates
   INDEX CREATE UNIQUE INDEX ux_notification_templates_channel ON public.notification_templates USING btree (template_key, channel_id) WHERE (channel_id IS NOT NULL)
   INDEX CREATE UNIQUE INDEX ux_notification_templates_default ON public.notification_templates USING btree (template_key) WHERE (channel_id IS NULL)
 
+TABLE observation_contract_generations
+  COLUMN provider text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN current_schema_version smallint NOT NULL
+  COLUMN current_generation bigint NOT NULL
+  COLUMN updated_by text NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_observation_contract_provider_vocab CHECK ((provider = ANY (ARRAY['holodex'::text, 'youtubejs'::text, 'hololive_official'::text])))
+  CONSTRAINT chk_observation_contract_updated_by CHECK (((length(updated_by) >= 1) AND (length(updated_by) <= 128)))
+  CONSTRAINT observation_contract_generations_current_generation_check CHECK ((current_generation > 0))
+  CONSTRAINT observation_contract_generations_current_schema_version_check CHECK ((current_schema_version > 0))
+  CONSTRAINT observation_contract_generations_pkey PRIMARY KEY (provider, observation_kind)
+
+TABLE source_collection_checkpoints
+  COLUMN provider text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN scope_sha256 text NOT NULL
+  COLUMN contract_generation bigint NOT NULL
+  COLUMN last_observation_key text NOT NULL
+  COLUMN last_evidence_sha256 text NOT NULL
+  COLUMN last_scheduled_for timestamp with time zone NOT NULL
+  COLUMN last_success_at timestamp with time zone NOT NULL
+  COLUMN collection_latency_ms bigint NOT NULL
+  COLUMN continuity text NOT NULL
+  COLUMN cursor jsonb
+  COLUMN last_error_code text
+  COLUMN last_error_at timestamp with time zone
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_source_checkpoint_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(last_observation_key) >= 1) AND (length(last_observation_key) <= 512)) AND ((last_error_code IS NULL) OR ((length(last_error_code) >= 1) AND (length(last_error_code) <= 128)))))
+  CONSTRAINT chk_source_checkpoint_continuity_vocab CHECK ((continuity = ANY (ARRAY['CONTIGUOUS'::text, 'GAP_UNRESOLVED'::text, 'NOT_APPLICABLE'::text])))
+  CONSTRAINT chk_source_checkpoint_cursor CHECK (((cursor IS NULL) OR ((jsonb_typeof(cursor) = 'object'::text) AND (octet_length((cursor)::text) <= 16384))))
+  CONSTRAINT chk_source_checkpoint_error_shape CHECK (((last_error_code IS NULL) = (last_error_at IS NULL)))
+  CONSTRAINT chk_source_checkpoint_hashes CHECK (((scope_sha256 ~ '^[0-9a-f]{64}$'::text) AND (last_evidence_sha256 ~ '^[0-9a-f]{64}$'::text)))
+  CONSTRAINT source_collection_checkpoints_collection_latency_ms_check CHECK ((collection_latency_ms >= 0))
+  CONSTRAINT source_collection_checkpoints_contract_generation_check CHECK ((contract_generation > 0))
+  CONSTRAINT fk_source_checkpoint_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
+  CONSTRAINT source_collection_checkpoints_pkey PRIMARY KEY (provider, observation_kind, subject_key, scope_sha256)
+
+TABLE source_observation_applications
+  COLUMN id bigint NOT NULL DEFAULT nextval('source_observation_applications_id_seq'::regclass)
+  COLUMN observation_id bigint
+  COLUMN provider text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN entity_kind text NOT NULL
+  COLUMN entity_key text NOT NULL
+  COLUMN decision text NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN applied_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_source_observation_application_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(entity_kind) >= 1) AND (length(entity_kind) <= 64)) AND ((length(entity_key) >= 1) AND (length(entity_key) <= 256)) AND ((length(decision) >= 1) AND (length(decision) <= 128))))
+  CONSTRAINT chk_source_observation_application_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT fk_source_observation_application_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
+  CONSTRAINT source_observation_applications_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT source_observation_applications_pkey PRIMARY KEY (id)
+  CONSTRAINT uq_source_observation_application UNIQUE (observation_id, entity_kind, entity_key)
+
+TABLE source_observation_collisions
+  COLUMN id bigint NOT NULL DEFAULT nextval('source_observation_collisions_id_seq'::regclass)
+  COLUMN existing_observation_id bigint
+  COLUMN provider text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN observation_key text NOT NULL
+  COLUMN schema_version smallint NOT NULL
+  COLUMN contract_generation bigint NOT NULL
+  COLUMN existing_evidence_sha256 text NOT NULL
+  COLUMN attempted_evidence_sha256 text NOT NULL
+  COLUMN attempted_payload_sha256 text NOT NULL
+  COLUMN collector_instance text NOT NULL
+  COLUMN job_key text NOT NULL
+  COLUMN fence_epoch bigint NOT NULL
+  COLUMN occurred_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_source_observation_collision_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(collector_instance) >= 1) AND (length(collector_instance) <= 128)) AND ((length(job_key) >= 1) AND (length(job_key) <= 512))))
+  CONSTRAINT chk_source_observation_collision_hashes CHECK (((existing_evidence_sha256 ~ '^[0-9a-f]{64}$'::text) AND (attempted_evidence_sha256 ~ '^[0-9a-f]{64}$'::text) AND (attempted_payload_sha256 ~ '^[0-9a-f]{64}$'::text)))
+  CONSTRAINT source_observation_collisions_contract_generation_check CHECK ((contract_generation > 0))
+  CONSTRAINT source_observation_collisions_fence_epoch_check CHECK ((fence_epoch > 0))
+  CONSTRAINT source_observation_collisions_schema_version_check CHECK ((schema_version > 0))
+  CONSTRAINT fk_source_observation_collision_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
+  CONSTRAINT source_observation_collisions_existing_observation_id_fkey FOREIGN KEY (existing_observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT source_observation_collisions_pkey PRIMARY KEY (id)
+  INDEX CREATE INDEX idx_source_observation_collisions_occurred ON public.source_observation_collisions USING btree (occurred_at, id)
+
+TABLE source_observation_consumer_offsets
+  COLUMN consumer_name text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN last_processed_id bigint NOT NULL DEFAULT 0
+  COLUMN last_effective_at timestamp with time zone
+  COLUMN last_processed_at timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_source_observation_consumer_offset_bounds CHECK (((length(consumer_name) >= 1) AND (length(consumer_name) <= 128)))
+  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT source_observation_consumer_offsets_last_processed_id_check CHECK ((last_processed_id >= 0))
+  CONSTRAINT source_observation_consumer_offsets_pkey PRIMARY KEY (consumer_name, observation_kind)
+
+TABLE source_observation_queue
+  COLUMN observation_id bigint NOT NULL
+  COLUMN status text NOT NULL DEFAULT 'PENDING'::text
+  COLUMN attempt_count smallint NOT NULL DEFAULT 0
+  COLUMN replay_count smallint NOT NULL DEFAULT 0
+  COLUMN available_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN lease_owner text
+  COLUMN lease_token text
+  COLUMN lease_expires_at timestamp with time zone
+  COLUMN processed_at timestamp with time zone
+  COLUMN dead_lettered_at timestamp with time zone
+  COLUMN last_error_code text
+  COLUMN last_error_detail text
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_source_observation_queue_bounds CHECK ((((lease_owner IS NULL) OR ((length(lease_owner) >= 1) AND (length(lease_owner) <= 128))) AND ((lease_token IS NULL) OR (lease_token ~ '^[0-9a-f]{64}$'::text)) AND ((last_error_code IS NULL) OR ((length(last_error_code) >= 1) AND (length(last_error_code) <= 128))) AND ((last_error_detail IS NULL) OR (length(last_error_detail) <= 2048))))
+  CONSTRAINT chk_source_observation_queue_lease_shape CHECK ((((status = 'PROCESSING'::text) AND (lease_owner IS NOT NULL) AND (lease_token IS NOT NULL) AND (lease_expires_at IS NOT NULL)) OR ((status <> 'PROCESSING'::text) AND (lease_owner IS NULL) AND (lease_token IS NULL) AND (lease_expires_at IS NULL))))
+  CONSTRAINT chk_source_observation_queue_status_vocab CHECK ((status = ANY (ARRAY['PENDING'::text, 'PROCESSING'::text, 'PROCESSED'::text, 'DEAD_LETTER'::text])))
+  CONSTRAINT chk_source_observation_queue_terminal_shape CHECK ((((status = 'PROCESSED'::text) = (processed_at IS NOT NULL)) AND ((status = 'DEAD_LETTER'::text) = (dead_lettered_at IS NOT NULL))))
+  CONSTRAINT source_observation_queue_attempt_count_check CHECK (((attempt_count >= 0) AND (attempt_count <= 64)))
+  CONSTRAINT source_observation_queue_replay_count_check CHECK (((replay_count >= 0) AND (replay_count <= 16)))
+  CONSTRAINT source_observation_queue_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE CASCADE
+  CONSTRAINT source_observation_queue_pkey PRIMARY KEY (observation_id)
+  INDEX CREATE INDEX idx_source_observation_queue_claim ON public.source_observation_queue USING btree (available_at, observation_id) WHERE (status = 'PENDING'::text)
+  INDEX CREATE INDEX idx_source_observation_queue_lease_recovery ON public.source_observation_queue USING btree (lease_expires_at, observation_id) WHERE (status = 'PROCESSING'::text)
+  INDEX CREATE INDEX idx_source_observation_queue_terminal_retention ON public.source_observation_queue USING btree (status, updated_at, observation_id) WHERE (status = ANY (ARRAY['PROCESSED'::text, 'DEAD_LETTER'::text]))
+
+TABLE source_observation_replay_requests
+  COLUMN id bigint NOT NULL DEFAULT nextval('source_observation_replay_requests_id_seq'::regclass)
+  COLUMN observation_id bigint
+  COLUMN provider text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN observation_key text NOT NULL
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN requested_by text NOT NULL
+  COLUMN reason text NOT NULL
+  COLUMN previous_attempt_count smallint NOT NULL
+  COLUMN status text NOT NULL DEFAULT 'PENDING'::text
+  COLUMN requested_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN applied_at timestamp with time zone
+  COLUMN rejection_code text
+  CONSTRAINT chk_source_observation_replay_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(requested_by) >= 1) AND (length(requested_by) <= 128)) AND ((length(reason) >= 1) AND (length(reason) <= 1024)) AND ((rejection_code IS NULL) OR ((length(rejection_code) >= 1) AND (length(rejection_code) <= 128)))))
+  CONSTRAINT chk_source_observation_replay_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_source_observation_replay_terminal_shape CHECK ((((status = 'APPLIED'::text) AND (applied_at IS NOT NULL) AND (rejection_code IS NULL)) OR ((status = 'REJECTED'::text) AND (applied_at IS NULL) AND (rejection_code IS NOT NULL)) OR ((status = 'PENDING'::text) AND (applied_at IS NULL) AND (rejection_code IS NULL))))
+  CONSTRAINT source_observation_replay_requests_previous_attempt_count_check CHECK (((previous_attempt_count >= 0) AND (previous_attempt_count <= 64)))
+  CONSTRAINT source_observation_replay_requests_status_check CHECK ((status = ANY (ARRAY['PENDING'::text, 'APPLIED'::text, 'REJECTED'::text])))
+  CONSTRAINT fk_source_observation_replay_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
+  CONSTRAINT source_observation_replay_requests_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT source_observation_replay_requests_pkey PRIMARY KEY (id)
+  INDEX CREATE INDEX idx_source_observation_replay_pending ON public.source_observation_replay_requests USING btree (requested_at, id) WHERE (status = 'PENDING'::text)
+
+TABLE source_observations
+  COLUMN id bigint NOT NULL DEFAULT nextval('source_observations_id_seq'::regclass)
+  COLUMN provider text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN observation_key text NOT NULL
+  COLUMN schema_version smallint NOT NULL
+  COLUMN contract_generation bigint NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN source_event_at timestamp with time zone
+  COLUMN received_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN scope_sha256 text NOT NULL
+  COLUMN completeness text NOT NULL
+  COLUMN continuity text NOT NULL
+  COLUMN payload jsonb NOT NULL
+  COLUMN payload_sha256 text NOT NULL
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN collector_instance text NOT NULL
+  COLUMN job_key text NOT NULL
+  COLUMN collection_job_kind text NOT NULL
+  COLUMN fence_epoch bigint NOT NULL
+  COLUMN projection_generation bigint NOT NULL
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_source_observation_completeness_vocab CHECK ((completeness = ANY (ARRAY['COMPLETE'::text, 'PARTIAL'::text, 'UNKNOWN'::text])))
+  CONSTRAINT chk_source_observation_continuity_vocab CHECK ((continuity = ANY (ARRAY['CONTIGUOUS'::text, 'GAP_UNRESOLVED'::text, 'NOT_APPLICABLE'::text])))
+  CONSTRAINT chk_source_observation_hashes CHECK (((scope_sha256 ~ '^[0-9a-f]{64}$'::text) AND (payload_sha256 ~ '^[0-9a-f]{64}$'::text) AND (evidence_sha256 ~ '^[0-9a-f]{64}$'::text)))
+  CONSTRAINT chk_source_observation_payload CHECK (((jsonb_typeof(payload) = 'object'::text) AND (octet_length((payload)::text) <= 1048576)))
+  CONSTRAINT chk_source_observation_text_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(collector_instance) >= 1) AND (length(collector_instance) <= 128)) AND ((length(job_key) >= 1) AND (length(job_key) <= 512)) AND ((length(collection_job_kind) >= 1) AND (length(collection_job_kind) <= 128))))
+  CONSTRAINT source_observations_contract_generation_check CHECK ((contract_generation > 0))
+  CONSTRAINT source_observations_fence_epoch_check CHECK ((fence_epoch > 0))
+  CONSTRAINT source_observations_projection_generation_check CHECK ((projection_generation > 0))
+  CONSTRAINT source_observations_schema_version_check CHECK ((schema_version > 0))
+  CONSTRAINT fk_source_observation_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
+  CONSTRAINT source_observations_pkey PRIMARY KEY (id)
+  CONSTRAINT uq_source_observation_identity UNIQUE (provider, observation_kind, subject_key, observation_key, schema_version, contract_generation)
+  INDEX CREATE INDEX idx_source_observations_kind_id ON public.source_observations USING btree (observation_kind, id)
+  INDEX CREATE INDEX idx_source_observations_received ON public.source_observations USING btree (received_at, id)
+  INDEX CREATE INDEX idx_source_observations_subject_time ON public.source_observations USING btree (observation_kind, subject_key, scheduled_for DESC, id DESC)
+
+TABLE source_reconciliation_conflicts
+  COLUMN id bigint NOT NULL DEFAULT nextval('source_reconciliation_conflicts_id_seq'::regclass)
+  COLUMN observation_id bigint
+  COLUMN provider text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN observation_key text NOT NULL
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN entity_kind text NOT NULL
+  COLUMN entity_key text NOT NULL
+  COLUMN field_name text NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN existing_value_sha256 text NOT NULL
+  COLUMN attempted_value_sha256 text NOT NULL
+  COLUMN decision text NOT NULL
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_source_reconciliation_conflict_bounds CHECK ((((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((length(observation_key) >= 1) AND (length(observation_key) <= 512)) AND ((length(entity_kind) >= 1) AND (length(entity_kind) <= 64)) AND ((length(entity_key) >= 1) AND (length(entity_key) <= 256)) AND ((length(field_name) >= 1) AND (length(field_name) <= 128))))
+  CONSTRAINT chk_source_reconciliation_conflict_hashes CHECK (((evidence_sha256 ~ '^[0-9a-f]{64}$'::text) AND (existing_value_sha256 ~ '^[0-9a-f]{64}$'::text) AND (attempted_value_sha256 ~ '^[0-9a-f]{64}$'::text)))
+  CONSTRAINT source_reconciliation_conflicts_decision_check CHECK ((decision = ANY (ARRAY['KEEP_EXISTING'::text, 'UNRESOLVED'::text])))
+  CONSTRAINT fk_source_reconciliation_conflict_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
+  CONSTRAINT source_reconciliation_conflicts_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT source_reconciliation_conflicts_pkey PRIMARY KEY (id)
+  CONSTRAINT uq_source_reconciliation_conflict UNIQUE (observation_id, entity_kind, entity_key, field_name)
+
 TABLE youtube_channel_latest_stats
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN member_name text
@@ -480,6 +693,76 @@ TABLE youtube_channel_stats_snapshots
   COLUMN handle character varying(100)
   CONSTRAINT youtube_channel_stats_snapshots_pkey PRIMARY KEY (channel_id, captured_at)
   INDEX CREATE INDEX idx_ycss_captured_at_brin ON public.youtube_channel_stats_snapshots USING brin (captured_at)
+
+TABLE youtube_collection_job_leases
+  COLUMN job_key text NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN job_class text NOT NULL
+  COLUMN collection_job_kind text NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN projection_generation bigint NOT NULL
+  COLUMN poll_interval_ms bigint NOT NULL
+  COLUMN slot_state text NOT NULL DEFAULT 'IDLE'::text
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN next_due_at timestamp with time zone NOT NULL
+  COLUMN retry_not_before timestamp with time zone
+  COLUMN fence_epoch bigint NOT NULL DEFAULT 0
+  COLUMN owner_instance text
+  COLUMN lease_expires_at timestamp with time zone
+  COLUMN last_completed_at timestamp with time zone
+  COLUMN last_error_code text
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_collection_job_identity CHECK ((((length(job_key) >= 1) AND (length(job_key) <= 512)) AND ((length(collection_job_kind) >= 1) AND (length(collection_job_kind) <= 128)) AND ((length(subject_key) >= 1) AND (length(subject_key) <= 256)) AND ((owner_instance IS NULL) OR ((length(owner_instance) >= 1) AND (length(owner_instance) <= 128))) AND ((last_error_code IS NULL) OR ((length(last_error_code) >= 1) AND (length(last_error_code) <= 128)))))
+  CONSTRAINT chk_youtube_collection_job_provider_vocab CHECK ((provider = ANY (ARRAY['holodex'::text, 'youtubejs'::text, 'hololive_official'::text])))
+  CONSTRAINT chk_youtube_collection_job_slot_shape CHECK ((((slot_state = 'IDLE'::text) AND (owner_instance IS NULL) AND (lease_expires_at IS NULL) AND (retry_not_before IS NULL)) OR ((slot_state = 'ACTIVE'::text) AND (owner_instance IS NOT NULL) AND (lease_expires_at IS NOT NULL) AND (retry_not_before IS NULL)) OR ((slot_state = 'DEFERRED'::text) AND (owner_instance IS NULL) AND (lease_expires_at IS NULL) AND (retry_not_before IS NOT NULL))))
+  CONSTRAINT youtube_collection_job_leases_fence_epoch_check CHECK ((fence_epoch >= 0))
+  CONSTRAINT youtube_collection_job_leases_job_class_check CHECK ((job_class = ANY (ARRAY['GLOBAL'::text, 'SUBJECT'::text])))
+  CONSTRAINT youtube_collection_job_leases_poll_interval_ms_check CHECK (((poll_interval_ms >= 1000) AND (poll_interval_ms <= 86400000)))
+  CONSTRAINT youtube_collection_job_leases_slot_state_check CHECK ((slot_state = ANY (ARRAY['IDLE'::text, 'ACTIVE'::text, 'DEFERRED'::text])))
+  CONSTRAINT youtube_collection_job_leases_projection_generation_fkey FOREIGN KEY (projection_generation) REFERENCES youtube_collection_projection_generations(generation) ON DELETE RESTRICT
+  CONSTRAINT youtube_collection_job_leases_pkey PRIMARY KEY (job_key)
+  INDEX CREATE INDEX idx_youtube_collection_job_due ON public.youtube_collection_job_leases USING btree (slot_state, next_due_at, retry_not_before, lease_expires_at, job_key)
+
+TABLE youtube_collection_projection_generations
+  COLUMN generation bigint NOT NULL GENERATED ALWAYS AS IDENTITY
+  COLUMN status text NOT NULL
+  COLUMN row_count integer NOT NULL
+  COLUMN projection_sha256 text NOT NULL
+  COLUMN valid_until timestamp with time zone NOT NULL
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN activated_at timestamp with time zone
+  CONSTRAINT chk_youtube_collection_projection_activation_shape CHECK ((((status = 'STAGING'::text) AND (activated_at IS NULL)) OR ((status = ANY (ARRAY['CURRENT'::text, 'RETIRED'::text])) AND (activated_at IS NOT NULL))))
+  CONSTRAINT youtube_collection_projection_generatio_projection_sha256_check CHECK ((projection_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT youtube_collection_projection_generations_row_count_check CHECK ((row_count >= 0))
+  CONSTRAINT youtube_collection_projection_generations_status_check CHECK ((status = ANY (ARRAY['STAGING'::text, 'CURRENT'::text, 'RETIRED'::text])))
+  CONSTRAINT youtube_collection_projection_generations_pkey PRIMARY KEY (generation)
+  INDEX CREATE UNIQUE INDEX uq_youtube_collection_projection_one_current ON public.youtube_collection_projection_generations USING btree (status) WHERE (status = 'CURRENT'::text)
+
+TABLE youtube_collection_target_reasons
+  COLUMN projection_generation bigint NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN reason_kind text NOT NULL
+  COLUMN reason_key text NOT NULL
+  CONSTRAINT chk_youtube_collection_target_reason_bounds CHECK ((((length(reason_kind) >= 1) AND (length(reason_kind) <= 128)) AND ((length(reason_key) >= 1) AND (length(reason_key) <= 512))))
+  CONSTRAINT youtube_collection_target_rea_projection_generation_subjec_fkey FOREIGN KEY (projection_generation, subject_key, observation_kind) REFERENCES youtube_collection_targets(projection_generation, subject_key, observation_kind) ON DELETE CASCADE
+  CONSTRAINT youtube_collection_target_reasons_pkey PRIMARY KEY (projection_generation, subject_key, observation_kind, reason_kind, reason_key)
+
+TABLE youtube_collection_targets
+  COLUMN projection_generation bigint NOT NULL
+  COLUMN subject_key text NOT NULL
+  COLUMN observation_kind text NOT NULL
+  COLUMN priority smallint NOT NULL
+  COLUMN poll_interval_ms bigint NOT NULL
+  COLUMN enabled boolean NOT NULL
+  COLUMN valid_until timestamp with time zone NOT NULL
+  COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_youtube_collection_target_subject CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256)))
+  CONSTRAINT youtube_collection_targets_poll_interval_ms_check CHECK (((poll_interval_ms >= 1000) AND (poll_interval_ms <= 86400000)))
+  CONSTRAINT youtube_collection_targets_priority_check CHECK (((priority >= 0) AND (priority <= 100)))
+  CONSTRAINT youtube_collection_targets_projection_generation_fkey FOREIGN KEY (projection_generation) REFERENCES youtube_collection_projection_generations(generation) ON DELETE CASCADE
+  CONSTRAINT youtube_collection_targets_pkey PRIMARY KEY (projection_generation, subject_key, observation_kind)
 
 TABLE youtube_community_posts
   COLUMN post_id character varying(50) NOT NULL
@@ -564,6 +847,33 @@ TABLE youtube_content_watermarks
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_youtube_content_watermarks_watermark_type_vocab CHECK (((watermark_type)::text = ANY ((ARRAY['VIDEO'::character varying, 'SHORT'::character varying, 'COMMUNITY_POST'::character varying])::text[])))
   CONSTRAINT youtube_content_watermarks_pkey PRIMARY KEY (channel_id, watermark_type)
+
+TABLE youtube_live_reconciliation_heads
+  COLUMN video_id text NOT NULL
+  COLUMN status text NOT NULL
+  COLUMN last_upcoming_positive_at timestamp with time zone
+  COLUMN last_upcoming_positive_seen_at timestamp with time zone
+  COLUMN last_live_positive_at timestamp with time zone
+  COLUMN last_live_positive_seen_at timestamp with time zone
+  COLUMN last_end_evidence_at timestamp with time zone
+  COLUMN last_complete_absence_at timestamp with time zone
+  COLUMN last_absence_scheduled_for timestamp with time zone
+  COLUMN consecutive_absence_slots smallint NOT NULL DEFAULT 0
+  COLUMN end_candidate_kind text
+  COLUMN end_candidate_observation_id bigint
+  COLUMN next_end_check_at timestamp with time zone
+  COLUMN ended_at timestamp with time zone
+  COLUMN end_reason text
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_live_head_candidate_shape CHECK ((((end_candidate_kind IS NULL) AND (end_candidate_observation_id IS NULL) AND (next_end_check_at IS NULL)) OR ((end_candidate_kind IS NOT NULL) AND (end_candidate_observation_id IS NOT NULL) AND (next_end_check_at IS NOT NULL))))
+  CONSTRAINT chk_youtube_live_head_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
+  CONSTRAINT youtube_live_reconciliation_hea_consecutive_absence_slots_check CHECK (((consecutive_absence_slots >= 0) AND (consecutive_absence_slots <= 32767)))
+  CONSTRAINT youtube_live_reconciliation_heads_end_candidate_kind_check CHECK ((end_candidate_kind = ANY (ARRAY['EXPLICIT_END'::text, 'EXPLICIT_CANCEL'::text, 'SCOPED_ABSENCE'::text])))
+  CONSTRAINT youtube_live_reconciliation_heads_end_reason_check CHECK ((end_reason = ANY (ARRAY['EXPLICIT_END'::text, 'CANCELLED_BEFORE_LIVE'::text, 'SCOPED_ABSENCE'::text])))
+  CONSTRAINT youtube_live_reconciliation_heads_status_check CHECK ((status = ANY (ARRAY['UPCOMING'::text, 'LIVE'::text, 'ENDED'::text])))
+  CONSTRAINT youtube_live_reconciliation_h_end_candidate_observation_id_fkey FOREIGN KEY (end_candidate_observation_id) REFERENCES source_observations(id) ON DELETE RESTRICT
+  CONSTRAINT youtube_live_reconciliation_heads_pkey PRIMARY KEY (video_id)
+  INDEX CREATE INDEX idx_youtube_live_reconciliation_due ON public.youtube_live_reconciliation_heads USING btree (next_end_check_at, video_id) WHERE (next_end_check_at IS NOT NULL)
 
 TABLE youtube_live_sessions
   COLUMN video_id character varying(20) NOT NULL
@@ -782,6 +1092,18 @@ SEQUENCE notification_delivery_outbox_id_seq AS bigint START 1 INCREMENT 1 MIN 1
 SEQUENCE notification_template_revisions_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY notification_template_revisions.id
 
 SEQUENCE notification_templates_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY notification_templates.id
+
+SEQUENCE source_observation_applications_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_observation_applications.id
+
+SEQUENCE source_observation_collisions_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_observation_collisions.id
+
+SEQUENCE source_observation_replay_requests_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_observation_replay_requests.id
+
+SEQUENCE source_observations_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_observations.id
+
+SEQUENCE source_reconciliation_conflicts_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_reconciliation_conflicts.id
+
+SEQUENCE youtube_collection_projection_generations_generation_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY youtube_collection_projection_generations.generation
 
 SEQUENCE youtube_milestone_approaching_id_seq AS integer START 1 INCREMENT 1 MIN 1 MAX 2147483647 CACHE 1 CYCLE false OWNED BY youtube_milestone_approaching.id
 

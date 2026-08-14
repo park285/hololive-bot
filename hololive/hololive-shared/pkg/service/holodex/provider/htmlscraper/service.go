@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,11 +71,27 @@ func NewServiceWithYouTubeProducer(
 	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
 ) *Service {
+	return NewServiceWithOfficialSchedule(
+		cacheClient,
+		membersData,
+		youtubeProducer,
+		logger,
+		settings.LoadOfficialScheduleRuntimeConfig(),
+	)
+}
+
+func NewServiceWithOfficialSchedule(
+	cacheClient cache.StreamCache,
+	membersData domain.MemberDataProvider,
+	youtubeProducer *scraper.Client,
+	logger *slog.Logger,
+	runtimeConfig settings.OfficialScheduleRuntimeConfig,
+) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	runtimeConfig := settings.LoadOfficialScheduleRuntimeConfig()
+	runtimeConfig = normalizeOfficialScheduleRuntimeConfig(runtimeConfig)
 	identityIndex := buildOfficialScheduleIdentityIndex(membersData)
 	logger.Info("Official schedule API source initialized",
 		slog.String("path", officialScheduleAPIPath),
@@ -89,6 +106,26 @@ func NewServiceWithYouTubeProducer(
 		maxResponseBodyBytes: runtimeConfig.MaxResponseBodyBytes,
 		youtubeProducer:      youtubeProducer,
 	}
+}
+
+func normalizeOfficialScheduleRuntimeConfig(config settings.OfficialScheduleRuntimeConfig) settings.OfficialScheduleRuntimeConfig {
+	defaults := settings.DefaultOfficialScheduleConfig()
+	if strings.TrimSpace(config.OfficialSchedule.BaseURL) == "" {
+		config.OfficialSchedule.BaseURL = defaults.BaseURL
+	}
+	if config.OfficialSchedule.Timeout <= 0 {
+		config.OfficialSchedule.Timeout = defaults.Timeout
+	}
+	if config.OfficialSchedule.CacheExpiry <= 0 {
+		config.OfficialSchedule.CacheExpiry = defaults.CacheExpiry
+	}
+	if config.OfficialSchedule.PageCacheTTL <= 0 {
+		config.OfficialSchedule.PageCacheTTL = defaults.PageCacheTTL
+	}
+	if config.MaxResponseBodyBytes <= 0 {
+		config.MaxResponseBodyBytes = settings.DefaultMaxResponseBodyBytes
+	}
+	return config
 }
 
 func (s *Service) FetchChannel(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, error) {

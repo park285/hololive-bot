@@ -30,14 +30,15 @@ import (
 )
 
 func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, errCh chan<- error) {
+	prefix := r.runtimeName()
 	if r.ConfigSubscriber != nil {
-		r.startBackgroundService("youtube-producer-config-subscriber", func() {
+		r.startBackgroundService(prefix+"-config-subscriber", func() {
 			r.ConfigSubscriber.Run(ctx)
 		})
 		r.Logger.Info("Config subscriber started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.ingestionLease != nil {
-		r.startBackgroundService("youtube-producer-ingestion-lease", func() {
+		r.startBackgroundService(prefix+"-ingestion-lease", func() {
 			r.ingestionLease.StartRenewLoop(ctx, errCh)
 		})
 	}
@@ -46,27 +47,33 @@ func (r *YouTubeProducerRuntime) startBackgroundServices(ctx context.Context, er
 		r.Logger.Info("Scraper scheduler started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.runActiveActiveRecovery != nil {
-		r.startBackgroundService("youtube-producer-readiness-recovery-owner", func() {
+		r.startBackgroundService(prefix+"-readiness-recovery-owner", func() {
 			r.runActiveActiveRecovery(ctx)
 		})
 	}
 	if r.PollTargetRefresher != nil {
-		r.startBackgroundService("youtube-producer-poll-target-refresh", func() {
+		r.startBackgroundService(prefix+"-poll-target-refresh", func() {
 			r.PollTargetRefresher.Start(ctx)
 		})
 		r.Logger.Info("YouTube poll target refresher started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.PhotoSync != nil {
-		r.startBackgroundService("youtube-producer-photo-sync", func() {
+		r.startBackgroundService(prefix+"-photo-sync", func() {
 			r.PhotoSync.Start(ctx)
 		})
 		r.Logger.Info("Photo sync service started", slog.String("runtime", r.runtimeName()))
 	}
 	if r.RetentionCleaner != nil {
-		r.startBackgroundService("youtube-producer-retention-cleaner", func() {
+		r.startBackgroundService(prefix+"-retention-cleaner", func() {
 			r.RetentionCleaner.Start(ctx)
 		})
 		r.Logger.Info("YouTube retention cleaner started", slog.String("runtime", r.runtimeName()))
+	}
+	if r.CommunityObservation != nil {
+		r.startBackgroundService(prefix+"-community-observation", func() {
+			r.CommunityObservation.Start(ctx)
+		})
+		r.Logger.Info("Community observation consumer started", slog.String("runtime", r.runtimeName()))
 	}
 }
 

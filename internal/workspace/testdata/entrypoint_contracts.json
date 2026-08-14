@@ -66,6 +66,18 @@
     ]
   },
   {
+    "path": "hololive/hololive-youtube-collector/cmd/runtime/youtube-collector/main.go",
+    "must_contain": [
+      "bootstrap.Run("
+    ]
+  },
+  {
+    "path": "hololive/hololive-youtube-collector/cmd/runtime/healthcheck/main.go",
+    "must_contain": [
+      "healthprobe.CheckURL("
+    ]
+  },
+  {
     "path": "hololive/hololive-api/cmd/db-migrate/main.go",
     "must_contain": [
       "migrationrunner.Run("

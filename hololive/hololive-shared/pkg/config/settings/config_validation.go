@@ -157,7 +157,35 @@ func (c *Config) ValidateYouTubeProducerRuntime() error {
 	if err := c.validateWithRequired(c.validateYouTubeProducerRequiredConfig); err != nil {
 		return err
 	}
-	return validateNoNotificationEgressOwnership(runtimeYouTubeProducer)
+	if err := validateNoNotificationEgressOwnership(runtimeYouTubeProducer); err != nil {
+		return err
+	}
+	return validateYouTubeProducerPostgresUser(c.Postgres.User)
+}
+
+func (c *Config) ValidateYouTubeCollectorRuntime() error {
+	if c.Scraper.ActiveActive.Enabled {
+		return fmt.Errorf("%s must not enable YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED", runtimeYouTubeCollector)
+	}
+	if err := c.validateWithRequired(c.validateYouTubeCollectorRequiredConfig); err != nil {
+		return err
+	}
+	if err := validateNoNotificationEgressOwnership(runtimeYouTubeCollector); err != nil {
+		return err
+	}
+	if err := validateYouTubeCollectorPostgresUser(c.Postgres.User); err != nil {
+		return err
+	}
+	collector := c.YouTubeCollector.OrDefault()
+	if err := collector.Validate(c.Holodex.Timeout, c.OfficialSchedule.Timeout); err != nil {
+		return err
+	}
+	c.YouTubeCollector = collector
+	return nil
+}
+
+func (c *Config) validateYouTubeCollectorRequiredConfig() error {
+	return nil
 }
 
 func (c *Config) validateYouTubeProducerRequiredConfig() error {
@@ -259,9 +287,6 @@ func validateScraperBackfillConfig(config ScraperBackfillConfig) error {
 	}
 	if config.ShortsEnabled && config.ShortsInterval <= 0 {
 		return fmt.Errorf("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS must be positive when backfill shorts is enabled")
-	}
-	if config.CommunityEnabled && config.CommunityInterval <= 0 {
-		return fmt.Errorf("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS must be positive when backfill community is enabled")
 	}
 	if config.LiveEnabled && config.LiveInterval <= 0 {
 		return fmt.Errorf("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS must be positive when backfill live is enabled")

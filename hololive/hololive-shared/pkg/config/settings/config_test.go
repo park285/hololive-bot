@@ -748,12 +748,6 @@ func TestLoad_ScraperBackfillDefaults(t *testing.T) {
 	if backfill.ShortsInterval != 5*time.Minute {
 		t.Fatalf("Scraper.Backfill.ShortsInterval = %s, want 5m", backfill.ShortsInterval)
 	}
-	if !backfill.CommunityEnabled {
-		t.Fatal("Scraper.Backfill.CommunityEnabled = false, want true")
-	}
-	if backfill.CommunityInterval != 10*time.Minute {
-		t.Fatalf("Scraper.Backfill.CommunityInterval = %s, want 10m", backfill.CommunityInterval)
-	}
 	if !backfill.LiveEnabled {
 		t.Fatal("Scraper.Backfill.LiveEnabled = false, want true")
 	}
@@ -770,8 +764,6 @@ func TestLoad_ScraperBackfillEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_BACKFILL_ENABLED", "true")
 	t.Setenv("SCRAPER_BACKFILL_SHORTS_ENABLED", "false")
 	t.Setenv("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS", "420")
-	t.Setenv("SCRAPER_BACKFILL_COMMUNITY_ENABLED", "false")
-	t.Setenv("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS", "660")
 	t.Setenv("SCRAPER_BACKFILL_LIVE_ENABLED", "false")
 	t.Setenv("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", "180")
 	t.Setenv("SCRAPER_BACKFILL_TARGET_GROUP", " notification ")
@@ -790,12 +782,6 @@ func TestLoad_ScraperBackfillEnvOverrides(t *testing.T) {
 	}
 	if backfill.ShortsInterval != 7*time.Minute {
 		t.Fatalf("Scraper.Backfill.ShortsInterval = %s, want 7m", backfill.ShortsInterval)
-	}
-	if backfill.CommunityEnabled {
-		t.Fatal("Scraper.Backfill.CommunityEnabled = true, want false")
-	}
-	if backfill.CommunityInterval != 11*time.Minute {
-		t.Fatalf("Scraper.Backfill.CommunityInterval = %s, want 11m", backfill.CommunityInterval)
 	}
 	if backfill.LiveEnabled {
 		t.Fatal("Scraper.Backfill.LiveEnabled = true, want false")
@@ -825,20 +811,18 @@ func TestLoad_ScraperBackfillValidation(t *testing.T) {
 		{
 			name: "rejects enabled shorts zero interval",
 			env: map[string]string{
-				"SCRAPER_BACKFILL_ENABLED":                    "true",
-				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS":    "0",
-				"SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS": "600",
-				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":      "180",
+				"SCRAPER_BACKFILL_ENABLED":                 "true",
+				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS": "0",
+				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":   "180",
 			},
 			wantErr: "SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS must be positive when backfill shorts is enabled",
 		},
 		{
 			name: "allows disabled backfill zero intervals",
 			env: map[string]string{
-				"SCRAPER_BACKFILL_ENABLED":                    "false",
-				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS":    "0",
-				"SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS": "0",
-				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":      "0",
+				"SCRAPER_BACKFILL_ENABLED":                 "false",
+				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS": "0",
+				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":   "0",
 			},
 		},
 	}

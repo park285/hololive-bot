@@ -9,19 +9,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	polling2 "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
+	"github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
 )
+
+var _ communityObservationRunner = (*pollers.CommunityObservationConsumer)(nil)
 
 const activeActivePollTargetRefreshMaxJitter = 2 * time.Second
 
@@ -36,6 +41,7 @@ type ingestionRuntimeYouTubeDependencies struct {
 	pollerRegistrations     []providers.ChannelPollerRegistration
 	pollTargetRefresher     *polltarget.Refresher
 	runActiveActiveRecovery func(context.Context)
+	communityObservation    *pollers.CommunityObservationConsumer
 }
 
 func resolveIngestionRuntimeYouTubeState(
@@ -75,7 +81,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 	appConfig *settings.Config,
 	logger *slog.Logger,
 	infra *youtubeProducerInfrastructure,
-	enabled bool,
+	features ingestionRuntimeFeatures,
 	state *ingestionRuntimeYouTubeState,
 	readinessState *readiness.State,
 ) (ingestionRuntimeYouTubeDependencies, error) {
@@ -84,7 +90,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if readinessState != nil {
 		readinessState.SetGlobalBudgetEnabled(budgetCfg.Enabled)
 	}
-	if !enabled {
+	if !features.youtubeEnabled {
 		return deps, nil
 	}
 
@@ -93,9 +99,42 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if err != nil {
 		return deps, err
 	}
-	if appConfig.Scraper.ActiveActive.Enabled {
+	if features.activeActiveEnabled {
 		probeReadinessJobClaimer(ctx, jobClaimer, logger)
 	}
+	liveStatusProvider, err := producerHolodexLiveStatusProvider(infra.holodexService)
+	if err != nil {
+		return deps, err
+	}
+	return buildProducerYouTubeDependencies(
+		ctx,
+		appConfig,
+		logger,
+		infra,
+		state,
+		readinessState,
+		sharedScraperClient,
+		liveStatusProvider,
+		jobClaimer,
+		budgetWiring,
+		deps,
+	)
+}
+
+func buildProducerYouTubeDependencies(
+	ctx context.Context,
+	appConfig *settings.Config,
+	logger *slog.Logger,
+	infra *youtubeProducerInfrastructure,
+	state *ingestionRuntimeYouTubeState,
+	readinessState *readiness.State,
+	sharedScraperClient *scraper.Client,
+	liveStatusProvider pollers.LiveStatusProvider,
+	jobClaimer polling2.JobClaimer,
+	budgetWiring polling.GlobalBudgetWiring,
+	deps ingestionRuntimeYouTubeDependencies,
+) (ingestionRuntimeYouTubeDependencies, error) {
+	var err error
 	deps.scraperScheduler, deps.pollerRegistrations, err = polling.BuildComponentsWithJobClaimerContext(
 		ctx,
 		&appConfig.Scraper,
@@ -105,7 +144,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		state.pollTargets.NotificationChannelIDs,
 		state.pollTargets.OperationalChannelIDs,
 		sharedScraperClient,
-		infra.holodexService,
+		liveStatusProvider,
 		logger,
 	)
 	if err != nil {
@@ -113,7 +152,20 @@ func buildIngestionRuntimeYouTubeDependencies(
 	}
 	deps.runActiveActiveRecovery = buildActiveActiveRecoveryLoop(appConfig, jobClaimer, readinessState, deps.scraperScheduler, logger)
 	deps.pollTargetRefresher = buildPollTargetRefresher(appConfig, infra, deps, state, logger)
+	deps.communityObservation = pollers.NewCommunityObservationConsumer(
+		postgresPool(infra),
+		polling.CommunityKeywords(),
+		communityObservationLeaseOwner(appConfig),
+		logger,
+	)
 	return deps, nil
+}
+
+func producerHolodexLiveStatusProvider(holodex *holodexprovider.Service) (pollers.LiveStatusProvider, error) {
+	if holodex == nil {
+		return nil, fmt.Errorf("youtube producer requires Holodex live status provider")
+	}
+	return holodex, nil
 }
 
 func buildIngestionRuntimeCoordination(
@@ -279,4 +331,29 @@ func resolveIngestionSharedScraperClient(scraperConfig *settings.ScraperConfig, 
 		return infra.scraperClient
 	}
 	return polling.BuildSharedClient(scraperConfig, infra.cacheService, infra.sharedRL)
+}
+
+func postgresPool(infra *youtubeProducerInfrastructure) *pgxpool.Pool {
+	if infra == nil || infra.postgresService == nil {
+		return nil
+	}
+	return infra.postgresService.GetPool()
+}
+
+func communityObservationLeaseOwner(appConfig *settings.Config) string {
+	if appConfig == nil {
+		return youtubeProducerRuntimeName
+	}
+	owner := strings.TrimSpace(appConfig.Scraper.ActiveActive.InstanceID)
+	if owner == "" {
+		return youtubeProducerRuntimeName
+	}
+	return owner
+}
+
+func communityObservationRunnerFrom(consumer *pollers.CommunityObservationConsumer) communityObservationRunner {
+	if consumer == nil {
+		return nil
+	}
+	return consumer
 }

@@ -87,8 +87,10 @@ default, live_default, main_default, central, live, main, osaka, seoul, osaka2, 
 for args in [
     (default, "hololive-api", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "central API default"),
     (default, "hololive-alarm-worker", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "central worker default"),
+    (default, "youtube-collector", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "central collector default"),
     (default, "hololive-db-migrate", "holo-postgres", "5432", ("PGHOST", "PGPORT"), "central migrate default"),
     (live_default, "hololive-api", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "live API default"),
+    (live_default, "youtube-collector", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "live collector default"),
     (live_default, "hololive-db-migrate", "holo-postgres", "5432", ("PGHOST", "PGPORT"), "live migrate default"),
     (main_default, "youtube-producer-c", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "main producer-c default"),
 ]:
@@ -97,8 +99,10 @@ expected = ("postgres.service.fixture", "15432")
 for args in [
     (central, "hololive-api", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "central API override"),
     (central, "hololive-alarm-worker", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "central worker override"),
+    (central, "youtube-collector", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "central collector override"),
     (central, "hololive-db-migrate", *expected, ("PGHOST", "PGPORT"), "central migrate override"),
     (live, "hololive-api", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "live API override"),
+    (live, "youtube-collector", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "live collector override"),
     (live, "hololive-db-migrate", *expected, ("PGHOST", "PGPORT"), "live migrate override"),
     (main, "youtube-producer-c", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "main producer-c override"),
     (osaka, "youtube-producer-a", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka producer-a override"),
@@ -109,6 +113,7 @@ for args in [
 for services, name, label in [
     (central, "hololive-api", "central API uses tailnet DNS"),
     (central, "hololive-alarm-worker", "central worker uses tailnet DNS"),
+    (central, "youtube-collector", "central collector uses tailnet DNS"),
     (central, "hololive-db-migrate", "central migrate uses tailnet DNS"),
     (main, "youtube-producer-c", "main producer-c uses tailnet DNS"),
     (osaka, "youtube-producer-a", "Osaka producer-a uses tailnet DNS"),

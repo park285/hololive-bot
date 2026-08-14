@@ -32,6 +32,7 @@ var tracingEnabledEnvKeys = []string{
 	tracingYouTubeProducerBEnabledEnv,
 	tracingYouTubeProducerCEnabledEnv,
 	tracingYouTubeProducerDEnabledEnv,
+	tracingYouTubeCollectorEnabledEnv,
 }
 
 func clearTracingEnv(t *testing.T) {
@@ -82,6 +83,7 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 		{name: "youtube producer b", runtime: tracingRuntimeYouTubeProducer, producerInstanceID: "b", selectedEnv: tracingYouTubeProducerBEnabledEnv},
 		{name: "youtube producer c", runtime: tracingRuntimeYouTubeProducer, producerInstanceID: "c", selectedEnv: tracingYouTubeProducerCEnabledEnv},
 		{name: "youtube producer d", runtime: tracingRuntimeYouTubeProducer, producerInstanceID: "d", selectedEnv: tracingYouTubeProducerDEnabledEnv},
+		{name: "youtube collector", runtime: tracingRuntimeYouTubeCollector, selectedEnv: tracingYouTubeCollectorEnabledEnv},
 	}
 
 	for _, tt := range tests {

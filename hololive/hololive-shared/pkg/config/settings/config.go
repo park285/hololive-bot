@@ -50,6 +50,7 @@ type Config struct {
 	Services               ServicesConfig
 	Environment            string
 	Scraper                ScraperConfig
+	YouTubeCollector       YouTubeCollectorConfig
 	Webhook                WebhookConfig
 	WorkerPool             WorkerPoolConfig
 	WorkerProfile          WorkerProfileConfig
@@ -84,6 +85,12 @@ func LoadAdminAPIRuntime() (*Config, error) {
 func LoadYouTubeProducerRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateYouTubeProducerRuntime, configLoadOptions{
 		TracingRuntime: tracingRuntimeYouTubeProducer,
+	})
+}
+
+func LoadYouTubeCollectorRuntime() (*Config, error) {
+	return loadConfigValidated((*Config).ValidateYouTubeCollectorRuntime, configLoadOptions{
+		TracingRuntime: tracingRuntimeYouTubeCollector,
 	})
 }
 
@@ -144,6 +151,7 @@ func buildConfig(
 		Services:               loadServicesConfig(),
 		Environment:            loadAppEnvironment(),
 		Scraper:                scraperConfig,
+		YouTubeCollector:       loadYouTubeCollectorConfig(),
 		Webhook:                loadWebhookConfig(&workerProfile),
 		WorkerPool:             loadWorkerPoolConfig(&workerProfile),
 		WorkerProfile: WorkerProfileConfig{

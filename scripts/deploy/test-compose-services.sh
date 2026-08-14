@@ -58,6 +58,7 @@ expect_eq "$(compose_service_resolve_build_target hololive-api)" "hololive-api" 
 expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm-worker" "build alias alarm-worker"
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
 expect_eq "$(compose_service_resolve_build_target youtube-producer)" "youtube-producer" "build target youtube-producer"
+expect_eq "$(compose_service_resolve_build_target youtube-collector)" "youtube-collector" "build target youtube-collector"
 expect_eq "$(compose_service_resolve_build_target admin-dashboard)" "admin-dashboard" "build target admin-dashboard"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
     expect_fail "build target rejects retired runtime ${removed}" compose_service_resolve_build_target "${removed}"
@@ -69,6 +70,7 @@ expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" 
 expect_eq "$(compose_service_resolve_redeploy_target admin)" "admin-dashboard" "redeploy alias admin-dashboard"
 expect_eq "$(compose_service_resolve_redeploy_target all)" "" "redeploy all sentinel"
 expect_eq "$(compose_service_resolve_redeploy_target youtube-producer-c)" "youtube-producer-c" "redeploy target youtube-producer-c (main-ap)"
+expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtube-collector" "redeploy target youtube-collector"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
     expect_fail "redeploy target rejects retired runtime ${removed}" compose_service_resolve_redeploy_target "${removed}"
 done
@@ -76,6 +78,7 @@ done
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
 expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
 expect_eq "$(compose_service_resolve_log_target youtube-producer)" "youtube-producer" "log target youtube-producer"
+expect_eq "$(compose_service_resolve_log_target youtube-collector)" "youtube-collector" "log target youtube-collector"
 expect_eq "$(compose_service_resolve_log_target youtube-producer-c)" "youtube-producer-c" "log target youtube-producer-c (main-ap)"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler producer dispatcher-go; do
     expect_fail "log target rejects retired runtime ${removed}" compose_service_resolve_log_target "${removed}"

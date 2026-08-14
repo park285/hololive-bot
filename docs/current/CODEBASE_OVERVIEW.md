@@ -4,7 +4,7 @@
 
 ## 한 줄 요약
 
-`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube producer AP, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm plane), `alarm-worker`, `youtube-producer`로 Docker Compose production baseline과 Seoul split-host override에서 운영합니다.
+`hololive-bot`은 Go 중심 모노레포입니다. Kakao/Iris 봇 ingress, 알람 처리, YouTube producer AP, Community collector, LLM 스케줄링, 관리자 API, 공유 라이브러리를 `hololive-api` 통합 런타임(bot/admin/llm plane), `alarm-worker`, `youtube-producer`, `youtube-collector`로 Docker Compose production baseline과 Seoul split-host override에서 운영합니다.
 
 ## 큰 구조
 
@@ -13,6 +13,7 @@
 ├── hololive/
 │   ├── hololive-api/               # Unified runtime: bot/admin/llm planes (webhook ingress, admin API, LLM/news/event scheduler)
 │   ├── hololive-alarm-worker/      # Alarm checker, dispatch queue, proactive egress
+│   ├── hololive-youtube-collector/  # Independent Community YouTube collector module
 │   ├── hololive-youtube-producer/   # YouTube producer AP runtime
 │   └── hololive-shared/            # shared domain, config, providers, contracts, services
 ├── shared-go/                      # lower-level shared Go utilities
@@ -25,17 +26,18 @@
     └── docker-compose.main-ap.yml  # main-host active-active AP (youtube-producer-c, profile main-ap)
 ```
 
-`go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-producer`) are implemented in Go 1.26.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
+`go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The four production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-producer`, `youtube-collector`) are implemented in Go 1.26.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
 
 ## Runtime Services
 
-The current production runtime set is three Go binaries:
+The current production runtime set is four Go binaries:
 
 | Runtime | Path | Main responsibility | Typical port |
 |---|---|---|---:|
 | `hololive-api` | `hololive/hololive-api/` | Bot/admin/llm planes: webhook ingress + command routing (bot), admin control plane (admin), major event/member news scheduling + LLM-backed work (llm) | 30001/30003/30006 |
 | `alarm-worker` | `hololive/hololive-alarm-worker/` | Alarm checks, queue consumption, proactive notification egress | 30007 |
-| `youtube-producer` | `hololive/hololive-youtube-producer/` | YouTube polling/scraping, YouTube outbox production, Holodex photo sync | 30015 |
+| `youtube-producer` | `hololive/hololive-youtube-producer/` | YouTube polling/scraping except Community fetch, observation consume, YouTube outbox production, Holodex photo sync | 30015 |
+| `youtube-collector` | `hololive/hololive-youtube-collector/cmd/runtime/youtube-collector` | Community YouTube.js fetch/normalize and `source_observation_outbox` Publish (required central singleton; AP overlays pin `central-only`) | 30045 |
 
 ## Shared Libraries
 
@@ -67,13 +69,19 @@ The `hololive-api` bot plane owns webhook ingress and user-facing command routin
 ### YouTube Producer Flow
 
 ```text
+youtube-collector
+  -> YouTube.js community fetch/normalize
+  -> PostgreSQL source_observation_outbox Publish
 youtube-producer
-  -> primary/backfill YouTube polling and Holodex-backed checks
+  -> live/shorts/videos/stats polling and Holodex-backed live discovery
+  -> community observation consume + canonical persist
   -> PostgreSQL youtube_notification_outbox
   -> alarm-worker
   -> room resolution, rendering, retry, delivery rows
   -> Iris / Kakao egress
 ```
+
+Community notifications require both `youtube-collector` (central singleton) and `youtube-producer` consumer. Producer does not fetch Community posts. Live discovery requires Holodex; official-schedule API is Holodex upcoming/channel-schedule secondary, not live truth.
 
 The key ownership split is that `youtube-producer` produces YouTube outbox rows and owns 4-way active-active poll coordination/readiness (Seoul `b` + main `c` + Osaka host-native `a` + Osaka2 host-native `d`), while `alarm-worker` owns final delivery. Duplicate suppression depends on Valkey `JobRunGuard`, database identities such as `(kind, content_id)`, and the dispatch worker's delivery claims.
 
@@ -136,6 +144,7 @@ Current operational details live in `docs/current/services/youtube-producer.md` 
 | Release, rollback, or deploy | `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`, `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
 | Change YouTube producer behavior | `hololive/hololive-youtube-producer/`, `hololive/hololive-shared/pkg/service/youtube/`, `docs/current/services/youtube-producer.md` |
+| Change Community collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change final notification delivery | `docs/current/contracts/alarm.md`, `docs/current/QUEUE_AND_PUBSUB_CONTRACTS.md`, `docs/current/runbooks/alarm-worker.md`, `docs/current/runbooks/dlq-replay.md`, `hololive/hololive-alarm-worker/` |
 | Change command handling | `hololive/hololive-api/internal/planes/bot/` |
 | Change admin dashboard API | `hololive/hololive-api/internal/planes/admin/`, `admin-dashboard/` |
@@ -148,8 +157,8 @@ Use the smallest command that matches the change. For broad Go runtime changes, 
 
 ```bash
 ./build-all.sh --no-bump --build-only
-go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-producer/...
-go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-producer/...
+go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/... ./hololive/hololive-youtube-producer/...
+go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/... ./hololive/hololive-youtube-producer/...
 ```
 
 Run the deploying `./build-all.sh --no-bump` path only with explicit operator approval because it can recreate live Compose services.

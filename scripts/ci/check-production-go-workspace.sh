@@ -7,6 +7,7 @@ docker_modules=(
   "hololive/hololive-api/Dockerfile|hololive/hololive-api"
   "hololive/hololive-alarm-worker/Dockerfile|hololive/hololive-alarm-worker"
   "hololive/hololive-youtube-producer/Dockerfile|hololive/hololive-youtube-producer"
+  "hololive/hololive-youtube-collector/Dockerfile|hololive/hololive-youtube-collector"
   "admin-dashboard/Dockerfile|admin-dashboard/backend"
 )
 
@@ -15,6 +16,7 @@ module_dirs=(
   "hololive/hololive-api"
   "hololive/hololive-alarm-worker"
   "hololive/hololive-youtube-producer"
+  "hololive/hololive-youtube-collector"
   "hololive/hololive-shared"
   "hololive/hololive-dbtest"
 )

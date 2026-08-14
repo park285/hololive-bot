@@ -38,6 +38,13 @@ func newPollerBatchTestDB(t *testing.T, models ...any) *pollerBatchTestDB {
 	return db
 }
 
+func (db *pollerBatchTestDB) GetPool() *pgxpool.Pool {
+	if db == nil {
+		return nil
+	}
+	return db.Pool
+}
+
 func (db *pollerBatchTestDB) clone() *pollerBatchTestDB {
 	return &pollerBatchTestDB{
 		Pool:    db.Pool,

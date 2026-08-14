@@ -28,12 +28,13 @@ func InitScraperHolodexFoundation(
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
 
-	scraperService := providers.ProvideScraperService(
+	scraperService := providers.ProvideScraperServiceWithOfficialSchedule(
 		infra.Cache,
 		memberServiceAdapter,
 		scraperProxyConfig,
 		sharedRL,
 		logger,
+		appConfig.OfficialScheduleRuntime(),
 	)
 
 	holodexService, err := providers.ProvideHolodexService(

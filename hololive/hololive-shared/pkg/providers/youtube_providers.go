@@ -51,7 +51,31 @@ func ProvideScraperService(
 	sharedRL *ratelimiter.RateLimiter,
 	logger *slog.Logger,
 ) *htmlscraper.Service {
-	return htmlscraper.NewService(cacheClient, members, proxyConfig, sharedRL, logger)
+	return ProvideScraperServiceWithOfficialSchedule(
+		cacheClient,
+		members,
+		proxyConfig,
+		sharedRL,
+		logger,
+		settings.LoadOfficialScheduleRuntimeConfig(),
+	)
+}
+
+func ProvideScraperServiceWithOfficialSchedule(
+	cacheClient cache.Client,
+	members domain.MemberDataProvider,
+	proxyConfig scraper.ProxyConfig,
+	sharedRL *ratelimiter.RateLimiter,
+	logger *slog.Logger,
+	official settings.OfficialScheduleRuntimeConfig,
+) *htmlscraper.Service {
+	return htmlscraper.NewServiceWithOfficialSchedule(
+		cacheClient,
+		members,
+		scraper.NewClient(scraper.WithProxy(proxyConfig), scraper.WithRateLimiter(sharedRL)),
+		logger,
+		official,
+	)
 }
 
 func ProvideScraperServiceWithYouTubeProducer(
@@ -60,7 +84,23 @@ func ProvideScraperServiceWithYouTubeProducer(
 	youtubeProducer *scraper.Client,
 	logger *slog.Logger,
 ) *htmlscraper.Service {
-	return htmlscraper.NewServiceWithYouTubeProducer(cacheClient, members, youtubeProducer, logger)
+	return ProvideScraperServiceWithYouTubeProducerAndSchedule(
+		cacheClient,
+		members,
+		youtubeProducer,
+		logger,
+		settings.LoadOfficialScheduleRuntimeConfig(),
+	)
+}
+
+func ProvideScraperServiceWithYouTubeProducerAndSchedule(
+	cacheClient cache.Client,
+	members domain.MemberDataProvider,
+	youtubeProducer *scraper.Client,
+	logger *slog.Logger,
+	official settings.OfficialScheduleRuntimeConfig,
+) *htmlscraper.Service {
+	return htmlscraper.NewServiceWithOfficialSchedule(cacheClient, members, youtubeProducer, logger, official)
 }
 
 // ProvideScraperScheduler - YouTube HTML 스크래퍼 기반 폴러 스케줄러 생성

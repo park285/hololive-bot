@@ -35,10 +35,12 @@ Structured allowlist: `repository-ownership.allowlist`.
 
 | Runtime | Enabled role | Must stay disabled |
 |---|---|---|
-| `youtube-producer` | YouTube scraping/polling, `youtube_notification_outbox` production, and Holodex photo sync (a/c singleton lease) | Iris send, direct outbox dispatch |
+| `youtube-collector` | Community YouTube.js fetch/normalize and `source_observation_outbox` Publish | Canonical community persist, observation claim/finalize, Iris send, outbox dispatch |
+| `youtube-producer` | YouTube scraping/polling except Community fetch, observation consume/canonical persist, `youtube_notification_outbox` production, and Holodex photo sync (a/c singleton lease) | Iris send, direct outbox dispatch |
 
-Duplicated polling prevention is enforced operationally by Compose env ownership: `youtube-producer` owns `YOUTUBE_INGESTION_ENABLED=true`.
+Duplicated polling prevention is enforced operationally by Compose env ownership: `youtube-producer` and `youtube-collector` own `YOUTUBE_INGESTION_ENABLED=true` on their own processes. Collector poller identity is `community_collect`; producer does not register a `community` poller and persists through `CommunityObservationConsumer`.
 Duplicated sending prevention is enforced by code and architecture gates: `youtube-producer` and producer runtimes must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.
+`internal/runtime/communitycollector` must not import persist helpers (`batchrepo`, `PersistCommunityPosts`, producer `pollers`).
 
 YouTube outbox dispatcher는 `hololive-alarm-worker/internal/egress/youtubedispatch`에 있으므로 다른 모듈에서 import 자체가 불가능합니다. 즉 이 항목의 1차 보장은 Go `internal/` 컴파일러이고, 게이트의 `outbox\.NewDispatcher`/`OutboxDispatcher` 심볼 denylist는 회귀 방지용 이중화로 유지합니다. 반면 `pkg/service/delivery`는 `hololive-api`(reactive reply)와 `alarm-worker`(proactive egress)의 진성 다중 소비자라 shared에 남으므로, 해당 항목은 게이트가 유일한 보장입니다.
 

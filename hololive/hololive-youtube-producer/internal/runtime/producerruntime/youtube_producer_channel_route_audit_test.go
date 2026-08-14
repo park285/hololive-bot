@@ -17,7 +17,7 @@ import (
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
 )
 
-func TestBuildYouTubeProducerYouTubeComponents_RegistersCommunityAndShortsForEveryActiveChannel(t *testing.T) {
+func TestBuildYouTubeProducerYouTubeComponents_RegistersShortsForEveryActiveChannel(t *testing.T) {
 	t.Parallel()
 
 	operationalChannels := mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
@@ -50,12 +50,10 @@ func TestBuildYouTubeProducerYouTubeComponents_RegistersCommunityAndShortsForEve
 	require.NoError(t, err)
 
 	require.NotNil(t, scraperScheduler)
-	require.Len(t, registrations, 5)
+	require.Len(t, registrations, 4)
 	require.ElementsMatch(t,
 		[]string{
-			"UC_ACTIVE_A:community",
 			"UC_ACTIVE_A:shorts",
-			"UC_ACTIVE_B:community",
 			"UC_ACTIVE_B:shorts",
 		},
 		contentPollerJobKeys(t, scraperScheduler),

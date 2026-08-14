@@ -27,6 +27,7 @@ import (
 
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -109,12 +110,6 @@ func buildYouTubeProducerResources(ctx context.Context, appConfig *configsetting
 	}
 
 	scraperClient := polling.BuildSharedClient(&appConfig.Scraper, infra.Cache, sharedRL)
-	scraperService := sharedproviders.ProvideScraperServiceWithYouTubeProducer(infra.Cache, memberServiceAdapter, scraperClient, logger)
-	holodexService, err := sharedproviders.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide holodex service: %w", err)
-	}
-
 	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, &sharedmodules.YouTubeStackParams{
 		YouTubeConfig:   appConfig.YouTube,
 		ScraperConfig:   appConfig.Scraper,
@@ -122,6 +117,29 @@ func buildYouTubeProducerResources(ctx context.Context, appConfig *configsetting
 		SharedRateLimit: sharedRL,
 		Logger:          logger,
 	})
+	return finishYouTubeIngestionResources(appConfig, logger, infra, memberServiceAdapter, sharedRL, scraperClient, youTubeStack)
+}
+
+func finishYouTubeIngestionResources(
+	appConfig *configsettings.Config,
+	logger *slog.Logger,
+	infra *sharedmodules.InfraModule,
+	memberServiceAdapter domain.MemberDataProvider,
+	sharedRL *ratelimiter.RateLimiter,
+	scraperClient *scraper.Client,
+	youTubeStack *sharedproviders.YouTubeStack,
+) (*youtubeProducerYouTubeResources, error) {
+	scraperService := sharedproviders.ProvideScraperServiceWithYouTubeProducerAndSchedule(
+		infra.Cache,
+		memberServiceAdapter,
+		scraperClient,
+		logger,
+		appConfig.OfficialScheduleRuntime(),
+	)
+	holodexService, err := sharedproviders.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide holodex service: %w", err)
+	}
 
 	return &youtubeProducerYouTubeResources{
 		holodexService: holodexService,

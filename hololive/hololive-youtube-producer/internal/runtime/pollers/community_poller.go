@@ -24,13 +24,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
@@ -56,7 +56,7 @@ func NewCommunityPoller(scraperClient *scraper.Client, db any, maxResults int, k
 		db:         querier,
 		repository: batchrepo.NewPgxBatchRepositoryWithPersister(querier, newDeliveryTelemetryLatencyPersisterAdapter(querier)),
 		maxResults: maxResults,
-		keywords:   normalizeCommunityKeywords(keywords),
+		keywords:   community.NormalizeKeywords(keywords),
 	}
 }
 
@@ -74,40 +74,12 @@ func (p *CommunityPoller) ensureMetrics() *polling.Metrics {
 	return polling.NewMetrics()
 }
 
-func (p *CommunityPoller) Name() string {
-	return "community"
-}
-
-func (p *CommunityPoller) SetProxyEnabled(enabled bool) bool {
-	if p == nil || p.client == nil {
-		return false
-	}
-	return p.client.SetProxyEnabled(enabled)
-}
-
-func (p *CommunityPoller) ProxyEnabled() bool {
-	if p == nil || p.client == nil {
-		return false
-	}
-	return p.client.ProxyEnabled()
-}
-
-func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
-	posts, err := p.client.GetCommunityPosts(ctx, channelID, p.maxResults)
-	if err != nil {
-		return fmt.Errorf("failed to get community posts: %w", err)
-	}
-
-	posts = polling.NormalizeCollectedCommunityPostsByCanonicalPostID(posts)
-	if len(posts) == 0 {
-		return nil
-	}
-
+func (p *CommunityPoller) persistCollected(ctx context.Context, channelID string, posts []*parser.CommunityPost) error {
 	watermark, isInitialized, err := loadContentWatermark(ctx, p.db, channelID, domain.WatermarkTypeCommunityPost)
 	if err != nil {
 		return err
 	}
-	newPosts := collectNewCommunityPosts(posts, &watermark, isInitialized)
+	newPosts := community.CollectNewPosts(posts, &watermark, isInitialized)
 	detectedAt := yttimestamp.Normalize(time.Now()).Truncate(time.Microsecond)
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt, p.ensureMetrics())
 	batch := p.buildCommunityBatch(ctx, channelID, newPosts, isInitialized, detectedAt)
@@ -143,8 +115,9 @@ func (p *CommunityPoller) buildCommunityBatch(
 		trackingRows:  make([]*domain.YouTubeContentAlarmTracking, 0, len(posts)),
 	}
 	for i := range posts {
-		dbPost, trackingRow, notification := p.buildCommunityPostArtifacts(ctx, channelID, posts[i], isInitialized, detectedAt)
+		dbPost, trackingRow, notification := community.BuildPostArtifacts(channelID, posts[i], isInitialized, detectedAt, p.keywords)
 		if dbPost != nil {
+			logCommunityPostDetected(ctx, channelID, dbPost.PostID, dbPost.PublishedAt, detectedAt)
 			batch.dbPosts = append(batch.dbPosts, dbPost)
 		}
 		if trackingRow != nil {
@@ -155,79 +128,6 @@ func (p *CommunityPoller) buildCommunityBatch(
 		}
 	}
 	return batch
-}
-
-func (p *CommunityPoller) buildCommunityPostArtifacts(
-	ctx context.Context,
-	channelID string,
-	post *parser.CommunityPost,
-	isInitialized bool,
-	detectedAt time.Time,
-) (*domain.YouTubeCommunityPost, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox) {
-	if post == nil {
-		return nil, nil, nil
-	}
-
-	canonicalPostID := polling.NormalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
-	publishedAt := yttimestamp.NormalizePtr(post.PublishedAt)
-	logCommunityPostDetected(ctx, channelID, canonicalPostID, publishedAt, detectedAt)
-
-	dbPost := &domain.YouTubeCommunityPost{
-		PostID:        canonicalPostID,
-		ChannelID:     channelID,
-		AuthorName:    post.AuthorName,
-		AuthorPhoto:   polling.ConvertThumbnails(post.AuthorPhoto),
-		ContentText:   post.ContentText,
-		PublishedText: post.PublishedText,
-		PublishedAt:   publishedAt,
-		LikeCount:     post.LikeCount,
-		CommentCount:  post.CommentCount,
-		Images:        polling.ConvertThumbnails(post.Images),
-		AttachedVideo: post.VideoID,
-	}
-	if !isInitialized || !p.matchesKeywords(post.ContentText) {
-		return dbPost, nil, nil
-	}
-
-	trackingRow := &domain.YouTubeContentAlarmTracking{
-		Kind:              domain.OutboxKindCommunityPost,
-		ContentID:         canonicalPostID,
-		ChannelID:         channelID,
-		ActualPublishedAt: dbPost.PublishedAt,
-		DetectedAt:        detectedAt,
-	}
-	notification := p.buildCommunityNotification(channelID, canonicalPostID, dbPost)
-	return dbPost, trackingRow, notification
-}
-
-func (p *CommunityPoller) buildCommunityNotification(
-	channelID string,
-	canonicalPostID string,
-	dbPost *domain.YouTubeCommunityPost,
-) *domain.YouTubeNotificationOutbox {
-	return &domain.YouTubeNotificationOutbox{
-		Kind:      domain.OutboxKindCommunityPost,
-		ChannelID: channelID,
-		ContentID: canonicalPostID,
-		Payload:   polling.BuildCommunityNotificationPayload(dbPost, canonicalPostID),
-		Status:    domain.OutboxStatusPending,
-	}
-}
-
-func collectNewCommunityPosts(
-	posts []*parser.CommunityPost,
-	watermark *domain.YouTubeContentWatermark,
-	isInitialized bool,
-) []*parser.CommunityPost {
-	newPosts := make([]*parser.CommunityPost, 0, len(posts))
-	for _, post := range posts {
-		canonicalPostID := polling.NormalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
-		if isInitialized && canonicalPostID == polling.NormalizeContentID(domain.OutboxKindCommunityPost, watermark.LastContentID) {
-			break
-		}
-		newPosts = append(newPosts, post)
-	}
-	return newPosts
 }
 
 func logCommunityPostDetected(ctx context.Context, channelID, postID string, actualPublishedAt *time.Time, detectedAt time.Time) {
@@ -244,40 +144,4 @@ func optionalTimestampAttr(key string, value *time.Time) slog.Attr {
 		return slog.Any(key, nil)
 	}
 	return slog.String(key, yttimestamp.Format(*value))
-}
-
-// matchesKeywords: 텍스트가 키워드 조건에 맞는지 확인
-// 키워드가 비어있으면 항상 true (모든 포스트 매칭)
-func (p *CommunityPoller) matchesKeywords(text string) bool {
-	if len(p.keywords) == 0 {
-		return true
-	}
-
-	lowerText := strings.ToLower(text)
-	for _, keyword := range p.keywords {
-		if strings.Contains(lowerText, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeCommunityKeywords(keywords []string) []string {
-	if len(keywords) == 0 {
-		return nil
-	}
-	normalized := make([]string, 0, len(keywords))
-	seen := make(map[string]struct{}, len(keywords))
-	for i := range keywords {
-		keyword := strings.ToLower(strings.TrimSpace(keywords[i]))
-		if keyword == "" {
-			continue
-		}
-		if _, ok := seen[keyword]; ok {
-			continue
-		}
-		seen[keyword] = struct{}{}
-		normalized = append(normalized, keyword)
-	}
-	return normalized
 }

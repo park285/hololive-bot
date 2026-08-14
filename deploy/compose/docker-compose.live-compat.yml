@@ -135,6 +135,23 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - valkey-cache-socket:/var/run/valkey:ro
 
+  youtube-collector:
+    environment:
+      <<: *live-postgres-env
+    ports: !override
+      - "127.0.0.1:30045:30045"
+      - "127.0.0.1:30045:30045/udp"
+      - "${HOLOLIVE_METRICS_PORT_BIND_IP:-127.0.0.1}:30096:30096"
+    volumes: !override
+      - ../../data:/app/data
+      - ${LIVE_LOGS_PATH:?LIVE_LOGS_PATH is required for live-compat overlays}:/app/logs
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+      - valkey-cache-socket:/var/run/valkey:ro
+    networks:
+      observability-traces: {}
+
   admin-dashboard:
     environment:
       ALLOWED_ORIGINS: ${ADMIN_DASHBOARD_ALLOWED_ORIGINS:-https://admin.holoshi.com}

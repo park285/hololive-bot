@@ -53,6 +53,9 @@ deploy_service_image_ref() {
         youtube-producer|youtube-producer-c|youtube-producer-a|youtube-producer-b|youtube-producer-d)
             printf '%s\n' hololive-youtube-producer:prod
             ;;
+        youtube-collector)
+            printf '%s\n' hololive-youtube-collector:prod
+            ;;
         admin-dashboard) printf '%s\n' admin-dashboard:prod ;;
         *)
             echo "[ERROR] No source-built image mapping for service: $1" >&2

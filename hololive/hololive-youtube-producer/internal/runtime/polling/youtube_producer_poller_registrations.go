@@ -80,10 +80,9 @@ func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 		scraperConfig = &settings.ScraperConfig{}
 	}
 	poll := scraperConfig.PollOrDefault()
-	communityKeywords := []string{}
 	pool := postgres.GetPool()
 	tieringEnabled := scraperConfig.PollTiering.Enabled
-	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, pool, communityKeywords)
+	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, pool)
 	logLiveDiscoveryScope(logger, pollers.liveBatchEnabled, notificationChannelIDs, operationalChannelIDs)
 
 	if registrations, ok := tryBuildTieredChannelPollerRegistrations(ctx, tieringEnabled, pool, &pollers, poll, polltarget.Targets{
@@ -119,19 +118,6 @@ func appendBackfillChannelPollerRegistrations(
 			BudgetProfile:         youtubeScraperBudgetProfile(shortsUnits, polling.BudgetBurstBackfill, polling.BudgetPriorityLow),
 		}))
 	}
-	if backfill.CommunityEnabled {
-		communityUnits := communityWorstCaseRequestUnits()
-		registrations = append(registrations, buildRegistration(&registrationSpec{
-			Poller:                newNamedBackfillPoller("community_backfill", pollers.community),
-			Priority:              scheduler.PriorityLow,
-			Interval:              backfill.CommunityInterval,
-			ChannelIDs:            notificationChannelIDs,
-			TargetGroup:           providers.ChannelTargetGroupNotification,
-			WorstCaseAttempts:     scraper.HighFrequencyChannelFetchPolicy.MaxAttempts,
-			WorstCaseRequestUnits: communityUnits,
-			BudgetProfile:         youtubeScraperBudgetProfile(communityUnits, polling.BudgetBurstBackfill, polling.BudgetPriorityLow),
-		}))
-	}
 	if backfill.LiveEnabled {
 		liveChannelIDs, liveTargetGroup := liveRegistrationTargets(pollers.liveBatchEnabled, notificationChannelIDs, operationalChannelIDs)
 		registrations = appendLivePollerRegistrations(registrations, &livePollerRegistrationSpec{
@@ -156,9 +142,7 @@ func buildFlatYouTubeProducerChannelPollerRegistrations(
 	notificationChannelIDs []string,
 	operationalChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
-	communityInterval := communityPrimaryPollInterval(poll)
 	shortsUnits := shortsWorstCaseRequestUnits()
-	communityUnits := communityWorstCaseRequestUnits()
 	registrations := []providers.ChannelPollerRegistration{
 		buildRegistration(&registrationSpec{
 			Poller:                pollers.videos,
@@ -179,16 +163,6 @@ func buildFlatYouTubeProducerChannelPollerRegistrations(
 			WorstCaseAttempts:     scraper.HighFrequencyChannelFetchPolicy.MaxAttempts,
 			WorstCaseRequestUnits: shortsUnits,
 			BudgetProfile:         youtubeScraperBudgetProfile(shortsUnits, polling.BudgetBurstPrimary, budgetPriorityFromRegistrationPriority(scheduler.PriorityLow)),
-		}),
-		buildRegistration(&registrationSpec{
-			Poller:                pollers.community,
-			Priority:              scheduler.PriorityLow,
-			Interval:              communityInterval,
-			ChannelIDs:            notificationChannelIDs,
-			TargetGroup:           providers.ChannelTargetGroupNotification,
-			WorstCaseAttempts:     scraper.HighFrequencyChannelFetchPolicy.MaxAttempts,
-			WorstCaseRequestUnits: communityUnits,
-			BudgetProfile:         youtubeScraperBudgetProfile(communityUnits, polling.BudgetBurstPrimary, budgetPriorityFromRegistrationPriority(scheduler.PriorityLow)),
 		}),
 		buildStatsRegistration(pollers.stats, poll.Stats, operationalChannelIDs),
 	}
@@ -237,7 +211,6 @@ func buildTieredYouTubeProducerChannelPollerRegistrations(
 	registrations := make([]providers.ChannelPollerRegistration, 0, 11)
 	registrations = appendTieredNotificationRegistration(registrations, pollers.videos, targets, poll.Videos, scheduler.PriorityNormal, scraper.FetchPageMaxAttempts, videosWorstCaseRequestUnits(), youtubeScraperBudgetProfile(videosWorstCaseRequestUnits(), polling.BudgetBurstPrimary, polling.BudgetPriorityNormal), false)
 	registrations = appendTieredNotificationRegistration(registrations, pollers.shorts, targets, poll.Shorts, scheduler.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, shortsWorstCaseRequestUnits(), youtubeScraperBudgetProfile(shortsWorstCaseRequestUnits(), polling.BudgetBurstPrimary, polling.BudgetPriorityLow), true)
-	registrations = appendTieredNotificationRegistration(registrations, pollers.community, targets, communityPrimaryPollInterval(poll), scheduler.PriorityLow, scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, communityWorstCaseRequestUnits(), youtubeScraperBudgetProfile(communityWorstCaseRequestUnits(), polling.BudgetBurstPrimary, polling.BudgetPriorityLow), true)
 	registrations = append(registrations, buildStatsRegistration(pollers.stats, poll.Stats, targets.OperationalChannelIDs))
 	liveChannelIDs, liveTargetGroup := liveRegistrationTargets(pollers.liveBatchEnabled, targets.NotificationChannelIDs, targets.OperationalChannelIDs)
 	registrations = appendLivePollerRegistrations(registrations, &livePollerRegistrationSpec{
@@ -279,13 +252,6 @@ func logLiveDiscoveryScope(
 		slog.Int("notification_target_channels", len(notificationChannelIDs)),
 		slog.Int("operational_target_channels", len(operationalChannelIDs)),
 	)
-}
-
-func communityPrimaryPollInterval(poll settings.ScraperPoll) time.Duration {
-	if poll.Shorts > 0 {
-		return poll.Shorts
-	}
-	return poll.Community
 }
 
 func appendTieredNotificationRegistration(

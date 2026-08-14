@@ -144,7 +144,7 @@ cutover_service_uses_app_writable_bind_mount() {
     local service="$1"
 
     case "${service}" in
-        hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|admin-dashboard)
+        hololive-api|hololive-alarm-worker|youtube-collector|youtube-producer|youtube-producer-c|admin-dashboard)
             return 0
             ;;
     esac

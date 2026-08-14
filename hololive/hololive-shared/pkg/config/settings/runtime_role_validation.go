@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	runtimeBot             = "bot"
-	runtimeAlarmWorker     = "alarm-worker"
-	runtimeAdminAPI        = "admin-api"
-	runtimeLLMScheduler    = "llm-scheduler"
-	runtimeYouTubeProducer = "youtube-producer"
+	runtimeBot              = "bot"
+	runtimeAlarmWorker      = "alarm-worker"
+	runtimeAdminAPI         = "admin-api"
+	runtimeLLMScheduler     = "llm-scheduler"
+	runtimeYouTubeProducer  = "youtube-producer"
+	runtimeYouTubeCollector = "youtube-collector"
 
 	notificationEgressRoleEnv         = "NOTIFICATION_EGRESS_ROLE"
 	notificationSchedulerRoleEnv      = "NOTIFICATION_SCHEDULER_ROLE"
@@ -25,6 +26,8 @@ const (
 	notificationEgressRoleOff       = "off"
 	notificationSchedulerRoleWorker = "worker"
 	notificationSchedulerRoleOff    = "off"
+
+	postgresScraperRoleUser = "hololive_scraper"
 )
 
 // proactive notification egress 소유를 거부하는 bot runtime config 로더다.
@@ -212,4 +215,18 @@ func lookupExplicitBoolEnv(key string) (value, explicit bool, err error) {
 
 func trimmedEnv(key string) string {
 	return strings.TrimSpace(os.Getenv(key))
+}
+
+func validateYouTubeCollectorPostgresUser(user string) error {
+	if strings.TrimSpace(user) != postgresScraperRoleUser {
+		return fmt.Errorf("%s requires POSTGRES_USER=%s", runtimeYouTubeCollector, postgresScraperRoleUser)
+	}
+	return nil
+}
+
+func validateYouTubeProducerPostgresUser(user string) error {
+	if strings.TrimSpace(user) == postgresScraperRoleUser {
+		return fmt.Errorf("%s must not use POSTGRES_USER=%s", runtimeYouTubeProducer, postgresScraperRoleUser)
+	}
+	return nil
 }

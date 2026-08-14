@@ -62,6 +62,9 @@ services:
   deunhealth:
     profiles: !override ["central-only"]
 
+  youtube-collector:
+    profiles: !override ["central-only"]
+
   youtube-producer:
     profiles: !override ["retired-youtube-producer"]
     env_file: !override

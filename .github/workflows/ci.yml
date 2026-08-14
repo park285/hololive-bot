@@ -65,6 +65,7 @@ jobs:
           - hololive/hololive-alarm-worker
           - hololive/hololive-dbtest
           - hololive/hololive-shared
+          - hololive/hololive-youtube-collector
           - hololive/hololive-youtube-producer
     defaults:
       run:

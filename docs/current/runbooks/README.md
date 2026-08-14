@@ -9,6 +9,7 @@
 | `hololive-api` | `hololive-api.md` |
 | `alarm-worker` | `alarm-worker.md` |
 | `youtube-producer` | `youtube-producer.md` |
+| `youtube-collector` | `youtube-collector.md` |
 | `admin-dashboard` | `admin-dashboard.md` |
 
 ## Infra And Release

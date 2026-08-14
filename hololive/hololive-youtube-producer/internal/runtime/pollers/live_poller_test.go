@@ -81,6 +81,15 @@ func (p *fakeLiveStatusProvider) GetChannelsLiveStatus(_ context.Context, channe
 	return p.streams, nil
 }
 
+func TestLivePollerPollFailsClosedWithoutHolodexProvider(t *testing.T) {
+	db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	err := poller.Poll(context.Background(), "UC_LIVE")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "Holodex live status provider")
+	require.NotEmpty(t, poller.PollBatch(context.Background(), []string{"UC_LIVE"}))
+}
+
 func TestLivePollerNeverEnqueuesLiveStreamOutbox(t *testing.T) {
 	t.Run("baseline 이후 live 전환", func(t *testing.T) {
 		db := newPollerBatchTestDB(t, &domain.YouTubeNotificationOutbox{})

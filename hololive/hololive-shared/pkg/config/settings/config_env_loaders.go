@@ -156,14 +156,12 @@ func loadScraperPollTieringConfig() ScraperPollTieringConfig {
 func loadScraperBackfillConfig() ScraperBackfillConfig {
 	defaults := DefaultScraperBackfillConfig()
 	return ScraperBackfillConfig{
-		Enabled:           sharedenv.Bool("SCRAPER_BACKFILL_ENABLED", defaults.Enabled),
-		ShortsEnabled:     sharedenv.Bool("SCRAPER_BACKFILL_SHORTS_ENABLED", defaults.ShortsEnabled),
-		ShortsInterval:    time.Duration(sharedenv.Int("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS", int(defaults.ShortsInterval/time.Second))) * time.Second,
-		CommunityEnabled:  sharedenv.Bool("SCRAPER_BACKFILL_COMMUNITY_ENABLED", defaults.CommunityEnabled),
-		CommunityInterval: time.Duration(sharedenv.Int("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS", int(defaults.CommunityInterval/time.Second))) * time.Second,
-		LiveEnabled:       sharedenv.Bool("SCRAPER_BACKFILL_LIVE_ENABLED", defaults.LiveEnabled),
-		LiveInterval:      time.Duration(sharedenv.Int("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", int(defaults.LiveInterval/time.Second))) * time.Second,
-		TargetGroup:       strings.TrimSpace(sharedenv.String("SCRAPER_BACKFILL_TARGET_GROUP", defaults.TargetGroup)),
+		Enabled:        sharedenv.Bool("SCRAPER_BACKFILL_ENABLED", defaults.Enabled),
+		ShortsEnabled:  sharedenv.Bool("SCRAPER_BACKFILL_SHORTS_ENABLED", defaults.ShortsEnabled),
+		ShortsInterval: time.Duration(sharedenv.Int("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS", int(defaults.ShortsInterval/time.Second))) * time.Second,
+		LiveEnabled:    sharedenv.Bool("SCRAPER_BACKFILL_LIVE_ENABLED", defaults.LiveEnabled),
+		LiveInterval:   time.Duration(sharedenv.Int("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", int(defaults.LiveInterval/time.Second))) * time.Second,
+		TargetGroup:    strings.TrimSpace(sharedenv.String("SCRAPER_BACKFILL_TARGET_GROUP", defaults.TargetGroup)),
 	}
 }
 
