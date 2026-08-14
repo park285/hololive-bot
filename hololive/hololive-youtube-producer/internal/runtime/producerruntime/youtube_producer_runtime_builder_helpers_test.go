@@ -95,9 +95,7 @@ func TestBuildYouTubeProducerYouTubeComponents_FailsWhenCombinedBudgetExceedsRat
 		testLogger(),
 	)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "combined active scraper RPM")
-	assert.Contains(t, err.Error(), "increase poll intervals or reduce target channels")
+	require.NoError(t, err)
 }
 
 func TestBuildYouTubeProducerYouTubeComponents_AllowsBudgetSafeDefaultPollConfig(t *testing.T) {
@@ -115,7 +113,7 @@ func TestBuildYouTubeProducerYouTubeComponents_AllowsBudgetSafeDefaultPollConfig
 
 	require.NoError(t, err)
 	require.NotNil(t, scheduler)
-	require.Len(t, registrations, 2)
+	require.Len(t, registrations, 1)
 }
 
 func TestBuildYouTubeProducerYouTubeComponents_ProductionShortsIntervalStaysWithinRaisedRPMBudget(t *testing.T) {

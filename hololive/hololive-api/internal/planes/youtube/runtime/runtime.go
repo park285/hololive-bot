@@ -42,6 +42,10 @@ type projectionRefresher interface {
 	Refresh(context.Context, targetprojection.Builder, time.Time) (targetprojection.Result, error)
 }
 
+type liveEndFinalizer interface {
+	FinalizeNextDueLiveEnd(context.Context, time.Duration) (bool, error)
+}
+
 type Runtime struct {
 	Config settings.YouTubePlaneConfig
 	Logger *slog.Logger
@@ -51,6 +55,7 @@ type Runtime struct {
 	claimer   observationClaimer
 	consumer  observationConsumer
 	refresher projectionRefresher
+	finalizer liveEndFinalizer
 	builder   targetprojection.Builder
 	now       func() time.Time
 
@@ -63,6 +68,7 @@ type Runtime struct {
 	ready      atomic.Bool
 	degraded   atomic.Bool
 	loopDone   chan struct{}
+	loopCount  int
 	workerDone chan struct{}
 	closeWork  sync.Once
 	inFlight   sync.Map
@@ -119,8 +125,9 @@ func newRuntime(
 		pool:      pool,
 		closePool: cleanup,
 		claimer:   repo,
-		consumer:  sourceobservation.NewConsumerWithAbsenceGrace(repo, writer, nil, plane.ContentAbsenceGrace),
+		consumer:  sourceobservation.NewConsumerWithGraces(repo, writer, nil, plane.ContentAbsenceGrace, plane.LiveEndGrace),
 		refresher: refresher,
+		finalizer: repo,
 		builder: targetprojection.PolicyBuilder{
 			Reader:    rosterReader{},
 			Schedules: targetprojection.DefaultPolicySchedules(),
@@ -128,16 +135,12 @@ func newRuntime(
 		now:        func() time.Time { return time.Now().UTC() },
 		dbSem:      make(chan struct{}, plane.DBOperationConcurrency),
 		workCh:     make(chan sourceobservation.Observation, plane.ConsumerWorkers),
-		loopDone:   make(chan struct{}, 2),
+		loopDone:   make(chan struct{}, 3),
 		workerDone: make(chan struct{}, plane.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
-			ConsumerName: communityConsumerName,
-			LeaseOwner:   communityLeaseOwner,
-			Kinds: []contract.ObservationKind{
-				contract.KindCommunityPage,
-				contract.KindVideoList,
-				contract.KindShortsList,
-			},
+			ConsumerName:  communityConsumerName,
+			LeaseOwner:    communityLeaseOwner,
+			Kinds:         youtubePlaneClaimKinds(),
 			Limit:         plane.ClaimBatchSize,
 			LeaseDuration: plane.ClaimLease,
 		},
@@ -171,8 +174,13 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	for i := 0; i < r.Config.ConsumerWorkers; i++ {
 		go r.runWorker(runCtx, errCh)
 	}
+	r.loopCount = 2
 	go r.runClaimLoop(runCtx, errCh)
 	go r.runProjectionLoop(runCtx, errCh)
+	if r.Config.LiveEndFinalizer.Enabled {
+		r.loopCount++
+		go r.runLiveEndLoop(runCtx, errCh)
+	}
 }
 
 func (r *Runtime) Shutdown(ctx context.Context) error {
@@ -190,7 +198,7 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 	}
 	shutdownCtx, cancel := context.WithTimeout(ctx, r.Config.ShutdownTimeout)
 	defer cancel()
-	if err := waitForCompletions(shutdownCtx, r.loopDone, 2, "youtube supervisor loops"); err != nil {
+	if err := waitForCompletions(shutdownCtx, r.loopDone, r.supervisorLoopCount(), "youtube supervisor loops"); err != nil {
 		return err
 	}
 	r.closeWork.Do(func() {
@@ -212,6 +220,24 @@ func (r *Runtime) Close() {
 	}
 	r.pool = nil
 	health.RemoveComponent(youtubeHealthComponent)
+}
+
+func youtubePlaneClaimKinds() []contract.ObservationKind {
+	return []contract.ObservationKind{
+		contract.KindCommunityPage,
+		contract.KindVideoList,
+		contract.KindShortsList,
+		contract.KindLiveSnapshot,
+		contract.KindViewerSample,
+		contract.KindSchedule,
+	}
+}
+
+func (r *Runtime) supervisorLoopCount() int {
+	if r == nil || r.loopCount == 0 {
+		return 2
+	}
+	return r.loopCount
 }
 
 func (r *Runtime) Ready() bool {

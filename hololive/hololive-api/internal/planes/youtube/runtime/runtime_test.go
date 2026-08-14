@@ -18,6 +18,22 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
+func TestRuntimeClaimsLiveViewerAndScheduleKinds(t *testing.T) {
+	t.Parallel()
+	got := make(map[contract.ObservationKind]bool, 6)
+	for _, kind := range youtubePlaneClaimKinds() {
+		got[kind] = true
+	}
+	for _, kind := range []contract.ObservationKind{
+		contract.KindCommunityPage, contract.KindVideoList, contract.KindShortsList,
+		contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindSchedule,
+	} {
+		if !got[kind] {
+			t.Fatalf("missing claim kind %s", kind)
+		}
+	}
+}
+
 func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 	t.Parallel()
 	cfg := settings.DefaultYouTubePlaneConfig()
@@ -504,7 +520,7 @@ func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *R
 		now:        func() time.Time { return time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC) },
 		dbSem:      make(chan struct{}, cfg.DBOperationConcurrency),
 		workCh:     make(chan sourceobservation.Observation, cfg.ConsumerWorkers),
-		loopDone:   make(chan struct{}, 2),
+		loopDone:   make(chan struct{}, 3),
 		workerDone: make(chan struct{}, cfg.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
 			ConsumerName:  communityConsumerName,

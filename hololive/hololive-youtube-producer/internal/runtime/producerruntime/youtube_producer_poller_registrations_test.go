@@ -85,8 +85,8 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		[]string{"UC_STATS_A"},
 	)
 
-	if len(registrations) != 2 {
-		t.Fatalf("len(registrations) = %d, want 2", len(registrations))
+	if len(registrations) != 1 {
+		t.Fatalf("len(registrations) = %d, want 1", len(registrations))
 	}
 
 	expected := []struct {
@@ -98,7 +98,6 @@ func TestBuildYouTubeProducerChannelPollerRegistrations_DefaultOrdering(t *testi
 		worstCaseRequestUnits float64
 	}{
 		{name: "channel_stats", priority: pollscheduler.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupOperational, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 6},
-		{name: "live", priority: pollscheduler.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
 	}
 
 	for idx, reg := range registrations {
@@ -291,9 +290,8 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 	syncer.SyncAt(t.Context(), polltarget.Targets{NotificationChannelIDs: notificationIDs, OperationalChannelIDs: statsIDs}, now)
 
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:videos")
-	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_ACTIVE:live"))
-	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_WARM:live"))
-	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_COLD:live"))
+	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:live")
+	require.Contains(t, schedulerJobKeys(t, scheduler), "UC_STATS:channel_stats")
 }
 
 func TestTieredPollerRefreshRemovesEmptyNotificationTargets(t *testing.T) {
@@ -429,13 +427,13 @@ func TestBuildYouTubeProducerYouTubeComponents_GraduatedMembersFiltered(t *testi
 	if scheduler == nil {
 		t.Fatal("scheduler is nil")
 	}
-	if len(registrations) != 2 {
-		t.Fatalf("len(registrations) = %d, want 2", len(registrations))
+	if len(registrations) != 1 {
+		t.Fatalf("len(registrations) = %d, want 1", len(registrations))
 	}
 
 	applied := scheduler.SetProxyEnabled(false)
-	if applied != 2 {
-		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 2", applied)
+	if applied != 1 {
+		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 1", applied)
 	}
 }
 

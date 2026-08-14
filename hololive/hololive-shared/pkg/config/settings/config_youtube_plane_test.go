@@ -15,6 +15,9 @@ func TestDefaultYouTubePlaneConfigValidates(t *testing.T) {
 	if !cfg.Enabled || cfg.PostgresPoolMaxConns != 4 || cfg.ConsumerWorkers != 2 || cfg.DBOperationConcurrency != 3 {
 		t.Fatalf("default pool/worker budget = %#v", cfg)
 	}
+	if !cfg.LiveEndFinalizer.Enabled || cfg.LiveEndFinalizer.Interval != time.Minute {
+		t.Fatalf("default live end finalizer = %#v", cfg.LiveEndFinalizer)
+	}
 }
 
 func TestYouTubePlaneConfigValidateFailsClosed(t *testing.T) {
@@ -119,6 +122,12 @@ func TestLoadYouTubePlaneConfigNonDefaultOverride(t *testing.T) {
 	if cfg.ContentAbsenceGrace != 0 {
 		t.Fatalf("default content absence grace = %s", cfg.ContentAbsenceGrace)
 	}
+	if cfg.LiveEndGrace != 2*time.Minute {
+		t.Fatalf("default live end grace = %s", cfg.LiveEndGrace)
+	}
+	if !cfg.LiveEndFinalizer.Enabled || cfg.LiveEndFinalizer.Interval != time.Minute {
+		t.Fatalf("default live end finalizer after load = %#v", cfg.LiveEndFinalizer)
+	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("overridden config: %v", err)
 	}
@@ -144,6 +153,45 @@ func TestYouTubePlaneConfigRejectsInvalidContentAbsenceGrace(t *testing.T) {
 	cfg.ContentAbsenceGrace = 25 * time.Hour
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "content absence grace") {
+		t.Fatalf("Validate() = %v", err)
+	}
+}
+
+func TestLoadYouTubePlaneConfigLiveEndFinalizerOverride(t *testing.T) {
+	t.Setenv("YOUTUBE_PLANE_LIVE_END_FINALIZER_ENABLED", "false")
+	t.Setenv("YOUTUBE_PLANE_LIVE_END_FINALIZER_INTERVAL_SECONDS", "30")
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
+	if cfg.LiveEndFinalizer.Enabled {
+		t.Fatal("LiveEndFinalizer.Enabled override to false was ignored")
+	}
+	if cfg.LiveEndFinalizer.Interval != 30*time.Second {
+		t.Fatalf("LiveEndFinalizer.Interval = %s, want 30s", cfg.LiveEndFinalizer.Interval)
+	}
+}
+
+func TestLoadYouTubePlaneConfigLiveEndGraceOverride(t *testing.T) {
+	t.Setenv("YOUTUBE_PLANE_LIVE_END_GRACE_SECONDS", "180")
+	cfg, err := loadYouTubePlaneConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubePlaneConfig() error = %v", err)
+	}
+	if cfg.LiveEndGrace != 180*time.Second {
+		t.Fatalf("LiveEndGrace = %s, want 180s", cfg.LiveEndGrace)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("overridden live end grace: %v", err)
+	}
+}
+
+func TestYouTubePlaneConfigRejectsInvalidLiveEndGrace(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultYouTubePlaneConfig()
+	cfg.LiveEndGrace = 25 * time.Hour
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "live end grace") {
 		t.Fatalf("Validate() = %v", err)
 	}
 }

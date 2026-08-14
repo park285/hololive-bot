@@ -32,8 +32,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	pollerruntime "github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
@@ -80,36 +78,16 @@ func buildYouTubeProducerChannelPollerRegistrationsWithClient(
 	poll := scraperConfig.PollOrDefault()
 	pool := postgres.GetPool()
 	pollers := newYouTubeProducerPollerSet(scraperClient, liveStatusProvider, pool)
-	logLiveDiscoveryScope(logger, pollers.liveBatchEnabled, notificationChannelIDs, operationalChannelIDs)
-	registrations := buildFlatYouTubeProducerChannelPollerRegistrations(&pollers, poll, notificationChannelIDs, operationalChannelIDs)
-	return appendBackfillChannelPollerRegistrations(registrations, &pollers, scraperConfig.Backfill, notificationChannelIDs, operationalChannelIDs)
+	return buildFlatYouTubeProducerChannelPollerRegistrations(&pollers, poll, notificationChannelIDs, operationalChannelIDs)
 }
 
 func appendBackfillChannelPollerRegistrations(
 	registrations []providers.ChannelPollerRegistration,
-	pollers *youTubeProducerPollerSet,
-	backfill settings.ScraperBackfillConfig,
-	notificationChannelIDs []string,
-	operationalChannelIDs []string,
+	_ *youTubeProducerPollerSet,
+	_ settings.ScraperBackfillConfig,
+	_ []string,
+	_ []string,
 ) []providers.ChannelPollerRegistration {
-	if !backfill.Enabled {
-		return registrations
-	}
-	if backfill.LiveEnabled {
-		liveChannelIDs, liveTargetGroup := liveRegistrationTargets(pollers.liveBatchEnabled, notificationChannelIDs, operationalChannelIDs)
-		registrations = appendLivePollerRegistrations(registrations, &livePollerRegistrationSpec{
-			Name:           "live_backfill",
-			Base:           newNamedBackfillPoller("live_backfill", pollers.live),
-			BatchBase:      pollers.liveBatch,
-			BatchEnabled:   pollers.liveBatchEnabled,
-			Priority:       scheduler.PriorityLow,
-			Interval:       backfill.LiveInterval,
-			ChannelIDs:     liveChannelIDs,
-			TargetGroup:    liveTargetGroup,
-			BurstClass:     polling.BudgetBurstBackfill,
-			BudgetPriority: polling.BudgetPriorityLow,
-		})
-	}
 	return registrations
 }
 
@@ -119,22 +97,9 @@ func buildFlatYouTubeProducerChannelPollerRegistrations(
 	notificationChannelIDs []string,
 	operationalChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
-	registrations := []providers.ChannelPollerRegistration{
+	return []providers.ChannelPollerRegistration{
 		buildStatsRegistration(pollers.stats, poll.Stats, operationalChannelIDs),
 	}
-	liveChannelIDs, liveTargetGroup := liveRegistrationTargets(pollers.liveBatchEnabled, notificationChannelIDs, operationalChannelIDs)
-	return appendLivePollerRegistrations(registrations, &livePollerRegistrationSpec{
-		Name:           "live",
-		Base:           pollers.live,
-		BatchBase:      pollers.liveBatch,
-		BatchEnabled:   pollers.liveBatchEnabled,
-		Priority:       scheduler.PriorityHigh,
-		Interval:       poll.Live,
-		ChannelIDs:     liveChannelIDs,
-		TargetGroup:    liveTargetGroup,
-		BurstClass:     polling.BudgetBurstPrimary,
-		BudgetPriority: polling.BudgetPriorityHigh,
-	})
 }
 
 func tryBuildTieredChannelPollerRegistrations(
@@ -164,46 +129,7 @@ func buildTieredYouTubeProducerChannelPollerRegistrations(
 	poll settings.ScraperPoll,
 	targets *polltarget.TieredTargets,
 ) []providers.ChannelPollerRegistration {
-	registrations := make([]providers.ChannelPollerRegistration, 0, 4)
-	registrations = append(registrations, buildStatsRegistration(pollers.stats, poll.Stats, targets.OperationalChannelIDs))
-	liveChannelIDs, liveTargetGroup := liveRegistrationTargets(pollers.liveBatchEnabled, targets.NotificationChannelIDs, targets.OperationalChannelIDs)
-	registrations = appendLivePollerRegistrations(registrations, &livePollerRegistrationSpec{
-		Name:           "live",
-		Base:           pollers.live,
-		BatchBase:      pollers.liveBatch,
-		BatchEnabled:   pollers.liveBatchEnabled,
-		Priority:       scheduler.PriorityHigh,
-		Interval:       poll.Live,
-		ChannelIDs:     liveChannelIDs,
-		TargetGroup:    liveTargetGroup,
-		BurstClass:     polling.BudgetBurstPrimary,
-		BudgetPriority: polling.BudgetPriorityHigh,
-	})
-	return registrations
-}
-
-func liveRegistrationTargets(
-	batchEnabled bool,
-	notificationChannelIDs []string,
-	operationalChannelIDs []string,
-) ([]string, providers.ChannelTargetGroup) {
-	if batchEnabled {
-		return operationalChannelIDs, providers.ChannelTargetGroupOperational
+	return []providers.ChannelPollerRegistration{
+		buildStatsRegistration(pollers.stats, poll.Stats, targets.OperationalChannelIDs),
 	}
-	return notificationChannelIDs, providers.ChannelTargetGroupNotification
-}
-
-func logLiveDiscoveryScope(
-	logger *slog.Logger,
-	batchEnabled bool,
-	notificationChannelIDs []string,
-	operationalChannelIDs []string,
-) {
-	if logger == nil || batchEnabled || len(notificationChannelIDs) == len(operationalChannelIDs) {
-		return
-	}
-	logger.Warn("youtube_producer_live_discovery_subscription_fallback",
-		slog.Int("notification_target_channels", len(notificationChannelIDs)),
-		slog.Int("operational_target_channels", len(operationalChannelIDs)),
-	)
 }

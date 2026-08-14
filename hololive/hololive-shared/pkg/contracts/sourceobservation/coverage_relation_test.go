@@ -63,4 +63,39 @@ func TestAbsenceCapabilityForKind(t *testing.T) {
 	if AbsenceCapabilityFor(KindShortsList) != AbsenceScoped {
 		t.Fatal("shorts_list is SCOPED_ABSENCE")
 	}
+	if AbsenceCapabilityFor(KindLiveSnapshot) != AbsenceScoped {
+		t.Fatal("live_snapshot is SCOPED_ABSENCE")
+	}
+	if AbsenceCapabilityFor(KindSchedule) != AbsencePositiveOnly {
+		t.Fatal("schedule_snapshot remains POSITIVE_ONLY")
+	}
+}
+
+func TestLiveCoverageCoversChannel(t *testing.T) {
+	t.Parallel()
+	coverage := GlobalChannelCoverageV1{RequestedChannelIDs: []string{"UC_A", "UC_B"}}
+	if !LiveCoverageCoversChannel(coverage, "UC_A") {
+		t.Fatal("requested channel must be covered")
+	}
+	if LiveCoverageCoversChannel(coverage, "UC_C") {
+		t.Fatal("unrequested channel must not be covered")
+	}
+}
+
+func TestLiveCoverageCoversSessionRespectsStatusFilter(t *testing.T) {
+	t.Parallel()
+	liveOnly := GlobalChannelCoverageV1{
+		RequestedChannelIDs: []string{"UC_A"},
+		Filters:             LiveFiltersV1{Statuses: []string{"LIVE"}},
+	}
+	if !LiveCoverageCoversSession(liveOnly, "UC_A", "LIVE") {
+		t.Fatal("LIVE-only coverage must cover a LIVE session")
+	}
+	if LiveCoverageCoversSession(liveOnly, "UC_A", "UPCOMING") {
+		t.Fatal("LIVE-only coverage must not cover an UPCOMING session")
+	}
+	empty := GlobalChannelCoverageV1{RequestedChannelIDs: []string{"UC_A"}}
+	if !LiveCoverageCoversSession(empty, "UC_A", "UPCOMING") {
+		t.Fatal("empty status filter covers requested channel sessions")
+	}
 }

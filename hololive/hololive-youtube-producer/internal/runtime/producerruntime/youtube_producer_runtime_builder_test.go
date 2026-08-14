@@ -263,8 +263,8 @@ func TestBuildYouTubeProducerRuntime_NormalBuildWithAllDependencies(t *testing.T
 			)
 			require.NoError(t, err)
 			require.NotNil(t, scraperScheduler)
-			require.Len(t, registrations, 2)
-			assert.Equal(t, 2, schedulerJobCount(t, scraperScheduler))
+			require.Len(t, registrations, 1)
+			assert.Equal(t, 1, schedulerJobCount(t, scraperScheduler))
 
 			configSubscriber := configupdates.BuildSubscriber(
 				infra.cacheService,

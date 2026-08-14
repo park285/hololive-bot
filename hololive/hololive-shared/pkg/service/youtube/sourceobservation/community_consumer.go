@@ -22,10 +22,11 @@ type CanonicalWriter interface {
 }
 
 type Consumer struct {
-	repo     *Repository
-	writer   CanonicalWriter
-	keywords []string
-	grace    time.Duration
+	repo      *Repository
+	writer    CanonicalWriter
+	keywords  []string
+	grace     time.Duration
+	liveGrace time.Duration
 }
 
 func NewConsumer(repo *Repository, writer CanonicalWriter, keywords []string) *Consumer {
@@ -38,7 +39,23 @@ func NewConsumerWithAbsenceGrace(
 	keywords []string,
 	grace time.Duration,
 ) *Consumer {
-	return &Consumer{repo: repo, writer: writer, keywords: community.NormalizeKeywords(keywords), grace: grace}
+	return NewConsumerWithGraces(repo, writer, keywords, grace, 0)
+}
+
+func NewConsumerWithGraces(
+	repo *Repository,
+	writer CanonicalWriter,
+	keywords []string,
+	grace time.Duration,
+	liveGrace time.Duration,
+) *Consumer {
+	return &Consumer{
+		repo:      repo,
+		writer:    writer,
+		keywords:  community.NormalizeKeywords(keywords),
+		grace:     grace,
+		liveGrace: liveGrace,
+	}
 }
 
 func (c *Consumer) Consume(ctx context.Context, options ClaimOptions) error {
@@ -88,12 +105,13 @@ func (c *Consumer) ConsumeObservation(
 	if result.Unsupported || !canonicalApplied {
 		return nil
 	}
-	if appliedKind == contract.KindCommunityPage {
+	switch appliedKind {
+	case contract.KindCommunityPage:
 		c.writer.AfterCommit(ctx, persisted)
-		return nil
+	case contract.KindVideoList, contract.KindShortsList:
+		_, _, tracking := contentArtifacts(Observation{}, contentDecision)
+		c.writer.AfterCommitVideos(ctx, tracking)
 	}
-	_, _, tracking := contentArtifacts(Observation{}, contentDecision)
-	c.writer.AfterCommitVideos(ctx, tracking)
 	return nil
 }
 
@@ -111,9 +129,41 @@ func (c *Consumer) finalizeObservation(
 		return c.finalizeCommunity(ctx, tx, claimed, persisted, appliedKind, canonicalApplied)
 	case contract.KindVideoList, contract.KindShortsList:
 		return c.finalizeContent(ctx, tx, claimed, contentDecision, appliedKind, canonicalApplied)
+	case contract.KindLiveSnapshot:
+		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileLive(ctx, tx, claimed)
+			return rec, err
+		})
+	case contract.KindViewerSample:
+		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileViewer(ctx, tx, claimed)
+			return rec, err
+		})
+	case contract.KindSchedule:
+		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileSchedule(ctx, tx, claimed)
+			return rec, err
+		})
 	default:
 		return ReconcileResult{}, fmt.Errorf("youtube consumer received kind %q", claimed.ObservationKind)
 	}
+}
+
+func (c *Consumer) finalizeKind(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed Observation,
+	appliedKind *contract.ObservationKind,
+	canonicalApplied *bool,
+	reconcile func(context.Context, dbx.Tx, Observation) (ReconcileResult, error),
+) (ReconcileResult, error) {
+	rec, err := reconcile(ctx, tx, claimed)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	*appliedKind = claimed.ObservationKind
+	*canonicalApplied = true
+	return rec, nil
 }
 
 func (c *Consumer) finalizeCommunity(

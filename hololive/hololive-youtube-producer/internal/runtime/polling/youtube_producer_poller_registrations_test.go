@@ -82,10 +82,10 @@ func TestBuildRegistrationsAddsEnabledBackfillPollers(t *testing.T) {
 		TargetGroup:    "notification",
 	}, []string{"UC_A", "UC_B"})
 
-	assertBackfillRegistration(t, registrations, "live_backfill", 3*time.Minute)
 	for _, registration := range registrations {
 		name := registration.Poller.Name()
-		if name == "videos" || name == "shorts" || name == "shorts_backfill" {
+		switch name {
+		case "videos", "shorts", "shorts_backfill", "live", "live_batch", "live_backfill", "live_backfill_batch":
 			t.Fatalf("producer must not register %q", name)
 		}
 	}
@@ -119,7 +119,7 @@ func TestBudgetIncludesBackfillRegistrations(t *testing.T) {
 		TargetGroup:    "notification",
 	}, []string{"UC_A"})
 
-	require.Greater(t, summarizeYouTubeProducerBudget(withBackfill).PollerRPM, summarizeYouTubeProducerBudget(base).PollerRPM)
+	require.Equal(t, summarizeYouTubeProducerBudget(withBackfill).PollerRPM, summarizeYouTubeProducerBudget(base).PollerRPM)
 }
 
 func TestFlatAndBackfillRegistrationsHaveBudgetProfiles(t *testing.T) {
@@ -251,16 +251,6 @@ func TestRegistrationBudgetProfileMatrixSpotChecks(t *testing.T) {
 		TargetGroup:    "notification",
 	}, []string{"UC_A", "UC_B"})
 
-	live := requireRegistration(t, registrations, "live_batch")
-	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[polling.BudgetSourceHolodexLive])
-	require.Equal(t, float64(1), live.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
-	require.Equal(t, polling.BudgetBurstPrimary, live.BudgetProfile.BurstClass)
-	require.Equal(t, polling.BudgetPriorityHigh, live.BudgetProfile.Priority)
-
-	liveBackfill := requireRegistration(t, registrations, "live_backfill_batch")
-	require.Equal(t, polling.BudgetBurstBackfill, liveBackfill.BudgetProfile.BurstClass)
-	require.Equal(t, polling.BudgetPriorityLow, liveBackfill.BudgetProfile.Priority)
-
 	stats := requireRegistration(t, registrations, "channel_stats")
 	require.Equal(t, 2*float64(scraper.FetchPageMaxAttempts), stats.BudgetProfile.SourceUnits[polling.BudgetSourceYouTubeScraper])
 	require.Equal(t, float64(1), stats.BudgetProfile.SourceUnits[polling.BudgetSourcePostgresWrite])
@@ -327,7 +317,6 @@ func TestEstimateYouTubeProducerSourceBudgetKeepsSustainedIndependentOfAPCount(t
 
 	require.Equal(t, twoAPs.SustainedRPMBySource, threeAPs.SustainedRPMBySource)
 	require.Greater(t, twoAPs.SustainedRPMBySource[polling.BudgetSourceYouTubeScraper], float64(0))
-	require.Greater(t, twoAPs.SustainedRPMBySource[polling.BudgetSourceHolodexLive], float64(0))
 	for source := range twoAPs.BurstInflightBySource {
 		require.Equal(t, 4, twoAPs.BurstInflightBySource[source])
 		require.Equal(t, 6, threeAPs.BurstInflightBySource[source])
@@ -416,7 +405,7 @@ func TestBudgetRejectsAggressiveBackfillInterval(t *testing.T) {
 	}, manyChannelIDs(120))
 
 	summary := summarizeYouTubeProducerBudget(registrations)
-	require.Error(t, validateYouTubeProducerPollerBudget(summary))
+	require.NoError(t, validateYouTubeProducerPollerBudget(summary))
 }
 
 func buildBackfillTestRegistrations(backfill settings.ScraperBackfillConfig, notificationChannelIDs []string) []providers.ChannelPollerRegistration {

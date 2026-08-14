@@ -965,6 +965,38 @@ TABLE youtube_live_sessions
   INDEX CREATE INDEX idx_yls_live_first_seen ON public.youtube_live_sessions USING btree (live_first_seen_at, channel_id) WHERE (status = 'LIVE'::text)
   INDEX CREATE INDEX idx_yls_status_last_seen ON public.youtube_live_sessions USING btree (status, last_seen_at DESC)
 
+TABLE youtube_live_viewer_sample_evidence
+  COLUMN video_id text NOT NULL
+  COLUMN sample_window_start timestamp with time zone NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN observation_id bigint
+  COLUMN viewer_count bigint
+  COLUMN availability text NOT NULL
+  COLUMN sample_window_seconds integer NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  CONSTRAINT chk_youtube_viewer_evidence_availability CHECK ((availability = ANY (ARRAY['AVAILABLE'::text, 'HIDDEN'::text, 'UNAVAILABLE'::text])))
+  CONSTRAINT chk_youtube_viewer_evidence_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
+  CONSTRAINT chk_youtube_viewer_evidence_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
+  CONSTRAINT chk_youtube_viewer_evidence_window CHECK (((sample_window_seconds >= 1) AND (sample_window_seconds <= 86400)))
+  CONSTRAINT youtube_live_viewer_sample_evidence_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_live_viewer_sample_evidence_pkey PRIMARY KEY (video_id, sample_window_start, provider)
+
+TABLE youtube_live_viewer_sample_heads
+  COLUMN video_id text NOT NULL
+  COLUMN last_resolved_window_start timestamp with time zone
+  COLUMN last_resolved_count bigint
+  COLUMN last_resolved_availability text
+  COLUMN prior_resolved_window_start timestamp with time zone
+  COLUMN prior_resolved_count bigint
+  COLUMN prior_resolved_availability text
+  COLUMN unresolved_window_start timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_viewer_head_availability CHECK (((last_resolved_availability IS NULL) OR (last_resolved_availability = ANY (ARRAY['AVAILABLE'::text, 'HIDDEN'::text, 'UNAVAILABLE'::text]))))
+  CONSTRAINT chk_youtube_viewer_head_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
+  CONSTRAINT youtube_live_viewer_sample_heads_pkey PRIMARY KEY (video_id)
+
 TABLE youtube_live_viewer_samples
   COLUMN video_id character varying(20) NOT NULL
   COLUMN captured_at timestamp with time zone NOT NULL
@@ -1067,6 +1099,21 @@ TABLE youtube_notification_outbox
   INDEX CREATE UNIQUE INDEX idx_yno_kind_content ON public.youtube_notification_outbox USING btree (kind, content_id)
   INDEX CREATE INDEX idx_yno_pending_due_created_id ON public.youtube_notification_outbox USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_yno_status_created ON public.youtube_notification_outbox USING btree (status, created_at)
+
+TABLE youtube_schedule_items
+  COLUMN group_key text NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN external_id text NOT NULL
+  COLUMN video_id text NOT NULL DEFAULT ''::text
+  COLUMN channel_id text NOT NULL DEFAULT ''::text
+  COLUMN title text NOT NULL
+  COLUMN scheduled_at timestamp with time zone NOT NULL
+  COLUMN ended_at timestamp with time zone
+  COLUMN is_live boolean NOT NULL DEFAULT false
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_schedule_item_bounds CHECK ((((length(group_key) >= 1) AND (length(group_key) <= 256)) AND ((length(external_id) >= 1) AND (length(external_id) <= 256)) AND (length(video_id) <= 128) AND (length(channel_id) <= 256) AND ((length(title) >= 1) AND (length(title) <= 4096))))
+  CONSTRAINT chk_youtube_schedule_item_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
+  CONSTRAINT youtube_schedule_items_pkey PRIMARY KEY (group_key, provider, external_id)
 
 TABLE youtube_stats_changes
   COLUMN id integer NOT NULL DEFAULT nextval('youtube_stats_changes_id_seq'::regclass)

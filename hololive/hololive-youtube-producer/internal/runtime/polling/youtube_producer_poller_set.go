@@ -95,27 +95,27 @@ func CommunityKeywords() []string {
 
 func newYouTubeProducerPollerSet(
 	scraperClient *scraper.Client,
-	liveStatusProvider pollers.LiveStatusProvider,
+	_ pollers.LiveStatusProvider,
 	db any,
 ) youTubeProducerPollerSet {
-	livePoller := pollers.NewLivePollerWithStatusProvider(liveStatusProvider, scraperClient, db)
+	unavailableLive := newUnavailableYouTubeProducerPoller("live")
 	if !hasYouTubeProducerPollerDB(db) {
 		return youTubeProducerPollerSet{
 			videos:           newUnavailableYouTubeProducerPoller("videos"),
 			shorts:           newUnavailableYouTubeProducerPoller("shorts"),
 			stats:            newUnavailableYouTubeProducerPoller("channel_stats"),
-			live:             livePoller,
-			liveBatch:        livePoller,
-			liveBatchEnabled: liveStatusProvider != nil,
+			live:             unavailableLive,
+			liveBatch:        nil,
+			liveBatchEnabled: false,
 		}
 	}
 	return youTubeProducerPollerSet{
 		videos:           newUnavailableYouTubeProducerPoller("videos"),
 		shorts:           newUnavailableYouTubeProducerPoller("shorts"),
 		stats:            pollers.NewChannelStatsPoller(scraperClient, db),
-		live:             livePoller,
-		liveBatch:        livePoller,
-		liveBatchEnabled: liveStatusProvider != nil,
+		live:             unavailableLive,
+		liveBatch:        nil,
+		liveBatchEnabled: false,
 	}
 }
 

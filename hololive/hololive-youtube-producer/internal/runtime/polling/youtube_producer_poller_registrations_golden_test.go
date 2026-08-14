@@ -105,6 +105,9 @@ func serializeRegistrations(registrations []providers.ChannelPollerRegistration)
 }
 
 func TestBuildYouTubeProducerChannelPollerRegistrationsGolden(t *testing.T) {
+	statsOnly := []string{
+		"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
+	}
 	cases := []struct {
 		name       string
 		tiering    bool
@@ -117,85 +120,15 @@ func TestBuildYouTubeProducerChannelPollerRegistrationsGolden(t *testing.T) {
 			tiering:    false,
 			backfill:   false,
 			liveStatus: registrationTestLiveStatusProvider{},
-			want: []string{
-				"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-				"name=live_batch | priority=2 | interval=2m0s | targetGroup=operational | channelIDs=[__global__] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=1 | worstCaseRequestUnitsPerRun=2 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=high | budgetSourceUnits={holodex_live=1,postgres_write=2} | budgetFallbackSourceUnits={youtube_scraper=2}",
-			},
+			want:       statsOnly,
 		},
-		{
-			name:       "flat_backfill_batch",
-			tiering:    false,
-			backfill:   true,
-			liveStatus: registrationTestLiveStatusProvider{},
-			want: []string{
-				"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-				"name=live_batch | priority=2 | interval=2m0s | targetGroup=operational | channelIDs=[__global__] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=1 | worstCaseRequestUnitsPerRun=2 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=high | budgetSourceUnits={holodex_live=1,postgres_write=2} | budgetFallbackSourceUnits={youtube_scraper=2}",
-				"name=live_backfill_batch | priority=0 | interval=3m0s | targetGroup=operational | channelIDs=[__global__] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=1 | worstCaseRequestUnitsPerRun=2 | hasBudgetProfile=true | budgetBurstClass=backfill | budgetPriority=low | budgetSourceUnits={holodex_live=1,postgres_write=2} | budgetFallbackSourceUnits={youtube_scraper=2}",
-			},
-		},
-		{
-			name:       "tiered_no_backfill_batch",
-			tiering:    true,
-			backfill:   false,
-			liveStatus: registrationTestLiveStatusProvider{},
-			want: []string{
-				"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-				"name=live_batch | priority=2 | interval=2m0s | targetGroup=operational | channelIDs=[__global__] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=1 | worstCaseRequestUnitsPerRun=2 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=high | budgetSourceUnits={holodex_live=1,postgres_write=2} | budgetFallbackSourceUnits={youtube_scraper=2}",
-			},
-		},
-		{
-			name:       "tiered_backfill_batch",
-			tiering:    true,
-			backfill:   true,
-			liveStatus: registrationTestLiveStatusProvider{},
-			want: []string{
-				"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-				"name=live_batch | priority=2 | interval=2m0s | targetGroup=operational | channelIDs=[__global__] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=1 | worstCaseRequestUnitsPerRun=2 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=high | budgetSourceUnits={holodex_live=1,postgres_write=2} | budgetFallbackSourceUnits={youtube_scraper=2}",
-				"name=live_backfill_batch | priority=0 | interval=3m0s | targetGroup=operational | channelIDs=[__global__] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=1 | worstCaseRequestUnitsPerRun=2 | hasBudgetProfile=true | budgetBurstClass=backfill | budgetPriority=low | budgetSourceUnits={holodex_live=1,postgres_write=2} | budgetFallbackSourceUnits={youtube_scraper=2}",
-			},
-		},
-		{
-			name:       "flat_no_backfill_single",
-			tiering:    false,
-			backfill:   false,
-			liveStatus: nil,
-			want: []string{
-				"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-				"name=live | priority=2 | interval=2m0s | targetGroup=notification | channelIDs=[UC_A UC_B UC_C] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=3 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=high | budgetSourceUnits={postgres_write=1,youtube_scraper=3} | budgetFallbackSourceUnits={}",
-			},
-		},
-		{
-			name:       "flat_backfill_single",
-			tiering:    false,
-			backfill:   true,
-			liveStatus: nil,
-			want: []string{
-				"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-				"name=live | priority=2 | interval=2m0s | targetGroup=notification | channelIDs=[UC_A UC_B UC_C] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=3 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=high | budgetSourceUnits={postgres_write=1,youtube_scraper=3} | budgetFallbackSourceUnits={}",
-				"name=live_backfill | priority=0 | interval=3m0s | targetGroup=notification | channelIDs=[UC_A UC_B UC_C] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=3 | hasBudgetProfile=true | budgetBurstClass=backfill | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=3} | budgetFallbackSourceUnits={}",
-			},
-		},
-		{
-			name:       "tiered_no_backfill_single",
-			tiering:    true,
-			backfill:   false,
-			liveStatus: nil,
-			want: []string{
-				"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-				"name=live | priority=2 | interval=2m0s | targetGroup=notification | channelIDs=[UC_A UC_B UC_C] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=3 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=high | budgetSourceUnits={postgres_write=1,youtube_scraper=3} | budgetFallbackSourceUnits={}",
-			},
-		},
-		{
-			name:       "tiered_backfill_single",
-			tiering:    true,
-			backfill:   true,
-			liveStatus: nil,
-			want: []string{
-				"name=channel_stats | priority=0 | interval=6h0m0s | targetGroup=operational | channelIDs=[UC_STATS_1 UC_STATS_2] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=6 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=6} | budgetFallbackSourceUnits={}",
-				"name=live | priority=2 | interval=2m0s | targetGroup=notification | channelIDs=[UC_A UC_B UC_C] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=3 | hasBudgetProfile=true | budgetBurstClass=primary | budgetPriority=high | budgetSourceUnits={postgres_write=1,youtube_scraper=3} | budgetFallbackSourceUnits={}",
-				"name=live_backfill | priority=0 | interval=3m0s | targetGroup=notification | channelIDs=[UC_A UC_B UC_C] | hasExplicitChannelIDs=true | requestsPerRun=1 | worstCaseAttempts=3 | worstCaseRequestUnitsPerRun=3 | hasBudgetProfile=true | budgetBurstClass=backfill | budgetPriority=low | budgetSourceUnits={postgres_write=1,youtube_scraper=3} | budgetFallbackSourceUnits={}",
-			},
-		},
+		{name: "flat_backfill_batch", tiering: false, backfill: true, liveStatus: registrationTestLiveStatusProvider{}, want: statsOnly},
+		{name: "tiered_no_backfill_batch", tiering: true, backfill: false, liveStatus: registrationTestLiveStatusProvider{}, want: statsOnly},
+		{name: "tiered_backfill_batch", tiering: true, backfill: true, liveStatus: registrationTestLiveStatusProvider{}, want: statsOnly},
+		{name: "flat_no_backfill_single", tiering: false, backfill: false, liveStatus: nil, want: statsOnly},
+		{name: "flat_backfill_single", tiering: false, backfill: true, liveStatus: nil, want: statsOnly},
+		{name: "tiered_no_backfill_single", tiering: true, backfill: false, liveStatus: nil, want: statsOnly},
+		{name: "tiered_backfill_single", tiering: true, backfill: true, liveStatus: nil, want: statsOnly},
 	}
 
 	for _, tc := range cases {

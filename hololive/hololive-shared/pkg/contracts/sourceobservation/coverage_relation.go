@@ -4,7 +4,7 @@ import "time"
 
 func AbsenceCapabilityFor(kind ObservationKind) AbsenceCapability {
 	switch kind {
-	case KindVideoList, KindShortsList:
+	case KindVideoList, KindShortsList, KindLiveSnapshot:
 		return AbsenceScoped
 	default:
 		return AbsencePositiveOnly
@@ -83,6 +83,33 @@ func ShortsListCoversVideo(coverage ShortsListCoverageV1, video VideoListItemV1)
 
 func CoverageAllowsAbsence(relation CoverageRelation) bool {
 	return relation == CoverageEqual || relation == CoverageCovers
+}
+
+func LiveCoverageCoversChannel(coverage GlobalChannelCoverageV1, channelID string) bool {
+	if channelID == "" {
+		return false
+	}
+	for _, requested := range coverage.RequestedChannelIDs {
+		if requested == channelID {
+			return true
+		}
+	}
+	return false
+}
+
+func LiveCoverageCoversSession(coverage GlobalChannelCoverageV1, channelID, status string) bool {
+	if !LiveCoverageCoversChannel(coverage, channelID) {
+		return false
+	}
+	if len(coverage.Filters.Statuses) == 0 {
+		return true
+	}
+	for _, requested := range coverage.Filters.Statuses {
+		if requested == status {
+			return true
+		}
+	}
+	return false
 }
 
 func upcomingOnly(video VideoListItemV1) bool {

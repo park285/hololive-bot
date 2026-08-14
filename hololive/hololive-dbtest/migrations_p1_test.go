@@ -100,6 +100,8 @@ func TestSourceObservationMigrationReplaysWithoutRegressingContracts(t *testing.
 		"159_source_observation_replay_fk_index.sql",
 		"160_youtube_live_reconciliation_candidate_fk_index.sql",
 		"161_source_observation_subject_heads.sql",
+		"162_youtube_content_evidence_clocks.sql",
+		"163_youtube_live_viewer_schedule_canonical.sql",
 	}
 	if _, err := pool.Exec(ctx, `
 		UPDATE observation_contract_generations
@@ -164,11 +166,19 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 161 source observation subject heads migration: %v", err)
 	}
+	contentClocks, err := os.ReadFile(filepath.Join(dir, "162_youtube_content_evidence_clocks.sql"))
+	if err != nil {
+		t.Fatalf("read 162 content evidence clocks migration: %v", err)
+	}
+	liveSchedule, err := os.ReadFile(filepath.Join(dir, "163_youtube_live_viewer_schedule_canonical.sql"))
+	if err != nil {
+		t.Fatalf("read 163 live viewer schedule migration: %v", err)
+	}
 	grantPreexistingScraperPrivileges(t, pool, roles.scraper)
 	sql := strings.NewReplacer(
 		"hololive_scraper", roles.scraper,
 		"hololive_runtime", roles.runtime,
-	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads))
+	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads) + "\n" + string(contentClocks) + "\n" + string(liveSchedule))
 	if _, err := pool.Exec(ctx, sql); err != nil {
 		t.Fatalf("apply source observation migration with isolated roles: %v", err)
 	}
@@ -359,6 +369,9 @@ var sourceObservationTables = []string{
 	"youtube_content_evidence_clocks",
 	"youtube_content_absence_slots",
 	"youtube_content_channel_heads",
+	"youtube_live_viewer_sample_evidence",
+	"youtube_live_viewer_sample_heads",
+	"youtube_schedule_items",
 }
 
 var sourceObservationSequences = []string{
@@ -400,6 +413,11 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_content_evidence_clocks":           observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_content_absence_slots":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_content_channel_heads":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_live_viewer_sample_evidence":       observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_live_viewer_sample_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_schedule_items":                    observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_live_sessions":                     observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_live_viewer_samples":               observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 		},
 	}
 	sequencePrivileges := map[string]map[string]map[string]bool{

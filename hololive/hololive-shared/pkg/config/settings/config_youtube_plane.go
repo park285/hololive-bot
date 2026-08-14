@@ -48,6 +48,7 @@ type YouTubePlaneConfig struct {
 	TargetProjection    YouTubePlaneTargetProjectionConfig
 	LiveEndFinalizer    YouTubePlaneLiveEndFinalizerConfig
 	ContentAbsenceGrace time.Duration
+	LiveEndGrace        time.Duration
 }
 
 func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
@@ -66,6 +67,11 @@ func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 			Interval: 5 * time.Second,
 			Validity: time.Hour,
 		},
+		LiveEndFinalizer: YouTubePlaneLiveEndFinalizerConfig{
+			Enabled:  true,
+			Interval: time.Minute,
+		},
+		LiveEndGrace: 2 * time.Minute,
 	}
 }
 
@@ -121,13 +127,16 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	if config.TargetProjection.Validity, err = strictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_VALIDITY_SECONDS", defaults.TargetProjection.Validity, time.Second); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if config.LiveEndFinalizer.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_LIVE_END_FINALIZER_ENABLED", false); err != nil {
+	if config.LiveEndFinalizer.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_LIVE_END_FINALIZER_ENABLED", defaults.LiveEndFinalizer.Enabled); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if config.LiveEndFinalizer.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_FINALIZER_INTERVAL_SECONDS", time.Minute, time.Second); err != nil {
+	if config.LiveEndFinalizer.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_FINALIZER_INTERVAL_SECONDS", defaults.LiveEndFinalizer.Interval, time.Second); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
 	if err := loadContentAbsenceGrace(&config, defaults); err != nil {
+		return YouTubePlaneConfig{}, err
+	}
+	if err := loadLiveEndGrace(&config, defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
 	return config, nil
@@ -139,6 +148,15 @@ func loadContentAbsenceGrace(config *YouTubePlaneConfig, defaults YouTubePlaneCo
 		return err
 	}
 	config.ContentAbsenceGrace = value
+	return nil
+}
+
+func loadLiveEndGrace(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+	value, err := strictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_GRACE_SECONDS", defaults.LiveEndGrace, time.Second)
+	if err != nil {
+		return err
+	}
+	config.LiveEndGrace = value
 	return nil
 }
 
@@ -216,12 +234,22 @@ func (c YouTubePlaneConfig) Validate() error {
 	if c.LiveEndFinalizer.Enabled && c.LiveEndFinalizer.Interval <= 0 {
 		return errors.New("youtube plane live end finalizer interval must be positive when enabled")
 	}
-	return c.validateContentAbsenceGrace()
+	if err := c.validateContentAbsenceGrace(); err != nil {
+		return err
+	}
+	return c.validateLiveEndGrace()
 }
 
 func (c YouTubePlaneConfig) validateContentAbsenceGrace() error {
 	if c.ContentAbsenceGrace < 0 || c.ContentAbsenceGrace > 24*time.Hour {
 		return errors.New("youtube plane content absence grace must be between 0 and 24h")
+	}
+	return nil
+}
+
+func (c YouTubePlaneConfig) validateLiveEndGrace() error {
+	if c.LiveEndGrace < 0 || c.LiveEndGrace > 24*time.Hour {
+		return errors.New("youtube plane live end grace must be between 0 and 24h")
 	}
 	return nil
 }

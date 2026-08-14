@@ -14,13 +14,11 @@ import (
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	polling2 "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	communityshorts "github.com/kapu/hololive-youtube-producer/internal/communityshorts"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/ingestionlease"
-	"github.com/kapu/hololive-youtube-producer/internal/runtime/pollers"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polling"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/polltarget"
 	"github.com/kapu/hololive-youtube-producer/internal/runtime/readiness"
@@ -99,10 +97,6 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if features.activeActiveEnabled {
 		probeReadinessJobClaimer(ctx, jobClaimer, logger)
 	}
-	liveStatusProvider, err := producerHolodexLiveStatusProvider(infra.holodexService)
-	if err != nil {
-		return deps, err
-	}
 	return buildProducerYouTubeDependencies(
 		ctx,
 		appConfig,
@@ -111,7 +105,6 @@ func buildIngestionRuntimeYouTubeDependencies(
 		state,
 		readinessState,
 		sharedScraperClient,
-		liveStatusProvider,
 		jobClaimer,
 		budgetWiring,
 		deps,
@@ -126,7 +119,6 @@ func buildProducerYouTubeDependencies(
 	state *ingestionRuntimeYouTubeState,
 	readinessState *readiness.State,
 	sharedScraperClient *scraper.Client,
-	liveStatusProvider pollers.LiveStatusProvider,
 	jobClaimer polling2.JobClaimer,
 	budgetWiring polling.GlobalBudgetWiring,
 	deps ingestionRuntimeYouTubeDependencies,
@@ -141,7 +133,7 @@ func buildProducerYouTubeDependencies(
 		state.pollTargets.NotificationChannelIDs,
 		state.pollTargets.OperationalChannelIDs,
 		sharedScraperClient,
-		liveStatusProvider,
+		nil,
 		logger,
 	)
 	if err != nil {
@@ -150,13 +142,6 @@ func buildProducerYouTubeDependencies(
 	deps.runActiveActiveRecovery = buildActiveActiveRecoveryLoop(appConfig, jobClaimer, readinessState, deps.scraperScheduler, logger)
 	deps.pollTargetRefresher = buildPollTargetRefresher(appConfig, infra, deps, state, logger)
 	return deps, nil
-}
-
-func producerHolodexLiveStatusProvider(holodex *holodexprovider.Service) (pollers.LiveStatusProvider, error) {
-	if holodex == nil {
-		return nil, fmt.Errorf("youtube producer requires Holodex live status provider")
-	}
-	return holodex, nil
 }
 
 func buildIngestionRuntimeCoordination(

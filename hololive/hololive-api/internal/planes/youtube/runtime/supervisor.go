@@ -47,6 +47,61 @@ func (r *Runtime) stopAfterClaimError(ctx context.Context, errCh chan<- error, e
 	return true
 }
 
+func (r *Runtime) runLiveEndLoop(ctx context.Context, errCh chan<- error) {
+	defer func() { r.loopDone <- struct{}{} }()
+	ticker := time.NewTicker(r.Config.LiveEndFinalizer.Interval)
+	defer ticker.Stop()
+	if r.stopAfterLiveEndError(ctx, errCh, r.liveEndTick(ctx)) {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if r.stopAfterLiveEndError(ctx, errCh, r.liveEndTick(ctx)) {
+				return
+			}
+		}
+	}
+}
+
+func (r *Runtime) stopAfterLiveEndError(ctx context.Context, errCh chan<- error, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		return true
+	}
+	if retryableObservationError(err) {
+		r.Logger.Error("youtube plane live end finalizer failed", slog.Any("error", err))
+		return false
+	}
+	r.reportLoopError(ctx, errCh, "finalize due live ends", err)
+	return true
+}
+
+func (r *Runtime) liveEndTick(ctx context.Context) error {
+	if r == nil || r.finalizer == nil || !r.Config.LiveEndFinalizer.Enabled {
+		return nil
+	}
+	for i := 0; i < r.Config.ClaimBatchSize; i++ {
+		var processed bool
+		err := r.withDB(ctx, func(ctx context.Context) error {
+			var tickErr error
+			processed, tickErr = r.finalizer.FinalizeNextDueLiveEnd(ctx, r.Config.LiveEndGrace)
+			return tickErr
+		})
+		if err != nil {
+			return err
+		}
+		if !processed {
+			return nil
+		}
+	}
+	return nil
+}
+
 func (r *Runtime) runProjectionLoop(ctx context.Context, errCh chan<- error) {
 	defer func() { r.loopDone <- struct{}{} }()
 	ticker := time.NewTicker(r.Config.TargetProjection.Interval)

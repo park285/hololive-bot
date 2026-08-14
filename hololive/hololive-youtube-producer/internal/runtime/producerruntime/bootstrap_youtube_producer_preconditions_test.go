@@ -65,10 +65,3 @@ func TestBuildYouTubeProducerRuntimeRequiresRuntimeAllowEnv(t *testing.T) {
 	assert.Nil(t, runtime)
 	assert.Equal(t, "youtube producer runtime disabled: set YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true on the owning host", err.Error())
 }
-
-func TestProducerHolodexLiveStatusProviderIsRequired(t *testing.T) {
-	provider, err := producerHolodexLiveStatusProvider(nil)
-	require.Error(t, err)
-	assert.Nil(t, provider)
-	assert.Equal(t, "youtube producer requires Holodex live status provider", err.Error())
-}

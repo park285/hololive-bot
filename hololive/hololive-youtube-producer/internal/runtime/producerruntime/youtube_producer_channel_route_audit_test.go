@@ -50,7 +50,7 @@ func TestBuildYouTubeProducerYouTubeComponents_OmitsVideosAndShortsForEveryActiv
 	require.NoError(t, err)
 
 	require.NotNil(t, scraperScheduler)
-	require.Len(t, registrations, 2)
+	require.Len(t, registrations, 1)
 	require.Empty(t, contentPollerJobKeys(t, scraperScheduler))
 }
 
