@@ -98,6 +98,23 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 	}
 }
 
+func TestHolodexGlobalCandidatesUseFastestIntervalWhenKindsDiffer(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{
+		{"UC_A", contract.KindLiveSnapshot, 2 * time.Minute, true},
+		{"UC_A", contract.KindChannelStats, 6 * time.Hour, true},
+	})
+	repository := newTestRepository(t, pool)
+	candidates, err := repository.Candidates(ctx, contract.ProviderHolodex, "holodex_global", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].PollInterval != 2*time.Minute {
+		t.Fatalf("candidates = %#v", candidates)
+	}
+}
+
 func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)

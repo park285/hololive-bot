@@ -1,6 +1,8 @@
 # YouTube Three-Provider Convergence — Task 3 Implementation Handoff
 
 > **문서 상태 — 2026-08-14 완료:** Task 3 three-provider collector adapters는 로컬 구현·targeted validation을 완료했습니다. 아래 원문은 실행 당시의 write boundary와 판단 근거를 보존하는 historical implementation record입니다. 새 세션에서 Task 3를 다시 실행하지 말고 canonical contract와 status 문서의 현재 상태를 우선하십시오.
+>
+> **후속:** `viewer_sample` channel-ID plant, `MaxPublishBatchSize=100`, collector `HOLODEX_API_KEY` 미전달은 이후 커밋에서 닫혔습니다. Task 4는 `2026-08-14-youtube-convergence-task4-implementation-handoff.md`를 따르십시오.
 
 ## 완료 업데이트
 

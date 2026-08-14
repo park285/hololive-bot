@@ -175,17 +175,11 @@ func TestNormalizeProjectionIsOrderIndependent(t *testing.T) {
 }
 
 func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
-	schedules := make(map[contract.ObservationKind]Schedule)
-	for _, kind := range []contract.ObservationKind{
-		contract.KindCommunityPage, contract.KindVideoList, contract.KindShortsList,
-		contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindChannelStats,
-		contract.KindChannelProfile, contract.KindChannelPhoto, contract.KindSchedule,
-	} {
-		schedules[kind] = Schedule{Priority: 50, PollInterval: time.Minute, Enabled: true}
-	}
+	schedules := defaultPolicySchedules()
 	targets, reasons, err := BuildPolicyTargets(PolicyInputs{
 		NotificationChannelIDs: []string{"channel:notify"},
 		OperationalChannelIDs:  []string{"channel:ops"},
+		ViewerVideoIDs:         []string{"vid-live-1"},
 	}, schedules)
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +192,7 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 		"channel:notify/video_list":                  true,
 		"channel:notify/shorts_list":                 true,
 		"channel:ops/live_snapshot":                  true,
-		"channel:ops/viewer_sample":                  true,
+		"vid-live-1/viewer_sample":                   true,
 		"channel:ops/channel_stats":                  true,
 		"channel:ops/channel_profile":                true,
 		"channel:ops/channel_photo":                  true,
@@ -210,6 +204,45 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 	if len(want) != 0 {
 		t.Fatalf("missing mapped targets: %#v", want)
 	}
+}
+
+func TestBuildPolicyTargetsDoesNotPlantViewerSampleOnChannelIDs(t *testing.T) {
+	targets, _, err := BuildPolicyTargets(PolicyInputs{
+		OperationalChannelIDs: []string{"UCoperationalchannel0001"},
+		ViewerVideoIDs:        []string{"vid-live-1"},
+	}, defaultPolicySchedules())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range targets {
+		if target.ObservationKind != contract.KindViewerSample {
+			continue
+		}
+		if target.SubjectKey != "vid-live-1" {
+			t.Fatalf("viewer_sample subject = %q, want video id", target.SubjectKey)
+		}
+	}
+}
+
+func TestBuildPolicyTargetsRejectsChannelIDAsViewerVideo(t *testing.T) {
+	_, _, err := BuildPolicyTargets(PolicyInputs{
+		ViewerVideoIDs: []string{"UCoperationalchannel0001"},
+	}, defaultPolicySchedules())
+	if !errors.Is(err, ErrInvalidProjection) {
+		t.Fatalf("error = %v, want invalid projection", err)
+	}
+}
+
+func defaultPolicySchedules() map[contract.ObservationKind]Schedule {
+	schedules := make(map[contract.ObservationKind]Schedule)
+	for _, kind := range []contract.ObservationKind{
+		contract.KindCommunityPage, contract.KindVideoList, contract.KindShortsList,
+		contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindChannelStats,
+		contract.KindChannelProfile, contract.KindChannelPhoto, contract.KindSchedule,
+	} {
+		schedules[kind] = Schedule{Priority: 50, PollInterval: time.Minute, Enabled: true}
+	}
+	return schedules
 }
 
 func assertGenerationStatus(t *testing.T, pool *pgxpool.Pool, generation int64, want string) {

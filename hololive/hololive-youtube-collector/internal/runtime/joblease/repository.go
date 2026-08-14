@@ -172,7 +172,7 @@ func (r *Repository) loadCandidateInterval(
 	if count == 0 {
 		return 0, ErrTargetDisabled
 	}
-	if minIntervalMS != maxIntervalMS {
+	if membership != sourceobservation.JobMembershipCurrentProjection && minIntervalMS != maxIntervalMS {
 		return 0, fmt.Errorf("list collection job candidates: %w: global bundle has conflicting poll intervals", ErrInvalidJob)
 	}
 	return time.Duration(minIntervalMS) * time.Millisecond, nil

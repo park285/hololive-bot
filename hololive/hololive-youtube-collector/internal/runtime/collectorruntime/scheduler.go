@@ -192,6 +192,8 @@ func (s *leaseScheduler) refreshFreshness(now time.Time) {
 }
 
 func (s *leaseScheduler) syncCandidates(ctx context.Context) {
+	var globals []joblease.JobSpec
+	var subjects []joblease.JobSpec
 	for _, runner := range s.registry.Runners() {
 		candidates, err := s.repository.Candidates(ctx, runner.Provider(), runner.JobKind(), s.config.AcquisitionBatch)
 		if err != nil {
@@ -203,11 +205,26 @@ func (s *leaseScheduler) syncCandidates(ctx context.Context) {
 			continue
 		}
 		for _, candidate := range candidates {
-			if !s.enqueue(ctx, candidate) {
-				return
+			if candidate.Class == "GLOBAL" {
+				globals = append(globals, candidate)
+				continue
 			}
+			subjects = append(subjects, candidate)
 		}
 	}
+	if !s.enqueueAll(ctx, globals) {
+		return
+	}
+	s.enqueueAll(ctx, subjects)
+}
+
+func (s *leaseScheduler) enqueueAll(ctx context.Context, candidates []joblease.JobSpec) bool {
+	for _, candidate := range candidates {
+		if !s.enqueue(ctx, candidate) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *leaseScheduler) enqueue(ctx context.Context, candidate joblease.JobSpec) bool {
@@ -222,7 +239,7 @@ func (s *leaseScheduler) enqueue(ctx context.Context, candidate joblease.JobSpec
 		return false
 	default:
 		s.unmarkQueued(candidate.JobKey)
-		return false
+		return true
 	}
 }
 

@@ -708,18 +708,15 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	producerEnv := composeEnvironment(t, cfg, "youtube-producer")
-	for _, key := range []string{"HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
-		if _, ok := producerEnv[key]; !ok {
-			t.Fatalf("youtube-producer missing scoped %s mapping", key)
+	for _, service := range []string{"youtube-producer", "youtube-collector"} {
+		env := composeEnvironment(t, cfg, service)
+		for _, key := range []string{"HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
+			if _, ok := env[key]; !ok {
+				t.Fatalf("%s missing scoped %s mapping", service, key)
+			}
 		}
 	}
 	collectorEnv := composeEnvironment(t, cfg, "youtube-collector")
-	for _, key := range []string{"HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
-		if _, ok := collectorEnv[key]; ok {
-			t.Fatalf("youtube-collector rendered with %s", key)
-		}
-	}
 	if collectorEnv["POSTGRES_USER"] != "hololive_scraper" {
 		t.Fatalf("youtube-collector POSTGRES_USER = %q, want hololive_scraper", collectorEnv["POSTGRES_USER"])
 	}

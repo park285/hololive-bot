@@ -2,6 +2,7 @@ package youtubejscollector
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -32,6 +33,9 @@ func (r *ViewerRunner) Collect(ctx context.Context, input collectutil.RunInput) 
 	if r == nil || r.client == nil {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js viewer client is not configured")
 	}
+	if looksLikeYouTubeChannelID(input.Spec.SubjectKey) {
+		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "viewer_sample subject must be a video id")
+	}
 	started := time.Now()
 	result, err := r.client.FetchViewer(ctx, youtubejs.ViewerRequest{
 		VideoID:           input.Spec.SubjectKey,
@@ -60,4 +64,9 @@ func (r *ViewerRunner) Collect(ctx context.Context, input collectutil.RunInput) 
 		return collectutil.RunOutput{}, collecterr.Wrap(collecterr.ParserDrift, err)
 	}
 	return collectutil.Output([]contract.Envelope{envelope}, started)
+}
+
+func looksLikeYouTubeChannelID(value string) bool {
+	id := strings.TrimSpace(value)
+	return strings.HasPrefix(id, "UC") && len(id) >= 22
 }

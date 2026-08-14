@@ -52,11 +52,13 @@ type Schedule struct {
 type PolicyInputs struct {
 	NotificationChannelIDs []string
 	OperationalChannelIDs  []string
+	ViewerVideoIDs         []string
 }
 
 type InputReader interface {
 	NotificationChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
 	OperationalChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
+	ViewerVideoIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
 }
 
 type PolicyBuilder struct {
@@ -76,14 +78,21 @@ func (b PolicyBuilder) Build(ctx context.Context, tx dbx.Tx, now time.Time) ([]T
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: load operational channels: %w", ErrInputRead, err)
 	}
+	videos, err := b.Reader.ViewerVideoIDs(ctx, tx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: load viewer videos: %w", ErrInputRead, err)
+	}
 	return BuildPolicyTargets(PolicyInputs{
 		NotificationChannelIDs: notification,
 		OperationalChannelIDs:  operational,
+		ViewerVideoIDs:         videos,
 	}, b.Schedules)
 }
 
 func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationKind]Schedule) ([]TargetSpec, []TargetReason, error) {
-	if len(inputs.NotificationChannelIDs) > MaxInputChannelCount || len(inputs.OperationalChannelIDs) > MaxInputChannelCount {
+	if len(inputs.NotificationChannelIDs) > MaxInputChannelCount ||
+		len(inputs.OperationalChannelIDs) > MaxInputChannelCount ||
+		len(inputs.ViewerVideoIDs) > MaxInputChannelCount {
 		return nil, nil, fmt.Errorf("%w: input channel count exceeds %d", ErrInvalidProjection, MaxInputChannelCount)
 	}
 	notificationKinds := []contract.ObservationKind{
@@ -93,18 +102,17 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 	}
 	operationalKinds := []contract.ObservationKind{
 		contract.KindLiveSnapshot,
-		contract.KindViewerSample,
 		contract.KindChannelStats,
 		contract.KindChannelProfile,
 		contract.KindChannelPhoto,
 	}
-	targets := make([]TargetSpec, 0, len(inputs.NotificationChannelIDs)*len(notificationKinds)+len(inputs.OperationalChannelIDs)*len(operationalKinds)+1)
+	targets := make([]TargetSpec, 0, len(inputs.NotificationChannelIDs)*len(notificationKinds)+len(inputs.OperationalChannelIDs)*len(operationalKinds)+len(inputs.ViewerVideoIDs)+1)
 	reasons := make([]TargetReason, 0, cap(targets))
-	appendGroup := func(channelIDs []string, kinds []contract.ObservationKind, reasonKind string) error {
-		for _, rawChannelID := range channelIDs {
-			channelID := strings.TrimSpace(rawChannelID)
-			if channelID == "" {
-				return fmt.Errorf("%w: %s channel id is empty", ErrInvalidProjection, reasonKind)
+	appendGroup := func(subjectIDs []string, kinds []contract.ObservationKind, reasonKind string) error {
+		for _, rawSubject := range subjectIDs {
+			subject := strings.TrimSpace(rawSubject)
+			if subject == "" {
+				return fmt.Errorf("%w: %s subject is empty", ErrInvalidProjection, reasonKind)
 			}
 			for _, kind := range kinds {
 				schedule, ok := schedules[kind]
@@ -112,12 +120,12 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 					return fmt.Errorf("%w: schedule for %s is missing", ErrInvalidProjection, kind)
 				}
 				targets = append(targets, TargetSpec{
-					SubjectKey: channelID, ObservationKind: kind,
+					SubjectKey: subject, ObservationKind: kind,
 					Priority: schedule.Priority, PollInterval: schedule.PollInterval, Enabled: schedule.Enabled,
 				})
 				reasons = append(reasons, TargetReason{
-					SubjectKey: channelID, ObservationKind: kind,
-					ReasonKind: reasonKind, ReasonKey: channelID,
+					SubjectKey: subject, ObservationKind: kind,
+					ReasonKind: reasonKind, ReasonKey: subject,
 				})
 			}
 		}
@@ -127,6 +135,14 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 		return nil, nil, err
 	}
 	if err := appendGroup(inputs.OperationalChannelIDs, operationalKinds, "operational_roster"); err != nil {
+		return nil, nil, err
+	}
+	for _, rawVideoID := range inputs.ViewerVideoIDs {
+		if looksLikeYouTubeChannelID(rawVideoID) {
+			return nil, nil, fmt.Errorf("%w: viewer_sample subject %q is a channel id", ErrInvalidProjection, strings.TrimSpace(rawVideoID))
+		}
+	}
+	if err := appendGroup(inputs.ViewerVideoIDs, []contract.ObservationKind{contract.KindViewerSample}, "viewer_roster"); err != nil {
 		return nil, nil, err
 	}
 	schedule, ok := schedules[contract.KindSchedule]
@@ -143,4 +159,9 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 		ReasonKind: "fixed_global", ReasonKey: globalScheduleSubject,
 	})
 	return targets, reasons, nil
+}
+
+func looksLikeYouTubeChannelID(value string) bool {
+	id := strings.TrimSpace(value)
+	return strings.HasPrefix(id, "UC") && len(id) >= 22
 }

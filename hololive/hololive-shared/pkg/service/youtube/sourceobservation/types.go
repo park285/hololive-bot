@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	MaxPublishBatchSize  = 100
+	MaxPublishBatchSize  = 1024
 	MaxClaimBatchSize    = 100
-	MaxCheckpointCount   = 100
+	MaxCheckpointCount   = 1024
 	MaxAttempts          = 64
 	MaxReplayCount       = 16
 	MaxCollectionLatency = 24 * time.Hour

@@ -17,6 +17,8 @@ trap cleanup EXIT
 cat >"${STUB_COMPOSE_ENV}" <<'EOF'
 CACHE_PASSWORD=stub
 DB_PASSWORD=stub
+HOLODEX_API_KEY=stub
+HOLODEX_API_KEY_1=stub
 IRIS_BOT_TOKEN=stub
 IRIS_WEBHOOK_TOKEN=stub
 LIVE_LOGS_PATH=/srv/hololive-logs-stub
@@ -189,7 +191,7 @@ if collector is not None:
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
     for holodex_key in ("HOLODEX_API_KEY", "HOLODEX_API_KEY_1"):
-        check(f"youtube-collector does not receive {holodex_key}", holodex_key not in env)
+        check(f"youtube-collector receives {holodex_key}", env.get(holodex_key) == "stub")
 
 for name in ("hololive-api", "hololive-alarm-worker"):
     env = (main.get(name) or {}).get("environment") or {}

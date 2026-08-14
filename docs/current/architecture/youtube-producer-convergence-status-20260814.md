@@ -27,9 +27,9 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
 |---|---|---|---|
 | Official Schedule API-only | commit `4c6faafcc`, collector `official_schedule` adapter와 fixture | collector observation 로컬 검증 완료 | producer/API 내부 Official 호출 제거는 Task 9 |
 | Observation 저장 기반 | migration `144`–`155`, contract/repository v2.1, Canonical JSON v1 fixture와 replay·golden test | Task 1 및 identity 후속 로컬 검증 완료 | Task 4 API가 collector observation을 consume |
-| Target projection/job fence | generation rebuild, DB lease owner, set-based publish fence와 stale-holder regression | Task 2 로컬 검증 완료 | Task 4 API lifecycle에서 authoritative input refresh 기동. `viewer_sample` subject를 video ID로 맞출 것 |
+| Target projection/job fence | generation rebuild, DB lease owner, set-based publish fence와 stale-holder regression. `viewer_sample`은 video ID roster | Task 2 로컬 검증 완료 | Task 4 API lifecycle에서 `LiveHeadViewerVideoIDs`로 viewer roster를 채운다 |
 | Community domain processor | `pkg/service/youtube/community` WIP | 로컬 구현 | consumer ownership을 API로 이동 |
-| 독립 collector module | typed registry, `YouTubeCollector` config, Holodex/Official/YouTube.js adapters, Community registry 흡수 | Task 3 로컬 검증 완료 | AP fleet 배포, `HOLODEX_API_KEY` wiring, Task 4 ownership 이전 |
+| 독립 collector module | typed registry, `YouTubeCollector` config, Holodex/Official/YouTube.js adapters, Community registry 흡수. Compose가 `HOLODEX_API_KEY`를 전달 | Task 3 로컬 검증 완료 | AP fleet 배포, Task 4 ownership 이전 |
 | Community observation consume | producer consumer WIP | 로컬 구현 | API YouTube plane으로 이동하고 producer 경로 삭제 |
 | Videos/Shorts | collector `youtubejs_content`가 observation을 발행; producer poller가 아직 canonical write를 소유 | collector 수집 로컬 완료, canonical 미전환 | API reconciler로 분리 |
 | Live/Viewer | collector Holodex/YouTube.js adapter 로컬; producer fallback path는 production에 잔존 | collector 수집 로컬 완료, canonical 미전환 | source-neutral observation과 monotonic reconciliation 구현 |
@@ -171,9 +171,9 @@ Go runtime/settings/sourceobservation package와 Node helper test 42개가 통�
 
 Task 4 진입 전 확인할 조건:
 
-1. `viewer_sample` contract subject는 video ID인데 Task 2 operational roster는 channel ID로 target을 심는다. production publish fence는 이 mismatch에서 Holodex/YouTube.js viewer sample을 거부한다.
-2. Holodex `live_snapshot` subject는 channel ID라 operational roster와 맞지만, 같은 `holodex_global` batch의 `viewer_sample`은 video ID다.
-3. Holodex 채널×kind inflate가 `MaxPublishBatchSize=100`을 넘기면 부분 kind drop 없이 fail closed다.
-4. collector Compose는 `HOLODEX_API_KEY`를 받지 않으므로 production Holodex collect는 key wiring 전까지 fail closed다.
+1. `viewer_sample` target은 live/upcoming video ID만 심는다. channel operational roster는 live/stats/profile/photo만 소유한다. Task 4는 `LiveHeadViewerVideoIDs`로 그 roster를 채운다.
+2. Holodex `live_snapshot` subject는 channel ID, 같은 `holodex_global` batch의 `viewer_sample`은 video ID이며 fence도 그 공간을 쓴다.
+3. `MaxPublishBatchSize`/`MaxCheckpointCount`는 1024다. Hololive 규모(90채널×4 kind+schedule)는 한 응답 한 batch로 들어간다. 초과는 여전히 부분 drop 없이 fail closed다.
+4. collector Compose는 `HOLODEX_API_KEY`/`HOLODEX_API_KEY_1`을 전달한다. 값이 비면 collect-time fail-closed다.
 
 통합 contract v2.1에 따라 로컬 구현과 비파괴 검증을 진행할 수 있다. production migration 적용, deploy, restart, live data 변경은 별도 승인 전까지 수행하지 않는다.

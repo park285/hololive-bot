@@ -148,6 +148,24 @@ func TestRunnerRejectsMalformedSchema(t *testing.T) {
 	}
 }
 
+func TestRunnerDoesNotEmitViewerForChannelSubjects(t *testing.T) {
+	t.Parallel()
+	input := holodexInput([]string{"UC_A", "UC_B"})
+	input.EnabledSubjects[contract.KindViewerSample] = []string{"UC_A", "UC_B"}
+	output, err := NewRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, envelope := range output.Observations {
+		if envelope.ObservationKind == contract.KindViewerSample {
+			t.Fatalf("emitted viewer_sample %q from channel roster", envelope.SubjectKey)
+		}
+	}
+	if len(output.Observations) == 0 {
+		t.Fatal("channel-kind observations were dropped with viewers")
+	}
+}
+
 func TestRunnerEmitsNothingForEmptyLiveArray(t *testing.T) {
 	t.Parallel()
 	output := mustCollect(t, testdata(t, "empty.json"), []string{"UC_A"})

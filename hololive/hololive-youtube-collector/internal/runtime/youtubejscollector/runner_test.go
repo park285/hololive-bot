@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,17 @@ func TestChannelRunnerEmitsFixtureKinds(t *testing.T) {
 	}
 	if len(output.Observations) != 4 {
 		t.Fatalf("observations = %d", len(output.Observations))
+	}
+}
+
+func TestViewerRunnerRejectsChannelSubject(t *testing.T) {
+	t.Parallel()
+	runner := NewViewerRunner(&viewerFake{})
+	_, err := runner.Collect(context.Background(), youtubeInput(
+		"UCoperationalchannel0001", "youtubejs_viewer", contract.KindViewerSample,
+	))
+	if err == nil || !strings.Contains(err.Error(), "video id") {
+		t.Fatalf("error = %v, want video id rejection", err)
 	}
 }
 

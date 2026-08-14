@@ -226,6 +226,50 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	}
 }
 
+func TestSyncCandidatesEnqueuesGlobalJobsWhenSubjectQueueIsSaturated(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedRuntimeTargets(t, pool, []leaseSeed{
+		{"UC_A", contract.KindCommunityPage},
+		{"UC_B", contract.KindCommunityPage},
+		{"UC_C", contract.KindCommunityPage},
+		{"UC_A", contract.KindLiveSnapshot},
+		{"global:hololive-schedule", contract.KindSchedule},
+	})
+	config := joblease.Config{
+		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
+		ProviderTimeout: 500 * time.Millisecond, NormalizationBudget: 250 * time.Millisecond, PublishBudget: 250 * time.Millisecond,
+		MinRetryDelay: 100 * time.Millisecond, MaxRetryDelay: time.Second,
+		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
+		AcquisitionBatch: 8, WorkerCount: 1, QueueCapacity: 1, PollCadence: 100 * time.Millisecond,
+	}
+	repository, err := joblease.NewRepository(pool, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := NewRegistry(completeStubRunners()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler := &leaseScheduler{
+		repository: repository, registry: registry, publisher: NewPublisher(pool),
+		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
+		owner:   "collector-a", logger: slog.New(slog.NewTextHandler(io.Discard, nil)), config: config,
+		collector: settings.DefaultYouTubeCollectorConfig(),
+		gates:     newProviderGates(settings.DefaultYouTubeCollectorConfig()),
+		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
+	}
+	scheduler.syncCandidates(ctx)
+	select {
+	case spec := <-scheduler.queue:
+		if spec.Class != "GLOBAL" {
+			t.Fatalf("queued %s %s, want GLOBAL", spec.Class, spec.JobKey)
+		}
+	default:
+		t.Fatal("expected a global job in the saturated queue")
+	}
+}
+
 func TestLeaseSchedulerStopJoinsWorkers(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedRuntimeCommunityTarget(t, pool, "UC_TEST")
