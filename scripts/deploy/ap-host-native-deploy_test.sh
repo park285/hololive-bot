@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY="${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh"
+REMOTE_APPLY="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-remote-apply.sh"
 ROLLBACK="${ROOT_DIR}/scripts/deploy/ap-host-native-rollback.sh"
 RELEASE_PATH_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-release-path.sh"
 ROLLBACK_CHECK_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-rollback-check.sh"
@@ -49,7 +50,7 @@ else
 fi
 
 if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${DEPLOY}" &&
-   grep -Fq 'install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-collector/settings' "${DEPLOY}"; then
+   grep -Fq 'install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-collector/settings' "${REMOTE_APPLY}"; then
   pass "ap-host-native settings dir is writable for hololive"
 else
   record_fail "ap-host-native settings dir must be created and writable under systemd hardening"
@@ -61,16 +62,16 @@ else
   pass "ap-host-native keeps /etc/stack-secrets read-only under ProtectSystem=strict"
 fi
 
-if grep -Fq 'rollback_contract_dir="$old_target/rollback-contract"' "${DEPLOY}" &&
-   grep -Fq '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${DEPLOY}" &&
-   grep -Fq '"$unit_file" "$rollback_contract_dir/hololive-youtube-collector@.service"' "${DEPLOY}"; then
+if grep -Fq 'rollback_contract_dir="$old_target/rollback-contract"' "${REMOTE_APPLY}" &&
+   grep -Fq '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" &&
+   grep -Fq '"$unit_file" "$rollback_contract_dir/hololive-youtube-collector@.service"' "${REMOTE_APPLY}"; then
   pass "ap-host-native deploy preserves the installed host env and systemd unit with the previous release"
 else
   record_fail "ap-host-native deploy must preserve the installed host env and systemd unit"
 fi
 
-if grep -Fq 'write_retired_producer_runtime_state "$service"' "${DEPLOY}" &&
-   grep -Fq 'stop_retired_producer_runtime "$service"' "${DEPLOY}"; then
+if grep -Fq 'write_retired_producer_runtime_state "$service"' "${REMOTE_APPLY}" &&
+   grep -Fq 'stop_retired_producer_runtime "$service"' "${REMOTE_APPLY}"; then
   pass "ap-host-native deploy records and stops the prior producer runtime before enabling collector"
 else
   record_fail "ap-host-native deploy must record and stop the prior producer runtime"
@@ -83,22 +84,22 @@ if grep -Fq 'validate_retired_producer_runtime_state "$producer_state_file" "$se
 else
   record_fail "ap-host-native rollback must stop collector then restore the recorded producer runtime"
 fi
-if grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${DEPLOY}"; then
+if grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${REMOTE_APPLY}"; then
   pass "ap-host-native failed cutover stops collector before restoring producer"
 else
   record_fail "ap-host-native failed cutover must stop collector before restoring producer"
 fi
 
-capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${DEPLOY}" | head -1 | cut -d: -f1)"
-install_line="$(grep -nF '"$payload/youtube-collector-host.env" "$host_env"' "${DEPLOY}" | head -1 | cut -d: -f1)"
+capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
+install_line="$(grep -nF '"$payload/youtube-collector-host.env" "$host_env"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
 if [[ -n "${capture_line}" && -n "${install_line}" ]] && (( capture_line < install_line )); then
   pass "ap-host-native deploy captures the old contract before installing the new contract"
 else
   record_fail "ap-host-native deploy must capture the old contract before overwriting it"
 fi
 
-manifest_line="$(grep -nF '> rollback-contract/SHA256SUMS' "${DEPLOY}" | head -1 | cut -d: -f1)"
-previous_line="$(grep -nF 'ln -sfn "$old_target" "$previous_link"' "${DEPLOY}" | head -1 | cut -d: -f1)"
+manifest_line="$(grep -nF '> rollback-contract/SHA256SUMS' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
+previous_line="$(grep -nF 'ln -sfn "$old_target" "$previous_link"' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
 if [[ -n "${manifest_line}" && -n "${previous_line}" && -n "${install_line}" ]] &&
    (( manifest_line < previous_line && manifest_line < install_line )); then
   pass "ap-host-native deploy seals the complete rollback payload before publishing previous"
@@ -157,8 +158,8 @@ else
   pass "host-native release resolver rejects canonical containment escape"
 fi
 
-resolve_line="$(grep -nF 'native_release_dir_resolve "$releases_root" "$release_id" "$current_link"' "${DEPLOY}" | tail -1 | cut -d: -f1)"
-delete_line="$(grep -nF 'rm -rf "$release_dir"' "${DEPLOY}" | tail -1 | cut -d: -f1)"
+resolve_line="$(grep -nF 'native_release_dir_resolve "$releases_root" "$release_id" "$current_link"' "${REMOTE_APPLY}" | tail -1 | cut -d: -f1)"
+delete_line="$(grep -nF 'rm -rf "$release_dir"' "${REMOTE_APPLY}" | tail -1 | cut -d: -f1)"
 if [[ -n "${resolve_line}" && -n "${delete_line}" ]] && (( resolve_line < delete_line )); then
   pass "remote canonical release guard runs before release deletion"
 else
