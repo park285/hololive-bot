@@ -23,9 +23,9 @@ echo "PASS: actual go.work is the module-list SSOT"
 fixture_parent="${tmp_dir}/fixture"
 fixture_root="${fixture_parent}/repo"
 mkdir -p "${fixture_root}/internal-module" "${fixture_parent}/sibling-module"
-printf 'module example.test/root\n\ngo 1.26.5\n' >"${fixture_root}/go.mod"
-printf 'module example.test/internal\n\ngo 1.26.5\n' >"${fixture_root}/internal-module/go.mod"
-printf 'module example.test/sibling\n\ngo 1.26.5\n' >"${fixture_parent}/sibling-module/go.mod"
+printf 'module example.test/root\n\ngo 1.26.6\n' >"${fixture_root}/go.mod"
+printf 'module example.test/internal\n\ngo 1.26.6\n' >"${fixture_root}/internal-module/go.mod"
+printf 'module example.test/sibling\n\ngo 1.26.6\n' >"${fixture_parent}/sibling-module/go.mod"
 (
     cd "${fixture_root}"
     go work init . ./internal-module ../sibling-module
@@ -35,7 +35,7 @@ fixture_modules="$(load_go_workspace_modules "${fixture_root}")"
 echo "PASS: root exclusion and path normalization"
 
 mkdir -p "${tmp_dir}/outside"
-printf 'module example.test/outside\n\ngo 1.26.5\n' >"${tmp_dir}/outside/go.mod"
+printf 'module example.test/outside\n\ngo 1.26.6\n' >"${tmp_dir}/outside/go.mod"
 cat >>"${fixture_root}/go.work" <<EOF
 
 use ../../outside
