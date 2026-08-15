@@ -1,6 +1,9 @@
 package sourceobservation
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 func AbsenceCapabilityFor(kind ObservationKind) AbsenceCapability {
 	switch kind {
@@ -89,12 +92,7 @@ func LiveCoverageCoversChannel(coverage GlobalChannelCoverageV1, channelID strin
 	if channelID == "" {
 		return false
 	}
-	for _, requested := range coverage.RequestedChannelIDs {
-		if requested == channelID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(coverage.RequestedChannelIDs, channelID)
 }
 
 func LiveCoverageCoversSession(coverage GlobalChannelCoverageV1, channelID, status string) bool {
@@ -104,12 +102,7 @@ func LiveCoverageCoversSession(coverage GlobalChannelCoverageV1, channelID, stat
 	if len(coverage.Filters.Statuses) == 0 {
 		return true
 	}
-	for _, requested := range coverage.Filters.Statuses {
-		if requested == status {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(coverage.Filters.Statuses, status)
 }
 
 func upcomingOnly(video VideoListItemV1) bool {

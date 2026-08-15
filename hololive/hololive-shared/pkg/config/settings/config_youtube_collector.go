@@ -44,10 +44,7 @@ func DefaultYouTubeCollectorConfig() YouTubeCollectorConfig {
 	workers := DefaultScraperWorkerCount()
 	retry := DefaultScraperSchedulerConfig()
 	queueCapacity := workers * 4
-	acquisitionBatch := queueCapacity
-	if acquisitionBatch > youtubeCollectorMaxAcquisitionBatch {
-		acquisitionBatch = youtubeCollectorMaxAcquisitionBatch
-	}
+	acquisitionBatch := min(queueCapacity, youtubeCollectorMaxAcquisitionBatch)
 	return YouTubeCollectorConfig{
 		TotalWorkers:         workers,
 		QueueCapacity:        queueCapacity,
@@ -83,16 +80,10 @@ func (c YouTubeCollectorConfig) defaultWorkerQueue(defaults YouTubeCollectorConf
 		c.TotalWorkers = defaults.TotalWorkers
 	}
 	if c.QueueCapacity <= 0 {
-		c.QueueCapacity = c.TotalWorkers * 4
-		if c.QueueCapacity > youtubeCollectorMaxQueueCapacity {
-			c.QueueCapacity = youtubeCollectorMaxQueueCapacity
-		}
+		c.QueueCapacity = min(c.TotalWorkers*4, youtubeCollectorMaxQueueCapacity)
 	}
 	if c.AcquisitionBatch <= 0 {
-		c.AcquisitionBatch = c.QueueCapacity
-		if c.AcquisitionBatch > youtubeCollectorMaxAcquisitionBatch {
-			c.AcquisitionBatch = youtubeCollectorMaxAcquisitionBatch
-		}
+		c.AcquisitionBatch = min(c.QueueCapacity, youtubeCollectorMaxAcquisitionBatch)
 	}
 	if c.AcquisitionCadence <= 0 {
 		c.AcquisitionCadence = defaults.AcquisitionCadence
@@ -163,10 +154,7 @@ func (c YouTubeCollectorConfig) defaultPaginationLimits(defaults YouTubeCollecto
 }
 
 func (c YouTubeCollectorConfig) MaxProviderTimeout(holodexTimeout, officialTimeout time.Duration) time.Duration {
-	maxTimeout := c.YouTubeJSTimeout
-	if holodexTimeout > maxTimeout {
-		maxTimeout = holodexTimeout
-	}
+	maxTimeout := max(holodexTimeout, c.YouTubeJSTimeout)
 	if officialTimeout > maxTimeout {
 		maxTimeout = officialTimeout
 	}
@@ -285,18 +273,12 @@ func loadYouTubeCollectorConfig() (YouTubeCollectorConfig, error) {
 	if err != nil {
 		return YouTubeCollectorConfig{}, err
 	}
-	queueDefault := workers * 4
-	if queueDefault > youtubeCollectorMaxQueueCapacity {
-		queueDefault = youtubeCollectorMaxQueueCapacity
-	}
+	queueDefault := min(workers*4, youtubeCollectorMaxQueueCapacity)
 	queueCapacity, err := requiredPositiveIntEnv("YOUTUBE_COLLECTOR_QUEUE_CAPACITY", queueDefault)
 	if err != nil {
 		return YouTubeCollectorConfig{}, err
 	}
-	batchDefault := queueCapacity
-	if batchDefault > youtubeCollectorMaxAcquisitionBatch {
-		batchDefault = youtubeCollectorMaxAcquisitionBatch
-	}
+	batchDefault := min(queueCapacity, youtubeCollectorMaxAcquisitionBatch)
 	return loadYouTubeCollectorFields(defaults, workers, queueCapacity, batchDefault)
 }
 

@@ -87,8 +87,7 @@ func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 		},
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	runtime.Start(ctx, make(chan error, 1))
 	select {
 	case <-entered:
@@ -135,8 +134,7 @@ func TestFirstClaimTickTransientErrorDoesNotKillProcess(t *testing.T) {
 			return sourceobservation.ClaimedBatch{}, nil
 		},
 	}, fakeConsumer{})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	runtime.Start(ctx, errCh)
 	time.Sleep(80 * time.Millisecond)
 	select {
@@ -213,8 +211,7 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 	})
 	runtime.Config.ConsumerWorkers = 1
 	runtime.workCh = make(chan sourceobservation.Observation)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	runtime.Start(ctx, make(chan error, 1))
 	select {
 	case <-entered:

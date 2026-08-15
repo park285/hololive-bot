@@ -2,7 +2,7 @@ package collectorruntime
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
@@ -132,7 +132,7 @@ func matchEmissions(key runnerKey, definition sourceobservation.JobContract, emi
 }
 
 func sortKinds(kinds []contract.ObservationKind) {
-	sort.Slice(kinds, func(i, j int) bool { return kinds[i] < kinds[j] })
+	slices.Sort(kinds)
 }
 
 func (r *Registry) Runners() []JobRunner {

@@ -1,6 +1,7 @@
 package live
 
 import (
+	"maps"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -154,8 +155,6 @@ func (s State) clone() State {
 		cloned.AbsenceSlots = append([]AbsenceSlot(nil), s.AbsenceSlots...)
 	}
 	cloned.PendingEnds = make(map[string]PendingEnd, len(s.PendingEnds))
-	for key, value := range s.PendingEnds {
-		cloned.PendingEnds[key] = value
-	}
+	maps.Copy(cloned.PendingEnds, s.PendingEnds)
 	return cloned
 }

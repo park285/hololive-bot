@@ -298,16 +298,14 @@ func TestOfficialScheduleFetchDeduplicatesConcurrentRequestsAndClonesCache(t *te
 	results := make(chan []*domain.Stream, concurrency)
 	var waitGroup sync.WaitGroup
 	for range concurrency {
-		waitGroup.Add(1)
-		go func() {
-			defer waitGroup.Done()
+		waitGroup.Go(func() {
 			streams, err := service.FetchUpcomingStreams(context.Background(), 0)
 			if err != nil {
 				t.Errorf("FetchUpcomingStreams() error = %v", err)
 				return
 			}
 			results <- streams
-		}()
+		})
 	}
 	waitGroup.Wait()
 	close(results)

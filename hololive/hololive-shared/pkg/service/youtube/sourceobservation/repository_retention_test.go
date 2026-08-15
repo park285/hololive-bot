@@ -225,7 +225,7 @@ func publishProcessedObservations(
 	t.Helper()
 	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	ids := make([]int64, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		if i > 0 {
 			proof = advanceLease(t, pool, proof, time.Minute)
 		}

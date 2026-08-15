@@ -1,6 +1,7 @@
 package schedule
 
 import (
+	"maps"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -64,12 +65,8 @@ func ItemIdentity(provider contract.Provider, item Item) string {
 func (s State) clone() State {
 	cloned := s
 	cloned.Items = make(map[string]Item, len(s.Items))
-	for key, value := range s.Items {
-		cloned.Items[key] = value
-	}
+	maps.Copy(cloned.Items, s.Items)
 	cloned.Sessions = make(map[string]Session, len(s.Sessions))
-	for key, value := range s.Sessions {
-		cloned.Sessions[key] = value
-	}
+	maps.Copy(cloned.Sessions, s.Sessions)
 	return cloned
 }

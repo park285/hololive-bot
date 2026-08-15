@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -156,12 +157,7 @@ func subjectAllowed(input collectutil.RunInput, kind contract.ObservationKind, s
 	if !ok {
 		return true
 	}
-	for _, value := range subjects {
-		if value == subject {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(subjects, subject)
 }
 
 func viewerPayload(row parsedLive, windowStart time.Time, windowSeconds int) (contract.ViewerSampleV1, error) {

@@ -1,6 +1,7 @@
 package collectorruntime
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -86,10 +87,8 @@ func TestMetricsTracksPublishedObservationForHandoffReadiness(t *testing.T) {
 
 func assertLabel(t *testing.T, seen map[string][]string, name, want string) {
 	t.Helper()
-	for _, value := range seen[name] {
-		if value == want {
-			return
-		}
+	if slices.Contains(seen[name], want) {
+		return
 	}
 	t.Fatalf("label %s missing %s in %v", name, want, seen[name])
 }
