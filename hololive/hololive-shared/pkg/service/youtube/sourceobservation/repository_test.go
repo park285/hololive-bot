@@ -739,6 +739,22 @@ func TestRetentionSQLLocksCandidatesWithSkipLocked(t *testing.T) {
 	}
 }
 
+func TestPublishSetCollisionWriteKeepsInsertOnlyPrivilege(t *testing.T) {
+	query := mustSQL("repository_publish_set_0032_32.sql")
+	start := strings.Index(query, "collision_write AS (")
+	end := strings.Index(query, "), observation_write AS (")
+	if start < 0 || end <= start {
+		t.Fatal("publish set collision write CTE is missing")
+	}
+	collisionWrite := query[start:end]
+	if !strings.Contains(collisionWrite, "RETURNING 1 AS inserted") || strings.Contains(collisionWrite, "RETURNING id") {
+		t.Fatal("collision write must not require SELECT privilege for RETURNING")
+	}
+	if !strings.Contains(query, "count(inserted) FROM collision_write") {
+		t.Fatal("collision write execution barrier must count the constant result")
+	}
+}
+
 func TestClaimSQLUsesBoundedSkipLockedWithoutGenerationFilter(t *testing.T) {
 	query := mustSQL("repository_claim_0012_12.sql")
 	if !strings.Contains(query, "LIMIT $2") || !strings.Contains(query, "FOR UPDATE OF queue SKIP LOCKED") {
