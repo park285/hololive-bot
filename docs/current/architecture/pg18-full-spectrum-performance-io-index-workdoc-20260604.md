@@ -1,5 +1,7 @@
 # PG18 전범위 성능 / I/O / 인덱스 작업 문서 — hololive-bot
 
+> Historical 2026-06-04 snapshot. Current collector fleet identity is `youtube-collector`. `youtube-producer` in this document is a retired name.
+
 작성일: 2026-06-04
 대상 저장소: `park285/hololive-bot`
 대상 런타임: `holo-postgres`, `hololive-bot`, `hololive-admin-api`, `hololive-alarm-worker`, `llm-scheduler`, `youtube-producer`
@@ -173,7 +175,7 @@ llm-scheduler:
 youtube-producer:
   environment:
     POSTGRES_POOL_MIN_CONNS: ${YOUTUBE_PRODUCER_POSTGRES_POOL_MIN_CONNS:-2}
-    POSTGRES_POOL_MAX_CONNS: ${YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS:-8}
+    POSTGRES_POOL_MAX_CONNS: ${YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS:-8}
     POSTGRES_POOL_MAX_IDLE_CONNS: ${YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_IDLE_CONNS:-4}
 
 hololive-alarm-worker:

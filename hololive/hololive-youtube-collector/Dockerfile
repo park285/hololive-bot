@@ -92,10 +92,10 @@ ENV GOGC=100 \
     GOMEMLIMIT=320MiB \
     GIN_MODE=release
 
-EXPOSE 30045/tcp 30045/udp 30096/tcp
+EXPOSE 30025/tcp 30025/udp 30096/tcp
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["./bin/healthcheck", "https://127.0.0.1:30045/ready"]
+    CMD ["./bin/healthcheck", "https://127.0.0.1:30025/ready"]
 
 USER 1000:1000
 

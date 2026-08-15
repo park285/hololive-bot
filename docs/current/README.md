@@ -17,7 +17,7 @@
 
 - `services/hololive-api.md`
 - `services/alarm-worker.md`
-- `services/youtube-producer.md`
+- `services/youtube-collector.md`
 
 ## Contracts
 

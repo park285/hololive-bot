@@ -14,17 +14,9 @@
 
 ## Execute
 
-우선 경로는 저장소의 집계 로직을 그대로 사용하는 전용 명령입니다. repo root에서 실행합니다.
+standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다. 아래 SQL로 채널별 `detected`, `alarm_sent`, `success`, `failure`, `detected_unsent` 집계를 확인한다.
 
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts channel-summary -window 24h
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts channel-summary -window 24h -format json
-```
-
-- 기본 출력은 Markdown 표이며, 채널별 `detected`, `alarm_sent`, `success`, `failure`, `detected_unsent` 집계를 한 줄로 보여 줍니다.
-- `-format json` 은 자동 수집이나 후처리에 사용할 수 있습니다.
-
-## Fallback SQL
+## SQL
 
 호스트에서 `psql` 을 사용할 수 있으면 아래 절차로 같은 집계를 직접 확인할 수 있습니다. compose 운영 기준 Postgres는 `localhost:5433`, 기본 읽기 계정은 `HOLOLIVE_DB_USER`입니다.
 

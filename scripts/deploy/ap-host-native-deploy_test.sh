@@ -28,10 +28,10 @@ else
   record_fail "ap-host-native H3 bind not narrowed to loopback (8c2e3ef9)"
 fi
 
-if grep -Fq 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT=4' "${DEPLOY}"; then
-  pass "ap-host-native pins the four-instance active-active fleet size"
+if grep -Fq 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true' "${DEPLOY}"; then
+  pass "ap-host-native enables the collector runtime"
 else
-  record_fail "ap-host-native must configure the four-instance active-active fleet size"
+  record_fail "ap-host-native must set YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true"
 fi
 
 if grep -Fq 'AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-hololive-postgres.tail742dd8.ts.net}"' "${DEPLOY}" &&
@@ -42,14 +42,14 @@ else
   record_fail "ap-host-native must use stable PostgreSQL DNS without changing the cache endpoint"
 fi
 
-if grep -Fq 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings' "${DEPLOY}"; then
+if grep -Fq 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-collector/settings' "${DEPLOY}"; then
   pass "ap-host-native settings dir uses persistent varlib path"
 else
   record_fail "ap-host-native settings dir must not default to read-only release data"
 fi
 
 if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${DEPLOY}" &&
-   grep -Fq 'install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-producer/settings' "${DEPLOY}"; then
+   grep -Fq 'install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-collector/settings' "${DEPLOY}"; then
   pass "ap-host-native settings dir is writable for hololive"
 else
   record_fail "ap-host-native settings dir must be created and writable under systemd hardening"
@@ -62,15 +62,15 @@ else
 fi
 
 if grep -Fq 'rollback_contract_dir="$old_target/rollback-contract"' "${DEPLOY}" &&
-   grep -Fq '"$host_env" "$rollback_contract_dir/youtube-producer-host.env"' "${DEPLOY}" &&
-   grep -Fq '"$unit_file" "$rollback_contract_dir/hololive-youtube-producer@.service"' "${DEPLOY}"; then
+   grep -Fq '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${DEPLOY}" &&
+   grep -Fq '"$unit_file" "$rollback_contract_dir/hololive-youtube-collector@.service"' "${DEPLOY}"; then
   pass "ap-host-native deploy preserves the installed host env and systemd unit with the previous release"
 else
   record_fail "ap-host-native deploy must preserve the installed host env and systemd unit"
 fi
 
-capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-producer-host.env"' "${DEPLOY}" | head -1 | cut -d: -f1)"
-install_line="$(grep -nF '"$payload/youtube-producer-host.env" "$host_env"' "${DEPLOY}" | head -1 | cut -d: -f1)"
+capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${DEPLOY}" | head -1 | cut -d: -f1)"
+install_line="$(grep -nF '"$payload/youtube-collector-host.env" "$host_env"' "${DEPLOY}" | head -1 | cut -d: -f1)"
 if [[ -n "${capture_line}" && -n "${install_line}" ]] && (( capture_line < install_line )); then
   pass "ap-host-native deploy captures the old contract before installing the new contract"
 else
@@ -164,23 +164,25 @@ EOF
 chmod +x "${tmp}/rollback-bin/sudo" "${tmp}/rollback-bin/systemd-analyze"
 
 rollback_fixture="${tmp}/rollback-fixture"
-printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-producer"
-printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-producer-wrapper"
+printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-collector"
+printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/youtube-collector-wrapper"
 printf '#!/bin/sh\nexit 0\n' > "${rollback_fixture}/bin/healthcheck"
-chmod +x "${rollback_fixture}/bin/youtube-producer" \
-  "${rollback_fixture}/bin/youtube-producer-wrapper" \
+mkdir -p "${rollback_fixture}/youtubejs/src"
+printf 'export {}\n' > "${rollback_fixture}/youtubejs/src/server.mjs"
+chmod +x "${rollback_fixture}/bin/youtube-collector" \
+  "${rollback_fixture}/bin/youtube-collector-wrapper" \
   "${rollback_fixture}/bin/healthcheck"
 printf 'fixture-data\n' > "${rollback_fixture}/internal/domain/data/members.json"
-printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-producer-host.env"
-printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-producer@.service"
+printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
+printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
 (
   cd "${rollback_fixture}"
   sha256sum \
-    bin/youtube-producer \
-    bin/youtube-producer-wrapper \
+    bin/youtube-collector \
+    bin/youtube-collector-wrapper \
     bin/healthcheck \
-    rollback-contract/youtube-producer-host.env \
-    rollback-contract/hololive-youtube-producer@.service \
+    rollback-contract/youtube-collector-host.env \
+    rollback-contract/hololive-youtube-collector@.service \
     internal/domain/data/members.json \
     > rollback-contract/SHA256SUMS
 )
@@ -201,7 +203,7 @@ else
 fi
 mv "${rollback_fixture}/bin/healthcheck.missing" "${rollback_fixture}/bin/healthcheck"
 
-printf 'corrupt\n' >> "${rollback_fixture}/bin/youtube-producer"
+printf 'corrupt\n' >> "${rollback_fixture}/bin/youtube-collector"
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/corrupt.out" 2>"${tmp}/corrupt.err"; then
   record_fail "native rollback validation must reject a corrupt binary"
 elif grep -Fq 'previous host-native rollback payload failed checksum validation' "${tmp}/corrupt.err"; then
@@ -209,18 +211,18 @@ elif grep -Fq 'previous host-native rollback payload failed checksum validation'
 else
   record_fail "corrupt binary validation must fail for the checksum precondition"
 fi
-sed -i '$d' "${rollback_fixture}/bin/youtube-producer"
-chmod +x "${rollback_fixture}/bin/youtube-producer"
+sed -i '$d' "${rollback_fixture}/bin/youtube-collector"
+chmod +x "${rollback_fixture}/bin/youtube-collector"
 
-printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtube-producer@.service"
+printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
 (
   cd "${rollback_fixture}"
   sha256sum \
-    bin/youtube-producer \
-    bin/youtube-producer-wrapper \
+    bin/youtube-collector \
+    bin/youtube-collector-wrapper \
     bin/healthcheck \
-    rollback-contract/youtube-producer-host.env \
-    rollback-contract/hololive-youtube-producer@.service \
+    rollback-contract/youtube-collector-host.env \
+    rollback-contract/hololive-youtube-collector@.service \
     internal/domain/data/members.json \
     > rollback-contract/SHA256SUMS
 )
@@ -255,7 +257,7 @@ if grep -Fq 'date -u +%Y-%m-%dT%H:%M:%SZ' <<<"${payload}"; then
   printf '2026-08-01T03:04:05Z\n'
 fi
 if [[ "${AP_NATIVE_ROLLBACK_FAIL_COMPLETION:-false}" == "true" ]] &&
-   grep -Fq "active-active completion check passed" <<<"${payload}"; then
+   grep -Fq "collector AP completion check passed" <<<"${payload}"; then
   exit 77
 fi
 EOF
@@ -278,8 +280,8 @@ completion_cmd="${tmp}/success/call-4.cmd"
 if [[ -r "${restore_payload}" ]] &&
    bash -n "${restore_payload}" &&
    grep -Fq 'native_rollback_validate "$previous_target"' "${restore_payload}" &&
-   grep -Fq '"$rollback_contract_dir/youtube-producer-host.env" "$host_env"' "${restore_payload}" &&
-   grep -Fq '"$rollback_contract_dir/hololive-youtube-producer@.service" "$unit_file"' "${restore_payload}" &&
+   grep -Fq '"$rollback_contract_dir/youtube-collector-host.env" "$host_env"' "${restore_payload}" &&
+   grep -Fq '"$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"' "${restore_payload}" &&
    grep -Fq 'systemctl daemon-reload' "${restore_payload}" &&
    grep -Fq 'systemctl restart "$unit"' "${restore_payload}"; then
   pass "ap-host-native rollback restores binary-adjacent contract files before restarting"
@@ -288,7 +290,7 @@ else
 fi
 
 validate_line="$(grep -nF 'native_rollback_validate "$previous_target"' "${restore_payload}" | tail -1 | cut -d: -f1)"
-restore_line="$(grep -nF 'install -m 0640 -o root -g root "$rollback_contract_dir/youtube-producer-host.env"' "${restore_payload}" | tail -1 | cut -d: -f1)"
+restore_line="$(grep -nF 'install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env"' "${restore_payload}" | tail -1 | cut -d: -f1)"
 if [[ -n "${validate_line}" && -n "${restore_line}" ]] && (( validate_line < restore_line )); then
   pass "native rollback validates payload integrity and unit before mutation"
 else

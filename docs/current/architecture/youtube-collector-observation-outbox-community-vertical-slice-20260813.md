@@ -1,6 +1,6 @@
 # YouTube Collector / Source Observation Outbox: Community Vertical Slice
 
-> **중간 구현 기록:** 이 문서는 현재 worktree의 Community-only WIP 계약을 설명한다. 최종 목표와 구현 순서는 `youtube-three-provider-convergence-contract-v2-20260814.md`가 대체한다. 따라서 `legacy/shadow/authoritative`, 중앙 singleton collector, producer consumer는 merge 전 제거될 중간 상태이며 production rollout 근거로 사용하지 않는다.
+> **중간 구현 기록:** 이 문서는 2026-08-13 Community-only WIP 계약을 설명한다. 최종 목표와 구현 순서는 `youtube-three-provider-convergence-contract-v2-20260814.md`가 대체한다. `legacy/shadow/authoritative`, 중앙 singleton collector, `youtube-producer` consumer는 retired historical vocabulary이며 production rollout 근거로 사용하지 않는다.
 
 ## 상태
 
@@ -22,7 +22,7 @@ Community authoritative 전환 자체와 운영 migration 적용은 이 변경�
 | Runtime | Binary | Compose | DB role | Owns |
 |---|---|---|---|---|
 | `youtube-collector` | `hololive/hololive-youtube-collector/cmd/runtime/youtube-collector` | `youtube-collector` | `hololive_scraper` | YouTube.js community fetch, normalize, `Repository.Publish` |
-| `youtube-producer` | `hololive/hololive-youtube-producer/cmd/runtime/youtube-producer` | `youtube-producer` / AP overlays | `hololive_runtime` | Claim/Finalize, canonical persist, live/shorts/videos/stats, photo sync |
+| `youtube-producer` | `hololive/hololive-youtube-collector/cmd/runtime/youtube-producer` | `youtube-producer` / AP overlays | `hololive_runtime` | Claim/Finalize, canonical persist, live/shorts/videos/stats, photo sync |
 
 `youtube-collector`는 `github.com/kapu/hololive-youtube-collector` Go 모듈이다. producer 모듈의 extra binary가 아니다.
 

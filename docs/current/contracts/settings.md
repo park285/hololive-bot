@@ -16,7 +16,7 @@ Runtime settings changes are broadcast through Valkey Pub/Sub channel `config:up
 
 ## Consumers
 
-- Services: `hololive-api`, `alarm-worker`, `youtube-producer`, ingestion runtimes where `configsub.Subscriber` is configured
+- Services: `hololive-api`, `alarm-worker`, `youtube-collector`, ingestion runtimes where `configsub.Subscriber` is configured
 - Usage: scraper proxy toggles, alarm advance minutes updates, member news run-now event
 
 ## Transport

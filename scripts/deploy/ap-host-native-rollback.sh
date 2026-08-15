@@ -39,9 +39,9 @@ if [[ "$MODE" == "--dry-run" ]]; then
     cat <<'REMOTE'
 set -euo pipefail
 service="$1"
-unit="hololive-youtube-producer@${service}.service"
-current="/opt/hololive-bot/youtube-producer/current"
-previous="/opt/hololive-bot/youtube-producer/previous"
+unit="hololive-youtube-collector@${service}.service"
+current="/opt/hololive-bot/youtube-collector/current"
+previous="/opt/hololive-bot/youtube-collector/previous"
 previous_target="$(readlink -f "$previous" 2>/dev/null || true)"
 rollback_contract_dir="$previous_target/rollback-contract"
 echo "unit=$unit"
@@ -65,18 +65,18 @@ REMOTE
 set -euo pipefail
 service="$1"
 rollback_started_at="$2"
-unit="hololive-youtube-producer@${service}.service"
-current="/opt/hololive-bot/youtube-producer/current"
-previous="/opt/hololive-bot/youtube-producer/previous"
-host_env="/etc/hololive-bot/youtube-producer-host.env"
-unit_file="/etc/systemd/system/hololive-youtube-producer@.service"
+unit="hololive-youtube-collector@${service}.service"
+current="/opt/hololive-bot/youtube-collector/current"
+previous="/opt/hololive-bot/youtube-collector/previous"
+host_env="/etc/hololive-bot/youtube-collector-host.env"
+unit_file="/etc/systemd/system/hololive-youtube-collector@.service"
 previous_target="$(readlink -f "$previous" 2>/dev/null || true)"
 rollback_contract_dir="$previous_target/rollback-contract"
 
 native_rollback_validate "$previous_target"
 
-sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-producer-host.env" "$host_env"
-sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-producer@.service" "$unit_file"
+sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
+sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
 sudo -n ln -sfn "$previous_target" "$current"
 sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload

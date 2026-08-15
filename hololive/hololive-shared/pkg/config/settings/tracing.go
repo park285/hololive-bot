@@ -31,13 +31,13 @@ import (
 const defaultOTELSampleRate = 0.1
 
 const (
-	tracingHololiveAPIEnabledEnv      = "OTEL_HOLOLIVE_API_ENABLED"
-	tracingAlarmWorkerEnabledEnv      = "OTEL_HOLOLIVE_ALARM_WORKER_ENABLED"
-	tracingYouTubeProducerAEnabledEnv = "OTEL_YOUTUBE_PRODUCER_A_ENABLED"
-	tracingYouTubeProducerBEnabledEnv = "OTEL_YOUTUBE_PRODUCER_B_ENABLED"
-	tracingYouTubeProducerCEnabledEnv = "OTEL_YOUTUBE_PRODUCER_C_ENABLED"
-	tracingYouTubeProducerDEnabledEnv = "OTEL_YOUTUBE_PRODUCER_D_ENABLED"
-	tracingYouTubeCollectorEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_ENABLED"
+	tracingHololiveAPIEnabledEnv       = "OTEL_HOLOLIVE_API_ENABLED"
+	tracingAlarmWorkerEnabledEnv       = "OTEL_HOLOLIVE_ALARM_WORKER_ENABLED"
+	tracingYouTubeCollectorAEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_A_ENABLED"
+	tracingYouTubeCollectorBEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_B_ENABLED"
+	tracingYouTubeCollectorCEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_C_ENABLED"
+	tracingYouTubeCollectorDEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_D_ENABLED"
+	tracingYouTubeCollectorEnabledEnv  = "OTEL_YOUTUBE_COLLECTOR_ENABLED"
 )
 
 type tracingRuntime uint8
@@ -45,7 +45,6 @@ type tracingRuntime uint8
 const (
 	tracingRuntimeHololiveAPI tracingRuntime = iota + 1
 	tracingRuntimeAlarmWorker
-	tracingRuntimeYouTubeProducer
 	tracingRuntimeYouTubeCollector
 )
 
@@ -56,8 +55,8 @@ type TracingConfig struct {
 	SampleRate float64
 }
 
-func loadTracingConfig(runtime tracingRuntime, producerInstanceID string) (TracingConfig, error) {
-	enabledEnv, err := tracingEnabledEnv(runtime, producerInstanceID)
+func loadTracingConfig(runtime tracingRuntime, collectorInstanceID string) (TracingConfig, error) {
+	enabledEnv, err := tracingEnabledEnv(runtime, collectorInstanceID)
 	if err != nil {
 		return TracingConfig{}, err
 	}
@@ -90,27 +89,28 @@ func loadTracingConfig(runtime tracingRuntime, producerInstanceID string) (Traci
 	return config, nil
 }
 
-func tracingEnabledEnv(runtime tracingRuntime, producerInstanceID string) (string, error) {
+func tracingEnabledEnv(runtime tracingRuntime, collectorInstanceID string) (string, error) {
 	switch runtime {
 	case tracingRuntimeHololiveAPI:
 		return tracingHololiveAPIEnabledEnv, nil
 	case tracingRuntimeAlarmWorker:
 		return tracingAlarmWorkerEnabledEnv, nil
-	case tracingRuntimeYouTubeProducer:
-		return tracingEnabledEnvForYouTubeProducer(producerInstanceID)
 	case tracingRuntimeYouTubeCollector:
-		return tracingYouTubeCollectorEnabledEnv, nil
+		return tracingEnabledEnvForYouTubeCollector(collectorInstanceID)
 	default:
 		return "", fmt.Errorf("unsupported tracing runtime %d", runtime)
 	}
 }
 
-func tracingEnabledEnvForYouTubeProducer(producerInstanceID string) (string, error) {
-	enabledEnv, err := youtubeProducerTracingEnabledEnv(producerInstanceID)
+func tracingEnabledEnvForYouTubeCollector(collectorInstanceID string) (string, error) {
+	enabledEnv, err := youtubeCollectorTracingEnabledEnv(collectorInstanceID)
 	if err == nil {
 		return enabledEnv, nil
 	}
-	disabled, disabledErr := allYouTubeProducerTracingDisabled()
+	if strings.TrimSpace(collectorInstanceID) == "" {
+		return tracingYouTubeCollectorEnabledEnv, nil
+	}
+	disabled, disabledErr := allYouTubeCollectorTracingDisabled()
 	if disabledErr != nil {
 		return "", disabledErr
 	}
@@ -120,12 +120,13 @@ func tracingEnabledEnvForYouTubeProducer(producerInstanceID string) (string, err
 	return "", err
 }
 
-func allYouTubeProducerTracingDisabled() (bool, error) {
+func allYouTubeCollectorTracingDisabled() (bool, error) {
 	for _, key := range []string{
-		tracingYouTubeProducerAEnabledEnv,
-		tracingYouTubeProducerBEnabledEnv,
-		tracingYouTubeProducerCEnabledEnv,
-		tracingYouTubeProducerDEnabledEnv,
+		tracingYouTubeCollectorAEnabledEnv,
+		tracingYouTubeCollectorBEnabledEnv,
+		tracingYouTubeCollectorCEnabledEnv,
+		tracingYouTubeCollectorDEnabledEnv,
+		tracingYouTubeCollectorEnabledEnv,
 	} {
 		enabled, err := sharedenv.BoolE(key, false)
 		if err != nil {
@@ -138,16 +139,16 @@ func allYouTubeProducerTracingDisabled() (bool, error) {
 	return true, nil
 }
 
-func youtubeProducerTracingEnabledEnv(instanceID string) (string, error) {
-	normalized := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(instanceID)), "youtube-producer-")
+func youtubeCollectorTracingEnabledEnv(instanceID string) (string, error) {
+	normalized := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(instanceID)), "youtube-collector-")
 	enabledEnv, ok := map[string]string{
-		"a": tracingYouTubeProducerAEnabledEnv,
-		"b": tracingYouTubeProducerBEnabledEnv,
-		"c": tracingYouTubeProducerCEnabledEnv,
-		"d": tracingYouTubeProducerDEnabledEnv,
+		"a": tracingYouTubeCollectorAEnabledEnv,
+		"b": tracingYouTubeCollectorBEnabledEnv,
+		"c": tracingYouTubeCollectorCEnabledEnv,
+		"d": tracingYouTubeCollectorDEnabledEnv,
 	}[normalized]
 	if !ok {
-		return "", fmt.Errorf("YOUTUBE_PRODUCER_INSTANCE_ID must be one of a, b, c, d, youtube-producer-a, youtube-producer-b, youtube-producer-c, youtube-producer-d")
+		return "", fmt.Errorf("YOUTUBE_COLLECTOR_INSTANCE_ID must be one of a, b, c, d, youtube-collector-a, youtube-collector-b, youtube-collector-c, youtube-collector-d")
 	}
 	return enabledEnv, nil
 }

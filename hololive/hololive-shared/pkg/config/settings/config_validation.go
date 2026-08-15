@@ -151,18 +151,6 @@ func (c *Config) validateAdminAPIRequiredConfig() error {
 	return nil
 }
 
-// ValidateYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
-// Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
-func (c *Config) ValidateYouTubeProducerRuntime() error {
-	if err := c.validateWithRequired(c.validateYouTubeProducerRequiredConfig); err != nil {
-		return err
-	}
-	if err := validateNoNotificationEgressOwnership(runtimeYouTubeProducer); err != nil {
-		return err
-	}
-	return validateYouTubeProducerPostgresUser(c.Postgres.User)
-}
-
 func (c *Config) ValidateYouTubeCollectorRuntime() error {
 	if c.Scraper.ActiveActive.Enabled {
 		return fmt.Errorf("%s must not enable YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED", runtimeYouTubeCollector)
@@ -185,13 +173,6 @@ func (c *Config) ValidateYouTubeCollectorRuntime() error {
 }
 
 func (c *Config) validateYouTubeCollectorRequiredConfig() error {
-	return nil
-}
-
-func (c *Config) validateYouTubeProducerRequiredConfig() error {
-	if strings.TrimSpace(c.Holodex.APIKey) == "" {
-		return fmt.Errorf("HOLODEX_API_KEY is required")
-	}
 	return nil
 }
 

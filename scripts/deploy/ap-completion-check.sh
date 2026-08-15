@@ -36,17 +36,19 @@ set -euo pipefail
 service="$1"
 port="$2"
 change_started_at="$3"
-unit="hololive-youtube-producer@${service}.service"
-current_link="/opt/hololive-bot/youtube-producer/current"
+unit="hololive-youtube-collector@${service}.service"
+current_link="/opt/hololive-bot/youtube-collector/current"
 
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
-sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
-sudo -n test -r /etc/hololive-bot/youtube-producer-host.env
-sudo -n test -d /var/lib/hololive-bot/youtube-producer/settings
+sudo -n test -r /etc/hololive-bot/youtube-collector-host.env
+sudo -n test -d /var/lib/hololive-bot/youtube-collector/settings
 sudo -n test -x "$current_link/bin/healthcheck"
+sudo -n test -f "$current_link/youtubejs/src/server.mjs"
+command -v node >/dev/null
 
 systemctl is-active --quiet "$unit"
 active_state="$(systemctl show "$unit" -p ActiveState --value)"
@@ -63,9 +65,10 @@ if [[ -n "$change_started_at" ]]; then
   [[ "$active_epoch" -ge "$since_epoch" ]]
 fi
 
-sudo -n grep -qx 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true' /etc/hololive-bot/youtube-producer-host.env
-sudo -n grep -qx 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings' /etc/hololive-bot/youtube-producer-host.env
-sudo -n -u hololive test -w /var/lib/hololive-bot/youtube-producer/settings
+sudo -n grep -qx 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true' /etc/hololive-bot/youtube-collector-host.env
+sudo -n grep -qx 'POSTGRES_USER=hololive_scraper' /etc/hololive-bot/youtube-collector-host.env
+sudo -n grep -qx 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-collector/settings' /etc/hololive-bot/youtube-collector-host.env
+sudo -n -u hololive test -w /var/lib/hololive-bot/youtube-collector/settings
 
 sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
@@ -87,11 +90,11 @@ else
   journal_since="10 minutes ago"
 fi
 if journalctl -u "$unit" --since "$journal_since" --no-pager |
-   grep -E 'ERR|panic|permission denied|x509|no such file|ingestion_lease_lost'; then
+   grep -E 'ERR|panic|permission denied|x509|no such file'; then
   exit 1
 fi
 
-echo 'active-active completion check passed'
+echo 'collector AP completion check passed'
 REMOTE
 }
 
@@ -108,7 +111,7 @@ remote "set -euo pipefail
 cd ~/hololive-bot
 bash scripts/deploy/lib/require-quic-udp-buffer.sh '$AP_REQUIRED_UDP_BUFFER_BYTES' '$AP_NAME'
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
-sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f '$AP_COMPOSE_FILE' ps $services_list
 
@@ -123,7 +126,8 @@ idx=0
 for container in $containers_list; do
   ready=\$(docker exec \"\$container\" ./bin/healthcheck --body \"https://127.0.0.1:\${ports[\$idx]}/ready\")
   printf '%s' \"\$ready\" | grep -q '\"status\":\"ready\"'
-  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \"\$container\" | grep -qx 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true'
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \"\$container\" | grep -qx 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true'
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \"\$container\" | grep -qx 'POSTGRES_USER=hololive_scraper'
   idx=\$((idx + 1))
 done
 
@@ -139,5 +143,5 @@ if [[ -n '$CHANGE_STARTED_AT' ]]; then
   done
 fi
 
-echo 'active-active completion check passed'
+echo 'collector AP completion check passed'
 "

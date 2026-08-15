@@ -56,23 +56,6 @@ func TestLoadLLMSchedulerStillRequiresIrisTokens(t *testing.T) {
 	}
 }
 
-func TestLoadYouTubeProducerRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
-	clearIrisAndRoomEnv(t)
-	t.Setenv("API_SECRET_KEY", "dummy-secret")
-	setRuntimeH3ServerEnv(t)
-	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
-	t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
-	t.Setenv("YOUTUBE_PRODUCER_INSTANCE_ID", "youtube-producer-a")
-
-	cfg, err := LoadYouTubeProducerRuntime()
-	if err != nil {
-		t.Fatalf("LoadYouTubeProducerRuntime() error = %v", err)
-	}
-	if cfg.Holodex.APIKey != "dummy-holodex" {
-		t.Fatalf("Holodex.APIKey = %q, want dummy-holodex", cfg.Holodex.APIKey)
-	}
-}
-
 func TestLoadYouTubeCollectorRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
 	clearIrisAndRoomEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")
@@ -107,19 +90,6 @@ func TestNonEgressConfigLoadersSkipWorkerProfileFetchWithAccidentalIrisToken(t *
 			load: LoadAdminAPIRuntime,
 		},
 		{
-			name: "youtube producer",
-			setup: func(t *testing.T) {
-				t.Helper()
-				clearIrisAndRoomEnv(t)
-				t.Setenv("API_SECRET_KEY", "dummy-secret")
-				setRuntimeH3ServerEnv(t)
-				t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
-				t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
-				t.Setenv("YOUTUBE_PRODUCER_INSTANCE_ID", "youtube-producer-a")
-			},
-			load: LoadYouTubeProducerRuntime,
-		},
-		{
 			name: "youtube collector",
 			setup: func(t *testing.T) {
 				t.Helper()
@@ -151,20 +121,5 @@ func TestNonEgressConfigLoadersSkipWorkerProfileFetchWithAccidentalIrisToken(t *
 				t.Fatalf("%s Webhook = %#v, want default worker profile", tt.name, cfg.Webhook)
 			}
 		})
-	}
-}
-
-func TestLoadYouTubeProducerRuntimeRequiresHolodexKey(t *testing.T) {
-	clearIrisAndRoomEnv(t)
-	t.Setenv("API_SECRET_KEY", "dummy-secret")
-	setRuntimeH3ServerEnv(t)
-	t.Setenv("HOLODEX_API_KEY", "")
-	t.Setenv("HOLODEX_API_KEY_1", "")
-	t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
-	t.Setenv("YOUTUBE_PRODUCER_INSTANCE_ID", "youtube-producer-a")
-
-	_, err := LoadYouTubeProducerRuntime()
-	if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY") {
-		t.Fatalf("LoadYouTubeProducerRuntime() error = %v, want HOLODEX_API_KEY requirement", err)
 	}
 }

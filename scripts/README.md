@@ -30,7 +30,7 @@ PR/릴리스 전 경계 게이트와 릴리스 노트 렌더링 도구입니다.
 Docker Compose 운영 재배포 스크립트입니다.
 
 - `./scripts/deploy/compose-redeploy-service.sh <service>`
-- 원격 AP(youtube-producer active-active) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
+- 원격 AP(`youtube-collector` fleet) 호스트 운영: `scripts/deploy/ap-hosts/<host>.conf` 기반
   - Seoul Compose: `./scripts/deploy/ap-deploy.sh seoul [--dry-run|--apply]`
   - Osaka/Osaka2 native: `./scripts/deploy/ap-host-native-deploy.sh <osaka|osaka2> [--dry-run|--apply]`
   - `./scripts/deploy/ap-completion-check.sh <host>`
@@ -50,7 +50,7 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
 - `./scripts/logs/ap-status.sh <host>` (osaka, seoul)
-- `./scripts/logs/ap-logs.sh <host> [youtube-producer|all]`
+- `./scripts/logs/ap-logs.sh <host> [youtube-collector|all]`
 - `./scripts/logs/ap-smoke.sh <host>`
 - `./scripts/logs/osaka-install-log-rollup.sh` - legacy Osaka log rollup timer를 masked 상태로 유지합니다.
 

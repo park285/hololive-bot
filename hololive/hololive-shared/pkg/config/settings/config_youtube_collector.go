@@ -2,7 +2,10 @@ package settings
 
 import (
 	"fmt"
+	"strings"
 	"time"
+
+	sharedenv "github.com/park285/shared-go/pkg/envutil"
 )
 
 const (
@@ -15,6 +18,7 @@ const (
 )
 
 type YouTubeCollectorConfig struct {
+	InstanceID           string
 	TotalWorkers         int
 	QueueCapacity        int
 	AcquisitionBatch     int
@@ -228,6 +232,7 @@ func loadYouTubeCollectorConfig() YouTubeCollectorConfig {
 		batchDefault = youtubeCollectorMaxAcquisitionBatch
 	}
 	return YouTubeCollectorConfig{
+		InstanceID:           strings.TrimSpace(sharedenv.String("YOUTUBE_COLLECTOR_INSTANCE_ID", "")),
 		TotalWorkers:         workers,
 		QueueCapacity:        queueCapacity,
 		AcquisitionBatch:     positiveIntEnv("YOUTUBE_COLLECTOR_ACQUISITION_BATCH", batchDefault),

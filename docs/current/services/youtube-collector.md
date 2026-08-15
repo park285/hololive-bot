@@ -6,41 +6,41 @@
 |---|---|
 | Module | `hololive-youtube-collector` |
 | Binary | `youtube-collector` |
-| Compose service | `youtube-collector` |
-| Port | `30045` |
-| Health endpoint | `https://127.0.0.1:30045/health` over H3 |
-| Ready endpoint | `https://127.0.0.1:30045/ready` |
+| Compose service | `youtube-collector` (central `c`); AP overlays `youtube-collector-a/b/d` |
+| Ports | `a` 30005, `b` 30015, `c` 30025, `d` 30035 |
+| Health endpoint | `https://127.0.0.1:<port>/health` over H3 |
+| Ready endpoint | `https://127.0.0.1:<port>/ready` over H3 |
+| DB role | `hololive_scraper` |
+| TLS | `POSTGRES_SSLMODE=verify-full`, `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem` |
 
 ## Role
 
-Community vertical slice collector입니다. YouTube.js (`youtubei.js`) community fetch, normalize, `source_collection_checkpoints`와 `source_observation_outbox` Publish만 소유합니다. Canonical community persist와 notification outbox는 `hololive-api` YouTube plane이 소유합니다.
+AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normalize와 PostgreSQL collection lease/checkpoint/`source_observations` Publish만 소유합니다. Canonical persist와 notification intent는 `hololive-api` YouTube plane이 소유합니다. `members.photo` product path는 hololive-api admin PhotoSync가 소유합니다.
 
 ## Owns
 
-- Community YouTube.js fetch/normalize when `YOUTUBE_INGESTION_ENABLED=true`
-- `Repository.Publish` for `youtube_community` observations (checkpoint + outbox insert)
-- Collector DB role `hololive_scraper` (`SELECT, INSERT` on outbox; no outbox UPDATE)
+- Provider adapters and bounded collection when `YOUTUBE_INGESTION_ENABLED=true`
+- DB job lease/fence and `PublishBatch` (checkpoint + observation insert)
+- Collector DB role `hololive_scraper`
 
 ## Provides
 
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
-| Community observations | PostgreSQL outbox | `source_observation_outbox` (`source_kind=youtube_community`) | `hololive-api` YouTube plane |
-| Collector health | H3 | `/health` | Compose healthcheck |
+| Source observations | PostgreSQL | `source_observations` / `source_observation_queue` | `hololive-api` YouTube plane |
+| Collector health/ready | H3 | `/health`, `/ready` | Compose/systemd healthcheck |
 
 ## Consumes
 
 | Dependency | Purpose | Failure impact |
 |---|---|---|
-| PostgreSQL | checkpoint/outbox insert over `verify-full` TLS | collection handoff fails |
-| Valkey | poll target/cache/coordination | stale targets or degraded scheduling |
+| PostgreSQL | lease/checkpoint/observation insert over `verify-full` TLS | collection handoff fails |
+| Valkey | optional contention optimization | scheduling degrades to DB-only |
 
 ## Must not own
 
-- `youtube_community_posts`, watermarks, tracking, `youtube_notification_outbox`
-- Observation claim/finalize
-- Live/shorts/videos/stats polling
-- Holodex photo sync
+- Canonical community/content/live/stats/profile/photo tables
+- Notification outbox / observation claim/finalize
 - Proactive notification egress owned by `alarm-worker`
 
 ## Startup requirements
@@ -48,27 +48,24 @@ Community vertical slice collector입니다. YouTube.js (`youtubei.js`) communit
 - PostgreSQL and Valkey availability
 - `YOUTUBE_INGESTION_ENABLED=true`
 - `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true`
-- `YOUTUBE_PRODUCER_RUNTIME_ALLOWED=false`
-- `YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=false`
+- `YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-{a,b,c,d}`
 - `PHOTO_SYNC_ENABLED=false`
 - `POSTGRES_USER=hololive_scraper`
-- Holodex is not required; Community collection uses the collector-owned YouTube.js helper, not HTML `GetCommunityPosts`
 - `POSTGRES_SSLMODE=verify-full` and `POSTGRES_SSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem`
-- Required central compose service. Default central `up` starts this service. AP overlays pin it to profile `central-only`.
+- Central default `up` starts fleet member `c` as compose service `youtube-collector`. AP overlays pin that service to `central-only` and start the host instance.
 
 ## Shutdown behavior
 
-- Stop the community collector scheduler.
-- Do not claim or update observation outbox rows.
+- Stop the collector scheduler and YouTube.js helper.
+- Do not claim or update observation queue rows.
 
 ## Observability
 
 - Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f youtube-collector`
-- Health: `https://127.0.0.1:30045/health`
-- Metrics: live-compat publishes `:30096` on `HOLOLIVE_METRICS_PORT_BIND_IP` for central Prometheus
+- Health: `https://127.0.0.1:30025/health`
+- Ready: `https://127.0.0.1:30025/ready`
+- Metrics: live-compat publishes `:30096` on `HOLOLIVE_METRICS_PORT_BIND_IP`
 
 ## Related docs
 
-- `../architecture/youtube-collector-observation-outbox-community-vertical-slice-20260813.md`
-- `youtube-producer.md`
 - `../runbooks/youtube-collector.md`

@@ -48,7 +48,7 @@ worktree 또는 branch가 다르면 수정하지 말고 차이를 보고하십�
 1. `/home/kapu/work/iris-stack/hololive-bot/AGENTS.md`
 2. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md`
    - Sections 4.4, 7, 13.1 Community, 14, 16–18 Task 4, 19–23
-3. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-producer-convergence-status-20260814.md`
+3. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-collector-convergence-status-20260814.md`
 4. `/home/kapu/work/iris-stack/hololive-bot/docs/current/contracts/source-observation-canonical-json-v1.md`
 5. 이 문서의 「확정된 선행 상태」
 
@@ -128,12 +128,12 @@ hololive/hololive-shared/pkg/service/youtube/community/**
 Community consume ownership을 API로 옮긴 뒤에만, live path가 남지 않게 다음을 삭제하거나 연결 해제할 수 있습니다.
 
 ```text
-hololive/hololive-youtube-producer/internal/runtime/pollers/community_observation_consumer.go
-hololive/hololive-youtube-producer/internal/runtime/pollers/community_observation_consumer_test.go
-hololive/hololive-youtube-producer/internal/runtime/producerruntime/bootstrap_youtube_producer_youtube.go
-hololive/hololive-youtube-producer/internal/runtime/producerruntime/youtube_producer_runtime_lifecycle.go
-hololive/hololive-youtube-producer/internal/runtime/producerruntime/youtube_producer_runtime_runner.go
-hololive/hololive-youtube-producer/internal/runtime/producerruntime/community_observation_consumer_test.go
+hololive/hololive-youtube-collector/internal/runtime/pollers/community_observation_consumer.go
+hololive/hololive-youtube-collector/internal/runtime/pollers/community_observation_consumer_test.go
+hololive/hololive-youtube-collector/internal/runtime/producerruntime/bootstrap_youtube_producer_youtube.go
+hololive/hololive-youtube-collector/internal/runtime/producerruntime/youtube_producer_runtime_lifecycle.go
+hololive/hololive-youtube-collector/internal/runtime/producerruntime/youtube_producer_runtime_runner.go
+hololive/hololive-youtube-collector/internal/runtime/producerruntime/community_observation_consumer_test.go
 ```
 
 제한:
@@ -146,7 +146,7 @@ hololive/hololive-youtube-producer/internal/runtime/producerruntime/community_ob
 검증 성공 뒤 진척 증거만 다음 문서에 갱신할 수 있습니다.
 
 ```text
-docs/current/architecture/youtube-producer-convergence-status-20260814.md
+docs/current/architecture/youtube-collector-convergence-status-20260814.md
 docs/current/handoffs/2026-08-14-youtube-convergence-task4-implementation-handoff.md
 ```
 
@@ -237,22 +237,22 @@ go test -count=1 \
   ./hololive/hololive-shared/pkg/service/youtube/community \
   ./hololive/hololive-shared/pkg/service/youtube/sourceobservation \
   ./hololive/hololive-shared/pkg/config/settings \
-  ./hololive/hololive-youtube-producer/internal/runtime/pollers \
-  ./hololive/hololive-youtube-producer/internal/runtime/producerruntime
+  ./hololive/hololive-youtube-collector/internal/runtime/pollers \
+  ./hololive/hololive-youtube-collector/internal/runtime/producerruntime
 
 go test -race -count=1 \
   ./hololive/hololive-api/internal/planes/youtube/... \
   ./hololive/hololive-shared/pkg/service/youtube/sourceobservation
 
 rg -n "CommunityObservationConsumer|community_observation_consumer" \
-  hololive/hololive-youtube-producer/internal/runtime
+  hololive/hololive-youtube-collector/internal/runtime
 
 git diff --check -- \
   hololive/hololive-api/internal/planes/youtube \
   hololive/hololive-shared/pkg/config/settings \
   hololive/hololive-shared/pkg/service/youtube \
-  hololive/hololive-youtube-producer/internal/runtime \
-  docs/current/architecture/youtube-producer-convergence-status-20260814.md \
+  hololive/hololive-youtube-collector/internal/runtime \
+  docs/current/architecture/youtube-collector-convergence-status-20260814.md \
   docs/current/handoffs/2026-08-14-youtube-convergence-task4-implementation-handoff.md
 ```
 

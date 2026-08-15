@@ -2191,7 +2191,7 @@ shutdown joins retention and replay workers
 삭제 및 수정 범위:
 
 ```text
-hololive/hololive-youtube-producer/
+hololive/hololive-youtube-collector/
 go.work
 .env.example
 README.md

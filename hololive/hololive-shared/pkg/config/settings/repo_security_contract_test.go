@@ -245,7 +245,7 @@ func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
 	for _, service := range []string{
 		"hololive-api",
 		"hololive-alarm-worker",
-		"youtube-producer",
+		"youtube-collector",
 		"admin-dashboard",
 	} {
 		block := composeServiceBlock(t, content, service)
@@ -488,8 +488,8 @@ func assertProdComposeRequiredPatterns(t *testing.T, content string) {
 	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}"); got != 1 {
 		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE verify-full default count = %d, want 1", got)
 	}
-	if got := strings.Count(content, "*postgres-env"); got != 4 {
-		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 4", got)
+	if got := strings.Count(content, "*postgres-env"); got != 3 {
+		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 3", got)
 	}
 
 	required := []string{
@@ -539,7 +539,7 @@ func assertProdComposeEgressEnvFiles(t *testing.T, content string) {
 func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
 	t.Helper()
 
-	nonEgress := []string{"youtube-producer", "youtube-collector", "admin-dashboard"}
+	nonEgress := []string{"youtube-collector", "admin-dashboard"}
 	for _, service := range nonEgress {
 		block := composeServiceBlock(t, content, service)
 		assertNonEgressEnvFilePolicy(t, service, block)
@@ -561,6 +561,12 @@ func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
 func assertNonEgressEnvFilePolicy(t *testing.T, service, block string) {
 	t.Helper()
 
+	if service == "youtube-collector" {
+		if !strings.Contains(block, "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}") {
+			t.Fatalf("youtube-collector must inject secrets via the scoped youtube-collector.env env_file")
+		}
+		return
+	}
 	if service != "admin-dashboard" {
 		if strings.Contains(block, "env_file:") {
 			t.Fatalf("%s must not define env_file in hardened docker-compose.prod.yml", service)
@@ -610,7 +616,6 @@ func assertProdRenderedValkeySocketIsolation(t *testing.T, cfg renderedCompose) 
 		"valkey-cache":          true,
 		"hololive-api":          true,
 		"hololive-alarm-worker": true,
-		"youtube-producer":      true,
 		"youtube-collector":     true,
 	}
 	for service := range cfg.Services {
@@ -639,7 +644,7 @@ func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-producer", "youtube-collector"} {
+	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-collector"} {
 		env := composeEnvironment(t, cfg, service)
 		if env["POSTGRES_HOST"] != "holo-postgres" {
 			t.Fatalf("%s POSTGRES_HOST = %q, want holo-postgres", service, env["POSTGRES_HOST"])
@@ -656,7 +661,7 @@ func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
 func assertProdRenderedNonEgressSecretIsolation(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{"youtube-producer", "youtube-collector", "admin-dashboard"} {
+	for _, service := range []string{"youtube-collector", "admin-dashboard"} {
 		env := composeEnvironment(t, cfg, service)
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; ok {
@@ -698,7 +703,7 @@ func assertProdRenderedEgressRuntimeKeys(t *testing.T, cfg renderedCompose) {
 func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{"youtube-producer", "youtube-collector"} {
+	for _, service := range []string{"youtube-collector"} {
 		env := composeEnvironment(t, cfg, service)
 		if _, ok := env["API_SECRET_KEY"]; !ok {
 			t.Fatalf("%s missing scoped API_SECRET_KEY mapping", service)
@@ -708,7 +713,7 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{"youtube-producer", "youtube-collector"} {
+	for _, service := range []string{"youtube-collector"} {
 		env := composeEnvironment(t, cfg, service)
 		for _, key := range []string{"HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
 			if _, ok := env[key]; !ok {
@@ -732,7 +737,7 @@ func assertProdRenderedNoRuntimeConfigMount(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{"youtube-producer", "youtube-collector", "admin-dashboard"} {
+	for _, service := range []string{"youtube-collector", "admin-dashboard"} {
 		for _, target := range composeVolumeTargets(t, cfg, service) {
 			if target == "/app/runtime-config" {
 				t.Fatalf("%s still mounts runtime-config", service)
@@ -747,7 +752,6 @@ func assertProdRenderedPortAndCertScope(t *testing.T, cfg renderedCompose) {
 	h3KeyConsumers := map[string]bool{
 		"hololive-api":          true,
 		"hololive-alarm-worker": true,
-		"youtube-producer":      true,
 		"youtube-collector":     true,
 	}
 	for serviceName, service := range cfg.Services {
@@ -827,7 +831,7 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 			t.Fatalf("live overlay must not restore monolithic env_file for %s", service)
 		}
 	}
-	for _, service := range []string{"youtube-producer", "youtube-collector", "admin-dashboard"} {
+	for _, service := range []string{"youtube-collector", "admin-dashboard"} {
 		block := composeServiceBlock(t, overlay, service)
 		if strings.Contains(block, "env_file:") {
 			t.Fatalf("live overlay must keep nonEgress %s scoped without env_file", service)
@@ -883,7 +887,7 @@ func assertLiveCompatRenderedPostgres(t *testing.T, cfg renderedCompose) {
 		t.Fatalf("holo-postgres PGPORT = %q, want 5432", postgresEnv["PGPORT"])
 	}
 
-	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-producer", "youtube-collector"} {
+	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-collector"} {
 		env := composeEnvironment(t, cfg, service)
 		if env["POSTGRES_HOST"] != "holo-postgres" || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != "verify-full" {
 			t.Fatalf("%s POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
@@ -931,7 +935,7 @@ func assertLiveCompatEgressSecrets(t *testing.T, cfg renderedCompose) {
 func assertLiveCompatNonEgressSecrets(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{"youtube-producer", "youtube-collector", "admin-dashboard"} {
+	for _, service := range []string{"youtube-collector", "admin-dashboard"} {
 		env := composeEnvironment(t, cfg, service)
 		for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 			if _, ok := env[key]; ok {
@@ -1057,7 +1061,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 		{
 			name:     "base prod",
 			files:    []string{"deploy/compose/docker-compose.prod.yml"},
-			services: []string{"hololive-api", "hololive-alarm-worker", "youtube-producer", "youtube-collector"},
+			services: []string{"hololive-api", "hololive-alarm-worker", "youtube-collector"},
 		},
 		{
 			name: "live-compat",
@@ -1065,7 +1069,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 				"deploy/compose/docker-compose.prod.yml",
 				"deploy/compose/docker-compose.live-compat.yml",
 			},
-			services: []string{"hololive-api", "hololive-alarm-worker", "youtube-producer", "youtube-collector"},
+			services: []string{"hololive-api", "hololive-alarm-worker", "youtube-collector"},
 		},
 		{
 			name: "main-ap live-compat",
@@ -1075,7 +1079,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 				"deploy/compose/docker-compose.main-ap.yml",
 				"deploy/compose/docker-compose.main-ap.live-compat.yml",
 			},
-			services: []string{"youtube-producer-c"},
+			services: []string{"youtube-collector"},
 		},
 	}
 
@@ -1190,10 +1194,10 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 func assertMainAPLiveCompatOverlayText(t *testing.T) {
 	t.Helper()
 
-	mainAP := readRepoFile(t, "deploy/compose/docker-compose.main-ap.yml")
-	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}"
-	if block := composeServiceBlock(t, mainAP, "youtube-producer-c"); !strings.Contains(block, "env_file:") || !strings.Contains(block, producerEnvFile) {
-		t.Fatalf("main-ap must give youtube-producer-c scoped env_file %q", producerEnvFile)
+	prod := readRepoFile(t, "deploy/compose/docker-compose.prod.yml")
+	const collectorEnvFile = "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}"
+	if block := composeServiceBlock(t, prod, "youtube-collector"); !strings.Contains(block, "env_file:") || !strings.Contains(block, collectorEnvFile) {
+		t.Fatalf("prod must give youtube-collector scoped env_file %q", collectorEnvFile)
 	}
 }
 
@@ -1211,36 +1215,36 @@ func assertMainAPLiveCompatRenderedEgressAllowedHosts(t *testing.T, cfg rendered
 func assertMainAPLiveCompatRenderedProducer(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	env := composeEnvironment(t, cfg, "youtube-producer-c")
+	env := composeEnvironment(t, cfg, "youtube-collector")
 	if env["POSTGRES_HOST"] != "holo-postgres" || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != "verify-full" {
-		t.Fatalf("youtube-producer-c POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
+		t.Fatalf("youtube-collector POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
 	}
 	if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
-		t.Fatalf("youtube-producer-c renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", value)
+		t.Fatalf("youtube-collector renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q", value)
 	}
 	if env["POSTGRES_SSLROOTCERT"] != "/run/hololive-bot/certs/postgres-ca.pem" {
-		t.Fatalf("youtube-producer-c POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", env["POSTGRES_SSLROOTCERT"])
+		t.Fatalf("youtube-collector POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", env["POSTGRES_SSLROOTCERT"])
 	}
 	for _, key := range []string{"IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"} {
 		if _, ok := env[key]; ok {
-			t.Fatalf("youtube-producer-c rendered with %s under live overlay", key)
+			t.Fatalf("youtube-collector rendered with %s under live overlay", key)
 		}
 	}
 	for _, key := range []string{"API_SECRET_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
 		if _, ok := env[key]; !ok {
-			t.Fatalf("youtube-producer-c missing scoped %s mapping", key)
+			t.Fatalf("youtube-collector missing scoped %s mapping", key)
 		}
 	}
 	for _, key := range []string{"HOLODEX_API_KEY_2", "SCRAPER_PROXY_ENABLED", "YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "YOUTUBE_ENABLE_QUOTA_BUILDING"} {
 		if _, ok := env[key]; !ok {
-			t.Fatalf("youtube-producer-c missing producer env_file key %s", key)
+			t.Fatalf("youtube-collector missing producer env_file key %s", key)
 		}
 	}
 
-	targets := strings.Join(composeVolumeTargets(t, cfg, "youtube-producer-c"), "\n")
-	for _, target := range []string{"/app/data", "/app/logs", "/app/runtime-config", "/run/hololive-bot/certs", "/var/run/valkey"} {
+	targets := strings.Join(composeVolumeTargets(t, cfg, "youtube-collector"), "\n")
+	for _, target := range []string{"/app/data", "/app/logs", "/run/hololive-bot/certs", "/var/run/valkey"} {
 		if !strings.Contains(targets, target) {
-			t.Fatalf("youtube-producer-c missing live-compat volume target %s in %q", target, targets)
+			t.Fatalf("youtube-collector missing live-compat volume target %s in %q", target, targets)
 		}
 	}
 }
@@ -1410,7 +1414,7 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 		"COMPOSE_ENV_FILE="+composeEnvFile,
 		"HOLOLIVE_API_ENV_FILE="+appEnvFile,
 		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+appEnvFile,
-		"HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="+writeAPProducerEnvFile(t),
+		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeAPProducerEnvFile(t),
 		"ADMIN_DASHBOARD_ENV_FILE="+writeAdminDashboardEnvFile(t),
 		"DB_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
@@ -1498,7 +1502,7 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
 		"COMPOSE_ENV_FILE="+writeAPComposeEnvFile(t),
-		"HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE="+writeAPProducerEnvFile(t),
+		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeAPProducerEnvFile(t),
 		"ADMIN_DASHBOARD_ENV_FILE="+writeAdminDashboardEnvFile(t),
 		"DB_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
@@ -1597,9 +1601,9 @@ func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) stri
 	if strings.Contains(content, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(content, "COMPOSE_ENV_FILE") {
 		t.Fatalf("%s must not reference monolithic hololive env file", sourceName)
 	}
-	const producerEnvFile = "${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}"
+	const producerEnvFile = "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}"
 	if !strings.Contains(content, producerEnvFile) {
-		t.Fatalf("%s missing AP youtube-producer env_file path %s", sourceName, producerEnvFile)
+		t.Fatalf("%s missing AP youtube-collector env_file path %s", sourceName, producerEnvFile)
 	}
 
 	return sourceName
@@ -1608,7 +1612,7 @@ func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) stri
 func writeAPProducerEnvFile(t *testing.T) string {
 	t.Helper()
 
-	return writeTempEnvFile(t, "youtube-producer-*.env", []string{
+	return writeTempEnvFile(t, "youtube-collector-*.env", []string{
 		"API_SECRET_KEY=dummy",
 		"HOLODEX_API_KEY=dummy",
 		"HOLODEX_API_KEY_1=dummy",
@@ -1722,12 +1726,12 @@ func apComposeServiceNames(t *testing.T, cfg renderedCompose, composeFile string
 
 	serviceNames := make([]string, 0, len(cfg.Services))
 	for service := range cfg.Services {
-		if strings.HasPrefix(service, "youtube-producer") {
+		if strings.HasPrefix(service, "youtube-collector-") {
 			serviceNames = append(serviceNames, service)
 		}
 	}
 	if len(serviceNames) == 0 {
-		t.Fatalf("%s rendered no AP youtube-producer services", composeFile)
+		t.Fatalf("%s rendered no AP youtube-collector services", composeFile)
 	}
 	return serviceNames
 }

@@ -11,8 +11,8 @@
 | `major_event_subscriptions` | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (admin/bot planes) | internal HTTP contract `majorevent.subscription` |
 | `membernews` state | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | internal HTTP contracts `membernews.subscription`, `membernews.digest` |
 | alarm queue state | `alarm-worker` | `alarm-worker` | `alarm-worker`, observability consumers | queue contract `alarm.dispatch` or documented API |
-| `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api`, `youtube-producer` | `youtube-producer`는 `alarmread.Reader` 계약(`ProvideAlarmReader`)으로만 읽는다 |
-| YouTube outbox/tracking | `youtube-producer` production, `alarm-worker` egress | `youtube-producer` writes rows; `alarm-worker` writes delivery/terminal state | observability consumers | `youtube-producer` writes rows, `alarm-worker` owns final send state |
+| `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `hololive-api`는 `alarmread.Reader` 계약(`ProvideAlarmReader`)으로만 읽는다 |
+| YouTube outbox/tracking | `hololive-api` YouTube plane production, `alarm-worker` egress | `hololive-api` writes rows; `alarm-worker` writes delivery/terminal state | observability consumers | `hololive-api` writes notification intent, `alarm-worker` owns final send state |
 
 Structured allowlist: `repository-ownership.allowlist`.
 
@@ -28,19 +28,19 @@ Structured allowlist: `repository-ownership.allowlist`.
 - The `hololive-api` bot plane must not import `hololive-alarm-worker/internal`; cross-runtime access uses documented internal HTTP/queue contracts.
 - `shared-go` must not import any `hololive/*` module.
 - The `hololive-api` bot and admin planes must not import major event repository/storage internals directly; they use documented internal HTTP contracts.
-- `youtube-producer` must not import `pkg/service/alarm` or call `alarm.NewRepository`; `Repository`는 `Add`/`Remove`/`ClearByRoom` write 메서드를 함께 노출하므로 read 소비자는 `pkg/service/alarmread`의 `Reader`를 `ProvideAlarmReader`로 주입받는다. `pkg/service/alarm/keys`는 제외 대상이 아니다.
+- `youtube-collector` must not import `pkg/service/alarm` or call `alarm.NewRepository`; `Repository`는 `Add`/`Remove`/`ClearByRoom` write 메서드를 함께 노출하므로 read 소비자는 `pkg/service/alarmread`의 `Reader`를 `ProvideAlarmReader`로 주입받는다. `pkg/service/alarm/keys`는 제외 대상이 아니다.
 - Shared data ownership changes must update `repository-ownership.allowlist`.
 
 ## YouTube Runtime Role Separation
 
 | Runtime | Enabled role | Must stay disabled |
 |---|---|---|
-| `youtube-collector` | Community YouTube.js fetch/normalize and `source_observation_outbox` Publish | Canonical community persist, observation claim/finalize, Iris send, outbox dispatch |
-| `youtube-producer` | YouTube scraping/polling except Community fetch/consume, `youtube_notification_outbox` production, and Holodex photo sync (a/c singleton lease) | Iris send, direct outbox dispatch, Community consume |
+| `youtube-collector` | AP-fleet fetch/normalize/lease and observation Publish | Canonical persist, observation claim/finalize, Iris send, outbox dispatch |
+| `hololive-api` YouTube plane | Observation consume, canonical persist, notification intent | External scraping, proactive egress |
 
-Duplicated polling prevention is enforced operationally by Compose env ownership: `youtube-producer` and `youtube-collector` own `YOUTUBE_INGESTION_ENABLED=true` on their own processes. Collector poller identity is `community_collect`; producer does not register a `community` poller. Community consume/canonical persist is owned by the `hololive-api` YouTube plane.
-Duplicated sending prevention is enforced by code and architecture gates: `youtube-producer` and producer runtimes must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.
-`internal/runtime/communitycollector` must not import persist helpers (`batchrepo`, `PersistCommunityPosts`, producer `pollers`).
+Duplicated polling prevention is enforced by PostgreSQL collection leases. Collector processes set `YOUTUBE_INGESTION_ENABLED=true`. Consume/canonical persist is owned by the `hololive-api` YouTube plane.
+Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.
+Collector adapters must not import persist helpers (`batchrepo`, `PersistCommunityPosts`).
 
 YouTube outbox dispatcher는 `hololive-alarm-worker/internal/egress/youtubedispatch`에 있으므로 다른 모듈에서 import 자체가 불가능합니다. 즉 이 항목의 1차 보장은 Go `internal/` 컴파일러이고, 게이트의 `outbox\.NewDispatcher`/`OutboxDispatcher` 심볼 denylist는 회귀 방지용 이중화로 유지합니다. 반면 `pkg/service/delivery`는 `hololive-api`(reactive reply)와 `alarm-worker`(proactive egress)의 진성 다중 소비자라 shared에 남으므로, 해당 항목은 게이트가 유일한 보장입니다.
 

@@ -5,7 +5,6 @@ x-seoul-ap-env: &seoul-ap-env
   POSTGRES_SOCKET_PATH: ""
   POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:?HOLOLIVE_CENTRAL_POSTGRES_HOST is required for an AP overlay}
   POSTGRES_PORT: ${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5433}
-  # SCRAPER_BACKFILL_*: prod x-scraper-env 기본값을 extends/파일 병합으로 그대로 상속하므로 재선언하지 않는다.
 
 x-seoul-ap-logging: &seoul-ap-logging
   driver: "json-file"
@@ -33,49 +32,42 @@ services:
 
   youtube-collector:
     profiles: !override ["central-only"]
-
-  youtube-producer:
-    profiles: !override ["retired-youtube-producer"]
     env_file: !override
-      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}
+      - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
     environment:
       <<: *seoul-ap-env
-      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
+      YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
     logging: *seoul-ap-logging
     deploy:
       resources:
         limits:
           memory: 768m
 
-  youtube-producer-b:
+  youtube-collector-b:
     extends:
       file: docker-compose.prod.yml
-      service: youtube-producer
+      service: youtube-collector
     profiles: ["oracle"]
     build:
       provenance: false
       sbom: false
-    container_name: hololive-youtube-producer-b
+    container_name: hololive-youtube-collector-b
     env_file:
-      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}
+      - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
     environment:
       <<: *seoul-ap-env
-      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
-      YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
-      YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT: "4"
-      YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}
-      SCRAPER_FETCHER_ENGINE: ${YOUTUBE_PRODUCER_B_FETCHER_ENGINE:-nethttp}
-      SCRAPER_SCHEDULER_WORKER_COUNT: ${YOUTUBE_PRODUCER_AP_WORKER_COUNT:-2}
+      YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
+      POSTGRES_USER: hololive_scraper
       GOMEMLIMIT: "640MiB"
-      YOUTUBE_PRODUCER_INSTANCE_ID: "youtube-producer-b"
-      YOUTUBE_PRODUCER_LOG_FILE_NAME: "youtube-producer-b.log"
+      YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-b"
+      YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-b.log"
       SERVER_PORT: 30015
       HOLOLIVE_H3_ADDR: ":30015"
       PHOTO_SYNC_ENABLED: "false"
     ports: !override
       - "127.0.0.1:30015:30015"
       - "127.0.0.1:30015:30015/udp"
-      - "100.100.1.5:30095:30095"
+      - "100.100.1.5:30096:30096"
     volumes: !override
       - ../../data:/app/data
       - ../../logs:/app/logs
@@ -85,7 +77,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
     healthcheck:
-      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30015/health"]
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30015/ready"]
     logging: *seoul-ap-logging
     deploy:
       resources:

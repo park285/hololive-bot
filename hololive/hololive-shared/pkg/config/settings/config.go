@@ -80,14 +80,6 @@ func LoadAdminAPIRuntime() (*Config, error) {
 	})
 }
 
-// LoadYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
-// Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
-func LoadYouTubeProducerRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateYouTubeProducerRuntime, configLoadOptions{
-		TracingRuntime: tracingRuntimeYouTubeProducer,
-	})
-}
-
 func LoadYouTubeCollectorRuntime() (*Config, error) {
 	return loadConfigValidated((*Config).ValidateYouTubeCollectorRuntime, configLoadOptions{
 		TracingRuntime: tracingRuntimeYouTubeCollector,
@@ -125,7 +117,12 @@ func buildConfig(
 	irisConfig := loadIrisConfig(webhookToken, botToken)
 	workerProfile := resolveIrisBotWebhookWorkerProfile(&irisConfig, options)
 	scraperConfig := loadScraperConfig()
-	tracingConfig, err := loadTracingConfig(options.TracingRuntime, scraperConfig.ActiveActive.InstanceID)
+	collectorConfig := loadYouTubeCollectorConfig()
+	tracingInstanceID := scraperConfig.ActiveActive.InstanceID
+	if options.TracingRuntime == tracingRuntimeYouTubeCollector {
+		tracingInstanceID = collectorConfig.InstanceID
+	}
+	tracingConfig, err := loadTracingConfig(options.TracingRuntime, tracingInstanceID)
 	if err != nil {
 		return nil, fmt.Errorf("load tracing config: %w", err)
 	}
@@ -151,7 +148,7 @@ func buildConfig(
 		Services:               loadServicesConfig(),
 		Environment:            loadAppEnvironment(),
 		Scraper:                scraperConfig,
-		YouTubeCollector:       loadYouTubeCollectorConfig(),
+		YouTubeCollector:       collectorConfig,
 		Webhook:                loadWebhookConfig(&workerProfile),
 		WorkerPool:             loadWorkerPoolConfig(&workerProfile),
 		WorkerProfile: WorkerProfileConfig{

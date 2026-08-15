@@ -80,11 +80,15 @@ func assembleRuntime(
 	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, appConfig.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
 		opts.EnableGzip = true
 		opts.ReadyResponder = func(c *gin.Context) {
+			instanceID := strings.TrimSpace(appConfig.YouTubeCollector.InstanceID)
+			if instanceID == "" {
+				instanceID = runtimeName
+			}
 			if infra.youtubejs == nil || infra.youtubejs.Exited() {
-				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "runtime": runtimeName, "dependency": "youtubejs"})
+				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "runtime": runtimeName, "instance_id": instanceID, "dependency": "youtubejs"})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"status": "ready", "runtime": runtimeName})
+			c.JSON(http.StatusOK, gin.H{"status": "ready", "runtime": runtimeName, "instance_id": instanceID})
 		}
 	})
 	if err != nil {

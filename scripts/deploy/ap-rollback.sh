@@ -68,7 +68,7 @@ PROD_BACKUP_LEGACY_FILE="$BACKUP_DIR/$PROD_COMPOSE_LEGACY_FILE.prechange"
 AP_BACKUP_FILE="$BACKUP_DIR/$AP_COMPOSE_FILE.prechange"
 AP_BACKUP_LEGACY_FILE="$BACKUP_DIR/$(basename "$AP_COMPOSE_FILE").prechange"
 AP_COMPOSE_BASENAME="$(basename "$AP_COMPOSE_FILE")"
-IMAGE_REF="hololive-youtube-producer:prod"
+IMAGE_REF="hololive-youtube-collector:prod"
 ROLLBACK_IMAGE_TAG_FILE="$BACKUP_DIR/rollback-image-tag"
 
 remote "set -euo pipefail
@@ -86,12 +86,12 @@ test -r \"\$ap_backup_file\"
 test -r '$ROLLBACK_IMAGE_TAG_FILE'
 rollback_image_tag=\$(cat '$ROLLBACK_IMAGE_TAG_FILE')
 case \"\$rollback_image_tag\" in
-  hololive-youtube-producer:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+  hololive-youtube-collector:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
   *) echo 'invalid rollback image tag' >&2; exit 1 ;;
 esac
 sudo -n docker image inspect \"\$rollback_image_tag\" >/dev/null
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
-sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 preflight_root=\$(mktemp -d)
 trap 'rm -rf \"\$preflight_root\"' EXIT
@@ -128,7 +128,7 @@ if [[ ! -r \"\$ap_backup_file\" && -r '$AP_BACKUP_LEGACY_FILE' ]]; then
 fi
 rollback_image_tag=\$(cat '$ROLLBACK_IMAGE_TAG_FILE')
 case \"\$rollback_image_tag\" in
-  hololive-youtube-producer:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+  hololive-youtube-collector:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
   *) echo 'invalid rollback image tag' >&2; exit 1 ;;
 esac
 sudo -n docker image inspect \"\$rollback_image_tag\" >/dev/null

@@ -139,7 +139,7 @@ worktree 또는 branch가 다르면 수정하지 말고 차이를 보고하십�
 1. `/home/kapu/work/iris-stack/hololive-bot/AGENTS.md`
 2. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md`
    - Sections 1–6, 8, 10, 15–18의 Task 3, 19–23
-3. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-producer-convergence-status-20260814.md`
+3. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-collector-convergence-status-20260814.md`
 4. `/home/kapu/work/iris-stack/hololive-bot/docs/current/handoffs/2026-08-14-youtube-convergence-task2-implementation-handoff.md`
 5. `/home/kapu/work/iris-stack/hololive-bot/docs/current/contracts/source-observation-canonical-json-v1.md`
 
@@ -427,7 +427,7 @@ hololive/hololive-youtube-collector/go.sum
 검증 성공 뒤 다음 문서에 Task 3 진척 증거만 갱신할 수 있습니다.
 
 ```text
-docs/current/architecture/youtube-producer-convergence-status-20260814.md
+docs/current/architecture/youtube-collector-convergence-status-20260814.md
 docs/current/handoffs/2026-08-14-youtube-convergence-task3-implementation-handoff.md
 ```
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -96,7 +97,7 @@ func buildScheduler(
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector: job registry: %w", err)
 	}
-	owner, err := newCollectorOwner()
+	owner, err := newCollectorOwner(collector.InstanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -123,12 +124,16 @@ func newProviderGates(cfg settings.YouTubeCollectorConfig) map[contract.Provider
 	}
 }
 
-func newCollectorOwner() (string, error) {
+func newCollectorOwner(instanceID string) (string, error) {
 	token := make([]byte, 16)
 	if _, err := rand.Read(token); err != nil {
 		return "", fmt.Errorf("build youtube collector: generate lease owner: %w", err)
 	}
-	return runtimeName + ":" + hex.EncodeToString(token), nil
+	prefix := runtimeName
+	if id := strings.TrimSpace(instanceID); id != "" {
+		prefix = id
+	}
+	return prefix + ":" + hex.EncodeToString(token), nil
 }
 
 func (s *leaseScheduler) Start(ctx context.Context) {

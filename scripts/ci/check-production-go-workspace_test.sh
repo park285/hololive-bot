@@ -13,8 +13,6 @@ fixture_files=(
   hololive/hololive-api/go.mod
   hololive/hololive-alarm-worker/Dockerfile
   hololive/hololive-alarm-worker/go.mod
-  hololive/hololive-youtube-producer/Dockerfile
-  hololive/hololive-youtube-producer/go.mod
   hololive/hololive-youtube-collector/Dockerfile
   hololive/hololive-youtube-collector/go.mod
   hololive/hololive-shared/go.mod

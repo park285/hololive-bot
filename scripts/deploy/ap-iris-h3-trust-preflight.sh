@@ -35,7 +35,7 @@ remote_ap_name="$(printf '%q' "$AP_NAME")"
 set -euo pipefail
 
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
-sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/iris-ca.pem
 sudo -n openssl x509 -in /etc/stack-secrets/hololive-bot/certs/iris-ca.pem -noout >/dev/null
 

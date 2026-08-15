@@ -25,7 +25,8 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - Major event/member news subscription, digest generation, internal trigger endpoints, LLM summary cache and notification intent production (llm plane)
 - Dashboard-facing admin HTTP API, operational trigger client facade, alarm HTTP compatibility facade during migration (admin plane)
 - Bot-side clients for major event, member news, and alarm operations
-- Community observation claim/finalize and canonical persist (YouTube plane)
+- Observation claim/finalize, canonical persist, notification intent, live-end finalizer, and retention/replay (YouTube plane)
+- `members.photo` Holodex PhotoSync product path (admin plane). YouTube channel photos are the `channel_photo` reducer.
 
 ## Provides
 
@@ -36,7 +37,7 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | majorevent | HTTP JSON | `/internal/majorevent/*` | `hololive-api` (bot plane) |
 | trigger | HTTP JSON | `/internal/trigger/*` | `hololive-api` (admin plane) |
 | Admin HTTP API | HTTP JSON | 검토 필요 | `admin-dashboard` |
-| settings.update | Valkey Pub/Sub | `config:update` | `hololive-api`, `alarm-worker`, `youtube-producer` |
+| settings.update | Valkey Pub/Sub | `config:update` | `hololive-api`, `alarm-worker`, `youtube-collector` |
 | alarm HTTP compatibility | HTTP JSON | `/internal/alarm/*` | migration callers (target owner is `alarm-worker`) |
 
 ## Consumes

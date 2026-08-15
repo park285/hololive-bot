@@ -495,6 +495,7 @@ services:
       YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS: ${YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS:-2}
       YOUTUBE_PLANE_CONSUMER_WORKERS: ${YOUTUBE_PLANE_CONSUMER_WORKERS:-1}
       YOUTUBE_PLANE_DB_OPERATION_CONCURRENCY: ${YOUTUBE_PLANE_DB_OPERATION_CONCURRENCY:-1}
+      PHOTO_SYNC_ENABLED: ${PHOTO_SYNC_ENABLED:-true}
       ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-172.16.0.0/12,127.0.0.1/32}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://admin.holoshi.com}
       CORS_ENFORCE: ${CORS_ENFORCE:-true}
@@ -557,58 +558,6 @@ services:
         aliases:
           - hololive-api
 
-  youtube-producer:
-    <<: *app-service
-    profiles: ["oracle"]
-    image: hololive-youtube-producer:prod
-    build:
-      <<: *go-build-base
-      dockerfile: hololive/hololive-youtube-producer/Dockerfile
-      args:
-        VERSION: ${HOLO_API_VERSION:-2.0.0}
-        REVISION: ${REVISION:-unknown}
-    container_name: hololive-youtube-producer
-    environment:
-      <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *scraper-env, *cliproxy-env]
-      NOTIFICATION_EGRESS_ROLE: "producer"
-      YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
-      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "false"
-      SERVER_PORT: 30005
-      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_YOUTUBE_PRODUCER_HTTP_TRANSPORTS:-h3}
-      HOLOLIVE_H3_ADDR: ${HOLOLIVE_YOUTUBE_PRODUCER_H3_ADDR:-:30005}
-      HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_YOUTUBE_PRODUCER_METRICS_ADDR:-:30095}
-      POSTGRES_POOL_MIN_CONNS: ${YOUTUBE_PRODUCER_POSTGRES_POOL_MIN_CONNS:-2}
-      POSTGRES_POOL_MAX_CONNS: ${YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS:-8}
-      API_SECRET_KEY: ${API_SECRET_KEY:-}
-      HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
-      HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
-      YOUTUBE_INGESTION_ENABLED: "true"
-      YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS: "${YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS:-2}"
-      PHOTO_SYNC_ENABLED: "true"
-      GOGC: "100"
-      GOMEMLIMIT: "320MiB"
-      GIN_MODE: release
-      LOG_DIR: /app/logs
-    dns: *tailnet-dns
-    ports:
-      - "127.0.0.1:30005:30005"
-      - "127.0.0.1:30005:30005/udp"
-      - "127.0.0.1:30095:30095"
-    volumes: *go-volumes
-    group_add:
-      - "${HOLOLIVE_RUNTIME_GID:-1002}"
-      - "1000"
-    extra_hosts: *host-extra-hosts
-    depends_on: *db-cache-depends
-    deploy: *deploy-384m
-    healthcheck:
-      <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30005/health"]
-    networks:
-      hololive-net:
-        aliases:
-          - youtube-producer
-
   youtube-collector:
     <<: *app-service
     image: hololive-youtube-collector:prod
@@ -618,20 +567,23 @@ services:
       args:
         VERSION: ${HOLO_API_VERSION:-2.0.0}
         REVISION: ${REVISION:-unknown}
-    container_name: hololive-youtube-collector
+    container_name: hololive-youtube-collector-c
     entrypoint: ["./bin/youtube-collector"]
+    env_file:
+      - path: ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
+        required: false
     environment:
       <<: [*app-file-log-env, *hololive-h3-files-env, *cache-env, *postgres-env, *scraper-env]
-      NOTIFICATION_EGRESS_ROLE: "producer"
+      NOTIFICATION_EGRESS_ROLE: "off"
       YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
-      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "false"
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
-      YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "false"
+      YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-c"
+      YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-c.log"
       POSTGRES_USER: hololive_scraper
       POSTGRES_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-${HOLOLIVE_DB_PASSWORD:-${DB_PASSWORD}}}
-      SERVER_PORT: 30045
+      SERVER_PORT: 30025
       HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_YOUTUBE_COLLECTOR_HTTP_TRANSPORTS:-h3}
-      HOLOLIVE_H3_ADDR: ${HOLOLIVE_YOUTUBE_COLLECTOR_H3_ADDR:-:30045}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_YOUTUBE_COLLECTOR_H3_ADDR:-:30025}
       HOLOLIVE_METRICS_ADDR: ${HOLOLIVE_YOUTUBE_COLLECTOR_METRICS_ADDR:-:30096}
       POSTGRES_POOL_MIN_CONNS: ${YOUTUBE_COLLECTOR_POSTGRES_POOL_MIN_CONNS:-2}
       POSTGRES_POOL_MAX_CONNS: ${YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS:-8}
@@ -665,8 +617,8 @@ services:
       LOG_DIR: /app/logs
     dns: *tailnet-dns
     ports:
-      - "127.0.0.1:30045:30045"
-      - "127.0.0.1:30045:30045/udp"
+      - "127.0.0.1:30025:30025"
+      - "127.0.0.1:30025:30025/udp"
       - "127.0.0.1:30096:30096"
     volumes: *go-volumes
     group_add:
@@ -677,11 +629,12 @@ services:
     deploy: *deploy-384m
     healthcheck:
       <<: *go-healthcheck
-      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30045/ready"]
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30025/ready"]
     networks:
       hololive-net:
         aliases:
           - youtube-collector
+          - youtube-collector-c
 
   admin-dashboard:
     <<: *app-service

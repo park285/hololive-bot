@@ -142,6 +142,9 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 	if err != nil {
 		return nil, err
 	}
+	if appConfig.Ingestion.PhotoSyncEnabled {
+		runtime.PhotoSync = holodexprovider.NewPhotoSyncService(foundation.HolodexService, infra.MemberRepository, logger)
+	}
 	return runtime, nil
 }
 

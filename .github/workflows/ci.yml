@@ -66,7 +66,6 @@ jobs:
           - hololive/hololive-dbtest
           - hololive/hololive-shared
           - hololive/hololive-youtube-collector
-          - hololive/hololive-youtube-producer
     defaults:
       run:
         shell: bash

@@ -57,8 +57,8 @@ expect_fail_contains() {
 expect_eq "$(compose_service_resolve_build_target hololive-api)" "hololive-api" "build target hololive-api"
 expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm-worker" "build alias alarm-worker"
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
-expect_eq "$(compose_service_resolve_build_target youtube-producer)" "youtube-producer" "build target youtube-producer"
 expect_eq "$(compose_service_resolve_build_target youtube-collector)" "youtube-collector" "build target youtube-collector"
+expect_eq "$(compose_service_resolve_build_target youtube-collector-c)" "youtube-collector" "build alias youtube-collector-c"
 expect_eq "$(compose_service_resolve_build_target admin-dashboard)" "admin-dashboard" "build target admin-dashboard"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
     expect_fail "build target rejects retired runtime ${removed}" compose_service_resolve_build_target "${removed}"
@@ -69,7 +69,7 @@ expect_eq "$(compose_service_resolve_redeploy_target alarm-worker)" "hololive-al
 expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" "redeploy alias postgres"
 expect_eq "$(compose_service_resolve_redeploy_target admin)" "admin-dashboard" "redeploy alias admin-dashboard"
 expect_eq "$(compose_service_resolve_redeploy_target all)" "" "redeploy all sentinel"
-expect_eq "$(compose_service_resolve_redeploy_target youtube-producer-c)" "youtube-producer-c" "redeploy target youtube-producer-c (main-ap)"
+expect_eq "$(compose_service_resolve_redeploy_target youtube-collector-c)" "youtube-collector" "redeploy alias youtube-collector-c"
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtube-collector" "redeploy target youtube-collector"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
     expect_fail "redeploy target rejects retired runtime ${removed}" compose_service_resolve_redeploy_target "${removed}"
@@ -88,9 +88,8 @@ done
 
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
 expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
-expect_eq "$(compose_service_resolve_log_target youtube-producer)" "youtube-producer" "log target youtube-producer"
 expect_eq "$(compose_service_resolve_log_target youtube-collector)" "youtube-collector" "log target youtube-collector"
-expect_eq "$(compose_service_resolve_log_target youtube-producer-c)" "youtube-producer-c" "log target youtube-producer-c (main-ap)"
+expect_eq "$(compose_service_resolve_log_target youtube-collector-c)" "youtube-collector" "log alias youtube-collector-c"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler producer dispatcher-go; do
     expect_fail "log target rejects retired runtime ${removed}" compose_service_resolve_log_target "${removed}"
 done
@@ -104,22 +103,22 @@ export SSH_KEY
 trap 'rm -f "${SSH_KEY}"' EXIT
 
 ap_host_load "${ROOT_DIR}" osaka || fail "osaka ap-host conf loads"
-expect_eq "${AP_SERVICES[*]}" "youtube-producer-a" "osaka AP services"
-expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-a" "osaka AP containers"
+expect_eq "${AP_SERVICES[*]}" "youtube-collector-a" "osaka AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-a" "osaka AP containers"
 expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
 expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka.yml" "osaka AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
 
 ap_host_load "${ROOT_DIR}" osaka2 || fail "osaka2 ap-host conf loads"
-expect_eq "${AP_SERVICES[*]}" "youtube-producer-d" "osaka2 AP services"
-expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-d" "osaka2 AP containers"
+expect_eq "${AP_SERVICES[*]}" "youtube-collector-d" "osaka2 AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-d" "osaka2 AP containers"
 expect_eq "${AP_PORTS[*]}" "30035" "osaka2 AP ports"
 expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka2.yml" "osaka2 AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY" "osaka2 AP deploy approval var"
 
 ap_host_load "${ROOT_DIR}" seoul || fail "seoul ap-host conf loads"
-expect_eq "${AP_SERVICES[*]}" "youtube-producer-b" "seoul AP services"
-expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-b" "seoul AP containers"
+expect_eq "${AP_SERVICES[*]}" "youtube-collector-b" "seoul AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-b" "seoul AP containers"
 expect_eq "${AP_PORTS[*]}" "30015" "seoul AP ports"
 expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.seoul.yml" "seoul AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY" "seoul AP deploy approval var"
@@ -212,7 +211,7 @@ while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
     [[ -e "${ROOT_DIR}/${path}" ]] || fail "ap active-active files list path exists: ${path}"
     case "${path}" in
-        hololive/hololive-youtube-producer/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
+        hololive/hololive-youtube-collector/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
         go.sum|*/go.sum) fail "ap active-active files list excludes unapproved go.sum path: ${path}" ;;
     esac
     case "${path}" in

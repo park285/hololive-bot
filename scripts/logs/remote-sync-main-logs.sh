@@ -11,20 +11,20 @@ OSAKA_USER_HOST="${HOL_LOG_OSAKA_USER_HOST:-ubuntu@100.100.1.6}"
 OSAKA_SSH_KEY="${HOL_LOG_OSAKA_SSH_KEY:-${REPO_ROOT}/KR.key}"
 OSAKA_HOST_KEY_ALIAS="${HOL_LOG_OSAKA_HOST_KEY_ALIAS:-100.100.1.6}"
 OSAKA_REMOTE_LOG_DIR="${HOL_LOG_OSAKA_LOG_DIR:-/var/log/hololive-bot}"
-OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-producer-a}"
-OSAKA_DOCKER_SERVICES="${HOL_LOG_OSAKA_DOCKER_SERVICES:-youtube-producer youtube-producer-a}"
+OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-collector-a}"
+OSAKA_DOCKER_SERVICES="${HOL_LOG_OSAKA_DOCKER_SERVICES:-youtube-collector-a}"
 OSAKA2_USER_HOST="${HOL_LOG_OSAKA2_USER_HOST:-ubuntu@100.100.1.2}"
 OSAKA2_SSH_KEY="${HOL_LOG_OSAKA2_SSH_KEY:-${REPO_ROOT}/KR.key}"
 OSAKA2_HOST_KEY_ALIAS="${HOL_LOG_OSAKA2_HOST_KEY_ALIAS:-100.100.1.2}"
 OSAKA2_REMOTE_LOG_DIR="${HOL_LOG_OSAKA2_LOG_DIR:-/var/log/hololive-bot}"
-OSAKA2_SERVICES="${HOL_LOG_OSAKA2_SERVICES:-youtube-producer-d}"
-OSAKA2_DOCKER_SERVICES="${HOL_LOG_OSAKA2_DOCKER_SERVICES:-youtube-producer youtube-producer-d}"
+OSAKA2_SERVICES="${HOL_LOG_OSAKA2_SERVICES:-youtube-collector-d}"
+OSAKA2_DOCKER_SERVICES="${HOL_LOG_OSAKA2_DOCKER_SERVICES:-youtube-collector-d}"
 SEOUL_USER_HOST="${HOL_LOG_SEOUL_USER_HOST:-ubuntu@100.100.1.5}"
 SEOUL_SSH_KEY="${HOL_LOG_SEOUL_SSH_KEY:-${REPO_ROOT}/KR.key}"
 SEOUL_HOST_KEY_ALIAS="${HOL_LOG_SEOUL_HOST_KEY_ALIAS:-100.100.1.5}"
 SEOUL_REMOTE_LOG_DIR="${HOL_LOG_SEOUL_LOG_DIR:-/home/ubuntu/hololive-bot/logs}"
-SEOUL_SERVICES="${HOL_LOG_SEOUL_SERVICES:-youtube-producer-b}"
-SEOUL_DOCKER_SERVICES="${HOL_LOG_SEOUL_DOCKER_SERVICES:-youtube-producer youtube-producer-b}"
+SEOUL_SERVICES="${HOL_LOG_SEOUL_SERVICES:-youtube-collector-b}"
+SEOUL_DOCKER_SERVICES="${HOL_LOG_SEOUL_DOCKER_SERVICES:-youtube-collector-b}"
 usage() {
   cat <<'USAGE'
 Usage:
@@ -42,17 +42,17 @@ Environment:
   HOL_LOG_OSAKA_SSH_KEY=<repo>/KR.key
   HOL_LOG_OSAKA_HOST_KEY_ALIAS=100.100.1.6
   HOL_LOG_OSAKA_LOG_DIR=/var/log/hololive-bot
-  HOL_LOG_OSAKA_SERVICES=youtube-producer-a
+  HOL_LOG_OSAKA_SERVICES=youtube-collector-a
   HOL_LOG_OSAKA2_USER_HOST=ubuntu@100.100.1.2
   HOL_LOG_OSAKA2_SSH_KEY=<repo>/KR.key
   HOL_LOG_OSAKA2_HOST_KEY_ALIAS=100.100.1.2
   HOL_LOG_OSAKA2_LOG_DIR=/var/log/hololive-bot
-  HOL_LOG_OSAKA2_SERVICES=youtube-producer-d
+  HOL_LOG_OSAKA2_SERVICES=youtube-collector-d
   HOL_LOG_SEOUL_USER_HOST=ubuntu@100.100.1.5
   HOL_LOG_SEOUL_SSH_KEY=<repo>/KR.key
   HOL_LOG_SEOUL_HOST_KEY_ALIAS=100.100.1.5
   HOL_LOG_SEOUL_LOG_DIR=/home/ubuntu/hololive-bot/logs
-  HOL_LOG_SEOUL_SERVICES=youtube-producer-b
+  HOL_LOG_SEOUL_SERVICES=youtube-collector-b
   FORCE_MAIN_LOG_LINKS=1  # replace existing regular LOG_ROOT/<service>.log after backup
 USAGE
 }
@@ -84,7 +84,7 @@ remote_log_service_name() {
   local target="$1"
   local service="$2"
   case "${target}:${service}" in
-    osaka2:youtube-producer-d) printf '%s\n' "youtube-producer-d" ;;
+    osaka2:youtube-collector-d) printf '%s\n' "youtube-collector-d" ;;
     *) printf '%s\n' "${service}" ;;
   esac
 }
@@ -136,9 +136,9 @@ container_for() {
   local target="$1"
   local service="$2"
   case "${target}:${service}" in
-    osaka:youtube-producer|osaka:youtube-producer-a) printf '%s\n' "hololive-youtube-producer-a" ;;
-    osaka2:youtube-producer|osaka2:youtube-producer-d) printf '%s\n' "hololive-youtube-producer-d" ;;
-    seoul:youtube-producer|seoul:youtube-producer-b) printf '%s\n' "hololive-youtube-producer-b" ;;
+    osaka:youtube-collector-a) printf '%s\n' "hololive-youtube-collector-a" ;;
+    osaka2:youtube-collector-d) printf '%s\n' "hololive-youtube-collector-d" ;;
+    seoul:youtube-collector-b) printf '%s\n' "hololive-youtube-collector-b" ;;
     *) echo "ERROR: unknown service for ${target}: ${service}" >&2; exit 1 ;;
   esac
 }

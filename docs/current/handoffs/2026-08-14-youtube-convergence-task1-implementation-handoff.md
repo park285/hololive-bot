@@ -49,7 +49,7 @@ branch나 worktree가 다르면 수정하지 말고 차이를 보고하십시오
 1. `/home/kapu/work/iris-stack/hololive-bot/AGENTS.md`
 2. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md`
    - 특히 Sections 1–6, 8–12, 18 Task 1, 19–23
-3. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-producer-convergence-status-20260814.md`
+3. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-collector-convergence-status-20260814.md`
 4. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-collector-observation-outbox-community-vertical-slice-20260813.md`
    - 이것은 목표가 아니라 폐기 예정인 intermediate WIP 기록이다.
 5. `/home/kapu/work/iris-stack/hololive-bot/hololive/hololive-api/scripts/migrations/CONVENTIONS.md`
@@ -84,7 +84,7 @@ Canonical source of truth는 두 번째 문서의 v2.1 contract입니다. handof
 검증이 성공한 뒤 진척 증거만 다음 문서에 갱신할 수 있습니다.
 
 ```text
-/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-producer-convergence-status-20260814.md
+/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-collector-convergence-status-20260814.md
 ```
 
 Canonical contract는 구현 진행표가 아니므로 구현 결과 때문에 규범 내용을 완화하거나 임의 변경하지 마십시오. 계약 자체의 오류가 발견되면 code로 우회하지 말고 file/section 근거와 최소 수정안을 보고하십시오.
@@ -96,9 +96,9 @@ Task 1은 `AuthorityMode`, `SourceKindYouTubeCommunity`, `LoadAuthority`, `Trans
 ```text
 hololive/hololive-youtube-collector/internal/runtime/communitycollector/poller.go
 hololive/hololive-youtube-collector/internal/runtime/communitycollector/poller_test.go
-hololive/hololive-youtube-producer/internal/runtime/pollers/community_observation_consumer.go
-hololive/hololive-youtube-producer/internal/runtime/pollers/community_observation_consumer_test.go
-hololive/hololive-youtube-producer/internal/runtime/pollers/community_poller_observation_test.go
+hololive/hololive-youtube-collector/internal/runtime/pollers/community_observation_consumer.go
+hololive/hololive-youtube-collector/internal/runtime/pollers/community_observation_consumer_test.go
+hololive/hololive-youtube-collector/internal/runtime/pollers/community_poller_observation_test.go
 ```
 
 이 파일에는 다음 조건을 모두 만족하는 최소 compile repair만 허용됩니다.
@@ -240,7 +240,7 @@ Task 1 API를 import하는 direct dependents의 compile/test 상태를 확인하
 
 ```bash
 go test ./hololive/hololive-youtube-collector/internal/runtime/communitycollector \
-  ./hololive/hololive-youtube-producer/internal/runtime/pollers
+  ./hololive/hololive-youtube-collector/internal/runtime/pollers
 ```
 
 마지막으로 touched scope를 검사하십시오.
@@ -253,8 +253,8 @@ git diff --check -- \
   hololive/hololive-shared/pkg/contracts/sourceobservation \
   hololive/hololive-shared/pkg/service/youtube/sourceobservation \
   hololive/hololive-youtube-collector/internal/runtime/communitycollector \
-  hololive/hololive-youtube-producer/internal/runtime/pollers \
-  docs/current/architecture/youtube-producer-convergence-status-20260814.md
+  hololive/hololive-youtube-collector/internal/runtime/pollers \
+  docs/current/architecture/youtube-collector-convergence-status-20260814.md
 ```
 
 `SCHEMA_SNAPSHOT_UPDATE=1`은 golden 갱신 단계에서만 사용하고, 그 뒤 환경변수 없이 같은 DB test가 통과하는지 확인하십시오.

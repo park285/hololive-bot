@@ -1,0 +1,26 @@
+# Exact allowlist for remaining Task 9 retirement-scan hits.
+# Historical snapshots, retired-name inventories, denylist tests, and the
+# retirement contract itself. No directory exclusion.
+
+CHANGELOG.md
+docs/README.md
+docs/current/PROJECT_MAP.md
+docs/current/architecture/GORM_REMOVAL_PLAN_20260602.md
+docs/current/architecture/REFACTORING_PLAN_20260602.md
+docs/current/architecture/code-based-performance-scraping-sql-refactor-20260630.md
+docs/current/architecture/live-status-fallback-code-level-change-proposal-20260623.md
+docs/current/architecture/live-status-fallback-pacing-plan-review-20260623.md
+docs/current/architecture/outbox-v3-convergence-roadmap-20260703.md
+docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md
+docs/current/architecture/pg18-tracka-optimization-20260604.md
+docs/current/architecture/runtime-role-boundary-analysis-20260625.md
+docs/current/architecture/youtube-collector-observation-outbox-community-vertical-slice-20260813.md
+docs/current/architecture/youtube-producer-convergence-status-20260814.md
+docs/current/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md
+docs/current/architecture/youtube-producer-resilience-v6-20260605.md
+docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md
+docs/current/handoffs/2026-08-14-youtube-convergence-task1-implementation-handoff.md
+docs/current/handoffs/2026-08-14-youtube-convergence-task3-implementation-handoff.md
+internal/workspace/entrypoint_contract_test.go
+scripts/deploy/lib/removed-runtimes.sh
+scripts/deploy/test-compose-env.sh

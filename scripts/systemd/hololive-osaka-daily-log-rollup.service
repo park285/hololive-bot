@@ -1,5 +1,5 @@
 [Unit]
-Description=Hololive Osaka daily youtube-producer log rollup into archive tar.gz
+Description=Hololive Osaka daily youtube-collector log rollup into archive tar.gz
 
 [Service]
 Type=oneshot
@@ -7,7 +7,7 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/hololive-bot
 Environment=LOG_ROOT=/home/ubuntu/hololive-bot/logs
-Environment=LOG_ROLLUP_FILES=youtube-producer.log
+Environment=LOG_ROLLUP_FILES=youtube-collector-a.log
 ExecStart=/home/ubuntu/hololive-bot/scripts/logs/daily-rollup-logs.sh once
 UMask=0027
 Nice=10

@@ -7,7 +7,12 @@ removed_runtime_container_names() {
         "hololive-admin-api" \
         "hololive-llm-scheduler" \
         "llm-scheduler" \
-        "hololive-dispatcher-go"
+        "hololive-dispatcher-go" \
+        "hololive-youtube-producer" \
+        "hololive-youtube-producer-a" \
+        "hololive-youtube-producer-b" \
+        "hololive-youtube-producer-c" \
+        "hololive-youtube-producer-d"
 }
 
 removed_runtime_cleanup_before_cutover() {

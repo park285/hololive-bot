@@ -26,7 +26,7 @@ func DefaultScraperSchedulerConfig() ScraperSchedulerConfig {
 func DefaultScraperSnapshotConfig() ScraperSnapshotConfig {
 	return ScraperSnapshotConfig{
 		Enabled:      false,
-		Dir:          "./artifacts/youtube-producer",
+		Dir:          "./artifacts/youtube-collector",
 		MaxBodyBytes: 512 << 10,
 		MinInterval:  30 * time.Minute,
 	}

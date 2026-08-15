@@ -17,7 +17,7 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
 fi
 
 endpoint_root="$(mktemp -d)"
-for endpoint_name in app alarm-worker youtube-producer admin-dashboard; do
+for endpoint_name in app alarm-worker youtube-collector admin-dashboard; do
     : >"${endpoint_root}/${endpoint_name}.env"
 done
 cat >"${endpoint_root}/override.env" <<EOF
@@ -26,7 +26,7 @@ DB_PASSWORD=fixture
 LIVE_LOGS_PATH=/srv/hololive-logs-fixture
 HOLOLIVE_API_ENV_FILE=${endpoint_root}/app.env
 HOLOLIVE_ALARM_WORKER_ENV_FILE=${endpoint_root}/alarm-worker.env
-HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE=${endpoint_root}/youtube-producer.env
+HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE=${endpoint_root}/youtube-collector.env
 ADMIN_DASHBOARD_ENV_FILE=${endpoint_root}/admin-dashboard.env
 HOLOLIVE_CENTRAL_CACHE_HOST=cache.service.fixture
 HOLOLIVE_CENTRAL_POSTGRES_HOST=postgres.service.fixture
@@ -92,7 +92,7 @@ for args in [
     (live_default, "hololive-api", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "live API default"),
     (live_default, "youtube-collector", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "live collector default"),
     (live_default, "hololive-db-migrate", "holo-postgres", "5432", ("PGHOST", "PGPORT"), "live migrate default"),
-    (main_default, "youtube-producer-c", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "main producer-c default"),
+    (main_default, "youtube-collector", "holo-postgres", "5432", ("POSTGRES_HOST", "POSTGRES_PORT"), "main collector-c default"),
 ]:
     check(*args)
 expected = ("postgres.service.fixture", "15432")
@@ -104,10 +104,10 @@ for args in [
     (live, "hololive-api", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "live API override"),
     (live, "youtube-collector", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "live collector override"),
     (live, "hololive-db-migrate", *expected, ("PGHOST", "PGPORT"), "live migrate override"),
-    (main, "youtube-producer-c", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "main producer-c override"),
-    (osaka, "youtube-producer-a", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka producer-a override"),
-    (seoul, "youtube-producer-b", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Seoul producer-b override"),
-    (osaka2, "youtube-producer-d", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka2 producer-d override"),
+    (main, "youtube-collector", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "main collector-c override"),
+    (osaka, "youtube-collector-a", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka producer-a override"),
+    (seoul, "youtube-collector-b", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Seoul producer-b override"),
+    (osaka2, "youtube-collector-d", *expected, ("POSTGRES_HOST", "POSTGRES_PORT"), "Osaka2 producer-d override"),
 ]:
     check(*args)
 for services, name, label in [
@@ -115,13 +115,13 @@ for services, name, label in [
     (central, "hololive-alarm-worker", "central worker uses tailnet DNS"),
     (central, "youtube-collector", "central collector uses tailnet DNS"),
     (central, "hololive-db-migrate", "central migrate uses tailnet DNS"),
-    (main, "youtube-producer-c", "main producer-c uses tailnet DNS"),
-    (osaka, "youtube-producer-a", "Osaka producer-a uses tailnet DNS"),
-    (seoul, "youtube-producer-b", "Seoul producer-b uses tailnet DNS"),
-    (osaka2, "youtube-producer-d", "Osaka2 producer-d uses tailnet DNS"),
+    (main, "youtube-collector", "main collector-c uses tailnet DNS"),
+    (osaka, "youtube-collector-a", "Osaka producer-a uses tailnet DNS"),
+    (seoul, "youtube-collector-b", "Seoul producer-b uses tailnet DNS"),
+    (osaka2, "youtube-collector-d", "Osaka2 producer-d uses tailnet DNS"),
 ]:
     check_dns(services, name, label)
-check(ap_default, "youtube-producer-a", "postgres.service.fixture", "5433", ("POSTGRES_HOST", "POSTGRES_PORT"), "AP port default")
+check(ap_default, "youtube-collector-a", "postgres.service.fixture", "5433", ("POSTGRES_HOST", "POSTGRES_PORT"), "AP port default")
 postgres = env(central, "holo-postgres")
 healthcheck = str((central["holo-postgres"].get("healthcheck") or {}).get("test") or [])
 if postgres.get("PGPORT") != "5432" or "-p 5432" not in healthcheck:

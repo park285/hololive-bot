@@ -188,7 +188,7 @@ participants = {
     for name, service in services.items()
     if "observability-traces" in (service.get("networks", {}) or {})
 }
-expected = {"hololive-api", "hololive-alarm-worker", "youtube-collector", "youtube-producer-c"}
+expected = {"hololive-api", "hololive-alarm-worker", "youtube-collector", "youtube-collector-c"}
 if participants != expected:
     print(f"[FAIL] observability-traces participants: expected {sorted(expected)}, got {sorted(participants)}")
     sys.exit(1)
@@ -242,8 +242,8 @@ for port in service.get("ports", []) or []:
         sys.exit(1)
 PY
 done <<'EOF'
-youtube-producer-a docker-compose.osaka.yml
-youtube-producer-b docker-compose.seoul.yml
-youtube-producer-d docker-compose.osaka2.yml
+youtube-collector-a docker-compose.osaka.yml
+youtube-collector-b docker-compose.seoul.yml
+youtube-collector-d docker-compose.osaka2.yml
 EOF
 pass "remote AP producers remain outside the trace network without Jaeger or OTLP host ports"

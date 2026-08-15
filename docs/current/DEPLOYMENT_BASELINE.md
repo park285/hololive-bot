@@ -2,7 +2,7 @@
 
 ## Scope
 
-현재 production baseline은 단일 호스트 `deploy/compose/docker-compose.prod.yml`입니다. 이 문서는 runtime/infra 구성의 요약 기준이며, 실제 배포 절차는 `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`를 따릅니다.
+현재 production baseline은 단일 호스트 `deploy/compose/docker-compose.prod.yml`입니다. 이 문서는 runtime/infra 구성의 요약 기준입니다. 서비스별 현재 절차는 `docs/current/runbooks/`를 따릅니다. `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`는 historical Compose 절차이며 `youtube-producer` 표기는 retired name입니다.
 
 ## Non-Goals
 
@@ -14,7 +14,7 @@
 
 | 역할 | 호스트 | 내용 |
 |---|---|---|
-| 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | `hololive-api`, `alarm-worker`, `admin-dashboard`, `holo-postgres`, `valkey-cache`, ingress/proxy, main AP `youtube-producer-c`, required Community singleton `youtube-collector`. 권위 PostgreSQL이 여기 있습니다. |
+| 중앙 런타임 (primary) | `<tailnet-central>` (`aarch64`) | `hololive-api`, `alarm-worker`, `admin-dashboard`, `holo-postgres`, `valkey-cache`, ingress/proxy, collector fleet member `youtube-collector` (`c` on 30025). 권위 PostgreSQL이 여기 있습니다. |
 | Hot standby | `<tailnet-seoul-ap>` (`aarch64`) | `holo-postgres-standby`. 중앙 primary에서 물리 스트리밍 복제를 받는 read-only 복제본이며, 승인된 fencing/route backend가 준비되면 fail-closed controller가 승격합니다. |
 | 빌드/제어 | `<build-control-host>` (`x86_64`) | 모든 컴파일·이미지 빌드·테스트. 런타임 호스트는 검증된 배포 파일과 이미지만 받습니다. |
 | 원격 AP | Osaka `a`, Seoul `b`, Osaka2 `d` | `a`/`d`는 host-native systemd, `b`는 Compose. |
@@ -52,8 +52,7 @@ Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스�
 |---|---|---:|---|---|---|
 | `hololive-api` | `hololive-api` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, docker-proxy |
 | `alarm-worker` | `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
-| `youtube-producer` | `youtube-producer` | 30005 | app file log, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
-| `youtube-collector` | `youtube-collector` | 30045 | app file log, cache, PostgreSQL, scraper | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
+| `youtube-collector` | `youtube-collector` | 30025 (`c`; AP `a/b/d` 30005/30015/30035) | app file log, cache, PostgreSQL (`hololive_scraper`) | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
 
 ## Infra Services
 
@@ -75,7 +74,7 @@ Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스�
 | Iris / Redroid KakaoTalk automation | `hololive-api`, `alarm-worker` | `contracts/iris-boundary.md` |
 | PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-api/scripts/migrations` |
 | Valkey | cache, alarm queue, config Pub/Sub | `QUEUE_AND_PUBSUB_CONTRACTS.md` |
-| CLIPROXY/OpenAI-compatible LLM proxy | `hololive-api`, `youtube-producer` where configured | 검토 필요 |
+| CLIPROXY/OpenAI-compatible LLM proxy | `hololive-api` where configured | 검토 필요 |
 
 ## PostgreSQL TLS Baseline
 
@@ -93,9 +92,8 @@ place.
 
 The production client set uses `verify-full` with
 `/run/hololive-bot/certs/postgres-ca.pem`: `hololive-api`, `alarm-worker`,
-central `youtube-producer`, `youtube-collector`, `youtube-producer-c`,
-`hololive-db-migrate`, Seoul `youtube-producer-b`, and staged Osaka APs
-`youtube-producer-a`/`youtube-producer-d` when they are rolled out.
+central `youtube-collector`, `hololive-db-migrate`, Seoul `youtube-collector-b`,
+and Osaka APs `youtube-collector-a`/`youtube-collector-d` when they are rolled out.
 
 Operational evidence from the 2026-06-07 transition showed all 35 TCP
 PostgreSQL connections on TLSv1.3 and `0` plaintext TCP connections. One Unix

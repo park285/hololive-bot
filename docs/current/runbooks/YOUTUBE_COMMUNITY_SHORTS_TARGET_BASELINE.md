@@ -6,22 +6,14 @@
 
 ## 수집 명령
 
-리포지토리 루트에서 다음 명령을 실행합니다.
+standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다.
 
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts target-baseline
-```
-
-운영자용 Markdown 리포트가 필요하면 다음 명령을 사용합니다.
-
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts route-report
-```
+Community/shorts 수집 evidence는 `youtube-collector` observation, canonical consume는 `hololive-api` YouTube plane, 최종 발송은 `alarm-worker`다. 운영 채널과 typed 활성 상태는 `members`와 `alarms`를 직접 조회한다.
 
 필요 조건:
-- `settings.LoadYouTubeProducerRuntime()`가 성공할 수 있도록 운영과 동일한 DB 환경 변수가 설정되어 있어야 합니다.
-- 명령은 `members` 테이블을 읽어 활성 운영 채널을 계산합니다.
-- 명령은 `alarms` 테이블을 읽어 채널별 `COMMUNITY`/`SHORTS` typed room 활성 수를 계산합니다.
+- 운영과 동일한 PostgreSQL 환경이 설정되어 있어야 한다.
+- 활성 운영 채널은 `members` 테이블이 SSOT다.
+- 채널별 `COMMUNITY`/`SHORTS` typed room 활성 수는 `alarms` 테이블이 SSOT다.
 
 ## 출력 의미
 
@@ -42,12 +34,10 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts rou
 
 ## 기준 코드
 
-- 운영 채널 SSOT: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
-- baseline 수집: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
 - typed key SSOT: `hololive/hololive-shared/pkg/service/alarm/keys/keys.go`
-- canonical 경로 fan-out: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/dispatcher.go`
-- cutover 라우팅 정책: `hololive/hololive-youtube-producer/internal/communityshorts/route_policy.go`
-- 운영 런타임 owner: `hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/bootstrap_youtube_producer.go`
+- delivery path SSOT: `hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/classifiers.go`
+- 최종 egress owner: `alarm-worker`
+- Community/shorts canonical consume: `hololive-api` YouTube plane
 
 ## 검증
 
@@ -61,5 +51,5 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts rou
 
 로컬 검증 명령:
 
-- `go test ./hololive/hololive-youtube-producer/internal/communityshorts -run '^TestBuildTargetBaseline$'`
-- `go test ./hololive/hololive-youtube-producer/cmd/...`
+- `go test ./hololive/hololive-shared/pkg/service/alarm/keys`
+- `go test ./hololive/hololive-shared/pkg/service/youtube/outbox/...`

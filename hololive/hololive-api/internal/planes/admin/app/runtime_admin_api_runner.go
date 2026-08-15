@@ -39,6 +39,9 @@ func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
+	if r.PhotoSync != nil {
+		go r.PhotoSync.Start(ctx)
+	}
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:          r.Logger,
 		ServerAddr:      r.ServerAddr,

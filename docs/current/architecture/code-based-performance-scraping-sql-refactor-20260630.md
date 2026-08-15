@@ -1,5 +1,7 @@
 # 코드 기반 성능 최적화·스크래핑 안정화 리팩토링안 (2026-06-30)
 
+> Historical 2026-06-30 snapshot. Current collector fleet identity is `youtube-collector`. `hololive-youtube-producer` in this document is a retired module name.
+
 ## 목적
 
 이 문서는 기존 운영 문서나 실측 지표를 근거로 삼지 않고, 현재 저장소의 Go 코드와 SQL 호출 경로만 기준으로 병목 가능성이 명확한 구간을 정리합니다. 대상은 홀로라이브 봇의 핵심 런타임인 `hololive-youtube-producer`, 공용 YouTube scraper, poller batch repository, delivery/outbox tracking 저장소입니다.
@@ -445,7 +447,7 @@ func normalizeKeywords(keywords []string) []string {
 - `go test ./hololive/hololive-shared/pkg/service/youtube/poller/internal/batchrepo/...`
 - `go test ./hololive/hololive-shared/pkg/service/youtube/tracking/internal/observation/...`
 - `go test ./hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/...`
-- `go test ./hololive/hololive-youtube-producer/...`
+- `go test ./hololive/hololive-youtube-collector/...`
 - 기존 local CI: `./scripts/ci/local-ci.sh`
 
 추가로 batchrepo 테스트에는 다음 케이스를 넣습니다.

@@ -123,7 +123,7 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 
 	copyChecks := []string{
 		"hololive/hololive-api/Dockerfile",
-		"hololive/hololive-youtube-producer/Dockerfile",
+		"hololive/hololive-youtube-collector/Dockerfile",
 	}
 	for _, rel := range copyChecks {
 		t.Run(rel, func(t *testing.T) {

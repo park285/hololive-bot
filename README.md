@@ -10,7 +10,7 @@
 
 ## 시스템 아키텍처 (Architecture Overview)
 
-본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-producer`)로 구성되어 있으며 단일 호스트에서 Docker Compose로 격리 가동됩니다. `hololive-api`는 bot/admin/llm plane을 단일 프로세스에서 호스팅합니다. (단, youtube-producer 컴포넌트는 부하 분산 및 신뢰성을 위해 4-way Active-Active 형태로 확장 운용됩니다 — Seoul `b`·메인 `c` 인스턴스는 Docker Compose 컨테이너로, Osaka `a`·Osaka2 `d` 인스턴스는 host-native systemd 런타임으로 가동됩니다.)
+본 플랫폼은 Go 기반으로 구현된 **3개의 독립된 애플리케이션 런타임 서비스**(`hololive-api`, `alarm-worker`, `youtube-collector`)로 구성되어 있으며 단일 호스트에서 Docker Compose로 격리 가동됩니다. `hololive-api`는 bot/admin/llm plane을 단일 프로세스에서 호스팅합니다. `youtube-collector`는 AP fleet(`a`/`b`/`c`/`d`)으로 확장 운용됩니다 — Seoul `b`·메인 `c` 인스턴스는 Docker Compose 컨테이너로, Osaka `a`·Osaka2 `d` 인스턴스는 host-native systemd 런타임으로 가동됩니다.
 
 인프라 이력 사양: 이전의 k8s/k3s 오케스트레이션 구성에서 관리 편의성 향상을 위해 단일 호스트 Docker Compose 기반 환경으로 롤백 복귀하였습니다. 현재 배포 롤아웃 및 로그 분석, 트러블슈팅의 표준 준거는 Docker Compose 운영 문서군을 따릅니다.
 
@@ -20,7 +20,7 @@
 |---|---|---|---:|---|
 | hololive-api | hololive-api | hololive-api | 30001/30003/30006 | bot/admin/llm plane 통합 런타임: Kakao/Iris 웹훅 라우팅·챗 명령어 파싱(bot), 관리자 API 컨트롤 플레인(admin), 이벤트/뉴스 정규화 및 LLM 스케줄러(llm) |
 | alarm-worker | hololive-alarm-worker | hololive-alarm-worker | 30007 | 방송 정보 주기적 분석, 발송 대기열 소비 및 Iris outbound 호출 |
-| youtube-producer | hololive-youtube-producer | youtube-producer | 30005/15/25/35 | 유튜브 채널 모니터링, 신규 정보 발행 및 액티브-액티브 제어 |
+| youtube-collector | hololive-youtube-collector | youtube-collector | 30005/15/25/35 | 유튜브 수집 AP fleet: fetch/normalize/lease/Publish |
 
 ### 공유 라이브러리 (Shared Libraries)
 
@@ -32,7 +32,7 @@
 * 인바운드 메시지 처리: `Iris Core -> hololive-api (bot plane) -> Command/Service -> PostgreSQL & Valkey`
 * 실시간 알림 발송: `alarm-worker -> Valkey (alarm:dispatch:queue) -> alarm-worker egress -> Iris Core -> 카카오톡`
 * LLM 뉴스 분석 연계: `hololive-api` admin/bot plane 내장 클라이언트 -> `hololive-api` (llm plane) 내부 API
-* 유튜브 신작 감지: `youtube-producer -> Shared Outbox/Tracking DB -> alarm-worker`
+* 유튜브 신작 감지: `youtube-collector -> source_observations -> hololive-api YouTube plane -> alarm-worker`
 
 ---
 
@@ -53,7 +53,7 @@ go build ../shared-go/... \
   ./hololive/hololive-shared/... \
   ./hololive/hololive-api/... \
   ./hololive/hololive-alarm-worker/... \
-  ./hololive/hololive-youtube-producer/...
+  ./hololive/hololive-youtube-collector/...
 ```
 
 ### 2. 전체 단위 테스트 실행 (Test)
@@ -63,7 +63,7 @@ go test ../shared-go/... \
   ./hololive/hololive-shared/... \
   ./hololive/hololive-api/... \
   ./hololive/hololive-alarm-worker/... \
-  ./hololive/hololive-youtube-producer/...
+  ./hololive/hololive-youtube-collector/...
 ```
 
 * 독립 모듈 규격 검사: `go test . -run TestRuntimeSplitStandaloneModulesContract`
@@ -93,13 +93,11 @@ go test ../shared-go/... \
 ./scripts/deploy/compose-redeploy-service.sh hololive-api
 ./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
 
-# 유튜브 프로듀서 Active-Active 멀티 프로파일 재배포
-COMPOSE_FILE=deploy/compose/docker-compose.prod.yml:deploy/compose/docker-compose.main-ap.yml \
-COMPOSE_PROFILES=main-ap \
-./scripts/deploy/compose-redeploy-service.sh youtube-producer-c
+# 유튜브 collector 중앙 fleet member 재배포
+./scripts/deploy/compose-redeploy-service.sh youtube-collector
 ```
 
-원격 인프라 노드(`youtube-producer-b`) 배포 매뉴얼은 [DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md) 내부의 `./scripts/deploy/ap-deploy.sh <host>` 운영 절차를 준수해 주십시오.
+원격 인프라 노드(`youtube-collector-b`) 배포 매뉴얼은 [DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md) 내부의 `./scripts/deploy/ap-deploy.sh <host>` 운영 절차를 준수해 주십시오.
 
 ---
 
@@ -116,7 +114,7 @@ COMPOSE_PROFILES=main-ap \
 | hololive-api (llm) | `https://127.0.0.1:30003/health` via container `./bin/healthcheck` |
 | hololive-api (admin) | `https://127.0.0.1:30006/health` via container `./bin/healthcheck` |
 | alarm-worker | `https://127.0.0.1:30007/health` via container `./bin/healthcheck` |
-| youtube-producer | `https://127.0.0.1:30025/health` via container `./bin/healthcheck` (Main 노드) |
+| youtube-collector | `https://127.0.0.1:30025/ready` via container `./bin/healthcheck` (Main 노드) |
 
 ```bash
 # Docker Compose 컨테이너 동작 상태 점검

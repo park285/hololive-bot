@@ -48,9 +48,9 @@ check_forbidden_global_go_hits \
   -g '!hololive/hololive-alarm-worker/internal/app/**'
 
 check_forbidden_scoped_go_hits \
-  "youtube-producer does not own YouTube outbox dispatch or Iris egress capability" \
+  "youtube-collector does not own YouTube outbox dispatch or Iris egress capability" \
   'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started|ProvideIrisClient|iris\.WithBaseURL|iris\.WithBotToken|IrisClient:' \
-  "hololive/hololive-youtube-producer"
+  "hololive/hololive-youtube-collector"
 
 check_forbidden_scoped_go_hits \
   "hololive-api llm plane does not start proactive delivery dispatch or Iris delivery" \
@@ -63,7 +63,7 @@ check_forbidden_scoped_go_hits \
   "hololive/hololive-api/internal/planes/admin"
 
 compose="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
-service="youtube-producer"
+service="youtube-collector"
 block="$(awk -v service="  ${service}:" '
   $0 == service {in_block=1; print; next}
   in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}

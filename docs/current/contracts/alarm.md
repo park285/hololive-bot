@@ -24,7 +24,7 @@ Alarm domain currently has HTTP JSON APIs, the Valkey dispatch queue, generic no
 
 - HTTP consumers: `hololive-api` (bot + admin-plane facade paths)
 - Queue consumer: `alarm-worker`.
-- `alarm_state` read consumer: `youtube-producer` — `alarms` 테이블을 `alarmread.Reader`(`GetAllChannelIDs`, `LoadAll`)로만 읽어 poll target과 community shorts baseline을 산출합니다. `pkg/service/alarm.Repository`는 `Add`/`Remove`/`ClearByRoom`을 함께 노출하므로 producer에 직접 주입하지 않으며, `check-repository-ownership.sh`가 해당 import와 `alarm.NewRepository` 호출을 차단합니다.
+- `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 `alarmread.Reader`(`GetAllChannelIDs`, `LoadAll`)로만 읽습니다. `pkg/service/alarm.Repository`는 `Add`/`Remove`/`ClearByRoom`을 함께 노출하므로 collector/API YouTube plane에 직접 주입하지 않으며, `check-repository-ownership.sh`가 해당 import와 `alarm.NewRepository` 호출을 차단합니다.
 - Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery, YouTube outbox handoff
 
 ## Transport

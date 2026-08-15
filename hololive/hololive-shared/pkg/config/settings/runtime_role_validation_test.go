@@ -103,16 +103,6 @@ func TestValidateAdminAPIRuntimeRejectsDispatchers(t *testing.T) {
 	}
 }
 
-func TestValidateYouTubeProducerRuntimeRejectsYouTubeOutboxDispatcher(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
-
-	err := validRuntimeRoleConfig().ValidateYouTubeProducerRuntime()
-	if err == nil || !strings.Contains(err.Error(), youTubeOutboxDispatcherEnabledEnv) {
-		t.Fatalf("ValidateYouTubeProducerRuntime() error = %v, want YouTube outbox dispatcher rejection", err)
-	}
-}
-
 func TestValidateYouTubeCollectorRuntimeRejectsYouTubeOutboxDispatcher(t *testing.T) {
 	clearRuntimeRoleEnv(t)
 	t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
@@ -130,16 +120,6 @@ func TestValidateYouTubeCollectorRuntimeRequiresScraperPostgresUser(t *testing.T
 	err := validRuntimeRoleConfig().ValidateYouTubeCollectorRuntime()
 	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER=hololive_scraper") {
 		t.Fatalf("ValidateYouTubeCollectorRuntime() error = %v, want scraper postgres user", err)
-	}
-}
-
-func TestValidateYouTubeProducerRuntimeRejectsScraperPostgresUser(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	cfg := validRuntimeRoleConfig()
-	cfg.Postgres.User = postgresScraperRoleUser
-	err := cfg.ValidateYouTubeProducerRuntime()
-	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER=hololive_scraper") {
-		t.Fatalf("ValidateYouTubeProducerRuntime() error = %v, want scraper postgres user rejection", err)
 	}
 }
 

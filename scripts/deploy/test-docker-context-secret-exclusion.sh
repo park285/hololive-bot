@@ -87,7 +87,7 @@ assert_admin_backend_sensitive_excluded() {
 }
 
 producer_ctx="${TMP_DIR}/producer"
-build_fixture "${producer_ctx}" "${ROOT_DIR}/hololive/hololive-youtube-producer/Dockerfile.dockerignore"
+build_fixture "${producer_ctx}" "${ROOT_DIR}/hololive/hololive-youtube-collector/Dockerfile.dockerignore"
 producer_list="$(context_filelist "${producer_ctx}")" || fail "hb03: producer fixture build failed"
 
 assert_admin_backend_sensitive_excluded "${producer_list}" "producer"

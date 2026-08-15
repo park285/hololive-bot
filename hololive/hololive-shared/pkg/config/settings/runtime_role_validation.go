@@ -12,7 +12,6 @@ const (
 	runtimeAlarmWorker      = "alarm-worker"
 	runtimeAdminAPI         = "admin-api"
 	runtimeLLMScheduler     = "llm-scheduler"
-	runtimeYouTubeProducer  = "youtube-producer"
 	runtimeYouTubeCollector = "youtube-collector"
 
 	notificationEgressRoleEnv         = "NOTIFICATION_EGRESS_ROLE"
@@ -221,13 +220,6 @@ func trimmedEnv(key string) string {
 func validateYouTubeCollectorPostgresUser(user string) error {
 	if strings.TrimSpace(user) != postgresScraperRoleUser {
 		return fmt.Errorf("%s requires POSTGRES_USER=%s", runtimeYouTubeCollector, postgresScraperRoleUser)
-	}
-	return nil
-}
-
-func validateYouTubeProducerPostgresUser(user string) error {
-	if strings.TrimSpace(user) == postgresScraperRoleUser {
-		return fmt.Errorf("%s must not use POSTGRES_USER=%s", runtimeYouTubeProducer, postgresScraperRoleUser)
 	}
 	return nil
 }

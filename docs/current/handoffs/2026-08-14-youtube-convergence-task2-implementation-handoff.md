@@ -133,7 +133,7 @@ branch나 worktree가 다르면 수정하지 말고 차이를 보고하십시오
 1. `/home/kapu/work/iris-stack/hololive-bot/AGENTS.md`
 2. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md`
    - 특히 Sections 1–3, 7–10, 15–18의 Task 2, 19–23
-3. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-producer-convergence-status-20260814.md`
+3. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-collector-convergence-status-20260814.md`
 4. `/home/kapu/work/iris-stack/hololive-bot/docs/current/handoffs/2026-08-14-youtube-convergence-task1-implementation-handoff.md`
    - Task 1의 이전 실행 지침과 boundary 기록이며 Task 2의 규범을 확장하지 않는다.
 5. `/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-collector-observation-outbox-community-vertical-slice-20260813.md`
@@ -168,7 +168,7 @@ bash scripts/architecture/check-migration-manifest.sh
 
 go test -count=1 \
   ./hololive/hololive-youtube-collector/internal/runtime/communitycollector \
-  ./hololive/hololive-youtube-producer/internal/runtime/pollers
+  ./hololive/hololive-youtube-collector/internal/runtime/pollers
 
 go test -race -count=1 \
   ./hololive/hololive-shared/pkg/contracts/sourceobservation \
@@ -213,7 +213,7 @@ Canonical Task 2 production code와 test는 다음 경계 안에서만 수정하
 검증 성공 뒤 진척 증거만 다음 문서에 갱신할 수 있습니다.
 
 ```text
-/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-producer-convergence-status-20260814.md
+/home/kapu/work/iris-stack/hololive-bot/docs/current/architecture/youtube-collector-convergence-status-20260814.md
 ```
 
 Canonical contract는 구현 진행표가 아닙니다. 구현 편의를 위해 규범을 완화하거나 임의 변경하지 마십시오. contract 자체의 오류가 발견되면 code로 우회하지 말고 file/section 근거와 최소 수정안을 보고하십시오.
@@ -434,7 +434,7 @@ git diff --check -- \
   hololive/hololive-youtube-collector/internal/runtime/collectorruntime \
   hololive/hololive-youtube-collector/internal/runtime/communitycollector \
   hololive/hololive-shared/pkg/service/youtube/sourceobservation \
-  docs/current/architecture/youtube-producer-convergence-status-20260814.md
+  docs/current/architecture/youtube-collector-convergence-status-20260814.md
 ```
 
 현재 전체 worktree에는 범위 밖 `scripts/deploy/ap-rsync-files.txt`의 pre-existing blank-line hygiene finding이 기록되어 있습니다. Task 2에서 이를 수정하지 말고 scoped diff check와 실제 Task 2 command 결과를 분리해 보고하십시오.

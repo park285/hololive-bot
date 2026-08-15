@@ -38,8 +38,8 @@ AP_SSH_HOST=mock-host
 AP_SSH_HOST_KEY_ALIAS=mock-host
 AP_COMPOSE_FILE=deploy/compose/docker-compose.osaka.yml
 AP_RUNTIME_MODE=native
-AP_SERVICES=(youtube-producer-a)
-AP_CONTAINERS=(hololive-youtube-producer-a)
+AP_SERVICES=(youtube-collector-a)
+AP_CONTAINERS=(hololive-youtube-collector-a)
 AP_PORTS=(30005)
 AP_APPROVE_DEPLOY_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY
 AP_APPROVE_ROLLBACK_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK
@@ -129,9 +129,9 @@ cat > "$fakebin/journalctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 cat <<'LOG'
-Jun 30 08:14:13 host youtube-producer-wrapper[1]: 2026-06-30T08:14:13Z INF logging/log.go:44 ingestion runtime configured active_active_enabled=true
-Jun 30 08:14:13 host youtube-producer-wrapper[1]: 2026-06-30T08:14:13Z INF cache/service_connection.go:63 Cache store connected
-Jun 30 08:14:13 host youtube-producer-wrapper[1]: 2026-06-30T08:14:13Z INF dbx/client.go:199 postgres_pool_connected
+Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF logging/log.go:44 ingestion runtime configured active_active_enabled=true
+Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF cache/service_connection.go:63 Cache store connected
+Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF dbx/client.go:199 postgres_pool_connected
 LOG
 EOF
 chmod +x "$fakebin/journalctl"
@@ -143,7 +143,7 @@ output="$(
 )"
 grep -Fq 'AP QUIC UDP buffers ok on osaka' <<<"$output" || fail "native completion check runs remote UDP buffer verification"
 grep -Fq '"status":"ready"' <<<"$output" || fail "native completion check verifies ready endpoint"
-grep -Fq 'active-active completion check passed' <<<"$output" || fail "native completion check reports completion"
+grep -Fq 'collector AP completion check passed' <<<"$output" || fail "native completion check reports completion"
 if grep -Fq 'cd ~/hololive-bot' <<<"$output"; then
   fail "native completion check must not require remote compose checkout"
 fi

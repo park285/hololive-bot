@@ -1,5 +1,7 @@
 # Valkey Lua hardening follow-up (2026-06-08)
 
+> Historical 2026-06-08 snapshot. Current collector fleet identity is `youtube-collector`. `producerruntime` and producer poller packages were removed in Task 9; leftover `YOUTUBE_PRODUCER_*` setting names are retired compatibility loaders.
+
 ## Scope
 
 This patch narrows the Lua hardening work to the two reviewed high-risk surfaces:
@@ -31,9 +33,9 @@ The intent is not to remove Lua. Lua remains appropriate where Valkey needs sing
 ## Validation target
 
 ```bash
-go test ./hololive/hololive-youtube-producer/internal/runtime/polling -count=1
-go test ./hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime -run TestBuildIngestionRuntimeGlobalBudgetWiringPassesCleanupLimit -count=1
+go test ./hololive/hololive-youtube-collector/internal/runtime/polling -count=1
+go test ./hololive/hololive-youtube-collector/internal/runtime/internal/producerruntime -run TestBuildIngestionRuntimeGlobalBudgetWiringPassesCleanupLimit -count=1
 go test ./hololive/hololive-shared/pkg/service/acl -count=1
 go test ./hololive/hololive-shared/pkg/config/internal/settings -run 'TestLoadYouTubeProducerGlobalBudgetConfig(Defaults|EnvOverrides|CleanupLimitDefault)' -count=1
-go test ./hololive/hololive-youtube-producer/internal/runtime/readiness -count=1
+go test ./hololive/hololive-youtube-collector/internal/runtime/readiness -count=1
 ```

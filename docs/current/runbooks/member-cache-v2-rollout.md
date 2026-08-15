@@ -22,7 +22,7 @@ Member cache V2는 Valkey의 durable epoch를 cross-process freshness authority�
 
 - `hololive-api`: bot, admin, llm plane의 각각 독립된 `member.Cache`
 - `hololive-alarm-worker`: alarm target/member adapter
-- `hololive-youtube-producer`: Osaka `a`, Seoul `b`, central `c`, Osaka2 `d`
+- `youtube-collector`: Osaka `a`, Seoul `b`, central `c`, Osaka2 `d`
 
 조회 표면은 `AllMembers`, `GetAllChannelIDs`, `GetByChannelID`, `GetByName`, `FindByAlias`와 이를 감싼 `ServiceAdapter`입니다. Admin plane의 member mutation endpoint만 runtime mutation owner입니다.
 
@@ -40,12 +40,12 @@ V1 process의 process-local snapshot은 V2 notification을 이해하지 못합�
 
 1. Member mutation freeze를 선언하고 admin member endpoint 사용을 중지합니다.
 2. 현재 authority가 없으면 첫 V2 process가 value `1`로 생성하는지 확인합니다.
-3. `hololive-api`, `hololive-alarm-worker`, producer `a`/`b`/`c`/`d`를 기존 deploy runbook 순서로 V2 build에 교체합니다.
+3. `hololive-api`, `hololive-alarm-worker`, collector `a`/`b`/`c`/`d`를 기존 deploy runbook 순서로 V2 build에 교체합니다.
 4. 모든 process에서 `hololive_member_cache_epoch`가 durable authority와 일치하고 bypass `0` 안정 상태인지 확인합니다.
 5. Valkey `PUBSUB NUMSUB coord:member-cache:v2:epoch-notify`와 runtime inventory를 대조합니다. 일시적 reconnect를 고려하되, 지속적으로 누락된 subscriber가 있으면 mutation freeze를 유지합니다.
 6. Canary member mutation 한 건을 수행하고 mutation 전후 epoch가 정확히 `+1`인지 확인합니다.
 7. 모든 V2 process의 local epoch가 새 값으로 reconcile되고 cache bypass가 안정적으로 해제됐는지 확인합니다.
-8. name/channel/alias lookup과 affected bot/admin/worker/producer health를 smoke한 뒤 mutation freeze를 해제합니다.
+8. name/channel/alias lookup과 affected bot/admin/worker/collector health를 smoke한 뒤 mutation freeze를 해제합니다.
 
 관찰 metric:
 
@@ -68,7 +68,7 @@ Reconcile failure 또는 bypass가 계속 증가하면 Valkey authority를 복�
 
 V1 rollback 경로는 2026-08-06에 종결을 선언했습니다. 근거 관측(중앙 Valkey + Prometheus):
 
-- 6개 runtime 전부 V2 build: `hololive_member_cache_epoch` = durable authority(`coord:member-cache:v2:epoch` = 1)와 일치 — hololive-api(30091), alarm-worker(30097), producer c(중앙 30095)/a(100.100.1.6)/b(100.100.1.5)/d(100.100.1.2)
+- 6개 runtime 전부 V2 build: `hololive_member_cache_epoch` = durable authority(`coord:member-cache:v2:epoch` = 1)와 일치 — hololive-api(30091), alarm-worker(30097), collector c(중앙 30096)/a(100.100.1.6)/b(100.100.1.5)/d(100.100.1.2)
 - `rate(hololive_member_cache_bypass_total[30m])` = 0, reconcile 실패율 0
 - Valkey `SCAN MATCH member:*` = 0건
 
@@ -81,7 +81,7 @@ V2에서 V1으로 돌아가면 V1은 durable epoch를 이해하지 못하므로 
 1. Member mutation freeze를 다시 선언합니다.
 2. 문제 build의 모든 consumer를 이전 V1 ref로 교체합니다. 일부 V2와 일부 V1을 남긴 채 mutation을 재개하지 않습니다.
 3. 모든 V1 process를 restart해 process-local snapshot을 PostgreSQL에서 다시 생성합니다.
-4. member name/channel/alias와 worker/producer health를 확인합니다.
+4. member name/channel/alias와 worker/collector health를 확인합니다.
 5. V2 subscriber가 남아 있지 않고 모든 V1 snapshot이 restart 이후 생성됐음을 확인한 뒤에만 mutation freeze를 해제합니다.
 
 Authority key와 epoch-scoped V2 data는 rollback 중 삭제하지 않습니다. V2 data는 기존 TTL로 만료되고, authority는 다음 V2 rollout에서 단조 증가를 이어갑니다. 모든 consumer의 V2 정착이 확인되기 전에는 legacy read/write path 제거를 별도 변경으로 진행하지 않습니다.

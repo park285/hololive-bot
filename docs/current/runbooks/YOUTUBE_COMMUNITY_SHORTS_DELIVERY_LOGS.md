@@ -109,16 +109,9 @@
 
 ## Execute
 
-repo root에서 실행합니다.
+standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다.
 
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs -window 24h
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts delivery-logs -window 30m -limit 500 -format json
-```
-
-- `-window`: recent 조회 창입니다. 기본값은 `24h` 입니다.
-- `-limit`: 반환할 최대 로그 row 수입니다. 기본값은 `200` 입니다.
-- `-format json`: 자동 수집이나 후처리용 JSON 출력을 사용합니다.
+우선 경로는 alarm-worker의 `message="YouTube community/shorts delivery audit"` 구조화 로그다. 보조 근거는 `youtube_notification_delivery_telemetry`다.
 
 ## Readout
 
