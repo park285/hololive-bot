@@ -50,9 +50,7 @@ func (c *Catalog) Observe(ctx context.Context, roomID, roomType, roomLinkID stri
 	}
 
 	c.remember(facts)
-	if err := c.store.upsert(ctx, facts); err != nil && c.logger != nil {
-		c.logger.LogAttrs(ctx, slog.LevelWarn, "observe kakao room failed", slog.String("error", err.Error()))
-	}
+	c.warn(ctx, "observe kakao room failed", c.store.upsert(ctx, facts))
 }
 
 func (c *Catalog) OpenChat(ctx context.Context, roomID string) bool {
@@ -69,54 +67,68 @@ func (c *Catalog) lookup(ctx context.Context, roomID string) (Facts, bool) {
 	if roomID == "" {
 		return Facts{}, false
 	}
-
 	if facts, ok := c.cached(roomID); ok {
 		return facts, true
 	}
+	facts, ok, err := c.loadStored(ctx, roomID)
+	if err != nil || ok {
+		return facts, ok
+	}
+	return c.loadAfterRefresh(ctx, roomID)
+}
 
-	if facts, ok, err := c.store.get(ctx, roomID); err != nil {
-		if c.logger != nil {
-			c.logger.LogAttrs(ctx, slog.LevelWarn, "load kakao room failed", slog.String("error", err.Error()))
-		}
+func (c *Catalog) loadStored(ctx context.Context, roomID string) (Facts, bool, error) {
+	facts, ok, err := c.store.get(ctx, roomID)
+	if err != nil {
+		c.warn(ctx, "load kakao room failed", err)
+		return Facts{}, false, err
+	}
+	if !ok {
+		return Facts{}, false, nil
+	}
+	c.remember(facts)
+	return facts, true, nil
+}
+
+func (c *Catalog) loadAfterRefresh(ctx context.Context, roomID string) (Facts, bool) {
+	if !c.refresh(ctx) {
 		return Facts{}, false
-	} else if ok {
-		c.remember(facts)
-		return facts, true
 	}
-
-	if c.refresh(ctx) {
-		if facts, ok := c.cached(roomID); ok {
-			return facts, true
-		}
-	}
-
-	return Facts{}, false
+	return c.cached(roomID)
 }
 
 func (c *Catalog) refresh(ctx context.Context) bool {
 	if c.lister == nil {
 		return false
 	}
-
 	rooms, err := c.lister.GetRooms(ctx)
 	if err != nil {
-		if c.logger != nil {
-			c.logger.LogAttrs(ctx, slog.LevelWarn, "list kakao rooms failed", slog.String("error", err.Error()))
-		}
+		c.warn(ctx, "list kakao rooms failed", err)
 		return false
 	}
+	c.storeListed(ctx, rooms)
+	return true
+}
 
+func (c *Catalog) storeListed(ctx context.Context, rooms []Facts) {
 	for _, facts := range rooms {
-		if facts.RoomID == "" || (facts.RoomType == "" && facts.RoomLinkID == "") {
+		if !usableListedFacts(facts) {
 			continue
 		}
 		c.remember(facts)
-		if err := c.store.upsert(ctx, facts); err != nil && c.logger != nil {
-			c.logger.LogAttrs(ctx, slog.LevelWarn, "store kakao room failed", slog.String("error", err.Error()))
-		}
+		c.warn(ctx, "store kakao room failed", c.store.upsert(ctx, facts))
 	}
+}
 
-	return true
+func usableListedFacts(facts Facts) bool {
+	return facts.RoomID != "" && (facts.RoomType != "" || facts.RoomLinkID != "")
+}
+
+func (c *Catalog) warn(ctx context.Context, msg string, err error) {
+	if c.logger == nil || err == nil {
+		return
+	}
+	c.logger.LogAttrs(ctx, slog.LevelWarn, msg, slog.String("error", err.Error()))
 }
 
 func (c *Catalog) remember(facts Facts) {

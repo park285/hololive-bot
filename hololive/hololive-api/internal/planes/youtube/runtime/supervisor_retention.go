@@ -175,26 +175,35 @@ func addEvidenceRetentionAge(
 }
 
 func recordRetentionTick(result sourceobservation.RetentionResult, elapsed time.Duration, err error) {
-	parts := result.ByTable
-	if len(parts) == 0 {
-		parts = []sourceobservation.RetentionResult{{Table: result.Table, Deleted: result.Deleted, BacklogAge: result.BacklogAge}}
-	}
 	youtubeRetentionTickSeconds.Observe(elapsed.Seconds())
-	for _, part := range parts {
-		table := part.Table
-		if table == "" {
-			table = "none"
-		}
-		if err != nil {
-			youtubeRetentionErrorsTotal.WithLabelValues(table).Inc()
-			continue
-		}
-		if part.Deleted > 0 {
-			youtubeRetentionDeletedTotal.WithLabelValues(table).Add(float64(part.Deleted))
-		}
-		if part.BacklogAge > 0 {
-			youtubeRetentionBacklogAgeSeconds.WithLabelValues(table).Set(part.BacklogAge.Seconds())
-		}
+	for _, part := range retentionParts(result) {
+		recordRetentionPart(part, err)
+	}
+}
+
+func retentionParts(result sourceobservation.RetentionResult) []sourceobservation.RetentionResult {
+	if len(result.ByTable) > 0 {
+		return result.ByTable
+	}
+	return []sourceobservation.RetentionResult{{
+		Table: result.Table, Deleted: result.Deleted, BacklogAge: result.BacklogAge,
+	}}
+}
+
+func recordRetentionPart(part sourceobservation.RetentionResult, err error) {
+	table := part.Table
+	if table == "" {
+		table = "none"
+	}
+	if err != nil {
+		youtubeRetentionErrorsTotal.WithLabelValues(table).Inc()
+		return
+	}
+	if part.Deleted > 0 {
+		youtubeRetentionDeletedTotal.WithLabelValues(table).Add(float64(part.Deleted))
+	}
+	if part.BacklogAge > 0 {
+		youtubeRetentionBacklogAgeSeconds.WithLabelValues(table).Set(part.BacklogAge.Seconds())
 	}
 }
 
