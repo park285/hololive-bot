@@ -154,10 +154,7 @@ func (c YouTubeCollectorConfig) defaultPaginationLimits(defaults YouTubeCollecto
 }
 
 func (c YouTubeCollectorConfig) MaxProviderTimeout(holodexTimeout, officialTimeout time.Duration) time.Duration {
-	maxTimeout := max(holodexTimeout, c.YouTubeJSTimeout)
-	if officialTimeout > maxTimeout {
-		maxTimeout = officialTimeout
-	}
+	maxTimeout := max(officialTimeout, max(holodexTimeout, c.YouTubeJSTimeout))
 	return maxTimeout
 }
 

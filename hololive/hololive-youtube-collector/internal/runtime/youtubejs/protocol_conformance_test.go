@@ -90,7 +90,6 @@ func collectJSONFields(typ reflect.Type, fields map[string]bool) {
 		return
 	}
 	for field := range typ.Fields() {
-		field := field
 		if field.Anonymous {
 			collectJSONFields(field.Type, fields)
 			continue
