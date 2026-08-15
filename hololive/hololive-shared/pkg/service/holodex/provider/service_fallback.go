@@ -46,9 +46,5 @@ func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
 	}
 
 	keyRotationError := &apiclient.KeyRotationError{}
-	if stdErrors.As(err, &keyRotationError) {
-		return true
-	}
-
-	return false
+	return stdErrors.As(err, &keyRotationError)
 }

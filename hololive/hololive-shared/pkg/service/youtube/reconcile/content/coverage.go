@@ -1,7 +1,6 @@
 package content
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -67,10 +66,6 @@ func coverageBytes(value coverageValue) []byte {
 		return nil
 	}
 	return raw
-}
-
-func sameCoverage(left, right coverageValue) bool {
-	return bytes.Equal(coverageBytes(left), coverageBytes(right))
 }
 
 func ParseCoverage(kind contract.ObservationKind, raw []byte) (coverageValue, error) {

@@ -89,9 +89,6 @@ func TestReduceProviderArrivalPermutationsYieldSameProjection(t *testing.T) {
 	}
 }
 
-//go:fix inline
-func int64Ptr(value int64) *int64 { return new(value) }
-
 func t1() time.Time { return time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC) }
 func t2() time.Time { return time.Date(2026, 8, 14, 7, 0, 0, 0, time.UTC) }
 

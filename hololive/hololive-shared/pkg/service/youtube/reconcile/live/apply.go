@@ -227,17 +227,6 @@ func clearEndCandidate(existing *SessionState) {
 	existing.LastAbsenceScheduledFor = nil
 }
 
-func latestPositiveAt(existing SessionState) time.Time {
-	latest := time.Time{}
-	if existing.Clock.LastLivePositiveAt != nil {
-		latest = *existing.Clock.LastLivePositiveAt
-	}
-	if existing.Clock.LastUpcomingPositiveAt != nil && existing.Clock.LastUpcomingPositiveAt.After(latest) {
-		latest = *existing.Clock.LastUpcomingPositiveAt
-	}
-	return latest
-}
-
 func firstTime(value *time.Time, fallback time.Time) *time.Time {
 	if value != nil {
 		return copyOptionalTime(value)
