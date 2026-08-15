@@ -650,6 +650,8 @@ services:
     deploy: *deploy-384m
     healthcheck:
       <<: *go-healthcheck
+      # 이전 인스턴스의 60초 lease 만료와 첫 publish가 끝날 때까지 autoheal 재시작을 유예한다.
+      start_period: 180s
       test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30025/ready"]
     networks:
       hololive-net:

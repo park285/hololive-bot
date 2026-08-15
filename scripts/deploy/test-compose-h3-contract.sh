@@ -126,6 +126,10 @@ def healthcheck_timeout(svc):
     return (svc.get("healthcheck") or {}).get("timeout")
 
 
+def healthcheck_start_period(svc):
+    return (svc.get("healthcheck") or {}).get("start_period")
+
+
 def has_udp_published(svc, target_port):
     for p in svc.get("ports") or []:
         if str(p.get("target")) == str(target_port) and p.get("protocol") == "udp":
@@ -185,6 +189,7 @@ if collector is not None:
         healthcheck_url(collector) == "https://127.0.0.1:30025/ready",
     )
     check("youtube-collector healthcheck timeout is 7s", healthcheck_timeout(collector) == "7s")
+    check("youtube-collector healthcheck startup grace is 180s", healthcheck_start_period(collector) == "3m0s")
     check("youtube-collector publishes 30025/udp", has_udp_published(collector, 30025))
     env = collector.get("environment") or {}
     check("youtube-collector HOLOLIVE_H3_ADDR is :30025", env.get("HOLOLIVE_H3_ADDR") == ":30025")
@@ -244,6 +249,7 @@ if pc is not None:
         healthcheck_url(pc) == "https://127.0.0.1:30025/ready",
     )
     check("youtube-collector healthcheck timeout is 7s", healthcheck_timeout(pc) == "7s")
+    check("youtube-collector healthcheck startup grace is 180s", healthcheck_start_period(pc) == "3m0s")
     check("youtube-collector publishes 30025/udp", has_udp_published(pc, 30025))
     check("youtube-collector HOLOLIVE_H3_ADDR is :30025", h3_addr_aligned(pc, 30025))
     check("youtube-collector HOLOLIVE_METRICS_ADDR is :30096", metrics_addr_aligned(pc))
