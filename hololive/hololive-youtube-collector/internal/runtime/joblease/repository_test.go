@@ -74,6 +74,16 @@ func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
 	}
 }
 
+func TestProjectionLockUsesRestrictedRoleFunction(t *testing.T) {
+	query := mustSQL("repository_projection_lock_0144_05.sql")
+	if !strings.Contains(query, "lock_youtube_collection_projection") {
+		t.Fatal("projection lock query must use the restricted-role lock function")
+	}
+	if strings.Contains(strings.ToUpper(query), "FOR SHARE") {
+		t.Fatal("projection lock query must not lock the table directly")
+	}
+}
+
 func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
