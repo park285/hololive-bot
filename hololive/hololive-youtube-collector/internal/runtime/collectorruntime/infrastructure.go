@@ -8,10 +8,9 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
@@ -21,7 +20,6 @@ import (
 type collectorInfrastructure struct {
 	cache        cache.Client
 	postgres     database.Client
-	memberCache  *member.Cache
 	youtubejs    *youtubejs.Helper
 	youtubejsRPC *youtubejs.RPC
 	holodex      *holodexcollector.Client
@@ -32,23 +30,34 @@ type collectorInfrastructure struct {
 }
 
 func initInfrastructure(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*collectorInfrastructure, error) {
-	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
+	if appConfig == nil {
+		return nil, fmt.Errorf("build collector infra: config is nil")
+	}
+	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, appConfig.Valkey, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build collector infra: %w", err)
+	}
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
+	if err != nil {
+		cleanupCache()
+		return nil, fmt.Errorf("build collector infra: %w", err)
+	}
+	cleanup := func() {
+		cleanupDB()
+		cleanupCache()
 	}
 	collector := appConfig.YouTubeCollector.OrDefault()
 	helper, rpc, err := startYouTubeJSHelper(ctx, &appConfig.Scraper, &collector, ratelimiter.New(collector.RequestInterval))
 	if err != nil {
-		infra.Cleanup()
+		cleanup()
 		return nil, err
 	}
 	collectorInfra := &collectorInfrastructure{
-		cache:        infra.Cache,
-		postgres:     infra.Postgres,
-		memberCache:  infra.MemberCache,
+		cache:        cacheResources.Service,
+		postgres:     databaseResources.Service,
 		youtubejs:    helper,
 		youtubejsRPC: rpc,
-		cleanup:      infra.Cleanup,
+		cleanup:      cleanup,
 	}
 	maxBody := int64(collector.MaxAggregateBytes)
 	if appConfig.MaxResponseBodyBytes > 0 && appConfig.MaxResponseBodyBytes < maxBody {
