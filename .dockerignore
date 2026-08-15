@@ -76,7 +76,7 @@ coverage.out
 # Local build artifacts under module roots
 hololive/hololive-kakao-bot-go/bot
 hololive/hololive-kakao-bot-go/fetch_profiles
-hololive/hololive-youtube-producer/youtube-producer
+hololive/hololive-youtube-collector/youtube-collector
 
 # Data / backups (not needed for builds)
 backups/

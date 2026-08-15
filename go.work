@@ -1,4 +1,4 @@
-go 1.26.5
+go 1.26.6
 
 use (
 	../iris-client-go
@@ -9,5 +9,5 @@ use (
 	./hololive/hololive-api
 	./hololive/hololive-dbtest
 	./hololive/hololive-shared
-	./hololive/hololive-youtube-producer
+	./hololive/hololive-youtube-collector
 )

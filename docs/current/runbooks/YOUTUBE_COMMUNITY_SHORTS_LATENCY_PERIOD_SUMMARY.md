@@ -13,21 +13,9 @@
 
 ## Execute
 
-우선 경로는 저장소의 집계 로직을 그대로 사용하는 전용 명령입니다. repo root에서 실행합니다.
+standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다.
 
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts latency-period-summary
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts latency-period-summary -format json
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts latency-period-summary \
-  -period last_15m=15m \
-  -period last_2h=2h \
-  -period last_24h=24h
-```
-
-- `-period` 를 주지 않으면 기본 기간은 `last_1h=1h`, `last_24h=24h`, `last_7d=168h` 입니다.
-- 각 `-period` 는 `label=duration` 형식이며 `duration` 은 Go `time.ParseDuration` 규약을 따릅니다.
-- 기본 출력은 Markdown 표이며, 기간별 `total_posts`, `alarm_sent_posts`, `pending_posts`, `measured_posts`, `avg_latency_ms`, `p95_latency_ms`, `max_latency_ms`, `over_2m_posts` 를 바로 읽을 수 있습니다.
-- `-format json` 은 자동 수집이나 후처리에 사용할 수 있습니다. 각 period row는 저장된 지연 결과를 재사용하므로 수동 SQL과 동일한 기준 집합을 따릅니다.
+기간별 `total_posts`, `alarm_sent_posts`, `pending_posts`, `measured_posts`, `avg_latency_ms`, `p95_latency_ms`, `max_latency_ms`, `over_2m_posts`는 `youtube_content_alarm_tracking`의 저장된 지연 컬럼으로 집계한다.
 
 ## Fallback SQL
 

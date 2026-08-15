@@ -68,8 +68,9 @@ PROD_BACKUP_LEGACY_FILE="$BACKUP_DIR/$PROD_COMPOSE_LEGACY_FILE.prechange"
 AP_BACKUP_FILE="$BACKUP_DIR/$AP_COMPOSE_FILE.prechange"
 AP_BACKUP_LEGACY_FILE="$BACKUP_DIR/$(basename "$AP_COMPOSE_FILE").prechange"
 AP_COMPOSE_BASENAME="$(basename "$AP_COMPOSE_FILE")"
-IMAGE_REF="hololive-youtube-producer:prod"
+IMAGE_REF="hololive-youtube-collector:prod"
 ROLLBACK_IMAGE_TAG_FILE="$BACKUP_DIR/rollback-image-tag"
+PRODUCER_STATE_FILE="$BACKUP_DIR/retired-producer-runtime.state"
 
 remote "set -euo pipefail
 cd ~/hololive-bot
@@ -78,20 +79,26 @@ if [[ ! -r \"\$prod_backup_file\" && -r '$PROD_BACKUP_LEGACY_FILE' ]]; then
   prod_backup_file='$PROD_BACKUP_LEGACY_FILE'
 fi
 ap_backup_file='$AP_BACKUP_FILE'
+rollback_image_tag=''
 if [[ ! -r \"\$ap_backup_file\" && -r '$AP_BACKUP_LEGACY_FILE' ]]; then
   ap_backup_file='$AP_BACKUP_LEGACY_FILE'
 fi
 test -r \"\$prod_backup_file\"
 test -r \"\$ap_backup_file\"
-test -r '$ROLLBACK_IMAGE_TAG_FILE'
-rollback_image_tag=\$(cat '$ROLLBACK_IMAGE_TAG_FILE')
-case \"\$rollback_image_tag\" in
-  hololive-youtube-producer:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
-  *) echo 'invalid rollback image tag' >&2; exit 1 ;;
-esac
-sudo -n docker image inspect \"\$rollback_image_tag\" >/dev/null
+if [[ -r '$ROLLBACK_IMAGE_TAG_FILE' ]]; then
+  rollback_image_tag=\$(cat '$ROLLBACK_IMAGE_TAG_FILE')
+  case \"\$rollback_image_tag\" in
+    hololive-youtube-collector:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+    *) echo 'invalid rollback image tag' >&2; exit 1 ;;
+  esac
+  sudo -n docker image inspect \"\$rollback_image_tag\" >/dev/null
+else
+  . scripts/deploy/lib/retired-producer-cutover.sh
+  validate_retired_producer_runtime_state '$PRODUCER_STATE_FILE'
+  echo 'first-cutover producer rollback path selected'
+fi
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
-sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
+sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 preflight_root=\$(mktemp -d)
 trap 'rm -rf \"\$preflight_root\"' EXIT
@@ -112,6 +119,10 @@ if [[ "$MODE" == "--dry-run" ]]; then
   exit 0
 fi
 
+rollback_mode="$(
+  remote "if [[ -r '$ROLLBACK_IMAGE_TAG_FILE' ]]; then printf '%s\n' collector; else printf '%s\n' producer; fi"
+)"
+
 rollback_started_at="$(
   remote 'date -u +%Y-%m-%dT%H:%M:%SZ'
 )"
@@ -126,22 +137,37 @@ ap_backup_file='$AP_BACKUP_FILE'
 if [[ ! -r \"\$ap_backup_file\" && -r '$AP_BACKUP_LEGACY_FILE' ]]; then
   ap_backup_file='$AP_BACKUP_LEGACY_FILE'
 fi
-rollback_image_tag=\$(cat '$ROLLBACK_IMAGE_TAG_FILE')
-case \"\$rollback_image_tag\" in
-  hololive-youtube-producer:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
-  *) echo 'invalid rollback image tag' >&2; exit 1 ;;
-esac
-sudo -n docker image inspect \"\$rollback_image_tag\" >/dev/null
-sudo -n docker tag \"\$rollback_image_tag\" '$IMAGE_REF'
-mkdir -p \"\$(dirname '$PROD_COMPOSE_FILE')\" \"\$(dirname '$AP_COMPOSE_FILE')\"
-cp \"\$prod_backup_file\" '$PROD_COMPOSE_FILE'
-cp \"\$ap_backup_file\" '$AP_COMPOSE_FILE'
-sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
-docker stop $containers_list >/dev/null 2>&1 || true
-sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
+if [[ -r '$ROLLBACK_IMAGE_TAG_FILE' ]]; then
+  rollback_image_tag=\$(cat '$ROLLBACK_IMAGE_TAG_FILE')
+  case \"\$rollback_image_tag\" in
+    hololive-youtube-collector:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+    *) echo 'invalid rollback image tag' >&2; exit 1 ;;
+  esac
+  sudo -n docker image inspect \"\$rollback_image_tag\" >/dev/null
+  sudo -n docker tag \"\$rollback_image_tag\" '$IMAGE_REF'
+  mkdir -p \"\$(dirname '$PROD_COMPOSE_FILE')\" \"\$(dirname '$AP_COMPOSE_FILE')\"
+  cp \"\$prod_backup_file\" '$PROD_COMPOSE_FILE'
+  cp \"\$ap_backup_file\" '$AP_COMPOSE_FILE'
+  sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
+  docker stop $containers_list >/dev/null 2>&1 || true
+  sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
+else
+  . scripts/deploy/lib/retired-producer-cutover.sh
+  stop_named_containers_and_require_inactive $containers_list
+  restore_retired_producer_runtime '$PRODUCER_STATE_FILE'
+fi
 echo rollback_started_at='$rollback_started_at'"
 
 remote "set -euo pipefail
+if [[ ! -r '$ROLLBACK_IMAGE_TAG_FILE' ]]; then
+  cd ~/hololive-bot
+  . scripts/deploy/lib/retired-producer-cutover.sh
+  retired_producer_runtime_matches_state '$PRODUCER_STATE_FILE'
+  for container in $containers_list; do
+    [[ -z \"\$(docker ps -q --filter \"name=^\${container}$\" 2>/dev/null || true)\" ]]
+  done
+  exit 0
+fi
 since='$rollback_started_at'
 since_epoch=\$(date -u -d \"\$since\" +%s)
 expected_revision=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' '$IMAGE_REF')
@@ -171,4 +197,8 @@ for container in $containers_list; do
   fi
 done"
 
-"$REPO_ROOT/scripts/logs/ap-status.sh" "$AP_NAME"
+if [[ "$rollback_mode" == "collector" ]]; then
+  "$REPO_ROOT/scripts/logs/ap-status.sh" "$AP_NAME"
+else
+  echo "first-cutover producer runtime rollback verified"
+fi

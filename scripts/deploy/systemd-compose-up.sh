@@ -98,7 +98,7 @@ for file in \
   /etc/stack-secrets/hololive-bot/compose.env \
   /etc/stack-secrets/hololive-bot/bot.env \
   /etc/stack-secrets/hololive-bot/alarm-worker.env \
-  /etc/stack-secrets/hololive-bot/youtube-producer.env \
+  /etc/stack-secrets/hololive-bot/youtube-collector.env \
   /etc/stack-secrets/hololive-bot/admin-dashboard.env \
   /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   /etc/stack-secrets/hololive-bot/certs/hololive-h3.key \
@@ -124,6 +124,4 @@ if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" == "1" ]]; then
   )
 fi
 
-./scripts/deploy/compose.sh "${base_files[@]}" up -d
-
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh "${main_ap_files[@]}" up -d youtube-producer-c
+./scripts/deploy/compose.sh "${base_files[@]}" up -d --no-build

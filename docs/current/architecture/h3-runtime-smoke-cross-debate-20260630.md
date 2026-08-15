@@ -46,7 +46,7 @@ Observed result:
 
 - `smoke-compose-config.sh` passed.
 - `smoke-runtime-health.sh` passed for `bot`, `admin-api`, `alarm-worker`,
-  `alarm-worker-ready`, `llm-scheduler`, and `youtube-producer-c`.
+  `alarm-worker-ready`, `llm-scheduler`, and `youtube-collector-c`.
 - `test-compose-h3-contract.sh` passed and confirmed the central runtime smoke
   probes are H3-only.
 - `HEAD == origin/main == 81927f9d` during the parent verification.

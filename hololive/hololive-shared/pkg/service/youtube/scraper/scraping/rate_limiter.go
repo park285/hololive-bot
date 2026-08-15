@@ -6,7 +6,7 @@ import (
 )
 
 func distributedBucketFromURL(pageURL string) string {
-	base := ytDefaults.ProducerDistributedRateLimit.BucketBase
+	base := ytDefaults.DistributedRateLimit.BucketBase
 	parsed, err := url.Parse(pageURL)
 	if err != nil {
 		return base + ":unknown"

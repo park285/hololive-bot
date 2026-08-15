@@ -52,12 +52,16 @@ func ProvideMajorEventLLMClient(cliproxy settings.CliproxyConfig, tracker llm.Co
 		)
 		return nil
 	}
-	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, cliproxy.Model, logger,
+	client, err := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, cliproxy.Model, logger,
 		llm.WithWebSearch(true),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
 		llm.WithCostTracker(tracker),
 	)
-	logger.Info("Cliproxy LLM enabled for event summaries (responses + web_search, chat fallback)",
+	if err != nil {
+		logger.Error("Cliproxy LLM initialization failed", slog.Any("error", err))
+		return nil
+	}
+	logger.Info("Cliproxy LLM enabled for event summaries (responses + web_search)",
 		slog.String("model", cliproxy.Model),
 		slog.String("reasoning_effort", cliproxy.ReasoningEffort))
 	return client
@@ -208,15 +212,13 @@ func ProvideMajorEventAdjudicatorClient(cliproxy settings.CliproxyConfig, llmCon
 		enabled:        llmConfig.MajorEvent.Enabled,
 		model:          model,
 		incompleteWarn: "Major event consensus adjudicator LLM configuration incomplete, skipping",
-		// event_summary 스키마는 fallback 발생 시 discovered_events 억제가 필요하고, 그 판정에는
-		// openaipreset이 감추는 FallbackUsed 신호가 있어야 하므로 hololive OpenAIClient를 유지한다.
 		newClient: func(baseURL, apiKey, model string, logger *slog.Logger) (llm.Client, error) {
 			return llm.NewClient(baseURL, apiKey, model, logger,
 				llm.WithSchemaName("event_summary"),
 				llm.WithWebSearch(false),
 				llm.WithReasoningEffort(cliproxy.ReasoningEffort),
 				llm.WithCostTracker(tracker),
-			), nil
+			)
 		},
 	})
 }

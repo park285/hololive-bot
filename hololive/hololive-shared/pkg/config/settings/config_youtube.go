@@ -21,45 +21,17 @@ type HolodexLiveStatusFallbackConfig struct {
 }
 
 type YouTubeConfig struct {
-	CacheExpiration              time.Duration
-	MaxPageBodyBytes             int64
-	ScraperHTTPTimeout           time.Duration
-	ScraperDialTimeout           time.Duration
-	ScraperHeaderTimeout         time.Duration
-	ScraperPhaseTimeout          time.Duration
-	CacheSaveTimeout             time.Duration
-	CommunityMissingTTL          time.Duration
-	VideoRSSBackoffTTL           time.Duration
-	ProducerRequestInterval      time.Duration
-	ProducerDistributedRateLimit DistributedRateLimitConfig
-}
-
-type YouTubeProducerGlobalBudgetConfig struct {
-	Enabled                    bool
-	AcquireTimeout             time.Duration
-	ActiveInstanceCount        int
-	YouTubeScraperMaxInflight  int
-	HolodexLiveMaxInflight     int
-	BrowserSnapshotMaxInflight int
-	BackfillMaxInflight        int
-	FallbackMaxInflight        int
-	CleanupLimit               int
-	WindowCheckEnabled         bool
-}
-
-func DefaultYouTubeProducerGlobalBudgetConfig() YouTubeProducerGlobalBudgetConfig {
-	return YouTubeProducerGlobalBudgetConfig{
-		Enabled:                    false,
-		AcquireTimeout:             3 * time.Second,
-		ActiveInstanceCount:        0,
-		YouTubeScraperMaxInflight:  6,
-		HolodexLiveMaxInflight:     4,
-		BrowserSnapshotMaxInflight: 1,
-		BackfillMaxInflight:        2,
-		FallbackMaxInflight:        2,
-		CleanupLimit:               128,
-		WindowCheckEnabled:         false,
-	}
+	CacheExpiration      time.Duration
+	MaxPageBodyBytes     int64
+	ScraperHTTPTimeout   time.Duration
+	ScraperDialTimeout   time.Duration
+	ScraperHeaderTimeout time.Duration
+	ScraperPhaseTimeout  time.Duration
+	CacheSaveTimeout     time.Duration
+	CommunityMissingTTL  time.Duration
+	VideoRSSBackoffTTL   time.Duration
+	RequestInterval      time.Duration
+	DistributedRateLimit DistributedRateLimitConfig
 }
 
 type IngestionConfig struct {

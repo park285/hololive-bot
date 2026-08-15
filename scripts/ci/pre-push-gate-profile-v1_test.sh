@@ -66,6 +66,16 @@ ambient_first="$(head -n 1 "${TMP_DIR}/ambient.log")"
   fail "ambient must start with the sibling workspace check"
 grep -Fq 'local-ci scope=changed base=origin/main dependency=true' "${TMP_DIR}/ambient.log" || \
   fail "ambient must always run local-ci with existing fast-route defaults"
+if grep -Fq 'scripts/ci/public-pr-collector-helper-gate.sh' "${TMP_DIR}/ambient.log"; then
+  fail "fast mode must not run the collector helper gate for an unrelated path"
+fi
+
+: >"${TMP_DIR}/full.log"
+GATE_TEST_LOG="${TMP_DIR}/full.log" PRE_PUSH_GATE_SCOPED=1 PRE_PUSH_MODE=full \
+  PATH="${fixture}/fake-bin:${PATH}" /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" --phase=ambient \
+  >"${TMP_DIR}/full.out" 2>"${TMP_DIR}/full.err"
+grep -Fq 'scripts/ci/public-pr-collector-helper-gate.sh' "${TMP_DIR}/full.log" || \
+  fail "full mode must run the collector helper gate for an unrelated path"
 
 run_phase default
 cat "${TMP_DIR}/reusable.log" "${TMP_DIR}/ambient.log" >"${TMP_DIR}/expected.log"
@@ -101,8 +111,8 @@ cp "${ROOT_DIR}/scripts/ci/local-ci.sh" "${fingerprint_fixture}/scripts/ci/"
 cat >"${fingerprint_fixture}/fake-bin/go" <<'SH'
 #!/bin/bash
 case "${1:-}" in
-  version) echo 'go version go1.26.5 linux/amd64' ;;
-  env) printf 'go1.26.5\nlinux\namd64\ngo1.26.5+auto\n' ;;
+  version) echo 'go version go1.26.6 linux/amd64' ;;
+  env) printf 'go1.26.6\nlinux\namd64\ngo1.26.6+auto\n' ;;
   *) exit 1 ;;
 esac
 SH

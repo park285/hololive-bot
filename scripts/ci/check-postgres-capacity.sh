@@ -87,7 +87,7 @@ if verify_compose:
 used = 0
 seen = set()
 scaled_services_seen = set()
-expected_owner_inventory_sha256 = "52482932e0705eabdcc909a847753dfbbc0e5097a08d64be7b9dd4e70137925e"
+expected_owner_inventory_sha256 = "73c0d2caaa84f46159d651c06ddcf81b010e5d2054c6ddd84715d70487eba27e"
 for line in policy:
     if not line or line.startswith("#") or line.startswith("@"):
         continue

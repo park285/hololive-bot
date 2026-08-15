@@ -133,15 +133,15 @@ fi
 bb_root="${TMP_DIR}/blackbox"
 mkdir -p "${bb_root}/logs/remote/osaka"
 printf 'bot yesterday\n' > "${bb_root}/logs/bot.log"
-printf 'producer mirror\n' > "${bb_root}/logs/remote/osaka/youtube-producer.log"
-ln -s remote/osaka/youtube-producer.log "${bb_root}/logs/youtube-producer.log"
+printf 'collector mirror\n' > "${bb_root}/logs/remote/osaka/youtube-collector-a.log"
+ln -s remote/osaka/youtube-collector-a.log "${bb_root}/logs/youtube-collector-a.log"
 
 bb_archive="${bb_root}/logs/archive/bot-2026-05-20.log.tar.gz"
 if LOG_ROOT="${bb_root}/logs" LOG_ROLLUP_STATE_DIR="${bb_root}/state" LOG_ROLLUP_DATE=2026-05-20 \
     "${ROOT_DIR}/scripts/logs/daily-rollup-logs.sh" once >/dev/null; then
   if [[ -f "${bb_archive}" && ! -L "${bb_archive}" \
       && ! -s "${bb_root}/logs/bot.log" \
-      && "$(cat "${bb_root}/logs/remote/osaka/youtube-producer.log")" == "producer mirror" \
+      && "$(cat "${bb_root}/logs/remote/osaka/youtube-collector-a.log")" == "collector mirror" \
       && "$(tar -xOzf "${bb_archive}" bot.log 2>/dev/null)" == "bot yesterday" ]]; then
     pass "once mode archives regular log content, truncates active log, skips symlinked mirror"
   else

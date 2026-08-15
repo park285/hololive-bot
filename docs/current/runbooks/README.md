@@ -8,12 +8,12 @@
 |---|---|
 | `hololive-api` | `hololive-api.md` |
 | `alarm-worker` | `alarm-worker.md` |
-| `youtube-producer` | `youtube-producer.md` |
+| `youtube-collector` | `youtube-collector.md` |
 | `admin-dashboard` | `admin-dashboard.md` |
 
 ## Infra And Release
 
-- `../../runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` - Compose deployment guide
+- `../../runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` - historical Compose procedure notes (YouTube runtime is now `youtube-collector`; current service runbook is `youtube-collector.md`)
 - `dlq-replay.md` - alarm dispatch DLQ 확인/재처리 기준
 - `release.md` - release checklist
 - `rollback.md` - rollback 기준

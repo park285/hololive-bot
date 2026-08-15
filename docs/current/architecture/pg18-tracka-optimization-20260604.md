@@ -1,5 +1,7 @@
 # PG18 Track A 최적화 적용 결과 (2026-06-04)
 
+> Historical 2026-06-04 snapshot. Current collector fleet identity is `youtube-collector`. `youtube-producer` in this document is a retired name.
+
 `docs/PG18_DB_OPTIMIZATION_PLAN_20260603.md`(iris-stack 메타리포) Track A(A1~A5)의 적용·측정 기록.
 대상: `holo-postgres` (postgres:18.4, 512MB cap, 호스트 단일 backing DB).
 

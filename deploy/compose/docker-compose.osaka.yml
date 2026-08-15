@@ -5,7 +5,6 @@ x-osaka-ap-env: &osaka-ap-env
   POSTGRES_SOCKET_PATH: ""
   POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:?HOLOLIVE_CENTRAL_POSTGRES_HOST is required for an AP overlay}
   POSTGRES_PORT: ${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5433}
-  # SCRAPER_BACKFILL_*: prod x-scraper-env 기본값을 extends/파일 병합으로 그대로 상속하므로 재선언하지 않는다.
 
 x-osaka-ap-logging: &osaka-ap-logging
   driver: "json-file"
@@ -16,10 +15,10 @@ x-osaka-ap-logging: &osaka-ap-logging
 x-osaka-ap-service: &osaka-ap-service
   extends:
     file: docker-compose.prod.yml
-    service: youtube-producer
+    service: youtube-collector
   profiles: ["oracle"]
   env_file:
-    - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}
+    - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
   volumes: !override
     - ../../data:/app/data
     - ../../logs:/app/logs
@@ -36,12 +35,8 @@ x-osaka-ap-service: &osaka-ap-service
 
 x-osaka-ap-env-common: &osaka-ap-env-common
   <<: *osaka-ap-env
-  YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
-  YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED: "true"
-  YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT: "4"
-  YOUTUBE_PRODUCER_LEASE_NAMESPACE: ${YOUTUBE_PRODUCER_LEASE_NAMESPACE:-production}
-  SCRAPER_FETCHER_ENGINE: ${YOUTUBE_PRODUCER_A_FETCHER_ENGINE:-nethttp}
-  SCRAPER_SCHEDULER_WORKER_COUNT: ${YOUTUBE_PRODUCER_AP_WORKER_COUNT:-2}
+  YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
+  POSTGRES_USER: hololive_scraper
   GOMEMLIMIT: "640MiB"
 
 services:
@@ -62,13 +57,13 @@ services:
   deunhealth:
     profiles: !override ["central-only"]
 
-  youtube-producer:
-    profiles: !override ["retired-youtube-producer"]
+  youtube-collector:
+    profiles: !override ["central-only"]
     env_file: !override
-      - ${HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-producer.env}
+      - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
     environment:
       <<: *osaka-ap-env
-      YOUTUBE_PRODUCER_RUNTIME_ALLOWED: "true"
+      YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
     volumes: !override
       - ../../data:/app/data
       - ../../logs:/app/logs
@@ -81,15 +76,19 @@ services:
         limits:
           memory: 768m
 
-  youtube-producer-a:
+  youtube-collector-a:
     <<: *osaka-ap-service
-    container_name: hololive-youtube-producer-a
+    container_name: hololive-youtube-collector-a
     environment:
       <<: *osaka-ap-env-common
-      YOUTUBE_PRODUCER_INSTANCE_ID: "youtube-producer-a"
+      YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-a"
+      YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-a.log"
       SERVER_PORT: 30005
-      PHOTO_SYNC_ENABLED: "true"
+      HOLOLIVE_H3_ADDR: ":30005"
+      PHOTO_SYNC_ENABLED: "false"
     ports: !override
       - "127.0.0.1:30005:30005"
       - "127.0.0.1:30005:30005/udp"
-      - "100.100.1.6:30095:30095"
+      - "100.100.1.6:30096:30096"
+    healthcheck:
+      test: ["CMD", "./bin/healthcheck", "https://127.0.0.1:30005/ready"]

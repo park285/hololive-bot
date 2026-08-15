@@ -265,7 +265,7 @@ func TestGetChannels_DoesNotFallbackOnNonRetryableListError(t *testing.T) {
 	}
 }
 
-func TestGetChannelsLiveStatus_UsesYouTubeProducerWithoutOfficialScheduleFallback(t *testing.T) {
+func TestGetChannelsLiveStatusUsesYouTubeScraperWithoutOfficialScheduleFallback(t *testing.T) {
 	var officialRequests atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -328,7 +328,7 @@ func TestGetChannelsLiveStatus_UsesYouTubeProducerWithoutOfficialScheduleFallbac
 	}
 }
 
-func TestGetChannelsLiveStatus_PropagatesYouTubeProducerFallbackError(t *testing.T) {
+func TestGetChannelsLiveStatusPropagatesYouTubeScraperFallbackError(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
 			if method != "GET" {
@@ -513,19 +513,19 @@ func TestShouldUseFallbackTimeout(t *testing.T) {
 			name:     "DeadlineExceeded with active ctx",
 			ctx:      activeCtx,
 			err:      context.DeadlineExceeded,
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "wrapped timeout with active ctx",
 			ctx:      activeCtx,
 			err:      fmt.Errorf("request: %w", context.DeadlineExceeded),
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "net timeout with active ctx",
 			ctx:      activeCtx,
 			err:      &mockTimeoutError{msg: "i/o timeout", timeout: true},
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "일반 에러는 폴백 안함",

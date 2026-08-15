@@ -28,6 +28,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
@@ -154,6 +155,72 @@ func (r *PgxBatchRepository) PersistCommunityPosts(ctx context.Context, posts []
 	}
 	r.persistLatencyClassificationsAfterCommit(ctx, trackingRows)
 	return nil
+}
+
+func (r *PgxBatchRepository) PersistVideosTx(
+	ctx context.Context,
+	tx dbx.Tx,
+	videos []*domain.YouTubeVideo,
+	notifications []*domain.YouTubeNotificationOutbox,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+	watermark *domain.YouTubeContentWatermark,
+) error {
+	if tx == nil {
+		return fmt.Errorf("persist videos: tx is nil")
+	}
+	if err := validateShortNotificationPublishedAt(videos, notifications); err != nil {
+		return fmt.Errorf("validate short notifications: %w", err)
+	}
+	_, err := r.persistReconciledVideosTx(ctx, tx, videos, notifications, trackingRows, watermark)
+	return err
+}
+
+func (r *PgxBatchRepository) persistReconciledVideosTx(
+	ctx context.Context,
+	tx batchDB,
+	videos []*domain.YouTubeVideo,
+	notifications []*domain.YouTubeNotificationOutbox,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+	watermark *domain.YouTubeContentWatermark,
+) ([]*domain.YouTubeContentAlarmTracking, error) {
+	if err := r.batchUpsertVideos(ctx, tx, videos); err != nil {
+		return nil, fmt.Errorf("batch upsert videos: %w", err)
+	}
+	if err := r.resolveShortPersistedContentIDs(ctx, tx, notifications, trackingRows); err != nil {
+		return nil, fmt.Errorf("resolve short persisted content ids: %w", err)
+	}
+	sourcePosts := buildShortSourcePosts(videos, trackingRows)
+	if err := observation.NewRepositoryContext(ctx, tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
+		return nil, fmt.Errorf("upsert short source posts: %w", err)
+	}
+	if err := r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "video", "short"); err != nil {
+		return nil, err
+	}
+	return trackingRows, nil
+}
+
+func (r *PgxBatchRepository) PersistCommunityPostsTx(
+	ctx context.Context,
+	tx dbx.Tx,
+	posts []*domain.YouTubeCommunityPost,
+	notifications []*domain.YouTubeNotificationOutbox,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+	watermark *domain.YouTubeContentWatermark,
+) error {
+	if tx == nil {
+		return fmt.Errorf("persist community posts: tx is nil")
+	}
+	if err := validateCommunityNotificationPublishedAt(posts, notifications); err != nil {
+		return fmt.Errorf("validate community notifications: %w", err)
+	}
+	return r.persistCommunityPostsTx(ctx, tx, posts, notifications, trackingRows, watermark)
+}
+
+func (r *PgxBatchRepository) RecordCommunityLatencyAfterCommit(
+	ctx context.Context,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+) {
+	r.persistLatencyClassificationsAfterCommit(ctx, trackingRows)
 }
 
 func (r *PgxBatchRepository) persistVideosTx(

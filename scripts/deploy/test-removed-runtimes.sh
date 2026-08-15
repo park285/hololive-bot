@@ -109,8 +109,8 @@ services:
     image: example-api
   hololive-alarm-worker:
     image: example-worker
-  youtube-producer:
-    image: example-producer
+  youtube-collector:
+    image: example-collector
 EOF
 mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/data"
 
@@ -144,16 +144,16 @@ COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
 HOLOLIVE_APP_UID="$(id -u)" \
 HOLOLIVE_APP_GID="$(id -g)" \
-    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build youtube-producer >"${tmpdir}/producer.out" 2>&1
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build youtube-collector >"${tmpdir}/collector.out" 2>&1
 
-grep -Eq '^compose --env-file .* build --with-dependencies youtube-producer$' "${MOCK_DOCKER_LOG}" \
-    || fail "producer-only start did not preserve targeted dependency build"
+grep -Eq '^compose --env-file .* build --with-dependencies youtube-collector$' "${MOCK_DOCKER_LOG}" \
+    || fail "collector-only start did not preserve targeted dependency build"
 if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
-    fail "producer-only start must not stop retired central runtimes"
+    fail "collector-only start must not stop retired central runtimes"
 fi
-grep -Fq "[PREFLIGHT] Verifying host bind-mount write access" "${tmpdir}/producer.out" \
-    || fail "producer-only start did not run writable bind-mount preflight"
-pass "producer-only AP start neither requires iris-client-go nor triggers central cutover cleanup"
+grep -Fq "[PREFLIGHT] Verifying host bind-mount write access" "${tmpdir}/collector.out" \
+    || fail "collector-only start did not run writable bind-mount preflight"
+pass "collector-only AP start neither requires iris-client-go nor triggers central cutover cleanup"
 
 : >"${MOCK_DOCKER_LOG}"
 MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \

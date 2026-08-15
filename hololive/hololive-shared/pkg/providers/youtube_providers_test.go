@@ -122,7 +122,7 @@ func TestProvideHolodexServiceWithConfigPassesLiveStatusFallbackConfig(t *testin
 			}),
 		}),
 	)
-	scraperService := ProvideScraperServiceWithYouTubeProducer(cachemocks.NewLenientClient(), nil, youtubeClient, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	scraperService := ProvideScraperServiceWithYouTubeClient(cachemocks.NewLenientClient(), nil, youtubeClient, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
 	holodexCfg.BaseURL = holodexServer.URL
 	holodexCfg.APIKey = "test-key"

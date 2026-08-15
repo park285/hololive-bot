@@ -17,7 +17,7 @@ SOURCE="${SOURCE:-docker}"
 usage() {
   cat <<'USAGE'
 Usage:
-  ap-logs.sh <ap-host> [youtube-producer|<ap-service>|all]
+  ap-logs.sh <ap-host> [youtube-collector|<ap-service>|all]
 
 Environment:
   SINCE=30m              docker log since window
@@ -28,8 +28,8 @@ Environment:
   SOURCE=docker|file     read docker logs or AP file logs
 
 Examples:
-  ap-logs.sh osaka youtube-producer
-  SINCE=2h PATTERN='pre-send claim|ERR' ap-logs.sh seoul youtube-producer
+  ap-logs.sh osaka youtube-collector
+  SINCE=2h PATTERN='pre-send claim|ERR' ap-logs.sh seoul youtube-collector
   FOLLOW=1 ap-logs.sh osaka all
   FULL=1 ap-logs.sh seoul all
   SOURCE=file TAIL=500 ap-logs.sh osaka all
@@ -46,7 +46,7 @@ ap_host_load "$REPO_ROOT" "$AP_HOST_ARG"
 
 services=()
 case "$SERVICE" in
-  youtube-producer|all)
+  youtube-collector|all)
     services=("${AP_SERVICES[@]}")
     ;;
   *)
@@ -58,7 +58,7 @@ case "$SERVICE" in
     done
     if [[ ${#services[@]} -eq 0 ]]; then
       echo "unknown service for $AP_NAME: $SERVICE" >&2
-      echo "Available: youtube-producer ${AP_SERVICES[*]} all" >&2
+      echo "Available: youtube-collector ${AP_SERVICES[*]} all" >&2
       usage >&2
       exit 2
     fi

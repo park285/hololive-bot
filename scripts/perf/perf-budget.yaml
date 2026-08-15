@@ -1,0 +1,7 @@
+version: 1
+workload: youtube_observation_publish_claim_consume
+modeled_collector_members: 4
+modeled_observation_kinds: 9
+representative_observation_kind: community_page
+iterations: 20
+max_projected_fleet_cycle_ns: 3600000000

@@ -29,17 +29,18 @@ func buildScraperHolodexProfileFoundation(
 	logger *slog.Logger,
 ) (*scraperHolodexProfileFoundation, error) {
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	sharedRL, err := providers.ProvideYouTubeProducerRateLimiter(infra.Cache, logger)
+	sharedRL, err := providers.ProvideYouTubeRateLimiter(infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
 
-	scraperService := providers.ProvideScraperService(
+	scraperService := providers.ProvideScraperServiceWithOfficialSchedule(
 		infra.Cache,
 		memberServiceAdapter,
 		scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL},
 		sharedRL,
 		logger,
+		appConfig.OfficialScheduleRuntime(),
 	)
 
 	holodexService, err := providers.ProvideHolodexService(

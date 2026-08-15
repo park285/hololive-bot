@@ -22,6 +22,7 @@ package settings
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -75,6 +76,9 @@ func (c *Config) validateRuntimeConfigs() error {
 	if err := validateHolodexConfig(&c.Holodex); err != nil {
 		return err
 	}
+	if err := validateOfficialScheduleConfig(&c.OfficialSchedule, c.MaxResponseBodyBytes); err != nil {
+		return err
+	}
 	if err := validateCORSConfig(c.Environment, c.CORS); err != nil {
 		return err
 	}
@@ -98,6 +102,45 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	return nil
 }
 
+func validateOfficialScheduleConfig(config *OfficialScheduleConfig, maxResponseBodyBytes int64) error {
+	if config == nil {
+		return fmt.Errorf("official schedule config is required")
+	}
+	if err := validateOfficialScheduleBaseURL(config.BaseURL); err != nil {
+		return err
+	}
+	if config.Timeout <= 0 {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive")
+	}
+	if config.CacheExpiry <= 0 {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS must be positive")
+	}
+	if config.PageCacheTTL < 0 {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS must be >= 0")
+	}
+	if maxResponseBodyBytes <= 0 {
+		return fmt.Errorf("MAX_RESPONSE_BODY_BYTES must be positive")
+	}
+	return nil
+}
+
+func validateOfficialScheduleBaseURL(rawURL string) error {
+	baseURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return fmt.Errorf("parse OFFICIAL_SCHEDULE_BASE_URL: %w", err)
+	}
+	if baseURL.Scheme != "https" || baseURL.Host == "" {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_BASE_URL must be an HTTPS origin")
+	}
+	if baseURL.User != nil || (baseURL.Path != "" && baseURL.Path != "/") {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_BASE_URL must not contain userinfo or path")
+	}
+	if baseURL.RawQuery != "" || baseURL.Fragment != "" {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_BASE_URL must not contain query or fragment")
+	}
+	return nil
+}
+
 func (c *Config) validateAdminAPIRequiredConfig() error {
 	if len(c.Kakao.Rooms) == 0 {
 		return fmt.Errorf("KAKAO_ROOMS is required")
@@ -108,19 +151,28 @@ func (c *Config) validateAdminAPIRequiredConfig() error {
 	return nil
 }
 
-// ValidateYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
-// Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
-func (c *Config) ValidateYouTubeProducerRuntime() error {
-	if err := c.validateWithRequired(c.validateYouTubeProducerRequiredConfig); err != nil {
+func (c *Config) ValidateYouTubeCollectorRuntime() error {
+	if c.Scraper.ActiveActive.Enabled {
+		return fmt.Errorf("%s must not enable YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED", runtimeYouTubeCollector)
+	}
+	if err := c.validateWithRequired(c.validateYouTubeCollectorRequiredConfig); err != nil {
 		return err
 	}
-	return validateNoNotificationEgressOwnership(runtimeYouTubeProducer)
+	if err := validateNoNotificationEgressOwnership(runtimeYouTubeCollector); err != nil {
+		return err
+	}
+	if err := validateYouTubeCollectorPostgresUser(c.Postgres.User); err != nil {
+		return err
+	}
+	collector := c.YouTubeCollector.OrDefault()
+	if err := collector.Validate(c.Holodex.Timeout, c.OfficialSchedule.Timeout); err != nil {
+		return err
+	}
+	c.YouTubeCollector = collector
+	return nil
 }
 
-func (c *Config) validateYouTubeProducerRequiredConfig() error {
-	if strings.TrimSpace(c.Holodex.APIKey) == "" {
-		return fmt.Errorf("HOLODEX_API_KEY is required")
-	}
+func (c *Config) validateYouTubeCollectorRequiredConfig() error {
 	return nil
 }
 
@@ -216,9 +268,6 @@ func validateScraperBackfillConfig(config ScraperBackfillConfig) error {
 	}
 	if config.ShortsEnabled && config.ShortsInterval <= 0 {
 		return fmt.Errorf("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS must be positive when backfill shorts is enabled")
-	}
-	if config.CommunityEnabled && config.CommunityInterval <= 0 {
-		return fmt.Errorf("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS must be positive when backfill community is enabled")
 	}
 	if config.LiveEnabled && config.LiveInterval <= 0 {
 		return fmt.Errorf("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS must be positive when backfill live is enabled")

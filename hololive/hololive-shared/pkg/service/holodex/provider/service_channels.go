@@ -23,6 +23,7 @@ package holodexprovider
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -44,7 +45,7 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 	statusStr := channelScheduleStatus(includeLive)
 	body, err := h.requester.DoRequest(ctx, "GET", "/live", channelScheduleParams(channelID, hours, statusStr))
 	if err != nil {
-		return h.handleChannelScheduleRequestError(ctx, channelID, statusStr, err)
+		return h.handleChannelScheduleRequestError(ctx, channelID, hours, includeLive, statusStr, err)
 	}
 
 	var rawStreams []streammapping.StreamRaw
@@ -53,9 +54,7 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 	}
 
 	result := h.buildChannelSchedule(rawStreams, includeLive)
-
 	h.cacheManager.SetChannelSchedule(ctx, channelID, hours, includeLive, result, constants.CacheTTL.ChannelSchedule)
-
 	return result, nil
 }
 
@@ -70,6 +69,9 @@ func (h *Service) channelScheduleFromCache(cached []*domain.Stream, includeLive 
 func copyChannelScheduleStreams(streams []*domain.Stream) []*domain.Stream {
 	copied := make([]*domain.Stream, len(streams))
 	for i, stream := range streams {
+		if stream == nil {
+			continue
+		}
 		streamCopy := *stream
 		if stream.StartScheduled != nil {
 			t := *stream.StartScheduled
@@ -100,22 +102,29 @@ func channelScheduleParams(channelID string, hours int, statusStr string) url.Va
 	return params
 }
 
-func (h *Service) handleChannelScheduleRequestError(ctx context.Context, channelID, statusStr string, err error) ([]*domain.Stream, error) {
+func (h *Service) handleChannelScheduleRequestError(
+	ctx context.Context,
+	channelID string,
+	hours int,
+	includeLive bool,
+	statusStr string,
+	primaryErr error,
+) ([]*domain.Stream, error) {
 	h.logger.Error("Failed to get channel schedule",
 		slog.String("channel_id", channelID),
 		slog.String("status", statusStr),
-		slog.Any("error", err),
-	)
-
-	if h.shouldUseFallback(ctx, err) && h.scraper != nil {
-		h.logger.Warn("Using scraper fallback for channel schedule",
-			slog.String("channel_id", channelID),
-			slog.Any("error", err))
-
-		return h.scraper.FetchChannel(ctx, channelID)
+		slog.Any("error", primaryErr))
+	if !h.shouldUseFallback(ctx, primaryErr) || h.scraper == nil {
+		return nil, fmt.Errorf("get channel schedule: %w", primaryErr)
 	}
 
-	return nil, fmt.Errorf("get channel schedule: %w", err)
+	streams, err := h.scraper.FetchChannel(ctx, channelID, hours, includeLive)
+	if err != nil {
+		return nil, fmt.Errorf("get channel schedule fallbacks: %w", errors.Join(primaryErr, err))
+	}
+	sortStreamsByScheduledTime(streams)
+	h.cacheManager.SetChannelSchedule(ctx, channelID, hours, includeLive, streams, constants.CacheTTL.ChannelSchedule)
+	return streams, nil
 }
 
 func (h *Service) buildChannelSchedule(rawStreams []streammapping.StreamRaw, includeLive bool) []*domain.Stream {
@@ -135,7 +144,7 @@ func sortStreamsByScheduledTime(streams []*domain.Stream) {
 }
 
 func streamScheduledUnix(stream *domain.Stream) int64 {
-	if stream.StartScheduled == nil {
+	if stream == nil || stream.StartScheduled == nil {
 		return 0
 	}
 	return stream.StartScheduled.Unix()

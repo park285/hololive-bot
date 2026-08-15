@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +10,31 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	"github.com/kapu/hololive-shared/pkg/health"
 )
+
+func TestNewRuntimeRouter_PublicReadyIncludesProcessComponents(t *testing.T) {
+	health.RemoveComponent("youtube")
+	health.SetComponent("youtube", health.ComponentStatus{Ready: false, Degraded: true})
+	t.Cleanup(func() { health.RemoveComponent("youtube") })
+
+	router, err := NewRuntimeRouter(t.Context(), slog.New(slog.DiscardHandler), &RuntimeRouterOptions{})
+	if err != nil {
+		t.Fatalf("NewRuntimeRouter() error = %v", err)
+	}
+
+	response := serveRuntimeReadyRequest(t, router, "/ready", "")
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("/ready status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	var body health.Response
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode /ready response: %v", err)
+	}
+	if got := body.Components["youtube"]; got.Ready || !got.Degraded {
+		t.Fatalf("youtube component = %#v", got)
+	}
+}
 
 func TestNewRuntimeRouter_InternalReadyRequiresAPIKey(t *testing.T) {
 	t.Parallel()

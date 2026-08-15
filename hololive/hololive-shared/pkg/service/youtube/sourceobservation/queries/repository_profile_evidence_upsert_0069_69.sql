@@ -1,0 +1,43 @@
+INSERT INTO youtube_channel_profile_evidence (
+    channel_id, scheduled_for, provider, observation_id,
+    handle_present, handle, description_present, description,
+    country_present, country, joined_date_present, joined_date,
+    complete, effective_at, received_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+ON CONFLICT (channel_id, scheduled_for, provider) DO UPDATE SET
+    observation_id = excluded.observation_id,
+    handle_present = excluded.handle_present,
+    handle = excluded.handle,
+    description_present = excluded.description_present,
+    description = excluded.description,
+    country_present = excluded.country_present,
+    country = excluded.country,
+    joined_date_present = excluded.joined_date_present,
+    joined_date = excluded.joined_date,
+    complete = excluded.complete,
+    effective_at = excluded.effective_at,
+    received_at = excluded.received_at
+WHERE (youtube_channel_profile_evidence.observation_id,
+       youtube_channel_profile_evidence.handle_present,
+       youtube_channel_profile_evidence.handle,
+       youtube_channel_profile_evidence.description_present,
+       youtube_channel_profile_evidence.description,
+       youtube_channel_profile_evidence.country_present,
+       youtube_channel_profile_evidence.country,
+       youtube_channel_profile_evidence.joined_date_present,
+       youtube_channel_profile_evidence.joined_date,
+       youtube_channel_profile_evidence.complete,
+       youtube_channel_profile_evidence.effective_at,
+       youtube_channel_profile_evidence.received_at)
+IS DISTINCT FROM (excluded.observation_id,
+                  excluded.handle_present,
+                  excluded.handle,
+                  excluded.description_present,
+                  excluded.description,
+                  excluded.country_present,
+                  excluded.country,
+                  excluded.joined_date_present,
+                  excluded.joined_date,
+                  excluded.complete,
+                  excluded.effective_at,
+                  excluded.received_at)

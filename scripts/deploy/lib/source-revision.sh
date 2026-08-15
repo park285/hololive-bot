@@ -50,8 +50,8 @@ deploy_service_image_ref() {
     case "$1" in
         hololive-api|hololive-db-migrate) printf '%s\n' hololive-api:prod ;;
         hololive-alarm-worker) printf '%s\n' hololive-alarm-worker:prod ;;
-        youtube-producer|youtube-producer-c|youtube-producer-a|youtube-producer-b|youtube-producer-d)
-            printf '%s\n' hololive-youtube-producer:prod
+        youtube-collector|youtube-collector-c|youtube-collector-a|youtube-collector-b|youtube-collector-d)
+            printf '%s\n' hololive-youtube-collector:prod
             ;;
         admin-dashboard) printf '%s\n' admin-dashboard:prod ;;
         *)

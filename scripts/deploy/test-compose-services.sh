@@ -57,7 +57,8 @@ expect_fail_contains() {
 expect_eq "$(compose_service_resolve_build_target hololive-api)" "hololive-api" "build target hololive-api"
 expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm-worker" "build alias alarm-worker"
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
-expect_eq "$(compose_service_resolve_build_target youtube-producer)" "youtube-producer" "build target youtube-producer"
+expect_eq "$(compose_service_resolve_build_target youtube-collector)" "youtube-collector" "build target youtube-collector"
+expect_eq "$(compose_service_resolve_build_target youtube-collector-c)" "youtube-collector" "build alias youtube-collector-c"
 expect_eq "$(compose_service_resolve_build_target admin-dashboard)" "admin-dashboard" "build target admin-dashboard"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
     expect_fail "build target rejects retired runtime ${removed}" compose_service_resolve_build_target "${removed}"
@@ -68,15 +69,27 @@ expect_eq "$(compose_service_resolve_redeploy_target alarm-worker)" "hololive-al
 expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" "redeploy alias postgres"
 expect_eq "$(compose_service_resolve_redeploy_target admin)" "admin-dashboard" "redeploy alias admin-dashboard"
 expect_eq "$(compose_service_resolve_redeploy_target all)" "" "redeploy all sentinel"
-expect_eq "$(compose_service_resolve_redeploy_target youtube-producer-c)" "youtube-producer-c" "redeploy target youtube-producer-c (main-ap)"
+expect_eq "$(compose_service_resolve_redeploy_target youtube-collector-c)" "youtube-collector" "redeploy alias youtube-collector-c"
+expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtube-collector" "redeploy target youtube-collector"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
     expect_fail "redeploy target rejects retired runtime ${removed}" compose_service_resolve_redeploy_target "${removed}"
 done
 
+for ap_overlay in docker-compose.osaka.yml docker-compose.osaka2.yml docker-compose.seoul.yml; do
+    expect_fail_contains "${ap_overlay} rejects explicit collector redeploy" \
+        "youtube-collector is central-only" \
+        env COMPOSE_FILE="deploy/compose/docker-compose.prod.yml:deploy/compose/${ap_overlay}" \
+        "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" youtube-collector
+    expect_fail_contains "${ap_overlay} rejects topology-unsafe all-service redeploy" \
+        "all-service redeploy is not supported with an AP compose overlay" \
+        env COMPOSE_FILE="deploy/compose/docker-compose.prod.yml:deploy/compose/${ap_overlay}" \
+        "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" all
+done
+
 expect_eq "$(compose_service_resolve_log_target hololive-api)" "hololive-api" "log target hololive-api"
 expect_eq "$(compose_service_resolve_log_target alarm-worker)" "hololive-alarm-worker" "log alias alarm-worker"
-expect_eq "$(compose_service_resolve_log_target youtube-producer)" "youtube-producer" "log target youtube-producer"
-expect_eq "$(compose_service_resolve_log_target youtube-producer-c)" "youtube-producer-c" "log target youtube-producer-c (main-ap)"
+expect_eq "$(compose_service_resolve_log_target youtube-collector)" "youtube-collector" "log target youtube-collector"
+expect_eq "$(compose_service_resolve_log_target youtube-collector-c)" "youtube-collector" "log alias youtube-collector-c"
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler producer dispatcher-go; do
     expect_fail "log target rejects retired runtime ${removed}" compose_service_resolve_log_target "${removed}"
 done
@@ -90,22 +103,22 @@ export SSH_KEY
 trap 'rm -f "${SSH_KEY}"' EXIT
 
 ap_host_load "${ROOT_DIR}" osaka || fail "osaka ap-host conf loads"
-expect_eq "${AP_SERVICES[*]}" "youtube-producer-a" "osaka AP services"
-expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-a" "osaka AP containers"
+expect_eq "${AP_SERVICES[*]}" "youtube-collector-a" "osaka AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-a" "osaka AP containers"
 expect_eq "${AP_PORTS[*]}" "30005" "osaka AP ports"
 expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka.yml" "osaka AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY" "osaka AP deploy approval var"
 
 ap_host_load "${ROOT_DIR}" osaka2 || fail "osaka2 ap-host conf loads"
-expect_eq "${AP_SERVICES[*]}" "youtube-producer-d" "osaka2 AP services"
-expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-d" "osaka2 AP containers"
+expect_eq "${AP_SERVICES[*]}" "youtube-collector-d" "osaka2 AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-d" "osaka2 AP containers"
 expect_eq "${AP_PORTS[*]}" "30035" "osaka2 AP ports"
 expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.osaka2.yml" "osaka2 AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_OSAKA2_ACTIVE_ACTIVE_DEPLOY" "osaka2 AP deploy approval var"
 
 ap_host_load "${ROOT_DIR}" seoul || fail "seoul ap-host conf loads"
-expect_eq "${AP_SERVICES[*]}" "youtube-producer-b" "seoul AP services"
-expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-producer-b" "seoul AP containers"
+expect_eq "${AP_SERVICES[*]}" "youtube-collector-b" "seoul AP services"
+expect_eq "${AP_CONTAINERS[*]}" "hololive-youtube-collector-b" "seoul AP containers"
 expect_eq "${AP_PORTS[*]}" "30015" "seoul AP ports"
 expect_eq "${AP_COMPOSE_FILE}" "deploy/compose/docker-compose.seoul.yml" "seoul AP compose file"
 expect_eq "${AP_APPROVE_DEPLOY_VAR}" "I_APPROVE_SEOUL_ACTIVE_ACTIVE_DEPLOY" "seoul AP deploy approval var"
@@ -122,6 +135,10 @@ pass "ap active-active syncs every Compose helper"
 grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs Iris H3 trust preflight"
 pass "ap active-active syncs Iris H3 trust preflight"
 grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
+grep -Fq 'stop_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap collector cutover stops leftover youtube-producer"
+grep -Fq 'restore_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback restores the recorded youtube-producer state"
+grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback stops collector before restoring producer"
+grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap failed cutover stops collector before restoring producer"
 pass "ap active-active deploy runs Iris H3 trust preflight"
 
 for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
@@ -146,6 +163,10 @@ grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HO
 pass "ap active-active deploy handles token-free prechange transition"
 bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh" \
     || fail "ap deploy propagates the validated Compose release version"
+bash "${ROOT_DIR}/scripts/deploy/lib/youtubejs-node-version_test.sh" \
+    || fail "AP deploy enforces the YouTube.js Node engine contract"
+bash "${ROOT_DIR}/scripts/deploy/lib/retired-producer-cutover_test.sh" \
+    || fail "AP cutover restores only the recorded producer runtime state"
 bash "${ROOT_DIR}/scripts/deploy/source-revision-provenance_test.sh" \
     || fail "image builds and cutovers preserve exact source revision provenance"
 for ap_runtime_script in scripts/deploy/ap-iris-h3-trust-preflight.sh scripts/deploy/ap-completion-check.sh; do
@@ -198,7 +219,7 @@ while IFS= read -r path; do
     [[ -n "${path}" ]] || continue
     [[ -e "${ROOT_DIR}/${path}" ]] || fail "ap active-active files list path exists: ${path}"
     case "${path}" in
-        hololive/hololive-youtube-producer/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
+        hololive/hololive-youtube-collector/go.sum|hololive/hololive-dbtest/go.sum|hololive/hololive-shared/go.sum|shared-go/go.sum|../shared-go/go.sum) ;;
         go.sum|*/go.sum) fail "ap active-active files list excludes unapproved go.sum path: ${path}" ;;
     esac
     case "${path}" in
@@ -256,7 +277,7 @@ chmod +x "${rollback_fixture_root}/bin/ssh"
 AP_ROLLBACK_SSH_CAPTURE="${rollback_capture}" \
 PATH="${rollback_fixture_root}/bin:${PATH}" \
 SSH_KEY="${SSH_KEY}" \
-BACKUP_DIR="backups/seoul-active-active-fixture" \
+BACKUP_DIR="backups/seoul-collector-fixture" \
     "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --dry-run >/dev/null \
     || fail "seoul rollback dry-run emits a backup compose preflight"
 
@@ -272,8 +293,8 @@ grep -Fq "cp \"\$ap_backup_file\" \"\$ap_preflight_file\"" "${rollback_capture}"
     || fail "seoul rollback preflight stages the AP backup"
 grep -Fq "./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet" "${rollback_capture}" \
     || fail "seoul rollback preflight validates the staged compose pair"
-grep -Fq "test -r 'backups/seoul-active-active-fixture/rollback-image-tag'" "${rollback_capture}" \
-    || fail "seoul rollback preflight requires the preserved image tag artifact"
+grep -Fq "if [[ -r 'backups/seoul-collector-fixture/rollback-image-tag' ]]" "${rollback_capture}" \
+    || fail "seoul rollback preflight inspects the preserved image tag artifact"
 grep -Fq 'sudo -n docker image inspect "$rollback_image_tag"' "${rollback_capture}" \
     || fail "seoul rollback preflight verifies the preserved image exists"
 grep -Fq 'up -d --no-build --no-deps' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" \

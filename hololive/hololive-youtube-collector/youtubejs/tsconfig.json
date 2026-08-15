@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "types": ["node"],
+    "maxNodeModuleJsDepth": 0
+  },
+  "include": [
+    "src/contracts.d.ts",
+    "src/rpc-boundary.mjs",
+    "src/rpc-validation.mjs",
+    "src/server.mjs",
+    "src/real-fetchers.mjs",
+    "src/upstream-feeds.d.ts",
+    "src/fetch-community.d.mts",
+    "src/fetch-content.d.mts",
+    "src/fetch-channel.d.mts",
+    "src/fetch-viewer.d.mts"
+  ]
+}

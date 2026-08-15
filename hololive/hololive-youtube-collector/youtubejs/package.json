@@ -1,0 +1,22 @@
+{
+  "name": "hololive-youtube-collector-youtubejs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "test": "node --test src/*.test.mjs",
+    "start": "node src/server.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p jsconfig.json"
+  },
+  "dependencies": {
+    "undici": "8.10.0",
+    "youtubei.js": "18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "typescript": "7.0.2"
+  }
+}

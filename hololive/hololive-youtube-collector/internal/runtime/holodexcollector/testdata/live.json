@@ -1,0 +1,45 @@
+[
+  {
+    "id": "vidLive01",
+    "title": "Live now",
+    "channel_id": "UC_A",
+    "status": "live",
+    "start_scheduled": "2026-08-14T10:00:00Z",
+    "start_actual": "2026-08-14T10:01:00Z",
+    "live_viewers": 123,
+    "channel": {
+      "id": "UC_A",
+      "photo": "https://img.test/a.jpg",
+      "subscriber_count": 10,
+      "video_count": 3,
+      "name": "A"
+    }
+  },
+  {
+    "id": "vidSoon02",
+    "title": "Soon",
+    "channel_id": "UC_B",
+    "status": "upcoming",
+    "start_scheduled": "2026-08-14T12:00:00Z",
+    "live_viewers": null,
+    "channel": {
+      "id": "UC_B",
+      "photo": "https://img.test/b.jpg",
+      "name": "B"
+    }
+  },
+  {
+    "id": "vidHide03",
+    "title": "Hidden",
+    "channel_id": "UC_A",
+    "status": "live",
+    "start_scheduled": "2026-08-14T09:00:00Z",
+    "start_actual": "2026-08-14T09:00:00Z",
+    "live_viewers": null,
+    "channel": {
+      "id": "UC_A",
+      "photo": "https://img.test/a.jpg",
+      "name": "A"
+    }
+  }
+]

@@ -7,7 +7,8 @@ if [[ -d "${ROOT_DIR}/shared-go" ]]; then SHARED_GO_DIR="${ROOT_DIR}/shared-go";
 
 mapfile -t generic_dirs < <(
     find "${ROOT_DIR}/hololive" "${SHARED_GO_DIR}" \
-        -type d \( -name core -o -name servicecore \) \
+        \( -name node_modules -o -name vendor -o -name dist -o -name .git \) -prune -o \
+        -type d \( -name core -o -name servicecore \) -print \
         | sed "s#^${ROOT_DIR}/##" \
         | sort
 )

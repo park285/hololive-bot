@@ -50,7 +50,6 @@ type Service struct {
 	cache           cache.Client
 	targetPolicy    sharedchecker.TargetMinutePolicy
 	targetMinutesMu sync.RWMutex
-	fallback        *LocalFallback
 	logger          *slog.Logger
 }
 
@@ -62,7 +61,6 @@ func NewService(c cache.Client, targetMinutes []int, logger *slog.Logger) *Servi
 	return &Service{
 		cache:        c,
 		targetPolicy: sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
-		fallback:     NewLocalFallback(logger),
 		logger:       logger,
 	}
 }
@@ -75,15 +73,15 @@ func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
 	s.targetPolicy = sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes))
 }
 
-// tryClaimKey: SETNX 기반 키 선점 (Valkey 장애 시 로컬 폴백)
+// tryClaimKey: SETNX 기반 키 선점 (Valkey 장애 시 fail-closed)
 func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration) bool {
 	acquired, err := s.cache.SetNX(ctx, key, "1", ttl)
 	if err != nil {
-		s.logger.Debug("dedup claim fallback",
+		s.logger.Warn("dedup claim setnx failed",
 			slog.String("claim_key_token", privacylog.Pseudonym(key)),
 			slog.String("error", err.Error()),
 		)
-		return s.fallback.TryClaimOnOutage(key, ttl, err)
+		return false
 	}
 	s.logger.Debug("dedup claim result",
 		slog.String("claim_key_token", privacylog.Pseudonym(key)),

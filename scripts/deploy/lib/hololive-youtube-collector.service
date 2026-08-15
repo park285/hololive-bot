@@ -1,0 +1,32 @@
+[Unit]
+Description=Hololive youtube-collector AP (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hololive
+Group=opc
+WorkingDirectory=/opt/hololive-bot/youtube-collector/current
+EnvironmentFile=-/etc/stack-secrets/hololive-bot/compose.env
+EnvironmentFile=-/etc/stack-secrets/hololive-bot/youtube-collector.env
+EnvironmentFile=-/etc/hololive-bot/youtube-collector-host.env
+Environment=YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true
+Environment=YOUTUBE_INGESTION_ENABLED=true
+Environment=PHOTO_SYNC_ENABLED=false
+Environment=YOUTUBEJS_SCRIPT=/opt/hololive-bot/youtube-collector/current/youtubejs/src/server.mjs
+Environment=POSTGRES_USER=hololive_scraper
+ExecStart=/opt/hololive-bot/youtube-collector/current/bin/youtube-collector
+Restart=always
+RestartSec=5s
+TimeoutStopSec=30s
+MemoryMax=768M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/hololive-bot /tmp
+ReadWritePaths=/var/lib/hololive-bot
+
+[Install]
+WantedBy=multi-user.target

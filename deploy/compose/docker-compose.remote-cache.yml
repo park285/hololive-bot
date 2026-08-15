@@ -13,12 +13,12 @@ services:
       cache_to:
         - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-alarm-worker-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
 
-  youtube-producer:
+  youtube-collector:
     build:
       cache_from:
-        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-youtube-producer-buildcache:buildcache
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-youtube-collector-buildcache:buildcache
       cache_to:
-        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-youtube-producer-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-youtube-collector-buildcache:buildcache,mode=min,image-manifest=true,oci-mediatypes=true
 
   admin-dashboard:
     build:

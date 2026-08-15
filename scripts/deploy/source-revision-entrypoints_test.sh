@@ -81,6 +81,9 @@ if [[ "${1:-}" == compose && "${2:-}" == version ]]; then
     exit 0
 fi
 if [[ "${1:-}" == compose ]]; then
+    if [[ " $* " == *" run --rm --no-deps hololive-api --check-config "* ]]; then
+        exit "${FAKE_CONFIG_CHECK_STATUS:-0}"
+    fi
     if [[ " $* " == *" ps -q "* ]]; then
         printf '%b' "${FAKE_COMPOSE_IDS:-container-one\n}"
     fi
@@ -217,13 +220,25 @@ if grep -Eq ' compose .* up ' "${docker_log}"; then
 fi
 
 : >"${docker_log}"
+if env "${common_env[@]}" FAKE_REVISION_LABEL="${revision}" FAKE_CONFIG_CHECK_STATUS=1 \
+    bash "${repo}/build-all.sh" --no-bump --skip-local-ci >/dev/null 2>&1; then
+    fail "build-all live mode must reject an invalid built runtime configuration"
+fi
+grep -Eq ' compose .* run --rm --no-deps hololive-api --check-config' "${docker_log}" \
+    || fail "build-all must run the built runtime config preflight"
+if grep -Eq ' compose .* up ' "${docker_log}"; then
+    fail "runtime config failure must stop before cutover up"
+fi
+
+: >"${docker_log}"
 env "${common_env[@]}" FAKE_REVISION_LABEL="${revision}" \
     bash "${repo}/build-all.sh" --no-bump --skip-local-ci >/dev/null \
     || fail "build-all --no-bump full cutover must accept exact built and live revisions"
 built_line="$(grep -n ' image inspect ' "${docker_log}" | tail -n1 | cut -d: -f1)"
+config_line="$(grep -n ' compose .* run --rm --no-deps hololive-api --check-config' "${docker_log}" | tail -n1 | cut -d: -f1)"
 up_line="$(grep -nE ' compose .* up -d ' "${docker_log}" | tail -n1 | cut -d: -f1)"
 live_line="$(grep -n ' container inspect ' "${docker_log}" | head -n1 | cut -d: -f1)"
-[[ "${built_line}" -lt "${up_line}" && "${up_line}" -lt "${live_line}" ]] \
-    || fail "build-all revision verification ordering must be build-image, up, live-container"
+[[ "${built_line}" -lt "${config_line}" && "${config_line}" -lt "${up_line}" && "${up_line}" -lt "${live_line}" ]] \
+    || fail "build-all ordering must be build-image, config-check, up, live-container"
 
 echo "all production revision entrypoint fixtures passed"

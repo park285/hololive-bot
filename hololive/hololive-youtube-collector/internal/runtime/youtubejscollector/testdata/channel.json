@@ -1,0 +1,15 @@
+{
+  "live_sessions": [
+    {"video_id": "live-b", "channel_id": "UC_TEST", "status": "UPCOMING"},
+    {"video_id": "live-a", "channel_id": "UC_TEST", "status": "LIVE"}
+  ],
+  "stats": {"subscriber_count": 12, "video_count": 4},
+  "profile": {"handle": "@test", "description": "hello"},
+  "photo": [
+    {"kind": "banner", "url": "https://img.test/b.jpg", "width": 100, "height": 20},
+    {"kind": "avatar", "url": "https://img.test/a.jpg", "width": 88, "height": 88}
+  ],
+  "page_count": 1,
+  "exhausted": true,
+  "continuity": "CONTIGUOUS"
+}

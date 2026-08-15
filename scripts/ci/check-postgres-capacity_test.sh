@@ -7,7 +7,7 @@ trap 'rm -rf "${tmp}"' EXIT
 
 "${root}/scripts/ci/check-postgres-capacity.sh" >/dev/null
 cp "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/policy.tsv"
-sed -i '/^youtube-producer|/d' "${tmp}/policy.tsv"
+sed -i '/^youtube-collector|/d' "${tmp}/policy.tsv"
 if "${root}/scripts/ci/check-postgres-capacity.sh" "${root}/deploy/compose/docker-compose.prod.yml" "${tmp}/policy.tsv" >"${tmp}/out" 2>&1; then
 	echo "capacity gate accepted an incomplete AP inventory" >&2
 	exit 1
@@ -26,34 +26,34 @@ grep -q 'connection budget exhausted' "${tmp}/out"
 
 cat >"${tmp}/safe.env" <<'ENV'
 BOT_POSTGRES_POOL_MAX_CONNS=3
-YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS=8
+YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=8
 ENV
 "${root}/scripts/ci/check-postgres-capacity.sh" \
   "${root}/deploy/compose/docker-compose.prod.yml" \
   "${root}/scripts/ci/postgres-capacity-policy.tsv" \
   "${tmp}/safe.env" >"${tmp}/out"
 grep -q "source=target-env:${tmp}/safe.env" "${tmp}/out"
-grep -q 'allocated=52 reserve=8' "${tmp}/out"
+grep -q 'allocated=54 reserve=6' "${tmp}/out"
 "${root}/scripts/ci/check-postgres-capacity.sh" \
   "${root}/deploy/compose/docker-compose.prod.yml" \
   "${root}/scripts/ci/postgres-capacity-policy.tsv" \
   "${tmp}/safe.env" --target-env-only >"${tmp}/out"
-grep -q 'allocated=52 reserve=8' "${tmp}/out"
+grep -q 'allocated=54 reserve=6' "${tmp}/out"
 
 : >"${tmp}/default.env"
 if "${root}/scripts/ci/check-postgres-capacity.sh" \
   "${root}/deploy/compose/docker-compose.prod.yml" \
   "${root}/scripts/ci/postgres-capacity-policy.tsv" \
   "${tmp}/default.env" --target-env-only \
-  --scale=youtube-producer=2 >"${tmp}/out" 2>&1; then
+  --scale=youtube-collector=2 >"${tmp}/out" 2>&1; then
 	echo "capacity gate accepted producer scale 2 above the server budget" >&2
 	exit 1
 fi
-grep -q 'max=60 allocated=61 reserve=-1' "${tmp}/out"
+grep -q 'max=60 allocated=63 reserve=-3' "${tmp}/out"
 
 for invalid_scale in \
-  '--scale=youtube-producer' \
-  '--scale=youtube-producer=two' \
+  '--scale=youtube-collector' \
+  '--scale=youtube-collector=two' \
   '--scale=unknown-service=2'; do
 	if "${root}/scripts/ci/check-postgres-capacity.sh" \
 	  "${root}/deploy/compose/docker-compose.prod.yml" \
@@ -89,7 +89,7 @@ fi
 grep -q 'shared by multiple independently rendered instances' "${tmp}/out"
 
 cat >"${tmp}/heterogeneous-ap.env" <<'ENV'
-YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS=7
+YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=7
 ENV
 if "${root}/scripts/ci/check-postgres-capacity.sh" \
   "${root}/deploy/compose/docker-compose.prod.yml" \
@@ -99,7 +99,7 @@ if "${root}/scripts/ci/check-postgres-capacity.sh" \
 	exit 1
 fi
 grep -q 'shared by multiple independently rendered instances' "${tmp}/out"
-if grep -q 'YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS=7' "${tmp}/out"; then
+if grep -q 'YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=7' "${tmp}/out"; then
 	echo "capacity gate disclosed the rejected target value" >&2
 	exit 1
 fi
@@ -122,7 +122,7 @@ fi
 
 cat >"${tmp}/unsafe.env" <<'ENV'
 BOT_POSTGRES_POOL_MAX_CONNS=50
-YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS=8
+YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=8
 ENV
 if "${root}/scripts/ci/check-postgres-capacity.sh" \
   "${root}/deploy/compose/docker-compose.prod.yml" \

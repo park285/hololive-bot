@@ -48,7 +48,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 
 ## Must not own
 
-- YouTube scraping/outbox production, owned by `youtube-producer`
+- YouTube collection, owned by `youtube-collector`
+- YouTube canonical persist and notification intent, owned by `hololive-api` YouTube plane
 - Kakao command parsing, owned by `bot`
 - LLM summary generation, owned by `llm-scheduler`
 

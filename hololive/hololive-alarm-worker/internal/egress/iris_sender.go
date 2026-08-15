@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/shared-go/pkg/kakaoformat"
 )
 
 type IrisClient interface {
@@ -36,9 +37,14 @@ func (a irisSenderAdapter) SendKaringContentList(ctx context.Context, req *iris.
 	return a.client.SendKaringContentList(ctx, *req)
 }
 
+type RoomChat interface {
+	OpenChat(ctx context.Context, roomID string) bool
+}
+
 type IrisMessageSender struct {
 	client          IrisSender
 	markdownReplies bool
+	rooms           RoomChat
 }
 
 type IrisMessageSenderOption func(*IrisMessageSender)
@@ -46,6 +52,12 @@ type IrisMessageSenderOption func(*IrisMessageSender)
 func WithMarkdownReplies(enabled bool) IrisMessageSenderOption {
 	return func(s *IrisMessageSender) {
 		s.markdownReplies = enabled
+	}
+}
+
+func WithRoomChat(rooms RoomChat) IrisMessageSenderOption {
+	return func(s *IrisMessageSender) {
+		s.rooms = rooms
 	}
 }
 
@@ -73,16 +85,28 @@ func resolveIrisSender(client any) IrisSender {
 }
 
 func (s *IrisMessageSender) send(ctx context.Context, roomID, message string, opts ...iris.SendOption) error {
-	if s.markdownReplies {
+	if s.useMarkdown(ctx, roomID) {
 		if _, err := s.client.SendMarkdown(ctx, roomID, message, opts...); err != nil {
 			return fmt.Errorf("iris send message: %w", err)
 		}
 		return nil
 	}
+	message = kakaoformat.Render(message)
 	if err := s.client.SendMessage(ctx, roomID, message, opts...); err != nil {
 		return fmt.Errorf("iris send message: %w", err)
 	}
 	return nil
+}
+
+func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool {
+	if s == nil || !s.markdownReplies {
+		return false
+	}
+	if s.rooms == nil {
+		return false
+	}
+
+	return s.rooms.OpenChat(ctx, roomID)
 }
 
 func (s *IrisMessageSender) SendMessage(ctx context.Context, roomID, message string) error {

@@ -100,7 +100,7 @@ COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh \
   -f deploy/compose/docker-compose.live-compat.yml \
   -f deploy/compose/docker-compose.main-ap.yml \
   -f deploy/compose/docker-compose.main-ap.live-compat.yml \
-  up -d --no-deps youtube-producer-c
+  up -d --no-deps youtube-collector-c
 ```
 
 ### 4. 수용 증거
@@ -132,7 +132,7 @@ Current Go runtime services:
 
 - `hololive-api`
 - `hololive-alarm-worker`
-- `youtube-producer-c` on the main host; `youtube-producer-b` uses the AP host wrapper.
+- `youtube-collector-c` on the main host; `youtube-collector-b` uses the AP host wrapper.
 
 ## 필수 검사
 
@@ -215,7 +215,7 @@ Equivalent manual checks:
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml exec -T youtube-producer-c ./bin/healthcheck https://127.0.0.1:30025/health
+COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml exec -T youtube-collector-c ./bin/healthcheck https://127.0.0.1:30025/health
 ```
 
 ## 관련 문서

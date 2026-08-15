@@ -157,7 +157,7 @@ def sql_asset_files() -> list[Path]:
 
 def allowed_sql_asset(path: Path) -> bool:
     parts = path.relative_to(ROOT).parts
-    if "queries" in parts:
+    if "queries" in parts or "testqueries" in parts:
         return True
     if parts[:4] == ("hololive", "hololive-api", "scripts", "migrations"):
         return True

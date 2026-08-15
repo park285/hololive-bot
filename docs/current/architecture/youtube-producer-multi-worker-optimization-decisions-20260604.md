@@ -1,16 +1,18 @@
 # YouTube Producer Active-Active 다중 워커 최적화 코드레벨 결정서
 
+> Historical 2026-06-04 snapshot. Current collector fleet identity is `youtube-collector` a/b/c/d. `hololive-youtube-producer` is a retired module name.
+
 작성일: 2026-06-04 KST
 대상 저장소: `park285/hololive-bot`
 대상 런타임: `hololive-youtube-producer`
-대상 인스턴스: `youtube-producer-a`, `youtube-producer-b`, `youtube-producer-c`; staged 확장 인스턴스 `youtube-producer-d`
+대상 인스턴스: `youtube-collector-a`, `youtube-collector-b`, `youtube-collector-c`; staged 확장 인스턴스 `youtube-collector-d`
 상태: 구현 작업 가능 기준 문서.
 
 ---
 
 ## 1. 이 문서의 목적
 
-현재 `youtube-producer`는 Seoul의 `youtube-producer-b`, main host의 `youtube-producer-c`가 active-active로 실행되고, Osaka의 `youtube-producer-a`와 Osaka2의 `youtube-producer-d`가 repo-side 확장 대상으로 준비된 구조입니다.
+현재 `youtube-producer`는 Seoul의 `youtube-collector-b`, main host의 `youtube-collector-c`가 active-active로 실행되고, Osaka의 `youtube-collector-a`와 Osaka2의 `youtube-collector-d`가 repo-side 확장 대상으로 준비된 구조입니다.
 
 현재 구조는 이미 다음을 갖고 있습니다.
 
@@ -97,17 +99,17 @@ hololive/hololive-shared/pkg/config/internal/settings/config_env_loaders.go
 
 | 인스턴스 | 위치 | 포트 | 역할 | PhotoSync |
 |---|---:|---:|---|---|
-| `youtube-producer-a` | Osaka | `30005` | staged scraping/polling active-active AP | 참여 |
-| `youtube-producer-b` | Seoul | `30015` | scraping/polling active-active AP | 미참여 |
-| `youtube-producer-c` | main host | `30025` | scraping/polling active-active AP | 참여 |
-| `youtube-producer-d` | Osaka2 | `30035` | staged scraping/polling active-active AP | 미참여 |
+| `youtube-collector-a` | Osaka | `30005` | staged scraping/polling active-active AP | 참여 |
+| `youtube-collector-b` | Seoul | `30015` | scraping/polling active-active AP | 미참여 |
+| `youtube-collector-c` | main host | `30025` | scraping/polling active-active AP | 참여 |
+| `youtube-collector-d` | Osaka2 | `30035` | staged scraping/polling active-active AP | 미참여 |
 
 공통 요구사항은 다음입니다.
 
 ```text
-YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true
+YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true
 YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true
-YOUTUBE_PRODUCER_INSTANCE_ID=<unique instance id>
+YOUTUBE_COLLECTOR_INSTANCE_ID=<unique instance id>
 YOUTUBE_PRODUCER_LEASE_NAMESPACE=production
 SCRAPER_SCHEDULER_WORKER_COUNT=<per AP worker count>
 ```
@@ -414,7 +416,7 @@ burst_inflight <= source별 허용 in-flight
 새 validator는 다음 위치에 추가합니다.
 
 ```text
-hololive/hololive-youtube-producer/internal/runtime/polling/budget_validator.go
+hololive/hololive-youtube-collector/internal/runtime/polling/budget_validator.go
 ```
 
 기존 `validateYouTubeProducerPollerBudget`는 이 validator로 위임합니다.
@@ -1096,9 +1098,9 @@ Phase 3:
 ```text
 Create:
   hololive/hololive-shared/pkg/service/youtube/poller/internal/budget.go
-  hololive/hololive-youtube-producer/internal/runtime/polling/budget_validator.go
-  hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter.go
-  hololive/hololive-youtube-producer/internal/runtime/polling/global_budget_limiter_test.go
+  hololive/hololive-youtube-collector/internal/runtime/polling/budget_validator.go
+  hololive/hololive-youtube-collector/internal/runtime/polling/global_budget_limiter.go
+  hololive/hololive-youtube-collector/internal/runtime/polling/global_budget_limiter_test.go
 
 Modify:
   hololive/hololive-shared/pkg/service/youtube/poller/poller.go
@@ -1111,17 +1113,17 @@ Modify:
   hololive/hololive-shared/pkg/providers/youtube_providers.go
   hololive/hololive-shared/pkg/config/internal/settings/config_youtube.go
   hololive/hololive-shared/pkg/config/internal/settings/config_env_loaders.go
-  hololive/hololive-youtube-producer/internal/runtime/polling/api.go
-  hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_budget.go
-  hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_components.go
-  hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations.go
-  hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations_test.go
-  hololive/hololive-youtube-producer/internal/runtime/publishedat/published_at_resolver_builder.go
-  hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_runtime_readiness.go
-  hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_runtime_readiness_test.go
-  hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/bootstrap_youtube_producer_youtube.go
-  hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/readiness_job_claimer.go
-  hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/readiness_job_claimer_test.go
+  hololive/hololive-youtube-collector/internal/runtime/polling/api.go
+  hololive/hololive-youtube-collector/internal/runtime/polling/youtube_producer_budget.go
+  hololive/hololive-youtube-collector/internal/runtime/polling/youtube_producer_components.go
+  hololive/hololive-youtube-collector/internal/runtime/polling/youtube_producer_poller_registrations.go
+  hololive/hololive-youtube-collector/internal/runtime/polling/youtube_producer_poller_registrations_test.go
+  hololive/hololive-youtube-collector/internal/runtime/publishedat/published_at_resolver_builder.go
+  hololive/hololive-youtube-collector/internal/runtime/readiness/ingestion_runtime_readiness.go
+  hololive/hololive-youtube-collector/internal/runtime/readiness/ingestion_runtime_readiness_test.go
+  hololive/hololive-youtube-collector/internal/runtime/internal/producerruntime/bootstrap_youtube_producer_youtube.go
+  hololive/hololive-youtube-collector/internal/runtime/internal/producerruntime/readiness_job_claimer.go
+  hololive/hololive-youtube-collector/internal/runtime/internal/producerruntime/readiness_job_claimer_test.go
 ```
 
 ### 작업 체크리스트
@@ -1148,10 +1150,10 @@ Modify:
 ```bash
 go test ./hololive/hololive-shared/pkg/service/youtube/poller/internal -run 'TestScheduler|TestJobClaim|TestRunJobClaim|TestBudget|TestMetrics'
 go test ./hololive/hololive-shared/pkg/providers -run 'Test.*Scheduler|Test.*Budget'
-go test ./hololive/hololive-youtube-producer/internal/runtime/polling -run 'Test.*Budget|Test.*Registration|Test.*Backfill'
-go test ./hololive/hololive-youtube-producer/internal/runtime/publishedat -run 'Test.*Registration|Test.*Resolver'
-go test ./hololive/hololive-youtube-producer/internal/runtime/readiness -run 'TestStateResponse|Test.*Readiness'
-go test ./hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime -run 'Test.*Readiness|Test.*Build.*YouTube'
+go test ./hololive/hololive-youtube-collector/internal/runtime/polling -run 'Test.*Budget|Test.*Registration|Test.*Backfill'
+go test ./hololive/hololive-youtube-collector/internal/runtime/publishedat -run 'Test.*Registration|Test.*Resolver'
+go test ./hololive/hololive-youtube-collector/internal/runtime/readiness -run 'TestStateResponse|Test.*Readiness'
+go test ./hololive/hololive-youtube-collector/internal/runtime/internal/producerruntime -run 'Test.*Readiness|Test.*Build.*YouTube'
 ```
 
 ### Phase 1 성공 기준
@@ -1180,7 +1182,7 @@ hololive/hololive-shared/pkg/service/youtube/poller/internal/scheduler_worker.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/live_poller.go
 hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers/live_poller_test.go
 hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider/service_channels_live.go
-hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations.go
+hololive/hololive-youtube-collector/internal/runtime/polling/youtube_producer_poller_registrations.go
 ```
 
 ### 작업
@@ -1211,7 +1213,7 @@ hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_pol
 go test ./hololive/hololive-shared/pkg/service/youtube/poller/internal -run 'Test.*Batch|TestScheduler.*Batch|TestJobClaim|TestRunJobClaim'
 go test ./hololive/hololive-shared/pkg/service/youtube/poller/internal/pollers -run 'TestLivePoller.*Batch|TestLivePoller'
 go test ./hololive/hololive-shared/pkg/service/holodex/internal/holodexprovider -run 'TestGetChannelsLiveStatus'
-go test ./hololive/hololive-youtube-producer/internal/runtime/polling -run 'Test.*Registration|Test.*Budget'
+go test ./hololive/hololive-youtube-collector/internal/runtime/polling -run 'Test.*Registration|Test.*Budget'
 ```
 
 ---
@@ -1223,10 +1225,10 @@ go test ./hololive/hololive-youtube-producer/internal/runtime/polling -run 'Test
 ```text
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client.go
 hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping/client_http.go
-hololive/hololive-youtube-producer/internal/runtime/polling/source_cooldown.go
-hololive/hololive-youtube-producer/internal/runtime/polling/source_cooldown_test.go
-hololive/hololive-youtube-producer/internal/runtime/polling/youtube_producer_poller_registrations.go
-hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_runtime_readiness.go
+hololive/hololive-youtube-collector/internal/runtime/polling/source_cooldown.go
+hololive/hololive-youtube-collector/internal/runtime/polling/source_cooldown_test.go
+hololive/hololive-youtube-collector/internal/runtime/polling/youtube_producer_poller_registrations.go
+hololive/hololive-youtube-collector/internal/runtime/readiness/ingestion_runtime_readiness.go
 ```
 
 ### 작업
@@ -1250,8 +1252,8 @@ hololive/hololive-youtube-producer/internal/runtime/readiness/ingestion_runtime_
 
 ```bash
 go test ./hololive/hololive-shared/pkg/service/youtube/scraper/internal/scraping -run 'Test.*Cooldown|Test.*RateLimited|Test.*Forbidden|Test.*Parser'
-go test ./hololive/hololive-youtube-producer/internal/runtime/polling -run 'Test.*Cooldown|Test.*Backfill|Test.*Budget'
-go test ./hololive/hololive-youtube-producer/internal/runtime/readiness -run 'TestStateResponse|Test.*Readiness'
+go test ./hololive/hololive-youtube-collector/internal/runtime/polling -run 'Test.*Cooldown|Test.*Backfill|Test.*Budget'
+go test ./hololive/hololive-youtube-collector/internal/runtime/readiness -run 'TestStateResponse|Test.*Readiness'
 ```
 
 ---
@@ -1263,16 +1265,16 @@ go test ./hololive/hololive-youtube-producer/internal/runtime/readiness -run 'Te
 ```bash
 go test ./hololive/hololive-shared/pkg/service/youtube/poller/internal/...
 go test ./hololive/hololive-shared/pkg/providers/...
-go test ./hololive/hololive-youtube-producer/internal/runtime/polling/...
-go test ./hololive/hololive-youtube-producer/internal/runtime/readiness/...
-go test ./hololive/hololive-youtube-producer/internal/runtime/internal/producerruntime/...
+go test ./hololive/hololive-youtube-collector/internal/runtime/polling/...
+go test ./hololive/hololive-youtube-collector/internal/runtime/readiness/...
+go test ./hololive/hololive-youtube-collector/internal/runtime/internal/producerruntime/...
 ```
 
 release 후보 검증:
 
 ```bash
-go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-youtube-producer/...
-go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-youtube-producer/...
+go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-youtube-collector/...
+go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-youtube-collector/...
 ```
 
 다음 조건에서는 구현을 중단하고 문서를 먼저 갱신합니다.

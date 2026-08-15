@@ -1,0 +1,79 @@
+{
+  "profile": "source-observation-canonical-json-v1",
+  "cases": [
+    {
+      "name": "object-order-and-whitespace",
+      "input": " { \"b\" : 2, \"a\" : 1 } ",
+      "canonical": "{\"a\":1,\"b\":2}",
+      "sha256": "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"
+    },
+    {
+      "name": "recursive-order-and-array-stability",
+      "input": "{\"z\":[3e0,{\"b\":\"line\\nfeed\",\"a\":true}],\"a\":null}",
+      "canonical": "{\"a\":null,\"z\":[3,{\"a\":true,\"b\":\"line\\nfeed\"}]}",
+      "sha256": "96b62d756d12b2c8c4206b4a3b6ee7935aee8565f954ff39b92a27aa725bead4"
+    },
+    {
+      "name": "jcs-string-escaping",
+      "input": "{\"html\":\"<>&\",\"escaped\":\"\\u0061\\/b\",\"controls\":\"\\u0000\\b\\t\\n\\f\\r\",\"separators\":\"\\u2028\\u2029\"}",
+      "canonical": "{\"controls\":\"\\u0000\\b\\t\\n\\f\\r\",\"escaped\":\"a/b\",\"html\":\"<>&\",\"separators\":\"  \"}",
+      "sha256": "e105047d5393db7d4b8a02e898ced29f122613b8740b997f7b194864009dacd7"
+    },
+    {
+      "name": "utf16-property-order",
+      "input": "{\"\\uE000\":2,\"\\uD83D\\uDE00\":1,\"a\":0}",
+      "canonical": "{\"a\":0,\"😀\":1,\"\":2}",
+      "sha256": "356bb09cec7ab06ff968a7e17eb81536156726241da02a0b315c0293b5f1a97a"
+    },
+    {
+      "name": "safe-integer-spellings",
+      "input": "[1.0,1e3,-0,9007199254740991,-9007199254740991,1.2300e2]",
+      "canonical": "[1,1000,0,9007199254740991,-9007199254740991,123]",
+      "sha256": "b70ee570aea304e2748c8823ed9e6aa0367db0a807d3e827464d9c8a12fa337d"
+    },
+    {
+      "name": "unicode-preserved-without-normalization",
+      "input": "{\"escaped\":\"caf\\u00e9\",\"literal\":\"café\",\"decomposed\":\"cafe\\u0301\"}",
+      "canonical": "{\"decomposed\":\"café\",\"escaped\":\"café\",\"literal\":\"café\"}",
+      "sha256": "fce97500191c785a6de12b89ebd468963fda5eef459645aa0f2b39e4d2b550e5"
+    }
+  ],
+  "rejections": [
+    {
+      "name": "duplicate-decoded-name",
+      "input": "{\"a\":1,\"\\u0061\":2}"
+    },
+    {
+      "name": "lone-surrogate",
+      "input": "{\"value\":\"\\uD800\"}"
+    },
+    {
+      "name": "fractional-number",
+      "input": "{\"value\":1.5}"
+    },
+    {
+      "name": "fraction-rounded-to-integer-by-ieee754",
+      "input": "{\"value\":9007199254740990.5}"
+    },
+    {
+      "name": "fraction-underflowed-to-zero-by-ieee754",
+      "input": "{\"value\":1e-400}"
+    },
+    {
+      "name": "unsafe-integer",
+      "input": "{\"value\":9007199254740992}"
+    },
+    {
+      "name": "unsafe-negative-integer",
+      "input": "{\"value\":-9007199254740992}"
+    },
+    {
+      "name": "trailing-value",
+      "input": "{} []"
+    },
+    {
+      "name": "depth-overflow",
+      "input": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+    }
+  ]
+}

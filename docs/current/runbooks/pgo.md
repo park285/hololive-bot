@@ -2,7 +2,7 @@
 
 ## 현재 정책
 
-`hololive-api`, `hololive-alarm-worker`, `youtube-producer`, `admin-dashboard`의 production 빌드는 PGO를 사용하지 않습니다.
+`hololive-api`, `hololive-alarm-worker`, `youtube-collector`, `admin-dashboard`의 production 빌드는 PGO를 사용하지 않습니다.
 `scripts/ci/pgo-off-policy.tsv`는 production PGO 정책의 정본이며 `off` 행만 허용하고
 `scripts/ci/check-pgo-default.sh`는 `on` 행을 즉시 거부합니다.
 

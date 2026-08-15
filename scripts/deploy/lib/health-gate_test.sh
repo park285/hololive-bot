@@ -20,7 +20,7 @@ check_app_service() {
     fi
 }
 
-for service in hololive-api hololive-alarm-worker youtube-producer youtube-producer-c admin-dashboard; do
+for service in hololive-api hololive-alarm-worker youtube-collector youtube-collector-c admin-dashboard; do
     check_app_service "${service}"
 done
 

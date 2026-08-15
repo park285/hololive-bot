@@ -934,13 +934,25 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 		assert.Empty(t, threadID)
 	})
 
+	t.Run("regular chat renders unicode on the accepted lane", func(t *testing.T) {
+		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}}}
+		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
+
+		ctx := WithRoomChat(inboundCtx(ctx), "MultiChat", "")
+		require.NoError(t, tr.SendMessage(ctx, "room-reg", "## **hi**"))
+		assert.Equal(t, 1, c.acceptCalls)
+		assert.Equal(t, 0, c.markdownCalls)
+		assert.Equal(t, "【𝗵𝗶】", c.lastMessage)
+	})
+
 	t.Run("disabled flag keeps the accepted lane", func(t *testing.T) {
 		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}}}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(false))
 
-		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room", "hi"))
+		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room", "**hi**"))
 		assert.Equal(t, 1, c.acceptCalls)
 		assert.Equal(t, 0, c.markdownCalls)
+		assert.Equal(t, "𝗵𝗶", c.lastMessage)
 
 		requestID, _ := capturedSendOptions(t, c.lastOpts)
 		assert.Equal(t, wantRequestID, requestID)
@@ -1294,5 +1306,5 @@ func tr(c iris.BotClient) *CommandTransport {
 }
 
 func inboundCtx(ctx context.Context) context.Context {
-	return WithReplyIdentity(ctx, "message:m-1")
+	return WithRoomChat(WithReplyIdentity(ctx, "message:m-1"), "OM", "")
 }

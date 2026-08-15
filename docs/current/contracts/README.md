@@ -1,6 +1,6 @@
 # Current Contracts
 
-이 디렉터리는 current service-to-service 계약 문서의 진입점입니다.
+이 디렉터리는 current service-to-service 및 외부 source 계약 문서의 진입점입니다.
 
 ## Stable Contract IDs
 
@@ -27,10 +27,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `shortlink.md` - fixed-target YouTube short-link route, scraper rejection, and alarm rendering contract
 - `settings.md` - settings/config update Pub/Sub
 - `iris-boundary.md` - Iris external boundary
-
-## Observed External API References
-
-- `schedule-hololive-tv-api.md` - `schedule.hololive.tv`의 미문서 `/api/list[/{group}]` 사용법 맵, group inventory, 관찰 schema. 현재 저장소 contract ID나 consumer를 추가하지 않음
+- `schedule-hololive-tv-api.md` - Official Schedule API request, mapping, fallback ownership, live non-goal, cache, and observability contract
 
 ## Update Rules
 
@@ -43,6 +40,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 | Queue key/envelope/retry/DLQ | `../CONTRACT_MAP.md`, `alarm.md`, `../QUEUE_AND_PUBSUB_CONTRACTS.md` |
 | Pub/Sub channel/type/payload | `../CONTRACT_MAP.md`, `settings.md`, `../QUEUE_AND_PUBSUB_CONTRACTS.md` |
 | External Iris transport or auth | `../CONTRACT_MAP.md`, `iris-boundary.md`, affected runbook |
+| External schedule source request/schema/ownership | `schedule-hololive-tv-api.md`, affected provider tests and runbook |
 
 ## Version Policy
 

@@ -28,10 +28,11 @@ import (
 var tracingEnabledEnvKeys = []string{
 	tracingHololiveAPIEnabledEnv,
 	tracingAlarmWorkerEnabledEnv,
-	tracingYouTubeProducerAEnabledEnv,
-	tracingYouTubeProducerBEnabledEnv,
-	tracingYouTubeProducerCEnabledEnv,
-	tracingYouTubeProducerDEnabledEnv,
+	tracingYouTubeCollectorAEnabledEnv,
+	tracingYouTubeCollectorBEnabledEnv,
+	tracingYouTubeCollectorCEnabledEnv,
+	tracingYouTubeCollectorDEnabledEnv,
+	tracingYouTubeCollectorEnabledEnv,
 }
 
 func clearTracingEnv(t *testing.T) {
@@ -71,17 +72,18 @@ func TestLoadTracingConfigDefaultsDisabled(t *testing.T) {
 
 func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 	tests := []struct {
-		name               string
-		runtime            tracingRuntime
-		producerInstanceID string
-		selectedEnv        string
+		name                string
+		runtime             tracingRuntime
+		collectorInstanceID string
+		selectedEnv         string
 	}{
 		{name: "hololive api", runtime: tracingRuntimeHololiveAPI, selectedEnv: tracingHololiveAPIEnabledEnv},
 		{name: "alarm worker", runtime: tracingRuntimeAlarmWorker, selectedEnv: tracingAlarmWorkerEnabledEnv},
-		{name: "youtube producer a", runtime: tracingRuntimeYouTubeProducer, producerInstanceID: "a", selectedEnv: tracingYouTubeProducerAEnabledEnv},
-		{name: "youtube producer b", runtime: tracingRuntimeYouTubeProducer, producerInstanceID: "b", selectedEnv: tracingYouTubeProducerBEnabledEnv},
-		{name: "youtube producer c", runtime: tracingRuntimeYouTubeProducer, producerInstanceID: "c", selectedEnv: tracingYouTubeProducerCEnabledEnv},
-		{name: "youtube producer d", runtime: tracingRuntimeYouTubeProducer, producerInstanceID: "d", selectedEnv: tracingYouTubeProducerDEnabledEnv},
+		{name: "youtube collector a", runtime: tracingRuntimeYouTubeCollector, collectorInstanceID: "a", selectedEnv: tracingYouTubeCollectorAEnabledEnv},
+		{name: "youtube collector b", runtime: tracingRuntimeYouTubeCollector, collectorInstanceID: "b", selectedEnv: tracingYouTubeCollectorBEnabledEnv},
+		{name: "youtube collector c", runtime: tracingRuntimeYouTubeCollector, collectorInstanceID: "c", selectedEnv: tracingYouTubeCollectorCEnabledEnv},
+		{name: "youtube collector d", runtime: tracingRuntimeYouTubeCollector, collectorInstanceID: "d", selectedEnv: tracingYouTubeCollectorDEnabledEnv},
+		{name: "youtube collector default", runtime: tracingRuntimeYouTubeCollector, selectedEnv: tracingYouTubeCollectorEnabledEnv},
 	}
 
 	for _, tt := range tests {
@@ -94,7 +96,7 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 			t.Setenv("OTEL_ENABLED", "true")
 			t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", " otel-collector:4317 ")
 
-			config, err := loadTracingConfig(tt.runtime, tt.producerInstanceID)
+			config, err := loadTracingConfig(tt.runtime, tt.collectorInstanceID)
 			if err != nil {
 				t.Fatalf("loadTracingConfig() error = %v", err)
 			}
@@ -108,28 +110,27 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 	}
 }
 
-func TestLoadTracingConfigRejectsUnknownProducerInstance(t *testing.T) {
+func TestLoadTracingConfigRejectsUnknownCollectorInstance(t *testing.T) {
 	clearTracingEnv(t)
 	for _, key := range tracingEnabledEnvKeys {
 		t.Setenv(key, "true")
 	}
 	t.Setenv("OTEL_ENABLED", "true")
 
-	_, err := loadTracingConfig(tracingRuntimeYouTubeProducer, "unknown")
-	if err == nil || !strings.Contains(err.Error(), "YOUTUBE_PRODUCER_INSTANCE_ID") {
+	_, err := loadTracingConfig(tracingRuntimeYouTubeCollector, "unknown")
+	if err == nil || !strings.Contains(err.Error(), "YOUTUBE_COLLECTOR_INSTANCE_ID") {
 		t.Fatalf("loadTracingConfig() error = %v, want instance ID validation error", err)
 	}
 }
 
-func TestLoadTracingConfigAllowsDisabledUnknownProducerInstance(t *testing.T) {
+func TestLoadTracingConfigAllowsDisabledUnknownCollectorInstance(t *testing.T) {
 	tests := []struct {
 		name       string
 		instanceID string
 		setFlags   bool
 	}{
 		{name: "empty instance and unset flags"},
-		{name: "legacy instance and false flags", instanceID: "legacy-producer", setFlags: true},
-		{name: "unknown instance and false flags", instanceID: "youtube-producer-legacy", setFlags: true},
+		{name: "unknown instance and false flags", instanceID: "youtube-collector-legacy", setFlags: true},
 	}
 
 	for _, tt := range tests {
@@ -141,7 +142,7 @@ func TestLoadTracingConfigAllowsDisabledUnknownProducerInstance(t *testing.T) {
 				}
 			}
 
-			config, err := loadTracingConfig(tracingRuntimeYouTubeProducer, tt.instanceID)
+			config, err := loadTracingConfig(tracingRuntimeYouTubeCollector, tt.instanceID)
 			if err != nil {
 				t.Fatalf("loadTracingConfig() error = %v, want nil", err)
 			}
@@ -265,15 +266,15 @@ func TestLoadAlarmWorkerRuntimeSelectsAlarmWorkerToggle(t *testing.T) {
 	}
 }
 
-func TestLoadYouTubeProducerRuntimeSelectsInstanceToggle(t *testing.T) {
+func TestLoadYouTubeCollectorRuntimeSelectsInstanceToggle(t *testing.T) {
 	tests := []struct {
 		instanceID  string
 		selectedEnv string
 	}{
-		{instanceID: "youtube-producer-a", selectedEnv: tracingYouTubeProducerAEnabledEnv},
-		{instanceID: "youtube-producer-b", selectedEnv: tracingYouTubeProducerBEnabledEnv},
-		{instanceID: "youtube-producer-c", selectedEnv: tracingYouTubeProducerCEnabledEnv},
-		{instanceID: "youtube-producer-d", selectedEnv: tracingYouTubeProducerDEnabledEnv},
+		{instanceID: "youtube-collector-a", selectedEnv: tracingYouTubeCollectorAEnabledEnv},
+		{instanceID: "youtube-collector-b", selectedEnv: tracingYouTubeCollectorBEnabledEnv},
+		{instanceID: "youtube-collector-c", selectedEnv: tracingYouTubeCollectorCEnabledEnv},
+		{instanceID: "youtube-collector-d", selectedEnv: tracingYouTubeCollectorDEnabledEnv},
 	}
 
 	for _, tt := range tests {
@@ -283,9 +284,9 @@ func TestLoadYouTubeProducerRuntimeSelectsInstanceToggle(t *testing.T) {
 			t.Setenv("APP_ENV", "development")
 			t.Setenv("API_SECRET_KEY", "dummy-secret")
 			setRuntimeH3ServerEnv(t)
-			t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
 			t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
-			t.Setenv("YOUTUBE_PRODUCER_INSTANCE_ID", tt.instanceID)
+			t.Setenv("POSTGRES_USER", "hololive_scraper")
+			t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", tt.instanceID)
 			t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
 			t.Setenv(tracingHololiveAPIEnabledEnv, "not-a-bool")
 			t.Setenv(tracingAlarmWorkerEnabledEnv, "not-a-bool")
@@ -294,9 +295,9 @@ func TestLoadYouTubeProducerRuntimeSelectsInstanceToggle(t *testing.T) {
 			}
 			t.Setenv(tt.selectedEnv, "true")
 
-			config, err := LoadYouTubeProducerRuntime()
+			config, err := LoadYouTubeCollectorRuntime()
 			if err != nil {
-				t.Fatalf("LoadYouTubeProducerRuntime() error = %v", err)
+				t.Fatalf("LoadYouTubeCollectorRuntime() error = %v", err)
 			}
 			if !config.Tracing.Enabled {
 				t.Fatal("TracingConfig.Enabled = false, want true")
