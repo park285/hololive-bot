@@ -173,6 +173,13 @@ func TestRetainDeletesOnlyUnlockedRetiredProjectionState(t *testing.T) {
 	assertGenerationStatus(t, pool, current.Generation, "CURRENT")
 }
 
+func TestRetiredLeaseRetentionUsesRestrictedFunction(t *testing.T) {
+	query := mustSQL("delete_retired_job_leases.sql")
+	if !strings.Contains(query, "delete_retired_youtube_collection_job_leases") || strings.Contains(query, "FOR UPDATE") {
+		t.Fatal("retired lease retention must use the restricted retention function")
+	}
+}
+
 func insertProjectionLease(t *testing.T, pool *pgxpool.Pool, key string, generation int64, state string, expiresAt time.Time) {
 	t.Helper()
 	var owner any
