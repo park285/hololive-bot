@@ -21,10 +21,14 @@
 package orchestration
 
 import (
+	"log/slog"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 )
 
 func (b *Bot) ensureCommandExecutor() *orchcmd.CommandRouter {
@@ -37,14 +41,19 @@ func (b *Bot) ensureCommandExecutor() *orchcmd.CommandRouter {
 
 func (b *Bot) ensureIngress() *ingress.MessageIngress {
 	if b.ingress == nil {
-		b.ingress = ingress.NewMessageIngress(b.messageAdapter, b.acl, b.logger, b.selfSender)
+		b.ingress = ingress.NewMessageIngress(b.messageAdapter, b.acl, b.logger, b.selfSender, ingress.WithRoomObserver(b.rooms))
 	}
 
 	return b.ingress
 }
 
 func (b *Bot) newCommandTransport() *transport.CommandTransport {
-	return transport.NewCommandTransport(b.irisClient, b.formatter, transport.WithMarkdownReplies(b.markdownReplies))
+	return transport.NewCommandTransport(
+		b.irisClient,
+		b.formatter,
+		transport.WithMarkdownReplies(b.markdownReplies),
+		transport.WithRoomChatLookup(b.rooms),
+	)
 }
 
 func (b *Bot) SetReplyOutboxWriter(writer transport.ReplyOutboxWriter) {
@@ -52,8 +61,17 @@ func (b *Bot) SetReplyOutboxWriter(writer transport.ReplyOutboxWriter) {
 		b.irisClient,
 		b.formatter,
 		transport.WithMarkdownReplies(b.markdownReplies),
+		transport.WithRoomChatLookup(b.rooms),
 		transport.WithReplyOutboxWriter(writer),
 	)
+}
+
+func newRoomCatalog(postgres database.Client, irisClient any, logger *slog.Logger) *kakaoroom.Catalog {
+	if postgres == nil || postgres.GetPool() == nil {
+		return nil
+	}
+
+	return kakaoroom.New(postgres.GetPool(), kakaoroom.ListerFrom(irisClient), logger)
 }
 
 func (b *Bot) ensureTransport() *transport.CommandTransport {

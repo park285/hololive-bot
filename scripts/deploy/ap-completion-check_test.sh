@@ -22,6 +22,7 @@ fixture_root="$tmp/repo"
 fakebin="$tmp/bin"
 mkdir -p "$fixture_root/scripts/deploy/lib" "$fixture_root/scripts/deploy/ap-hosts" "$fixture_root/deploy/compose" "$fakebin"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-host.sh" "$fixture_root/scripts/deploy/lib/ap-host.sh"
+cp "$ROOT_DIR/scripts/deploy/lib/youtubejs-node-version.sh" "$fixture_root/scripts/deploy/lib/youtubejs-node-version.sh"
 cat > "$fixture_root/scripts/deploy/lib/require-quic-udp-buffer.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -38,8 +39,8 @@ AP_SSH_HOST=mock-host
 AP_SSH_HOST_KEY_ALIAS=mock-host
 AP_COMPOSE_FILE=deploy/compose/docker-compose.osaka.yml
 AP_RUNTIME_MODE=native
-AP_SERVICES=(youtube-producer-a)
-AP_CONTAINERS=(hololive-youtube-producer-a)
+AP_SERVICES=(youtube-collector-a)
+AP_CONTAINERS=(hololive-youtube-collector-a)
 AP_PORTS=(30005)
 AP_APPROVE_DEPLOY_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_DEPLOY
 AP_APPROVE_ROLLBACK_VAR=I_APPROVE_OSAKA_ACTIVE_ACTIVE_ROLLBACK
@@ -86,7 +87,8 @@ case "${1:-}" in
     done
     if [[ "${1:-}" == */bin/healthcheck ]]; then
       if [[ " $* " == *" --body "* ]]; then
-        printf '{"status":"ready","version":"test"}\n'
+        printf '{"status":"ready","helper":"ok","first_success":%s,"handoff_status":"%s","due_jobs":0,"pending_queue":0,"version":"test"}\n' \
+          "${MOCK_FIRST_SUCCESS:-true}" "${MOCK_HANDOFF_STATUS:-PROCESSED}"
       fi
       exit 0
     fi
@@ -129,9 +131,9 @@ cat > "$fakebin/journalctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 cat <<'LOG'
-Jun 30 08:14:13 host youtube-producer-wrapper[1]: 2026-06-30T08:14:13Z INF logging/log.go:44 ingestion runtime configured active_active_enabled=true
-Jun 30 08:14:13 host youtube-producer-wrapper[1]: 2026-06-30T08:14:13Z INF cache/service_connection.go:63 Cache store connected
-Jun 30 08:14:13 host youtube-producer-wrapper[1]: 2026-06-30T08:14:13Z INF dbx/client.go:199 postgres_pool_connected
+Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF logging/log.go:44 ingestion runtime configured active_active_enabled=true
+Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF cache/service_connection.go:63 Cache store connected
+Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF dbx/client.go:199 postgres_pool_connected
 LOG
 EOF
 chmod +x "$fakebin/journalctl"
@@ -143,9 +145,23 @@ output="$(
 )"
 grep -Fq 'AP QUIC UDP buffers ok on osaka' <<<"$output" || fail "native completion check runs remote UDP buffer verification"
 grep -Fq '"status":"ready"' <<<"$output" || fail "native completion check verifies ready endpoint"
-grep -Fq 'active-active completion check passed' <<<"$output" || fail "native completion check reports completion"
+grep -Fq '"helper":"ok"' <<<"$output" || fail "native completion check verifies helper health"
+grep -Fq '"first_success":true' <<<"$output" || fail "native completion check verifies first success"
+grep -Fq '"handoff_status":"PROCESSED"' <<<"$output" || fail "native completion check verifies API handoff"
+grep -Fq 'collector AP completion check passed' <<<"$output" || fail "native completion check reports completion"
 if grep -Fq 'cd ~/hololive-bot' <<<"$output"; then
   fail "native completion check must not require remote compose checkout"
+fi
+
+if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
+  MOCK_FIRST_SUCCESS=false CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
+  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
+  fail "native completion check must reject first_success=false"
+fi
+if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
+  MOCK_HANDOFF_STATUS=PENDING CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
+  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
+  fail "native completion check must reject an incomplete API handoff"
 fi
 
 pass "ap-completion-check supports host-native APs"

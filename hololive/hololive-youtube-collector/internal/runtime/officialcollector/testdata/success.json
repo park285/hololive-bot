@@ -1,0 +1,22 @@
+{
+  "dateGroupList": [
+    {
+      "videoList": [
+        {
+          "datetime": "2026/08/14 20:00:00",
+          "isLive": false,
+          "url": "https://www.youtube.com/watch?v=abcdefghijk",
+          "title": "Talk",
+          "name": "Talent A"
+        },
+        {
+          "datetime": "2026/08/14 21:00:00",
+          "isLive": true,
+          "url": "https://www.youtube.com/watch?v=lmnopqrstuv",
+          "title": "Live",
+          "name": "Talent B"
+        }
+      ]
+    }
+  ]
+}

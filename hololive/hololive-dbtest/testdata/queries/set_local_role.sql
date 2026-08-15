@@ -1,0 +1,1 @@
+SET LOCAL ROLE __ROLE__

@@ -1,6 +1,10 @@
 package settings
 
-import "time"
+import (
+	"time"
+
+	sharedenv "github.com/park285/shared-go/pkg/envutil"
+)
 
 type DistributedRateLimitConfig struct {
 	Enabled    bool
@@ -27,6 +31,11 @@ type OfficialScheduleConfig struct {
 	Timeout      time.Duration
 	CacheExpiry  time.Duration
 	PageCacheTTL time.Duration
+}
+
+type OfficialScheduleRuntimeConfig struct {
+	OfficialSchedule     OfficialScheduleConfig
+	MaxResponseBodyBytes int64
 }
 
 type OfficialProfileConfig struct {
@@ -71,17 +80,17 @@ func DefaultHolodexOperationalConfig() HolodexConfig {
 
 func DefaultYouTubeOperationalConfig() YouTubeConfig {
 	return YouTubeConfig{
-		CacheExpiration:         2 * time.Hour,
-		MaxPageBodyBytes:        8 << 20,
-		ScraperHTTPTimeout:      15 * time.Second,
-		ScraperDialTimeout:      5 * time.Second,
-		ScraperHeaderTimeout:    12 * time.Second,
-		ScraperPhaseTimeout:     45 * time.Second,
-		CacheSaveTimeout:        5 * time.Second,
-		CommunityMissingTTL:     24 * time.Hour,
-		VideoRSSBackoffTTL:      6 * time.Hour,
-		ProducerRequestInterval: 3 * time.Second,
-		ProducerDistributedRateLimit: DistributedRateLimitConfig{
+		CacheExpiration:      2 * time.Hour,
+		MaxPageBodyBytes:     8 << 20,
+		ScraperHTTPTimeout:   15 * time.Second,
+		ScraperDialTimeout:   5 * time.Second,
+		ScraperHeaderTimeout: 12 * time.Second,
+		ScraperPhaseTimeout:  45 * time.Second,
+		CacheSaveTimeout:     5 * time.Second,
+		CommunityMissingTTL:  24 * time.Hour,
+		VideoRSSBackoffTTL:   6 * time.Hour,
+		RequestInterval:      3 * time.Second,
+		DistributedRateLimit: DistributedRateLimitConfig{
 			Enabled:    true,
 			Limit:      1,
 			Window:     3 * time.Second,
@@ -120,6 +129,29 @@ func DefaultOfficialScheduleConfig() OfficialScheduleConfig {
 	}
 }
 
+func LoadOfficialScheduleRuntimeConfig() OfficialScheduleRuntimeConfig {
+	defaults := DefaultOfficialScheduleConfig()
+	return OfficialScheduleRuntimeConfig{
+		OfficialSchedule: OfficialScheduleConfig{
+			BaseURL:      sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", defaults.BaseURL),
+			Timeout:      time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", int(defaults.Timeout/time.Second))) * time.Second,
+			CacheExpiry:  time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", int(defaults.CacheExpiry/time.Second))) * time.Second,
+			PageCacheTTL: time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", int(defaults.PageCacheTTL/time.Second))) * time.Second,
+		},
+		MaxResponseBodyBytes: int64(sharedenv.Int("MAX_RESPONSE_BODY_BYTES", int(DefaultMaxResponseBodyBytes))),
+	}
+}
+
+func (c *Config) OfficialScheduleRuntime() OfficialScheduleRuntimeConfig {
+	if c == nil {
+		return LoadOfficialScheduleRuntimeConfig()
+	}
+	return OfficialScheduleRuntimeConfig{
+		OfficialSchedule:     c.OfficialSchedule,
+		MaxResponseBodyBytes: c.MaxResponseBodyBytes,
+	}
+}
+
 func DefaultOfficialProfileConfig() OfficialProfileConfig {
 	return OfficialProfileConfig{
 		BaseURL:        "https://hololive.hololivepro.com/talents",
@@ -131,4 +163,4 @@ func DefaultOfficialProfileConfig() OfficialProfileConfig {
 	}
 }
 
-const DefaultMaxResponseBodyBytes int64 = 2 << 20 // 2MiB
+const DefaultMaxResponseBodyBytes int64 = 2 << 20

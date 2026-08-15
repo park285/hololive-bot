@@ -91,6 +91,10 @@ echo "[M2] repository ownership boundary check"
 "${SCRIPT_DIR}/check-repository-ownership.sh"
 echo
 
+echo "[M2] youtube-producer retirement check"
+"${SCRIPT_DIR}/check-youtube-producer-retirement.sh"
+echo
+
 echo "[M2] notification egress ownership check"
 "${SCRIPT_DIR}/ci-notification-egress-gate.sh"
 echo

@@ -9,7 +9,7 @@ native_rollback_validate() {
     echo "previous host-native release is unavailable; refusing partial rollback" >&2
     return 1
   fi
-  for rel in bin/youtube-producer bin/youtube-producer-wrapper bin/healthcheck; do
+  for rel in bin/youtube-collector bin/youtube-collector-wrapper bin/healthcheck; do
     if ! sudo -n test -x "$previous_target/$rel"; then
       echo "previous host-native executable is missing or not executable: $rel" >&2
       return 1
@@ -20,14 +20,18 @@ native_rollback_validate() {
     echo "previous host-native runtime data is missing or empty" >&2
     return 1
   fi
-  for rel in youtube-producer-host.env hololive-youtube-producer@.service SHA256SUMS; do
+  if ! sudo -n test -f "$previous_target/youtubejs/src/server.mjs"; then
+    echo "previous host-native youtubejs helper is missing" >&2
+    return 1
+  fi
+  for rel in youtube-collector-host.env hololive-youtube-collector@.service SHA256SUMS; do
     if ! sudo -n test -r "$contract_dir/$rel"; then
       echo "previous host-native rollback contract is incomplete: $rel" >&2
       return 1
     fi
   done
 
-  if ! sudo -n sh -n "$previous_target/bin/youtube-producer-wrapper"; then
+  if ! sudo -n sh -n "$previous_target/bin/youtube-collector-wrapper"; then
     echo "previous host-native wrapper failed syntax validation" >&2
     return 1
   fi
@@ -35,7 +39,7 @@ native_rollback_validate() {
     echo "previous host-native rollback payload failed checksum validation" >&2
     return 1
   fi
-  if ! sudo -n systemd-analyze verify "$contract_dir/hololive-youtube-producer@.service"; then
+  if ! sudo -n systemd-analyze verify "$contract_dir/hololive-youtube-collector@.service"; then
     echo "previous host-native systemd unit failed validation" >&2
     return 1
   fi

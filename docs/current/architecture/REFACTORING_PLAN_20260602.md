@@ -1,5 +1,7 @@
 # hololive-bot 리팩토링 계획 (2026-06-02)
 
+> Historical 2026-06-02 snapshot. Current collector fleet identity is `youtube-collector`. `youtube-producer` in this document is a retired name.
+
 > cross-cutting 마스터: `iris-stack/docs/archive/REFACTORING_PLAN_20260602.md`
 > 범위: `hololive-shared`(domain/contracts/service incl. youtube) + 런타임 5종(kakao-bot, admin-api, alarm-worker, llm-sched, youtube-producer) (~128K LOC)
 > 관련 계약 문서: `CONTRACT_MAP.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md`, `ERROR_CONTRACT.md`

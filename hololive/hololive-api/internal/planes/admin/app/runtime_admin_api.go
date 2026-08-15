@@ -27,6 +27,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -37,6 +38,7 @@ type AdminAPIRuntime struct {
 	ServerAddr   string
 	HTTPServers  *sharedserver.RuntimeHTTPServers
 	AlarmService interface{ Close(context.Context) error }
+	PhotoSync    *holodexprovider.PhotoSyncService
 
 	lifecycle.Managed
 }

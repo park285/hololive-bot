@@ -50,6 +50,7 @@ type Config struct {
 	Services               ServicesConfig
 	Environment            string
 	Scraper                ScraperConfig
+	YouTubeCollector       YouTubeCollectorConfig
 	Webhook                WebhookConfig
 	WorkerPool             WorkerPoolConfig
 	WorkerProfile          WorkerProfileConfig
@@ -79,11 +80,9 @@ func LoadAdminAPIRuntime() (*Config, error) {
 	})
 }
 
-// LoadYouTubeProducerRuntime: youtube-producer는 compose 보안 계약상 nonEgress라
-// Iris egress 토큰·KAKAO_ROOMS를 받지 않으므로 해당 필수 검증을 면제합니다.
-func LoadYouTubeProducerRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateYouTubeProducerRuntime, configLoadOptions{
-		TracingRuntime: tracingRuntimeYouTubeProducer,
+func LoadYouTubeCollectorRuntime() (*Config, error) {
+	return loadConfigValidated((*Config).ValidateYouTubeCollectorRuntime, configLoadOptions{
+		TracingRuntime: tracingRuntimeYouTubeCollector,
 	})
 }
 
@@ -103,67 +102,6 @@ func loadConfigValidated(validate func(*Config) error, options configLoadOptions
 	}
 
 	return config, nil
-}
-
-func buildConfig(
-	webhookToken, botToken string,
-	corsAllowedOrigins []string,
-	corsMissingInProduction bool,
-	options configLoadOptions,
-) (*Config, error) {
-	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
-	if err != nil {
-		return nil, err
-	}
-	irisConfig := loadIrisConfig(webhookToken, botToken)
-	workerProfile := resolveIrisBotWebhookWorkerProfile(&irisConfig, options)
-	scraperConfig := loadScraperConfig()
-	tracingConfig, err := loadTracingConfig(options.TracingRuntime, scraperConfig.ActiveActive.InstanceID)
-	if err != nil {
-		return nil, fmt.Errorf("load tracing config: %w", err)
-	}
-	kakaoConfig, err := loadKakaoConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load Kakao config: %w", err)
-	}
-
-	return &Config{
-		Iris:                   irisConfig,
-		Server:                 loadServerConfig(),
-		Kakao:                  newKakaoConfig(kakaoConfig.Rooms, kakaoConfig.ACLEnabled, kakaoConfig.ACLMode),
-		Holodex:                loadHolodexConfig(),
-		YouTube:                loadYouTubeConfig(),
-		Ingestion:              loadIngestionConfig(communityShortsBigBangCutoverAt),
-		Valkey:                 loadValkeyConfig(),
-		Postgres:               loadPostgresConfig(),
-		Notification:           loadNotificationConfig(),
-		AlarmDispatchRetention: loadAlarmDispatchRetentionConfig(),
-		Logging:                loadLoggingConfig(),
-		Tracing:                tracingConfig,
-		Bot:                    loadBotConfig(),
-		Services:               loadServicesConfig(),
-		Environment:            loadAppEnvironment(),
-		Scraper:                scraperConfig,
-		Webhook:                loadWebhookConfig(&workerProfile),
-		WorkerPool:             loadWorkerPoolConfig(&workerProfile),
-		WorkerProfile: WorkerProfileConfig{
-			Version: workerProfile.Version,
-			Hash:    workerProfile.ProfileHash(),
-		},
-		Chzzk:                loadChzzkConfig(),
-		Twitch:               loadTwitchConfig(),
-		Cliproxy:             loadCliproxyConfig(),
-		LLM:                  loadLLMConfig(),
-		Exa:                  loadExaConfig(),
-		OfficialSchedule:     loadOfficialScheduleConfig(),
-		OfficialProfile:      loadOfficialProfileConfig(),
-		MaxResponseBodyBytes: int64(sharedenv.Int("MAX_RESPONSE_BODY_BYTES", int(DefaultMaxResponseBodyBytes))),
-		LLMSchedulerURL:      sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
-		AlarmServiceURL:      sharedenv.String("ALARM_INTERNAL_URL", ""),
-		BotInternalURL:       sharedenv.String("HOLOLIVE_BOT_INTERNAL_URL", ""),
-		CORS:                 loadCORSConfig(corsAllowedOrigins, corsMissingInProduction, options),
-		Version:              sharedenv.String("APP_VERSION", "1.1.0-go"),
-	}, nil
 }
 
 func newKakaoConfig(rooms []string, enabled bool, mode string) KakaoConfig {
@@ -317,28 +255,31 @@ func loadHolodexConfig() HolodexConfig {
 	}
 }
 
-func loadYouTubeConfig() YouTubeConfig {
-	d := DefaultYouTubeOperationalConfig()
-	producerInterval := time.Duration(sharedenv.Int("YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS", int(d.ProducerRequestInterval/time.Second))) * time.Second
-	return YouTubeConfig{
-		CacheExpiration:         time.Duration(sharedenv.Int("YOUTUBE_CACHE_EXPIRATION_SECONDS", int(d.CacheExpiration/time.Second))) * time.Second,
-		MaxPageBodyBytes:        int64(sharedenv.Int("YOUTUBE_MAX_PAGE_BODY_BYTES", int(d.MaxPageBodyBytes))),
-		ScraperHTTPTimeout:      time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS", int(d.ScraperHTTPTimeout/time.Second))) * time.Second,
-		ScraperDialTimeout:      time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_DIAL_TIMEOUT_SECONDS", int(d.ScraperDialTimeout/time.Second))) * time.Second,
-		ScraperHeaderTimeout:    time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HEADER_TIMEOUT_SECONDS", int(d.ScraperHeaderTimeout/time.Second))) * time.Second,
-		ScraperPhaseTimeout:     time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS", int(d.ScraperPhaseTimeout/time.Second))) * time.Second,
-		CacheSaveTimeout:        time.Duration(sharedenv.Int("YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS", int(d.CacheSaveTimeout/time.Second))) * time.Second,
-		CommunityMissingTTL:     time.Duration(sharedenv.Int("YOUTUBE_COMMUNITY_MISSING_TTL_SECONDS", int(d.CommunityMissingTTL/time.Second))) * time.Second,
-		VideoRSSBackoffTTL:      time.Duration(sharedenv.Int("YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS", int(d.VideoRSSBackoffTTL/time.Second))) * time.Second,
-		ProducerRequestInterval: producerInterval,
-		ProducerDistributedRateLimit: DistributedRateLimitConfig{
-			Enabled:    sharedenv.Bool("YOUTUBE_PRODUCER_DISTRIBUTED_RATELIMIT_ENABLED", d.ProducerDistributedRateLimit.Enabled),
-			Limit:      sharedenv.Int("YOUTUBE_PRODUCER_DISTRIBUTED_RATELIMIT_LIMIT", d.ProducerDistributedRateLimit.Limit),
-			Window:     producerInterval,
-			KeyPrefix:  sharedenv.String("YOUTUBE_PRODUCER_DISTRIBUTED_RATELIMIT_KEY_PREFIX", d.ProducerDistributedRateLimit.KeyPrefix),
-			BucketBase: sharedenv.String("YOUTUBE_PRODUCER_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.ProducerDistributedRateLimit.BucketBase),
-		},
+func loadYouTubeConfig() (YouTubeConfig, error) {
+	if err := rejectRetiredYouTubeProducerEnv(); err != nil {
+		return YouTubeConfig{}, err
 	}
+	d := DefaultYouTubeOperationalConfig()
+	interval := time.Duration(sharedenv.Int("YOUTUBE_REQUEST_INTERVAL_SECONDS", int(d.RequestInterval/time.Second))) * time.Second
+	return YouTubeConfig{
+		CacheExpiration:      time.Duration(sharedenv.Int("YOUTUBE_CACHE_EXPIRATION_SECONDS", int(d.CacheExpiration/time.Second))) * time.Second,
+		MaxPageBodyBytes:     int64(sharedenv.Int("YOUTUBE_MAX_PAGE_BODY_BYTES", int(d.MaxPageBodyBytes))),
+		ScraperHTTPTimeout:   time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HTTP_TIMEOUT_SECONDS", int(d.ScraperHTTPTimeout/time.Second))) * time.Second,
+		ScraperDialTimeout:   time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_DIAL_TIMEOUT_SECONDS", int(d.ScraperDialTimeout/time.Second))) * time.Second,
+		ScraperHeaderTimeout: time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_HEADER_TIMEOUT_SECONDS", int(d.ScraperHeaderTimeout/time.Second))) * time.Second,
+		ScraperPhaseTimeout:  time.Duration(sharedenv.Int("YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS", int(d.ScraperPhaseTimeout/time.Second))) * time.Second,
+		CacheSaveTimeout:     time.Duration(sharedenv.Int("YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS", int(d.CacheSaveTimeout/time.Second))) * time.Second,
+		CommunityMissingTTL:  time.Duration(sharedenv.Int("YOUTUBE_COMMUNITY_MISSING_TTL_SECONDS", int(d.CommunityMissingTTL/time.Second))) * time.Second,
+		VideoRSSBackoffTTL:   time.Duration(sharedenv.Int("YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS", int(d.VideoRSSBackoffTTL/time.Second))) * time.Second,
+		RequestInterval:      interval,
+		DistributedRateLimit: DistributedRateLimitConfig{
+			Enabled:    sharedenv.Bool("YOUTUBE_DISTRIBUTED_RATELIMIT_ENABLED", d.DistributedRateLimit.Enabled),
+			Limit:      sharedenv.Int("YOUTUBE_DISTRIBUTED_RATELIMIT_LIMIT", d.DistributedRateLimit.Limit),
+			Window:     interval,
+			KeyPrefix:  sharedenv.String("YOUTUBE_DISTRIBUTED_RATELIMIT_KEY_PREFIX", d.DistributedRateLimit.KeyPrefix),
+			BucketBase: sharedenv.String("YOUTUBE_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.DistributedRateLimit.BucketBase),
+		},
+	}, nil
 }
 
 func loadChzzkConfig() ChzzkConfig {

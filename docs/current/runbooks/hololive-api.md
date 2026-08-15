@@ -2,11 +2,12 @@
 
 ## Role
 
-`hololive-api`는 bot/admin/llm plane을 한 프로세스(단일 compose service `hololive-api`)에서 호스팅하는 통합 runtime입니다.
+`hololive-api`는 bot/admin/llm plane과 YouTube consume plane을 한 프로세스(단일 compose service `hololive-api`)에서 호스팅하는 통합 runtime입니다.
 
 - Bot plane: Kakao/Iris webhook ingress, 사용자 명령 routing, reply orchestration (port `30001`).
 - LLM plane: major event/member news scheduling, LLM digest 생성, internal subscription/trigger 제공자 (port `30003`).
-- Admin plane: dashboard-facing admin HTTP control plane, trigger client facade, alarm HTTP 호환 facade (port `30006`).
+- Admin plane: dashboard-facing admin HTTP control plane, trigger client facade, alarm HTTP 호환 facade, `members.photo` Holodex PhotoSync (port `30006`).
+- YouTube plane: observation claim/finalize, canonical persist, notification intent, live-end finalizer, retention/replay. YouTube channel photos는 `channel_photo` reducer.
 
 ## Normal status
 
@@ -40,7 +41,9 @@
 | `LLM_SCHEDULER_INTERNAL_URL` | internal scheduler/trigger API base | partial |
 | `CLIPROXY_*` | LLM proxy | partial |
 | `MAJOREVENT_*` | major event scrape/schedule config | partial |
-| `DELIVERY_DISPATCHER_ENABLED=false` | producer-only egress boundary (egress owned by `alarm-worker`) | yes |
+| `DELIVERY_DISPATCHER_ENABLED=false` | egress boundary (egress owned by `alarm-worker`) | yes |
+| `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
+| `YOUTUBE_PLANE_ENABLED=true` | YouTube observation consume plane | yes |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 
 ## Logs
@@ -89,7 +92,7 @@ docker exec holo-postgres psql -U postgres_admin -d hololive -c \
 ```
 
 - **중요**: pgx DSN에 `application_name`을 설정하지 않으므로, `hololive-api`의 bot/admin/llm 3 plane은 같은 process·같은 usename(`hololive_runtime`)·같은 `client_addr`(컨테이너 IP 1개)로 보입니다 → **plane 단위 구분은 pg_stat_activity로 불가능**합니다. 구분 가능한 경계는 `client_addr`(hololive-api vs alarm-worker vs migrate) 수준입니다. plane별 budget은 정의값(bot/admin/llm 각 max 4, 합 최대 12)으로 추적합니다.
-- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` 12 + `alarm-worker` 8 + producer AP 4개 32 + migrator 1 = 53, `max_connections=60` 대비 reserve 7로 고정합니다.
+- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin/llm 12 + YouTube plane 2 + `alarm-worker` 8 + collector AP 4×8=32 + migrator 1 = 55, `max_connections=60` 대비 reserve 5로 고정합니다.
 
 ### Valkey latency / slowlog
 
@@ -236,7 +239,7 @@ bot/admin/llm을 한 프로세스에 묶었으므로 평균값보다 동시 spik
 ### 관찰 항목
 
 - Go RSS / heap inuse·idle, GC pause·GC CPU 비중 (GOMEMLIMIT 1024MiB, 컨테이너 limit 1280m·pids 512 대비 여유) — `Metrics` 절 명령 사용
-- PostgreSQL connection 수 — plane별 pool 합산(bot/admin/llm 각 max 4 = 최대 12) + alarm-worker(max 8)/youtube-producer/migration 포함 전체 budget. plane 단위 구분은 불가(같은 client_addr/usename — `Metrics` 절 참조)
+- PostgreSQL connection 수 — plane별 pool 합산(bot/admin/llm 각 max 4 + YouTube plane max 2 = 최대 14) + alarm-worker(max 8)/collector AP 4×8=32/migration 포함 전체 budget. plane 단위 구분은 불가(같은 client_addr/usename — `Metrics` 절 참조)
 - pgx acquire latency, Valkey command latency(slowlog/--latency), H3 handshake error rate
 - bot webhook p95/p99, admin API p95/p99, LLM scheduler job lag
 - deunhealth 재시작 빈도 — 잦은 재시작은 H3 listener hang/5s 타임아웃/GC pause를 의심

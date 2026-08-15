@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.5+auto}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.6+auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
 source "${SCRIPT_DIR}/nilaway-inputs.sh"
@@ -42,7 +42,7 @@ run_step() {
 
 check_go_toolchain() {
     # 1.26.x patch는 자동 추종한다: minor family만 강제하고 정확한 patch는 고정하지 않는다.
-    # 새 patch(예: go1.26.5)가 설치되면 파일 수정 없이 그대로 통과한다.
+    # 새 patch(예: go1.26.6)가 설치되면 파일 수정 없이 그대로 통과한다.
     local family="${GO_TOOLCHAIN_FAMILY:-go1.26.}"
     local actual
     actual="$(go env GOVERSION)"
@@ -57,9 +57,9 @@ check_go_toolchain() {
 
 ensure_go_mod_toolchains() {
     # go.mod/go.work의 toolchain 하한을 현재 보안 patch로 고정한다.
-    # GOTOOLCHAIN=go1.26.5+auto가 필요한 patch toolchain을 확보한다.
+    # GOTOOLCHAIN=go1.26.6+auto가 필요한 patch toolchain을 확보한다.
     local module
-    local pin="${GO_TOOLCHAIN_PIN:-go1.26.5}"
+    local pin="${GO_TOOLCHAIN_PIN:-go1.26.6}"
     local pin_version="${pin#go}"
 
     # go directive가 핀 이상이면 directive 자체가 하한이고, 그때의 toolchain 라인은
@@ -285,6 +285,7 @@ run_step "production Go workspace gate tests" ./scripts/ci/check-production-go-w
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
 run_step "PostgreSQL capacity gate tests" ./scripts/ci/check-postgres-capacity_test.sh
+run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
 run_step "PostgreSQL capacity mutation-entrypoint tests" ./scripts/deploy/test-postgres-capacity-entrypoints.sh
 run_step "migration 114 restore preflight tests" ./hololive/hololive-api/scripts/migrations/preflight-114-restore_test.sh
 run_step "durable runtime rollback preflight tests" ./hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback_test.sh

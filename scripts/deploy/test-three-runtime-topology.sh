@@ -41,7 +41,7 @@ for file in "${ACTIVE_COMPOSE_FILES[@]}"; do
 done
 
 mapfile -t prod_services < <(list_services "${PROD_FILE}")
-for expected in hololive-api hololive-alarm-worker youtube-producer; do
+for expected in hololive-api hololive-alarm-worker youtube-collector; do
     printf '%s\n' "${prod_services[@]}" | grep -Fxq "${expected}" \
         || fail "production Compose is missing runtime service: ${expected}"
 done
@@ -90,5 +90,5 @@ pass "hololive-api preserves the three listener ports in one service"
 grep -Fq 'NOTIFICATION_EGRESS_ROLE: "owner"' "${PROD_FILE}" \
     || fail "alarm-worker is not configured as proactive egress owner"
 grep -Fq 'YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"' "${PROD_FILE}" \
-    || fail "youtube-producer is not configured as producer-only"
+    || fail "youtube-collector is not configured without YouTube outbox dispatch"
 pass "egress ownership remains isolated to alarm-worker"

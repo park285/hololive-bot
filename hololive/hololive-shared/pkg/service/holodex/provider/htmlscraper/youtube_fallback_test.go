@@ -25,14 +25,14 @@ func (f fallbackRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, err
 	return f(req)
 }
 
-func TestFetchFromYouTubeProducerKeepsInjectedFetcherBehavior(t *testing.T) {
+func TestFetchYouTubeScheduleKeepsInjectedFetcherBehavior(t *testing.T) {
 	called := 0
 	service := NewTestServiceWithHTTPClient(nil, slog.Default(), "", func(context.Context, string) ([]*parser.UpcomingEvent, error) {
 		called++
 		return []*parser.UpcomingEvent{{VideoID: "video", Title: "title", Status: "LIVE"}}, nil
 	})
 
-	streams, err := service.FetchFromYouTubeProducer(context.Background(), "UCtest")
+	streams, err := service.FetchYouTubeSchedule(context.Background(), "UCtest")
 
 	require.NoError(t, err)
 	require.Len(t, streams, 1)
@@ -40,20 +40,20 @@ func TestFetchFromYouTubeProducerKeepsInjectedFetcherBehavior(t *testing.T) {
 	require.Equal(t, 1, called)
 }
 
-func TestFetchFromYouTubeProducerWaitAdmissionUsesInjectedFetcherInTests(t *testing.T) {
+func TestFetchYouTubeScheduleWaitAdmissionUsesInjectedFetcherInTests(t *testing.T) {
 	called := 0
 	service := NewTestServiceWithHTTPClient(nil, slog.Default(), "", func(context.Context, string) ([]*parser.UpcomingEvent, error) {
 		called++
 		return nil, nil
 	})
 
-	_, err := service.FetchFromYouTubeProducerWaitAdmission(context.Background(), "UCtest")
+	_, err := service.FetchYouTubeScheduleWaitAdmission(context.Background(), "UCtest")
 
 	require.NoError(t, err)
 	require.Equal(t, 1, called)
 }
 
-func TestFetchFromYouTubeProducerWaitAdmissionUsesScraperBlockingAdmission(t *testing.T) {
+func TestFetchYouTubeScheduleWaitAdmissionUsesScraperBlockingAdmission(t *testing.T) {
 	limiter := ratelimiter.New(25 * time.Millisecond)
 	decision, err := limiter.TryReserve(context.Background())
 	require.NoError(t, err)
@@ -73,12 +73,12 @@ func TestFetchFromYouTubeProducerWaitAdmissionUsesScraperBlockingAdmission(t *te
 			}),
 		}),
 	)
-	service := NewServiceWithYouTubeProducer(nil, nil, client, slog.Default())
+	service := NewServiceWithYouTubeClient(nil, nil, client, slog.Default())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	_, err = service.FetchFromYouTubeProducerWaitAdmission(ctx, "UCtest")
+	_, err = service.FetchYouTubeScheduleWaitAdmission(ctx, "UCtest")
 
 	require.Error(t, err)
 	require.False(t, youtubeadmission.IsDeferred(err), "wait admission should not return a non-blocking admission deferral")

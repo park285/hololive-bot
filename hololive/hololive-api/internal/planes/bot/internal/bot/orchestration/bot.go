@@ -47,6 +47,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -88,6 +89,7 @@ type Bot struct {
 	commandExecutor       *orchcmd.CommandRouter
 	transport             *transport.CommandTransport
 	lifecycle             *lifecycle.BotLifecycle
+	rooms                 *kakaoroom.Catalog
 }
 
 func NewBot(deps *Dependencies) (*Bot, error) {
@@ -128,9 +130,10 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		selfSender:           stringutil.Normalize(core.botSelfUser),
 	}
 	bot.initImageRenderers(core.calendarImageCacheDir, messaging.messageStrings)
+	bot.rooms = newRoomCatalog(bot.postgres, bot.irisClient, bot.logger)
 
 	bot.transport = bot.newCommandTransport()
-	bot.ingress = ingress.NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender)
+	bot.ingress = ingress.NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender, ingress.WithRoomObserver(bot.rooms))
 	bot.lifecycle = lifecycle.NewBotLifecycle(
 		bot.logger,
 		bot.cache,

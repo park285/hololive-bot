@@ -305,17 +305,18 @@ func buildAlarmFoundation(
 	logger *slog.Logger,
 ) (*alarmFoundation, error) {
 	memberData := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	sharedRL, err := providers.ProvideYouTubeProducerRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
+	sharedRL, err := providers.ProvideYouTubeRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}
 
-	scraperService := providers.ProvideScraperService(
+	scraperService := providers.ProvideScraperServiceWithOfficialSchedule(
 		infra.Cache,
 		memberData,
 		scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL},
 		sharedRL,
 		logger,
+		appConfig.OfficialScheduleRuntime(),
 	)
 	holodexService, err := providers.ProvideHolodexServiceWithConfig(&appConfig.Holodex, infra.Cache, scraperService, logger)
 	if err != nil {

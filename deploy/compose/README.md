@@ -2,11 +2,11 @@
 
 - `docker-compose.prod.yml`: production baseline for the main host.
 - `docker-compose.live-compat.yml`: opt-in compatibility overlay for pre-hardening live wiring.
-- `docker-compose.main-ap.yml`: main-host `youtube-producer-c` overlay.
-- `docker-compose.main-ap.live-compat.yml`: live-compat overlay for `youtube-producer-c`.
-- `docker-compose.osaka.yml`: Osaka AP overlay for `youtube-producer-a`.
-- `docker-compose.osaka2.yml`: second Osaka AP overlay for `youtube-producer-d`.
-- `docker-compose.seoul.yml`: Seoul AP overlay for `youtube-producer-b`.
+- `docker-compose.main-ap.yml`: main-host `youtube-collector-c` overlay.
+- `docker-compose.main-ap.live-compat.yml`: live-compat overlay for `youtube-collector-c`.
+- `docker-compose.osaka.yml`: Osaka AP overlay for `youtube-collector-a`.
+- `docker-compose.osaka2.yml`: second Osaka AP overlay for `youtube-collector-d`.
+- `docker-compose.seoul.yml`: Seoul AP overlay for `youtube-collector-b`.
 - `docker-compose.remote-cache.yml`: optional BuildKit registry cache overlay. Export is fixed to
   `mode=min`, so only final-image cache records are published; intermediate build stages and copied
   source trees must not be exported by this operational overlay.
@@ -37,7 +37,7 @@ Application-only env is scoped per service:
 ```text
 HOLOLIVE_API_ENV_FILE=/etc/stack-secrets/hololive-bot/bot.env
 HOLOLIVE_ALARM_WORKER_ENV_FILE=/etc/stack-secrets/hololive-bot/alarm-worker.env
-HOLOLIVE_YOUTUBE_PRODUCER_ENV_FILE=/etc/stack-secrets/hololive-bot/youtube-producer.env
+HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE=/etc/stack-secrets/hololive-bot/youtube-collector.env
 ```
 
 ### Central endpoint ownership
@@ -56,14 +56,14 @@ HOLOLIVE_CENTRAL_CACHE_PORT      default 6379
 
 `ap-compose.env` owns those values. `CLIPROXY_BASE_URL` comes from the same file through
 `docker-compose.prod.yml`; AP overlays must not re-declare it. Host-native APs
-(`youtube-producer-a`/`-d`) get the same endpoint from `AP_CENTRAL_HOST` in
+(`youtube-collector-a`/`-d`) get the same endpoint from `AP_CENTRAL_HOST` in
 `scripts/deploy/ap-host-native-deploy.sh`.
 
-AP overlays use only `youtube-producer.env` for `youtube-producer` instances, so Iris
-egress tokens stay out of AP producer containers. Osaka/Seoul AP hosts also use
+AP overlays use only `youtube-collector.env` for `youtube-collector` instances, so Iris
+egress tokens stay out of AP collector containers. Osaka/Seoul AP hosts also use
 `ap-compose.env`, which excludes `IRIS_WEBHOOK_TOKEN` and `IRIS_BOT_TOKEN`.
-`docker-compose.main-ap.yml` also uses scoped `youtube-producer.env` for
-`youtube-producer-c`; it still must not receive Iris egress tokens or the
+The central unsuffixed `youtube-collector` (`c`) also uses scoped
+`youtube-collector.env`; it still must not receive Iris egress tokens or the
 monolithic Compose env file as an `env_file`.
 
 Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored
@@ -87,8 +87,8 @@ the server material without a container recreate.
 
 All production PostgreSQL clients use `verify-full` with the CA bundle mounted
 at `/run/hololive-bot/certs/postgres-ca.pem`: the five central Go runtimes,
-`youtube-producer-c`, `hololive-db-migrate`, Osaka `youtube-producer-a`,
-Osaka2 `youtube-producer-d`, and Seoul `youtube-producer-b`. The retired
+`youtube-collector-c`, `hololive-db-migrate`, Osaka `youtube-collector-a`,
+Osaka2 `youtube-collector-d`, and Seoul `youtube-collector-b`. The retired
 insecure downgrade ledger stays closed by preserving production paths with
 verified TLS and the CA bundle above.
 

@@ -1,5 +1,7 @@
 # YouTube Producer resilience v6
 
+> Historical 2026-06-05 snapshot. Current collector fleet identity is `youtube-collector`. `youtube-producer` is a retired runtime name.
+
 작성일: 2026-06-05 KST
 갱신일: 2026-06-06 KST (교차 리뷰 후속 패치 v6.1 반영)
 
@@ -49,8 +51,8 @@
    (cd hololive/hololive-shared && go test ./internal/retry)
    (cd hololive/hololive-shared && go test ./pkg/service/youtube/scraper/internal/initialdata ./pkg/service/youtube/scraper/internal/scraping)
    (cd hololive/hololive-shared && go test ./pkg/service/youtube/poller/internal ./pkg/service/youtube/poller/internal/pollers)
-   (cd hololive/hololive-youtube-producer && go test ./internal/runtime/polling)
-   (cd hololive/hololive-youtube-producer && go test ./internal/runtime/internal/producerruntime)
+   (cd hololive/hololive-youtube-collector && go test ./internal/runtime/polling)
+   (cd hololive/hololive-youtube-collector && go test ./internal/runtime/internal/producerruntime)
    ```
 2. 배포 직후 각 AP의 `/readyz`에서 `budget_backend_available=true`를 확인한다.
 3. Holodex live batch가 켜진 환경에서는 synthetic `live_batch` registration이 생성되고, steady YouTube scraper RPM은 증가하지 않으면서 fault envelope에 fallback request units가 합산되는지 로그의 `youtube_producer_combined_budget_summary`로 확인한다.

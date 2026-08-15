@@ -223,7 +223,7 @@ cmd_dump() {
   local file_size=0
   local line_count=0
   local svc=""
-  local services=(hololive-api youtube-producer)
+  local services=(hololive-api youtube-collector)
 
   if [[ "${enable_log_mirror}" != "1" ]]; then
     echo "log mirror disabled: set ENABLE_LOG_MIRROR=1 to enable" >&2

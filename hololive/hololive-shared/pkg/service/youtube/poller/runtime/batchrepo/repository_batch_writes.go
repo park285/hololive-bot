@@ -31,6 +31,13 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
+func seenTime(value, fallback time.Time) time.Time {
+	if value.IsZero() {
+		return fallback
+	}
+	return value
+}
+
 func (r *PgxBatchRepository) batchUpsertVideos(ctx context.Context, tx batchDB, videos []*domain.YouTubeVideo) error {
 	if len(videos) == 0 {
 		return nil
@@ -71,8 +78,8 @@ func (r *PgxBatchRepository) upsertVideosChunk(ctx context.Context, tx batchDB, 
 			video.IsShort,
 			video.IsLiveReplay,
 			video.ViewCount,
-			now,
-			now,
+			seenTime(video.FirstSeenAt, now),
+			seenTime(video.LastSeenAt, now),
 		)
 	}
 

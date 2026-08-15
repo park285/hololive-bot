@@ -1,5 +1,7 @@
 # Live-status 폴백 페이싱 코드레벨 변경안
 
+> Historical 2026-06-23 snapshot. Current collector fleet identity is `youtube-collector`. `hololive-youtube-producer` in this document is a retired module name.
+
 작성일: 2026-06-23
 대상 PR: #139 보강 문서
 기준: `Live-status 스크래퍼 폴백 페이싱 Implementation Plan v2` + PR #139 코드 리뷰 문서
@@ -1092,7 +1094,7 @@ func (p *LivePoller) pollBatchChannel(
 
 ### 수정 파일
 
-`hololive/hololive-youtube-producer/internal/runtime/polling/live_batch_poller.go`
+`hololive/hololive-youtube-collector/internal/runtime/polling/live_batch_poller.go`
 
 ### 변경안
 

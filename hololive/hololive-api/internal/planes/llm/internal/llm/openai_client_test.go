@@ -29,18 +29,55 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/openai/openai-go/v3"
-	json "github.com/park285/shared-go/pkg/json"
 	sharedllm "github.com/park285/shared-go/pkg/llm"
 )
 
+func mustNewClient(t *testing.T, baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
+	t.Helper()
+	client, err := NewClient(baseURL, apiKey, model, logger, opts...)
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	return client
+}
+
+func TestNewClientDoesNotFallbackToChatCompletionsOnUnsupportedResponses(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		http.Error(w, `{"error":{"message":"unsupported endpoint","type":"invalid_request_error","code":"unsupported_endpoint"}}`, http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+
+	client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler), WithWebSearch(false))
+	_, err := client.GenerateJSON(t.Context(), "system", "user", map[string]any{"type": "object"})
+	if err == nil {
+		t.Fatal("GenerateJSON() error = nil, want Responses failure without Chat Completions fallback")
+	}
+	if strings.Join(paths, ",") != "/responses" {
+		t.Fatalf("paths = %v, want /responses only", paths)
+	}
+}
+
+func TestNewClient_EmptyAPIKeyReturnsError(t *testing.T) {
+	client, err := NewClient("https://example.com/v1", "", "gpt-test", slog.New(slog.DiscardHandler))
+	if err == nil {
+		t.Fatal("NewClient() error = nil, want generator construction error")
+	}
+	if client != nil {
+		t.Fatalf("NewClient() client = %#v, want nil", client)
+	}
+}
+
 func TestNewClient_DefaultOptions(t *testing.T) {
-	client := NewClient("https://example.com/v1", "test-key", "gpt-test", slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	client := mustNewClient(t, "https://example.com/v1", "test-key", "gpt-test", slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	if client.schemaName != "event_summary" {
 		t.Errorf("default schemaName = %q, want %q", client.schemaName, "event_summary")
@@ -138,7 +175,7 @@ func testOpenAIAPIError(t *testing.T) *openai.Error {
 }
 
 func TestNewClient_WithSchemaName(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil, WithSchemaName("custom_schema"))
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithSchemaName("custom_schema"))
 
 	if client.schemaName != "custom_schema" {
 		t.Errorf("schemaName = %q, want %q", client.schemaName, "custom_schema")
@@ -146,7 +183,7 @@ func TestNewClient_WithSchemaName(t *testing.T) {
 }
 
 func TestNewClient_WithSchemaName_Empty(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil, WithSchemaName(""))
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithSchemaName(""))
 
 	if client.schemaName != "event_summary" {
 		t.Errorf("empty WithSchemaName should keep default, got %q", client.schemaName)
@@ -154,7 +191,7 @@ func TestNewClient_WithSchemaName_Empty(t *testing.T) {
 }
 
 func TestNewClient_WithTemperature_Positive(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil, WithTemperature(0.7))
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithTemperature(0.7))
 
 	if client.temperature == nil {
 		t.Fatal("temperature should be set for positive value")
@@ -165,7 +202,7 @@ func TestNewClient_WithTemperature_Positive(t *testing.T) {
 }
 
 func TestNewClient_WithTemperature_Zero(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil, WithTemperature(0))
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithTemperature(0))
 
 	if client.temperature != nil {
 		t.Errorf("WithTemperature(0) should not set temperature, got %v", *client.temperature)
@@ -173,7 +210,7 @@ func TestNewClient_WithTemperature_Zero(t *testing.T) {
 }
 
 func TestNewClient_WithTemperature_Negative(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil, WithTemperature(-1))
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithTemperature(-1))
 
 	if client.temperature != nil {
 		t.Errorf("WithTemperature(-1) should not set temperature, got %v", *client.temperature)
@@ -181,7 +218,7 @@ func TestNewClient_WithTemperature_Negative(t *testing.T) {
 }
 
 func TestNewClient_MultipleOptions(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil,
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil,
 		WithSchemaName("member_news_summary"),
 		WithTemperature(0.3),
 	)
@@ -214,7 +251,7 @@ func TestNewClient_WithWebSearch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := NewClient("https://example.com/v1", "key", "model", nil, tt.opt)
+			client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, tt.opt)
 			if client.webSearch != tt.wantWeb {
 				t.Fatalf("webSearch = %v, want %v", client.webSearch, tt.wantWeb)
 			}
@@ -223,7 +260,7 @@ func TestNewClient_WithWebSearch(t *testing.T) {
 }
 
 func TestNewClient_WithChatCompletions(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil, WithChatCompletions())
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithChatCompletions())
 
 	if !client.chatCompletions {
 		t.Fatal("chatCompletions should be enabled")
@@ -234,14 +271,14 @@ func TestNewClient_WithChatCompletions(t *testing.T) {
 }
 
 func TestNewClient_WithReasoningEffort(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil, WithReasoningEffort("high"))
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithReasoningEffort("high"))
 	if client.reasoningEffort != "high" {
 		t.Fatalf("reasoningEffort = %q, want %q", client.reasoningEffort, "high")
 	}
 }
 
 func TestNewClient_WithReasoningEffort_EmptyIgnored(t *testing.T) {
-	client := NewClient("https://example.com/v1", "key", "model", nil,
+	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil,
 		WithReasoningEffort("high"),
 		WithReasoningEffort(""),
 	)
@@ -253,7 +290,7 @@ func TestNewClient_WithReasoningEffort_EmptyIgnored(t *testing.T) {
 func TestOpenAIClient_ImplementsClient(t *testing.T) {
 	// compile-time 검증 (var _ Client = (*OpenAIClient)(nil))은 openai_client.go에 존재
 	// 런타임에서도 인터페이스 할당 가능 확인
-	var _ Client = NewClient("https://example.com/v1", "key", "model", nil)
+	var _ Client = mustNewClient(t, "https://example.com/v1", "key", "model", nil)
 }
 
 func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
@@ -294,36 +331,6 @@ func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
 	}
 }
 
-func TestOpenAIClientGenerateJSON_SanitizesDiscoveredEventsOnlyAfterFallback(t *testing.T) {
-	generator := &fakeJSONGenerator{
-		resp: sharedllm.JSONResponse{
-			Text:         `{"summary":"ok","discovered_events":[{"id":"a"}]}`,
-			Model:        "gpt-test",
-			FallbackUsed: true,
-		},
-	}
-	client := &OpenAIClient{
-		generator:  generator,
-		model:      "gpt-test",
-		schemaName: "event_summary",
-		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
-
-	got, err := client.GenerateJSON(context.Background(), "system", "user", map[string]any{"type": "object"})
-	if err != nil {
-		t.Fatalf("GenerateJSON() error = %v", err)
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(got), &payload); err != nil {
-		t.Fatalf("unmarshal sanitized json: %v", err)
-	}
-	events, ok := payload["discovered_events"].([]any)
-	if !ok || len(events) != 0 {
-		t.Fatalf("discovered_events = %#v, want empty array", payload["discovered_events"])
-	}
-}
-
 type fakeJSONGenerator struct {
 	called bool
 	resp   sharedllm.JSONResponse
@@ -347,74 +354,5 @@ func TestSafeLLMProviderError_RedactsEmptyOutputDiagnostics(t *testing.T) {
 	}
 	if !strings.Contains(safeErr.Error(), "error_type=openai_empty_output") {
 		t.Fatalf("safeLLMProviderError missing empty-output type, got: %s", safeErr.Error())
-	}
-}
-
-func TestSuppressDiscoveredEvents_NoField(t *testing.T) {
-	raw := `{"summary":"ok","items":[1,2,3]}`
-
-	sanitized, err := suppressFallbackDiscoveredEvents(raw)
-	if err != nil {
-		t.Fatalf("suppressFallbackDiscoveredEvents() error = %v", err)
-	}
-	if sanitized != raw {
-		t.Fatalf("suppressFallbackDiscoveredEvents() = %q, want original %q", sanitized, raw)
-	}
-}
-
-func TestSuppressDiscoveredEvents_WithField(t *testing.T) {
-	raw := `{"summary":"ok","discovered_events":[{"id":"a"}]}`
-
-	sanitized, err := suppressFallbackDiscoveredEvents(raw)
-	if err != nil {
-		t.Fatalf("suppressFallbackDiscoveredEvents() error = %v", err)
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(sanitized), &payload); err != nil {
-		t.Fatalf("unmarshal sanitized json: %v", err)
-	}
-
-	if payload["summary"] != "ok" {
-		t.Fatalf("summary = %v, want %q", payload["summary"], "ok")
-	}
-
-	events, ok := payload["discovered_events"].([]any)
-	if !ok {
-		t.Fatalf("discovered_events type = %T, want []any", payload["discovered_events"])
-	}
-	if len(events) != 0 {
-		t.Fatalf("discovered_events length = %d, want 0", len(events))
-	}
-}
-
-func TestSuppressDiscoveredEvents_InvalidJSON(t *testing.T) {
-	_, err := suppressFallbackDiscoveredEvents(`{"summary":`)
-	if err == nil {
-		t.Fatal("invalid json should return error")
-	}
-}
-
-func TestApplyFallbackPostProcess_SkipsWhenNoFallback(t *testing.T) {
-	client := &OpenAIClient{schemaName: "event_summary"}
-
-	raw := `{"summary":"ok","discovered_events":[{"id":"a"}]}`
-	got := client.applyFallbackPostProcess(raw, false)
-	if got != raw {
-		t.Fatalf("applyFallbackPostProcess() = %q, want original %q", got, raw)
-	}
-}
-
-func TestApplyFallbackPostProcess_SanitizesEventSummary(t *testing.T) {
-	client := &OpenAIClient{schemaName: "event_summary"}
-
-	got := client.applyFallbackPostProcess(`{"summary":"ok","discovered_events":[{"id":"a"}]}`, true)
-
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(got), &payload); err != nil {
-		t.Fatalf("unmarshal sanitized json: %v", err)
-	}
-	if events, ok := payload["discovered_events"].([]any); !ok || len(events) != 0 {
-		t.Fatalf("discovered_events = %#v, want empty array", payload["discovered_events"])
 	}
 }

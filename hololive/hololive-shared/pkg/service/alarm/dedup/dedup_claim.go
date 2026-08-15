@@ -72,7 +72,6 @@ func (s *Service) ReleaseClaims(ctx context.Context, claimKeys []string) error {
 	if len(claimKeys) == 0 {
 		return nil
 	}
-	s.fallback.ReleaseClaims(claimKeys)
 
 	_, err := s.cache.DelMany(ctx, claimKeys)
 	if err != nil {

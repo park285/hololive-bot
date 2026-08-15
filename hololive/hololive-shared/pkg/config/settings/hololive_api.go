@@ -16,13 +16,14 @@ const (
 	defaultAdminAPIPort = 30006
 )
 
-// HololiveAPIConfig는 단일 hololive-api 프로세스가 호스팅하는 세 논리적 plane을 담는다.
-// 각 plane은 자체 bounded DB pool을 explicit bulkhead로 유지하고, 프로세스 전역의
-// logging·GC·signal 처리는 부모 runtime이 소유한다.
+// HololiveAPIConfig는 단일 hololive-api 프로세스가 호스팅하는 bot/admin/llm HTTP plane과
+// YouTube background plane을 담는다. 각 plane은 자체 bounded DB pool을 explicit bulkhead로
+// 유지하고, 프로세스 전역의 logging·GC·signal 처리는 부모 runtime이 소유한다.
 type HololiveAPIConfig struct {
 	Bot     *Config
 	Admin   *Config
 	LLM     *LLMSchedulerConfig
+	YouTube YouTubePlaneConfig
 	Logging LoggingConfig
 	Tracing TracingConfig
 }
@@ -42,11 +43,16 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 	}
 
 	configureHololiveAPIPlanes(botConfig, adminConfig, llmConfig)
+	youtubeConfig, err := loadYouTubePlaneConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load hololive-api youtube plane: %w", err)
+	}
 
 	config := &HololiveAPIConfig{
 		Bot:     botConfig,
 		Admin:   adminConfig,
 		LLM:     llmConfig,
+		YouTube: youtubeConfig,
 		Logging: botConfig.Logging,
 		Tracing: botConfig.Tracing,
 	}
@@ -105,6 +111,16 @@ func (c *HololiveAPIConfig) Validate() error {
 	if c.Bot == nil || c.Admin == nil || c.LLM == nil {
 		return fmt.Errorf("bot, admin and llm plane configs are required")
 	}
+	if err := c.validateSharedPlanes(); err != nil {
+		return err
+	}
+	if err := c.validateYouTubeBindings(); err != nil {
+		return err
+	}
+	return validateHololiveAPIListenerPorts(c)
+}
+
+func (c *HololiveAPIConfig) validateSharedPlanes() error {
 	if err := validateTracingConfig(c.Tracing); err != nil {
 		return err
 	}
@@ -114,10 +130,17 @@ func (c *HololiveAPIConfig) Validate() error {
 	if err := c.validateAlarmProviders(); err != nil {
 		return err
 	}
-	if err := c.validatePlanePools(); err != nil {
-		return err
+	return c.validatePlanePools()
+}
+
+func (c *HololiveAPIConfig) validateYouTubeBindings() error {
+	if err := c.YouTube.Validate(); err != nil {
+		return fmt.Errorf("youtube plane: %w", err)
 	}
-	return validateHololiveAPIListenerPorts(c)
+	if err := c.YouTube.validateProductionRetention(c.Bot.Environment); err != nil {
+		return fmt.Errorf("youtube plane: %w", err)
+	}
+	return validateYouTubePlaneDatabaseRole(c.Bot.Postgres.User)
 }
 
 func (c *HololiveAPIConfig) validatePlaneRuntimes() error {
@@ -180,6 +203,13 @@ func validateAlarmProviderScheme(environment string, parsed *url.URL) error {
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return fmt.Errorf("ALARM_INTERNAL_URL scheme must be http or https")
+	}
+	return nil
+}
+
+func validateYouTubePlaneDatabaseRole(user string) error {
+	if strings.TrimSpace(user) != postgresRuntimeRoleUser {
+		return fmt.Errorf("youtube plane requires POSTGRES_USER=%s", postgresRuntimeRoleUser)
 	}
 	return nil
 }

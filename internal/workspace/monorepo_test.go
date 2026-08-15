@@ -32,7 +32,7 @@ func TestMonorepoModuleSuites(t *testing.T) {
 		"./hololive/hololive-shared/...",
 		"./hololive/hololive-api/...",
 		"./hololive/hololive-alarm-worker/...",
-		"./hololive/hololive-youtube-producer/...",
+		"./hololive/hololive-youtube-collector/...",
 	)
 	cmd.Env = append(os.Environ(), "HOLOLIVE_WORKSPACE_MONOREPO_TEST=1")
 	_, file, _, ok := runtime.Caller(0)

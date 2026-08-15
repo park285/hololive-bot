@@ -11,7 +11,7 @@
 
 ### Discovery audience
 
-- `youtube-producer`의 LIVE/UPCOMING discovery audience는 enabled operational roster 전체입니다.
+- collector LIVE/UPCOMING discovery audience는 enabled operational roster 전체입니다.
 - videos, shorts, community 알림 후보는 계속 notification subscription target만 사용합니다.
 - channel stats도 operational target을 사용하므로 내부 target 이름은 `OperationalChannelIDs`, target group은 `operational`로 통일합니다.
 - Holodex live provider가 있으면 `live_batch` scheduler job 하나가 roster snapshot을 소유하고 실행 시 최대 40개씩 나눠 조회합니다. target refresh는 poller와 budget profile이 함께 든 immutable snapshot으로 scheduler job을 교체합니다.
@@ -44,7 +44,7 @@
 
 혼합 버전에서 구 worker는 전체 방으로 fan-out하므로 다음 중 하나를 지켜야 합니다.
 
-1. 권장: 새 alarm-worker를 먼저 배포해 sent-birthday audience를 적용한 뒤 새 youtube-producer를 배포합니다. 중간 구간에는 구독 없는 멤버 discovery만 일시적으로 빠지고 과다 발송은 없습니다.
+1. 권장: 새 alarm-worker를 먼저 배포해 sent-birthday audience를 적용한 뒤 새 youtube-collector를 배포합니다. 중간 구간에는 구독 없는 멤버 discovery만 일시적으로 빠지고 과다 발송은 없습니다.
 2. producer-first가 필요하면 먼저 `BIRTHDAY_STREAM_RUNNER_ENABLED=false`로 runner를 중지하고, producer와 worker를 모두 배포한 뒤 다시 활성화합니다.
 
 활성화 전 확인:

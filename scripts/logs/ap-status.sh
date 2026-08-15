@@ -75,7 +75,7 @@ find . -maxdepth 1 -mindepth 1 -printf "%f\n" | sort
 REMOTE
 
 echo
-echo "== Recent youtube-producer signals =="
+echo "== Recent youtube-collector signals =="
 for container in "${AP_CONTAINERS[@]}"; do
   signals "$container" 'Cache store connected|postgres_pool_connected|job_claim|Photo sync service started|Photo sync completed|ERR|pre-send claim|ingestion_lease_lost|panic|permission denied'
 done

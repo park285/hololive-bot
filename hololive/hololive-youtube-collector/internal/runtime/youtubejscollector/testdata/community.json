@@ -1,0 +1,27 @@
+{
+  "posts": [
+    {
+      "postId": "post-b",
+      "upstreamPostId": "post-b",
+      "authorId": "UC_TEST",
+      "authorName": "Author",
+      "contentText": "second",
+      "likeCount": 2,
+      "commentCount": 0,
+      "authorPhoto": [{"url": "https://img.test/a.jpg", "width": 88, "height": 88}]
+    },
+    {
+      "postId": "post-a",
+      "upstreamPostId": "post-a",
+      "authorId": "UC_TEST",
+      "authorName": "Author",
+      "contentText": "first",
+      "likeCount": 1,
+      "commentCount": 0,
+      "authorPhoto": [{"url": "https://img.test/a.jpg", "width": 88, "height": 88}]
+    }
+  ],
+  "page_count": 1,
+  "exhausted": true,
+  "continuity": "CONTIGUOUS"
+}

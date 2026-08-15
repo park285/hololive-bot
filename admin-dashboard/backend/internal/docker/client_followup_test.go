@@ -162,17 +162,17 @@ func TestDefaultContainerPolicyMatchesComposeOwnership(t *testing.T) {
 		managed     bool
 		stopBlocked bool
 	}{
-		"hololive-api":                {managed: true},
-		"hololive-youtube-producer-a": {managed: true},
-		"holo-postgres":               {managed: true, stopBlocked: true},
-		"valkey-cache":                {managed: true, stopBlocked: true},
-		"admin-dashboard":             {managed: true, stopBlocked: true},
-		"deunhealth":                  {managed: true, stopBlocked: true},
-		"hololive-db-migrate":         {},
-		"hololive-api-init":           {},
-		"hololiveevil":                {},
-		"administrator":               {},
-		"postgresql":                  {},
+		"hololive-api":                 {managed: true},
+		"hololive-youtube-collector-a": {managed: true},
+		"holo-postgres":                {managed: true, stopBlocked: true},
+		"valkey-cache":                 {managed: true, stopBlocked: true},
+		"admin-dashboard":              {managed: true, stopBlocked: true},
+		"deunhealth":                   {managed: true, stopBlocked: true},
+		"hololive-db-migrate":          {},
+		"hololive-api-init":            {},
+		"hololiveevil":                 {},
+		"administrator":                {},
+		"postgresql":                   {},
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {

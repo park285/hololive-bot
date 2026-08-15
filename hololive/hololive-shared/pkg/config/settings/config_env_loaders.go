@@ -156,63 +156,17 @@ func loadScraperPollTieringConfig() ScraperPollTieringConfig {
 func loadScraperBackfillConfig() ScraperBackfillConfig {
 	defaults := DefaultScraperBackfillConfig()
 	return ScraperBackfillConfig{
-		Enabled:           sharedenv.Bool("SCRAPER_BACKFILL_ENABLED", defaults.Enabled),
-		ShortsEnabled:     sharedenv.Bool("SCRAPER_BACKFILL_SHORTS_ENABLED", defaults.ShortsEnabled),
-		ShortsInterval:    time.Duration(sharedenv.Int("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS", int(defaults.ShortsInterval/time.Second))) * time.Second,
-		CommunityEnabled:  sharedenv.Bool("SCRAPER_BACKFILL_COMMUNITY_ENABLED", defaults.CommunityEnabled),
-		CommunityInterval: time.Duration(sharedenv.Int("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS", int(defaults.CommunityInterval/time.Second))) * time.Second,
-		LiveEnabled:       sharedenv.Bool("SCRAPER_BACKFILL_LIVE_ENABLED", defaults.LiveEnabled),
-		LiveInterval:      time.Duration(sharedenv.Int("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", int(defaults.LiveInterval/time.Second))) * time.Second,
-		TargetGroup:       strings.TrimSpace(sharedenv.String("SCRAPER_BACKFILL_TARGET_GROUP", defaults.TargetGroup)),
+		Enabled:        sharedenv.Bool("SCRAPER_BACKFILL_ENABLED", defaults.Enabled),
+		ShortsEnabled:  sharedenv.Bool("SCRAPER_BACKFILL_SHORTS_ENABLED", defaults.ShortsEnabled),
+		ShortsInterval: time.Duration(sharedenv.Int("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS", int(defaults.ShortsInterval/time.Second))) * time.Second,
+		LiveEnabled:    sharedenv.Bool("SCRAPER_BACKFILL_LIVE_ENABLED", defaults.LiveEnabled),
+		LiveInterval:   time.Duration(sharedenv.Int("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", int(defaults.LiveInterval/time.Second))) * time.Second,
+		TargetGroup:    strings.TrimSpace(sharedenv.String("SCRAPER_BACKFILL_TARGET_GROUP", defaults.TargetGroup)),
 	}
 }
 
 func loadScraperActiveActiveConfig() ScraperActiveActiveConfig {
-	defaults := DefaultScraperActiveActiveConfig()
-	return ScraperActiveActiveConfig{
-		Enabled:    sharedenv.Bool("YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED", defaults.Enabled),
-		InstanceID: strings.TrimSpace(sharedenv.String("YOUTUBE_PRODUCER_INSTANCE_ID", "")),
-		Namespace:  strings.TrimSpace(sharedenv.String("YOUTUBE_PRODUCER_LEASE_NAMESPACE", defaults.Namespace)),
-	}
-}
-
-func LoadYouTubeProducerGlobalBudgetConfig() YouTubeProducerGlobalBudgetConfig {
-	defaults := DefaultYouTubeProducerGlobalBudgetConfig()
-	return YouTubeProducerGlobalBudgetConfig{
-		Enabled:                    sharedenv.Bool("YOUTUBE_PRODUCER_GLOBAL_BUDGET_ENABLED", defaults.Enabled),
-		AcquireTimeout:             loadYouTubeProducerBudgetAcquireTimeout(defaults.AcquireTimeout),
-		ActiveInstanceCount:        sharedenv.Int("YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT", defaults.ActiveInstanceCount),
-		YouTubeScraperMaxInflight:  loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_YOUTUBE_SCRAPER_MAX_INFLIGHT", defaults.YouTubeScraperMaxInflight),
-		HolodexLiveMaxInflight:     loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_HOLODEX_LIVE_MAX_INFLIGHT", defaults.HolodexLiveMaxInflight),
-		BrowserSnapshotMaxInflight: loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_BROWSER_SNAPSHOT_MAX_INFLIGHT", defaults.BrowserSnapshotMaxInflight),
-		BackfillMaxInflight:        loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_BACKFILL_MAX_INFLIGHT", defaults.BackfillMaxInflight),
-		FallbackMaxInflight:        loadYouTubeProducerBudgetMaxInflight("YOUTUBE_PRODUCER_BUDGET_FALLBACK_MAX_INFLIGHT", defaults.FallbackMaxInflight),
-		CleanupLimit:               loadYouTubeProducerBudgetCleanupLimit(defaults.CleanupLimit),
-		WindowCheckEnabled:         sharedenv.Bool("YOUTUBE_PRODUCER_BUDGET_WINDOW_CHECK_ENABLED", defaults.WindowCheckEnabled),
-	}
-}
-
-func loadYouTubeProducerBudgetAcquireTimeout(defaultTimeout time.Duration) time.Duration {
-	timeout := time.Duration(sharedenv.Int("YOUTUBE_PRODUCER_BUDGET_ACQUIRE_TIMEOUT_MS", int(defaultTimeout/time.Millisecond))) * time.Millisecond
-	if timeout <= 0 {
-		return defaultTimeout
-	}
-	if timeout > 5*time.Second {
-		return 5 * time.Second
-	}
-	return timeout
-}
-
-func loadYouTubeProducerBudgetMaxInflight(key string, defaultValue int) int {
-	value := sharedenv.Int(key, defaultValue)
-	if value < 0 {
-		return 0
-	}
-	return value
-}
-
-func loadYouTubeProducerBudgetCleanupLimit(defaultValue int) int {
-	return positiveIntEnv("YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT", defaultValue)
+	return DefaultScraperActiveActiveConfig()
 }
 
 func loadWorkerPoolConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) WorkerPoolConfig {

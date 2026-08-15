@@ -13,20 +13,22 @@ import (
 	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
 
 	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
+	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedlifecycle "github.com/park285/shared-go/pkg/runtime/lifecycle"
 )
 
-// Runtime은 bot ingress, admin API, LLM scheduler plane을 하나의 Go 프로세스에서
-// 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
+// Runtime은 bot ingress, admin API, LLM scheduler, YouTube plane을 하나의 Go
+// 프로세스에서 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
 type Runtime struct {
 	Config *settings.HololiveAPIConfig
 	Logger *slog.Logger
 
-	Bot   *botruntime2.BotRuntime
-	Admin *app.AdminAPIRuntime
-	LLM   *llmruntime.LLMSchedulerRuntime
+	Bot     *botruntime2.BotRuntime
+	Admin   *app.AdminAPIRuntime
+	LLM     *llmruntime.LLMSchedulerRuntime
+	YouTube *youtuberuntime.Runtime
 
 	group *applifecycle.GroupRuntime
 }
@@ -38,50 +40,84 @@ func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, lo
 	if logger == nil {
 		return nil, errors.New("logger must not be nil")
 	}
+	planes, err := buildAPIPlanes(ctx, appConfig, logger)
+	if err != nil {
+		return nil, err
+	}
+	return assembleAPIRuntime(appConfig, logger, planes), nil
+}
 
+type apiPlanes struct {
+	bot     *botruntime2.BotRuntime
+	admin   *app.AdminAPIRuntime
+	llm     *llmruntime.LLMSchedulerRuntime
+	youtube *youtuberuntime.Runtime
+}
+
+func buildAPIPlanes(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (apiPlanes, error) {
 	llm, err := llmruntime.BuildLLMSchedulerRuntime(ctx, appConfig.LLM, logger.With(slog.String("plane", "llm")))
 	if err != nil {
-		return nil, fmt.Errorf("build llm plane: %w", err)
+		return apiPlanes{}, fmt.Errorf("build llm plane: %w", err)
 	}
-
 	admin, err := app.BuildAdminAPIRuntime(ctx, appConfig.Admin, logger.With(slog.String("plane", "admin")))
 	if err != nil {
 		llm.Close()
-		return nil, fmt.Errorf("build admin plane: %w", err)
+		return apiPlanes{}, fmt.Errorf("build admin plane: %w", err)
 	}
-
 	bot, err := botruntime2.BuildRuntime(ctx, appConfig.Bot, logger.With(slog.String("plane", "bot")))
 	if err != nil {
 		admin.Close()
 		llm.Close()
-		return nil, fmt.Errorf("build bot plane: %w", err)
+		return apiPlanes{}, fmt.Errorf("build bot plane: %w", err)
 	}
+	youtube, err := buildYouTubePlane(ctx, appConfig, logger)
+	if err != nil {
+		bot.Close()
+		admin.Close()
+		llm.Close()
+		return apiPlanes{}, err
+	}
+	return apiPlanes{bot: bot, admin: admin, llm: llm, youtube: youtube}, nil
+}
 
-	runtime := &Runtime{
-		Config: appConfig,
-		Logger: logger,
-		Bot:    bot,
-		Admin:  admin,
-		LLM:    llm,
+func buildYouTubePlane(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (*youtuberuntime.Runtime, error) {
+	if !appConfig.YouTube.Enabled {
+		return nil, nil
 	}
-	runtime.group = applifecycle.NewGroupRuntime(logger,
-		applifecycle.GroupComponent{
-			Name:     "llm",
-			Start:    llm.Start,
-			Shutdown: llm.Shutdown,
-		},
-		applifecycle.GroupComponent{
-			Name:     "admin",
-			Start:    admin.Start,
-			Shutdown: admin.Shutdown,
-		},
-		applifecycle.GroupComponent{
-			Name:     "bot",
-			Start:    bot.Start,
-			Shutdown: bot.Shutdown,
-		},
-	)
-	return runtime, nil
+	youtube, err := youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
+	if err != nil {
+		return nil, fmt.Errorf("build youtube plane: %w", err)
+	}
+	return youtube, nil
+}
+
+func assembleAPIRuntime(appConfig *settings.HololiveAPIConfig, logger *slog.Logger, planes apiPlanes) *Runtime {
+	runtime := &Runtime{
+		Config:  appConfig,
+		Logger:  logger,
+		Bot:     planes.bot,
+		Admin:   planes.admin,
+		LLM:     planes.llm,
+		YouTube: planes.youtube,
+	}
+	runtime.group = applifecycle.NewGroupRuntime(logger, apiPlaneComponents(planes)...)
+	return runtime
+}
+
+func apiPlaneComponents(planes apiPlanes) []applifecycle.GroupComponent {
+	components := []applifecycle.GroupComponent{
+		{Name: "llm", Start: planes.llm.Start, Shutdown: planes.llm.Shutdown},
+		{Name: "admin", Start: planes.admin.Start, Shutdown: planes.admin.Shutdown},
+		{Name: "bot", Start: planes.bot.Start, Shutdown: planes.bot.Shutdown},
+	}
+	if planes.youtube == nil {
+		return components
+	}
+	return append([]applifecycle.GroupComponent{{
+		Name:     "youtube",
+		Start:    planes.youtube.Start,
+		Shutdown: planes.youtube.Shutdown,
+	}}, components...)
 }
 
 func (r *Runtime) Run() error {
@@ -123,5 +159,8 @@ func (r *Runtime) Close() {
 	}
 	if r.LLM != nil {
 		r.LLM.Close()
+	}
+	if r.YouTube != nil {
+		r.YouTube.Close()
 	}
 }

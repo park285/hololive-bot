@@ -26,7 +26,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 cat >"${tmp}/unsafe.env" <<'ENV'
 BOT_POSTGRES_POOL_MAX_CONNS=50
-YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS=8
+YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=8
 ENV
 : >"${tmp}/default.env"
 mkdir -p "${tmp}/shared-go" "${tmp}/iris-client-go" "${tmp}/bin"
@@ -46,7 +46,7 @@ if postgres_capacity_assert_target "${root}" "${tmp}/unsafe.env" >"${tmp}/out" 2
     exit 1
 fi
 grep -q 'connection budget exhausted' "${tmp}/out"
-if grep -Eq 'BOT_POSTGRES_POOL_MAX_CONNS=|YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS=' "${tmp}/out"; then
+if grep -Eq 'BOT_POSTGRES_POOL_MAX_CONNS=|YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS=' "${tmp}/out"; then
     echo "common PostgreSQL capacity gate printed target values" >&2
     exit 1
 fi
@@ -57,7 +57,7 @@ assert_entrypoint_blocked() {
     local expected="$3"
     shift 3
     : >"${tmp}/docker.log"
-    if env -u BOT_POSTGRES_POOL_MAX_CONNS -u YOUTUBE_PRODUCER_POSTGRES_POOL_MAX_CONNS \
+    if env -u BOT_POSTGRES_POOL_MAX_CONNS -u YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS \
         PATH="${tmp}/bin:${PATH}" CONTAINER_CLI=docker MOCK_DOCKER_LOG="${tmp}/docker.log" \
         COMPOSE_ENV_FILE="${env_file}" \
         SHARED_GO_WORKSPACE_PATH="${tmp}/shared-go" \
@@ -78,17 +78,17 @@ assert_entrypoint_blocked "compose wrapper" \
     "${tmp}/unsafe.env" 'connection budget exhausted' \
     "${root}/scripts/deploy/compose.sh" -f deploy/compose/docker-compose.prod.yml up -d hololive-api
 for scale_args in \
-    'up -d --scale youtube-producer=2 youtube-producer' \
-    'up -d youtube-producer --scale=youtube-producer=2'; do
+    'up -d --scale youtube-collector=2 youtube-collector' \
+    'up -d youtube-collector --scale=youtube-collector=2'; do
     read -r -a args <<<"${scale_args}"
     assert_entrypoint_blocked "compose wrapper scale ${scale_args}" \
         "${tmp}/default.env" 'connection budget exhausted' \
         "${root}/scripts/deploy/compose.sh" -f deploy/compose/docker-compose.prod.yml "${args[@]}"
-    grep -q 'max=60 allocated=61 reserve=-1' "${tmp}/out"
+    grep -q 'max=60 allocated=63 reserve=-3' "${tmp}/out"
 done
 
 for scale_case in \
-    'malformed scale override|up --scale youtube-producer youtube-producer' \
+    'malformed scale override|up --scale youtube-collector youtube-collector' \
     'absent from the reviewed capacity policy|up --scale=unknown-service=2 unknown-service' \
     'duplicate scale override|up --scale=hololive-api=1 --scale hololive-api=1 hololive-api' \
     'conflicting scale overrides|up --scale hololive-api=1 --scale=hololive-api=2 hololive-api'; do

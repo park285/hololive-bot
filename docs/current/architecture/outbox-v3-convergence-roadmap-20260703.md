@@ -1,5 +1,7 @@
 # Outbox v3 수렴 로드맵 (2026-07-03)
 
+> Historical 2026-07-03 snapshot. Current collector fleet identity is `youtube-collector`. `youtube-producer` in this document is a retired name.
+
 2026-07 SQL 리뷰의 "outbox 3세대 공존 → v3 수렴" 지적에 대한 실행 계획.
 **즉시 제거는 불가하다** — 세 계열은 같은 outbox의 신·구 버전이 아니라 도메인이 다른 병렬
 파이프라인이고, 셋 다 프로덕션에서 유일 경로로 살아 있다. 이 문서가 수렴의 단계와 선행 조건을 고정한다.

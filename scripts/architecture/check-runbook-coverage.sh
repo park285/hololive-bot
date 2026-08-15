@@ -11,7 +11,7 @@ echo "[CHECK] runtime runbook coverage"
 required_runtimes=(
   hololive-api
   alarm-worker
-  youtube-producer
+  youtube-collector
 )
 
 required_sections=(

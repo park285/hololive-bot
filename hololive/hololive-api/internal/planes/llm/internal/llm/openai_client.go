@@ -25,6 +25,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -56,7 +57,7 @@ type OpenAIClient struct {
 	costTracker     CostTracker
 }
 
-func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
+func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) (*OpenAIClient, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -68,15 +69,14 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		opt(o)
 	}
 
-	var generator sharedllm.JSONGenerator
 	generator, err := sharedllm.NewOpenAICompatibleJSONGenerator(sharedllm.OpenAICompatibleConfig{
 		BaseURL:                      baseURL,
 		APIKey:                       apiKey,
 		HTTPClient:                   newLLMHTTPClient(),
-		AllowChatCompletionsFallback: true,
+		AllowChatCompletionsFallback: false,
 	})
 	if err != nil {
-		generator = errorJSONGenerator{err: err}
+		return nil, fmt.Errorf("create openai compatible json generator: %w", err)
 	}
 
 	return &OpenAIClient{
@@ -89,7 +89,7 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 		chatCompletions: o.ChatCompletions,
 		logger:          logger,
 		costTracker:     o.CostTracker,
-	}
+	}, nil
 }
 
 // Cloudflare가 Go HTTP/2 fingerprint를 차단하므로 HTTP/2를 끈 프로파일을 쓴다.
@@ -176,34 +176,12 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 		return "", safeErr
 	}
 
-	text := c.applyFallbackPostProcess(resp.Text, resp.FallbackUsed)
-
 	successAttrs := append([]slog.Attr{}, attrs...)
 	successAttrs = append(successAttrs, sharedlog.SinceMS(started), slog.Int("result_count", 1))
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.succeeded", "llm provider request succeeded", successAttrs...)
 	sharedlog.Debug(ctx, c.logger, "llm.result.validated", "llm result validated", successAttrs...)
 
-	return text, nil
-}
-
-func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) string {
-	if !usedFallback {
-		return text
-	}
-	if c.schemaName != "event_summary" {
-		return text
-	}
-
-	sanitized, err := suppressFallbackDiscoveredEvents(text)
-	if err != nil {
-		if c.logger != nil {
-			c.logger.Warn("failed to sanitize discovered_events on fallback",
-				slog.String("error_type", llmErrorType(err)))
-		}
-		return text
-	}
-
-	return sanitized
+	return resp.Text, nil
 }
 
 func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []slog.Attr {
@@ -218,12 +196,4 @@ func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []s
 		attrs = append(attrs, slog.String("prompt_sha256_8", hex.EncodeToString(sum[:8])))
 	}
 	return attrs
-}
-
-type errorJSONGenerator struct {
-	err error
-}
-
-func (g errorJSONGenerator) GenerateJSON(context.Context, sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
-	return sharedllm.JSONResponse{}, g.err
 }

@@ -53,6 +53,12 @@ contains_compose_file() {
     return 1
 }
 
+contains_ap_compose_file() {
+    contains_compose_file docker-compose.osaka.yml \
+        || contains_compose_file docker-compose.osaka2.yml \
+        || contains_compose_file docker-compose.seoul.yml
+}
+
 usage() {
     echo "Usage: $0 <service|all>"
     echo
@@ -62,15 +68,7 @@ usage() {
 
 target_requires_db_migration() {
     case "${TARGET}" in
-        hololive-api|hololive-alarm-worker|youtube-producer-c|"")
-            return 0
-            ;;
-        youtube-producer)
-            if contains_compose_file docker-compose.osaka.yml \
-               || contains_compose_file docker-compose.osaka2.yml \
-               || contains_compose_file docker-compose.seoul.yml; then
-                return 1
-            fi
+        hololive-api|hololive-alarm-worker|youtube-collector|"")
             return 0
             ;;
         *)
@@ -104,7 +102,7 @@ resolve_revision_services() {
     LIVE_REVISION_SERVICES=()
 
     case "${TARGET}" in
-        hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|admin-dashboard)
+        hololive-api|hololive-alarm-worker|youtube-collector|admin-dashboard)
             BUILT_REVISION_SERVICES=("${TARGET}")
             LIVE_REVISION_SERVICES=("${TARGET}")
             ;;
@@ -112,17 +110,8 @@ resolve_revision_services() {
             BUILT_REVISION_SERVICES=(hololive-db-migrate)
             ;;
         "")
-            BUILT_REVISION_SERVICES=(hololive-api hololive-alarm-worker admin-dashboard)
-            LIVE_REVISION_SERVICES=(hololive-api hololive-alarm-worker admin-dashboard)
-            if [[ ",${COMPOSE_PROFILES:-}," == *",main-ap,"* ]]; then
-                BUILT_REVISION_SERVICES+=(youtube-producer-c)
-                LIVE_REVISION_SERVICES+=(youtube-producer-c)
-            fi
-            if [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] \
-               && [[ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" == "true" ]]; then
-                BUILT_REVISION_SERVICES+=(youtube-producer)
-                LIVE_REVISION_SERVICES+=(youtube-producer)
-            fi
+            BUILT_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)
+            LIVE_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)
             ;;
     esac
 }
@@ -169,6 +158,24 @@ for index in "${!COMPOSE_FILE_PATHS[@]}"; do
 done
 COMPOSE_FILE="$(IFS=:; printf '%s' "${COMPOSE_FILE_PATHS[*]}")"
 
+SERVICE="$1"
+if ! TARGET="$(compose_service_resolve_redeploy_target "${SERVICE}")"; then
+    echo "[ERROR] Unsupported service: ${SERVICE}" >&2
+    echo >&2
+    usage >&2
+    exit 1
+fi
+
+if contains_ap_compose_file && [[ "${TARGET}" == "youtube-collector" ]]; then
+    echo "[ERROR] youtube-collector is central-only and cannot be redeployed with an AP compose overlay" >&2
+    exit 1
+fi
+
+if contains_ap_compose_file && [[ -z "${TARGET}" ]]; then
+    echo "[ERROR] all-service redeploy is not supported with an AP compose overlay; use the host-specific AP deploy entrypoint" >&2
+    exit 1
+fi
+
 SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
     "${SHARED_GO_WORKSPACE_PATH:-}" \
     "${ROOT_DIR}/../shared-go" \
@@ -204,41 +211,10 @@ elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
     exit 1
 fi
 
-SERVICE="$1"
-if ! TARGET="$(compose_service_resolve_redeploy_target "${SERVICE}")"; then
-    echo "[ERROR] Unsupported service: ${SERVICE}" >&2
-    echo >&2
-    usage >&2
-    exit 1
-fi
-
-if [[ "${TARGET}" == "youtube-producer" ]] \
-   && ! contains_compose_file docker-compose.osaka.yml \
-   && ! contains_compose_file docker-compose.osaka2.yml \
-   && ! contains_compose_file docker-compose.seoul.yml \
-   && [[ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]]; then
-    echo "[ERROR] youtube-producer is remote-AP-owned; central redeploy requires ALLOW_CENTRAL_YOUTUBE_PRODUCER=true" >&2
-    exit 1
-fi
-
-if [[ "${TARGET}" == "youtube-producer-c" ]]; then
-    if ! contains_compose_file docker-compose.main-ap.yml; then
-        echo "[ERROR] youtube-producer-c requires docker-compose.main-ap.yml in COMPOSE_FILE" >&2
-        exit 1
-    fi
-    if [[ ",${COMPOSE_PROFILES:-}," != *",main-ap,"* ]]; then
-        echo "[ERROR] youtube-producer-c requires COMPOSE_PROFILES=main-ap" >&2
-        exit 1
-    fi
-fi
-
 if [[ -z "${TARGET}" ]] \
-   && ! contains_compose_file docker-compose.osaka.yml \
-   && ! contains_compose_file docker-compose.osaka2.yml \
-   && ! contains_compose_file docker-compose.seoul.yml \
-   && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] \
-   && [[ "${ALLOW_CENTRAL_YOUTUBE_PRODUCER:-}" != "true" ]]; then
-    echo "[ERROR] Central all-service deploy cannot enable the remote-owned oracle profile" >&2
+   && ! contains_ap_compose_file \
+   && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]]; then
+    echo "[ERROR] Central all-service deploy cannot enable the AP-only oracle profile" >&2
     exit 1
 fi
 
@@ -255,7 +231,7 @@ postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}"
 
 REVISION_ENABLED=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|hololive-db-migrate|admin-dashboard|"")
+    hololive-api|hololive-alarm-worker|youtube-collector|hololive-db-migrate|admin-dashboard|"")
         REVISION_ENABLED=true
         REVISION="$(deploy_source_revision "${ROOT_DIR}")"
         export REVISION
@@ -282,7 +258,7 @@ echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 build_target=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-producer|youtube-producer-c|hololive-db-migrate|admin-dashboard)
+    hololive-api|hololive-alarm-worker|youtube-collector|hololive-db-migrate|admin-dashboard)
         build_target=true
         ;;
     "")
@@ -291,10 +267,8 @@ case "${TARGET}" in
 esac
 
 if [[ "${build_target}" == true ]]; then
-    # producer Dockerfile은 빌드 컨텍스트를 ap-rsync 매니페스트로 프루닝하므로,
-    # 매니페스트 누락은 원격 rsync뿐 아니라 이 로컬 빌드도 깨뜨린다.
     case "${TARGET}" in
-        youtube-producer|youtube-producer-c|"")
+        youtube-collector|"")
             bash "${ROOT_DIR}/scripts/deploy/check-ap-rsync-manifest.sh"
             ;;
     esac
@@ -346,12 +320,12 @@ if [[ -n "${TARGET}" ]]; then
         verify_cutover_image_revisions
     fi
 else
-    cutover_capture_restart_baseline hololive-api hololive-alarm-worker
+    cutover_capture_restart_baseline hololive-api hololive-alarm-worker youtube-collector
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
-    if ! cutover_health_gate hololive-api hololive-alarm-worker; then
+    if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector; then
         echo "[ERROR] health gate failed after all-service redeploy" >&2
         exit 1
     fi

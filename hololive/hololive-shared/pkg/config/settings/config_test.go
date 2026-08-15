@@ -748,12 +748,6 @@ func TestLoad_ScraperBackfillDefaults(t *testing.T) {
 	if backfill.ShortsInterval != 5*time.Minute {
 		t.Fatalf("Scraper.Backfill.ShortsInterval = %s, want 5m", backfill.ShortsInterval)
 	}
-	if !backfill.CommunityEnabled {
-		t.Fatal("Scraper.Backfill.CommunityEnabled = false, want true")
-	}
-	if backfill.CommunityInterval != 10*time.Minute {
-		t.Fatalf("Scraper.Backfill.CommunityInterval = %s, want 10m", backfill.CommunityInterval)
-	}
 	if !backfill.LiveEnabled {
 		t.Fatal("Scraper.Backfill.LiveEnabled = false, want true")
 	}
@@ -770,8 +764,6 @@ func TestLoad_ScraperBackfillEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_BACKFILL_ENABLED", "true")
 	t.Setenv("SCRAPER_BACKFILL_SHORTS_ENABLED", "false")
 	t.Setenv("SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS", "420")
-	t.Setenv("SCRAPER_BACKFILL_COMMUNITY_ENABLED", "false")
-	t.Setenv("SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS", "660")
 	t.Setenv("SCRAPER_BACKFILL_LIVE_ENABLED", "false")
 	t.Setenv("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", "180")
 	t.Setenv("SCRAPER_BACKFILL_TARGET_GROUP", " notification ")
@@ -790,12 +782,6 @@ func TestLoad_ScraperBackfillEnvOverrides(t *testing.T) {
 	}
 	if backfill.ShortsInterval != 7*time.Minute {
 		t.Fatalf("Scraper.Backfill.ShortsInterval = %s, want 7m", backfill.ShortsInterval)
-	}
-	if backfill.CommunityEnabled {
-		t.Fatal("Scraper.Backfill.CommunityEnabled = true, want false")
-	}
-	if backfill.CommunityInterval != 11*time.Minute {
-		t.Fatalf("Scraper.Backfill.CommunityInterval = %s, want 11m", backfill.CommunityInterval)
 	}
 	if backfill.LiveEnabled {
 		t.Fatal("Scraper.Backfill.LiveEnabled = true, want false")
@@ -825,20 +811,18 @@ func TestLoad_ScraperBackfillValidation(t *testing.T) {
 		{
 			name: "rejects enabled shorts zero interval",
 			env: map[string]string{
-				"SCRAPER_BACKFILL_ENABLED":                    "true",
-				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS":    "0",
-				"SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS": "600",
-				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":      "180",
+				"SCRAPER_BACKFILL_ENABLED":                 "true",
+				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS": "0",
+				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":   "180",
 			},
 			wantErr: "SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS must be positive when backfill shorts is enabled",
 		},
 		{
 			name: "allows disabled backfill zero intervals",
 			env: map[string]string{
-				"SCRAPER_BACKFILL_ENABLED":                    "false",
-				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS":    "0",
-				"SCRAPER_BACKFILL_COMMUNITY_INTERVAL_SECONDS": "0",
-				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":      "0",
+				"SCRAPER_BACKFILL_ENABLED":                 "false",
+				"SCRAPER_BACKFILL_SHORTS_INTERVAL_SECONDS": "0",
+				"SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS":   "0",
 			},
 		},
 	}
@@ -1794,158 +1778,5 @@ func TestLoad_ScraperSchedulerBackoffValidation(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be >= SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS") {
 		t.Fatalf("Load() error = %v", err)
-	}
-}
-
-func clearYouTubeProducerGlobalBudgetEnv(t *testing.T) {
-	t.Helper()
-	for _, key := range []string{
-		"YOUTUBE_PRODUCER_GLOBAL_BUDGET_ENABLED",
-		"YOUTUBE_PRODUCER_BUDGET_ACQUIRE_TIMEOUT_MS",
-		"YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT",
-		"YOUTUBE_PRODUCER_BUDGET_YOUTUBE_SCRAPER_MAX_INFLIGHT",
-		"YOUTUBE_PRODUCER_BUDGET_HOLODEX_LIVE_MAX_INFLIGHT",
-		"YOUTUBE_PRODUCER_BUDGET_BROWSER_SNAPSHOT_MAX_INFLIGHT",
-		"YOUTUBE_PRODUCER_BUDGET_BACKFILL_MAX_INFLIGHT",
-		"YOUTUBE_PRODUCER_BUDGET_FALLBACK_MAX_INFLIGHT",
-		"YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT",
-		"YOUTUBE_PRODUCER_BUDGET_WINDOW_CHECK_ENABLED",
-	} {
-		t.Setenv(key, "")
-		if err := os.Unsetenv(key); err != nil {
-			t.Fatalf("os.Unsetenv(%q) error = %v", key, err)
-		}
-	}
-}
-
-func assertYouTubeProducerGlobalBudgetConfig(t *testing.T, got, want *YouTubeProducerGlobalBudgetConfig) {
-	t.Helper()
-	if *got != *want {
-		t.Fatalf("LoadYouTubeProducerGlobalBudgetConfig() = %+v, want %+v", *got, *want)
-	}
-}
-
-func TestLoadYouTubeProducerGlobalBudgetConfigDefaults(t *testing.T) {
-	clearYouTubeProducerGlobalBudgetEnv(t)
-
-	config := LoadYouTubeProducerGlobalBudgetConfig()
-
-	assertYouTubeProducerGlobalBudgetConfig(t, &config, &YouTubeProducerGlobalBudgetConfig{
-		Enabled:                    false,
-		AcquireTimeout:             3 * time.Second,
-		ActiveInstanceCount:        0,
-		YouTubeScraperMaxInflight:  6,
-		HolodexLiveMaxInflight:     4,
-		BrowserSnapshotMaxInflight: 1,
-		BackfillMaxInflight:        2,
-		FallbackMaxInflight:        2,
-		CleanupLimit:               128,
-		WindowCheckEnabled:         false,
-	})
-}
-
-func TestLoadYouTubeProducerGlobalBudgetConfigEnvOverrides(t *testing.T) {
-	clearYouTubeProducerGlobalBudgetEnv(t)
-	t.Setenv("YOUTUBE_PRODUCER_GLOBAL_BUDGET_ENABLED", "true")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_ACQUIRE_TIMEOUT_MS", "2500")
-	t.Setenv("YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT", "3")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_YOUTUBE_SCRAPER_MAX_INFLIGHT", "7")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_HOLODEX_LIVE_MAX_INFLIGHT", "5")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_BROWSER_SNAPSHOT_MAX_INFLIGHT", "2")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_BACKFILL_MAX_INFLIGHT", "4")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_FALLBACK_MAX_INFLIGHT", "8")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT", "17")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_WINDOW_CHECK_ENABLED", "true")
-
-	config := LoadYouTubeProducerGlobalBudgetConfig()
-
-	assertYouTubeProducerGlobalBudgetConfig(t, &config, &YouTubeProducerGlobalBudgetConfig{
-		Enabled:                    true,
-		AcquireTimeout:             2500 * time.Millisecond,
-		ActiveInstanceCount:        3,
-		YouTubeScraperMaxInflight:  7,
-		HolodexLiveMaxInflight:     5,
-		BrowserSnapshotMaxInflight: 2,
-		BackfillMaxInflight:        4,
-		FallbackMaxInflight:        8,
-		CleanupLimit:               17,
-		WindowCheckEnabled:         true,
-	})
-}
-
-func TestLoadYouTubeProducerGlobalBudgetConfigAcquireTimeoutClamp(t *testing.T) {
-	tests := []struct {
-		name string
-		env  string
-		want time.Duration
-	}{
-		{name: "zero", env: "0", want: 3 * time.Second},
-		{name: "negative", env: "-1", want: 3 * time.Second},
-		{name: "above max", env: "6000", want: 5 * time.Second},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			clearYouTubeProducerGlobalBudgetEnv(t)
-			t.Setenv("YOUTUBE_PRODUCER_BUDGET_ACQUIRE_TIMEOUT_MS", tt.env)
-
-			config := LoadYouTubeProducerGlobalBudgetConfig()
-
-			if config.AcquireTimeout != tt.want {
-				t.Fatalf("AcquireTimeout = %s, want %s", config.AcquireTimeout, tt.want)
-			}
-		})
-	}
-}
-
-func TestLoadYouTubeProducerGlobalBudgetConfigCleanupLimitDefault(t *testing.T) {
-	tests := []struct {
-		name string
-		env  string
-		want int
-	}{
-		{name: "zero", env: "0", want: 128},
-		{name: "negative", env: "-1", want: 128},
-		{name: "positive", env: "9", want: 9},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			clearYouTubeProducerGlobalBudgetEnv(t)
-			t.Setenv("YOUTUBE_PRODUCER_BUDGET_CLEANUP_LIMIT", tt.env)
-
-			config := LoadYouTubeProducerGlobalBudgetConfig()
-
-			if config.CleanupLimit != tt.want {
-				t.Fatalf("CleanupLimit = %d, want %d", config.CleanupLimit, tt.want)
-			}
-		})
-	}
-}
-
-func TestLoadYouTubeProducerGlobalBudgetConfigNegativeMaxInflight(t *testing.T) {
-	clearYouTubeProducerGlobalBudgetEnv(t)
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_YOUTUBE_SCRAPER_MAX_INFLIGHT", "-1")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_HOLODEX_LIVE_MAX_INFLIGHT", "-2")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_BROWSER_SNAPSHOT_MAX_INFLIGHT", "-3")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_BACKFILL_MAX_INFLIGHT", "-4")
-	t.Setenv("YOUTUBE_PRODUCER_BUDGET_FALLBACK_MAX_INFLIGHT", "-5")
-
-	config := LoadYouTubeProducerGlobalBudgetConfig()
-
-	if config.YouTubeScraperMaxInflight != 0 {
-		t.Fatalf("YouTubeScraperMaxInflight = %d, want 0", config.YouTubeScraperMaxInflight)
-	}
-	if config.HolodexLiveMaxInflight != 0 {
-		t.Fatalf("HolodexLiveMaxInflight = %d, want 0", config.HolodexLiveMaxInflight)
-	}
-	if config.BrowserSnapshotMaxInflight != 0 {
-		t.Fatalf("BrowserSnapshotMaxInflight = %d, want 0", config.BrowserSnapshotMaxInflight)
-	}
-	if config.BackfillMaxInflight != 0 {
-		t.Fatalf("BackfillMaxInflight = %d, want 0", config.BackfillMaxInflight)
-	}
-	if config.FallbackMaxInflight != 0 {
-		t.Fatalf("FallbackMaxInflight = %d, want 0", config.FallbackMaxInflight)
 	}
 }

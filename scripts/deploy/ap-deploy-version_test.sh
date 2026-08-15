@@ -58,7 +58,7 @@ grep -Fq '[[ "$built_revision" == ' "$deploy_script" \
   || fail "AP build must require the exact locally built image revision"
 grep -Fq 'docker save --output' "$deploy_script" \
   || fail "AP cutover must archive the verified producer image for transfer"
-grep -Fq 'rollback_image_tag="hololive-youtube-producer:rollback-$change_id"' "$deploy_script" \
+grep -Fq 'rollback_image_tag="hololive-youtube-collector:rollback-$change_id"' "$deploy_script" \
   || fail "AP cutover must name a release-specific rollback image tag"
 grep -Fq "sudo -n docker tag '\$IMAGE_REF' '\$rollback_image_tag'" "$deploy_script" \
   || fail "AP cutover must preserve the previous runtime image before loading the candidate"
@@ -68,7 +68,7 @@ grep -Fq '  "$image_archive"' "$deploy_script" \
   || fail "AP cutover must transfer the image archive to the AP host"
 grep -Fq '"ubuntu@$AP_SSH_HOST:~/$image_remote_path"' "$deploy_script" \
   || fail "AP cutover must transfer the image archive into the remote backup workspace"
-grep -Fq "image_archive='\$backup_dir/hololive-youtube-producer-prod.tar'" "$deploy_script" \
+grep -Fq "image_archive='\$backup_dir/hololive-youtube-collector-prod.tar'" "$deploy_script" \
   || fail "AP cutover must load the image archive from the remote backup workspace"
 grep -Fq 'docker load --input' "$deploy_script" \
   || fail "AP cutover must load the transferred producer image on the AP host"
@@ -90,6 +90,8 @@ up_line="$(grep -n "up -d --no-build" "$deploy_script" | cut -d: -f1)"
   || fail "AP image build, verification, transfer, load, and no-build up must remain ordered"
 grep -Fq "up -d --no-build" "$deploy_script" \
   || fail "AP cutover must explicitly disable remote Compose builds"
+grep -Fq 'stop_retired_producer_runtime' "$deploy_script" \
+  || fail "AP cutover must stop leftover youtube-producer before starting collector"
 if grep -Fq -- "--remove-orphans" "$deploy_script"; then
   fail "AP deploy must preserve independently managed services in the shared Compose project"
 fi

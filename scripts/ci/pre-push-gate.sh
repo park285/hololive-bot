@@ -27,7 +27,7 @@ esac
 
 # 필요한 보안 patch toolchain을 확보하되, go.mod/go.work 정본은 local-ci의
 # ensure_go_mod_toolchains가 관리한다.
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.5+auto}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.6+auto}"
 
 # hook이 주입한 GIT_DIR 등이 남으면 linked worktree나 tmp 레포 대상 git 호출이
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.
@@ -240,6 +240,11 @@ run_ambient() {
   if echo "$changed_files" | grep -qE '^admin-dashboard/(frontend|backend)/'; then
     echo "[pre-push] admin-dashboard frontend 품질 게이트"
     (cd admin-dashboard/frontend && corepack npm ci && corepack npm run generate:api && corepack npm test && corepack npm run lint && corepack npm run build)
+  fi
+
+  if [[ "${PRE_PUSH_MODE}" == "full" ]] || echo "$changed_files" | grep -q '^hololive/hololive-youtube-collector/'; then
+    echo "[pre-push] youtube-collector YouTube.js helper 품질 게이트"
+    bash scripts/ci/public-pr-collector-helper-gate.sh
   fi
 }
 

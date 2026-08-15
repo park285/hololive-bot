@@ -21,10 +21,13 @@
 package settings
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 	"github.com/park285/shared-go/pkg/stringutil"
@@ -88,6 +91,42 @@ func positiveIntEnv(key string, fallback int) int {
 		return value
 	}
 	return fallback
+}
+
+func requiredPositiveIntEnv(key string, fallback int) (int, error) {
+	raw, found := os.LookupEnv(key)
+	if !found {
+		return fallback, nil
+	}
+	if strings.TrimSpace(raw) == "" {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	value, err := sharedenv.IntE(key, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("%s must be positive", key)
+	}
+	return value, nil
+}
+
+func requiredDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
+	raw, found := os.LookupEnv(key)
+	if !found {
+		return fallback, nil
+	}
+	if strings.TrimSpace(raw) == "" {
+		return 0, fmt.Errorf("%s must be a positive duration", key)
+	}
+	value, err := strictDurationUnitEnv(key, fallback, unit)
+	if err != nil {
+		return 0, err
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("%s must be positive", key)
+	}
+	return value, nil
 }
 
 func resolveHolodexAPIKey() string {

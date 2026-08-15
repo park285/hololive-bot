@@ -1,5 +1,5 @@
 [Unit]
-Description=Run Hololive Osaka daily youtube-producer log rollup after midnight
+Description=Run Hololive Osaka daily youtube-collector log rollup after midnight
 
 [Timer]
 OnCalendar=*-*-* 00:05:00

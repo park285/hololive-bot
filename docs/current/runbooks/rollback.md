@@ -106,7 +106,7 @@ Runtime service names:
 
 - `hololive-api`
 - `hololive-alarm-worker`
-- `youtube-producer`
+- `youtube-collector`
 
 `hololive-api`가 durable bot admission migration 123~136을 적용하고 traffic을 수락한 뒤에는 이전 image나 구 bot runtime이 `bot_webhook_inbox`/`bot_reply_outbox`를 소비하지 못합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 rollback 절차가 우선하며, ingress quiescence와 zero-backlog preflight가 성공하지 않으면 image rollback 대신 현재 durable runtime을 fix-forward합니다.
 

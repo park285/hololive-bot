@@ -20,6 +20,9 @@ esac
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 . "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
+NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
+RETIRED_PRODUCER_LIB="$REPO_ROOT/scripts/deploy/lib/retired-producer-cutover.sh"
+REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
@@ -62,13 +65,10 @@ write_host_env() {
   local dest="$1"
   {
     printf 'APP_ENV=production\n'
-    printf 'NOTIFICATION_EGRESS_ROLE=producer\n'
-    printf 'YOUTUBE_PRODUCER_RUNTIME_ALLOWED=true\n'
-    printf 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED=true\n'
-    printf 'YOUTUBE_PRODUCER_ACTIVE_ACTIVE_INSTANCE_COUNT=4\n'
-    printf 'YOUTUBE_PRODUCER_LEASE_NAMESPACE=production\n'
-    printf 'YOUTUBE_PRODUCER_INSTANCE_ID=%s\n' "$service"
-    printf 'YOUTUBE_PRODUCER_LOG_FILE_NAME=%s.log\n' "$service"
+    printf 'NOTIFICATION_EGRESS_ROLE=off\n'
+    printf 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true\n'
+    printf 'YOUTUBE_COLLECTOR_INSTANCE_ID=%s\n' "$service"
+    printf 'YOUTUBE_COLLECTOR_LOG_FILE_NAME=%s.log\n' "$service"
     printf 'YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false\n'
     printf 'YOUTUBE_INGESTION_ENABLED=true\n'
     printf 'SERVER_PORT=%s\n' "$port"
@@ -79,14 +79,13 @@ write_host_env() {
     printf 'HOLOLIVE_H3_SERVER_NAME=127.0.0.1\n'
     printf 'HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1\n'
-    printf 'HOLOLIVE_METRICS_ADDR=%s:30095\n' "$AP_SSH_HOST"
+    printf 'HOLOLIVE_METRICS_ADDR=%s:30096\n' "$AP_SSH_HOST"
     printf 'HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HEALTHCHECK_SERVER_NAME=127.0.0.1\n'
     printf 'PHOTO_SYNC_ENABLED=false\n'
-    printf 'SCRAPER_FETCHER_ENGINE=nethttp\n'
-    printf 'SCRAPER_SCHEDULER_WORKER_COUNT=1\n'
-    printf 'SCRAPER_BACKFILL_ENABLED=false\n'
-    printf 'YOUTUBE_PRODUCER_REQUEST_INTERVAL_SECONDS=2\n'
+    printf 'YOUTUBEJS_NODE=/usr/bin/node\n'
+    printf 'YOUTUBEJS_SCRIPT=/opt/hololive-bot/youtube-collector/current/youtubejs/src/server.mjs\n'
+    printf 'POSTGRES_USER=hololive_scraper\n'
     printf 'POSTGRES_HOST=%s\n' "$AP_POSTGRES_HOST"
     printf 'POSTGRES_PORT=%s\n' "$AP_POSTGRES_PORT"
     printf 'POSTGRES_DB=hololive\n'
@@ -99,8 +98,7 @@ write_host_env() {
     printf 'CACHE_HOST=%s\n' "${AP_CACHE_HOST:-$AP_CENTRAL_HOST}"
     printf 'CACHE_PORT=6379\n'
     printf 'CACHE_SOCKET_PATH=\n'
-    printf 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-producer/settings\n'
-    printf 'CLIPROXY_BASE_URL=%s\n' "${AP_CLIPROXY_BASE_URL:-http://$AP_CLIPROXY_HOST:8787/v1}"
+    printf 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-collector/settings\n'
     printf 'GOMEMLIMIT=384MiB\n'
     printf 'GOGC=100\n'
     printf 'GIN_MODE=release\n'
@@ -122,12 +120,15 @@ elif [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${DB_PASSWORD:-}" ]; then
   export POSTGRES_PASSWORD="$DB_PASSWORD"
 fi
 if [ -z "${POSTGRES_USER:-}" ]; then
-  export POSTGRES_USER="${HOLOLIVE_DB_USER:-hololive_runtime}"
+  export POSTGRES_USER="${HOLOLIVE_SCRAPER_USER:-hololive_scraper}"
 fi
 if [ -z "${POSTGRES_DB:-}" ]; then
   export POSTGRES_DB=hololive
 fi
-exec /opt/hololive-bot/youtube-producer/current/bin/youtube-producer
+if [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${HOLOLIVE_SCRAPER_PASSWORD:-}" ]; then
+  export POSTGRES_PASSWORD="$HOLOLIVE_SCRAPER_PASSWORD"
+fi
+exec /opt/hololive-bot/youtube-collector/current/bin/youtube-collector
 EOF
   chmod 0755 "$dest"
 }
@@ -136,7 +137,7 @@ write_unit() {
   local dest="$1"
   cat > "$dest" <<'EOF'
 [Unit]
-Description=Hololive youtube-producer AP (%i)
+Description=Hololive youtube-collector AP (%i)
 After=network-online.target
 Wants=network-online.target
 
@@ -144,11 +145,11 @@ Wants=network-online.target
 Type=simple
 User=hololive
 Group=opc
-WorkingDirectory=/opt/hololive-bot/youtube-producer/current
+WorkingDirectory=/opt/hololive-bot/youtube-collector/current
 EnvironmentFile=/etc/stack-secrets/hololive-bot/ap-compose.env
-EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-producer.env
-EnvironmentFile=/etc/hololive-bot/youtube-producer-host.env
-ExecStart=/opt/hololive-bot/youtube-producer/current/bin/youtube-producer-wrapper
+EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env
+EnvironmentFile=/etc/hololive-bot/youtube-collector-host.env
+ExecStart=/opt/hololive-bot/youtube-collector/current/bin/youtube-collector-wrapper
 Restart=always
 RestartSec=5s
 TimeoutStopSec=30s
@@ -169,21 +170,32 @@ mkdir -p "$artifact_dir/bin" "$artifact_dir/internal/domain"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
 
 (
-  cd "$REPO_ROOT/hololive/hololive-youtube-producer"
+  cd "$REPO_ROOT/hololive/hololive-youtube-collector"
   export GOWORK=off
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64="${GOAMD64:-v1}" \
     go build -tags sonic -trimpath -buildvcs=false \
       -ldflags="-s -w -buildid= -X main.Version=$version" \
-      -o "$artifact_dir/bin/youtube-producer" ./cmd/runtime/youtube-producer
+      -o "$artifact_dir/bin/youtube-collector" ./cmd/runtime/youtube-collector
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64="${GOAMD64:-v1}" \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
       -o "$artifact_dir/bin/healthcheck" ./cmd/runtime/healthcheck
 )
-write_wrapper "$artifact_dir/bin/youtube-producer-wrapper"
+write_wrapper "$artifact_dir/bin/youtube-collector-wrapper"
 rm -rf "$artifact_dir/internal/domain/data"
 cp -R "$REPO_ROOT/hololive/hololive-shared/pkg/domain/internal/model/data" "$artifact_dir/internal/domain/data"
-write_host_env "$artifact_dir/youtube-producer-host.env"
-write_unit "$artifact_dir/hololive-youtube-producer@.service"
+rm -rf "$artifact_dir/youtubejs"
+mkdir -p "$artifact_dir/youtubejs"
+cp "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package.json" \
+  "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package-lock.json" \
+  "$artifact_dir/youtubejs/"
+cp -R "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/src" "$artifact_dir/youtubejs/src"
+rm -f "$artifact_dir/youtubejs/src/"*.test.mjs
+(
+  cd "$artifact_dir/youtubejs"
+  npm ci --omit=dev --no-audit --no-fund
+)
+write_host_env "$artifact_dir/youtube-collector-host.env"
+write_unit "$artifact_dir/hololive-youtube-collector@.service"
 
 RSYNC_RSH="ssh -F /dev/null -i $SSH_KEY -o IdentitiesOnly=yes"
 if [[ -n "$AP_SSH_HOST_KEY_ALIAS" ]]; then
@@ -202,182 +214,11 @@ date -u +%Y-%m-%dT%H:%M:%SZ
 REMOTE
 )"
 
-ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" <<'REMOTE'
-set -euo pipefail
-payload_name="$1"
-release_id="$2"
-service="$3"
-port="$4"
-change_started_at="$5"
-required_udp_buffer="$6"
-swapfile_size_mib="$7"
-payload="$HOME/$payload_name"
-release_path_lib="$payload/bin/ap-host-native-release-path.sh"
-releases_root="/opt/hololive-bot/youtube-producer/releases"
-current_link="/opt/hololive-bot/youtube-producer/current"
-previous_link="/opt/hololive-bot/youtube-producer/previous"
-host_env="/etc/hololive-bot/youtube-producer-host.env"
-unit_file="/etc/systemd/system/hololive-youtube-producer@.service"
-unit="hololive-youtube-producer@${service}.service"
-swapfile="/swapfile"
-
-test -r "$release_path_lib"
-. "$release_path_lib"
-
-if ! getent group opc >/dev/null; then
-  sudo -n groupadd --system opc
-fi
-if ! id hololive >/dev/null 2>&1; then
-  sudo -n useradd --system --gid opc --home-dir /nonexistent --shell /usr/sbin/nologin hololive
-fi
-
-sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
-sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-producer.env
-sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
-sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
-sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
-
-sudo -n install -d -m 0755 -o root -g root "$releases_root"
-sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
-sudo -n install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-producer/settings
-sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
-sudo -n install -d -m 0755 -o root -g root /etc/sysctl.d
-sudo -n tee /etc/logrotate.d/hololive-bot >/dev/null <<'LOGROTATE'
-/var/log/hololive-bot/*.log {
-    daily
-    rotate 14
-    size 10M
-    missingok
-    notifempty
-    olddir /var/log/hololive-bot/archive
-    compress
-    delaycompress
-    copytruncate
-    create 0640 hololive opc
-}
-LOGROTATE
-if command -v logrotate >/dev/null 2>&1; then
-  sudo -n logrotate -d /etc/logrotate.d/hololive-bot >/dev/null
-fi
-sudo -n tee /etc/sysctl.d/99-hololive-quic-udp-buffer.conf >/dev/null <<SYSCTL
-net.core.rmem_max = ${required_udp_buffer}
-net.core.wmem_max = ${required_udp_buffer}
-SYSCTL
-sudo -n sysctl -w "net.core.rmem_max=${required_udp_buffer}" "net.core.wmem_max=${required_udp_buffer}" >/dev/null
-if ! sudo -n test -f "$swapfile"; then
-  if command -v fallocate >/dev/null 2>&1; then
-    sudo -n fallocate -l "${swapfile_size_mib}M" "$swapfile" || sudo -n dd if=/dev/zero of="$swapfile" bs=1M count="$swapfile_size_mib" status=none
-  else
-    sudo -n dd if=/dev/zero of="$swapfile" bs=1M count="$swapfile_size_mib" status=none
-  fi
-fi
-sudo -n chown root:root "$swapfile"
-sudo -n chmod 600 "$swapfile"
-if ! sudo -n file "$swapfile" | grep -q 'swap file'; then
-  sudo -n mkswap "$swapfile" >/dev/null
-fi
-if ! swapon --noheadings --show=NAME | grep -Fxq "$swapfile"; then
-  sudo -n swapon "$swapfile"
-fi
-if ! sudo -n grep -Eq '^/swapfile[[:space:]]+none[[:space:]]+swap[[:space:]]+' /etc/fstab; then
-  printf '/swapfile none swap sw 0 0\n' | sudo -n tee -a /etc/fstab >/dev/null
-fi
-sudo -n tee /etc/sysctl.d/99-hololive-swap.conf >/dev/null <<'SYSCTL'
-vm.swappiness = 10
-SYSCTL
-sudo -n sysctl -w vm.swappiness=10 >/dev/null
-
-old_target=""
-if [[ -L "$current_link" ]]; then
-  old_target="$(readlink -f "$current_link" || true)"
-fi
-release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
-
-sudo -n rm -rf "$release_dir"
-sudo -n mkdir -p "$release_dir"
-sudo -n rsync -a --delete "$payload/" "$release_dir/"
-sudo -n chown -R root:root "$release_dir"
-sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-producer" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-producer-wrapper"
-
-if [[ -n "$old_target" && -d "$old_target" ]]; then
-  sudo -n test -r "$host_env"
-  sudo -n test -r "$unit_file"
-  sudo -n test -x "$old_target/bin/youtube-producer"
-  sudo -n test -x "$old_target/bin/youtube-producer-wrapper"
-  sudo -n test -x "$old_target/bin/healthcheck"
-  sudo -n test -d "$old_target/internal/domain/data"
-  rollback_contract_dir="$old_target/rollback-contract"
-  sudo -n install -d -m 0755 -o root -g root "$rollback_contract_dir"
-  sudo -n install -m 0640 -o root -g root "$host_env" "$rollback_contract_dir/youtube-producer-host.env"
-  sudo -n install -m 0644 -o root -g root "$unit_file" "$rollback_contract_dir/hololive-youtube-producer@.service"
-  sudo -n sh -c '
-    set -eu
-    cd "$1"
-    {
-      sha256sum \
-        bin/youtube-producer \
-        bin/youtube-producer-wrapper \
-        bin/healthcheck \
-        rollback-contract/youtube-producer-host.env \
-        rollback-contract/hololive-youtube-producer@.service
-      find internal/domain/data -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
-    } > rollback-contract/SHA256SUMS
-    chmod 0644 rollback-contract/SHA256SUMS
-  ' sh "$old_target"
-  sudo -n ln -sfn "$old_target" "$previous_link"
-fi
-
-sudo -n install -m 0640 -o root -g root "$payload/youtube-producer-host.env" "$host_env"
-sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-producer@.service" "$unit_file"
-sudo -n ln -sfn "$release_dir" "$current_link"
-
-sudo -n systemd-analyze verify "$unit_file"
-sudo -n systemctl daemon-reload
-sudo -n systemctl enable --now "$unit"
-sudo -n systemctl restart "$unit"
-
-since_epoch="$(date -u -d "$change_started_at" +%s)"
-for _ in $(seq 1 30); do
-  active_state="$(systemctl show "$unit" -p ActiveState --value)"
-  [[ "$active_state" == active ]] && break
-  sleep 2
-done
-active_enter="$(systemctl show "$unit" -p ActiveEnterTimestamp --value)"
-active_epoch="$(date -u -d "$active_enter" +%s)"
-[[ "$active_epoch" -ge "$since_epoch" ]]
-
-systemctl show "$unit" -p ActiveState -p SubState -p ExecMainPID -p MemoryCurrent -p NRestarts -p ActiveEnterTimestamp
-printf 'net.core.rmem_max=%s\n' "$(sysctl -n net.core.rmem_max)"
-printf 'net.core.wmem_max=%s\n' "$(sysctl -n net.core.wmem_max)"
-
-for _ in $(seq 1 30); do
-  if sudo -n -u hololive env \
-     HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
-     HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-     "$current_link/bin/healthcheck" "https://127.0.0.1:${port}/health"; then
-    break
-  fi
-  sleep 2
-done
-
-ready="$(
-  sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
-  HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-  "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
-)"
-printf '%s\n' "$ready"
-printf '%s' "$ready" | grep -q '"status":"ready"'
-
-journal_since="${change_started_at/T/ }"
-journal_since="${journal_since%Z} UTC"
-journalctl -u "$unit" --since "$journal_since" --no-pager |
-  grep -E 'PostgreSQL|Valkey|active_active|ERR|panic|permission denied|x509|no such file' || true
-if journalctl -u "$unit" --since "$journal_since" --no-pager |
-   grep -E 'ERR|panic|permission denied|x509|no such file'; then
-  exit 1
-fi
-REMOTE
+{
+  cat "$NODE_VERSION_LIB"
+  cat "$RETIRED_PRODUCER_LIB"
+  cat "$REMOTE_APPLY_LIB"
+} | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB"
 
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$AP_NAME"
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"

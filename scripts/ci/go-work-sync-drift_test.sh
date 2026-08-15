@@ -12,13 +12,13 @@ sibling="${tmpdir}/stack/iris-client-go"
 fakebin="${tmpdir}/bin"
 mkdir -p "${fixture}/admin-dashboard/backend" "${sibling}" "${fakebin}"
 
-printf 'go 1.26.5\nuse (\n\t.\n\t./admin-dashboard/backend\n\t../iris-client-go\n)\n' >"${fixture}/go.work"
-printf 'module example.com/root\n\ngo 1.26.5\n' >"${fixture}/go.mod"
+printf 'go 1.26.6\nuse (\n\t.\n\t./admin-dashboard/backend\n\t../iris-client-go\n)\n' >"${fixture}/go.work"
+printf 'module example.com/root\n\ngo 1.26.6\n' >"${fixture}/go.mod"
 : >"${fixture}/go.sum"
 : >"${fixture}/go.work.sum"
-printf 'module example.com/admin\n\ngo 1.26.5\n' >"${fixture}/admin-dashboard/backend/go.mod"
+printf 'module example.com/admin\n\ngo 1.26.6\n' >"${fixture}/admin-dashboard/backend/go.mod"
 : >"${fixture}/admin-dashboard/backend/go.sum"
-printf 'module example.com/client\n\ngo 1.26.5\n' >"${sibling}/go.mod"
+printf 'module example.com/client\n\ngo 1.26.6\n' >"${sibling}/go.mod"
 printf 'baseline\n' >"${sibling}/go.sum"
 
 workspace_metadata_files() {

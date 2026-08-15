@@ -12,23 +12,14 @@
 
 ## 실행
 
-리포지토리 루트에서 실행합니다.
+standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `youtube-collector`에는 `cmd/ops` 리포트 바이너리가 없다.
 
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts route-report
-```
-
-더 긴 관측 창이 필요하면 `-window` 를 지정합니다.
-
-```bash
-go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts route-report -window=72h
-```
+Community/shorts 수집 evidence는 `youtube-collector` observation, canonical consume는 `hololive-api` YouTube plane, 최종 발송은 `alarm-worker`다. 운영 조회는 `members`/`alarms`와 `youtube_content_alarm_tracking` + `youtube_notification_delivery_telemetry`를 직접 대조한다.
 
 필요 조건:
 
-- `config.Load()` 가 성공할 수 있도록 운영과 동일한 DB/env 구성이 필요합니다.
+- 운영과 동일한 PostgreSQL 구성이 필요합니다.
 - 기본 관측 창은 최근 `24h` 입니다.
-- 리포트는 stdout으로 Markdown을 출력합니다.
 
 ## 출력 해석
 
@@ -76,17 +67,14 @@ go run ./hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts rou
 
 ## 근거 코드
 
-- 리포트 수집/렌더링: `hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports/community_shorts_route_report.go`
-- baseline SSOT: `hololive/hololive-youtube-producer/internal/communityshorts/target_baseline.go`
-- 신규 경로 fan-out: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/dispatch/dispatcher_send.go`
-- 실제 경로 조회: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/path_usage.go`
-- 게시물별 발송 집계: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/telemetry/post_send_counts.go`
+- 신규 경로 상수: `hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/classifiers.go`
+- 실제 경로 조회: `hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/path_usage.go`
+- 게시물별 발송 집계: `hololive/hololive-shared/pkg/service/youtube/outbox/telemetry/post_send_counts.go`
+- 최종 egress owner: `alarm-worker`
 
 ## 로컬 검증
 
-- `go test ./hololive/hololive-youtube-producer/internal/ops/communityshorts/internal/reports -run '^TestBuildCommunityShortsRouteVerificationReport`
-`
-- `go test ./hololive/hololive-youtube-producer/cmd/...`
+- `go test ./hololive/hololive-shared/pkg/service/youtube/outbox/...`
 
 관련 참고:
 

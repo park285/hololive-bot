@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -54,8 +53,9 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 		}
 
 		service := NewService(client, []int{10}, logger)
-		_, _, err := service.TryClaimNotification(context.Background(), nonCanonicalRoomID, "stream-1", scheduled, 10)
+		_, acquired, err := service.TryClaimNotification(context.Background(), nonCanonicalRoomID, "stream-1", scheduled, 10)
 		require.NoError(t, err)
+		require.False(t, acquired)
 
 		record := sink.String()
 		require.NotEmpty(t, record)
@@ -79,18 +79,4 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 		require.NotEmpty(t, record)
 		assert.NotContains(t, record, nonCanonicalRoomID)
 	})
-}
-
-func TestTryClaimOnOutageRecordNeverCarriesRoomPlaintext(t *testing.T) {
-	sink, logger := debugSink()
-	fallback := NewLocalFallback(logger)
-
-	key := keys.BuildNotifyClaimKey(nonCanonicalRoomID, "stream-1", time.Unix(1785499200, 0).UTC(), "10m")
-	acquired := fallback.TryClaimOnOutage(key, time.Minute, errors.New("valkey unreachable"))
-	require.True(t, acquired)
-
-	record := sink.String()
-	require.NotEmpty(t, record)
-	assert.NotContains(t, record, nonCanonicalRoomID,
-		"이 Warn은 기본 레벨이라 프로덕션 로그 수집기까지 그대로 나간다")
 }

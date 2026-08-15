@@ -18,7 +18,7 @@ write_fixture() {
   cat >"${dir}/service/go.mod" <<'EOF'
 module example.com/pgo-policy-fixture
 
-go 1.26.5
+go 1.26.6
 EOF
   cat >"${dir}/service/cmd/app/main.go" <<'EOF'
 package main
@@ -182,7 +182,7 @@ case_default_policy_has_exact_rows() {
     'off|admin-dashboard/backend|./cmd/admin-dashboard|admin-dashboard' \
     'off|hololive/hololive-alarm-worker|./cmd/alarm-worker|hololive-alarm-worker' \
     'off|hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate' \
-    'off|hololive/hololive-youtube-producer|./cmd/runtime/youtube-producer|youtube-producer' | sort)"
+    'off|hololive/hololive-youtube-collector|./cmd/runtime/youtube-collector|youtube-collector' | sort)"
   if [[ "${actual}" != "${expected}" ]]; then
     printf 'not ok - production off-only policy rows differ\nexpected:\n%s\nactual:\n%s\n' \
       "${expected}" "${actual}" >&2

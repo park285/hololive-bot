@@ -10,9 +10,10 @@
 
 ### 변경
 
+- standalone YouTube scrape/outbox runtime 모듈을 제거하고 AP a/b/c/d identity를 `youtube-collector` fleet로 통일했습니다. Canonical consume/notification/retention은 `hololive-api` YouTube plane, `members.photo`는 admin PhotoSync, egress는 `alarm-worker`입니다. production apply는 포함하지 않습니다.
 - **service 로그 인코딩이 text에서 JSON으로 바뀝니다.** shared-go 로깅이 text
   인코더를 제거하고 빈 `Format` 기본값이 JSON이 되면서, `hololive-api`,
-  `hololive-alarm-worker`, `hololive-youtube-producer`, admin-dashboard backend의
+  `hololive-alarm-worker`, `hololive-youtube-collector`, admin-dashboard backend의
   stdout·파일 로그가 모두 JSON으로 전환됩니다. text 출력을 전제한 로그 수집·grep·
   알림 규칙은 배포 전에 점검해야 합니다. 사람용 ops CLI의 stderr 출력은 종전
   그대로입니다.

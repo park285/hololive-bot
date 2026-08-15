@@ -41,7 +41,7 @@ func (f *fakeCostTracker) RecordUsage(_ context.Context, provider, model string,
 
 func TestOpenAIClient_recordUsage_DelegatesPositiveTokensWithProviderModel(t *testing.T) {
 	ft := &fakeCostTracker{}
-	c := NewClient("https://example.com", "key", "gpt-test", nil, WithCostTracker(ft))
+	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil, WithCostTracker(ft))
 
 	c.recordUsage(context.Background(), 1234)
 	require.Equal(t, []int64{1234}, ft.tokens)
@@ -51,7 +51,7 @@ func TestOpenAIClient_recordUsage_DelegatesPositiveTokensWithProviderModel(t *te
 
 func TestOpenAIClient_recordUsage_SkipsZeroOrNegativeTokens(t *testing.T) {
 	ft := &fakeCostTracker{}
-	c := NewClient("https://example.com", "key", "gpt-test", nil, WithCostTracker(ft))
+	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil, WithCostTracker(ft))
 
 	c.recordUsage(context.Background(), 0)
 	c.recordUsage(context.Background(), -5)
@@ -59,12 +59,12 @@ func TestOpenAIClient_recordUsage_SkipsZeroOrNegativeTokens(t *testing.T) {
 }
 
 func TestOpenAIClient_recordUsage_NoTrackerIsNoOp(t *testing.T) {
-	c := NewClient("https://example.com", "key", "gpt-test", nil)
+	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil)
 	require.NotPanics(t, func() {
 		c.recordUsage(context.Background(), 100)
 	})
 
 	// WithCostTracker(nil)은 tracker를 설정하지 않아야 한다(no-op).
-	c2 := NewClient("https://example.com", "key", "gpt-test", nil, WithCostTracker(nil))
+	c2 := mustNewClient(t, "https://example.com", "key", "gpt-test", nil, WithCostTracker(nil))
 	require.Nil(t, c2.costTracker)
 }

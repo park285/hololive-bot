@@ -5,9 +5,9 @@ majorevent.subscription|hololive-api|hololive-api|http_json|/internal/majorevent
 trigger.manual|hololive-api|hololive-api|http_json|/internal/trigger/majorevent-weekly;/internal/trigger/majorevent-monthly;/internal/trigger/membernews-weekly|hololive/hololive-shared/pkg/contracts/trigger|docs/current/contracts/trigger.md
 alarm.http|alarm-worker|hololive-api|http_json|/internal/alarm/*|hololive/hololive-shared/pkg/service/alarm|docs/current/contracts/alarm.md
 alarm.dispatch|alarm-worker|alarm-worker|valkey_queue|alarm:dispatch:queue;alarm:dispatch:retry;alarm:dispatch:dlq|hololive/hololive-shared/pkg/contracts/alarm|docs/current/contracts/alarm.md
-youtube.outbox.egress|youtube-producer|alarm-worker|postgres_table|youtube_notification_outbox|hololive/hololive-shared/pkg/service/youtube/outbox|docs/current/contracts/alarm.md
-alarm.state.read|alarm-worker|youtube-producer|postgres_table|alarms|hololive/hololive-shared/pkg/service/alarmread|docs/current/contracts/alarm.md
+youtube.outbox.egress|hololive-api|alarm-worker|postgres_table|youtube_notification_outbox|hololive/hololive-shared/pkg/service/youtube/outbox|docs/current/contracts/alarm.md
+alarm.state.read|alarm-worker|hololive-api|postgres_table|alarms|hololive/hololive-shared/pkg/service/alarmread|docs/current/contracts/alarm.md
 karing.kakaolink|alarm-worker|iris|external_http_json+kakaolink|/karing/content-list;KakaoLink list templates|external|docs/current/contracts/karing-kakaolink.md
 shortlink.youtube|hololive-api|external,alarm-worker|external_https_redirect|GET,HEAD /l/:videoID|hololive/hololive-shared/pkg/contracts/shortlink|docs/current/contracts/shortlink.md
-settings.update|hololive-api|hololive-api,alarm-worker,youtube-producer|valkey_pubsub|config:update|hololive/hololive-shared/pkg/contracts/settings|docs/current/contracts/settings.md
+settings.update|hololive-api|hololive-api,alarm-worker,youtube-collector|valkey_pubsub|config:update|hololive/hololive-shared/pkg/contracts/settings|docs/current/contracts/settings.md
 iris.webhook|iris|hololive-api,alarm-worker|external_http_h3|webhook/reply/send|external|docs/current/contracts/iris-boundary.md

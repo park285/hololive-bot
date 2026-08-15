@@ -1,0 +1,2 @@
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_youtube_content_evidence_clocks_last_absence_observation_id
+    ON youtube_content_evidence_clocks (last_absence_observation_id);

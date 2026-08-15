@@ -43,9 +43,4 @@ const (
 	LiveCatchupSuppressWindow = 15 * time.Minute
 )
 
-const (
-	LocalFallbackDedupTTL       = 10 * time.Minute
-	LocalFallbackCleanupMaxKeys = 4096
-)
-
 var DefaultTargetMinutes = []int{5, 3, 1}
