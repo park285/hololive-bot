@@ -175,15 +175,23 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 163 live viewer schedule migration: %v", err)
 	}
+	projectionRetentionGrant, err := fs.ReadFile(migrations, "174_youtube_projection_retention_grant.sql")
+	if err != nil {
+		t.Fatalf("read 174 projection retention grant migration: %v", err)
+	}
 	runtimeLockRetention, err := fs.ReadFile(migrations, "175_youtube_runtime_lock_retention_api.sql")
 	if err != nil {
 		t.Fatalf("read 175 runtime lock retention API migration: %v", err)
+	}
+	projectionRetentionRevoke, err := fs.ReadFile(migrations, "176_youtube_projection_retention_revoke_delete.sql")
+	if err != nil {
+		t.Fatalf("read 176 projection retention revoke migration: %v", err)
 	}
 	grantPreexistingScraperPrivileges(t, pool, roles.scraper)
 	sql := strings.NewReplacer(
 		"hololive_scraper", roles.scraper,
 		"hololive_runtime", roles.runtime,
-	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads) + "\n" + string(contentClocks) + "\n" + string(liveSchedule) + "\n" + string(runtimeLockRetention))
+	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads) + "\n" + string(contentClocks) + "\n" + string(liveSchedule) + "\n" + string(projectionRetentionGrant) + "\n" + string(runtimeLockRetention) + "\n" + string(projectionRetentionRevoke))
 	if _, err := pool.Exec(ctx, sql); err != nil {
 		t.Fatalf("apply source observation migration with isolated roles: %v", err)
 	}
@@ -417,6 +425,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"youtube_collection_projection_generations": observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_targets":                observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"youtube_collection_target_reasons":         observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
+			"youtube_collection_job_leases":             observationPrivileges("SELECT"),
 			"source_observations":                       observationPrivileges("SELECT", "DELETE"),
 			"source_observation_queue":                  observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
 			"source_observation_collisions":             observationPrivileges("SELECT", "DELETE"),
