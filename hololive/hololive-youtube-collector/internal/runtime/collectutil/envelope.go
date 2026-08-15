@@ -10,10 +10,7 @@ import (
 )
 
 func ClampLatency(started time.Time) time.Duration {
-	latency := max(time.Since(started), 0)
-	if latency > sourceobservation.MaxCollectionLatency {
-		latency = sourceobservation.MaxCollectionLatency
-	}
+	latency := min(max(time.Since(started), 0), sourceobservation.MaxCollectionLatency)
 	return latency
 }
 

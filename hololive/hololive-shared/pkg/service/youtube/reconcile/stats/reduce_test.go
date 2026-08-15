@@ -63,7 +63,7 @@ func TestReduceComplementaryCoverageDoesNotConflict(t *testing.T) {
 		Provider:      contract.ProviderHolodex,
 		Sample: Sample{
 			ChannelID: "UC_TEST", Provider: contract.ProviderHolodex,
-			SubscriberCount: int64Ptr(10), VideoCount: int64Ptr(3),
+			SubscriberCount: new(int64(10)), VideoCount: new(int64(3)),
 			SubscriberCovered: true, VideoCovered: true,
 			ObservationID: 2, ScheduledFor: t1(), EffectiveAt: t1(), ReceivedAt: t1(),
 		},

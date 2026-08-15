@@ -186,7 +186,6 @@ func indirectJSONType(valueType reflect.Type) reflect.Type {
 func jsonFieldTypes(valueType reflect.Type) map[string]reflect.Type {
 	fields := make(map[string]reflect.Type, valueType.NumField())
 	for field := range valueType.Fields() {
-		field := field
 		if field.PkgPath != "" && !field.Anonymous {
 			continue
 		}
