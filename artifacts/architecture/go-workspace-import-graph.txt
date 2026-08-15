@@ -1298,11 +1298,10 @@ github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> 
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/contracts/sourceobservation
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/panicguard
-github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/providers/modules
+github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/server/httpserver
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/database
-github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/sqlassets
