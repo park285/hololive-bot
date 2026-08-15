@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type RunFunc func(ctx context.Context, proof contract.LeaseProof) error
@@ -18,9 +19,11 @@ func (r *Repository) Run(ctx context.Context, lease Lease, run RunFunc) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	result := make(chan error, 1)
-	go func() {
-		result <- run(runCtx, lease.Proof())
-	}()
+	panicguard.Go(nil, "collection-job-run", func() {
+		result <- panicguard.RunE(nil, "collection-job-run", func() error {
+			return run(runCtx, lease.Proof())
+		})
+	})
 	return r.awaitRun(ctx, runCtx, cancel, lease, result)
 }
 

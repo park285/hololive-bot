@@ -88,6 +88,15 @@ verify_build_services() {
     done
 }
 
+validate_built_runtime_config_for_deploy() {
+    echo "[PREFLIGHT] Validating built hololive-api production configuration"
+    if ! "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" \
+        run --rm --no-deps hololive-api --check-config; then
+        echo "[ERROR] hololive-api production configuration is invalid; aborting before cutover" >&2
+        exit 1
+    fi
+}
+
 usage() {
     sed -n '1,12p' "$0"
     echo
@@ -337,6 +346,7 @@ else
     echo "[BUILD] All active buildable services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build
     verify_build_services
+    validate_built_runtime_config_for_deploy
 
     echo "[CUTOVER] Replacing retired runtimes with the three-runtime topology"
     COMPOSE_FILE_ARGS=("${COMPOSE_FILES[@]}")

@@ -3,6 +3,7 @@ package joblease
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -369,6 +370,16 @@ func TestRenewFailureCancelsFetchAndRunJoins(t *testing.T) {
 	}
 	if lease.renewCalls.Load() != 1 || lease.releaseCalls.Load() != 0 {
 		t.Fatalf("renew/release calls = %d/%d", lease.renewCalls.Load(), lease.releaseCalls.Load())
+	}
+}
+
+func TestRunReturnsRunnerPanic(t *testing.T) {
+	repository := &Repository{config: testConfig()}
+	err := repository.Run(context.Background(), &fakeLease{}, func(context.Context, contract.LeaseProof) error {
+		panic("runner panic")
+	})
+	if err == nil || !strings.Contains(err.Error(), "collection-job-run: recovered panic: runner panic") {
+		t.Fatalf("Run() error = %v, want recovered runner panic", err)
 	}
 }
 

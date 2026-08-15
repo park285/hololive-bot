@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
@@ -49,10 +50,16 @@ func (s *leaseScheduler) Start(ctx context.Context) {
 	s.done = done
 	s.wg.Add(s.config.WorkerCount + 1)
 	for i := 0; i < s.config.WorkerCount; i++ {
-		go s.worker(runCtx)
+		panicguard.Go(s.logger, "youtube-collector-worker", func() {
+			s.worker(runCtx)
+		})
 	}
-	go s.discover(runCtx)
-	go s.join(done)
+	panicguard.Go(s.logger, "youtube-collector-discovery", func() {
+		s.discover(runCtx)
+	})
+	panicguard.Go(s.logger, "youtube-collector-join", func() {
+		s.join(done)
+	})
 	s.mu.Unlock()
 }
 
@@ -91,10 +98,16 @@ func (s *leaseScheduler) discover(ctx context.Context) {
 	defer s.wg.Done()
 	ticker := time.NewTicker(s.config.PollCadence)
 	defer ticker.Stop()
-	s.pollOnce(ctx)
+	s.pollGuarded(ctx)
 	for s.waitPoll(ctx, ticker) {
-		s.pollOnce(ctx)
+		s.pollGuarded(ctx)
 	}
+}
+
+func (s *leaseScheduler) pollGuarded(ctx context.Context) {
+	panicguard.Run(s.logger, "youtube-collector-poll", func() {
+		s.pollOnce(ctx)
+	})
 }
 
 func (s *leaseScheduler) pollOnce(ctx context.Context) {
@@ -209,9 +222,15 @@ func (s *leaseScheduler) worker(ctx context.Context) {
 		if !ok {
 			return
 		}
-		s.runSpec(ctx, &spec)
-		s.unmarkQueued(spec.JobKey)
+		s.runQueued(ctx, &spec)
 	}
+}
+
+func (s *leaseScheduler) runQueued(ctx context.Context, spec *joblease.JobSpec) {
+	defer s.unmarkQueued(spec.JobKey)
+	panicguard.Run(s.logger, "youtube-collector-job", func() {
+		s.runSpec(ctx, spec)
+	})
 }
 
 func (s *leaseScheduler) nextSpec(ctx context.Context) (joblease.JobSpec, bool) {

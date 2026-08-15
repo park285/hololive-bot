@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -21,6 +22,13 @@ import (
 var Version = "dev"
 
 func main() {
+	if handled, exitCode := runConfigCheck(os.Args[1:], os.Stderr, func() error {
+		_, err := settings.LoadHololiveAPIRuntime()
+		return err
+	}); handled {
+		os.Exit(exitCode)
+	}
+
 	var logCloser io.Closer
 	code := bootstrap.Run(bootstrap.Options[*settings.HololiveAPIConfig, *observability.ManagedRuntime[*app.Runtime]]{
 		Version: Version,
@@ -66,6 +74,22 @@ func main() {
 		}
 	}
 	os.Exit(code)
+}
+
+func runConfigCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
+	if len(args) != 1 || args[0] != "--check-config" {
+		return false, 0
+	}
+	if err := load(); err != nil {
+		if _, writeErr := fmt.Fprintf(stderr, "Failed to load hololive-api config: %v\n", err); writeErr != nil {
+			return true, 1
+		}
+		return true, 1
+	}
+	if _, err := fmt.Fprintln(stderr, "hololive-api config valid"); err != nil {
+		return true, 1
+	}
+	return true, 0
 }
 
 func buildHololiveAPIRuntime(

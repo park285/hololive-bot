@@ -63,7 +63,7 @@ Symptoms:
 - no new `source_observations` / `source_observation_queue` rows
 
 Diagnosis:
-- migration `144`–`161` 적용 여부와 collection projection/target/lease 상태를 확인합니다.
+- SSOT manifest의 migration `144`–`174` 적용 여부와 collection projection/target/lease 상태를 확인합니다.
 - `POSTGRES_USER=hololive_scraper` grant를 확인합니다.
 
 Mitigation:

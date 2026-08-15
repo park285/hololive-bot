@@ -88,6 +88,45 @@ func TestRefreshProjectionPaths(t *testing.T) {
 	}
 }
 
+func TestRefreshProjectionUsesCanonicalByteOrderAcrossDatabaseCollations(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	refresher, err := NewRefresher(pool, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := []TargetSpec{
+		{SubjectKey: "global:hololive-schedule", ObservationKind: contract.KindSchedule, Priority: 30, PollInterval: 5 * time.Minute, Enabled: true},
+		{SubjectKey: "UCJFZiqLMntJufDCHc6bQixg", ObservationKind: contract.KindCommunityPage, Priority: 40, PollInterval: 2 * time.Minute, Enabled: true},
+	}
+	reasons := []TargetReason{
+		{SubjectKey: targets[0].SubjectKey, ObservationKind: targets[0].ObservationKind, ReasonKind: "fixed_global", ReasonKey: targets[0].SubjectKey},
+		{SubjectKey: targets[1].SubjectKey, ObservationKind: targets[1].ObservationKind, ReasonKind: "notification_target", ReasonKey: targets[1].SubjectKey},
+	}
+	result, err := refresher.Refresh(ctx, staticBuilder{targets: targets, reasons: reasons}, projectionNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Changed || result.RowCount != 2 {
+		t.Fatalf("refresh result = %#v", result)
+	}
+}
+
+func TestProjectionVerificationQueriesUseCanonicalByteOrder(t *testing.T) {
+	for _, name := range []string{"load_targets.sql", "load_reasons.sql"} {
+		query := mustSQL(name)
+		if !strings.Contains(query, `subject_key COLLATE "C"`) ||
+			!strings.Contains(query, `observation_kind COLLATE "C"`) {
+			t.Fatalf("%s must use canonical byte ordering", name)
+		}
+	}
+	reasonsQuery := mustSQL("load_reasons.sql")
+	if !strings.Contains(reasonsQuery, `reason_kind COLLATE "C"`) ||
+		!strings.Contains(reasonsQuery, `reason_key COLLATE "C"`) {
+		t.Fatal("load_reasons.sql must canonically order reason identity")
+	}
+}
+
 func mustRefresh(t *testing.T, ctx context.Context, refresher *Refresher, builder Builder, now time.Time, label string) Result {
 	t.Helper()
 	result, err := refresher.Refresh(ctx, builder, now)

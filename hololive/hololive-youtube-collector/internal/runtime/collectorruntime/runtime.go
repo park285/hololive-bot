@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
@@ -283,7 +284,9 @@ func (r *Runtime) watchHelper(ctx context.Context, errCh chan<- error) {
 	if r.helper == nil {
 		return
 	}
-	go r.forwardHelperExit(ctx, errCh)
+	panicguard.Go(r.Logger, "youtubejs-helper-exit", func() {
+		r.forwardHelperExit(ctx, errCh)
+	})
 }
 
 func (r *Runtime) forwardHelperExit(ctx context.Context, errCh chan<- error) {

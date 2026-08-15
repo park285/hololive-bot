@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -111,6 +114,23 @@ func TestStartFailsWithoutNode(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Start must fail when node is missing")
+	}
+}
+
+func TestHelperStartingClassifiesOnlyTransientSocketErrors(t *testing.T) {
+	t.Parallel()
+	for _, err := range []error{
+		fmt.Errorf("dial socket: %w", os.ErrNotExist),
+		fmt.Errorf("dial socket: %w", syscall.ECONNREFUSED),
+	} {
+		if !helperStarting(err) {
+			t.Fatalf("helperStarting(%v) = false, want true", err)
+		}
+	}
+	for _, err := range []error{context.DeadlineExceeded, syscall.EACCES, errors.New("invalid response")} {
+		if helperStarting(err) {
+			t.Fatalf("helperStarting(%v) = true, want false", err)
+		}
 	}
 }
 
