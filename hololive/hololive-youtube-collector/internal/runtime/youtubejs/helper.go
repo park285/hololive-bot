@@ -12,9 +12,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/httpbody"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
@@ -119,10 +121,10 @@ func Start(ctx context.Context, config *Config) (*Helper, *RPC, error) {
 		health:     rpc.http,
 		endpoint:   rpc.endpoint,
 	}
-	go func() {
+	panicguard.Go(nil, "youtubejs-helper-wait", func() {
+		defer close(helper.waited)
 		helper.waitErr = cmd.Wait()
-		close(helper.waited)
-	}()
+	})
 	if err := helper.waitReady(ctx); err != nil {
 		return nil, nil, errors.Join(err, helper.Close())
 	}
@@ -189,8 +191,20 @@ func (h *Helper) waitReadyOnce(ctx context.Context, ticker *time.Ticker) (bool, 
 	case <-h.waited:
 		return false, helperExitedBeforeReady(h.waitErr)
 	case <-ticker.C:
-		return h.probeHealth(ctx)
+		return h.probeReady(ctx)
 	}
+}
+
+func (h *Helper) probeReady(ctx context.Context) (bool, error) {
+	ready, err := h.probeHealth(ctx)
+	if err != nil && helperStarting(err) {
+		return false, nil
+	}
+	return ready, err
+}
+
+func helperStarting(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED)
 }
 
 func helperExitedBeforeReady(waitErr error) error {

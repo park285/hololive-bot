@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
@@ -218,23 +219,46 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	r.ready.Store(true)
 	r.publishHealth()
 	for i := 0; i < r.Config.ConsumerWorkers; i++ {
-		go r.runWorker(runCtx, errCh)
+		r.startGuarded(runCtx, errCh, "youtube-consumer-worker", func() {
+			r.runWorker(runCtx, errCh)
+		})
 	}
 	r.loopCount = 2
-	go r.runClaimLoop(runCtx, errCh)
-	go r.runProjectionLoop(runCtx, errCh)
+	r.startGuarded(runCtx, errCh, "youtube-claim-loop", func() {
+		r.runClaimLoop(runCtx, errCh)
+	})
+	r.startGuarded(runCtx, errCh, "youtube-projection-loop", func() {
+		r.runProjectionLoop(runCtx, errCh)
+	})
 	if r.Config.LiveEndFinalizer.Enabled {
 		r.loopCount++
-		go r.runLiveEndLoop(runCtx, errCh)
+		r.startGuarded(runCtx, errCh, "youtube-live-end-loop", func() {
+			r.runLiveEndLoop(runCtx, errCh)
+		})
 	}
 	if r.Config.Retention.Enabled {
 		r.loopCount++
-		go r.runRetentionLoop(runCtx, errCh)
+		r.startGuarded(runCtx, errCh, "youtube-retention-loop", func() {
+			r.runRetentionLoop(runCtx, errCh)
+		})
 	}
 	if r.Config.Replay.Enabled {
 		r.loopCount++
-		go r.runReplayLoop(runCtx, errCh)
+		r.startGuarded(runCtx, errCh, "youtube-replay-loop", func() {
+			r.runReplayLoop(runCtx, errCh)
+		})
 	}
+}
+
+func (r *Runtime) startGuarded(ctx context.Context, errCh chan<- error, name string, run func()) {
+	panicguard.Go(r.Logger, name, func() {
+		if err := panicguard.RunE(r.Logger, name, func() error {
+			run()
+			return nil
+		}); err != nil {
+			r.reportLoopError(ctx, errCh, name, err)
+		}
+	})
 }
 
 func (r *Runtime) Shutdown(ctx context.Context) error {

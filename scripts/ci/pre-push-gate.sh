@@ -242,7 +242,7 @@ run_ambient() {
     (cd admin-dashboard/frontend && corepack npm ci && corepack npm run generate:api && corepack npm test && corepack npm run lint && corepack npm run build)
   fi
 
-  if echo "$changed_files" | grep -q '^hololive/hololive-youtube-collector/'; then
+  if [[ "${PRE_PUSH_MODE}" == "full" ]] || echo "$changed_files" | grep -q '^hololive/hololive-youtube-collector/'; then
     echo "[pre-push] youtube-collector YouTube.js helper 품질 게이트"
     bash scripts/ci/public-pr-collector-helper-gate.sh
   fi

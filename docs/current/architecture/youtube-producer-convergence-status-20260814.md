@@ -15,9 +15,9 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
   - `e073d3896 Document community source observation vertical slice`
   - `0d68ad2b0 Add source observation PostgreSQL infrastructure`
   - `5248898cd Add source observation contract and repository`
-- 2026-08-14 read-only evidence 기준 production에는 migration `144`와 `youtube-collector`가 적용되지 않았다. 따라서 rollout 전 manifest `144`–`161` 전체를 순서대로 적용해야 한다.
+- 2026-08-14 read-only evidence 기준 production에는 migration `144`와 `youtube-collector`가 적용되지 않았다. 따라서 rollout 전 SSOT인 manifest의 `144`–`174` 전체를 순서대로 적용해야 한다.
 - 2026-08-14 read-only 관측 당시 `hololive-api`, `alarm-worker`, producer `a/b/c/d`는 healthy였고 중앙 `youtube-collector`는 배포되지 않았다. 이 관측은 production 상태를 가리키며 현재 worktree identity가 아니다.
-- 2026-08-14 통합 contract v2.1의 Task 1–8은 로컬 구현과 targeted validation을 완료했다. Task 9 local retirement도 같은 branch worktree에서 완료했다. production apply와 Task 10 full pre-push는 하지 않았다.
+- 2026-08-14 통합 contract v2.1의 Task 1–8은 로컬 구현과 targeted validation을 완료했다. Task 9 local retirement도 같은 branch worktree에서 완료했다. 2026-08-15 `PRE_PUSH_MODE=full`과 retention policy 승인은 완료했다. `build-all.sh --no-bump` 절체는 reviewed commit 없이 `revision=unknown` artifact를 만들 수 없어 보류했고 production apply도 수행하지 않았다.
 - worktree에서 standalone `hololive-youtube-producer` 모듈/binary/compose/systemd/current runbook은 삭제됐다. AP a/b/c/d identity는 `youtube-collector`다. `members.photo`는 hololive-api admin PhotoSync, YouTube channel photos는 API `channel_photo` reducer다.
 - source observation identity는 Go `encoding/json` 관례 대신 `source-observation-canonical-json-v1` safe-integer JCS subset과 language-neutral fixture로 고정했다. collector runtime은 계속 Go다.
 
@@ -36,9 +36,9 @@ production migration, deploy, restart, data change는 이 문서의 범위가 �
 | Stats/Profile/Photo | API stats/profile/`channel_photo` reducer; `members.photo`는 admin PhotoSync | Task 7 로컬 검증 완료 | production apply |
 | Retention/replay | API YouTube plane | Task 8 로컬 검증 완료 | production apply |
 | Collector AP 병렬화 | PostgreSQL subject lease와 duplicate-publish fence | runtime foundation 구현. production 배포 미수행 | 동일 collector binary를 AP fleet에 배포하고 Task 3 adapter job을 등록 |
-| Collector fleet identity | `youtube-collector` module/binary/compose/systemd/docs, AP a/b/c/d. standalone producer 모듈 삭제 | Task 9 로컬 완료. production apply 금지 | Task 10 full pre-push와 승인된 deploy |
+| Collector fleet identity | `youtube-collector` module/binary/compose/systemd/docs, AP a/b/c/d. standalone producer 모듈 삭제 | Task 9 로컬 완료, Task 10 full pre-push 통과. production apply 금지 | clean reviewed revision의 build gate와 승인된 deploy |
 
-Community부터 photo까지의 canonical consume는 API YouTube plane이다. standalone producer module은 worktree에서 삭제됐다. Task 9 local retirement는 완료됐다. production collector fleet apply와 Task 10 full gate는 남아 있다.
+Community부터 photo까지의 canonical consume는 API YouTube plane이다. standalone producer module은 worktree에서 삭제됐다. Task 9 local retirement, Task 10 full pre-push와 retention policy 승인은 완료됐다. clean reviewed revision의 build gate와 collector fleet apply가 남아 있다.
 
 ## 문서와 구현의 정합도
 
@@ -54,6 +54,7 @@ Community부터 photo까지의 canonical consume는 API YouTube plane이다. sta
 - collector production scheduler는 typed job registry와 하나의 `PublishBatch`를 사용하며 Community-only `PollWithLease` path는 제거됐다.
 - Holodex/Official/YouTube.js collector adapter가 fixture-backed observation을 발행한다. Official `isLive`는 schedule evidence only다.
 - publish fence는 job class/subject bundle, epoch, scheduled slot, current generation과 batch의 모든 enabled target을 검증하고 target query 수를 batch 크기와 무관하게 고정한다.
+- target projection staging verification은 PostgreSQL locale과 무관하게 Go canonical byte-order와 일치하도록 text identity를 `COLLATE "C"`로 읽는다.
 
 ### 목표 설계와 충돌하는 내용
 
@@ -201,12 +202,24 @@ standalone producer 모듈은 worktree에 없다. compose/systemd/docs identity�
 
 ## 다음 승인 경계
 
-Task 9 local retirement는 완료됐다. 다음에 남은 것은 Task 10 full pre-push와 별도 승인된 production apply다.
+Task 9 local retirement와 Task 10 full pre-push는 완료됐다. 2026-08-15 retention policy는 다음 초기값으로 승인했다. production apply는 여전히 별도 승인 경계다.
+
+| 대상 | 보존 기간 |
+|---|---:|
+| processed queue / DLQ | 7일 / 90일 |
+| collision / replay audit | 365일 / 365일 |
+| retired projection | 30일 |
+| community / videos / shorts | 각 30일 |
+| channel stats / profile / photo | 각 180일 |
+| live snapshot / viewer sample | 각 30일 |
+| schedule snapshot | 90일 |
+
+90채널과 기본 cadence를 모두 성공 관측으로 계산한 상한은 약 247,896 observations/day다. row, queue, TOAST와 index를 합쳐 observation당 4–8 KiB로 잡으면 steady-state storage estimate는 약 31–63 GB다. 2026-08-15 중앙 호스트의 가용 공간은 약 95 GB였고 기존 producer 시계열 3종은 약 117 MB였다. `BatchSize=1000`, `Interval=300s`는 processed queue 기준 시간당 최대 12,000행을 정리해 계산상 유입 상한 약 10,329행/시간을 상회한다. 실제 배포 후에는 kind별 row rate, relation size와 retention backlog를 관측해 이 추정치를 교정한다.
 
 1. `viewer_sample` target은 live/upcoming video ID만 심는다. channel operational roster는 live/stats/profile/photo만 소유한다.
 2. Holodex `live_snapshot` subject는 channel ID, 같은 `holodex_live` batch의 `viewer_sample`은 video ID이며 fence도 그 공간을 쓴다. Schedule과 metadata는 각 cadence별 global lease로 분리된다.
 3. `MaxPublishBatchSize`/`MaxCheckpointCount`는 1024다. Hololive 규모(90채널×4 kind+schedule)는 한 응답 한 batch로 들어간다. 초과는 여전히 부분 drop 없이 fail closed다.
 4. collector Compose는 `HOLODEX_API_KEY`/`HOLODEX_API_KEY_1`을 전달한다. 값이 비면 collect-time fail-closed다.
-5. production migration `144`–`161`, collector AP fleet deploy, restart, live data 변경은 별도 승인 전까지 수행하지 않는다.
+5. production migration manifest `144`–`174`, collector AP fleet deploy, restart, live data 변경은 별도 승인 전까지 수행하지 않는다.
 
-통합 contract v2.1에 따라 Task 10 full gate만 남는다. `PRE_PUSH_MODE=full`과 production apply는 이 문서의 범위가 아니다.
+통합 contract v2.1의 `PRE_PUSH_MODE=full`은 2026-08-15 통과했다. retention policy도 같은 날 승인했으며 clean reviewed commit의 `build-all.sh --no-bump`와 production apply는 별도 승인 경계로 남는다.
