@@ -15,12 +15,12 @@ func TestContentConsumerPositiveThenCompleteNegative(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
-	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, 1, contract.CompletenessComplete, "vid-a"))); err != nil {
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
+	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-a"))); err != nil {
 		t.Fatalf("publish positive: %v", err)
 	}
-	proof = advanceLease(t, pool, proof, time.Minute)
-	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, 1, contract.CompletenessComplete))); err != nil {
+	proof = advanceLease(t, ctx, pool, &proof, time.Minute)
+	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete))); err != nil {
 		t.Fatalf("publish negative: %v", err)
 	}
 	if err := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil).Consume(ctx, contentClaimOptions()); err != nil {
@@ -37,13 +37,13 @@ func TestContentConsumerCompleteNegativeThenPositive(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
 	repo := NewRepository(pool)
-	oldProof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
-	old, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, oldProof, 1, contract.CompletenessComplete, "vid-a")))
+	oldProof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
+	old, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &oldProof, contract.CompletenessComplete, "vid-a")))
 	if err != nil {
 		t.Fatalf("publish positive: %v", err)
 	}
-	newProof := advanceLease(t, pool, oldProof, time.Minute)
-	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, newProof, 1, contract.CompletenessComplete))); err != nil {
+	newProof := advanceLease(t, ctx, pool, &oldProof, time.Minute)
+	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &newProof, contract.CompletenessComplete))); err != nil {
 		t.Fatalf("publish negative: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE source_observation_queue SET available_at = NOW() + INTERVAL '1 hour' WHERE observation_id = $1`, old.Results[0].ObservationID); err != nil {
@@ -69,8 +69,8 @@ func TestContentConsumerReplayDoesNotDuplicateNotification(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
-	published, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, 1, contract.CompletenessComplete, "vid-a")))
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
+	published, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-a")))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -97,16 +97,16 @@ func TestContentConsumerInvalidItemDoesNotBlockLaterItem(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
-	first, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, 1, contract.CompletenessComplete, "vid-bad")))
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
+	first, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-bad")))
 	if err != nil {
 		t.Fatalf("publish first: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE source_observations SET payload = $1 WHERE id = $2`, []byte(`{"broken":true}`), first.Results[0].ObservationID); err != nil {
 		t.Fatalf("corrupt payload: %v", err)
 	}
-	proof = advanceLease(t, pool, proof, time.Minute)
-	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, 1, contract.CompletenessComplete, "vid-good"))); err != nil {
+	proof = advanceLease(t, ctx, pool, &proof, time.Minute)
+	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-good"))); err != nil {
 		t.Fatalf("publish second: %v", err)
 	}
 	if err := NewConsumer(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil).Consume(ctx, contentClaimOptions()); err != nil {

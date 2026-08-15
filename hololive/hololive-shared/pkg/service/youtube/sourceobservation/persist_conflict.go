@@ -9,7 +9,7 @@ import (
 func persistReconcileConflict(
 	ctx context.Context,
 	tx dbx.Tx,
-	observation Observation,
+	observation *Observation,
 	entityKind, entityKey, fieldName, existingSHA, attemptedSHA, decision string,
 ) error {
 	_, err := tx.Exec(

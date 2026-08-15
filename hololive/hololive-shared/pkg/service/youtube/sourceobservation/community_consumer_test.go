@@ -18,16 +18,16 @@ func TestConsumerIsolatesInvalidItemAndProcessesLaterBatchItem(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	first, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-bad")))
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	first, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-bad")))
 	if err != nil {
 		t.Fatalf("publish first: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE source_observations SET payload = $1 WHERE id = $2`, []byte(`{"broken":true}`), first.Results[0].ObservationID); err != nil {
 		t.Fatalf("corrupt payload: %v", err)
 	}
-	proof = advanceLease(t, pool, proof, time.Minute)
-	second, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-good")))
+	proof = advanceLease(t, context.Background(), pool, &proof, time.Minute)
+	second, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-good")))
 	if err != nil {
 		t.Fatalf("publish second: %v", err)
 	}
@@ -59,8 +59,8 @@ func TestConsumerTransactionFailureRollsBackCanonicalAndProcessedState(t *testin
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"))); err != nil {
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	err := NewConsumer(repo, failWriter{err: errors.New("canonical write failed")}, nil).Consume(ctx, claimOptions())
@@ -83,14 +83,14 @@ func TestConsumerReplayDoesNotDuplicateNotificationIntent(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_content_watermarks (channel_id, watermark_type, initialized, last_content_id)
 		VALUES ($1, 'COMMUNITY_POST', TRUE, 'old-post')
 	`, "UC_TEST"); err != nil {
 		t.Fatalf("seed watermark: %v", err)
 	}
-	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")))
+	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -119,19 +119,19 @@ func TestConsumerDoesNotRegressCanonicalStateWhenOlderObservationFinishesLast(t 
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	oldProof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	oldProof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_content_watermarks (channel_id, watermark_type, initialized, last_content_id)
 		VALUES ($1, 'COMMUNITY_POST', TRUE, 'old-post')
 	`, "UC_TEST"); err != nil {
 		t.Fatalf("seed watermark: %v", err)
 	}
-	old, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, oldProof, 1, contract.CompletenessComplete, "old-head")))
+	old, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &oldProof, "old-head")))
 	if err != nil {
 		t.Fatalf("publish old: %v", err)
 	}
-	newProof := advanceLease(t, pool, oldProof, time.Minute)
-	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, newProof, 1, contract.CompletenessComplete, "new-head"))); err != nil {
+	newProof := advanceLease(t, context.Background(), pool, &oldProof, time.Minute)
+	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &newProof, "new-head"))); err != nil {
 		t.Fatalf("publish new: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
@@ -182,11 +182,11 @@ type failWriter struct {
 	err error
 }
 
-func (w failWriter) PersistTx(context.Context, dbx.Tx, community.Batch) error {
+func (w failWriter) PersistTx(context.Context, dbx.Tx, *community.Batch) error {
 	return w.err
 }
 
-func (failWriter) AfterCommit(context.Context, community.Batch) {}
+func (failWriter) AfterCommit(context.Context, *community.Batch) {}
 
 func (w failWriter) PersistVideosTx(
 	context.Context,

@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/content"
 )
 
-func upsertContentClock(ctx context.Context, tx dbx.Tx, _ contract.ObservationKind, clock content.EntityState) error {
+func upsertContentClock(ctx context.Context, tx dbx.Tx, _ contract.ObservationKind, clock *content.EntityState) error {
 	coverage, err := content.MarshalCoverage(clock.LastPositiveCoverage)
 	if err != nil {
 		return fmt.Errorf("upsert content evidence clock: %w", err)

@@ -2,14 +2,15 @@ package officialcollector
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"mime"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -51,7 +52,7 @@ func validOfficialOrigin(parsed *url.URL) bool {
 	return parsed.RawQuery == "" && parsed.Fragment == ""
 }
 
-func defaultOfficialLimits(timeout time.Duration, maxBody int64) (time.Duration, int64) {
+func defaultOfficialLimits(timeout time.Duration, maxBody int64) (resolvedTimeout time.Duration, resolvedMaxBody int64) {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
@@ -86,19 +87,29 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; HololiveBot/1.0)")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, collecterr.FromContext(fmt.Errorf("request official schedule: %w", err))
+		return nil, errors.Join(
+			collecterr.FromContext(fmt.Errorf("request official schedule: %w", err)),
+			closeOfficialResponse(resp),
+		)
 	}
-	defer resp.Body.Close()
+	if resp == nil || resp.Body == nil {
+		return nil, collecterr.New(collecterr.Failed, "official schedule response is nil")
+	}
 	return readOfficialJSON(resp, c.maxBody)
 }
 
 func readOfficialJSON(resp *http.Response, maxBody int64) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
-	if err != nil {
-		return nil, collecterr.FromContext(fmt.Errorf("read official schedule: %w", err))
+	if resp == nil || resp.Body == nil {
+		return nil, collecterr.New(collecterr.Failed, "official schedule response is nil")
 	}
-	if int64(len(body)) > maxBody {
-		return nil, collecterr.New(collecterr.ParserDrift, "official schedule response exceeds body limit")
+	body, readErr := httpbody.ReadAllAndDrain(resp.Body, maxBody)
+	closeErr := resp.Body.Close()
+	err := errors.Join(readErr, closeErr)
+	if err != nil {
+		if errors.Is(err, httpbody.ErrTooLarge) {
+			return nil, errors.Join(collecterr.New(collecterr.ParserDrift, "official schedule response exceeds body limit"), err)
+		}
+		return nil, collecterr.FromContext(fmt.Errorf("read official schedule: %w", err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, collecterr.FromStatus("official schedule", resp.StatusCode, resp.Header.Get("Retry-After"), time.Now().UTC())
@@ -107,9 +118,21 @@ func readOfficialJSON(resp *http.Response, maxBody int64) ([]byte, error) {
 }
 
 func requireOfficialJSON(resp *http.Response, body []byte) ([]byte, error) {
+	if resp == nil {
+		return nil, collecterr.New(collecterr.Failed, "official schedule response is nil")
+	}
 	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil || !strings.EqualFold(mediaType, "application/json") {
 		return nil, collecterr.New(collecterr.ParserDrift, "official schedule content type is not JSON")
 	}
 	return body, nil
+}
+
+func closeOfficialResponse(resp *http.Response) error {
+	if resp == nil || resp.Body == nil {
+		return nil
+	}
+	drainErr := httpbody.Drain(resp.Body, httpbody.DefaultDrainLimit)
+	closeErr := resp.Body.Close()
+	return errors.Join(drainErr, closeErr)
 }

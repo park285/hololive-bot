@@ -3,8 +3,8 @@ package holodexcollector
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"sort"
 	"testing"
 	"time"
@@ -125,8 +125,8 @@ func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hashes(collectutil.RunOutput{Observations: first}) != hashes(collectutil.RunOutput{Observations: second}) {
-		t.Fatalf("ordering changed hashes\n%s\n%s", hashes(collectutil.RunOutput{Observations: first}), hashes(collectutil.RunOutput{Observations: second}))
+	if hashes(t, collectutil.RunOutput{Observations: first}) != hashes(t, collectutil.RunOutput{Observations: second}) {
+		t.Fatalf("ordering changed hashes\n%s\n%s", hashes(t, collectutil.RunOutput{Observations: first}), hashes(t, collectutil.RunOutput{Observations: second}))
 	}
 }
 
@@ -227,7 +227,8 @@ func mustCollect(t *testing.T, body []byte, requested []string) collectutil.RunO
 
 func viewerKey(t *testing.T, output collectutil.RunOutput, subject string) string {
 	t.Helper()
-	for _, envelope := range output.Observations {
+	for i := range output.Observations {
+		envelope := &output.Observations[i]
 		if envelope.ObservationKind == contract.KindViewerSample && envelope.SubjectKey == subject {
 			return envelope.ObservationKey
 		}
@@ -236,7 +237,8 @@ func viewerKey(t *testing.T, output collectutil.RunOutput, subject string) strin
 	return ""
 }
 
-func hashes(output collectutil.RunOutput) string {
+func hashes(t *testing.T, output collectutil.RunOutput) string {
+	t.Helper()
 	type pair struct {
 		Kind    contract.ObservationKind
 		Subject string
@@ -244,7 +246,8 @@ func hashes(output collectutil.RunOutput) string {
 		Scope   string
 	}
 	pairs := make([]pair, 0, len(output.Observations))
-	for _, envelope := range output.Observations {
+	for i := range output.Observations {
+		envelope := &output.Observations[i]
 		pairs = append(pairs, pair{envelope.ObservationKind, envelope.SubjectKey, envelope.PayloadSHA256, envelope.ScopeSHA256})
 	}
 	sort.Slice(pairs, func(i, j int) bool {
@@ -253,15 +256,18 @@ func hashes(output collectutil.RunOutput) string {
 		}
 		return pairs[i].Subject < pairs[j].Subject
 	})
-	encoded, _ := json.Marshal(pairs)
+	encoded, err := json.Marshal(pairs)
+	if err != nil {
+		t.Fatalf("marshal observation hashes: %v", err)
+	}
 	return string(encoded)
 }
 
-func holodexInput(requested []string) collectutil.RunInput {
+func holodexInput(requested []string) *collectutil.RunInput {
 	return holodexInputFor("holodex_live", requested)
 }
 
-func holodexInputFor(jobKind string, requested []string) collectutil.RunInput {
+func holodexInputFor(jobKind string, requested []string) *collectutil.RunInput {
 	enabled := map[contract.ObservationKind][]string{
 		contract.KindLiveSnapshot:   requested,
 		contract.KindChannelStats:   requested,
@@ -270,7 +276,7 @@ func holodexInputFor(jobKind string, requested []string) collectutil.RunInput {
 		contract.KindSchedule:       {officialScheduleSubject},
 		contract.KindChannelProfile: nil,
 	}
-	return collectutil.RunInput{
+	return &collectutil.RunInput{
 		Spec: joblease.JobSpec{
 			JobKey: "collector:holodex:" + jobKind + ":global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
 			CollectionJobKind: jobKind, SubjectKey: "global:" + jobKind, PollInterval: time.Minute,
@@ -290,7 +296,7 @@ func holodexInputFor(jobKind string, requested []string) collectutil.RunInput {
 
 func testdata(t *testing.T, name string) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	raw, err := fs.ReadFile(os.DirFS("testdata"), name)
 	if err != nil {
 		t.Fatal(err)
 	}

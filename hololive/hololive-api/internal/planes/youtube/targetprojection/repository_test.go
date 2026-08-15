@@ -35,18 +35,12 @@ func TestRefreshProjectionPaths(t *testing.T) {
 	first := TargetSpec{SubjectKey: "channel:a", ObservationKind: contract.KindCommunityPage, Priority: 50, PollInterval: time.Minute, Enabled: true}
 	reason := TargetReason{SubjectKey: first.SubjectKey, ObservationKind: first.ObservationKind, ReasonKind: "notification_target", ReasonKey: "room:a"}
 
-	created, err := refresher.Refresh(ctx, staticBuilder{targets: []TargetSpec{first}, reasons: []TargetReason{reason}}, projectionNow)
-	if err != nil {
-		t.Fatalf("initial refresh: %v", err)
-	}
+	created := mustRefresh(t, ctx, refresher, staticBuilder{targets: []TargetSpec{first}, reasons: []TargetReason{reason}}, projectionNow, "initial")
 	if !created.Changed || created.Generation <= 0 || created.RowCount != 1 {
 		t.Fatalf("initial result = %#v", created)
 	}
 
-	refreshed, err := refresher.Refresh(ctx, staticBuilder{targets: []TargetSpec{first, first}, reasons: []TargetReason{reason, reason}}, projectionNow.Add(10*time.Minute))
-	if err != nil {
-		t.Fatalf("same projection refresh: %v", err)
-	}
+	refreshed := mustRefresh(t, ctx, refresher, staticBuilder{targets: []TargetSpec{first, first}, reasons: []TargetReason{reason, reason}}, projectionNow.Add(10*time.Minute), "same projection")
 	if refreshed.Changed || refreshed.Generation != created.Generation {
 		t.Fatalf("same projection rotated generation: before=%#v after=%#v", created, refreshed)
 	}
@@ -60,10 +54,7 @@ func TestRefreshProjectionPaths(t *testing.T) {
 
 	newReason := reason
 	newReason.ReasonKey = "room:b"
-	reasonOnly, err := refresher.Refresh(ctx, staticBuilder{targets: []TargetSpec{first}, reasons: []TargetReason{newReason}}, projectionNow.Add(20*time.Minute))
-	if err != nil {
-		t.Fatalf("reason-only refresh: %v", err)
-	}
+	reasonOnly := mustRefresh(t, ctx, refresher, staticBuilder{targets: []TargetSpec{first}, reasons: []TargetReason{newReason}}, projectionNow.Add(20*time.Minute), "reason-only")
 	if reasonOnly.Changed || reasonOnly.Generation != created.Generation {
 		t.Fatalf("reason-only refresh rotated generation: %#v", reasonOnly)
 	}
@@ -77,20 +68,14 @@ func TestRefreshProjectionPaths(t *testing.T) {
 
 	changedTarget := first
 	changedTarget.PollInterval = 2 * time.Minute
-	changed, err := refresher.Refresh(ctx, staticBuilder{targets: []TargetSpec{changedTarget}, reasons: []TargetReason{newReason}}, projectionNow.Add(30*time.Minute))
-	if err != nil {
-		t.Fatalf("changed refresh: %v", err)
-	}
+	changed := mustRefresh(t, ctx, refresher, staticBuilder{targets: []TargetSpec{changedTarget}, reasons: []TargetReason{newReason}}, projectionNow.Add(30*time.Minute), "changed")
 	if !changed.Changed || changed.Generation == created.Generation {
 		t.Fatalf("changed result = %#v", changed)
 	}
 	assertGenerationStatus(t, pool, created.Generation, "RETIRED")
 	assertGenerationStatus(t, pool, changed.Generation, "CURRENT")
 
-	empty, err := refresher.Refresh(ctx, staticBuilder{}, projectionNow.Add(40*time.Minute))
-	if err != nil {
-		t.Fatalf("empty refresh: %v", err)
-	}
+	empty := mustRefresh(t, ctx, refresher, staticBuilder{}, projectionNow.Add(40*time.Minute), "empty")
 	if !empty.Changed || empty.RowCount != 0 || empty.Generation == changed.Generation {
 		t.Fatalf("empty result = %#v", empty)
 	}
@@ -101,6 +86,15 @@ func TestRefreshProjectionPaths(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("empty generation targets = %d", count)
 	}
+}
+
+func mustRefresh(t *testing.T, ctx context.Context, refresher *Refresher, builder Builder, now time.Time, label string) Result {
+	t.Helper()
+	result, err := refresher.Refresh(ctx, builder, now)
+	if err != nil {
+		t.Fatalf("%s refresh: %v", label, err)
+	}
+	return result
 }
 
 func TestRetainDeletesOnlyUnlockedRetiredProjectionState(t *testing.T) {

@@ -30,9 +30,12 @@ func (r *ViewerRunner) Emissions() []contract.ObservationKind {
 }
 func (r *ViewerRunner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
-func (r *ViewerRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
+func (r *ViewerRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js viewer client is not configured")
+	}
+	if err := collectutil.ValidateInput(input); err != nil {
+		return collectutil.RunOutput{}, err
 	}
 	if looksLikeYouTubeChannelID(input.Spec.SubjectKey) {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "viewer_sample subject must be a video id")
@@ -56,10 +59,10 @@ func (r *ViewerRunner) Collect(ctx context.Context, input collectutil.RunInput) 
 		contract.KindViewerSample,
 		input.Spec.SubjectKey,
 		generation,
-		input.Lease,
+		&input.Lease,
 		contract.CompletenessComplete,
 		contract.ContinuityNotApplicable,
-		viewerPayload(input.Spec.SubjectKey, result, windowStart, windowSeconds),
+		viewerPayload(input.Spec.SubjectKey, &result, windowStart, windowSeconds),
 	)
 	if err != nil {
 		return collectutil.RunOutput{}, collecterr.Wrap(collecterr.ParserDrift, err)

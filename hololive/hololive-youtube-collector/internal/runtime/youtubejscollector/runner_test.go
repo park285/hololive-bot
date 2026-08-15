@@ -3,8 +3,8 @@ package youtubejscollector
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -52,8 +52,8 @@ func TestCommunityRunnerPreservesInputOrderHash(t *testing.T) {
 	for i, j := 0, len(reversed.Posts)-1; i < j; i, j = i+1, j-1 {
 		reversed.Posts[i], reversed.Posts[j] = reversed.Posts[j], reversed.Posts[i]
 	}
-	first := mustCollectCommunity(t, result)
-	second := mustCollectCommunity(t, reversed)
+	first := mustCollectCommunity(t, &result)
+	second := mustCollectCommunity(t, &reversed)
 	if first.PayloadSHA256 != second.PayloadSHA256 || first.ScopeSHA256 != second.ScopeSHA256 {
 		t.Fatalf("ordering changed hashes %s/%s vs %s/%s", first.PayloadSHA256, first.ScopeSHA256, second.PayloadSHA256, second.ScopeSHA256)
 	}
@@ -274,9 +274,9 @@ func TestCommunityRunnerDoesNotPublishOnFetchError(t *testing.T) {
 	}
 }
 
-func mustCollectCommunity(t *testing.T, result youtubejs.CommunityResult) contract.Envelope {
+func mustCollectCommunity(t *testing.T, result *youtubejs.CommunityResult) contract.Envelope {
 	t.Helper()
-	output, err := NewCommunityRunner(&communityFake{result: result}, 10).Collect(
+	output, err := NewCommunityRunner(&communityFake{result: *result}, 10).Collect(
 		context.Background(), youtubeInput("UC_TEST", "community_collect", contract.KindCommunityPage),
 	)
 	if err != nil {
@@ -285,12 +285,12 @@ func mustCollectCommunity(t *testing.T, result youtubejs.CommunityResult) contra
 	return output.Observations[0]
 }
 
-func youtubeInput(subject, jobKind string, kinds ...contract.ObservationKind) collectutil.RunInput {
+func youtubeInput(subject, jobKind string, kinds ...contract.ObservationKind) *collectutil.RunInput {
 	generations := make(map[contract.ObservationKind]int64, len(kinds))
 	for _, kind := range kinds {
 		generations[kind] = 1
 	}
-	return collectutil.RunInput{
+	return &collectutil.RunInput{
 		Spec: joblease.JobSpec{
 			JobKey: "collector:youtubejs:" + jobKind + ":" + subject, Provider: contract.ProviderYouTubeJS,
 			Class: "SUBJECT", CollectionJobKind: jobKind, SubjectKey: subject, PollInterval: time.Minute,
@@ -308,7 +308,7 @@ func youtubeInput(subject, jobKind string, kinds ...contract.ObservationKind) co
 
 func loadJSON(t *testing.T, name string, dest any) {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	raw, err := fs.ReadFile(os.DirFS("testdata"), name)
 	if err != nil {
 		t.Fatal(err)
 	}

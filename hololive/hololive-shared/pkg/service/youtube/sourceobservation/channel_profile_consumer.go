@@ -13,7 +13,7 @@ import (
 func (c *Consumer) reconcileProfile(
 	ctx context.Context,
 	tx dbx.Tx,
-	claimed Observation,
+	claimed *Observation,
 ) (profile.Decision, ReconcileResult, error) {
 	evidence, err := profileEvidenceFromObservation(claimed)
 	if err != nil {
@@ -33,13 +33,13 @@ func (c *Consumer) reconcileProfile(
 	if err != nil {
 		return profile.Decision{}, ReconcileResult{}, err
 	}
-	if err := persistProfileDecision(ctx, tx, claimed, decision); err != nil {
+	if err := persistProfileDecision(ctx, tx, claimed, &decision); err != nil {
 		return profile.Decision{}, ReconcileResult{}, err
 	}
 	return decision, ReconcileResult{Applications: mapProfileApplications(decision.Applications)}, nil
 }
 
-func profileEvidenceFromObservation(observation Observation) (profile.Evidence, error) {
+func profileEvidenceFromObservation(observation *Observation) (profile.Evidence, error) {
 	var payload contract.ChannelProfileV1
 	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
 		return profile.Evidence{}, fmt.Errorf("decode channel profile payload: %w", err)

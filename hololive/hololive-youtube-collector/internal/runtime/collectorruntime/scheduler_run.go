@@ -13,10 +13,11 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
-func (s *leaseScheduler) runSpec(ctx context.Context, spec joblease.JobSpec) {
+func (s *leaseScheduler) runSpec(ctx context.Context, spec *joblease.JobSpec) {
 	runner, ok := s.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	if !ok {
-		s.logFailure("collect", collecterr.Failed, spec, contract.LeaseProof{})
+		proof := contract.LeaseProof{}
+		s.logFailure("collect", collecterr.Failed, spec, &proof)
 		return
 	}
 	lease, err := s.acquireLease(ctx, spec)
@@ -26,7 +27,7 @@ func (s *leaseScheduler) runSpec(ctx context.Context, spec joblease.JobSpec) {
 	s.runAcquired(ctx, runner, spec, lease, err)
 }
 
-func (s *leaseScheduler) acquireLease(ctx context.Context, spec joblease.JobSpec) (joblease.Lease, error) {
+func (s *leaseScheduler) acquireLease(ctx context.Context, spec *joblease.JobSpec) (joblease.Lease, error) {
 	lease, err := s.repository.Acquire(ctx, spec, s.owner)
 	if errors.Is(err, joblease.ErrNotAcquired) {
 		s.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultNotAcquired)
@@ -40,26 +41,27 @@ func (s *leaseScheduler) acquireLease(ctx context.Context, spec joblease.JobSpec
 	return lease, nil
 }
 
-func (s *leaseScheduler) observeAcquireError(spec joblease.JobSpec, err error) {
+func (s *leaseScheduler) observeAcquireError(spec *joblease.JobSpec, err error) {
 	if errors.Is(err, joblease.ErrProjectionStale) || errors.Is(err, joblease.ErrTargetDisabled) {
 		return
 	}
 	s.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultError)
-	s.logFailure("acquire", collecterr.AcquireFailed, spec, contract.LeaseProof{})
+	proof := contract.LeaseProof{}
+	s.logFailure("acquire", collecterr.AcquireFailed, spec, &proof)
 }
 
-func (s *leaseScheduler) runAcquired(ctx context.Context, runner JobRunner, spec joblease.JobSpec, lease joblease.Lease, _ error) {
+func (s *leaseScheduler) runAcquired(ctx context.Context, runner JobRunner, spec *joblease.JobSpec, lease joblease.Lease, _ error) {
 	proof := lease.Proof()
 	started := time.Now()
 	err := s.repository.Run(ctx, lease, func(runCtx context.Context, leaseProof contract.LeaseProof) error {
-		return s.collectAndPublish(runCtx, runner, spec, lease, leaseProof)
+		return s.collectAndPublish(runCtx, runner, spec, lease, &leaseProof)
 	})
 	s.metrics.ObserveAttempt(spec.Provider, spec.CollectionJobKind, attemptResult(err), time.Since(started))
 	if ignoreRunError(err) {
 		s.observeFenceLost(spec, err)
 		return
 	}
-	s.deferFailedRun(ctx, lease, spec, proof, err)
+	s.deferFailedRun(ctx, lease, spec, &proof, err)
 }
 
 func ignoreRunError(err error) bool {
@@ -70,7 +72,7 @@ func ignoreRunError(err error) bool {
 		errors.Is(err, sourceobservation.ErrTargetDisabled)
 }
 
-func (s *leaseScheduler) observeFenceLost(spec joblease.JobSpec, err error) {
+func (s *leaseScheduler) observeFenceLost(spec *joblease.JobSpec, err error) {
 	if errors.Is(err, joblease.ErrFenceLost) {
 		s.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phaseCollect)
 	}
@@ -79,8 +81,8 @@ func (s *leaseScheduler) observeFenceLost(spec joblease.JobSpec, err error) {
 func (s *leaseScheduler) deferFailedRun(
 	ctx context.Context,
 	lease joblease.Lease,
-	spec joblease.JobSpec,
-	proof contract.LeaseProof,
+	spec *joblease.JobSpec,
+	proof *contract.LeaseProof,
 	err error,
 ) {
 	retryAt := s.retryAt(err)
@@ -94,9 +96,9 @@ func (s *leaseScheduler) deferFailedRun(
 func (s *leaseScheduler) collectAndPublish(
 	ctx context.Context,
 	runner JobRunner,
-	spec joblease.JobSpec,
+	spec *joblease.JobSpec,
 	lease joblease.Lease,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 ) error {
 	generations, err := s.publisher.LoadContractGenerations(ctx, spec.Provider, runner.Emissions())
 	if err != nil {
@@ -116,8 +118,8 @@ func (s *leaseScheduler) collectAndPublish(
 func (s *leaseScheduler) collectOutput(
 	ctx context.Context,
 	runner JobRunner,
-	spec joblease.JobSpec,
-	proof contract.LeaseProof,
+	spec *joblease.JobSpec,
+	proof *contract.LeaseProof,
 	generations map[contract.ObservationKind]int64,
 	enabled map[contract.ObservationKind][]string,
 ) (collectutil.RunOutput, error) {
@@ -125,21 +127,22 @@ func (s *leaseScheduler) collectOutput(
 		return collectutil.RunOutput{}, collecterr.FromContext(err)
 	}
 	defer s.releaseProvider(spec.Provider)
-	return runner.Collect(ctx, collectutil.RunInput{
-		Spec:                spec,
-		Lease:               proof,
+	input := &collectutil.RunInput{
+		Spec:                *spec,
+		Lease:               *proof,
 		ContractGenerations: generations,
 		MaxPages:            s.collector.MaxPages,
 		MaxAggregateBytes:   s.collector.MaxAggregateBytes,
 		EnabledSubjects:     enabled,
-	})
+	}
+	return runner.Collect(ctx, input)
 }
 
 func (s *leaseScheduler) publishOutput(
 	ctx context.Context,
-	spec joblease.JobSpec,
+	spec *joblease.JobSpec,
 	lease joblease.Lease,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	output collectutil.RunOutput,
 ) error {
 	if len(output.Observations) == 0 {
@@ -158,7 +161,7 @@ func (s *leaseScheduler) publishOutput(
 	return nil
 }
 
-func (s *leaseScheduler) observePublishError(spec joblease.JobSpec, output collectutil.RunOutput, err error) {
+func (s *leaseScheduler) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
 	if errors.Is(err, joblease.ErrFenceLost) {
 		s.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phasePublish)
 	}
@@ -206,7 +209,8 @@ func (s *leaseScheduler) releaseProvider(provider contract.Provider) {
 }
 
 func (s *leaseScheduler) observePublished(output collectutil.RunOutput, result sourceobservation.PublishBatchResult) {
-	for i, envelope := range output.Observations {
+	for i := range output.Observations {
+		envelope := &output.Observations[i]
 		outcome := publishedOutcome(result, i)
 		if i < len(result.Results) && outcome != outcomeCollision {
 			s.metrics.ObservePublishedObservation(result.Results[i].ObservationID)
@@ -230,7 +234,8 @@ func publishedOutcome(result sourceobservation.PublishBatchResult, index int) st
 }
 
 func (s *leaseScheduler) observeRejected(provider contract.Provider, output collectutil.RunOutput) {
-	for _, envelope := range output.Observations {
+	for i := range output.Observations {
+		envelope := &output.Observations[i]
 		s.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcomeRejected)
 	}
 }
@@ -278,7 +283,7 @@ func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
 	return retryAt.UTC()
 }
 
-func (s *leaseScheduler) logFailure(phase, code string, spec joblease.JobSpec, proof contract.LeaseProof) {
+func (s *leaseScheduler) logFailure(phase, code string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	if s.logger == nil {
 		return
 	}

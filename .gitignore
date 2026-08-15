@@ -86,6 +86,7 @@ Desktop.ini
 # Temporary Files
 # ============================================
 *.tmp
+.tmp/
 *.temp
 *.swp
 *.swo

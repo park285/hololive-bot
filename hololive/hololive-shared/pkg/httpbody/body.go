@@ -23,22 +23,35 @@ func ReadAllAndClose(body io.ReadCloser, maxBytes int64) ([]byte, error) {
 	if body == nil {
 		return nil, ErrNilBody
 	}
+	data, readErr := ReadAllAndDrain(body, maxBytes)
+	closeErr := body.Close()
+	if readErr != nil {
+		return nil, errors.Join(readErr, closeErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close response body: %w", closeErr)
+	}
+	return data, nil
+}
+
+// ReadAllAndDrain은 response body를 닫지 않고 bounded read와 drain까지만 수행한다.
+func ReadAllAndDrain(body io.Reader, maxBytes int64) ([]byte, error) {
+	if body == nil {
+		return nil, ErrNilBody
+	}
 	if maxBytes < 0 {
-		closeErr := DrainAndClose(body, DefaultDrainLimit)
-		return nil, errors.Join(fmt.Errorf("invalid response body limit %d", maxBytes), closeErr)
+		drainErr := drain(body, DefaultDrainLimit)
+		return nil, errors.Join(fmt.Errorf("invalid response body limit %d", maxBytes), drainErr)
 	}
 
 	data, readErr := io.ReadAll(io.LimitReader(body, maxBytes+1))
 	if readErr != nil {
-		closeErr := DrainAndClose(body, DefaultDrainLimit)
-		return nil, errors.Join(fmt.Errorf("read response body: %w", readErr), closeErr)
+		drainErr := drain(body, DefaultDrainLimit)
+		return nil, errors.Join(fmt.Errorf("read response body: %w", readErr), drainErr)
 	}
 	if int64(len(data)) > maxBytes {
-		closeErr := DrainAndClose(body, DefaultDrainLimit)
-		return nil, errors.Join(fmt.Errorf("%w: max_bytes=%d", ErrTooLarge, maxBytes), closeErr)
-	}
-	if closeErr := DrainAndClose(body, DefaultDrainLimit); closeErr != nil {
-		return nil, fmt.Errorf("close response body: %w", closeErr)
+		drainErr := drain(body, DefaultDrainLimit)
+		return nil, errors.Join(fmt.Errorf("%w: max_bytes=%d", ErrTooLarge, maxBytes), drainErr)
 	}
 	return data, nil
 }
@@ -49,14 +62,24 @@ func DrainAndClose(body io.ReadCloser, maxDrainBytes int64) error {
 	if body == nil {
 		return nil
 	}
-	if maxDrainBytes <= 0 {
-		return body.Close()
+	drainErr := drain(body, maxDrainBytes)
+	closeErr := body.Close()
+	return errors.Join(drainErr, closeErr)
+}
+
+// Drain은 response body를 닫지 않고 설정된 상한까지만 버린다.
+func Drain(body io.Reader, maxDrainBytes int64) error {
+	return drain(body, maxDrainBytes)
+}
+
+func drain(body io.Reader, maxDrainBytes int64) error {
+	if body == nil || maxDrainBytes <= 0 {
+		return nil
 	}
 	drainLimit := maxDrainBytes
 	if maxDrainBytes != int64(^uint64(0)>>1) {
 		drainLimit++
 	}
 	_, drainErr := io.Copy(io.Discard, io.LimitReader(body, drainLimit))
-	closeErr := body.Close()
-	return errors.Join(drainErr, closeErr)
+	return drainErr
 }

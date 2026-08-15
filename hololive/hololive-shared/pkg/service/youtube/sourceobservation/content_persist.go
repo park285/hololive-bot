@@ -16,13 +16,13 @@ func persistContentDecision(
 	ctx context.Context,
 	tx dbx.Tx,
 	writer CanonicalWriter,
-	observation Observation,
-	decision content.Decision,
+	observation *Observation,
+	decision *content.Decision,
 ) error {
 	if writer == nil {
 		return fmt.Errorf("persist content decision: canonical writer is not configured")
 	}
-	videos, notifications, tracking := contentArtifacts(observation, decision)
+	videos, notifications, tracking := contentArtifacts(observation.EffectiveAt, decision)
 	if err := writer.PersistVideosTx(ctx, tx, videos, notifications, tracking, decision.Watermark); err != nil {
 		return err
 	}
@@ -42,20 +42,20 @@ func persistContentDecision(
 }
 
 func contentArtifacts(
-	observation Observation,
-	decision content.Decision,
+	effectiveAt time.Time,
+	decision *content.Decision,
 ) ([]*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox, []*domain.YouTubeContentAlarmTracking) {
 	videos := make([]*domain.YouTubeVideo, 0, len(decision.Videos))
 	for i := range decision.Videos {
-		videos = append(videos, domainVideo(decision.Videos[i], observation.EffectiveAt))
+		videos = append(videos, domainVideo(decision.Videos[i], effectiveAt))
 	}
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(decision.Notifications))
 	for i := range decision.Notifications {
-		notifications = append(notifications, domainNotification(decision.Notifications[i]))
+		notifications = append(notifications, domainNotification(&decision.Notifications[i]))
 	}
 	tracking := make([]*domain.YouTubeContentAlarmTracking, 0, len(decision.Tracking))
 	for i := range decision.Tracking {
-		tracking = append(tracking, domainTracking(decision.Tracking[i], observation.EffectiveAt))
+		tracking = append(tracking, domainTracking(&decision.Tracking[i], effectiveAt))
 	}
 	return videos, notifications, tracking
 }
@@ -72,7 +72,7 @@ func domainVideo(entity content.Entity, seenAt time.Time) *domain.YouTubeVideo {
 	}
 }
 
-func domainNotification(intent content.NotificationIntent) *domain.YouTubeNotificationOutbox {
+func domainNotification(intent *content.NotificationIntent) *domain.YouTubeNotificationOutbox {
 	video := domainVideo(intent.Video, time.Time{})
 	payload := polling.MustMarshalJSON(video)
 	if intent.Kind == domain.OutboxKindNewShort {
@@ -87,7 +87,7 @@ func domainNotification(intent content.NotificationIntent) *domain.YouTubeNotifi
 	}
 }
 
-func domainTracking(intent content.NotificationIntent, detectedAt time.Time) *domain.YouTubeContentAlarmTracking {
+func domainTracking(intent *content.NotificationIntent, detectedAt time.Time) *domain.YouTubeContentAlarmTracking {
 	return &domain.YouTubeContentAlarmTracking{
 		Kind:              intent.Kind,
 		ContentID:         intent.ContentID,
@@ -118,14 +118,14 @@ func persistContentClocks(ctx context.Context, tx dbx.Tx, kind contract.Observat
 		if clocks[i].LastPositiveValueSHA256 == "" {
 			continue
 		}
-		if err := upsertContentClock(ctx, tx, kind, clocks[i]); err != nil {
+		if err := upsertContentClock(ctx, tx, kind, &clocks[i]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation Observation, slot *content.AbsenceSlot) error {
+func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observation, slot *content.AbsenceSlot) error {
 	if slot == nil {
 		return nil
 	}
@@ -151,7 +151,7 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation Observati
 	return nil
 }
 
-func persistContentHead(ctx context.Context, tx dbx.Tx, observation Observation, earliest *time.Time) error {
+func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation, earliest *time.Time) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_content_channel_head_upsert_0041_41.sql"),
@@ -164,7 +164,7 @@ func persistContentHead(ctx context.Context, tx dbx.Tx, observation Observation,
 	return nil
 }
 
-func persistContentConflicts(ctx context.Context, tx dbx.Tx, observation Observation, conflicts []content.Conflict) error {
+func persistContentConflicts(ctx context.Context, tx dbx.Tx, observation *Observation, conflicts []content.Conflict) error {
 	for i := range conflicts {
 		if _, err := tx.Exec(
 			ctx,

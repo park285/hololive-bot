@@ -13,7 +13,7 @@ import (
 func (c *Consumer) reconcileViewer(
 	ctx context.Context,
 	tx dbx.Tx,
-	claimed Observation,
+	claimed *Observation,
 ) (viewer.Decision, ReconcileResult, error) {
 	evidence, err := viewerEvidenceFromObservation(claimed)
 	if err != nil {
@@ -34,13 +34,13 @@ func (c *Consumer) reconcileViewer(
 	if err != nil {
 		return viewer.Decision{}, ReconcileResult{}, err
 	}
-	if err := persistViewerDecision(ctx, tx, claimed, decision, channelID); err != nil {
+	if err := persistViewerDecision(ctx, tx, claimed, &decision, channelID); err != nil {
 		return viewer.Decision{}, ReconcileResult{}, err
 	}
 	return decision, ReconcileResult{Applications: mapViewerApplications(decision.Applications)}, nil
 }
 
-func viewerEvidenceFromObservation(observation Observation) (viewer.Evidence, error) {
+func viewerEvidenceFromObservation(observation *Observation) (viewer.Evidence, error) {
 	var payload contract.ViewerSampleV1
 	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
 		return viewer.Evidence{}, fmt.Errorf("decode viewer sample payload: %w", err)

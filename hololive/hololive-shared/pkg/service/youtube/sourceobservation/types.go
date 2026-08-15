@@ -148,11 +148,11 @@ type Observation struct {
 	SourceEventFallback  bool
 }
 
-func (o Observation) ContractVersion() ContractVersion {
+func (o *Observation) ContractVersion() ContractVersion {
 	return ContractVersion{Provider: o.Provider, Kind: o.ObservationKind, Schema: o.SchemaVersion, Generation: o.ContractGeneration}
 }
 
-func (o Observation) Envelope() contract.Envelope {
+func (o *Observation) Envelope() contract.Envelope {
 	return contract.Envelope{
 		Provider: o.Provider, ObservationKind: o.ObservationKind, SubjectKey: o.SubjectKey,
 		ObservationKey: o.ObservationKey, SchemaVersion: o.SchemaVersion,
@@ -179,7 +179,27 @@ type ClaimOptions struct {
 
 type ClaimedBatch struct {
 	ConsumerName string
-	Observations []Observation
+	Claims       []ClaimWork
+}
+
+type ClaimWork struct {
+	ObservationID   int64
+	LeaseToken      string
+	ObservationKind contract.ObservationKind
+	SubjectKey      string
+}
+
+type ClaimKey struct {
+	ObservationID int64
+	LeaseToken    string
+}
+
+func (w ClaimWork) Claim(consumerName string) Claim {
+	return Claim{ConsumerName: consumerName, ObservationID: w.ObservationID, LeaseToken: w.LeaseToken}
+}
+
+func (w ClaimWork) Key() ClaimKey {
+	return ClaimKey{ObservationID: w.ObservationID, LeaseToken: w.LeaseToken}
 }
 
 type Claim struct {

@@ -18,7 +18,7 @@ type sqlPublishFenceVerifier struct {
 func (v sqlPublishFenceVerifier) Verify(
 	ctx context.Context,
 	tx dbx.Tx,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	observations []contract.Envelope,
 ) error {
 	job, err := v.loadPublishFence(ctx, tx, proof)
@@ -28,7 +28,7 @@ func (v sqlPublishFenceVerifier) Verify(
 	if err := v.verifyProjection(ctx, tx, proof.ProjectionGeneration); err != nil {
 		return err
 	}
-	subjects, kinds, err := v.collectPublishSubjects(job, observations)
+	subjects, kinds, err := v.collectPublishSubjects(&job, observations)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ type publishFenceJob struct {
 func (v sqlPublishFenceVerifier) loadPublishFence(
 	ctx context.Context,
 	tx dbx.Tx,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 ) (publishFenceJob, error) {
 	var job publishFenceJob
 	var jobClass string
@@ -88,13 +88,13 @@ func (v sqlPublishFenceVerifier) verifyProjection(ctx context.Context, tx dbx.Tx
 }
 
 func (v sqlPublishFenceVerifier) collectPublishSubjects(
-	job publishFenceJob,
+	job *publishFenceJob,
 	observations []contract.Envelope,
-) ([]string, []string, error) {
+) (subjectKeys, kindNames []string, err error) {
 	subjects := make([]string, len(observations))
 	kinds := make([]string, len(observations))
 	for i := range observations {
-		if err := v.validatePublishObservation(job, observations[i], i); err != nil {
+		if err := v.validatePublishObservation(job, &observations[i], i); err != nil {
 			return nil, nil, err
 		}
 		subjects[i] = observations[i].SubjectKey
@@ -103,7 +103,7 @@ func (v sqlPublishFenceVerifier) collectPublishSubjects(
 	return subjects, kinds, nil
 }
 
-func (v sqlPublishFenceVerifier) validatePublishObservation(job publishFenceJob, observation contract.Envelope, index int) error {
+func (v sqlPublishFenceVerifier) validatePublishObservation(job *publishFenceJob, observation *contract.Envelope, index int) error {
 	if job.provider != string(observation.Provider) ||
 		!v.jobs.Allows(job.collectionJobKind, observation.Provider, observation.ObservationKind) {
 		return fmt.Errorf("verify collection job emission %d: %w", index, ErrTargetDisabled)
@@ -136,8 +136,11 @@ func (v sqlPublishFenceVerifier) verifyTargetsEnabled(
 
 func (r *Repository) PublishBatch(
 	ctx context.Context,
-	input PublishBatchInput,
+	input *PublishBatchInput,
 ) (PublishBatchResult, error) {
+	if input == nil {
+		return PublishBatchResult{}, fmt.Errorf("publish source observation batch: input is nil")
+	}
 	if err := r.validate(); err != nil {
 		return PublishBatchResult{}, err
 	}
@@ -156,11 +159,11 @@ func (r *Repository) PublishBatch(
 func (r *Repository) publishBatchTx(
 	ctx context.Context,
 	tx dbx.Tx,
-	input PublishBatchInput,
+	input *PublishBatchInput,
 	encoded []byte,
 	contracts []byte,
 ) (PublishBatchResult, error) {
-	if err := r.fenceVerifier.Verify(ctx, tx, input.Lease, input.Observations); err != nil {
+	if err := r.fenceVerifier.Verify(ctx, tx, &input.Lease, input.Observations); err != nil {
 		return PublishBatchResult{}, fmt.Errorf("publish source observation batch: verify job fence: %w", err)
 	}
 	if err := verifyCurrentContracts(ctx, tx, contracts); err != nil {
@@ -174,7 +177,7 @@ func (r *Repository) publishBatchTx(
 	if collision {
 		errorCode = "observation_collision"
 	}
-	if err := completeCollectionJob(ctx, tx, input.Lease, errorCode); err != nil {
+	if err := completeCollectionJob(ctx, tx, &input.Lease, errorCode); err != nil {
 		return PublishBatchResult{}, err
 	}
 	return result, nil

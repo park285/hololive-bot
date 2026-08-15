@@ -51,7 +51,7 @@ func loadViewerState(ctx context.Context, tx dbx.Tx, videoID string, windowStart
 	return state, rows.Err()
 }
 
-func persistViewerDecision(ctx context.Context, tx dbx.Tx, observation Observation, decision viewer.Decision, channelID string) error {
+func persistViewerDecision(ctx context.Context, tx dbx.Tx, observation *Observation, decision *viewer.Decision, channelID string) error {
 	if err := persistViewerEvidence(ctx, tx, observation, decision); err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func persistViewerDecision(ctx context.Context, tx dbx.Tx, observation Observati
 	return persistViewerConflict(ctx, tx, observation, decision)
 }
 
-func persistViewerEvidence(ctx context.Context, tx dbx.Tx, observation Observation, decision viewer.Decision) error {
+func persistViewerEvidence(ctx context.Context, tx dbx.Tx, observation *Observation, decision *viewer.Decision) error {
 	if decision.Sample == nil {
 		return nil
 	}
@@ -87,7 +87,7 @@ func persistViewerEvidence(ctx context.Context, tx dbx.Tx, observation Observati
 	return nil
 }
 
-func persistViewerHead(ctx context.Context, tx dbx.Tx, decision viewer.Decision) error {
+func persistViewerHead(ctx context.Context, tx dbx.Tx, decision *viewer.Decision) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_viewer_head_upsert_0055_55.sql"),
@@ -105,7 +105,7 @@ func persistViewerHead(ctx context.Context, tx dbx.Tx, decision viewer.Decision)
 	return nil
 }
 
-func persistViewerProduct(ctx context.Context, tx dbx.Tx, decision viewer.Decision, channelID string) error {
+func persistViewerProduct(ctx context.Context, tx dbx.Tx, decision *viewer.Decision, channelID string) error {
 	if decision.Sample == nil {
 		return nil
 	}
@@ -136,13 +136,13 @@ func persistViewerProduct(ctx context.Context, tx dbx.Tx, decision viewer.Decisi
 	return nil
 }
 
-func shouldWriteViewerProduct(decision viewer.Decision, channelID string) bool {
+func shouldWriteViewerProduct(decision *viewer.Decision, channelID string) bool {
 	return decision.Sample.Availability == viewer.AvailabilityAvailable &&
 		decision.Sample.ViewerCount != nil &&
 		channelID != ""
 }
 
-func persistViewerConflict(ctx context.Context, tx dbx.Tx, observation Observation, decision viewer.Decision) error {
+func persistViewerConflict(ctx context.Context, tx dbx.Tx, observation *Observation, decision *viewer.Decision) error {
 	if decision.Conflict == nil || decision.Sample == nil {
 		return nil
 	}

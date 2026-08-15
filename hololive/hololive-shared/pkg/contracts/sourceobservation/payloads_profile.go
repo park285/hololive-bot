@@ -127,11 +127,11 @@ func invalidPhotoFingerprint(value string) bool {
 
 func lessPhotoVariantIndex(variants []PhotoVariantV1) func(int, int) bool {
 	return func(i, j int) bool {
-		return photoVariantLess(variants[i], variants[j])
+		return photoVariantLess(&variants[i], &variants[j])
 	}
 }
 
-func photoVariantLess(left, right PhotoVariantV1) bool {
+func photoVariantLess(left, right *PhotoVariantV1) bool {
 	if left.Kind != right.Kind {
 		return left.Kind < right.Kind
 	}
@@ -141,7 +141,7 @@ func photoVariantLess(left, right PhotoVariantV1) bool {
 	return photoVariantLessRemainder(left, right)
 }
 
-func photoVariantLessRemainder(left, right PhotoVariantV1) bool {
+func photoVariantLessRemainder(left, right *PhotoVariantV1) bool {
 	if left.ContentFingerprint != right.ContentFingerprint {
 		return left.ContentFingerprint < right.ContentFingerprint
 	}
@@ -216,7 +216,7 @@ func validateOptionalIdentifier(name, value string, maxLength int) error {
 }
 
 func validateScheduleItemTiming(item *ScheduleItemV1, coverage ScheduleCoverageV1) error {
-	if len(strings.TrimSpace(item.Title)) == 0 || len(item.Title) > 4096 || item.ScheduledAt.IsZero() {
+	if strings.TrimSpace(item.Title) == "" || len(item.Title) > 4096 || item.ScheduledAt.IsZero() {
 		return fmt.Errorf("schedule item title or scheduled time is invalid")
 	}
 	item.ScheduledAt = item.ScheduledAt.UTC()

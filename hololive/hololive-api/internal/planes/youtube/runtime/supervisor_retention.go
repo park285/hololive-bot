@@ -56,7 +56,7 @@ func (r *Runtime) retainSource(ctx context.Context) error {
 	var result sourceobservation.RetentionResult
 	err := r.withRetainDB(ctx, func(ctx context.Context) error {
 		var tickErr error
-		result, tickErr = r.retainer.RunRetentionTick(ctx, planeRetentionConfig(r.Config.Retention), r.now())
+		result, tickErr = r.retainer.RunRetentionTick(ctx, planeRetentionConfig(&r.Config.Retention), r.now())
 		return tickErr
 	})
 	recordRetentionTick(result, time.Since(started), err)
@@ -139,7 +139,7 @@ func (r *Runtime) replayTick(ctx context.Context) error {
 	return nil
 }
 
-func planeRetentionConfig(cfg settings.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
+func planeRetentionConfig(cfg *settings.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
 	return sourceobservation.RetentionConfig{
 		QueueProcessedAge: cfg.QueueProcessedAge,
 		QueueDLQAge:       cfg.QueueDLQAge,
@@ -150,7 +150,7 @@ func planeRetentionConfig(cfg settings.YouTubePlaneRetentionConfig) sourceobserv
 	}
 }
 
-func evidenceRetentionAges(cfg settings.YouTubePlaneRetentionConfig) map[contract.ObservationKind]time.Duration {
+func evidenceRetentionAges(cfg *settings.YouTubePlaneRetentionConfig) map[contract.ObservationKind]time.Duration {
 	ages := make(map[contract.ObservationKind]time.Duration, 9)
 	addEvidenceRetentionAge(ages, contract.KindCommunityPage, cfg.CommunityPageAge)
 	addEvidenceRetentionAge(ages, contract.KindVideoList, cfg.VideoListAge)

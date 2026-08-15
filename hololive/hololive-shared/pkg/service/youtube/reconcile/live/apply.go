@@ -13,35 +13,35 @@ func reapplyStoredEnds(session *reduceSession, videoID string) {
 	if !ok {
 		return
 	}
-	applyPendingEnd(session, existing, pending)
+	applyPendingEnd(session, &existing, &pending)
 }
 
-func applyPendingEnd(session *reduceSession, existing SessionState, pending PendingEnd) {
+func applyPendingEnd(session *reduceSession, existing *SessionState, pending *PendingEnd) {
 	evidence := endEvidenceOf(existing, pending)
-	if CanEnd(existing.Clock, evidence, session.dbNow, session.grace) {
-		endSession(&existing, pending, session.dbNow)
+	if CanEnd(&existing.Clock, &evidence, session.dbNow, session.grace) {
+		endSession(existing, pending, session.dbNow)
 		storeSessionDecision(session, existing, "ENDED")
 		delete(session.state.PendingEnds, existing.VideoID)
 		return
 	}
-	if persistCandidate(existing, evidence) {
-		setEndCandidate(&existing, pending, session.grace)
+	if persistCandidate(existing, &evidence) {
+		setEndCandidate(existing, pending, session.grace)
 		storeSessionDecision(session, existing, "END_CANDIDATE")
 		return
 	}
 	if existing.Clock.EndCandidateKind != nil {
-		clearEndCandidate(&existing)
+		clearEndCandidate(existing)
 		storeSessionDecision(session, existing, "END_CANDIDATE_CLEARED")
 	}
 }
 
-func storeSessionDecision(session *reduceSession, existing SessionState, decision string) {
-	session.state.Sessions[existing.VideoID] = existing
+func storeSessionDecision(session *reduceSession, existing *SessionState, decision string) {
+	session.state.Sessions[existing.VideoID] = *existing
 	markDirty(session, existing.VideoID)
 	recordApplication(session, existing.VideoID, decision)
 }
 
-func endEvidenceOf(existing SessionState, pending PendingEnd) EndEvidence {
+func endEvidenceOf(existing *SessionState, pending *PendingEnd) EndEvidence {
 	return EndEvidence{
 		Kind:                 pending.Kind,
 		EffectiveAt:          pending.EffectiveAt,
@@ -53,7 +53,7 @@ func endEvidenceOf(existing SessionState, pending PendingEnd) EndEvidence {
 	}
 }
 
-func hasPositiveAtOrAfter(existing SessionState, pending PendingEnd) bool {
+func hasPositiveAtOrAfter(existing *SessionState, pending *PendingEnd) bool {
 	if existing.Clock.LastLivePositiveAt != nil && !existing.Clock.LastLivePositiveAt.Before(pending.EffectiveAt) {
 		return true
 	}
@@ -65,14 +65,14 @@ func hasPositiveAtOrAfter(existing SessionState, pending PendingEnd) bool {
 	return false
 }
 
-func persistCandidate(existing SessionState, evidence EndEvidence) bool {
+func persistCandidate(existing *SessionState, evidence *EndEvidence) bool {
 	if !evidence.Valid || !evidence.EntityMatchesSession || evidence.HasPositiveAtOrAfter {
 		return false
 	}
 	return persistCandidateKind(existing, evidence)
 }
 
-func persistCandidateKind(existing SessionState, evidence EndEvidence) bool {
+func persistCandidateKind(existing *SessionState, evidence *EndEvidence) bool {
 	if evidence.Kind == EndEvidenceExplicitEnd {
 		return persistExplicitEnd(existing, evidence)
 	}
@@ -85,19 +85,19 @@ func persistCandidateKind(existing SessionState, evidence EndEvidence) bool {
 	return false
 }
 
-func persistExplicitEnd(existing SessionState, evidence EndEvidence) bool {
+func persistExplicitEnd(existing *SessionState, evidence *EndEvidence) bool {
 	return existing.Clock.LastLivePositiveAt != nil && existing.Clock.LastLivePositiveSeenAt != nil &&
 		evidence.EffectiveAt.After(*existing.Clock.LastLivePositiveAt)
 }
 
-func persistExplicitCancel(existing SessionState, evidence EndEvidence) bool {
+func persistExplicitCancel(existing *SessionState, evidence *EndEvidence) bool {
 	return existing.Clock.LastLivePositiveAt == nil &&
 		existing.Clock.LastUpcomingPositiveAt != nil &&
 		existing.Clock.LastUpcomingPositiveSeenAt != nil &&
 		evidence.EffectiveAt.After(*existing.Clock.LastUpcomingPositiveAt)
 }
 
-func persistScopedAbsence(existing SessionState, evidence EndEvidence) bool {
+func persistScopedAbsence(existing *SessionState, evidence *EndEvidence) bool {
 	return evidence.NegativeEligible && evidence.ScopeCoversSession &&
 		existing.Clock.LastLivePositiveAt != nil &&
 		existing.Clock.LastLivePositiveSeenAt != nil &&
@@ -111,47 +111,47 @@ func settleDueCandidate(session *reduceSession, videoID string) {
 		return
 	}
 	if existing.Status == StatusEnded {
-		clearStoredCandidate(session, videoID, existing)
+		clearStoredCandidate(session, videoID, &existing)
 		return
 	}
 	pending, ok := session.state.PendingEnds[videoID]
 	if !ok {
-		clearStoredCandidate(session, videoID, existing)
+		clearStoredCandidate(session, videoID, &existing)
 		return
 	}
-	refreshDueCandidate(session, existing, pending)
+	refreshDueCandidate(session, &existing, &pending)
 }
 
-func refreshDueCandidate(session *reduceSession, existing SessionState, pending PendingEnd) {
+func refreshDueCandidate(session *reduceSession, existing *SessionState, pending *PendingEnd) {
 	evidence := endEvidenceOf(existing, pending)
-	if CanEnd(existing.Clock, evidence, session.dbNow, session.grace) {
+	if CanEnd(&existing.Clock, &evidence, session.dbNow, session.grace) {
 		return
 	}
-	if persistCandidate(existing, evidence) {
+	if persistCandidate(existing, &evidence) {
 		storeRecheckOrClear(session, existing, pending)
 		return
 	}
 	clearStoredCandidate(session, existing.VideoID, existing)
 }
 
-func storeRecheckOrClear(session *reduceSession, existing SessionState, pending PendingEnd) {
+func storeRecheckOrClear(session *reduceSession, existing *SessionState, pending *PendingEnd) {
 	next := candidateRecheckAt(existing, pending, session.grace)
 	if next != nil && next.After(session.dbNow) {
 		existing.Clock.NextEndCheckAt = next
 	} else {
-		clearEndCandidate(&existing)
+		clearEndCandidate(existing)
 	}
-	session.state.Sessions[existing.VideoID] = existing
+	session.state.Sessions[existing.VideoID] = *existing
 	markDirty(session, existing.VideoID)
 }
 
-func clearStoredCandidate(session *reduceSession, videoID string, existing SessionState) {
-	clearEndCandidate(&existing)
-	session.state.Sessions[videoID] = existing
+func clearStoredCandidate(session *reduceSession, videoID string, existing *SessionState) {
+	clearEndCandidate(existing)
+	session.state.Sessions[videoID] = *existing
 	markDirty(session, videoID)
 }
 
-func candidateRecheckAt(existing SessionState, pending PendingEnd, grace time.Duration) *time.Time {
+func candidateRecheckAt(existing *SessionState, pending *PendingEnd, grace time.Duration) *time.Time {
 	seen := existing.Clock.LastLivePositiveSeenAt
 	if pending.Kind == EndEvidenceExplicitCancel {
 		seen = existing.Clock.LastUpcomingPositiveSeenAt
@@ -163,16 +163,16 @@ func candidateRecheckAt(existing SessionState, pending PendingEnd, grace time.Du
 	return &next
 }
 
-func setEndCandidate(existing *SessionState, pending PendingEnd, grace time.Duration) {
+func setEndCandidate(existing *SessionState, pending *PendingEnd, grace time.Duration) {
 	kind := pending.Kind
 	observationID := pending.ObservationID
 	existing.Clock.EndCandidateKind = &kind
 	existing.Clock.EndCandidateObservationID = &observationID
 	existing.Clock.LastEndEvidenceAt = copyTime(pending.EffectiveAt)
-	existing.Clock.NextEndCheckAt = candidateRecheckAt(*existing, pending, grace)
+	existing.Clock.NextEndCheckAt = candidateRecheckAt(existing, pending, grace)
 }
 
-func endSession(existing *SessionState, pending PendingEnd, dbNow time.Time) {
+func endSession(existing *SessionState, pending *PendingEnd, dbNow time.Time) {
 	existing.Status = StatusEnded
 	if pending.EndedAt != nil {
 		existing.EndedAt = copyOptionalTime(pending.EndedAt)
@@ -201,7 +201,7 @@ func endReasonOf(kind EndEvidenceKind) EndReason {
 	return EndReasonExplicitEnd
 }
 
-func shouldClearEnd(existing SessionState, positiveAt time.Time) bool {
+func shouldClearEnd(existing *SessionState, positiveAt time.Time) bool {
 	cutoff := existing.Clock.LastEndEvidenceAt
 	if existing.Clock.LastCompleteAbsenceAt != nil {
 		if cutoff == nil || existing.Clock.LastCompleteAbsenceAt.After(*cutoff) {
@@ -234,7 +234,7 @@ func firstTime(value *time.Time, fallback time.Time) *time.Time {
 	return copyTime(fallback)
 }
 
-func sameOptionalTime(value *time.Time, other *time.Time) bool {
+func sameOptionalTime(value, other *time.Time) bool {
 	if value == nil || other == nil {
 		return false
 	}

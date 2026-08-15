@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
@@ -108,7 +109,7 @@ func resultError(message string) error {
 	return collecterr.New(collecterr.Failed, "youtube.js helper: "+message)
 }
 
-func (c *RPC) doJSON(ctx context.Context, path string, request any, response any) error {
+func (c *RPC) doJSON(ctx context.Context, path string, request, response any) error {
 	if c == nil || c.http == nil {
 		return collecterr.New(collecterr.Failed, "youtube.js client is not configured")
 	}
@@ -121,9 +122,12 @@ func (c *RPC) doJSON(ctx context.Context, path string, request any, response any
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return collecterr.FromContext(fmt.Errorf("youtube.js helper: %w", err))
+		closeErr := closeHTTPResponse(resp)
+		return errors.Join(collecterr.FromContext(fmt.Errorf("youtube.js helper: %w", err)), closeErr)
 	}
-	defer resp.Body.Close()
+	if resp == nil || resp.Body == nil {
+		return collecterr.New(collecterr.Failed, "youtube.js helper response is nil")
+	}
 	return decodeHelperResponse(resp, c.bodyLimit, response)
 }
 
@@ -144,15 +148,20 @@ func (c *RPC) newJSONRequest(ctx context.Context, path string, request any) (*ht
 }
 
 func decodeHelperResponse(resp *http.Response, limit int64, response any) error {
+	if resp == nil || resp.Body == nil {
+		return collecterr.New(collecterr.Failed, "youtube.js helper response is nil")
+	}
 	if limit <= 0 {
 		limit = defaultHelperBodyLimit
 	}
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	payload, readErr := httpbody.ReadAllAndDrain(resp.Body, limit)
+	closeErr := resp.Body.Close()
+	err := errors.Join(readErr, closeErr)
 	if err != nil {
+		if errors.Is(err, httpbody.ErrTooLarge) {
+			return errors.Join(collecterr.New(collecterr.ParserDrift, "youtube.js helper response exceeds body limit"), err)
+		}
 		return collecterr.FromContext(fmt.Errorf("read youtube.js helper: %w", err))
-	}
-	if int64(len(payload)) > limit {
-		return collecterr.New(collecterr.ParserDrift, "youtube.js helper response exceeds body limit")
 	}
 	if err := json.Unmarshal(payload, response); err != nil {
 		return collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode youtube.js helper: %w", err))
@@ -163,12 +172,20 @@ func decodeHelperResponse(resp *http.Response, limit int64, response any) error 
 	return nil
 }
 
+func closeHTTPResponse(resp *http.Response) error {
+	if resp == nil || resp.Body == nil {
+		return nil
+	}
+	drainErr := httpbody.Drain(resp.Body, httpbody.DefaultDrainLimit)
+	return errors.Join(drainErr, resp.Body.Close())
+}
+
 func helperStatusError(status int, payload []byte) error {
 	var decoded struct {
 		Error string `json:"error"`
 		Code  string `json:"error_code"`
 	}
-	_ = json.Unmarshal(payload, &decoded)
+	decodeErr := json.Unmarshal(payload, &decoded)
 	errText := strings.TrimSpace(decoded.Error)
 	if errText == "" {
 		errText = strings.TrimSpace(string(payload))
@@ -177,7 +194,11 @@ func helperStatusError(status int, payload []byte) error {
 	if code == "" {
 		code = collecterr.Failed
 	}
-	return collecterr.Wrap(code, fmt.Errorf("youtube.js helper status %d: %s", status, errText))
+	statusErr := collecterr.Wrap(code, fmt.Errorf("youtube.js helper status %d: %s", status, errText))
+	if decodeErr != nil {
+		return errors.Join(statusErr, fmt.Errorf("decode youtube.js helper error response: %w", decodeErr))
+	}
+	return statusErr
 }
 
 func (c *RPC) waitLimiter(ctx context.Context) error {

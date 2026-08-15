@@ -128,6 +128,7 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/coverage_relation.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/coverage_time_range.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/envelope.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/envelope_json.go
+hololive/hololive-shared/pkg/contracts/sourceobservation/envelope_validation.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/identity.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_decode.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_normalize.go
@@ -317,6 +318,7 @@ hololive/hololive-shared/pkg/domain/youtube_content_thumbnails.go
 hololive/hololive-shared/pkg/domain/youtube_delivery.go
 hololive/hololive-shared/pkg/domain/youtube_delivery_telemetry.go
 hololive/hololive-shared/pkg/health/health.go
+hololive/hololive-shared/pkg/httpbody/body.go
 hololive/hololive-shared/pkg/observability/runtime.go
 hololive/hololive-shared/pkg/panicguard/panicguard.go
 hololive/hololive-shared/pkg/pgxutil/rollback.go

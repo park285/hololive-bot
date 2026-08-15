@@ -87,7 +87,7 @@ type Decision struct {
 	Applications []Application
 }
 
-func Identity(variant Variant) string {
+func Identity(variant *Variant) string {
 	if variant.StableMediaID != "" {
 		return "id:" + variant.StableMediaID
 	}
@@ -95,4 +95,43 @@ func Identity(variant Variant) string {
 		return "fp:" + variant.ContentFingerprint
 	}
 	return ""
+}
+
+func (s *State) clone() State {
+	cloned := *s
+	cloned.Head = s.Head.clone()
+	return cloned
+}
+
+func (h *Head) clone() Head {
+	cloned := *h
+	cloned.Kinds = make(map[string]Canonical, len(h.Kinds))
+	for kind := range h.Kinds {
+		canonical := h.Kinds[kind]
+		cloned.Kinds[kind] = canonical.clone()
+	}
+	return cloned
+}
+
+func (c *Canonical) clone() Canonical {
+	cloned := *c
+	cloned.EffectiveAt = cloneTime(c.EffectiveAt)
+	cloned.FirstAt = cloneTime(c.FirstAt)
+	cloned.LastAt = cloneTime(c.LastAt)
+	cloned.FirstRx = cloneTime(c.FirstRx)
+	return cloned
+}
+
+func (e *Evidence) clone() Evidence {
+	cloned := *e
+	cloned.Sample.Variants = append([]Variant(nil), e.Sample.Variants...)
+	return cloned
+}
+
+func cloneTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }

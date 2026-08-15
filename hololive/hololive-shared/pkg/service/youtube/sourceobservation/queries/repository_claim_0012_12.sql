@@ -62,31 +62,9 @@ WITH exhausted_candidates AS MATERIALIZED (
               queue.lease_expires_at
 )
 SELECT observation.id,
-       observation.provider,
-       observation.observation_kind,
-       observation.subject_key,
-       observation.observation_key,
-       observation.schema_version,
-       observation.contract_generation,
-       observation.scheduled_for,
-       observation.observed_at,
-       observation.source_event_at,
-       observation.received_at,
-       observation.scope_sha256,
-       observation.completeness,
-       observation.continuity,
-       observation.payload,
-       observation.payload_sha256,
-       observation.evidence_sha256,
-       observation.collector_instance,
-       observation.job_key,
-       observation.collection_job_kind,
-       observation.fence_epoch,
-       observation.projection_generation,
-       claimed.attempt_count,
-       claimed.lease_owner,
        claimed.lease_token,
-       claimed.lease_expires_at
+       observation.observation_kind,
+       observation.subject_key
 FROM claimed
 JOIN source_observations AS observation
   ON observation.id = claimed.observation_id

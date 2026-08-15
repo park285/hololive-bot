@@ -115,6 +115,9 @@ func applyLiveHeadRow(rows pgx.Rows, state *live.State) error {
 }
 
 func applyAbsenceSlotHints(existing *live.SessionState) {
+	if existing == nil {
+		return
+	}
 	if existing.Clock.ConsecutiveAbsenceSlots == 1 {
 		existing.FirstAbsenceScheduledFor = existing.LastAbsenceScheduledFor
 	}

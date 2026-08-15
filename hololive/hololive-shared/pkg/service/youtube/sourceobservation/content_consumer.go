@@ -13,7 +13,7 @@ import (
 func (c *Consumer) reconcileContent(
 	ctx context.Context,
 	tx dbx.Tx,
-	claimed Observation,
+	claimed *Observation,
 ) (content.Decision, ReconcileResult, error) {
 	evidence, err := evidenceFromObservation(claimed)
 	if err != nil {
@@ -30,7 +30,7 @@ func (c *Consumer) reconcileContent(
 	if err != nil {
 		return content.Decision{}, ReconcileResult{}, err
 	}
-	if err := persistContentDecision(ctx, tx, c.writer, claimed, decision); err != nil {
+	if err := persistContentDecision(ctx, tx, c.writer, claimed, &decision); err != nil {
 		return content.Decision{}, ReconcileResult{}, err
 	}
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
@@ -39,14 +39,14 @@ func (c *Consumer) reconcileContent(
 	return decision, ReconcileResult{Applications: mapContentApplications(decision.Applications)}, nil
 }
 
-func evidenceFromObservation(observation Observation) (content.Evidence, error) {
+func evidenceFromObservation(observation *Observation) (content.Evidence, error) {
 	if observation.ObservationKind == contract.KindShortsList {
 		return shortsEvidence(observation)
 	}
 	return videoEvidence(observation)
 }
 
-func videoEvidence(observation Observation) (content.Evidence, error) {
+func videoEvidence(observation *Observation) (content.Evidence, error) {
 	var payload contract.VideoListV1
 	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
 		return content.Evidence{}, fmt.Errorf("decode video list payload: %w", err)
@@ -63,11 +63,11 @@ func videoEvidence(observation Observation) (content.Evidence, error) {
 		Completeness:   observation.Completeness,
 		Continuity:     observation.Continuity,
 		Videos:         entitiesFromItems(payload.Videos, false),
-		Coverage:       content.VideoCoverage(payload.Coverage),
+		Coverage:       content.VideoCoverage(&payload.Coverage),
 	}, nil
 }
 
-func shortsEvidence(observation Observation) (content.Evidence, error) {
+func shortsEvidence(observation *Observation) (content.Evidence, error) {
 	var payload contract.ShortsListV1
 	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
 		return content.Evidence{}, fmt.Errorf("decode shorts list payload: %w", err)
@@ -84,7 +84,7 @@ func shortsEvidence(observation Observation) (content.Evidence, error) {
 		Completeness:   observation.Completeness,
 		Continuity:     observation.Continuity,
 		Videos:         entitiesFromItems(payload.Videos, true),
-		Coverage:       content.ShortsCoverage(payload.Coverage),
+		Coverage:       content.ShortsCoverage(&payload.Coverage),
 	}, nil
 }
 

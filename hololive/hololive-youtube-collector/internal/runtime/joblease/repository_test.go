@@ -43,7 +43,7 @@ func TestAcquireIncrementsEpochAndTakeoverPreservesScheduledSlot(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
 	repository := newTestRepository(t, pool)
-	spec := communityJob("channel:a", time.Minute)
+	spec := communityJob()
 
 	first, err := repository.Acquire(ctx, spec, "collector-a")
 	if err != nil {
@@ -83,10 +83,10 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 		Class: "GLOBAL", CollectionJobKind: "official_schedule",
 		SubjectKey: "global:hololive-schedule", PollInterval: time.Minute,
 	}
-	if _, err := repository.Acquire(ctx, spec, "collector-a"); err != nil {
+	if _, err := repository.Acquire(ctx, &spec, "collector-a"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repository.Acquire(ctx, spec, "collector-b"); !errors.Is(err, ErrNotAcquired) {
+	if _, err := repository.Acquire(ctx, &spec, "collector-b"); !errors.Is(err, ErrNotAcquired) {
 		t.Fatalf("second global acquire error = %v", err)
 	}
 	var active int
@@ -122,10 +122,10 @@ func TestYouTubeJSChannelCandidatesKeepLiveAndMetadataCadencesSeparate(t *testin
 	if len(metadata) != 1 || metadata[0].PollInterval != 6*time.Hour {
 		t.Fatalf("metadata candidates = %#v", metadata)
 	}
-	if _, err := repository.Acquire(ctx, live[0], "collector-a"); err != nil {
+	if _, err := repository.Acquire(ctx, &live[0], "collector-a"); err != nil {
 		t.Fatalf("acquire youtubejs live candidate: %v", err)
 	}
-	if _, err := repository.Acquire(ctx, metadata[0], "collector-a"); err != nil {
+	if _, err := repository.Acquire(ctx, &metadata[0], "collector-a"); err != nil {
 		t.Fatalf("acquire youtubejs metadata candidate: %v", err)
 	}
 }
@@ -157,7 +157,7 @@ func TestHolodexCandidatesKeepLiveScheduleAndMetadataCadencesSeparate(t *testing
 		if len(candidates) != 1 || candidates[0].PollInterval != tt.interval {
 			t.Fatalf("%s candidates = %#v", tt.jobKind, candidates)
 		}
-		if _, err := repository.Acquire(ctx, candidates[0], "collector-a"); err != nil {
+		if _, err := repository.Acquire(ctx, &candidates[0], "collector-a"); err != nil {
 			t.Fatalf("acquire %s candidate: %v", tt.jobKind, err)
 		}
 	}
@@ -180,7 +180,7 @@ func TestCandidatesEventuallyIncludeSubjectsBeyondAcquisitionBatch(t *testing.T)
 		t.Fatalf("first candidates = %#v", first)
 	}
 	for i := range first {
-		lease, err := repository.Acquire(ctx, first[i], "collector-a")
+		lease, err := repository.Acquire(ctx, &first[i], "collector-a")
 		if err != nil {
 			t.Fatalf("acquire first candidate %d: %v", i, err)
 		}
@@ -202,7 +202,7 @@ func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
 	repository := newTestRepository(t, pool)
-	spec := communityJob("channel:a", time.Minute)
+	spec := communityJob()
 	lease, err := repository.Acquire(ctx, spec, "collector-a")
 	if err != nil {
 		t.Fatal(err)
@@ -229,34 +229,39 @@ func TestIdleAcquisitionCoalescesLongOutage(t *testing.T) {
 func TestDeferAndReleasePreserveScheduledSlot(t *testing.T) {
 	for _, action := range []string{"defer", "release"} {
 		t.Run(action, func(t *testing.T) {
-			ctx := context.Background()
-			pool := dbtest.NewPool(t)
-			seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
-			repository := newTestRepository(t, pool)
-			spec := communityJob("channel:a", time.Minute)
-			first, err := repository.Acquire(ctx, spec, "collector-a")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if action == "defer" {
-				err = first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "provider_timeout")
-			} else {
-				err = first.Release(ctx)
-			}
-			if err != nil {
-				t.Fatalf("%s: %v", action, err)
-			}
-			if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
-				t.Fatal(err)
-			}
-			second, err := repository.Acquire(ctx, spec, "collector-b")
-			if err != nil {
-				t.Fatalf("reacquire after %s: %v", action, err)
-			}
-			if !second.Proof().ScheduledFor.Equal(first.Proof().ScheduledFor) || second.Proof().FenceEpoch != first.Proof().FenceEpoch+1 {
-				t.Fatalf("slot changed after %s: first=%#v second=%#v", action, first.Proof(), second.Proof())
-			}
+			assertActionPreservesScheduledSlot(t, action)
 		})
+	}
+}
+
+func assertActionPreservesScheduledSlot(t *testing.T, action string) {
+	t.Helper()
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+	first, err := repository.Acquire(ctx, spec, "collector-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action == "defer" {
+		err = first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "provider_timeout")
+	} else {
+		err = first.Release(ctx)
+	}
+	if err != nil {
+		t.Fatalf("%s: %v", action, err)
+	}
+	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+	second, err := repository.Acquire(ctx, spec, "collector-b")
+	if err != nil {
+		t.Fatalf("reacquire after %s: %v", action, err)
+	}
+	if !second.Proof().ScheduledFor.Equal(first.Proof().ScheduledFor) || second.Proof().FenceEpoch != first.Proof().FenceEpoch+1 {
+		t.Fatalf("slot changed after %s: first=%#v second=%#v", action, first.Proof(), second.Proof())
 	}
 }
 
@@ -265,7 +270,7 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
 	repository := newTestRepository(t, pool)
-	lease, err := repository.Acquire(ctx, communityJob("channel:a", time.Minute), "collector-a")
+	lease, err := repository.Acquire(ctx, communityJob(), "collector-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +294,7 @@ func TestProjectionExpiryBlocksAcquisition(t *testing.T) {
 	if _, err := pool.Exec(ctx, mustTestSQL("expire_projection.sql"), generation); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := newTestRepository(t, pool).Acquire(ctx, communityJob("channel:a", time.Minute), "collector-a"); !errors.Is(err, ErrProjectionStale) {
+	if _, err := newTestRepository(t, pool).Acquire(ctx, communityJob(), "collector-a"); !errors.Is(err, ErrProjectionStale) {
 		t.Fatalf("expired projection acquire error = %v", err)
 	}
 }
@@ -309,14 +314,14 @@ func TestYouTubeSubjectJobsDistributeWithoutDuplicateAcquisition(t *testing.T) {
 	if len(candidates) != 2 {
 		t.Fatalf("candidate count = %d", len(candidates))
 	}
-	first, err := repository.Acquire(ctx, candidates[0], "collector-a")
+	first, err := repository.Acquire(ctx, &candidates[0], "collector-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repository.Acquire(ctx, candidates[0], "collector-b"); !errors.Is(err, ErrNotAcquired) {
+	if _, err := repository.Acquire(ctx, &candidates[0], "collector-b"); !errors.Is(err, ErrNotAcquired) {
 		t.Fatalf("duplicate acquisition error = %v", err)
 	}
-	second, err := repository.Acquire(ctx, candidates[1], "collector-b")
+	second, err := repository.Acquire(ctx, &candidates[1], "collector-b")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,6 +372,52 @@ func TestRenewFailureCancelsFetchAndRunJoins(t *testing.T) {
 	}
 }
 
+func TestRenewFailureBoundsNonCooperativeRunnerJoin(t *testing.T) {
+	config := testConfig()
+	config.RenewInterval = 5 * time.Millisecond
+	config.PublishBudget = 20 * time.Millisecond
+	repository := &Repository{config: config}
+	lease := &fakeLease{}
+	releaseRunner := make(chan struct{})
+	started := time.Now()
+	err := repository.Run(context.Background(), lease, func(context.Context, contract.LeaseProof) error {
+		<-releaseRunner
+		return nil
+	})
+	close(releaseRunner)
+	if !errors.Is(err, ErrFenceLost) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("run error = %v, want fence loss and bounded join timeout", err)
+	}
+	if elapsed := time.Since(started); elapsed > 200*time.Millisecond {
+		t.Fatalf("Run() elapsed = %s, want bounded cleanup", elapsed)
+	}
+	if lease.releaseCalls.Load() != 0 {
+		t.Fatalf("release calls = %d, renew failure must preserve scheduler defer ownership", lease.releaseCalls.Load())
+	}
+}
+
+func TestCancellationReleasesBeforeBoundedRunnerJoin(t *testing.T) {
+	config := testConfig()
+	config.RenewInterval = time.Second
+	config.PublishBudget = 20 * time.Millisecond
+	repository := &Repository{config: config}
+	lease := &fakeLease{}
+	releaseRunner := make(chan struct{})
+	runCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := repository.Run(runCtx, lease, func(context.Context, contract.LeaseProof) error {
+		<-releaseRunner
+		return nil
+	})
+	close(releaseRunner)
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("run error = %v, want cancellation and bounded join timeout", err)
+	}
+	if lease.releaseCalls.Load() != 1 {
+		t.Fatalf("release calls = %d, want 1", lease.releaseCalls.Load())
+	}
+}
+
 type leaseTarget struct {
 	subject  string
 	kind     contract.ObservationKind
@@ -391,17 +442,19 @@ func seedProjection(t *testing.T, pool *pgxpool.Pool, targets []leaseTarget) int
 
 func newTestRepository(t *testing.T, pool *pgxpool.Pool) *Repository {
 	t.Helper()
-	repository, err := NewRepository(pool, testConfig())
+	config := testConfig()
+	repository, err := NewRepository(pool, &config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return repository
 }
 
-func communityJob(subject string, interval time.Duration) JobSpec {
-	return JobSpec{
+func communityJob() *JobSpec {
+	const subject = "channel:a"
+	return &JobSpec{
 		JobKey:   "collector:youtubejs:community_collect:" + subject,
 		Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
-		CollectionJobKind: "community_collect", SubjectKey: subject, PollInterval: interval,
+		CollectionJobKind: "community_collect", SubjectKey: subject, PollInterval: time.Minute,
 	}
 }

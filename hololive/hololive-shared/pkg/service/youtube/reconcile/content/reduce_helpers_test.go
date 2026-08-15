@@ -10,9 +10,9 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func seededState() State {
+func seededState() *State {
 	earliest := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	return State{
+	return &State{
 		ChannelID:          "UC_TEST",
 		Kind:               contract.KindVideoList,
 		Initialized:        true,
@@ -22,7 +22,7 @@ func seededState() State {
 }
 
 func wideCoverage() coverageValue {
-	return VideoCoverage(contract.ChannelListCoverageV1{
+	return VideoCoverage(&contract.ChannelListCoverageV1{
 		ChannelID: "UC_TEST", MaxResults: 10, Exhausted: true,
 	})
 }
@@ -88,7 +88,7 @@ func completeNegativeC(grace time.Duration) Evidence {
 }
 
 func partialNegative() Evidence {
-	coverage := VideoCoverage(contract.ChannelListCoverageV1{
+	coverage := VideoCoverage(&contract.ChannelListCoverageV1{
 		ChannelID: "UC_TEST", MaxResults: 10, Exhausted: false,
 	})
 	return emptyAt(5, time.Date(2026, 8, 14, 2, 0, 0, 0, time.UTC), contract.CompletenessPartial, coverage)
@@ -96,16 +96,16 @@ func partialNegative() Evidence {
 
 func narrowNegative() Evidence {
 	after := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
-	coverage := VideoCoverage(contract.ChannelListCoverageV1{
+	coverage := VideoCoverage(&contract.ChannelListCoverageV1{
 		ChannelID: "UC_TEST", MaxResults: 10, Exhausted: true,
 		Filters: contract.VideoListFiltersV1{PublishedAfter: &after},
 	})
 	return emptyAt(6, time.Date(2026, 8, 14, 2, 0, 0, 0, time.UTC), contract.CompletenessComplete, coverage)
 }
 
-func mustReduceAll(t *testing.T, state State, evidence []Evidence, grace time.Duration) Decision {
+func mustReduceAll(t *testing.T, state *State, evidence []Evidence, grace time.Duration) *Decision {
 	t.Helper()
-	current := state
+	current := state.clone()
 	var decision Decision
 	for i := range evidence {
 		next, err := Reduce(current, evidence[i], grace)
@@ -113,12 +113,12 @@ func mustReduceAll(t *testing.T, state State, evidence []Evidence, grace time.Du
 			t.Fatalf("reduce[%d]: %v", i, err)
 		}
 		decision = next
-		current = stateFromDecision(current, next, evidence[i])
+		current = stateFromDecision(&current, &next, &evidence[i])
 	}
-	return decision
+	return &decision
 }
 
-func stateFromDecision(previous State, decision Decision, evidence Evidence) State {
+func stateFromDecision(previous *State, decision *Decision, evidence *Evidence) State {
 	next := previous.clone()
 	next.Initialized = true
 	next.Kind = evidence.Kind
@@ -130,7 +130,8 @@ func stateFromDecision(previous State, decision Decision, evidence Evidence) Sta
 	if next.Videos == nil {
 		next.Videos = map[string]EntityState{}
 	}
-	for _, clock := range decision.Clocks {
+	for i := range decision.Clocks {
+		clock := decision.Clocks[i]
 		next.Videos[clock.VideoID] = clock
 	}
 	if decision.AbsenceSlot != nil {
@@ -148,9 +149,10 @@ func stateFromDecision(previous State, decision Decision, evidence Evidence) Sta
 	return next
 }
 
-func snapshotDecision(decision Decision) string {
+func snapshotDecision(decision *Decision) string {
 	videos := make([]string, 0, len(decision.Clocks))
-	for _, clock := range decision.Clocks {
+	for i := range decision.Clocks {
+		clock := &decision.Clocks[i]
 		videos = append(videos, fmt.Sprintf("%s|%s|missing=%t|withdrawn=%t|slots=%d",
 			clock.VideoID, clock.Title,
 			clock.Clock.MissingSinceEffectiveAt != nil,
@@ -162,7 +164,7 @@ func snapshotDecision(decision Decision) string {
 	return strings.Join(videos, ";")
 }
 
-func assertAllPermutationsConverge(t *testing.T, state State, evidence []Evidence, grace time.Duration) {
+func assertAllPermutationsConverge(t *testing.T, state *State, evidence []Evidence, grace time.Duration) {
 	t.Helper()
 	var want string
 	for _, order := range permutations(evidence) {
@@ -200,39 +202,39 @@ func observationIDs(items []Evidence) []int64 {
 	return ids
 }
 
-func clockOf(decision Decision, videoID string) EntityState {
-	for _, clock := range decision.Clocks {
-		if clock.VideoID == videoID {
-			return clock
+func clockOf(decision *Decision) EntityState {
+	for i := range decision.Clocks {
+		if decision.Clocks[i].VideoID == "vid-a" {
+			return decision.Clocks[i]
 		}
 	}
 	return EntityState{}
 }
 
-func assertVideoPresent(t *testing.T, decision Decision, videoID string) {
+func assertVideoPresent(t *testing.T, decision *Decision) {
 	t.Helper()
-	if clockOf(decision, videoID).VideoID != videoID {
-		t.Fatalf("missing canonical video %s", videoID)
+	if clockOf(decision).VideoID != "vid-a" {
+		t.Fatal("missing canonical video vid-a")
 	}
 }
 
-func assertMissing(t *testing.T, decision Decision, videoID string, want bool) {
+func assertMissing(t *testing.T, decision *Decision, want bool) {
 	t.Helper()
-	got := clockOf(decision, videoID).Clock.MissingSinceEffectiveAt != nil
+	got := clockOf(decision).Clock.MissingSinceEffectiveAt != nil
 	if got != want {
-		t.Fatalf("video %s missing = %t, want %t", videoID, got, want)
+		t.Fatalf("video vid-a missing = %t, want %t", got, want)
 	}
 }
 
-func assertWithdrawn(t *testing.T, decision Decision, videoID string, want bool) {
+func assertWithdrawn(t *testing.T, decision *Decision, want bool) {
 	t.Helper()
-	got := clockOf(decision, videoID).WithdrawnAt != nil
+	got := clockOf(decision).WithdrawnAt != nil
 	if got != want {
-		t.Fatalf("video %s withdrawn = %t, want %t", videoID, got, want)
+		t.Fatalf("video vid-a withdrawn = %t, want %t", got, want)
 	}
 }
 
-func assertNotifications(t *testing.T, decision Decision, videoIDs ...string) {
+func assertNotifications(t *testing.T, decision *Decision, videoIDs ...string) {
 	t.Helper()
 	got := make([]string, 0, len(decision.Notifications))
 	for _, note := range decision.Notifications {

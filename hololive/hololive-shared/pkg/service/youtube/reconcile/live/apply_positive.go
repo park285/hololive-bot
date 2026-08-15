@@ -1,6 +1,6 @@
 package live
 
-func applyUpcomingPositive(session *reduceSession, fact SessionFact) {
+func applyUpcomingPositive(session *reduceSession, fact *SessionFact) {
 	existing, ok := session.state.Sessions[fact.VideoID]
 	if ok && existing.Status == StatusEnded {
 		recordApplication(session, fact.VideoID, "KEEP_ENDED")
@@ -10,7 +10,7 @@ func applyUpcomingPositive(session *reduceSession, fact SessionFact) {
 		created := newSession(fact, StatusUpcoming, session.evidence)
 		created.Clock.LastUpcomingPositiveAt = copyTime(session.evidence.EffectiveAt)
 		created.Clock.LastUpcomingPositiveSeenAt = copyTime(session.evidence.ReceivedAt)
-		storeAppliedSession(session, fact.VideoID, created)
+		storeAppliedSession(session, fact.VideoID, &created)
 		reapplyStoredEnds(session, fact.VideoID)
 		return
 	}
@@ -18,20 +18,21 @@ func applyUpcomingPositive(session *reduceSession, fact SessionFact) {
 		recordApplication(session, fact.VideoID, "OLDER_POSITIVE_RETAINED")
 		return
 	}
-	existing = mergePositiveFields(existing, fact, session.evidence)
+	existing = mergePositiveFields(&existing, fact, session.evidence)
 	existing.Clock.LastUpcomingPositiveAt = copyTime(session.evidence.EffectiveAt)
 	existing.Clock.LastUpcomingPositiveSeenAt = copyTime(session.evidence.ReceivedAt)
-	storePositiveAfterMerge(session, fact.VideoID, existing)
+	storePositiveAfterMerge(session, fact.VideoID, &existing)
 }
 
-func applyLivePositive(session *reduceSession, fact SessionFact) {
+func applyLivePositive(session *reduceSession, fact *SessionFact) {
 	existing, ok := session.state.Sessions[fact.VideoID]
 	if ok && existing.Status == StatusEnded {
 		recordApplication(session, fact.VideoID, "KEEP_ENDED")
 		return
 	}
 	if !ok {
-		storeAppliedSession(session, fact.VideoID, newLiveSession(fact, session.evidence))
+		created := newLiveSession(fact, session.evidence)
+		storeAppliedSession(session, fact.VideoID, &created)
 		reapplyStoredEnds(session, fact.VideoID)
 		return
 	}
@@ -39,10 +40,11 @@ func applyLivePositive(session *reduceSession, fact SessionFact) {
 		recordApplication(session, fact.VideoID, "OLDER_POSITIVE_RETAINED")
 		return
 	}
-	storePositiveAfterMerge(session, fact.VideoID, mergeLiveSession(existing, fact, session.evidence))
+	merged := mergeLiveSession(&existing, fact, session.evidence)
+	storePositiveAfterMerge(session, fact.VideoID, &merged)
 }
 
-func newLiveSession(fact SessionFact, evidence Evidence) SessionState {
+func newLiveSession(fact *SessionFact, evidence *Evidence) SessionState {
 	created := newSession(fact, StatusLive, evidence)
 	created.Clock.LastLivePositiveAt = copyTime(evidence.EffectiveAt)
 	created.Clock.LastLivePositiveSeenAt = copyTime(evidence.ReceivedAt)
@@ -51,23 +53,23 @@ func newLiveSession(fact SessionFact, evidence Evidence) SessionState {
 	return created
 }
 
-func mergeLiveSession(existing SessionState, fact SessionFact, evidence Evidence) SessionState {
-	existing = mergePositiveFields(existing, fact, evidence)
-	if existing.Status == StatusUpcoming {
-		existing.Status = StatusLive
+func mergeLiveSession(existing *SessionState, fact *SessionFact, evidence *Evidence) SessionState {
+	merged := mergePositiveFields(existing, fact, evidence)
+	if merged.Status == StatusUpcoming {
+		merged.Status = StatusLive
 	}
-	if existing.LiveFirstSeenAt == nil {
-		existing.LiveFirstSeenAt = copyTime(evidence.ReceivedAt)
+	if merged.LiveFirstSeenAt == nil {
+		merged.LiveFirstSeenAt = copyTime(evidence.ReceivedAt)
 	}
-	if existing.StartedAt == nil {
-		existing.StartedAt = firstTime(fact.StartedAt, evidence.EffectiveAt)
+	if merged.StartedAt == nil {
+		merged.StartedAt = firstTime(fact.StartedAt, evidence.EffectiveAt)
 	}
-	existing.Clock.LastLivePositiveAt = copyTime(evidence.EffectiveAt)
-	existing.Clock.LastLivePositiveSeenAt = copyTime(evidence.ReceivedAt)
-	return existing
+	merged.Clock.LastLivePositiveAt = copyTime(evidence.EffectiveAt)
+	merged.Clock.LastLivePositiveSeenAt = copyTime(evidence.ReceivedAt)
+	return merged
 }
 
-func newSession(fact SessionFact, status Status, evidence Evidence) SessionState {
+func newSession(fact *SessionFact, status Status, evidence *Evidence) SessionState {
 	return SessionState{
 		VideoID:            fact.VideoID,
 		ChannelID:          fact.ChannelID,
@@ -78,32 +80,33 @@ func newSession(fact SessionFact, status Status, evidence Evidence) SessionState
 	}
 }
 
-func mergePositiveFields(existing SessionState, fact SessionFact, evidence Evidence) SessionState {
+func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Evidence) SessionState {
+	merged := *existing
 	if fact.ChannelID != "" {
-		existing.ChannelID = fact.ChannelID
+		merged.ChannelID = fact.ChannelID
 	}
 	if fact.ScheduledAt != nil {
-		existing.ScheduledStartTime = copyOptionalTime(fact.ScheduledAt)
+		merged.ScheduledStartTime = copyOptionalTime(fact.ScheduledAt)
 	}
-	if fact.StartedAt != nil && existing.StartedAt == nil {
-		existing.StartedAt = copyOptionalTime(fact.StartedAt)
+	if fact.StartedAt != nil && merged.StartedAt == nil {
+		merged.StartedAt = copyOptionalTime(fact.StartedAt)
 	}
-	if evidence.ReceivedAt.After(existing.LastSeenAt) {
-		existing.LastSeenAt = evidence.ReceivedAt.UTC()
+	if evidence.ReceivedAt.After(merged.LastSeenAt) {
+		merged.LastSeenAt = evidence.ReceivedAt.UTC()
 	}
-	existing.Present = true
-	return existing
+	merged.Present = true
+	return merged
 }
 
-func storeAppliedSession(session *reduceSession, videoID string, existing SessionState) {
-	session.state.Sessions[videoID] = existing
+func storeAppliedSession(session *reduceSession, videoID string, existing *SessionState) {
+	session.state.Sessions[videoID] = *existing
 	markDirty(session, videoID)
 	recordApplication(session, videoID, "APPLIED")
 }
 
-func storePositiveAfterMerge(session *reduceSession, videoID string, existing SessionState) {
+func storePositiveAfterMerge(session *reduceSession, videoID string, existing *SessionState) {
 	if shouldClearEnd(existing, session.evidence.EffectiveAt) {
-		clearEndCandidate(&existing)
+		clearEndCandidate(existing)
 		delete(session.state.PendingEnds, videoID)
 	}
 	storeAppliedSession(session, videoID, existing)

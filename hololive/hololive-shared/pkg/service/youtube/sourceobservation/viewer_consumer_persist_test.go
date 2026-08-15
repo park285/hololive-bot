@@ -22,12 +22,12 @@ func TestViewerConsumerRetainsEqualConsecutiveSamples(t *testing.T) {
 		t.Fatalf("seed session: %v", err)
 	}
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindViewerSample, "vid-a", "youtubejs_viewer")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindViewerSample, "vid-a", "youtubejs_viewer")
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
 	first := time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC)
 	second := first.Add(2 * time.Minute)
-	proof = publishConsumeViewer(t, ctx, pool, repo, consumer, proof, first, 10)
-	publishConsumeViewer(t, ctx, pool, repo, consumer, proof, second, 10)
+	proof = publishConsumeViewer(t, ctx, pool, repo, consumer, &proof, first, 10)
+	publishConsumeViewer(t, ctx, pool, repo, consumer, &proof, second, 10)
 	assertTableCount(t, pool, "youtube_live_viewer_samples", 2)
 }
 
@@ -41,11 +41,11 @@ func TestViewerConsumerEqualWindowConflictStaysUnresolved(t *testing.T) {
 		t.Fatalf("seed session: %v", err)
 	}
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindViewerSample, "vid-a", "youtubejs_viewer")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindViewerSample, "vid-a", "youtubejs_viewer")
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
 	first := time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC)
 	second := first.Add(2 * time.Minute)
-	proof = publishConsumeViewer(t, ctx, pool, repo, consumer, proof, first, 10)
+	proof = publishConsumeViewer(t, ctx, pool, repo, consumer, &proof, first, 10)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_viewer_sample_evidence (
 			video_id, sample_window_start, provider, viewer_count, availability,
@@ -54,7 +54,7 @@ func TestViewerConsumerEqualWindowConflictStaysUnresolved(t *testing.T) {
 	`, second); err != nil {
 		t.Fatalf("seed conflicting evidence: %v", err)
 	}
-	publishConsumeViewer(t, ctx, pool, repo, consumer, proof, second, 20)
+	publishConsumeViewer(t, ctx, pool, repo, consumer, &proof, second, 20)
 	var unresolved *time.Time
 	if err := pool.QueryRow(ctx, `
 		SELECT unresolved_window_start FROM youtube_live_viewer_sample_heads WHERE video_id = 'vid-a'
@@ -81,7 +81,7 @@ func publishConsumeViewer(
 	pool *pgxpool.Pool,
 	repo *Repository,
 	consumer *Consumer,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	window time.Time,
 	count int64,
 ) contract.LeaseProof {
@@ -101,16 +101,16 @@ func publishConsumeViewer(
 		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityNotApplicable,
-		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: proof,
+		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare viewer: %v", err)
 	}
-	if _, err := repo.PublishBatch(ctx, publishInput(envelope)); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(&envelope)); err != nil {
 		t.Fatalf("publish viewer: %v", err)
 	}
 	if err := consumer.Consume(ctx, liveClaimOptions()); err != nil {
 		t.Fatalf("consume viewer: %v", err)
 	}
-	return advanceLease(t, pool, proof, time.Minute)
+	return advanceLease(t, ctx, pool, proof, time.Minute)
 }

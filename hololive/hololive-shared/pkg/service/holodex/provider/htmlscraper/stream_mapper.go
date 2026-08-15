@@ -130,7 +130,7 @@ func (s *Service) mapOfficialScheduleRow(rawRow json.RawMessage) (*officialSched
 	}, nil
 }
 
-func parseOfficialScheduleVideoURL(rawURL string) (string, string, error) {
+func parseOfficialScheduleVideoURL(rawURL string) (parsedVideoID, parsedURL string, parseErr error) {
 	parsed, err := url.Parse(stringutil.TrimSpace(rawURL))
 	if err != nil {
 		return "", "", fmt.Errorf("parse official schedule video URL: %w", err)

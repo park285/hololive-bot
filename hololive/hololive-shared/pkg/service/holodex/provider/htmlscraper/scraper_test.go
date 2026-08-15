@@ -58,14 +58,14 @@ func newOfficialScheduleTestService(
 	t *testing.T,
 	handler http.Handler,
 	members []*domain.Member,
-) (*Service, *httptest.Server) {
+) *Service {
 	t.Helper()
 	server := httptest.NewTLSServer(handler)
 	t.Cleanup(server.Close)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	service := NewTestServiceWithHTTPClient(server.Client(), logger, server.URL, nil)
 	service.identityIndex = buildOfficialScheduleIdentityIndex(testMemberDataProvider{members: members})
-	return service, server
+	return service
 }
 
 func writeJSON(t *testing.T, writer http.ResponseWriter, body string) {
@@ -77,7 +77,7 @@ func writeJSON(t *testing.T, writer http.ResponseWriter, body string) {
 }
 
 func TestOfficialScheduleAPIMapsGroup2(t *testing.T) {
-	service, _ := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet || request.URL.Path != officialScheduleAPIPath {
 			t.Errorf("request = %s %s", request.Method, request.URL.Path)
 		}
@@ -122,7 +122,11 @@ func TestOfficialScheduleAPIMapsGroup2(t *testing.T) {
 	if len(streams) != 2 {
 		t.Fatalf("len(streams) = %d, want 2", len(streams))
 	}
+	assertOfficialScheduleStreams(t, streams)
+}
 
+func assertOfficialScheduleStreams(t *testing.T, streams []*domain.Stream) {
+	t.Helper()
 	first := streams[0]
 	if first.ID != "video_one" || first.ChannelID != "channel-1" || first.Title != "Provider title" {
 		t.Fatalf("first stream = %#v", first)
@@ -193,10 +197,12 @@ func TestOfficialScheduleAPIResponseContract(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, _ := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 				writer.Header().Set("Content-Type", test.contentType)
 				writer.WriteHeader(test.status)
-				_, _ = io.WriteString(writer, test.body)
+				if _, err := io.WriteString(writer, test.body); err != nil {
+					t.Errorf("write response: %v", err)
+				}
 			}), nil)
 			streams, err := service.fetchOfficialScheduleAPI(context.Background())
 			if (err != nil) != test.wantError {
@@ -280,7 +286,7 @@ func TestOfficialScheduleAPIClosesAndBoundsResponseBody(t *testing.T) {
 
 func TestOfficialScheduleFetchDeduplicatesConcurrentRequestsAndClonesCache(t *testing.T) {
 	var requests atomic.Int32
-	service, _ := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
 		time.Sleep(25 * time.Millisecond)
 		writeJSON(t, writer, `{"dateGroupList":[{"videoList":[{
@@ -334,7 +340,7 @@ func TestOfficialScheduleFetchDeduplicatesConcurrentRequestsAndClonesCache(t *te
 
 func TestFetchChannelUsesOfficialAPIOnlyAfterYouTubeFailure(t *testing.T) {
 	var requests atomic.Int32
-	service, _ := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
 		writeJSON(t, writer, `{"dateGroupList":[{"videoList":[{
 			"datetime":"2026/08/13 12:00:00",
@@ -366,7 +372,7 @@ func TestFetchChannelUsesOfficialAPIOnlyAfterYouTubeFailure(t *testing.T) {
 
 func TestFetchChannelDoesNotUseOfficialAPIAfterYouTubeSuccessEmpty(t *testing.T) {
 	var requests atomic.Int32
-	service, _ := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
 		writeJSON(t, writer, `{"dateGroupList":[]}`)
 	}), nil)
@@ -391,7 +397,7 @@ func TestOfficialScheduleSharedFetchSurvivesLeaderCancellation(t *testing.T) {
 	var requests atomic.Int32
 	started := make(chan struct{})
 	release := make(chan struct{})
-	service, _ := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		if requests.Add(1) == 1 {
 			close(started)
 		}
@@ -426,7 +432,7 @@ func TestOfficialScheduleSharedFetchSurvivesLeaderCancellation(t *testing.T) {
 }
 
 func TestOfficialScheduleFiltersPastAndHoursWindow(t *testing.T) {
-	service, _ := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	service := newOfficialScheduleTestService(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, writer, `{"dateGroupList":[{"videoList":[
 			{"datetime":"2026/08/13 09:59:59","url":"https://www.youtube.com/watch?v=past","name":"Member"},
 			{"datetime":"2026/08/13 11:00:00","url":"https://www.youtube.com/watch?v=within","name":"Member"},

@@ -233,27 +233,27 @@ func evidencePolicies(ages map[contract.ObservationKind]time.Duration, now time.
 }
 
 func minPositiveDuration(values ...time.Duration) time.Duration {
-	var min time.Duration
+	var minimum time.Duration
 	for _, value := range values {
 		if value <= 0 {
 			continue
 		}
-		if min == 0 || value < min {
-			min = value
+		if minimum == 0 || value < minimum {
+			minimum = value
 		}
 	}
-	return min
+	return minimum
 }
 
 func minEvidenceAge(ages map[contract.ObservationKind]time.Duration) time.Duration {
-	var min time.Duration
+	var minimum time.Duration
 	for _, age := range ages {
 		if age <= 0 {
 			continue
 		}
-		if min == 0 || age < min {
-			min = age
+		if minimum == 0 || age < minimum {
+			minimum = age
 		}
 	}
-	return min
+	return minimum
 }

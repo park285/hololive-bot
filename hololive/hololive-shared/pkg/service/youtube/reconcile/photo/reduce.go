@@ -8,14 +8,16 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
+func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
 	if evidence.Sample.ChannelID == "" {
 		return Decision{}, fmt.Errorf("channel photo reducer received empty channel id")
 	}
-	sample := evidence.Sample
-	sample.Provider = evidence.Provider
-	sample.ObservationID = evidence.ObservationID
-	head := state.Head
+	workingState := state.clone()
+	workingEvidence := evidence.clone()
+	sample := &workingEvidence.Sample
+	sample.Provider = workingEvidence.Provider
+	sample.ObservationID = workingEvidence.ObservationID
+	head := workingState.Head
 	head.ChannelID = sample.ChannelID
 	if head.Kinds == nil {
 		head.Kinds = map[string]Canonical{}
@@ -27,14 +29,17 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 	if err != nil {
 		return Decision{}, err
 	}
-	head, product, apps, conflicts = reducePhotoKinds(head, byKind, sample, policy, apps, conflicts)
+	product, apps, conflicts, err = reducePhotoKinds(&head, byKind, sample, policy, apps, conflicts)
+	if err != nil {
+		return Decision{}, err
+	}
 	if len(apps) == 0 {
 		apps = append(apps, Application{
 			EntityKind: "youtube_channel_photo", EntityKey: sample.ChannelID, Decision: "RAW_RETAINED",
 		})
 	}
 	return Decision{
-		Sample:       &sample,
+		Sample:       sample,
 		Head:         head,
 		WriteProduct: product,
 		Conflicts:    conflicts,
@@ -43,20 +48,27 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 }
 
 func reducePhotoKinds(
-	head Head,
+	head *Head,
 	byKind map[string][]Variant,
-	sample Sample,
+	sample *Sample,
 	policy Policy,
 	apps []Application,
 	conflicts []Conflict,
-) (Head, map[string]Canonical, []Application, []Conflict) {
+) (map[string]Canonical, []Application, []Conflict, error) {
+	if missingPhotoState(head, sample) {
+		return nil, nil, nil, fmt.Errorf("reduce channel photo kinds: nil state")
+	}
 	product := map[string]Canonical{}
 	for _, kind := range []string{"avatar", "banner"} {
 		variants := byKind[kind]
 		if len(variants) == 0 {
 			continue
 		}
-		next, writeProduct, kindApps, kindConflicts := reduceKind(head.Kinds[kind], kind, variants, sample, policy)
+		current := head.Kinds[kind]
+		next, writeProduct, kindApps, kindConflicts, err := reduceKind(&current, kind, variants, sample, policy)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 		head.Kinds[kind] = next
 		apps = append(apps, kindApps...)
 		conflicts = append(conflicts, kindConflicts...)
@@ -64,70 +76,116 @@ func reducePhotoKinds(
 			product[kind] = next
 		}
 	}
-	return head, product, apps, conflicts
+	return product, apps, conflicts, nil
 }
 
-func reduceKind(current Canonical, kind string, variants []Variant, sample Sample, policy Policy) (Canonical, bool, []Application, []Conflict) {
+func missingPhotoState(head *Head, sample *Sample) bool {
+	return head == nil || sample == nil
+}
+
+func reduceKind(current *Canonical, kind string, variants []Variant, sample *Sample, policy Policy) (Canonical, bool, []Application, []Conflict, error) {
+	if current == nil || sample == nil {
+		return Canonical{}, false, nil, nil, fmt.Errorf("reduce channel photo kind: nil state")
+	}
 	key := sample.ChannelID + "/" + kind
 	identified := identifiedVariants(variants)
 	if len(identified) == 0 {
-		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "RAW_RETAINED"}}, nil
+		return *current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "RAW_RETAINED"}}, nil, nil
 	}
 	chosen, ok, conflict := chooseIdentity(identified)
 	if !ok {
-		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CONFLICT"}}, []Conflict{conflict}
+		return *current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CONFLICT"}}, []Conflict{conflict}, nil
 	}
-	if rejected, next, apps, conflicts := rejectPhotoChange(current, kind, key, Identity(chosen), sample); rejected {
-		return next, false, apps, conflicts
+	rejected, next, apps, conflicts, err := rejectPhotoChange(current, kind, key, Identity(&chosen), sample)
+	if err != nil {
+		return Canonical{}, false, nil, nil, err
 	}
-	return applyPhotoChange(current, key, chosen, sample, policy)
+	if rejected {
+		return next, false, apps, conflicts, nil
+	}
+	return applyPhotoChange(current, key, &chosen, sample, policy)
 }
 
-func rejectPhotoChange(current Canonical, kind, key, identity string, sample Sample) (bool, Canonical, []Application, []Conflict) {
-	if current.Identity != "" && current.EffectiveAt != nil && sample.EffectiveAt.Before(*current.EffectiveAt) {
-		return true, current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "OLDER_RETAINED"}}, nil
+func rejectPhotoChange(current *Canonical, kind, key, identity string, sample *Sample) (bool, Canonical, []Application, []Conflict, error) {
+	if current == nil || sample == nil {
+		return false, Canonical{}, nil, nil, fmt.Errorf("reject channel photo change: nil state")
 	}
-	if current.Identity != "" && current.EffectiveAt != nil && sample.EffectiveAt.Equal(*current.EffectiveAt) && current.Identity != identity {
-		return true, current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CONFLICT"}}, []Conflict{{
+	if olderPhotoSample(current, sample) {
+		return true, *current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "OLDER_RETAINED"}}, nil, nil
+	}
+	if conflictingPhotoSample(current, identity, sample) {
+		return true, *current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CONFLICT"}}, []Conflict{{
 			FieldName:            kind,
 			ExistingValueSHA256:  contract.SHA256Hex([]byte(current.Identity)),
 			AttemptedValueSHA256: contract.SHA256Hex([]byte(identity)),
-		}}
+		}}, nil
 	}
 	if current.Identity == identity {
-		resetCandidate(&current)
-		return true, current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CANONICAL_UNCHANGED"}}, nil
+		if err := resetCandidate(current); err != nil {
+			return false, Canonical{}, nil, nil, err
+		}
+		return true, *current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CANONICAL_UNCHANGED"}}, nil, nil
 	}
-	return false, current, nil, nil
+	return false, *current, nil, nil, nil
 }
 
-func applyPhotoChange(current Canonical, key string, chosen Variant, sample Sample, policy Policy) (Canonical, bool, []Application, []Conflict) {
+func olderPhotoSample(current *Canonical, sample *Sample) bool {
+	return current.Identity != "" && current.EffectiveAt != nil && sample.EffectiveAt.Before(*current.EffectiveAt)
+}
+
+func conflictingPhotoSample(current *Canonical, identity string, sample *Sample) bool {
+	return current.Identity != "" && current.EffectiveAt != nil &&
+		sample.EffectiveAt.Equal(*current.EffectiveAt) && current.Identity != identity
+}
+
+func applyPhotoChange(current *Canonical, key string, chosen *Variant, sample *Sample, policy Policy) (Canonical, bool, []Application, []Conflict, error) {
+	if missingPhotoChangeState(current, chosen, sample) {
+		return Canonical{}, false, nil, nil, fmt.Errorf("apply channel photo change: nil state")
+	}
 	identity := Identity(chosen)
 	if !policy.ChangeEnabled() {
-		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_DISABLED"}}, nil
+		return *current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_DISABLED"}}, nil, nil
 	}
 	if !sample.Complete {
-		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_PENDING"}}, nil
+		return *current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_PENDING"}}, nil, nil
 	}
-	if current.LastAt != nil && current.LastAt.Equal(sample.ScheduledFor) && current.Candidate == identity {
-		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "REPLAY"}}, nil
+	if replayedPhotoChange(current, identity, sample) {
+		return *current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "REPLAY"}}, nil, nil
 	}
-	trackPhotoCandidate(&current, chosen, identity, sample)
-	if current.Slots < policy.ChangeMinObservations ||
-		current.FirstRx == nil ||
-		sample.ReceivedAt.Before(current.FirstRx.Add(policy.ChangeStability)) {
-		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_PENDING"}}, nil
+	if err := trackPhotoCandidate(current, chosen, identity, sample); err != nil {
+		return Canonical{}, false, nil, nil, err
+	}
+	if pendingPhotoChange(current, sample, policy) {
+		return *current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_PENDING"}}, nil, nil
 	}
 	current.Identity = identity
 	current.URL = chosen.URL
 	current.Width = chosen.Width
 	current.Height = chosen.Height
 	current.EffectiveAt = copyTime(sample.EffectiveAt)
-	resetCandidate(&current)
-	return current, true, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "APPLIED"}}, nil
+	if err := resetCandidate(current); err != nil {
+		return Canonical{}, false, nil, nil, err
+	}
+	return *current, true, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "APPLIED"}}, nil, nil
 }
 
-func trackPhotoCandidate(current *Canonical, chosen Variant, identity string, sample Sample) {
+func missingPhotoChangeState(current *Canonical, chosen *Variant, sample *Sample) bool {
+	return current == nil || chosen == nil || sample == nil
+}
+
+func replayedPhotoChange(current *Canonical, identity string, sample *Sample) bool {
+	return current.LastAt != nil && current.LastAt.Equal(sample.ScheduledFor) && current.Candidate == identity
+}
+
+func pendingPhotoChange(current *Canonical, sample *Sample, policy Policy) bool {
+	return current.Slots < policy.ChangeMinObservations || current.FirstRx == nil ||
+		sample.ReceivedAt.Before(current.FirstRx.Add(policy.ChangeStability))
+}
+
+func trackPhotoCandidate(current *Canonical, chosen *Variant, identity string, sample *Sample) error {
+	if current == nil || chosen == nil || sample == nil {
+		return fmt.Errorf("track channel photo candidate: nil state")
+	}
 	if current.Candidate != identity {
 		current.Candidate = identity
 		current.CandidateURL = chosen.URL
@@ -137,13 +195,14 @@ func trackPhotoCandidate(current *Canonical, chosen Variant, identity string, sa
 		current.FirstAt = copyTime(sample.ScheduledFor)
 		current.LastAt = copyTime(sample.ScheduledFor)
 		current.FirstRx = copyTime(sample.ReceivedAt)
-		return
+		return nil
 	}
 	current.Slots++
 	current.LastAt = copyTime(sample.ScheduledFor)
 	current.CandidateURL = chosen.URL
 	current.CandidateW = chosen.Width
 	current.CandidateH = chosen.Height
+	return nil
 }
 
 func groupVariants(variants []Variant) (map[string][]Variant, error) {
@@ -172,7 +231,7 @@ func validateStoredURL(raw string) error {
 func identifiedVariants(variants []Variant) []Variant {
 	identified := make([]Variant, 0, len(variants))
 	for i := range variants {
-		if Identity(variants[i]) == "" {
+		if Identity(&variants[i]) == "" {
 			continue
 		}
 		identified = append(identified, variants[i])
@@ -181,13 +240,16 @@ func identifiedVariants(variants []Variant) []Variant {
 }
 
 func chooseIdentity(variants []Variant) (Variant, bool, Conflict) {
+	if len(variants) == 0 {
+		return Variant{}, false, Conflict{}
+	}
 	chosen := variants[0]
 	for i := 1; i < len(variants); i++ {
-		if Identity(variants[i]) != Identity(chosen) {
+		if Identity(&variants[i]) != Identity(&chosen) {
 			return Variant{}, false, Conflict{
 				FieldName:            chosen.Kind,
-				ExistingValueSHA256:  contract.SHA256Hex([]byte(Identity(chosen))),
-				AttemptedValueSHA256: contract.SHA256Hex([]byte(Identity(variants[i]))),
+				ExistingValueSHA256:  contract.SHA256Hex([]byte(Identity(&chosen))),
+				AttemptedValueSHA256: contract.SHA256Hex([]byte(Identity(&variants[i]))),
 			}
 		}
 		if variants[i].Width*variants[i].Height > chosen.Width*chosen.Height {
@@ -197,7 +259,10 @@ func chooseIdentity(variants []Variant) (Variant, bool, Conflict) {
 	return chosen, true, Conflict{}
 }
 
-func resetCandidate(current *Canonical) {
+func resetCandidate(current *Canonical) error {
+	if current == nil {
+		return fmt.Errorf("reset channel photo candidate: nil state")
+	}
 	current.Candidate = ""
 	current.CandidateURL = ""
 	current.CandidateW = 0
@@ -206,6 +271,7 @@ func resetCandidate(current *Canonical) {
 	current.FirstAt = nil
 	current.LastAt = nil
 	current.FirstRx = nil
+	return nil
 }
 
 func copyTime(value time.Time) *time.Time {

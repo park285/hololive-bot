@@ -28,9 +28,12 @@ func (r *Runner) Emissions() []contract.ObservationKind {
 }
 func (r *Runner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
-func (r *Runner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
+func (r *Runner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "official schedule client is not configured")
+	}
+	if err := collectutil.ValidateInput(input); err != nil {
+		return collectutil.RunOutput{}, err
 	}
 	started := time.Now()
 	body, err := r.client.Fetch(ctx)
@@ -50,7 +53,7 @@ func (r *Runner) Collect(ctx context.Context, input collectutil.RunInput) (colle
 		contract.KindSchedule,
 		officialScheduleSubject,
 		generation,
-		input.Lease,
+		&input.Lease,
 		contract.CompletenessComplete,
 		contract.ContinuityNotApplicable,
 		payload,

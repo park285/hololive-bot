@@ -16,7 +16,7 @@ type JobRunner interface {
 	JobKind() string
 	Emissions() []contract.ObservationKind
 	TargetKinds() []contract.ObservationKind
-	Collect(ctx context.Context, input RunInput) (RunOutput, error)
+	Collect(ctx context.Context, input *RunInput) (RunOutput, error)
 }
 
 type RunInput struct {
@@ -34,13 +34,20 @@ type RunOutput struct {
 	CollectionLatency time.Duration
 }
 
+func ValidateInput(input *RunInput) error {
+	if input == nil {
+		return collecterr.New(collecterr.Failed, "collection run input is nil")
+	}
+	return nil
+}
+
 func Output(envelopes []contract.Envelope, started time.Time) (RunOutput, error) {
 	if len(envelopes) > sourceobservation.MaxPublishBatchSize {
 		return RunOutput{}, collecterr.New(collecterr.Failed, "observation batch exceeds publish limit")
 	}
 	checkpoints := make([]sourceobservation.CheckpointEntry, len(envelopes))
 	for i := range envelopes {
-		checkpoints[i] = Checkpoint(envelopes[i])
+		checkpoints[i] = Checkpoint(&envelopes[i])
 	}
 	return RunOutput{
 		Observations:      envelopes,
@@ -49,7 +56,10 @@ func Output(envelopes []contract.Envelope, started time.Time) (RunOutput, error)
 	}, nil
 }
 
-func Generation(input RunInput, kind contract.ObservationKind) (int64, error) {
+func Generation(input *RunInput, kind contract.ObservationKind) (int64, error) {
+	if err := ValidateInput(input); err != nil {
+		return 0, err
+	}
 	generation := input.ContractGenerations[kind]
 	if generation <= 0 {
 		return 0, collecterr.New(collecterr.Failed, "observation contract generation is missing")
@@ -95,7 +105,10 @@ func PaginationOf(page youtubejs.Pagination) (contract.Completeness, contract.Co
 	return Completeness(page.PageCount, page.Exhausted, page.Continuity)
 }
 
-func EnabledSet(input RunInput, kind contract.ObservationKind) map[string]struct{} {
+func EnabledSet(input *RunInput, kind contract.ObservationKind) map[string]struct{} {
+	if input == nil {
+		return nil
+	}
 	subjects := input.EnabledSubjects[kind]
 	if len(subjects) == 0 {
 		return nil

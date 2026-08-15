@@ -47,9 +47,12 @@ func (r *ChannelRunner) Emissions() []contract.ObservationKind {
 }
 func (r *ChannelRunner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
-func (r *ChannelRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
+func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js channel client is not configured")
+	}
+	if err := collectutil.ValidateInput(input); err != nil {
+		return collectutil.RunOutput{}, err
 	}
 	started := time.Now()
 	enabled := enabledChannelKinds(input, r.Emissions())
@@ -60,14 +63,14 @@ func (r *ChannelRunner) Collect(ctx context.Context, input collectutil.RunInput)
 	if err != nil {
 		return collectutil.RunOutput{}, err
 	}
-	envelopes, err := r.channelEnvelopes(input, result, enabled, completeness, continuity)
+	envelopes, err := r.channelEnvelopes(input, &result, enabled, completeness, continuity)
 	if err != nil {
 		return collectutil.RunOutput{}, err
 	}
 	return collectutil.Output(envelopes, started)
 }
 
-func enabledChannelKinds(input collectutil.RunInput, kinds []contract.ObservationKind) map[contract.ObservationKind]bool {
+func enabledChannelKinds(input *collectutil.RunInput, kinds []contract.ObservationKind) map[contract.ObservationKind]bool {
 	enabled := make(map[contract.ObservationKind]bool, len(kinds))
 	for _, kind := range kinds {
 		enabled[kind] = subjectEnabled(input, kind)
@@ -80,7 +83,7 @@ func anyChannelKindEnabled(enabled map[contract.ObservationKind]bool) bool {
 		enabled[contract.KindChannelProfile] || enabled[contract.KindChannelPhoto]
 }
 
-func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input collectutil.RunInput) (youtubejs.ChannelResult, contract.Completeness, contract.Continuity, error) {
+func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input *collectutil.RunInput) (youtubejs.ChannelResult, contract.Completeness, contract.Continuity, error) {
 	result, err := r.client.FetchChannel(ctx, youtubejs.ChannelRequest{
 		ChannelID:         input.Spec.SubjectKey,
 		MaxPages:          input.MaxPages,
@@ -97,8 +100,8 @@ func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input collectutil.
 }
 
 func (r *ChannelRunner) channelEnvelopes(
-	input collectutil.RunInput,
-	result youtubejs.ChannelResult,
+	input *collectutil.RunInput,
+	result *youtubejs.ChannelResult,
 	enabled map[contract.ObservationKind]bool,
 	completeness contract.Completeness,
 	continuity contract.Continuity,
@@ -120,8 +123,8 @@ func (r *ChannelRunner) channelEnvelopes(
 }
 
 func (r *ChannelRunner) appendLiveEnvelope(
-	input collectutil.RunInput,
-	result youtubejs.ChannelResult,
+	input *collectutil.RunInput,
+	result *youtubejs.ChannelResult,
 	enabled map[contract.ObservationKind]bool,
 	completeness contract.Completeness,
 	continuity contract.Continuity,
@@ -139,8 +142,8 @@ func (r *ChannelRunner) appendLiveEnvelope(
 }
 
 func (r *ChannelRunner) appendChannelStats(
-	input collectutil.RunInput,
-	result youtubejs.ChannelResult,
+	input *collectutil.RunInput,
+	result *youtubejs.ChannelResult,
 	enabled map[contract.ObservationKind]bool,
 	completeness contract.Completeness,
 	continuity contract.Continuity,
@@ -151,8 +154,8 @@ func (r *ChannelRunner) appendChannelStats(
 }
 
 func (r *ChannelRunner) appendChannelProfile(
-	input collectutil.RunInput,
-	result youtubejs.ChannelResult,
+	input *collectutil.RunInput,
+	result *youtubejs.ChannelResult,
 	enabled map[contract.ObservationKind]bool,
 	completeness contract.Completeness,
 	continuity contract.Continuity,
@@ -163,8 +166,8 @@ func (r *ChannelRunner) appendChannelProfile(
 }
 
 func (r *ChannelRunner) appendChannelPhoto(
-	input collectutil.RunInput,
-	result youtubejs.ChannelResult,
+	input *collectutil.RunInput,
+	result *youtubejs.ChannelResult,
 	enabled map[contract.ObservationKind]bool,
 	completeness contract.Completeness,
 	continuity contract.Continuity,
@@ -175,7 +178,7 @@ func (r *ChannelRunner) appendChannelPhoto(
 }
 
 func (r *ChannelRunner) appendBuiltEnvelope(
-	input collectutil.RunInput,
+	input *collectutil.RunInput,
 	kind contract.ObservationKind,
 	enabled map[contract.ObservationKind]bool,
 	completeness contract.Completeness,
@@ -196,7 +199,7 @@ func (r *ChannelRunner) appendBuiltEnvelope(
 }
 
 func (r *ChannelRunner) envelope(
-	input collectutil.RunInput,
+	input *collectutil.RunInput,
 	kind contract.ObservationKind,
 	completeness contract.Completeness,
 	continuity contract.Continuity,
@@ -211,7 +214,7 @@ func (r *ChannelRunner) envelope(
 		kind,
 		input.Spec.SubjectKey,
 		generation,
-		input.Lease,
+		&input.Lease,
 		completeness,
 		continuity,
 		payload,

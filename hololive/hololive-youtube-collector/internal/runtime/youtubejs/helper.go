@@ -2,6 +2,7 @@ package youtubejs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -9,9 +10,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
@@ -44,6 +47,8 @@ type Helper struct {
 	socketPath string
 	waited     chan struct{}
 	waitErr    error
+	closeOnce  sync.Once
+	closeErr   error
 	health     *http.Client
 	endpoint   string
 }
@@ -76,9 +81,12 @@ func (h *Helper) ExitError() error {
 	return h.waitErr
 }
 
-func Start(ctx context.Context, cfg Config) (*Helper, *RPC, error) {
-	cfg, err := resolveConfig(cfg)
-	if err != nil {
+func Start(ctx context.Context, config *Config) (*Helper, *RPC, error) {
+	if config == nil {
+		return nil, nil, fmt.Errorf("start youtube.js helper: config is not configured")
+	}
+	cfg := *config
+	if err := resolveConfig(&cfg); err != nil {
 		return nil, nil, err
 	}
 	if err := os.Remove(cfg.SocketPath); err != nil && !os.IsNotExist(err) {
@@ -116,8 +124,7 @@ func Start(ctx context.Context, cfg Config) (*Helper, *RPC, error) {
 		close(helper.waited)
 	}()
 	if err := helper.waitReady(ctx); err != nil {
-		_ = helper.Close()
-		return nil, nil, err
+		return nil, nil, errors.Join(err, helper.Close())
 	}
 	return helper, rpc, nil
 }
@@ -126,14 +133,10 @@ func (h *Helper) Close() error {
 	if h == nil {
 		return nil
 	}
-	stopErr := h.killProcess()
-	if waitErr := h.waitExit(); stopErr == nil {
-		stopErr = waitErr
-	}
-	if removeErr := h.removeSocket(); stopErr == nil {
-		stopErr = removeErr
-	}
-	return stopErr
+	h.closeOnce.Do(func() {
+		h.closeErr = errors.Join(h.killProcess(), h.waitExit(), h.removeSocket())
+	})
+	return h.closeErr
 }
 
 func (h *Helper) killProcess() error {
@@ -206,16 +209,21 @@ func (h *Helper) probeHealth(ctx context.Context) (bool, error) {
 	if h.health == nil {
 		return false, collecterr.New(collecterr.Failed, "youtube.js helper is not configured")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.endpoint+"/health", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.endpoint+"/health", http.NoBody)
 	if err != nil {
 		return false, fmt.Errorf("start youtube.js helper: health request: %w", err)
 	}
 	resp, err := h.health.Do(req)
 	if err != nil {
-		return false, nil
+		closeErr := closeHTTPResponse(resp)
+		return false, errors.Join(err, closeErr)
 	}
-	_ = resp.Body.Close()
-	return resp.StatusCode == http.StatusOK, nil
+	if resp == nil || resp.Body == nil {
+		return false, collecterr.New(collecterr.Failed, "youtube.js health response is nil")
+	}
+	drainErr := httpbody.Drain(resp.Body, httpbody.DefaultDrainLimit)
+	closeErr := errors.Join(drainErr, resp.Body.Close())
+	return resp.StatusCode == http.StatusOK && closeErr == nil, closeErr
 }
 
 func unixClient(socketPath string, timeout time.Duration) *http.Client {
@@ -233,18 +241,18 @@ func unixClient(socketPath string, timeout time.Duration) *http.Client {
 	}
 }
 
-func resolveConfig(cfg Config) (Config, error) {
-	cfg = resolveHelperPaths(cfg)
+func resolveConfig(cfg *Config) error {
+	resolveHelperPaths(cfg)
 	if cfg.NodePath == "" {
-		return Config{}, fmt.Errorf("start youtube.js helper: node binary is not configured")
+		return fmt.Errorf("start youtube.js helper: node binary is not configured")
 	}
 	if cfg.ScriptPath == "" {
-		return Config{}, fmt.Errorf("start youtube.js helper: helper script is not configured")
+		return fmt.Errorf("start youtube.js helper: helper script is not configured")
 	}
 	return absolutizeHelperPaths(cfg)
 }
 
-func resolveHelperPaths(cfg Config) Config {
+func resolveHelperPaths(cfg *Config) {
 	if cfg.NodePath == "" {
 		cfg.NodePath = firstExisting(
 			os.Getenv("YOUTUBEJS_NODE"),
@@ -270,25 +278,34 @@ func resolveHelperPaths(cfg Config) Config {
 	if cfg.SocketPath == "" {
 		cfg.SocketPath = filepath.Join(os.TempDir(), "youtubejs-community.sock")
 	}
-	return cfg
 }
 
-func absolutizeHelperPaths(cfg Config) (Config, error) {
+func absolutizeHelperPaths(cfg *Config) error {
 	if !filepath.IsAbs(cfg.NodePath) {
 		abs, err := filepath.Abs(cfg.NodePath)
 		if err != nil {
-			return Config{}, fmt.Errorf("start youtube.js helper: resolve node path: %w", err)
+			return fmt.Errorf("start youtube.js helper: resolve node path: %w", err)
 		}
 		cfg.NodePath = abs
 	}
 	if !filepath.IsAbs(cfg.ScriptPath) {
 		abs, err := filepath.Abs(cfg.ScriptPath)
 		if err != nil {
-			return Config{}, fmt.Errorf("start youtube.js helper: resolve script path: %w", err)
+			return fmt.Errorf("start youtube.js helper: resolve script path: %w", err)
 		}
 		cfg.ScriptPath = abs
 	}
-	return cfg, nil
+	resolvedNode, err := canonicalHelperFile(cfg.NodePath, "node binary")
+	if err != nil {
+		return err
+	}
+	resolvedScript, err := canonicalHelperFile(cfg.ScriptPath, "helper script")
+	if err != nil {
+		return err
+	}
+	cfg.NodePath = resolvedNode
+	cfg.ScriptPath = resolvedScript
+	return nil
 }
 
 func helperProcessEnv(parent []string) []string {
@@ -322,16 +339,39 @@ func helperProcessEnv(parent []string) []string {
 }
 
 func firstExisting(paths ...string) string {
-	for _, path := range paths {
-		path = strings.TrimSpace(path)
-		if path == "" {
+	for _, candidate := range paths {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
 			continue
 		}
-		if _, err := os.Stat(path); err == nil {
-			return path
+		absolute, err := filepath.Abs(candidate)
+		if err != nil {
+			continue
+		}
+		resolved, err := canonicalHelperFile(absolute, "helper candidate")
+		if err == nil {
+			return resolved
 		}
 	}
 	return ""
+}
+
+func canonicalHelperFile(path, name string) (string, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return "", fmt.Errorf("start youtube.js helper: %s path must be absolute and clean", name)
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("start youtube.js helper: resolve %s path: %w", name, err)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", fmt.Errorf("start youtube.js helper: inspect %s path: %w", name, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("start youtube.js helper: %s path is not a regular file", name)
+	}
+	return resolved, nil
 }
 
 func isFinished(err error) bool {

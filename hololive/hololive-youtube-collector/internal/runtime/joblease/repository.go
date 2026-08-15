@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"math/big"
 	"strings"
 	"time"
 
@@ -21,14 +22,17 @@ type Repository struct {
 	contracts sourceobservation.JobContractSet
 }
 
-func NewRepository(pool *pgxpool.Pool, config Config) (*Repository, error) {
+func NewRepository(pool *pgxpool.Pool, config *Config) (*Repository, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("create collection job lease repository: pool is nil")
+	}
+	if config == nil {
+		return nil, fmt.Errorf("create collection job lease repository: config is nil")
 	}
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	return &Repository{pool: pool, config: config, contracts: sourceobservation.InitialJobContracts()}, nil
+	return &Repository{pool: pool, config: *config, contracts: sourceobservation.InitialJobContracts()}, nil
 }
 
 func (r *Repository) Candidates(ctx context.Context, provider contract.Provider, jobKind string, limit int) ([]JobSpec, error) {
@@ -50,9 +54,12 @@ func (r *Repository) Candidates(ctx context.Context, provider contract.Provider,
 	return r.scanTargetCandidates(ctx, provider, jobKind, generation, kindValues, definition.Class, limit)
 }
 
-func (r *Repository) Acquire(ctx context.Context, spec JobSpec, owner string) (*JobLease, error) {
+func (r *Repository) Acquire(ctx context.Context, spec *JobSpec, owner string) (*JobLease, error) {
 	if r == nil || r.pool == nil || r.contracts == nil {
 		return nil, fmt.Errorf("acquire collection job lease: repository is not configured")
+	}
+	if spec == nil {
+		return nil, fmt.Errorf("acquire collection job lease: %w: spec is nil", ErrInvalidJob)
 	}
 	owner = strings.TrimSpace(owner)
 	if owner == "" || len(owner) > 128 {
@@ -68,13 +75,13 @@ func (r *Repository) Acquire(ctx context.Context, spec JobSpec, owner string) (*
 	if err != nil {
 		return nil, err
 	}
-	return &JobLease{repository: r, spec: spec, proof: proof}, nil
+	return &JobLease{repository: r, spec: *spec, proof: proof}, nil
 }
 
 func (r *Repository) acquireTx(
 	ctx context.Context,
 	tx dbx.Tx,
-	spec JobSpec,
+	spec *JobSpec,
 	owner string,
 	definition sourceobservation.JobContract,
 	kinds []contract.ObservationKind,
@@ -107,7 +114,7 @@ func lockAcquireProjection(ctx context.Context, tx dbx.Tx) (int64, error) {
 func (r *Repository) verifyAcquireTargets(
 	ctx context.Context,
 	tx dbx.Tx,
-	spec JobSpec,
+	spec *JobSpec,
 	definition sourceobservation.JobContract,
 	kinds []contract.ObservationKind,
 	generation int64,
@@ -140,11 +147,11 @@ func (r *Repository) verifyAcquireTargets(
 	return nil
 }
 
-func acquireCadenceMismatch(spec JobSpec, _ sourceobservation.JobContract, minIntervalMS, maxIntervalMS int64) bool {
+func acquireCadenceMismatch(spec *JobSpec, _ sourceobservation.JobContract, minIntervalMS, maxIntervalMS int64) bool {
 	return minIntervalMS <= 0 || minIntervalMS != maxIntervalMS || minIntervalMS != spec.PollInterval.Milliseconds()
 }
 
-func ensureAcquireJobRow(ctx context.Context, tx dbx.Tx, spec JobSpec, generation int64) error {
+func ensureAcquireJobRow(ctx context.Context, tx dbx.Tx, spec *JobSpec, generation int64) error {
 	if _, err := tx.Exec(ctx, mustSQL("repository_lease_insert_0144_06.sql"), spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey,
 		generation, spec.PollInterval.Milliseconds()); err != nil {
 		return fmt.Errorf("acquire collection job lease: create job row: %w", err)
@@ -167,7 +174,7 @@ func ensureAcquireJobRow(ctx context.Context, tx dbx.Tx, spec JobSpec, generatio
 func acquireLeaseProof(
 	ctx context.Context,
 	tx dbx.Tx,
-	spec JobSpec,
+	spec *JobSpec,
 	owner string,
 	generation int64,
 	leaseTTL time.Duration,
@@ -240,7 +247,7 @@ func (l *JobLease) Release(ctx context.Context) error {
 	if l == nil || l.repository == nil {
 		return fmt.Errorf("release collection job lease: %w", ErrFenceLost)
 	}
-	delay := deterministicJitter(l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
+	delay := deterministicJitter(&l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
 	var jobKey string
 	err := l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_release_0144_10.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
 		l.proof.ProjectionGeneration, l.proof.ScheduledFor, delay.Milliseconds()).Scan(&jobKey)
@@ -278,14 +285,16 @@ func (l *JobLease) finish(ctx context.Context, code string, retryAt time.Time, a
 	return nil
 }
 
-func deterministicJitter(proof contract.LeaseProof, minimum, maximum time.Duration) time.Duration {
+func deterministicJitter(proof *contract.LeaseProof, minimum, maximum time.Duration) time.Duration {
 	if maximum <= minimum {
 		return minimum
 	}
 	hash := fnv.New64a()
 	_, _ = hash.Write(fmt.Appendf(nil, "%s\x00%d", proof.JobKey, proof.FenceEpoch))
-	span := uint64(maximum - minimum)
-	return minimum + time.Duration(hash.Sum64()%(span+1))
+	span := big.NewInt((maximum - minimum).Nanoseconds() + 1)
+	offset := new(big.Int).SetUint64(hash.Sum64())
+	offset.Mod(offset, span)
+	return minimum + time.Duration(offset.Int64())
 }
 
 func emissionKinds(definition sourceobservation.JobContract, provider contract.Provider) []contract.ObservationKind {

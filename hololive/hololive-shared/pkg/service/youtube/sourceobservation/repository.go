@@ -11,7 +11,7 @@ import (
 )
 
 type PublishFenceVerifier interface {
-	Verify(ctx context.Context, tx dbx.Tx, proof contract.LeaseProof, observations []contract.Envelope) error
+	Verify(ctx context.Context, tx dbx.Tx, proof *contract.LeaseProof, observations []contract.Envelope) error
 }
 
 type JobContractSet interface {

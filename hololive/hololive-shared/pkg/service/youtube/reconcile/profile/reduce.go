@@ -11,14 +11,16 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
+func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
 	if evidence.Sample.ChannelID == "" {
 		return Decision{}, fmt.Errorf("channel profile reducer received empty channel id")
 	}
-	sample := evidence.Sample
-	sample.Provider = evidence.Provider
-	sample.ObservationID = evidence.ObservationID
-	head := state.Head
+	workingState := state.clone()
+	workingEvidence := evidence
+	sample := &workingEvidence.Sample
+	sample.Provider = workingEvidence.Provider
+	sample.ObservationID = workingEvidence.ObservationID
+	head := workingState.Head
 	head.ChannelID = sample.ChannelID
 	apps := make([]Application, 0, 4)
 	conflicts := make([]Conflict, 0, 2)
@@ -33,7 +35,7 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 		})
 	}
 	return Decision{
-		Sample:       &sample,
+		Sample:       sample,
 		Head:         head,
 		WriteHead:    changed,
 		Conflicts:    conflicts,
@@ -41,7 +43,7 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 	}, nil
 }
 
-func reduceHandle(current *CanonicalField, sample Sample, apps *[]Application, conflicts *[]Conflict) bool {
+func reduceHandle(current *CanonicalField, sample *Sample, apps *[]Application, conflicts *[]Conflict) bool {
 	if !sample.Handle.Present {
 		return false
 	}
@@ -59,7 +61,7 @@ func reduceClearable(
 	current *CanonicalField,
 	incoming Field,
 	name string,
-	sample Sample,
+	sample *Sample,
 	policy Policy,
 	apps *[]Application,
 	conflicts *[]Conflict,
@@ -93,7 +95,7 @@ func reduceClearable(
 	return trackEmpty(current, name, sample, policy, apps)
 }
 
-func reduceJoined(current *CanonicalField, sample Sample, apps *[]Application, conflicts *[]Conflict) bool {
+func reduceJoined(current *CanonicalField, sample *Sample, apps *[]Application, conflicts *[]Conflict) bool {
 	if !sample.JoinedDate.Present {
 		return false
 	}
@@ -127,7 +129,7 @@ func reduceJoined(current *CanonicalField, sample Sample, apps *[]Application, c
 func applyNewer(
 	current *CanonicalField,
 	value, name string,
-	sample Sample,
+	sample *Sample,
 	apps *[]Application,
 	conflicts *[]Conflict,
 ) bool {
@@ -155,11 +157,11 @@ func applyNewer(
 	return true
 }
 
-func retainOlderProfile(current *CanonicalField, sample Sample) bool {
+func retainOlderProfile(current *CanonicalField, sample *Sample) bool {
 	return current.Set && current.EffectiveAt != nil && sample.EffectiveAt.Before(*current.EffectiveAt)
 }
 
-func conflictEqualProfile(current *CanonicalField, value string, sample Sample) bool {
+func conflictEqualProfile(current *CanonicalField, value string, sample *Sample) bool {
 	return current.Set && current.EffectiveAt != nil && sample.EffectiveAt.Equal(*current.EffectiveAt) && current.Value != value
 }
 
@@ -169,7 +171,7 @@ func appendProfileApp(apps *[]Application, channelID, name, decision string) {
 	})
 }
 
-func trackEmpty(current *CanonicalField, name string, sample Sample, policy Policy, apps *[]Application) bool {
+func trackEmpty(current *CanonicalField, name string, sample *Sample, policy Policy, apps *[]Application) bool {
 	if !sample.Complete {
 		*apps = append(*apps, Application{
 			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_PENDING",

@@ -13,14 +13,14 @@ func TestReplayProcessedObservationIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_content_watermarks (channel_id, watermark_type, initialized, last_content_id)
 		VALUES ($1, 'COMMUNITY_POST', TRUE, 'old-post')
 	`, "UC_TEST"); err != nil {
 		t.Fatalf("seed watermark: %v", err)
 	}
-	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")))
+	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -52,8 +52,8 @@ func TestReplayUnsupportedSchemaIsRejectedWithAudit(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	observationID := publishOne(t, ctx, repo, proof, "post-old")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	observationID := publishOne(t, ctx, repo, &proof, "post-old")
 	finalizeObservation(t, ctx, repo, observationID)
 
 	unsupported := NewRepositoryWithContracts(pool, StaticSupportedContracts{}, InitialJobContracts(), nil)

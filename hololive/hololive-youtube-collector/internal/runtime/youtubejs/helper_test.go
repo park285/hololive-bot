@@ -33,14 +33,16 @@ func TestClientFetchCommunityDecodesHelperPosts(t *testing.T) {
 		if req.ChannelID != "UC_TEST" || req.MaxResults != 10 || req.MaxPages != 1 {
 			t.Fatalf("request = %#v", req)
 		}
-		_ = json.NewEncoder(w).Encode(CommunityResult{
+		if err := json.NewEncoder(w).Encode(CommunityResult{
 			Posts: []*parser.CommunityPost{{
 				PostID: "post-1", UpstreamPostID: "post-1", AuthorID: "UC_TEST",
 				AuthorName: "Author", ContentText: "hello world",
 				PublishedText: published.Format(time.RFC3339), LikeCount: 1200, CommentCount: 7,
 			}},
 			Pagination: Pagination{PageCount: 1, Exhausted: true, Continuity: "CONTIGUOUS"},
-		})
+		}); err != nil {
+			t.Errorf("encode community result: %v", err)
+		}
 	}))
 	t.Cleanup(server.Close)
 
@@ -63,7 +65,9 @@ func TestClientFetchFailClosesOnHelperError(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"error":"innertube down","error_code":"collection_failed"}`))
+		if _, err := w.Write([]byte(`{"error":"innertube down","error_code":"collection_failed"}`)); err != nil {
+			t.Errorf("write helper error: %v", err)
+		}
 	}))
 	t.Cleanup(server.Close)
 
@@ -80,9 +84,11 @@ func TestClientFetchDoesNotCallHTMLGetCommunityPosts(t *testing.T) {
 		if strings.Contains(r.URL.Path, "/posts") {
 			t.Fatal("helper client must not fetch the HTML /posts page")
 		}
-		_ = json.NewEncoder(w).Encode(CommunityResult{
+		if err := json.NewEncoder(w).Encode(CommunityResult{
 			Pagination: Pagination{PageCount: 1, Exhausted: true, Continuity: "CONTIGUOUS"},
-		})
+		}); err != nil {
+			t.Errorf("encode empty community result: %v", err)
+		}
 	}))
 	t.Cleanup(server.Close)
 
@@ -98,7 +104,7 @@ func TestClientFetchDoesNotCallHTMLGetCommunityPosts(t *testing.T) {
 
 func TestStartFailsWithoutNode(t *testing.T) {
 	t.Parallel()
-	_, _, err := Start(context.Background(), Config{
+	_, _, err := Start(context.Background(), &Config{
 		NodePath:   "/no/such/node",
 		ScriptPath: "/no/such/server.mjs",
 		SocketPath: t.TempDir() + "/youtubejs.sock",

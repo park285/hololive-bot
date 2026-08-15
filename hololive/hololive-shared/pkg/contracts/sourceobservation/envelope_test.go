@@ -77,6 +77,27 @@ func TestViewerSampleIdentityPreservesEqualValueInNextWindow(t *testing.T) {
 	}
 }
 
+func TestViewerSampleIdentityRejectsMalformedPayload(t *testing.T) {
+	envelope := newViewerEnvelope(t, time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC), 123)
+	envelope.Payload = json.RawMessage(`{"channel_id":"UC_TEST"}`)
+	if _, err := ObservationKeyForEnvelope(&envelope, []byte(`{"channel_id":"UC_TEST"}`)); err == nil || !strings.Contains(err.Error(), "build viewer sample observation key") {
+		t.Fatalf("ObservationKeyForEnvelope() error = %v, want viewer identity error", err)
+	}
+}
+
+func TestSnapshotObservationIdentityRejectsUnencodableTime(t *testing.T) {
+	_, err := SnapshotObservationKey(
+		ProviderYouTubeJS,
+		KindCommunityPage,
+		"UC_TEST",
+		strings.Repeat("0", 64),
+		time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	if err == nil {
+		t.Fatal("SnapshotObservationKey() error = nil, want canonicalization error")
+	}
+}
+
 func TestEnvelopeRejectsUnknownAndDuplicatePayloadFields(t *testing.T) {
 	base := newCommunityEnvelope(t, time.Now().UTC().Truncate(time.Second))
 	base.Payload = json.RawMessage(`{"channel_id":"UC_TEST","posts":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true},"unexpected":true}`)

@@ -7,11 +7,34 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
+func TestReduceCopiesInputBackingStorage(t *testing.T) {
+	t.Parallel()
+	lastWindow := t1()
+	lastCount := int64(10)
+	state := State{VideoID: "vid-a", Head: Head{
+		VideoID: "vid-a", LastResolvedWindowStart: &lastWindow, LastResolvedCount: &lastCount,
+	}}
+	evidence := sampleAt(2, contract.ProviderHolodex, t2(), 20)
+	decision, err := Reduce(state, evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	*decision.Head.PriorResolvedCount = 99
+	*decision.Sample.ViewerCount = 88
+	if *state.Head.LastResolvedCount != 10 {
+		t.Fatal("decision shares state count pointer")
+	}
+	if *evidence.Sample.ViewerCount != 20 {
+		t.Fatal("decision shares evidence count pointer")
+	}
+}
+
 func TestReduceEqualConsecutiveSamplesAreRetained(t *testing.T) {
 	t.Parallel()
 	first := sampleAt(1, contract.ProviderHolodex, t1(), 10)
 	second := sampleAt(2, contract.ProviderHolodex, t2(), 10)
-	got := mustReduceAll(t, State{}, []Evidence{first, second})
+	got := mustReduceAll(t, []Evidence{first, second})
 	if got.Head.LastResolvedWindowStart == nil || !got.Head.LastResolvedWindowStart.Equal(t2()) {
 		t.Fatalf("last resolved window = %v, want t2", got.Head.LastResolvedWindowStart)
 	}
@@ -25,7 +48,7 @@ func TestReduceEqualWindowConflictStaysUnresolved(t *testing.T) {
 	first := sampleAt(1, contract.ProviderHolodex, t1(), 10)
 	second := sampleAt(2, contract.ProviderYouTubeJS, t2(), 20)
 	third := sampleAt(3, contract.ProviderHolodex, t2(), 30)
-	got := mustReduceAll(t, State{}, []Evidence{first, second, third})
+	got := mustReduceAll(t, []Evidence{first, second, third})
 	if got.Conflict == nil {
 		t.Fatal("equal-window conflict must be recorded")
 	}
@@ -42,7 +65,7 @@ func TestReduceEqualWindowConflictStaysUnresolved(t *testing.T) {
 
 func TestReduceHiddenRemainsNil(t *testing.T) {
 	t.Parallel()
-	got := mustReduceAll(t, State{}, []Evidence{{
+	got := mustReduceAll(t, []Evidence{{
 		ObservationID: 1,
 		Provider:      contract.ProviderHolodex,
 		Sample: Sample{
@@ -73,9 +96,9 @@ func sampleAt(id int64, provider contract.Provider, at time.Time, count int64) E
 	}
 }
 
-func mustReduceAll(t *testing.T, state State, evidence []Evidence) Decision {
+func mustReduceAll(t *testing.T, evidence []Evidence) *Decision {
 	t.Helper()
-	current := state
+	current := State{}
 	var decision Decision
 	for i := range evidence {
 		next, err := Reduce(current, evidence[i])
@@ -83,13 +106,13 @@ func mustReduceAll(t *testing.T, state State, evidence []Evidence) Decision {
 			t.Fatalf("reduce[%d]: %v", i, err)
 		}
 		decision = next
-		current = stateFromDecision(current, next, evidence[i])
+		current = stateFromDecision(&current, &next, &evidence[i])
 	}
-	return decision
+	return &decision
 }
 
-func stateFromDecision(previous State, decision Decision, evidence Evidence) State {
-	next := previous
+func stateFromDecision(previous *State, decision *Decision, evidence *Evidence) State {
+	next := *previous
 	next.VideoID = evidence.Sample.VideoID
 	next.Head = decision.Head
 	if decision.Sample == nil {

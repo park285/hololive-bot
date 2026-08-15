@@ -14,7 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-func validatePublishBatch(input PublishBatchInput) error {
+func validatePublishBatch(input *PublishBatchInput) error {
 	if err := validatePublishBatchCounts(input); err != nil {
 		return err
 	}
@@ -28,7 +28,7 @@ func validatePublishBatch(input PublishBatchInput) error {
 	return validatePublishBatchCheckpoints(input, bindings)
 }
 
-func validatePublishBatchCounts(input PublishBatchInput) error {
+func validatePublishBatchCounts(input *PublishBatchInput) error {
 	if len(input.Observations) < 1 || len(input.Observations) > MaxPublishBatchSize {
 		return fmt.Errorf("%w: observation count must be between 1 and %d", ErrInvalidEnvelope, MaxPublishBatchSize)
 	}
@@ -41,7 +41,7 @@ func validatePublishBatchCounts(input PublishBatchInput) error {
 	return nil
 }
 
-func validatePublishBatchObservations(input PublishBatchInput) error {
+func validatePublishBatchObservations(input *PublishBatchInput) error {
 	seen := make(map[string]struct{}, len(input.Observations))
 	for i := range input.Observations {
 		if err := validatePublishBatchObservation(input, i, seen); err != nil {
@@ -51,13 +51,13 @@ func validatePublishBatchObservations(input PublishBatchInput) error {
 	return nil
 }
 
-func validatePublishBatchObservation(input PublishBatchInput, index int, seen map[string]struct{}) error {
-	observation := input.Observations[index]
+func validatePublishBatchObservation(input *PublishBatchInput, index int, seen map[string]struct{}) error {
+	observation := &input.Observations[index]
 	if observation.Lease != input.Lease {
 		return fmt.Errorf("%w: observation %d lease proof mismatch", ErrInvalidEnvelope, index)
 	}
 	if err := observation.Validate(); err != nil {
-		return fmt.Errorf("%w: observation %d: %v", ErrInvalidEnvelope, index, err)
+		return fmt.Errorf("%w: observation %d: %w", ErrInvalidEnvelope, index, err)
 	}
 	identity := observationIdentity(observation)
 	if _, ok := seen[identity]; ok {
@@ -70,7 +70,7 @@ func validatePublishBatchObservation(input PublishBatchInput, index int, seen ma
 func observationCheckpointBindings(observations []contract.Envelope) (map[checkpointBinding]struct{}, error) {
 	bindings := make(map[checkpointBinding]struct{}, len(observations))
 	for i := range observations {
-		binding := checkpointBindingForObservation(observations[i])
+		binding := checkpointBindingForObservation(&observations[i])
 		if _, ok := bindings[binding]; ok {
 			return nil, fmt.Errorf("%w: duplicate observation checkpoint identity", ErrInvalidEnvelope)
 		}
@@ -79,11 +79,11 @@ func observationCheckpointBindings(observations []contract.Envelope) (map[checkp
 	return bindings, nil
 }
 
-func validatePublishBatchCheckpoints(input PublishBatchInput, bindings map[checkpointBinding]struct{}) error {
+func validatePublishBatchCheckpoints(input *PublishBatchInput, bindings map[checkpointBinding]struct{}) error {
 	checkpointKeys := make(map[string]struct{}, len(input.Checkpoint.Entries))
 	matched := make(map[checkpointBinding]struct{}, len(input.Checkpoint.Entries))
 	for i := range input.Checkpoint.Entries {
-		if err := validatePublishCheckpoint(input.Checkpoint.Entries[i], i, bindings, checkpointKeys, matched); err != nil {
+		if err := validatePublishCheckpoint(&input.Checkpoint.Entries[i], i, bindings, checkpointKeys, matched); err != nil {
 			return err
 		}
 	}
@@ -94,7 +94,7 @@ func validatePublishBatchCheckpoints(input PublishBatchInput, bindings map[check
 }
 
 func validatePublishCheckpoint(
-	entry CheckpointEntry,
+	entry *CheckpointEntry,
 	index int,
 	bindings map[checkpointBinding]struct{},
 	checkpointKeys map[string]struct{},
@@ -109,7 +109,7 @@ func validatePublishCheckpoint(
 	return bindPublishCheckpoint(entry, index, bindings, checkpointKeys, matched)
 }
 
-func validateCheckpointMetadata(entry CheckpointEntry, index int) error {
+func validateCheckpointMetadata(entry *CheckpointEntry, index int) error {
 	if !entry.Provider.Valid() || !entry.ObservationKind.Valid() || entry.ContractGeneration <= 0 ||
 		!entry.Continuity.Valid() || entry.LastScheduledFor.IsZero() {
 		return fmt.Errorf("%w: checkpoint %d metadata is invalid", ErrInvalidEnvelope, index)
@@ -117,14 +117,14 @@ func validateCheckpointMetadata(entry CheckpointEntry, index int) error {
 	return nil
 }
 
-func validateCheckpointFields(entry CheckpointEntry, index int) error {
+func validateCheckpointFields(entry *CheckpointEntry, index int) error {
 	if err := validateCheckpointTextFields(entry, index); err != nil {
 		return err
 	}
 	return validateCheckpointCursor(entry, index)
 }
 
-func validateCheckpointTextFields(entry CheckpointEntry, index int) error {
+func validateCheckpointTextFields(entry *CheckpointEntry, index int) error {
 	for name, value := range map[string]string{
 		"subject key": entry.SubjectKey, "observation key": entry.LastObservationKey,
 		"scope sha256": entry.ScopeSHA256, "evidence sha256": entry.LastEvidenceSHA256,
@@ -148,12 +148,12 @@ func validateCheckpointTextField(name, value string, index int) error {
 		limit = 256
 	}
 	if err := validateText(name, value, limit); err != nil {
-		return fmt.Errorf("%w: checkpoint %d: %v", ErrInvalidEnvelope, index, err)
+		return fmt.Errorf("%w: checkpoint %d: %w", ErrInvalidEnvelope, index, err)
 	}
 	return nil
 }
 
-func validateCheckpointCursor(entry CheckpointEntry, index int) error {
+func validateCheckpointCursor(entry *CheckpointEntry, index int) error {
 	if len(entry.Cursor) > 16384 {
 		return fmt.Errorf("%w: checkpoint %d cursor is too large", ErrInvalidEnvelope, index)
 	}
@@ -168,7 +168,7 @@ func validateCheckpointCursor(entry CheckpointEntry, index int) error {
 }
 
 func bindPublishCheckpoint(
-	entry CheckpointEntry,
+	entry *CheckpointEntry,
 	index int,
 	bindings map[checkpointBinding]struct{},
 	checkpointKeys map[string]struct{},
@@ -202,7 +202,7 @@ type checkpointBinding struct {
 	Continuity         contract.Continuity
 }
 
-func checkpointBindingForObservation(observation contract.Envelope) checkpointBinding {
+func checkpointBindingForObservation(observation *contract.Envelope) checkpointBinding {
 	return checkpointBinding{
 		Provider:           observation.Provider,
 		ObservationKind:    observation.ObservationKind,
@@ -216,7 +216,7 @@ func checkpointBindingForObservation(observation contract.Envelope) checkpointBi
 	}
 }
 
-func checkpointBindingForEntry(entry CheckpointEntry) checkpointBinding {
+func checkpointBindingForEntry(entry *CheckpointEntry) checkpointBinding {
 	return checkpointBinding{
 		Provider:           entry.Provider,
 		ObservationKind:    entry.ObservationKind,
@@ -233,7 +233,7 @@ func checkpointBindingForEntry(entry CheckpointEntry) checkpointBinding {
 func completeCollectionJob(
 	ctx context.Context,
 	tx dbx.Tx,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	errorCode string,
 ) error {
 	var code any
@@ -260,7 +260,7 @@ func completeCollectionJob(
 	return nil
 }
 
-func observationIdentity(observation contract.Envelope) string {
+func observationIdentity(observation *contract.Envelope) string {
 	return strings.Join([]string{
 		string(observation.Provider), string(observation.ObservationKind), observation.SubjectKey,
 		observation.ObservationKey, fmt.Sprint(observation.SchemaVersion), fmt.Sprint(observation.ContractGeneration),

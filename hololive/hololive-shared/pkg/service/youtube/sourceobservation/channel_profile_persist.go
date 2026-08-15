@@ -30,7 +30,7 @@ func loadProfileState(ctx context.Context, tx dbx.Tx, channelID string) (profile
 	return state, nil
 }
 
-func persistProfileDecision(ctx context.Context, tx dbx.Tx, observation Observation, decision profile.Decision) error {
+func persistProfileDecision(ctx context.Context, tx dbx.Tx, observation *Observation, decision *profile.Decision) error {
 	if err := persistProfileEvidence(ctx, tx, observation, decision); err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func persistProfileDecision(ctx context.Context, tx dbx.Tx, observation Observat
 	return persistProfileConflicts(ctx, tx, observation, decision)
 }
 
-func persistProfileEvidence(ctx context.Context, tx dbx.Tx, observation Observation, decision profile.Decision) error {
+func persistProfileEvidence(ctx context.Context, tx dbx.Tx, observation *Observation, decision *profile.Decision) error {
 	if decision.Sample == nil {
 		return nil
 	}
@@ -68,7 +68,7 @@ func persistProfileEvidence(ctx context.Context, tx dbx.Tx, observation Observat
 	return nil
 }
 
-func persistProfileHead(ctx context.Context, tx dbx.Tx, decision profile.Decision) error {
+func persistProfileHead(ctx context.Context, tx dbx.Tx, decision *profile.Decision) error {
 	if !decision.WriteHead {
 		return nil
 	}
@@ -90,7 +90,7 @@ func persistProfileHead(ctx context.Context, tx dbx.Tx, decision profile.Decisio
 	return nil
 }
 
-func persistProfileConflicts(ctx context.Context, tx dbx.Tx, observation Observation, decision profile.Decision) error {
+func persistProfileConflicts(ctx context.Context, tx dbx.Tx, observation *Observation, decision *profile.Decision) error {
 	for i := range decision.Conflicts {
 		conflict := decision.Conflicts[i]
 		if err := persistReconcileConflict(ctx, tx, observation, "youtube_channel_profile", observation.SubjectKey, conflict.FieldName, conflict.ExistingValueSHA256, conflict.AttemptedValueSHA256, "KEEP_EXISTING"); err != nil {

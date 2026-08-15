@@ -28,7 +28,7 @@ func loadScheduleState(ctx context.Context, tx dbx.Tx, groupKey string, items []
 		if err != nil {
 			return schedule.State{}, err
 		}
-		state.Items[schedule.ItemIdentity(item.Provider, item)] = item
+		state.Items[schedule.ItemIdentity(item.Provider, &item)] = item
 	}
 	if err := rows.Err(); err != nil {
 		return schedule.State{}, err
@@ -48,7 +48,8 @@ func loadScheduleSessions(ctx context.Context, tx dbx.Tx, state *schedule.State,
 	if err != nil {
 		return err
 	}
-	for videoID, session := range liveState.Sessions {
+	for videoID := range liveState.Sessions {
+		session := liveState.Sessions[videoID]
 		state.Sessions[videoID] = schedule.Session{
 			VideoID:            session.VideoID,
 			ChannelID:          session.ChannelID,
@@ -84,7 +85,7 @@ func scanScheduleItem(rows pgx.Rows) (schedule.Item, error) {
 	return item, nil
 }
 
-func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation Observation, decision schedule.Decision) error {
+func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation *Observation, decision *schedule.Decision) error {
 	for i := range decision.Items {
 		item := decision.Items[i]
 		if _, err := tx.Exec(
@@ -105,7 +106,7 @@ func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation Observa
 	}
 	for i := range decision.Sessions {
 		session := decision.Sessions[i]
-		if err := upsertLiveSession(ctx, tx, live.SessionState{
+		if err := upsertLiveSession(ctx, tx, &live.SessionState{
 			VideoID:            session.VideoID,
 			ChannelID:          session.ChannelID,
 			Status:             session.Status,

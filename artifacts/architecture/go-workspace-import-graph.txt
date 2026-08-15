@@ -1319,6 +1319,7 @@ github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil -> githu
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil -> github.com/kapu/hololive-youtube-collector/internal/runtime/joblease
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil -> github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs
 github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector -> github.com/kapu/hololive-shared/pkg/contracts/sourceobservation
+github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector -> github.com/kapu/hololive-shared/pkg/httpbody
 github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector -> github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr
 github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector -> github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil
 github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector -> github.com/kapu/hololive-youtube-collector/internal/runtime/joblease
@@ -1328,9 +1329,11 @@ github.com/kapu/hololive-youtube-collector/internal/runtime/joblease -> github.c
 github.com/kapu/hololive-youtube-collector/internal/runtime/joblease -> github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation
 github.com/kapu/hololive-youtube-collector/internal/runtime/joblease -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/kapu/hololive-shared/pkg/contracts/sourceobservation
+github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/kapu/hololive-shared/pkg/httpbody
 github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr
 github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil
 github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/kapu/hololive-youtube-collector/internal/runtime/joblease
+github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs -> github.com/kapu/hololive-shared/pkg/httpbody
 github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser
 github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
 github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs -> github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr

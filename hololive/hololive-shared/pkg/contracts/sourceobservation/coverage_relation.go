@@ -9,12 +9,14 @@ func AbsenceCapabilityFor(kind ObservationKind) AbsenceCapability {
 	switch kind {
 	case KindVideoList, KindShortsList, KindLiveSnapshot:
 		return AbsenceScoped
+	case KindCommunityPage, KindViewerSample, KindChannelStats, KindChannelProfile, KindChannelPhoto, KindSchedule:
+		return AbsencePositiveOnly
 	default:
 		return AbsencePositiveOnly
 	}
 }
 
-func RelateChannelList(candidate, evidence ChannelListCoverageV1) CoverageRelation {
+func RelateChannelList(candidate, evidence *ChannelListCoverageV1) CoverageRelation {
 	if candidate.ChannelID != evidence.ChannelID {
 		return CoverageDisjoint
 	}
@@ -57,11 +59,11 @@ func RelateShortsList(candidate, evidence ShortsListCoverageV1) CoverageRelation
 	return CoverageDisjoint
 }
 
-func ChannelListCoversVideo(coverage ChannelListCoverageV1, video VideoListItemV1) bool {
+func ChannelListCoversVideo(coverage *ChannelListCoverageV1, video *VideoListItemV1) bool {
 	if coverage.ChannelID != video.ChannelID {
 		return false
 	}
-	if upcomingOnly(video) && !coverage.Filters.IncludeUpcoming {
+	if upcomingOnly(*video) && !coverage.Filters.IncludeUpcoming {
 		return false
 	}
 	return publishedAtInFilters(coverage.Filters, video.PublishedAt)

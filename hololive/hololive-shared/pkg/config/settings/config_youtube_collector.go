@@ -68,14 +68,15 @@ func DefaultYouTubeCollectorConfig() YouTubeCollectorConfig {
 	}
 }
 
-func (c YouTubeCollectorConfig) OrDefault() YouTubeCollectorConfig {
+func (c YouTubeCollectorConfig) OrDefault() YouTubeCollectorConfig { //nolint:gocritic // public value boundary preserves caller isolation
 	defaults := DefaultYouTubeCollectorConfig()
-	c = c.defaultWorkerQueue(defaults)
-	c = c.defaultLeaseBudgets(defaults)
-	return c.defaultProviderLimits(defaults)
+	c.defaultWorkerQueue(&defaults)
+	c.defaultLeaseBudgets(&defaults)
+	c.defaultProviderLimits(&defaults)
+	return c
 }
 
-func (c YouTubeCollectorConfig) defaultWorkerQueue(defaults YouTubeCollectorConfig) YouTubeCollectorConfig {
+func (c *YouTubeCollectorConfig) defaultWorkerQueue(defaults *YouTubeCollectorConfig) {
 	if c.TotalWorkers <= 0 {
 		c.TotalWorkers = defaults.TotalWorkers
 	}
@@ -88,10 +89,9 @@ func (c YouTubeCollectorConfig) defaultWorkerQueue(defaults YouTubeCollectorConf
 	if c.AcquisitionCadence <= 0 {
 		c.AcquisitionCadence = defaults.AcquisitionCadence
 	}
-	return c
 }
 
-func (c YouTubeCollectorConfig) defaultLeaseBudgets(defaults YouTubeCollectorConfig) YouTubeCollectorConfig {
+func (c *YouTubeCollectorConfig) defaultLeaseBudgets(defaults *YouTubeCollectorConfig) {
 	if c.LeaseTTL <= 0 {
 		c.LeaseTTL = defaults.LeaseTTL
 	}
@@ -110,11 +110,10 @@ func (c YouTubeCollectorConfig) defaultLeaseBudgets(defaults YouTubeCollectorCon
 	if c.RetryMax <= 0 {
 		c.RetryMax = defaults.RetryMax
 	}
-	return c
 }
 
-func (c YouTubeCollectorConfig) defaultProviderLimits(defaults YouTubeCollectorConfig) YouTubeCollectorConfig {
-	c = c.defaultInflightLimits()
+func (c *YouTubeCollectorConfig) defaultProviderLimits(defaults *YouTubeCollectorConfig) {
+	c.defaultInflightLimits()
 	if c.ReleaseJitterMin <= 0 {
 		c.ReleaseJitterMin = defaults.ReleaseJitterMin
 	}
@@ -124,10 +123,10 @@ func (c YouTubeCollectorConfig) defaultProviderLimits(defaults YouTubeCollectorC
 	if c.YouTubeJSTimeout <= 0 {
 		c.YouTubeJSTimeout = defaults.YouTubeJSTimeout
 	}
-	return c.defaultPaginationLimits(defaults)
+	c.defaultPaginationLimits(defaults)
 }
 
-func (c YouTubeCollectorConfig) defaultInflightLimits() YouTubeCollectorConfig {
+func (c *YouTubeCollectorConfig) defaultInflightLimits() {
 	if c.HolodexMaxInflight <= 0 {
 		c.HolodexMaxInflight = c.TotalWorkers
 	}
@@ -137,10 +136,9 @@ func (c YouTubeCollectorConfig) defaultInflightLimits() YouTubeCollectorConfig {
 	if c.YouTubeJSMaxInflight <= 0 {
 		c.YouTubeJSMaxInflight = c.TotalWorkers
 	}
-	return c
 }
 
-func (c YouTubeCollectorConfig) defaultPaginationLimits(defaults YouTubeCollectorConfig) YouTubeCollectorConfig {
+func (c *YouTubeCollectorConfig) defaultPaginationLimits(defaults *YouTubeCollectorConfig) {
 	if c.MaxPages <= 0 {
 		c.MaxPages = defaults.MaxPages
 	}
@@ -150,15 +148,14 @@ func (c YouTubeCollectorConfig) defaultPaginationLimits(defaults YouTubeCollecto
 	if c.RequestInterval <= 0 {
 		c.RequestInterval = defaults.RequestInterval
 	}
-	return c
 }
 
-func (c YouTubeCollectorConfig) MaxProviderTimeout(holodexTimeout, officialTimeout time.Duration) time.Duration {
+func (c *YouTubeCollectorConfig) MaxProviderTimeout(holodexTimeout, officialTimeout time.Duration) time.Duration {
 	maxTimeout := max(officialTimeout, max(holodexTimeout, c.YouTubeJSTimeout))
 	return maxTimeout
 }
 
-func (c YouTubeCollectorConfig) Validate(holodexTimeout, officialTimeout time.Duration) error {
+func (c *YouTubeCollectorConfig) Validate(holodexTimeout, officialTimeout time.Duration) error {
 	if err := c.validateLeaseBudgets(holodexTimeout, officialTimeout); err != nil {
 		return err
 	}
@@ -168,7 +165,7 @@ func (c YouTubeCollectorConfig) Validate(holodexTimeout, officialTimeout time.Du
 	return c.validateProviderLimits()
 }
 
-func (c YouTubeCollectorConfig) validateLeaseBudgets(holodexTimeout, officialTimeout time.Duration) error {
+func (c *YouTubeCollectorConfig) validateLeaseBudgets(holodexTimeout, officialTimeout time.Duration) error {
 	if c.LeaseTTL < time.Second || c.LeaseTTL > 30*time.Minute {
 		return fmt.Errorf("YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS must be between 1 and 1800")
 	}
@@ -187,7 +184,7 @@ func (c YouTubeCollectorConfig) validateLeaseBudgets(holodexTimeout, officialTim
 	return c.validateRetryAndJitter()
 }
 
-func (c YouTubeCollectorConfig) validateProviderTimeoutBudget(holodexTimeout, officialTimeout time.Duration) error {
+func (c *YouTubeCollectorConfig) validateProviderTimeoutBudget(holodexTimeout, officialTimeout time.Duration) error {
 	providerTimeout := c.MaxProviderTimeout(holodexTimeout, officialTimeout)
 	if providerTimeout <= 0 {
 		return fmt.Errorf("youtube collector provider timeout must be positive")
@@ -198,7 +195,7 @@ func (c YouTubeCollectorConfig) validateProviderTimeoutBudget(holodexTimeout, of
 	return nil
 }
 
-func (c YouTubeCollectorConfig) validateRetryAndJitter() error {
+func (c *YouTubeCollectorConfig) validateRetryAndJitter() error {
 	if c.RetryMin < 100*time.Millisecond || c.RetryMax < c.RetryMin || c.RetryMax > time.Hour {
 		return fmt.Errorf("YOUTUBE_COLLECTOR retry delay bounds are invalid")
 	}
@@ -208,7 +205,7 @@ func (c YouTubeCollectorConfig) validateRetryAndJitter() error {
 	return nil
 }
 
-func (c YouTubeCollectorConfig) validateWorkerQueue() error {
+func (c *YouTubeCollectorConfig) validateWorkerQueue() error {
 	if c.AcquisitionBatch < 1 || c.AcquisitionBatch > youtubeCollectorMaxAcquisitionBatch {
 		return fmt.Errorf("YOUTUBE_COLLECTOR_ACQUISITION_BATCH must be between 1 and %d", youtubeCollectorMaxAcquisitionBatch)
 	}
@@ -224,14 +221,14 @@ func (c YouTubeCollectorConfig) validateWorkerQueue() error {
 	return nil
 }
 
-func (c YouTubeCollectorConfig) validateProviderLimits() error {
+func (c *YouTubeCollectorConfig) validateProviderLimits() error {
 	if err := c.validateInflightLimits(); err != nil {
 		return err
 	}
 	return c.validatePaginationLimits()
 }
 
-func (c YouTubeCollectorConfig) validateInflightLimits() error {
+func (c *YouTubeCollectorConfig) validateInflightLimits() error {
 	if err := validateProviderInflight("YOUTUBE_COLLECTOR_HOLODEX_MAX_INFLIGHT", c.HolodexMaxInflight, c.TotalWorkers); err != nil {
 		return err
 	}
@@ -241,7 +238,7 @@ func (c YouTubeCollectorConfig) validateInflightLimits() error {
 	return validateProviderInflight("YOUTUBE_COLLECTOR_YOUTUBEJS_MAX_INFLIGHT", c.YouTubeJSMaxInflight, c.TotalWorkers)
 }
 
-func (c YouTubeCollectorConfig) validatePaginationLimits() error {
+func (c *YouTubeCollectorConfig) validatePaginationLimits() error {
 	if c.MaxPages < 1 || c.MaxPages > youtubeCollectorMaxPages {
 		return fmt.Errorf("YOUTUBE_COLLECTOR_MAX_PAGES must be between 1 and %d", youtubeCollectorMaxPages)
 	}
@@ -276,11 +273,11 @@ func loadYouTubeCollectorConfig() (YouTubeCollectorConfig, error) {
 		return YouTubeCollectorConfig{}, err
 	}
 	batchDefault := min(queueCapacity, youtubeCollectorMaxAcquisitionBatch)
-	return loadYouTubeCollectorFields(defaults, workers, queueCapacity, batchDefault)
+	return loadYouTubeCollectorFields(&defaults, workers, queueCapacity, batchDefault)
 }
 
 func loadYouTubeCollectorFields(
-	defaults YouTubeCollectorConfig,
+	defaults *YouTubeCollectorConfig,
 	workers, queueCapacity, batchDefault int,
 ) (YouTubeCollectorConfig, error) {
 	batch, err := requiredPositiveIntEnv("YOUTUBE_COLLECTOR_ACQUISITION_BATCH", batchDefault)
@@ -312,7 +309,7 @@ func loadYouTubeCollectorFields(
 	return cfg, nil
 }
 
-func loadYouTubeCollectorBudgets(cfg *YouTubeCollectorConfig, defaults YouTubeCollectorConfig) error {
+func loadYouTubeCollectorBudgets(cfg, defaults *YouTubeCollectorConfig) error {
 	var err error
 	if cfg.RenewInterval, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_RENEW_INTERVAL_SECONDS", defaults.RenewInterval, time.Second); err != nil {
 		return err
@@ -332,7 +329,7 @@ func loadYouTubeCollectorBudgets(cfg *YouTubeCollectorConfig, defaults YouTubeCo
 	return nil
 }
 
-func loadYouTubeCollectorLimits(cfg *YouTubeCollectorConfig, defaults YouTubeCollectorConfig, workers int) error {
+func loadYouTubeCollectorLimits(cfg, defaults *YouTubeCollectorConfig, workers int) error {
 	var err error
 	if cfg.ReleaseJitterMin, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_RELEASE_JITTER_MIN_MS", defaults.ReleaseJitterMin, time.Millisecond); err != nil {
 		return err

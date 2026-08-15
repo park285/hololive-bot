@@ -56,7 +56,7 @@ func (m *Metrics) ObservePublishedObservation(observationID int64) {
 	m.mu.Unlock()
 }
 
-func (m *Metrics) PublishedHandoff() (int64, bool, bool) {
+func (m *Metrics) PublishedHandoff() (observationID int64, complete, ok bool) {
 	if m == nil {
 		return 0, false, false
 	}

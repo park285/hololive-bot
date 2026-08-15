@@ -30,9 +30,12 @@ func (r *CommunityRunner) Emissions() []contract.ObservationKind {
 }
 func (r *CommunityRunner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
-func (r *CommunityRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
+func (r *CommunityRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js community client is not configured")
+	}
+	if err := collectutil.ValidateInput(input); err != nil {
+		return collectutil.RunOutput{}, err
 	}
 	started := time.Now()
 	result, err := r.client.FetchCommunity(ctx, youtubejs.CommunityRequest{
@@ -60,7 +63,7 @@ func (r *CommunityRunner) Collect(ctx context.Context, input collectutil.RunInpu
 		contract.KindCommunityPage,
 		input.Spec.SubjectKey,
 		generation,
-		input.Lease,
+		&input.Lease,
 		completeness,
 		continuity,
 		communityPayload(input.Spec.SubjectKey, result.Posts, r.maxResults, result.Pagination),

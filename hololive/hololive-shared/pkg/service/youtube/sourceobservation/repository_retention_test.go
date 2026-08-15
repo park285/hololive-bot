@@ -2,9 +2,11 @@ package sourceobservation
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -49,7 +51,7 @@ func TestDeleteFirstRetentionBatchRunsEveryTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Deleted != 3 || len(result.ByTable) != 2 || ran[0] != "queue" || ran[1] != "collisions" {
+	if result.Deleted != 3 || len(result.ByTable) != 2 || len(ran) != 2 || ran[0] != "queue" || ran[1] != "collisions" {
 		t.Fatalf("result=%#v ran=%v", result, ran)
 	}
 }
@@ -58,19 +60,19 @@ func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	pendingID := publishOne(t, ctx, repo, proof, "post-pending")
+	proof := seedPublishLease(t, ctx, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	pendingID := publishOne(t, ctx, repo, &proof, "post-pending")
 	finalizeObservation(t, ctx, repo, pendingID)
 	insertPendingReplay(t, pool, pendingID)
 
-	proof = advanceLease(t, pool, proof, time.Minute)
-	activeID := publishOne(t, ctx, repo, proof, "post-active")
+	proof = advanceLease(t, context.Background(), pool, &proof, time.Minute)
+	activeID := publishOne(t, ctx, repo, &proof, "post-active")
 	if _, err := repo.ClaimBatch(ctx, claimOptions()); err != nil {
 		t.Fatalf("claim active: %v", err)
 	}
 
-	proof = advanceLease(t, pool, proof, time.Minute)
-	candidateID := publishOne(t, ctx, repo, proof, "post-candidate")
+	proof = advanceLease(t, context.Background(), pool, &proof, time.Minute)
+	candidateID := publishOne(t, ctx, repo, &proof, "post-candidate")
 	finalizeObservation(t, ctx, repo, candidateID)
 	insertLiveEndCandidate(t, pool, candidateID)
 
@@ -124,7 +126,13 @@ func TestRetentionTickSkipsLockedTerminalQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		defer cleanupCancel()
+		if rollbackErr := holder.Rollback(cleanupCtx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback retention lock: %v", rollbackErr)
+		}
+	})
 	if _, err := holder.Exec(ctx, `
 		SELECT status FROM source_observation_queue WHERE observation_id = $1 FOR UPDATE
 	`, ids[0]); err != nil {
@@ -192,11 +200,11 @@ func TestRetentionTickProcessedAndDLQDurationsDiffer(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	processedID := publishOne(t, ctx, repo, proof, "post-processed")
+	proof := seedPublishLease(t, ctx, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	processedID := publishOne(t, ctx, repo, &proof, "post-processed")
 	finalizeObservation(t, ctx, repo, processedID)
-	proof = advanceLease(t, pool, proof, time.Minute)
-	dlqID := publishOne(t, ctx, repo, proof, "post-dlq")
+	proof = advanceLease(t, context.Background(), pool, &proof, time.Minute)
+	dlqID := publishOne(t, ctx, repo, &proof, "post-dlq")
 	deadLetterObservation(t, ctx, repo, dlqID)
 	ageQueueTerminal(t, pool, []int64{processedID, dlqID}, 36*time.Hour)
 
@@ -223,13 +231,13 @@ func publishProcessedObservations(
 	count int,
 ) []int64 {
 	t.Helper()
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, ctx, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	ids := make([]int64, 0, count)
 	for i := range count {
 		if i > 0 {
-			proof = advanceLease(t, pool, proof, time.Minute)
+			proof = advanceLease(t, ctx, pool, &proof, time.Minute)
 		}
-		id := publishOne(t, ctx, repo, proof, "post-batch")
+		id := publishOne(t, ctx, repo, &proof, "post-batch")
 		finalizeObservation(t, ctx, repo, id)
 		ids = append(ids, id)
 	}
@@ -240,11 +248,11 @@ func publishOne(
 	t *testing.T,
 	ctx context.Context,
 	repo *Repository,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	postID string,
 ) int64 {
 	t.Helper()
-	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, postID)))
+	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, postID)))
 	if err != nil || len(published.Results) != 1 {
 		t.Fatalf("publish %s: %#v err=%v", postID, published, err)
 	}
@@ -254,14 +262,14 @@ func publishOne(
 func finalizeObservation(t *testing.T, ctx context.Context, repo *Repository, observationID int64) {
 	t.Helper()
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 || batch.Observations[0].ID != observationID {
+	if err != nil || len(batch.Claims) != 1 || batch.Claims[0].ObservationID != observationID {
 		t.Fatalf("claim %d: %#v err=%v", observationID, batch, err)
 	}
 	if _, err := repo.Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
 		ObservationID: observationID,
-		LeaseToken:    batch.Observations[0].LeaseToken,
-	}, func(context.Context, dbx.Tx, Observation) (ReconcileResult, error) {
+		LeaseToken:    batch.Claims[0].LeaseToken,
+	}, func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error) {
 		return ReconcileResult{}, nil
 	}); err != nil {
 		t.Fatalf("finalize %d: %v", observationID, err)
@@ -271,12 +279,12 @@ func finalizeObservation(t *testing.T, ctx context.Context, repo *Repository, ob
 func deadLetterObservation(t *testing.T, ctx context.Context, repo *Repository, observationID int64) {
 	t.Helper()
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 || batch.Observations[0].ID != observationID {
+	if err != nil || len(batch.Claims) != 1 || batch.Claims[0].ObservationID != observationID {
 		t.Fatalf("claim dead letter %d: %#v err=%v", observationID, batch, err)
 	}
 	if err := repo.DeadLetter(ctx, DeadLetterInput{
 		ObservationID: observationID,
-		LeaseToken:    batch.Observations[0].LeaseToken,
+		LeaseToken:    batch.Claims[0].LeaseToken,
 		ErrorCode:     "test_dead_letter",
 		ErrorDetail:   "retention duration fixture",
 	}); err != nil {

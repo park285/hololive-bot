@@ -1,6 +1,9 @@
 package sourceobservation
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type snapshotIdentityV1 struct {
 	Provider     Provider        `json:"provider"`
@@ -24,12 +27,15 @@ func SnapshotObservationKey(
 	subjectKey string,
 	scopeSHA256 string,
 	scheduledFor time.Time,
-) string {
-	canonical, _ := canonicalJSON(snapshotIdentityV1{
+) (string, error) {
+	canonical, err := canonicalJSON(snapshotIdentityV1{
 		Provider: provider, Kind: kind, SubjectKey: subjectKey,
 		ScopeSHA256: scopeSHA256, ScheduledFor: scheduledFor.UTC(),
 	})
-	return SHA256Hex(canonical)
+	if err != nil {
+		return "", fmt.Errorf("build snapshot observation key: %w", err)
+	}
+	return SHA256Hex(canonical), nil
 }
 
 func ViewerSampleObservationKey(
@@ -37,26 +43,33 @@ func ViewerSampleObservationKey(
 	subjectKey string,
 	scopeSHA256 string,
 	sampleWindowStart time.Time,
-) string {
-	canonical, _ := canonicalJSON(viewerIdentityV1{
+) (string, error) {
+	canonical, err := canonicalJSON(viewerIdentityV1{
 		Provider: provider, Kind: KindViewerSample, SubjectKey: subjectKey,
 		ScopeSHA256: scopeSHA256, SampleWindowStart: sampleWindowStart.UTC(),
 	})
-	return SHA256Hex(canonical)
+	if err != nil {
+		return "", fmt.Errorf("build viewer sample observation key: %w", err)
+	}
+	return SHA256Hex(canonical), nil
 }
 
-func ObservationKeyForEnvelope(envelope Envelope, canonicalScope []byte) string {
+func ObservationKeyForEnvelope(envelope *Envelope, canonicalScope []byte) (string, error) {
+	if envelope == nil {
+		return "", fmt.Errorf("build observation key: envelope is nil")
+	}
 	scopeSHA256 := SHA256Hex(canonicalScope)
 	if envelope.ObservationKind == KindViewerSample {
 		var payload ViewerSampleV1
-		if err := decodeStrictJSON(envelope.Payload, &payload); err == nil {
-			return ViewerSampleObservationKey(
-				envelope.Provider,
-				envelope.SubjectKey,
-				scopeSHA256,
-				payload.SampleWindowStart,
-			)
+		if err := decodeStrictJSON(envelope.Payload, &payload); err != nil {
+			return "", fmt.Errorf("build viewer sample observation key: decode payload: %w", err)
 		}
+		return ViewerSampleObservationKey(
+			envelope.Provider,
+			envelope.SubjectKey,
+			scopeSHA256,
+			payload.SampleWindowStart,
+		)
 	}
 	return SnapshotObservationKey(
 		envelope.Provider,

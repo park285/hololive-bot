@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -25,13 +26,14 @@ const (
 )
 
 type Runtime struct {
-	Config    *settings.Config
-	Logger    *slog.Logger
-	Scheduler *leaseScheduler
-	servers   *sharedserver.RuntimeHTTPServers
-	helper    *youtubejs.Helper
-	cleanup   func()
-	lifecycle.Managed
+	Config          *settings.Config
+	Logger          *slog.Logger
+	Scheduler       *leaseScheduler
+	servers         *sharedserver.RuntimeHTTPServers
+	helper          *youtubejs.Helper
+	infra           *collectorInfrastructure
+	cleanupMu       sync.Mutex
+	cleanupReported bool
 }
 
 func Build(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*Runtime, error) {
@@ -55,8 +57,7 @@ func Build(ctx context.Context, appConfig *settings.Config, logger *slog.Logger)
 
 	runtime, err := assembleRuntime(ctx, appConfig, logger, infra)
 	if err != nil {
-		infra.cleanup()
-		return nil, err
+		return nil, errors.Join(err, infra.Close())
 	}
 	return runtime, nil
 }
@@ -77,10 +78,13 @@ func assembleRuntime(
 		return nil, err
 	}
 
-	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, appConfig.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
-		opts.EnableGzip = true
-		opts.ReadyResponder = collectorReadyResponder(appConfig, infra, sched)
-	})
+	readiness := &collectorReadiness{appConfig: appConfig, infra: infra, scheduler: sched}
+	router, err := sharedserver.NewHealthOnlyRuntimeRouter(
+		ctx,
+		logger,
+		appConfig.Server.APIKey,
+		readiness.configure,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector router: %w", err)
 	}
@@ -95,16 +99,24 @@ func assembleRuntime(
 		Scheduler: sched,
 		servers:   servers,
 		helper:    infra.youtubejs,
-		cleanup:   infra.cleanup,
+		infra:     infra,
 	}
-	runtime.Managed = lifecycle.NewManaged(infra.cleanup)
 	return runtime, nil
 }
 
-func collectorReadyResponder(appConfig *settings.Config, infra *collectorInfrastructure, sched *leaseScheduler) func(*gin.Context) {
-	return func(c *gin.Context) {
-		writeCollectorReady(c, collectorInstanceID(appConfig), infra, sched)
-	}
+type collectorReadiness struct {
+	appConfig *settings.Config
+	infra     *collectorInfrastructure
+	scheduler *leaseScheduler
+}
+
+func (r *collectorReadiness) configure(opts *sharedserver.RuntimeRouterOptions) {
+	opts.EnableGzip = true
+	opts.ReadyResponder = r.respond
+}
+
+func (r *collectorReadiness) respond(c *gin.Context) {
+	writeCollectorReady(c, collectorInstanceID(r.appConfig), r.infra, r.scheduler)
 }
 
 func collectorInstanceID(appConfig *settings.Config) string {
@@ -170,7 +182,7 @@ func collectionHandoffSnapshot(
 	ctx context.Context,
 	infra *collectorInfrastructure,
 	metrics *Metrics,
-) (bool, bool, string, error) {
+) (hasFirstSuccess, handoffComplete bool, handoffStatus string, handoffErr error) {
 	if metrics == nil {
 		return false, false, "", nil
 	}
@@ -319,23 +331,44 @@ func (r *Runtime) startServers(errCh chan<- error) {
 }
 
 func (r *Runtime) shutdown(ctx context.Context) error {
+	var shutdownErr error
 	if r.Scheduler != nil {
-		r.Scheduler.Stop()
+		shutdownErr = errors.Join(shutdownErr, r.Scheduler.Stop(ctx))
 	}
 	if r.servers != nil {
 		if err := r.servers.Shutdown(ctx); err != nil {
 			r.Logger.Error("YouTube collector HTTP shutdown failed", slog.Any("error", err))
+			shutdownErr = errors.Join(shutdownErr, err)
 		}
 	}
-	sharedlog.Info(ctx, r.Logger, "youtube_collector_stopped", "youtube collector stopped",
-		sharedlog.Runtime(runtimeName),
-	)
-	return nil
+	shutdownErr = errors.Join(shutdownErr, r.closeInfrastructure())
+	if shutdownErr == nil {
+		sharedlog.Info(ctx, r.Logger, "youtube_collector_stopped", "youtube collector stopped",
+			sharedlog.Runtime(runtimeName),
+		)
+	}
+	return shutdownErr
 }
 
 func (r *Runtime) Close() {
 	if r == nil {
 		return
 	}
-	r.Managed.Close()
+	if err := r.closeInfrastructure(); err != nil && r.Logger != nil {
+		r.Logger.Error("YouTube collector cleanup failed", slog.Any("error", err))
+	}
+}
+
+func (r *Runtime) closeInfrastructure() error {
+	r.cleanupMu.Lock()
+	defer r.cleanupMu.Unlock()
+	if r.infra == nil {
+		return nil
+	}
+	err := r.infra.Close()
+	if err == nil || r.cleanupReported {
+		return nil
+	}
+	r.cleanupReported = true
+	return err
 }

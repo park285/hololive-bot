@@ -1,6 +1,7 @@
 package collectutil
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -14,7 +15,7 @@ func ClampLatency(started time.Time) time.Duration {
 	return latency
 }
 
-func Checkpoint(envelope contract.Envelope) sourceobservation.CheckpointEntry {
+func Checkpoint(envelope *contract.Envelope) sourceobservation.CheckpointEntry {
 	return sourceobservation.CheckpointEntry{
 		Provider:           envelope.Provider,
 		ObservationKind:    envelope.ObservationKind,
@@ -33,11 +34,14 @@ func Envelope(
 	kind contract.ObservationKind,
 	subject string,
 	generation int64,
-	lease contract.LeaseProof,
+	lease *contract.LeaseProof,
 	completeness contract.Completeness,
 	continuity contract.Continuity,
 	payload any,
 ) (contract.Envelope, error) {
+	if lease == nil {
+		return contract.Envelope{}, fmt.Errorf("build collection envelope: lease is not configured")
+	}
 	raw, err := contract.MarshalPayloadV1(payload)
 	if err != nil {
 		return contract.Envelope{}, err
@@ -54,7 +58,7 @@ func Envelope(
 		Continuity:         continuity,
 		Payload:            raw,
 		CollectorInstance:  lease.OwnerInstance,
-		Lease:              lease,
+		Lease:              *lease,
 	})
 }
 

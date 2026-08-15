@@ -105,7 +105,7 @@ func TestArtifactsFromPayloadMatchPollerCanonicalRules(t *testing.T) {
 			CommentCount: 2,
 		}},
 	}
-	batch := ArtifactsFromPayload(payload, true, &domain.YouTubeContentWatermark{LastContentID: "old-post"}, detectedAt, nil)
+	batch := ArtifactsFromPayload(&payload, true, &domain.YouTubeContentWatermark{LastContentID: "old-post"}, detectedAt, nil)
 	if len(batch.Posts) != 1 || batch.Posts[0].PostID != "community:post-1" {
 		t.Fatalf("posts = %#v", batch.Posts)
 	}
@@ -122,7 +122,7 @@ func TestArtifactsFromPayloadFirstWindowOmitsNotifications(t *testing.T) {
 		ChannelID: "UC_TEST",
 		Posts:     []contract.CommunityPostV1{{PostID: "post-1", ChannelID: "UC_TEST", ContentText: "hello world"}},
 	}
-	batch := ArtifactsFromPayload(payload, false, nil, time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC), nil)
+	batch := ArtifactsFromPayload(&payload, false, nil, time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC), nil)
 	if len(batch.Posts) != 1 || batch.Posts[0].PostID != "community:post-1" {
 		t.Fatalf("posts = %#v", batch.Posts)
 	}
