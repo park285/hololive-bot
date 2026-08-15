@@ -30,7 +30,7 @@ func TestReplayProcessedObservationIsIdempotent(t *testing.T) {
 		t.Fatalf("first consume: %v", err)
 	}
 	assertTableCount(t, pool, "youtube_notification_outbox", 1)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		replay, err := repo.RequestReplay(ctx, ReplayInput{
 			ObservationID: published.Results[0].ObservationID,
 			RequestedBy:   "test-operator",

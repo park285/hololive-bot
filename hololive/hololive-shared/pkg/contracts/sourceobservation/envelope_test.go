@@ -437,7 +437,7 @@ func TestTypedCoverageBindsItemTimes(t *testing.T) {
 			payload: mustMarshalPayload(t, VideoListV1{
 				ChannelID: "UC_TEST",
 				Videos: []VideoListItemV1{{
-					VideoID: "video-1", ChannelID: "UC_TEST", PublishedAt: timePointer(windowStart.Add(-time.Second)),
+					VideoID: "video-1", ChannelID: "UC_TEST", PublishedAt: new(windowStart.Add(-time.Second)),
 				}},
 				Coverage: ChannelListCoverageV1{
 					ChannelID: "UC_TEST", MaxResults: 10,
@@ -451,7 +451,7 @@ func TestTypedCoverageBindsItemTimes(t *testing.T) {
 			payload: mustMarshalPayload(t, VideoListV1{
 				ChannelID: "UC_TEST",
 				Videos: []VideoListItemV1{{
-					VideoID: "video-1", ChannelID: "UC_TEST", PublishedAt: timePointer(windowEnd.Add(time.Second)),
+					VideoID: "video-1", ChannelID: "UC_TEST", PublishedAt: new(windowEnd.Add(time.Second)),
 				}},
 				Coverage: ChannelListCoverageV1{
 					ChannelID: "UC_TEST", MaxResults: 10,
@@ -726,8 +726,9 @@ func mustMarshalPayload(t *testing.T, value any) json.RawMessage {
 	return payload
 }
 
+//go:fix inline
 func timePointer(value time.Time) *time.Time {
-	return &value
+	return new(value)
 }
 
 func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload json.RawMessage, completeness Completeness) Envelope {

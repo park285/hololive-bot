@@ -209,7 +209,7 @@ func appendJSONControlOrRune(destination []byte, character rune) []byte {
 
 func lessUTF16(left, right []uint16) bool {
 	limit := min(len(left), len(right))
-	for index := 0; index < limit; index++ {
+	for index := range limit {
 		if left[index] != right[index] {
 			return left[index] < right[index]
 		}

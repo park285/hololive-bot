@@ -1,6 +1,7 @@
 package content
 
 import (
+	"maps"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -114,9 +115,7 @@ type Decision struct {
 func (s State) clone() State {
 	cloned := s
 	cloned.Videos = make(map[string]EntityState, len(s.Videos))
-	for key, value := range s.Videos {
-		cloned.Videos[key] = value
-	}
+	maps.Copy(cloned.Videos, s.Videos)
 	if len(s.AbsenceSlots) > 0 {
 		cloned.AbsenceSlots = append([]AbsenceSlot(nil), s.AbsenceSlots...)
 	}

@@ -58,8 +58,8 @@ func rejectDuplicateJSONNames(raw []byte) error {
 }
 
 var (
-	timeType       = reflect.TypeOf(time.Time{})
-	rawMessageType = reflect.TypeOf(json.RawMessage{})
+	timeType       = reflect.TypeFor[time.Time]()
+	rawMessageType = reflect.TypeFor[json.RawMessage]()
 )
 
 func rejectNonCanonicalJSONFields(raw []byte, destinationType reflect.Type) error {
@@ -145,7 +145,7 @@ func readJSONObjectFieldName(decoder *json.Decoder) (string, error) {
 
 func inspectJSONArrayFields(decoder *json.Decoder, valueType reflect.Type) error {
 	valueType = indirectJSONType(valueType)
-	itemType := reflect.TypeOf((*any)(nil)).Elem()
+	itemType := reflect.TypeFor[any]()
 	if valueType != nil && (valueType.Kind() == reflect.Array || valueType.Kind() == reflect.Slice) {
 		itemType = valueType.Elem()
 	}
@@ -185,8 +185,8 @@ func indirectJSONType(valueType reflect.Type) reflect.Type {
 
 func jsonFieldTypes(valueType reflect.Type) map[string]reflect.Type {
 	fields := make(map[string]reflect.Type, valueType.NumField())
-	for i := 0; i < valueType.NumField(); i++ {
-		field := valueType.Field(i)
+	for field := range valueType.Fields() {
+		field := field
 		if field.PkgPath != "" && !field.Anonymous {
 			continue
 		}

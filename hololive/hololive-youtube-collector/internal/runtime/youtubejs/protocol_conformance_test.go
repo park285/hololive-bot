@@ -89,8 +89,8 @@ func collectJSONFields(typ reflect.Type, fields map[string]bool) {
 	if typ.Kind() != reflect.Struct {
 		return
 	}
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
+	for field := range typ.Fields() {
+		field := field
 		if field.Anonymous {
 			collectJSONFields(field.Type, fields)
 			continue
@@ -126,12 +126,12 @@ func collectDTSInterface(src, name string, fields, seen map[string]bool) {
 		collectDTSInterface(src, src[loc[2]:loc[3]], fields, seen)
 	}
 	body := src[loc[1]:]
-	end := strings.Index(body, "\n}")
-	if end < 0 {
+	before, _, ok := strings.Cut(body, "\n}")
+	if !ok {
 		return
 	}
 	fieldLine := regexp.MustCompile(`(?m)^\s*([A-Za-z0-9_]+)\??:`)
-	for _, match := range fieldLine.FindAllStringSubmatch(body[:end], -1) {
+	for _, match := range fieldLine.FindAllStringSubmatch(before, -1) {
 		fields[match[1]] = true
 	}
 }

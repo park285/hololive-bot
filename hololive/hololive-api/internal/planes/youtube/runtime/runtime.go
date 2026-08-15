@@ -302,7 +302,7 @@ func (r *Runtime) publishHealth() {
 }
 
 func waitForCompletions(ctx context.Context, done <-chan struct{}, count int, owner string) error {
-	for completed := 0; completed < count; completed++ {
+	for range count {
 		if err := waitOneCompletion(ctx, done, owner); err != nil {
 			return err
 		}

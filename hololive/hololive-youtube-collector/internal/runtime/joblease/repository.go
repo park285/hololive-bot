@@ -283,7 +283,7 @@ func deterministicJitter(proof contract.LeaseProof, minimum, maximum time.Durati
 		return minimum
 	}
 	hash := fnv.New64a()
-	_, _ = hash.Write([]byte(fmt.Sprintf("%s\x00%d", proof.JobKey, proof.FenceEpoch)))
+	_, _ = hash.Write(fmt.Appendf(nil, "%s\x00%d", proof.JobKey, proof.FenceEpoch))
 	span := uint64(maximum - minimum)
 	return minimum + time.Duration(hash.Sum64()%(span+1))
 }

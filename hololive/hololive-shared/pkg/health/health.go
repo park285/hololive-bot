@@ -21,6 +21,7 @@
 package health
 
 import (
+	"maps"
 	"runtime"
 	"sync"
 	"time"
@@ -100,9 +101,7 @@ func componentSnapshot() map[string]ComponentStatus {
 		return nil
 	}
 	snapshot := make(map[string]ComponentStatus, len(components))
-	for name, status := range components {
-		snapshot[name] = status
-	}
+	maps.Copy(snapshot, components)
 	return snapshot
 }
 

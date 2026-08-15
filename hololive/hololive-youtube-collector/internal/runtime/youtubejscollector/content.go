@@ -2,6 +2,7 @@ package youtubejscollector
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -78,12 +79,7 @@ func subjectEnabled(input collectutil.RunInput, kind contract.ObservationKind) b
 	if !configured {
 		return true
 	}
-	for _, subject := range subjects {
-		if subject == input.Spec.SubjectKey {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(subjects, input.Spec.SubjectKey)
 }
 
 func (r *ContentRunner) fetchKind(ctx context.Context, input collectutil.RunInput, kind string) (*contract.Envelope, error) {

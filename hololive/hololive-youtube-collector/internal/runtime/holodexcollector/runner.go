@@ -2,6 +2,7 @@ package holodexcollector
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -211,12 +212,7 @@ func (r *Runner) requestedIDs(input collectutil.RunInput) []string {
 }
 
 func (r *Runner) emits(kind contract.ObservationKind) bool {
-	for _, emission := range r.emissions {
-		if emission == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.emissions, kind)
 }
 
 func (r *Runner) envelope(input collectutil.RunInput, kind contract.ObservationKind, subject string, payload any) (contract.Envelope, error) {
