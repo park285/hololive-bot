@@ -84,7 +84,7 @@ func buildYouTubePlane(ctx context.Context, appConfig *settings.HololiveAPIConfi
 	if !appConfig.YouTube.Enabled {
 		return nil, nil
 	}
-	youtube, err := youtuberuntime.Build(ctx, appConfig.YouTube, appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
+	youtube, err := youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
 	if err != nil {
 		return nil, fmt.Errorf("build youtube plane: %w", err)
 	}

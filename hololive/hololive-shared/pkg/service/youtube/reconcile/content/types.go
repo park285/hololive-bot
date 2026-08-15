@@ -1,7 +1,6 @@
 package content
 
 import (
-	"maps"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -112,12 +111,18 @@ type Decision struct {
 	Applications       []Application
 }
 
-func (s State) clone() State {
-	cloned := s
+func (s *State) clone() State {
+	cloned := *s
 	cloned.Videos = make(map[string]EntityState, len(s.Videos))
-	maps.Copy(cloned.Videos, s.Videos)
+	for videoID := range s.Videos {
+		entity := s.Videos[videoID]
+		cloned.Videos[videoID] = entity.clone()
+	}
 	if len(s.AbsenceSlots) > 0 {
-		cloned.AbsenceSlots = append([]AbsenceSlot(nil), s.AbsenceSlots...)
+		cloned.AbsenceSlots = make([]AbsenceSlot, len(s.AbsenceSlots))
+		for i := range s.AbsenceSlots {
+			cloned.AbsenceSlots[i] = s.AbsenceSlots[i].clone()
+		}
 	}
 	if s.EarliestCompleteAt != nil {
 		earliest := *s.EarliestCompleteAt
@@ -126,12 +131,79 @@ func (s State) clone() State {
 	return cloned
 }
 
-func VideoCoverage(value contract.ChannelListCoverageV1) coverageValue {
-	copied := value
+func (e *Evidence) clone() Evidence {
+	cloned := *e
+	if len(e.Videos) > 0 {
+		cloned.Videos = make([]Entity, len(e.Videos))
+		for i := range e.Videos {
+			cloned.Videos[i] = e.Videos[i].clone()
+		}
+	}
+	cloned.Coverage = e.Coverage.clone()
+	return cloned
+}
+
+func (e *EntityState) clone() EntityState {
+	cloned := *e
+	cloned.Entity = e.Entity.clone()
+	cloned.Clock.LastNegativeEffectiveAt = cloneTime(e.Clock.LastNegativeEffectiveAt)
+	cloned.Clock.MissingSinceEffectiveAt = cloneTime(e.Clock.MissingSinceEffectiveAt)
+	cloned.LastPositiveCoverage = e.LastPositiveCoverage.clone()
+	cloned.LastNegativeReceivedAt = cloneTime(e.LastNegativeReceivedAt)
+	cloned.FirstAbsenceScheduledFor = cloneTime(e.FirstAbsenceScheduledFor)
+	cloned.SecondAbsenceScheduledFor = cloneTime(e.SecondAbsenceScheduledFor)
+	cloned.WithdrawnAt = cloneTime(e.WithdrawnAt)
+	return cloned
+}
+
+func (e *Entity) clone() Entity {
+	cloned := *e
+	cloned.PublishedAt = cloneTime(e.PublishedAt)
+	cloned.ScheduledFor = cloneTime(e.ScheduledFor)
+	return cloned
+}
+
+func (s *AbsenceSlot) clone() AbsenceSlot {
+	cloned := *s
+	cloned.Coverage = s.Coverage.clone()
+	return cloned
+}
+
+func (c *coverageValue) clone() coverageValue {
+	cloned := *c
+	if c.Videos != nil {
+		videos := *c.Videos
+		videos.Filters.PublishedAfter = cloneTime(c.Videos.Filters.PublishedAfter)
+		videos.Filters.PublishedBefore = cloneTime(c.Videos.Filters.PublishedBefore)
+		cloned.Videos = &videos
+	}
+	if c.Shorts != nil {
+		shorts := *c.Shorts
+		cloned.Shorts = &shorts
+	}
+	return cloned
+}
+
+func cloneTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
+func VideoCoverage(value *contract.ChannelListCoverageV1) coverageValue {
+	if value == nil {
+		return coverageValue{}
+	}
+	copied := *value
 	return coverageValue{Videos: &copied}
 }
 
-func ShortsCoverage(value contract.ShortsListCoverageV1) coverageValue {
-	copied := value
+func ShortsCoverage(value *contract.ShortsListCoverageV1) coverageValue {
+	if value == nil {
+		return coverageValue{}
+	}
+	copied := *value
 	return coverageValue{Shorts: &copied}
 }

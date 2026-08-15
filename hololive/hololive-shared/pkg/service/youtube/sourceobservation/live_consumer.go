@@ -13,7 +13,7 @@ import (
 func (c *Consumer) reconcileLive(
 	ctx context.Context,
 	tx dbx.Tx,
-	claimed Observation,
+	claimed *Observation,
 ) (live.Decision, ReconcileResult, error) {
 	evidence, err := liveEvidenceFromObservation(claimed)
 	if err != nil {
@@ -22,7 +22,7 @@ func (c *Consumer) reconcileLive(
 	if err := lockLiveSubject(ctx, tx, claimed.SubjectKey); err != nil {
 		return live.Decision{}, ReconcileResult{}, err
 	}
-	state, err := loadLiveState(ctx, tx, evidence.Coverage.RequestedChannelIDs, videoIDsOf(evidence))
+	state, err := loadLiveState(ctx, tx, evidence.Coverage.RequestedChannelIDs, videoIDsOf(&evidence))
 	if err != nil {
 		return live.Decision{}, ReconcileResult{}, err
 	}
@@ -30,13 +30,13 @@ func (c *Consumer) reconcileLive(
 	if err != nil {
 		return live.Decision{}, ReconcileResult{}, err
 	}
-	if err := persistLiveDecision(ctx, tx, decision); err != nil {
+	if err := persistLiveDecision(ctx, tx, &decision); err != nil {
 		return live.Decision{}, ReconcileResult{}, err
 	}
 	return decision, ReconcileResult{Applications: mapLiveApplications(decision.Applications)}, nil
 }
 
-func liveEvidenceFromObservation(observation Observation) (live.Evidence, error) {
+func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error) {
 	var payload contract.LiveSnapshotV1
 	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
 		return live.Evidence{}, fmt.Errorf("decode live snapshot payload: %w", err)
@@ -68,7 +68,7 @@ func liveEvidenceFromObservation(observation Observation) (live.Evidence, error)
 	}, nil
 }
 
-func videoIDsOf(evidence live.Evidence) []string {
+func videoIDsOf(evidence *live.Evidence) []string {
 	ids := make([]string, 0, len(evidence.Sessions))
 	for i := range evidence.Sessions {
 		ids = append(ids, evidence.Sessions[i].VideoID)

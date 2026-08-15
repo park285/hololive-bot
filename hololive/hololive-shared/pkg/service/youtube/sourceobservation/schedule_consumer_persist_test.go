@@ -15,9 +15,9 @@ func TestScheduleConsumerOfficialIsLiveDoesNotFlipLive(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
-	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, proof, contract.ScheduleItemV1{
+	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
 		ExternalID: "vid-a", VideoID: "vid-a", ChannelID: "UC_TEST", Title: "Official Live",
 		ScheduledAt: time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC), IsLive: true,
 	}))); err != nil {
@@ -26,7 +26,7 @@ func TestScheduleConsumerOfficialIsLiveDoesNotFlipLive(t *testing.T) {
 	if err := consumer.Consume(ctx, liveClaimOptions()); err != nil {
 		t.Fatalf("consume schedule: %v", err)
 	}
-	if liveSessionStatus(t, pool, "vid-a") != string(domain.LiveStatusUpcoming) {
+	if liveSessionStatus(t, pool) != string(domain.LiveStatusUpcoming) {
 		t.Fatal("official isLive must not write LIVE")
 	}
 	var isLive bool
@@ -51,9 +51,9 @@ func TestScheduleConsumerDoesNotAdvanceLiveLastSeenAt(t *testing.T) {
 		t.Fatalf("seed session: %v", err)
 	}
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
-	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, proof, contract.ScheduleItemV1{
+	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
 		ExternalID: "vid-a", VideoID: "vid-a", ChannelID: "UC_TEST", Title: "Schedule Title",
 		ScheduledAt: time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC), IsLive: true,
 	}))); err != nil {
@@ -62,11 +62,11 @@ func TestScheduleConsumerDoesNotAdvanceLiveLastSeenAt(t *testing.T) {
 	if err := consumer.Consume(ctx, liveClaimOptions()); err != nil {
 		t.Fatalf("consume schedule: %v", err)
 	}
-	if liveSessionStatus(t, pool, "vid-a") != string(domain.LiveStatusLive) {
+	if liveSessionStatus(t, pool) != string(domain.LiveStatusLive) {
 		t.Fatal("schedule merge must not own live liveness")
 	}
-	if !liveLastSeen(t, pool, "vid-a").Equal(seen) {
-		t.Fatalf("schedule consume advanced last_seen_at: %s", liveLastSeen(t, pool, "vid-a"))
+	if !liveLastSeen(t, pool).Equal(seen) {
+		t.Fatalf("schedule consume advanced last_seen_at: %s", liveLastSeen(t, pool))
 	}
 }
 
@@ -80,9 +80,9 @@ func TestScheduleConsumerTemporaryItemDoesNotMergeSession(t *testing.T) {
 		t.Fatalf("seed session: %v", err)
 	}
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindSchedule, "global:hololive-schedule", "holodex_schedule")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderHolodex, contract.KindSchedule, "global:hololive-schedule", "holodex_schedule")
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
-	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, proof, contract.ScheduleItemV1{
+	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
 		ExternalID: "holodex-temp", Title: "Temp", ScheduledAt: time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC),
 	}))); err != nil {
 		t.Fatalf("publish schedule: %v", err)
@@ -99,7 +99,7 @@ func TestScheduleConsumerTemporaryItemDoesNotMergeSession(t *testing.T) {
 	}
 }
 
-func scheduleEnvelope(t *testing.T, proof contract.LeaseProof, items ...contract.ScheduleItemV1) contract.Envelope {
+func scheduleEnvelope(t *testing.T, proof *contract.LeaseProof, items ...contract.ScheduleItemV1) *contract.Envelope {
 	t.Helper()
 	payload, err := contract.MarshalPayloadV1(contract.ScheduleSnapshotV1{
 		GroupKey: "global:hololive-schedule",
@@ -114,15 +114,15 @@ func scheduleEnvelope(t *testing.T, proof contract.LeaseProof, items ...contract
 		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityNotApplicable,
-		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: proof,
+		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare schedule: %v", err)
 	}
-	return envelope
+	return &envelope
 }
 
-func proofProvider(proof contract.LeaseProof) contract.Provider {
+func proofProvider(proof *contract.LeaseProof) contract.Provider {
 	if proof.CollectionJobKind == "holodex_schedule" {
 		return contract.ProviderHolodex
 	}

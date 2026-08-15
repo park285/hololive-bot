@@ -152,7 +152,7 @@ func requestedSet(ids []string) map[string]struct{} {
 	return result
 }
 
-func subjectAllowed(input collectutil.RunInput, kind contract.ObservationKind, subject string) bool {
+func subjectAllowed(input *collectutil.RunInput, kind contract.ObservationKind, subject string) bool {
 	subjects, ok := input.EnabledSubjects[kind]
 	if !ok {
 		return true
@@ -160,7 +160,7 @@ func subjectAllowed(input collectutil.RunInput, kind contract.ObservationKind, s
 	return slices.Contains(subjects, subject)
 }
 
-func viewerPayload(row parsedLive, windowStart time.Time, windowSeconds int) (contract.ViewerSampleV1, error) {
+func viewerPayload(row *parsedLive, windowStart time.Time, windowSeconds int) (contract.ViewerSampleV1, error) {
 	availability, count, err := viewerAvailability(row)
 	if err != nil {
 		return contract.ViewerSampleV1{}, err
@@ -179,7 +179,7 @@ func viewerPayload(row parsedLive, windowStart time.Time, windowSeconds int) (co
 	}, nil
 }
 
-func viewerAvailability(row parsedLive) (string, *int64, error) {
+func viewerAvailability(row *parsedLive) (availability string, viewerCount *int64, parseErr error) {
 	raw := bytes.TrimSpace(row.row.LiveViewers)
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
 		if row.status == "LIVE" {
@@ -209,7 +209,8 @@ func livePayload(channelID string, sessions []parsedLive) contract.LiveSnapshotV
 	mapped := make([]contract.LiveSessionV1, 0, len(sessions))
 	statuses := make([]string, 0, 4)
 	seen := make(map[string]struct{}, 4)
-	for _, session := range sessions {
+	for i := range sessions {
+		session := &sessions[i]
 		mapped = append(mapped, contract.LiveSessionV1{
 			VideoID:     session.row.ID,
 			ChannelID:   channelID,
@@ -256,10 +257,11 @@ func statsPayload(channelID string, rows []parsedLive) (contract.ChannelStatsV1,
 	}, true
 }
 
-func firstStatsCounts(rows []parsedLive) (*int64, *int64) {
+func firstStatsCounts(rows []parsedLive) (subscriberCount, viewCount *int64) {
 	var subscriber *int64
 	var videos *int64
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		if subscriber == nil && row.row.Channel.SubscriberCount != nil {
 			subscriber = row.row.Channel.SubscriberCount
 		}
@@ -271,7 +273,8 @@ func firstStatsCounts(rows []parsedLive) (*int64, *int64) {
 }
 
 func photoPayload(channelID string, rows []parsedLive) (contract.ChannelPhotoV1, bool) {
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		photoURL, ok := httpsURL(row.row.Channel.Photo)
 		if !ok {
 			continue
@@ -291,8 +294,8 @@ func photoPayload(channelID string, rows []parsedLive) (contract.ChannelPhotoV1,
 func schedulePayload(rows []parsedLive, allowed map[string]struct{}) contract.ScheduleSnapshotV1 {
 	items := make([]contract.ScheduleItemV1, 0, len(rows))
 	seen := make(map[string]struct{}, len(rows))
-	for _, row := range rows {
-		if item, ok := scheduleItemFromRow(row, allowed, seen); ok {
+	for i := range rows {
+		if item, ok := scheduleItemFromRow(&rows[i], allowed, seen); ok {
 			items = append(items, item)
 		}
 	}
@@ -303,7 +306,7 @@ func schedulePayload(rows []parsedLive, allowed map[string]struct{}) contract.Sc
 	}
 }
 
-func scheduleItemFromRow(row parsedLive, allowed, seen map[string]struct{}) (contract.ScheduleItemV1, bool) {
+func scheduleItemFromRow(row *parsedLive, allowed, seen map[string]struct{}) (contract.ScheduleItemV1, bool) {
 	if _, ok := allowed[row.channelID]; !ok || row.scheduled == nil {
 		return contract.ScheduleItemV1{}, false
 	}
@@ -325,7 +328,7 @@ func scheduleItemFromRow(row parsedLive, allowed, seen map[string]struct{}) (con
 	}, true
 }
 
-func scheduleTitle(row parsedLive) string {
+func scheduleTitle(row *parsedLive) string {
 	title := strings.TrimSpace(row.row.Title)
 	if title != "" {
 		return title

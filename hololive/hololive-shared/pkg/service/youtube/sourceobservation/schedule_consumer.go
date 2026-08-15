@@ -13,7 +13,7 @@ import (
 func (c *Consumer) reconcileSchedule(
 	ctx context.Context,
 	tx dbx.Tx,
-	claimed Observation,
+	claimed *Observation,
 ) (schedule.Decision, ReconcileResult, error) {
 	evidence, err := scheduleEvidenceFromObservation(claimed)
 	if err != nil {
@@ -30,13 +30,13 @@ func (c *Consumer) reconcileSchedule(
 	if err != nil {
 		return schedule.Decision{}, ReconcileResult{}, err
 	}
-	if err := persistScheduleDecision(ctx, tx, claimed, decision); err != nil {
+	if err := persistScheduleDecision(ctx, tx, claimed, &decision); err != nil {
 		return schedule.Decision{}, ReconcileResult{}, err
 	}
 	return decision, ReconcileResult{Applications: mapScheduleApplications(decision.Applications)}, nil
 }
 
-func scheduleEvidenceFromObservation(observation Observation) (schedule.Evidence, error) {
+func scheduleEvidenceFromObservation(observation *Observation) (schedule.Evidence, error) {
 	var payload contract.ScheduleSnapshotV1
 	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
 		return schedule.Evidence{}, fmt.Errorf("decode schedule payload: %w", err)

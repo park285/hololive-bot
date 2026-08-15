@@ -17,7 +17,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
 )
 
-func leaseConfigFrom(cfg settings.YouTubeCollectorConfig, holodexTimeout, officialTimeout time.Duration) (joblease.Config, error) {
+func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig, holodexTimeout, officialTimeout time.Duration) (joblease.Config, error) {
 	lease := joblease.Config{
 		LeaseTTL:            cfg.LeaseTTL,
 		RenewInterval:       cfg.RenewInterval,
@@ -51,11 +51,11 @@ func buildScheduler(
 	if err := collector.Validate(appConfig.Holodex.Timeout, appConfig.OfficialSchedule.Timeout); err != nil {
 		return nil, fmt.Errorf("build youtube collector: %w", err)
 	}
-	leaseConfig, err := leaseConfigFrom(collector, appConfig.Holodex.Timeout, appConfig.OfficialSchedule.Timeout)
+	leaseConfig, err := leaseConfigFrom(&collector, appConfig.Holodex.Timeout, appConfig.OfficialSchedule.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector: lease config: %w", err)
 	}
-	return newLeaseScheduler(infra, logger, collector, leaseConfig)
+	return newLeaseScheduler(infra, logger, &collector, &leaseConfig)
 }
 
 func requireSchedulerDeps(appConfig *settings.Config, infra *collectorInfrastructure) error {
@@ -71,8 +71,8 @@ func requireSchedulerDeps(appConfig *settings.Config, infra *collectorInfrastruc
 func newLeaseScheduler(
 	infra *collectorInfrastructure,
 	logger *slog.Logger,
-	collector settings.YouTubeCollectorConfig,
-	leaseConfig joblease.Config,
+	collector *settings.YouTubeCollectorConfig,
+	leaseConfig *joblease.Config,
 ) (*leaseScheduler, error) {
 	repository, err := joblease.NewRepository(infra.postgres.GetPool(), leaseConfig)
 	if err != nil {
@@ -93,8 +93,8 @@ func newLeaseScheduler(
 		metrics:    NewMetrics(nil),
 		owner:      owner,
 		logger:     logger,
-		config:     leaseConfig,
-		collector:  collector,
+		config:     *leaseConfig,
+		collector:  *collector,
 		gates:      newProviderGates(collector),
 		queued:     make(map[string]struct{}),
 		queue:      make(chan joblease.JobSpec, collector.QueueCapacity),
@@ -120,7 +120,7 @@ func newCollectorRegistry(infra *collectorInfrastructure) (*Registry, error) {
 	return registry, nil
 }
 
-func newProviderGates(cfg settings.YouTubeCollectorConfig) map[contract.Provider]chan struct{} {
+func newProviderGates(cfg *settings.YouTubeCollectorConfig) map[contract.Provider]chan struct{} {
 	return map[contract.Provider]chan struct{}{
 		contract.ProviderHolodex:          make(chan struct{}, cfg.HolodexMaxInflight),
 		contract.ProviderHololiveOfficial: make(chan struct{}, cfg.OfficialMaxInflight),

@@ -13,7 +13,7 @@ import (
 func (c *Consumer) reconcilePhoto(
 	ctx context.Context,
 	tx dbx.Tx,
-	claimed Observation,
+	claimed *Observation,
 ) (photo.Decision, ReconcileResult, error) {
 	evidence, err := photoEvidenceFromObservation(claimed)
 	if err != nil {
@@ -33,13 +33,13 @@ func (c *Consumer) reconcilePhoto(
 	if err != nil {
 		return photo.Decision{}, ReconcileResult{}, err
 	}
-	if err := persistPhotoDecision(ctx, tx, claimed, decision); err != nil {
+	if err := persistPhotoDecision(ctx, tx, claimed, &decision); err != nil {
 		return photo.Decision{}, ReconcileResult{}, err
 	}
 	return decision, ReconcileResult{Applications: mapPhotoApplications(decision.Applications)}, nil
 }
 
-func photoEvidenceFromObservation(observation Observation) (photo.Evidence, error) {
+func photoEvidenceFromObservation(observation *Observation) (photo.Evidence, error) {
 	var payload contract.ChannelPhotoV1
 	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
 		return photo.Evidence{}, fmt.Errorf("decode channel photo payload: %w", err)

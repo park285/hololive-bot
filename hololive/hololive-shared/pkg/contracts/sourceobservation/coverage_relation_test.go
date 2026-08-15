@@ -15,24 +15,26 @@ func TestRelateChannelListAndCoversVideo(t *testing.T) {
 		Filters: VideoListFiltersV1{PublishedAfter: &after, PublishedBefore: &before},
 	}
 	other := ChannelListCoverageV1{ChannelID: "UC_B", MaxResults: 10, Exhausted: true}
-	if RelateChannelList(wide, wide) != CoverageEqual {
+	if RelateChannelList(&wide, &wide) != CoverageEqual {
 		t.Fatal("same coverage must be equal")
 	}
-	if RelateChannelList(narrow, wide) != CoverageCovers {
+	if RelateChannelList(&narrow, &wide) != CoverageCovers {
 		t.Fatal("wide evidence must cover a narrower last-positive window")
 	}
-	if RelateChannelList(wide, narrow) != CoverageCoveredBy {
+	if RelateChannelList(&wide, &narrow) != CoverageCoveredBy {
 		t.Fatal("narrow evidence cannot cover a wider last-positive window")
 	}
-	if RelateChannelList(wide, other) != CoverageDisjoint {
+	if RelateChannelList(&wide, &other) != CoverageDisjoint {
 		t.Fatal("different channels are disjoint")
 	}
 	inside := time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)
 	outside := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	if !ChannelListCoversVideo(narrow, VideoListItemV1{VideoID: "v1", ChannelID: "UC_A", PublishedAt: &inside}) {
+	insideVideo := VideoListItemV1{VideoID: "v1", ChannelID: "UC_A", PublishedAt: &inside}
+	if !ChannelListCoversVideo(&narrow, &insideVideo) {
 		t.Fatal("video inside the time window must be covered")
 	}
-	if ChannelListCoversVideo(narrow, VideoListItemV1{VideoID: "v1", ChannelID: "UC_A", PublishedAt: &outside}) {
+	outsideVideo := VideoListItemV1{VideoID: "v1", ChannelID: "UC_A", PublishedAt: &outside}
+	if ChannelListCoversVideo(&narrow, &outsideVideo) {
 		t.Fatal("video outside the time window must not be covered")
 	}
 }

@@ -3,8 +3,8 @@ package officialcollector
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -102,8 +102,8 @@ func mustCollect(t *testing.T, body []byte) collectutil.RunOutput {
 	return output
 }
 
-func officialInput() collectutil.RunInput {
-	return collectutil.RunInput{
+func officialInput() *collectutil.RunInput {
+	return &collectutil.RunInput{
 		Spec: joblease.JobSpec{
 			JobKey: "collector:hololive_official:official_schedule:global", Provider: contract.ProviderHololiveOfficial,
 			Class: "GLOBAL", CollectionJobKind: "official_schedule", SubjectKey: officialScheduleSubject, PollInterval: time.Minute,
@@ -119,7 +119,7 @@ func officialInput() collectutil.RunInput {
 
 func testdata(t *testing.T, name string) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	raw, err := fs.ReadFile(os.DirFS("testdata"), name)
 	if err != nil {
 		t.Fatal(err)
 	}

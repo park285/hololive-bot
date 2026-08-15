@@ -8,19 +8,19 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/live"
 )
 
-func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision live.Decision) error {
+func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision) error {
 	for i := range decision.Sessions {
-		if err := upsertLiveSession(ctx, tx, decision.Sessions[i]); err != nil {
+		if err := upsertLiveSession(ctx, tx, &decision.Sessions[i]); err != nil {
 			return err
 		}
-		if err := upsertLiveHead(ctx, tx, decision.Sessions[i]); err != nil {
+		if err := upsertLiveHead(ctx, tx, &decision.Sessions[i]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func upsertLiveSession(ctx context.Context, tx dbx.Tx, session live.SessionState) error {
+func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
 	if session.ChannelID == "" {
 		return nil
 	}
@@ -42,7 +42,10 @@ func upsertLiveSession(ctx context.Context, tx dbx.Tx, session live.SessionState
 	return nil
 }
 
-func upsertLiveHead(ctx context.Context, tx dbx.Tx, session live.SessionState) error {
+func upsertLiveHead(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
+	if session == nil {
+		return fmt.Errorf("upsert live head: session state is nil")
+	}
 	var kind any
 	var observationID any
 	var nextCheck any

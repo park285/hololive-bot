@@ -230,7 +230,7 @@ func validateJSONString(raw []byte, start int) (int, error) {
 	return 0, fmt.Errorf("decode json: unterminated string")
 }
 
-func validateJSONStringByte(raw []byte, index int) (int, bool, error) {
+func validateJSONStringByte(raw []byte, index int) (next int, escaped bool, err error) {
 	if raw[index] == '"' {
 		return index, true, nil
 	}

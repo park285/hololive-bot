@@ -10,7 +10,7 @@ import (
 func (c *Consumer) reconcileCommunity(
 	ctx context.Context,
 	tx dbx.Tx,
-	claimed Observation,
+	claimed *Observation,
 ) (community.Batch, ReconcileResult, bool, error) {
 	payload, err := decodeCommunityPayload(claimed)
 	if err != nil {
@@ -35,22 +35,22 @@ func (c *Consumer) reconcileCommunity(
 		return community.Batch{}, ReconcileResult{}, false, err
 	}
 	persisted := community.ArtifactsFromPayload(
-		payload,
+		&payload,
 		initialized,
 		watermark,
 		claimed.EffectiveAt,
 		c.keywords,
 	)
-	if err := c.writer.PersistTx(ctx, tx, persisted); err != nil {
+	if err := c.writer.PersistTx(ctx, tx, &persisted); err != nil {
 		return community.Batch{}, ReconcileResult{}, false, err
 	}
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
 		return community.Batch{}, ReconcileResult{}, false, err
 	}
-	return persisted, ReconcileResult{Applications: communityApplications(payload.ChannelID, persisted)}, true, nil
+	return persisted, ReconcileResult{Applications: communityApplications(payload.ChannelID, &persisted)}, true, nil
 }
 
-func communityApplications(channelID string, persisted community.Batch) []Application {
+func communityApplications(channelID string, persisted *community.Batch) []Application {
 	applications := make([]Application, 0, len(persisted.Posts)+1)
 	applications = append(applications, Application{
 		EntityKind: "community_subject_head",

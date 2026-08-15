@@ -2,6 +2,7 @@ package dbtest
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -153,24 +154,24 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve migrations dir: %v", err)
 	}
-	// #nosec G304 -- 리포 내 마이그레이션 SSOT 디렉터리의 고정 파일명만 읽는다(사용자 입력 아님).
-	raw, err := os.ReadFile(filepath.Join(dir, "144_source_observation_outbox.sql"))
+	migrations := os.DirFS(dir)
+	raw, err := fs.ReadFile(migrations, "144_source_observation_outbox.sql")
 	if err != nil {
 		t.Fatalf("read 144 source observation migration: %v", err)
 	}
-	lockAPI, err := os.ReadFile(filepath.Join(dir, "156_source_observation_lock_api.sql"))
+	lockAPI, err := fs.ReadFile(migrations, "156_source_observation_lock_api.sql")
 	if err != nil {
 		t.Fatalf("read 156 source observation lock API migration: %v", err)
 	}
-	subjectHeads, err := os.ReadFile(filepath.Join(dir, "161_source_observation_subject_heads.sql"))
+	subjectHeads, err := fs.ReadFile(migrations, "161_source_observation_subject_heads.sql")
 	if err != nil {
 		t.Fatalf("read 161 source observation subject heads migration: %v", err)
 	}
-	contentClocks, err := os.ReadFile(filepath.Join(dir, "162_youtube_content_evidence_clocks.sql"))
+	contentClocks, err := fs.ReadFile(migrations, "162_youtube_content_evidence_clocks.sql")
 	if err != nil {
 		t.Fatalf("read 162 content evidence clocks migration: %v", err)
 	}
-	liveSchedule, err := os.ReadFile(filepath.Join(dir, "163_youtube_live_viewer_schedule_canonical.sql"))
+	liveSchedule, err := fs.ReadFile(migrations, "163_youtube_live_viewer_schedule_canonical.sql")
 	if err != nil {
 		t.Fatalf("read 163 live viewer schedule migration: %v", err)
 	}
@@ -300,6 +301,12 @@ func grantPreexistingScraperPrivileges(t *testing.T, pool *pgxpool.Pool, role st
 
 func assertPreexistingScraperPrivilegesRevoked(t *testing.T, pool *pgxpool.Pool, role string) {
 	t.Helper()
+	assertPreexistingTablePrivilegesRevoked(t, pool, role)
+	assertPreexistingSequencePrivilegesRevoked(t, pool, role)
+}
+
+func assertPreexistingTablePrivilegesRevoked(t *testing.T, pool *pgxpool.Pool, role string) {
+	t.Helper()
 	for _, table := range preexistingScraperTables {
 		var exists bool
 		if err := pool.QueryRow(context.Background(), "SELECT to_regclass($1) IS NOT NULL", "public."+table).Scan(&exists); err != nil {
@@ -324,6 +331,10 @@ func assertPreexistingScraperPrivilegesRevoked(t *testing.T, pool *pgxpool.Pool,
 			}
 		}
 	}
+}
+
+func assertPreexistingSequencePrivilegesRevoked(t *testing.T, pool *pgxpool.Pool, role string) {
+	t.Helper()
 	for _, sequence := range preexistingScraperSequences {
 		var exists bool
 		if err := pool.QueryRow(context.Background(), "SELECT to_regclass($1) IS NOT NULL", "public."+sequence).Scan(&exists); err != nil {
@@ -433,7 +444,13 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 		},
 	}
 
-	for role, privilegesByTable := range tablePrivileges {
+	assertObservationTableGrants(t, pool, tablePrivileges)
+	assertObservationSequenceGrants(t, pool, sequencePrivileges)
+}
+
+func assertObservationTableGrants(t *testing.T, pool *pgxpool.Pool, rolePrivileges map[string]map[string]map[string]bool) {
+	t.Helper()
+	for role, privilegesByTable := range rolePrivileges {
 		for _, table := range sourceObservationTables {
 			want := privilegesByTable[table]
 			for _, privilege := range []string{"SELECT", "INSERT", "UPDATE", "DELETE"} {
@@ -453,8 +470,11 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			}
 		}
 	}
+}
 
-	for role, privilegesBySequence := range sequencePrivileges {
+func assertObservationSequenceGrants(t *testing.T, pool *pgxpool.Pool, rolePrivileges map[string]map[string]map[string]bool) {
+	t.Helper()
+	for role, privilegesBySequence := range rolePrivileges {
 		for _, sequence := range sourceObservationSequences {
 			want := privilegesBySequence[sequence]
 			for _, privilege := range []string{"USAGE", "SELECT"} {
@@ -482,8 +502,8 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	if err != nil {
 		t.Fatalf("resolve migrations dir for observation lock API check: %v", err)
 	}
-	queryDir := filepath.Clean(filepath.Join(dir, "../../../hololive-shared/pkg/service/youtube/sourceobservation/queries"))
-	roleSQLPath := filepath.Clean(filepath.Join(dir, "../../../hololive-dbtest/testdata/queries/set_local_role.sql"))
+	queryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-shared", "pkg", "service", "youtube", "sourceobservation", "queries"))
+	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 	checks := map[string][]observationRoleQuery{
 		roles.scraper: {
 			{name: "repository_projection_current_0002_02.sql", args: []any{int64(0)}},
@@ -503,14 +523,18 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		quoted := pgx.Identifier{role}.Sanitize()
 		roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": quoted})
 		if _, err := tx.Exec(context.Background(), roleSQL); err != nil {
-			_ = tx.Rollback(context.Background())
+			if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
+				t.Errorf("rollback observation lock API role setup for %s: %v", role, rollbackErr)
+			}
 			t.Fatalf("set observation lock API role %s: %v", role, err)
 		}
 		for _, check := range queries {
 			query := readObservationRoleSQL(t, filepath.Join(queryDir, check.name), nil)
 			rows, err := tx.Query(context.Background(), query, check.args...)
 			if err != nil {
-				_ = tx.Rollback(context.Background())
+				if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
+					t.Errorf("rollback observation lock API query %s as %s: %v", check.name, role, rollbackErr)
+				}
 				t.Fatalf("execute observation lock API query %s as %s: %v", check.name, role, err)
 			}
 			rows.Close()

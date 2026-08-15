@@ -8,21 +8,23 @@ import (
 )
 
 type reduceSession struct {
-	state        State
-	evidence     Evidence
+	state        *State
+	evidence     *Evidence
 	grace        time.Duration
 	dbNow        time.Time
 	dirty        map[string]struct{}
 	applications []Application
 }
 
-func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time) (Decision, error) {
+func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
 	if evidence.Kind != contract.KindLiveSnapshot {
 		return Decision{}, fmt.Errorf("live reducer received kind %q", evidence.Kind)
 	}
+	workingState := state.clone()
+	workingEvidence := evidence.clone()
 	session := reduceSession{
-		state:    state.clone(),
-		evidence: evidence,
+		state:    &workingState,
+		evidence: &workingEvidence,
 		grace:    grace,
 		dbNow:    dbNow.UTC(),
 		dirty:    map[string]struct{}{},
@@ -40,8 +42,8 @@ func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time
 func applyFacts(session *reduceSession) {
 	seen := map[string]SessionFact{}
 	for i := range session.evidence.Sessions {
-		fact := session.evidence.Sessions[i]
-		seen[fact.VideoID] = fact
+		fact := &session.evidence.Sessions[i]
+		seen[fact.VideoID] = *fact
 		applySessionFact(session, fact)
 	}
 	if scopedNegative(session.evidence) {
@@ -54,7 +56,7 @@ func applyFacts(session *reduceSession) {
 	}
 }
 
-func applySessionFact(session *reduceSession, fact SessionFact) {
+func applySessionFact(session *reduceSession, fact *SessionFact) {
 	if fact.Status == "UPCOMING" {
 		applyUpcomingPositive(session, fact)
 		return
@@ -66,19 +68,21 @@ func applySessionFact(session *reduceSession, fact SessionFact) {
 	applyNegativeFact(session, fact)
 }
 
-func applyNegativeFact(session *reduceSession, fact SessionFact) {
+func applyNegativeFact(session *reduceSession, fact *SessionFact) {
 	if fact.Status == "ENDED" {
-		recordPendingEnd(session, pendingFromFact(session, fact, EndEvidenceExplicitEnd))
+		pending := pendingFromFact(session, fact, EndEvidenceExplicitEnd)
+		recordPendingEnd(session, &pending)
 		reapplyStoredEnds(session, fact.VideoID)
 		return
 	}
 	if fact.Status == "CANCELLED" {
-		recordPendingEnd(session, pendingFromFact(session, fact, EndEvidenceExplicitCancel))
+		pending := pendingFromFact(session, fact, EndEvidenceExplicitCancel)
+		recordPendingEnd(session, &pending)
 		reapplyStoredEnds(session, fact.VideoID)
 	}
 }
 
-func scopedNegative(evidence Evidence) bool {
+func scopedNegative(evidence *Evidence) bool {
 	return contract.NegativeEligible(evidence.Completeness, evidence.Continuity) &&
 		contract.AbsenceCapabilityFor(evidence.Kind) == contract.AbsenceScoped
 }
@@ -88,11 +92,12 @@ func applySnapshotAbsence(session *reduceSession, seen map[string]SessionFact) {
 	if replay {
 		return
 	}
-	for videoID, existing := range session.state.Sessions {
+	for videoID := range session.state.Sessions {
 		if _, present := seen[videoID]; present {
 			continue
 		}
-		applyAbsenceToSession(session, existing, slot)
+		existing := session.state.Sessions[videoID]
+		applyAbsenceToSession(session, &existing, &slot)
 	}
 }
 
@@ -116,7 +121,7 @@ func recordAbsenceSlot(session *reduceSession) (AbsenceSlot, bool) {
 	return slot, false
 }
 
-func (s reduceSession) decision() Decision {
+func (s *reduceSession) decision() Decision {
 	sessions := make([]SessionState, 0, len(s.dirty))
 	for videoID := range s.dirty {
 		if state, ok := s.state.Sessions[videoID]; ok {
@@ -124,7 +129,8 @@ func (s reduceSession) decision() Decision {
 		}
 	}
 	pending := make([]PendingEnd, 0, len(s.state.PendingEnds))
-	for _, fact := range s.state.PendingEnds {
+	for videoID := range s.state.PendingEnds {
+		fact := s.state.PendingEnds[videoID]
 		pending = append(pending, fact)
 	}
 	return Decision{
@@ -135,7 +141,7 @@ func (s reduceSession) decision() Decision {
 	}
 }
 
-func absenceSlotOf(state State, evidence Evidence) *AbsenceSlot {
+func absenceSlotOf(state *State, evidence *Evidence) *AbsenceSlot {
 	if !scopedNegative(evidence) {
 		return nil
 	}
@@ -149,11 +155,14 @@ func absenceSlotOf(state State, evidence Evidence) *AbsenceSlot {
 }
 
 func FinalizeDue(state State, dbNow time.Time, grace time.Duration) Decision {
+	workingState := state.clone()
+	workingEvidence := Evidence{}
 	session := reduceSession{
-		state: state.clone(),
-		grace: grace,
-		dbNow: dbNow.UTC(),
-		dirty: map[string]struct{}{},
+		state:    &workingState,
+		evidence: &workingEvidence,
+		grace:    grace,
+		dbNow:    dbNow.UTC(),
+		dirty:    map[string]struct{}{},
 	}
 	if session.state.Sessions == nil {
 		session.state.Sessions = map[string]SessionState{}

@@ -18,7 +18,7 @@ type communitySubjectHead struct {
 	effectiveAt   time.Time
 }
 
-func (h communitySubjectHead) supersedes(observation Observation) bool {
+func (h communitySubjectHead) supersedes(observation *Observation) bool {
 	return h.effectiveAt.After(observation.EffectiveAt) ||
 		h.effectiveAt.Equal(observation.EffectiveAt) && h.observationID >= observation.ID
 }
@@ -69,7 +69,7 @@ func loadCommunitySubjectHead(
 func saveCommunitySubjectHead(
 	ctx context.Context,
 	tx dbx.Tx,
-	observation Observation,
+	observation *Observation,
 ) error {
 	if _, err := tx.Exec(
 		ctx,

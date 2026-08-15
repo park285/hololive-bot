@@ -10,8 +10,8 @@ import (
 )
 
 type reduceSession struct {
-	state         State
-	evidence      Evidence
+	state         *State
+	evidence      *Evidence
 	grace         time.Duration
 	applied       map[string]Entity
 	fieldUpdates  []Entity
@@ -20,28 +20,30 @@ type reduceSession struct {
 	applications  []Application
 }
 
-func Reduce(state State, evidence Evidence, grace time.Duration) (Decision, error) {
+func Reduce(state State, evidence Evidence, grace time.Duration) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
 	if evidence.Kind != contract.KindVideoList && evidence.Kind != contract.KindShortsList {
 		return Decision{}, fmt.Errorf("content reducer received kind %q", evidence.Kind)
 	}
-	session := reduceSession{state: state.clone(), evidence: evidence, grace: grace}
+	workingState := state.clone()
+	workingEvidence := evidence.clone()
+	session := reduceSession{state: &workingState, evidence: &workingEvidence, grace: grace}
 	if session.state.Videos == nil {
 		session.state.Videos = map[string]EntityState{}
 	}
 	session.state.Kind = evidence.Kind
-	session.state.ChannelID = channelIDOf(session.state, evidence)
+	session.state.ChannelID = channelIDOf(session.state, session.evidence)
 	applyPositives(&session)
-	if scopedNegative(evidence) {
+	if scopedNegative(session.evidence) {
 		applyNegative(&session)
 	}
-	if completeEligible(evidence) {
-		setEarliestComplete(&session.state, evidence.EffectiveAt)
+	if completeEligible(session.evidence) {
+		setEarliestComplete(session.state, evidence.EffectiveAt)
 	}
 	refreshNotifications(&session)
 	return session.decision(), nil
 }
 
-func channelIDOf(state State, evidence Evidence) string {
+func channelIDOf(state *State, evidence *Evidence) string {
 	if state.ChannelID != "" {
 		return state.ChannelID
 	}
@@ -57,11 +59,11 @@ func channelIDOf(state State, evidence Evidence) string {
 	return ""
 }
 
-func completeEligible(evidence Evidence) bool {
+func completeEligible(evidence *Evidence) bool {
 	return contract.NegativeEligible(evidence.Completeness, evidence.Continuity)
 }
 
-func scopedNegative(evidence Evidence) bool {
+func scopedNegative(evidence *Evidence) bool {
 	return completeEligible(evidence) &&
 		contract.AbsenceCapabilityFor(evidence.Kind) == contract.AbsenceScoped
 }
@@ -73,7 +75,7 @@ func setEarliestComplete(state *State, at time.Time) {
 	}
 }
 
-func (s reduceSession) decision() Decision {
+func (s *reduceSession) decision() Decision {
 	decision := Decision{
 		Videos:             appliedEntities(s.applied),
 		FieldUpdates:       s.fieldUpdates,
@@ -86,7 +88,7 @@ func (s reduceSession) decision() Decision {
 		Applications:       append(headApplication(s.state), s.applications...),
 	}
 	decision.Tracking = shortsTrackingOf(decision.Notifications)
-	return boundApplications(decision)
+	return boundApplications(&decision)
 }
 
 func markApplied(session *reduceSession, entity Entity) {
@@ -104,9 +106,10 @@ func appliedEntities(applied map[string]Entity) []Entity {
 	return result
 }
 
-func clocksOf(state State) []EntityState {
+func clocksOf(state *State) []EntityState {
 	result := make([]EntityState, 0, len(state.Videos))
-	for _, item := range state.Videos {
+	for videoID := range state.Videos {
+		item := state.Videos[videoID]
 		result = append(result, item)
 	}
 	return result

@@ -238,12 +238,15 @@ func buildCommunityWatermark(channelID string, collected []*parser.CommunityPost
 }
 
 func ArtifactsFromPayload(
-	payload contract.CommunityPayloadV1,
+	payload *contract.CommunityPayloadV1,
 	initialized bool,
 	watermark *domain.YouTubeContentWatermark,
 	detectedAt time.Time,
 	keywords []string,
 ) Batch {
+	if payload == nil {
+		return Batch{}
+	}
 	collected := polling.NormalizeCollectedCommunityPostsByCanonicalPostID(PostsFromPayload(payload.Posts))
 	return BuildBatch(
 		payload.ChannelID,

@@ -34,23 +34,7 @@ func TestCanonicalJSONV1Fixture(t *testing.T) {
 
 	for _, testCase := range fixture.Cases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			canonical, err := CanonicalizeJSON([]byte(testCase.Input))
-			if err != nil {
-				t.Fatalf("canonicalize fixture input: %v", err)
-			}
-			if string(canonical) != testCase.Canonical {
-				t.Fatalf("canonical JSON = %q, want %q", canonical, testCase.Canonical)
-			}
-			if got := SHA256Hex(canonical); got != testCase.SHA256 {
-				t.Fatalf("canonical SHA-256 = %s, want %s", got, testCase.SHA256)
-			}
-			canonicalAgain, err := CanonicalizeJSON(canonical)
-			if err != nil {
-				t.Fatalf("canonicalize canonical fixture output: %v", err)
-			}
-			if string(canonicalAgain) != testCase.Canonical {
-				t.Fatalf("canonical JSON is not idempotent: %q", canonicalAgain)
-			}
+			assertCanonicalJSONFixtureCase(t, &testCase)
 		})
 	}
 
@@ -60,6 +44,27 @@ func TestCanonicalJSONV1Fixture(t *testing.T) {
 				t.Fatal("fixture input must be rejected")
 			}
 		})
+	}
+}
+
+func assertCanonicalJSONFixtureCase(t *testing.T, testCase *canonicalJSONFixtureCase) {
+	t.Helper()
+	canonical, err := CanonicalizeJSON([]byte(testCase.Input))
+	if err != nil {
+		t.Fatalf("canonicalize fixture input: %v", err)
+	}
+	if string(canonical) != testCase.Canonical {
+		t.Fatalf("canonical JSON = %q, want %q", canonical, testCase.Canonical)
+	}
+	if got := SHA256Hex(canonical); got != testCase.SHA256 {
+		t.Fatalf("canonical SHA-256 = %s, want %s", got, testCase.SHA256)
+	}
+	canonicalAgain, err := CanonicalizeJSON(canonical)
+	if err != nil {
+		t.Fatalf("canonicalize canonical fixture output: %v", err)
+	}
+	if string(canonicalAgain) != testCase.Canonical {
+		t.Fatalf("canonical JSON is not idempotent: %q", canonicalAgain)
 	}
 }
 

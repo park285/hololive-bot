@@ -16,8 +16,8 @@ import (
 func TestChannelStatsConsumerRetainsEqualConsecutiveSamplesBySlot(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelStats)
 	ctx := context.Background()
-	proof = publishConsumeStats(t, ctx, pool, repo, consumer, proof, contract.ProviderYouTubeJS, 10, 20, 3)
-	publishConsumeStats(t, ctx, pool, repo, consumer, proof, contract.ProviderYouTubeJS, 10, 20, 3)
+	proof = publishConsumeStats(t, ctx, pool, repo, consumer, &proof, contract.ProviderYouTubeJS, 10)
+	publishConsumeStats(t, ctx, pool, repo, consumer, &proof, contract.ProviderYouTubeJS, 10)
 	assertTableCount(t, pool, "youtube_channel_stats_snapshots", 2)
 	assertTableCount(t, pool, "youtube_channel_stats_evidence", 2)
 }
@@ -25,7 +25,7 @@ func TestChannelStatsConsumerRetainsEqualConsecutiveSamplesBySlot(t *testing.T) 
 func TestChannelStatsConsumerHiddenCountRemainsNil(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelStats)
 	ctx := context.Background()
-	publishConsumeStatsHidden(t, ctx, pool, repo, consumer, proof)
+	publishConsumeStatsHidden(t, ctx, repo, consumer, &proof)
 	var sub, views, videos *int64
 	if err := pool.QueryRow(ctx, `
 		SELECT subscriber_count, view_count, video_count
@@ -50,9 +50,9 @@ func TestChannelStatsConsumerHiddenCountRemainsNil(t *testing.T) {
 func TestChannelStatsConsumerEqualTimeConflictDoesNotOverwrite(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelStats)
 	ctx := context.Background()
-	alt := seedAdditionalLease(t, pool, proof, contract.ProviderHolodex, contract.KindChannelStats, "UC_TEST", "holodex_metadata")
-	publishConsumeStats(t, ctx, pool, repo, consumer, proof, contract.ProviderYouTubeJS, 10, 20, 3)
-	publishConsumeStats(t, ctx, pool, repo, consumer, alt, contract.ProviderHolodex, 99, 20, 3)
+	alt := seedAdditionalLease(t, pool, &proof, contract.ProviderHolodex, contract.KindChannelStats, "UC_TEST", "holodex_metadata")
+	publishConsumeStats(t, ctx, pool, repo, consumer, &proof, contract.ProviderYouTubeJS, 10)
+	publishConsumeStats(t, ctx, pool, repo, consumer, &alt, contract.ProviderHolodex, 99)
 	assertTableCount(t, pool, "youtube_channel_stats_snapshots", 0)
 	var unresolved *time.Time
 	if err := pool.QueryRow(ctx, `
@@ -69,8 +69,8 @@ func TestChannelStatsConsumerEqualTimeConflictDoesNotOverwrite(t *testing.T) {
 func TestChannelProfileAbsentFieldDoesNotClear(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelProfile)
 	ctx := context.Background()
-	proof = publishConsumeProfile(t, ctx, pool, repo, consumer, proof, present("hello"), absentField(), absentField())
-	publishConsumeProfile(t, ctx, pool, repo, consumer, proof, absentField(), present("KR"), absentField())
+	proof = publishConsumeProfile(t, ctx, pool, repo, consumer, &proof, present("hello"), absentField(), absentField())
+	publishConsumeProfile(t, ctx, pool, repo, consumer, &proof, absentField(), present("KR"), absentField())
 	var description string
 	var set bool
 	if err := pool.QueryRow(ctx, `
@@ -86,8 +86,8 @@ func TestChannelProfileAbsentFieldDoesNotClear(t *testing.T) {
 func TestChannelProfileExplicitEmptyRequiresStability(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelProfile)
 	ctx := context.Background()
-	proof = publishConsumeProfile(t, ctx, pool, repo, consumer, proof, present("hello"), absentField(), absentField())
-	publishConsumeProfile(t, ctx, pool, repo, consumer, proof, present(""), absentField(), absentField())
+	proof = publishConsumeProfile(t, ctx, pool, repo, consumer, &proof, present("hello"), absentField(), absentField())
+	publishConsumeProfile(t, ctx, pool, repo, consumer, &proof, present(""), absentField(), absentField())
 	var description string
 	if err := pool.QueryRow(ctx, `
 		SELECT description FROM youtube_channel_profile_heads WHERE channel_id = 'UC_TEST'
@@ -102,8 +102,8 @@ func TestChannelProfileExplicitEmptyRequiresStability(t *testing.T) {
 func TestChannelProfileJoinedDateConflictIsRecorded(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelProfile)
 	ctx := context.Background()
-	proof = publishConsumeProfile(t, ctx, pool, repo, consumer, proof, absentField(), absentField(), present("2019-01-02"))
-	publishConsumeProfile(t, ctx, pool, repo, consumer, proof, absentField(), absentField(), present("2020-03-04"))
+	proof = publishConsumeProfile(t, ctx, pool, repo, consumer, &proof, absentField(), absentField(), present("2019-01-02"))
+	publishConsumeProfile(t, ctx, pool, repo, consumer, &proof, absentField(), absentField(), present("2020-03-04"))
 	var joined string
 	if err := pool.QueryRow(ctx, `
 		SELECT joined_date FROM youtube_channel_profile_heads WHERE channel_id = 'UC_TEST'
@@ -122,9 +122,9 @@ func TestChannelPhotoSameIdentityNewURLCreatesNoChangeEvent(t *testing.T) {
 	})
 	ctx := context.Background()
 	first := photoVariant("https://img.test/a.jpg?s=88", 88, "media-1")
-	proof = publishConsumePhoto(t, ctx, pool, repo, consumer, proof, first)
-	proof = publishConsumePhoto(t, ctx, pool, repo, consumer, proof, first)
-	publishConsumePhoto(t, ctx, pool, repo, consumer, proof, photoVariant("https://img.test/a.jpg?s=800", 800, "media-1"))
+	proof = publishConsumePhoto(t, ctx, pool, repo, consumer, &proof, first)
+	proof = publishConsumePhoto(t, ctx, pool, repo, consumer, &proof, first)
+	publishConsumePhoto(t, ctx, pool, repo, consumer, &proof, photoVariant("https://img.test/a.jpg?s=800", 800, "media-1"))
 	assertTableCount(t, pool, "youtube_channel_profiles", 1)
 	var avatar string
 	if err := pool.QueryRow(ctx, `SELECT avatar::text FROM youtube_channel_profiles WHERE channel_id = 'UC_TEST'`).Scan(&avatar); err != nil {
@@ -140,7 +140,7 @@ func TestChannelPhotoWithoutIdentityCannotChangeCanonical(t *testing.T) {
 		PhotoChangeMinObservations: 2, PhotoChangeStability: time.Nanosecond,
 	})
 	ctx := context.Background()
-	publishConsumePhoto(t, ctx, pool, repo, consumer, proof, photoVariant("https://img.test/a.jpg?s=88", 88, ""))
+	publishConsumePhoto(t, ctx, pool, repo, consumer, &proof, photoVariant("https://img.test/a.jpg?s=88", 88, ""))
 	assertTableCount(t, pool, "youtube_channel_photo_variants", 1)
 	assertTableCount(t, pool, "youtube_channel_profiles", 0)
 }
@@ -148,8 +148,8 @@ func TestChannelPhotoWithoutIdentityCannotChangeCanonical(t *testing.T) {
 func TestChannelPhotoDifferentIdentityRequiresStability(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelPhoto)
 	ctx := context.Background()
-	proof = publishConsumePhoto(t, ctx, pool, repo, consumer, proof, photoVariant("https://img.test/a.jpg", 88, "media-1"))
-	publishConsumePhoto(t, ctx, pool, repo, consumer, proof, photoVariant("https://img.test/b.jpg", 88, "media-2"))
+	proof = publishConsumePhoto(t, ctx, pool, repo, consumer, &proof, photoVariant("https://img.test/a.jpg", 88, "media-1"))
+	publishConsumePhoto(t, ctx, pool, repo, consumer, &proof, photoVariant("https://img.test/b.jpg", 88, "media-2"))
 	assertTableCount(t, pool, "youtube_channel_profiles", 0)
 	assertTableCount(t, pool, "youtube_channel_photo_variants", 2)
 }
@@ -157,7 +157,7 @@ func TestChannelPhotoDifferentIdentityRequiresStability(t *testing.T) {
 func TestChannelPhotoCollectorDoesNotSynthesizeFingerprint(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelPhoto)
 	ctx := context.Background()
-	publishConsumePhoto(t, ctx, pool, repo, consumer, proof, photoVariant("https://img.test/a.jpg?keep=1", 88, ""))
+	publishConsumePhoto(t, ctx, pool, repo, consumer, &proof, photoVariant("https://img.test/a.jpg?keep=1", 88, ""))
 	var fingerprint string
 	if err := pool.QueryRow(ctx, `
 		SELECT content_fingerprint FROM youtube_channel_photo_variants WHERE channel_id = 'UC_TEST'
@@ -180,14 +180,14 @@ func TestChannelConsumerProviderPermutationsYieldSameProjection(t *testing.T) {
 func seedAdditionalLease(
 	t *testing.T,
 	pool *pgxpool.Pool,
-	existing contract.LeaseProof,
+	existing *contract.LeaseProof,
 	provider contract.Provider,
 	kind contract.ObservationKind,
 	subjectKey string,
 	jobKind string,
 ) contract.LeaseProof {
 	t.Helper()
-	proof := existing
+	proof := *existing
 	proof.JobKey = "job:" + jobKind + ":" + subjectKey
 	proof.CollectionJobKind = jobKind
 	if _, err := pool.Exec(context.Background(), `
@@ -229,7 +229,7 @@ func startChannelPersistPolicy(
 	t.Helper()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, kind, "UC_TEST", "youtubejs_channel_metadata")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, kind, "UC_TEST", "youtubejs_channel_metadata")
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0).
 		WithChannelPolicy(policy)
 	return pool, repo, consumer, proof
@@ -251,11 +251,13 @@ func publishConsumeStats(
 	pool *pgxpool.Pool,
 	repo *Repository,
 	consumer *Consumer,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	provider contract.Provider,
-	sub, views, videos int64,
+	sub int64,
 ) contract.LeaseProof {
 	t.Helper()
+	views := int64(20)
+	videos := int64(3)
 	payload, err := contract.MarshalPayloadV1(contract.ChannelStatsV1{
 		ChannelID: "UC_TEST", SubscriberCount: &sub, ViewCount: &views, VideoCount: &videos,
 		Coverage: contract.ChannelStatsCoverageV1{
@@ -266,16 +268,15 @@ func publishConsumeStats(
 		t.Fatalf("marshal stats: %v", err)
 	}
 	publishConsumeEnvelope(t, ctx, repo, consumer, statsEnvelope(t, proof, provider, payload))
-	return advanceLease(t, pool, proof, time.Hour)
+	return advanceLease(t, ctx, pool, proof, time.Hour)
 }
 
 func publishConsumeStatsHidden(
 	t *testing.T,
 	ctx context.Context,
-	pool *pgxpool.Pool,
 	repo *Repository,
 	consumer *Consumer,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 ) {
 	t.Helper()
 	payload, err := contract.MarshalPayloadV1(contract.ChannelStatsV1{
@@ -296,7 +297,7 @@ func publishConsumeProfile(
 	pool *pgxpool.Pool,
 	repo *Repository,
 	consumer *Consumer,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	description, country, joined contract.FieldValue[string],
 ) contract.LeaseProof {
 	t.Helper()
@@ -322,13 +323,13 @@ func publishConsumeProfile(
 		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
-		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: proof,
+		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare profile: %v", err)
 	}
-	publishConsumeEnvelope(t, ctx, repo, consumer, envelope)
-	return advanceLease(t, pool, proof, time.Hour)
+	publishConsumeEnvelope(t, ctx, repo, consumer, &envelope)
+	return advanceLease(t, ctx, pool, proof, time.Hour)
 }
 
 func publishConsumePhoto(
@@ -337,13 +338,13 @@ func publishConsumePhoto(
 	pool *pgxpool.Pool,
 	repo *Repository,
 	consumer *Consumer,
-	proof contract.LeaseProof,
-	variant contract.PhotoVariantV1,
+	proof *contract.LeaseProof,
+	variant *contract.PhotoVariantV1,
 ) contract.LeaseProof {
 	t.Helper()
 	payload, err := contract.MarshalPayloadV1(contract.ChannelPhotoV1{
 		ChannelID: "UC_TEST",
-		Variants:  []contract.PhotoVariantV1{variant},
+		Variants:  []contract.PhotoVariantV1{*variant},
 		Coverage:  contract.ChannelPhotoCoverageV1{ChannelID: "UC_TEST", Variants: []string{variant.Kind}},
 	})
 	if err != nil {
@@ -354,16 +355,16 @@ func publishConsumePhoto(
 		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
-		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: proof,
+		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare photo: %v", err)
 	}
-	publishConsumeEnvelope(t, ctx, repo, consumer, envelope)
-	return advanceLease(t, pool, proof, time.Hour)
+	publishConsumeEnvelope(t, ctx, repo, consumer, &envelope)
+	return advanceLease(t, ctx, pool, proof, time.Hour)
 }
 
-func publishConsumeEnvelope(t *testing.T, ctx context.Context, repo *Repository, consumer *Consumer, envelope contract.Envelope) {
+func publishConsumeEnvelope(t *testing.T, ctx context.Context, repo *Repository, consumer *Consumer, envelope *contract.Envelope) {
 	t.Helper()
 	if _, err := repo.PublishBatch(ctx, publishInput(envelope)); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -373,19 +374,19 @@ func publishConsumeEnvelope(t *testing.T, ctx context.Context, repo *Repository,
 	}
 }
 
-func statsEnvelope(t *testing.T, proof contract.LeaseProof, provider contract.Provider, payload []byte) contract.Envelope {
+func statsEnvelope(t *testing.T, proof *contract.LeaseProof, provider contract.Provider, payload []byte) *contract.Envelope {
 	t.Helper()
 	envelope, err := contract.PrepareEnvelope(contract.Envelope{
 		Provider: provider, ObservationKind: contract.KindChannelStats, SubjectKey: "UC_TEST",
 		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
-		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: proof,
+		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare stats: %v", err)
 	}
-	return envelope
+	return &envelope
 }
 
 func jobKindFor(provider contract.Provider) string {
@@ -403,8 +404,8 @@ func absentField() contract.FieldValue[string] {
 	return contract.FieldValue[string]{}
 }
 
-func photoVariant(rawURL string, size int, mediaID string) contract.PhotoVariantV1 {
-	return contract.PhotoVariantV1{Kind: "avatar", URL: rawURL, Width: size, Height: size, StableMediaID: mediaID}
+func photoVariant(rawURL string, size int, mediaID string) *contract.PhotoVariantV1 {
+	return &contract.PhotoVariantV1{Kind: "avatar", URL: rawURL, Width: size, Height: size, StableMediaID: mediaID}
 }
 
 func projectStatsPermutation(t *testing.T, first, second contract.Provider) string {
@@ -413,10 +414,10 @@ func projectStatsPermutation(t *testing.T, first, second contract.Provider) stri
 	repo := NewRepository(pool)
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
 	ctx := context.Background()
-	firstProof := seedPublishLease(t, pool, first, contract.KindChannelStats, "UC_TEST", jobKindFor(first))
-	secondProof := seedAdditionalLease(t, pool, firstProof, second, contract.KindChannelStats, "UC_TEST", jobKindFor(second))
-	publishConsumeStats(t, ctx, pool, repo, consumer, firstProof, first, 10, 20, 3)
-	publishConsumeStats(t, ctx, pool, repo, consumer, secondProof, second, 10, 20, 3)
+	firstProof := seedPublishLease(t, context.Background(), pool, first, contract.KindChannelStats, "UC_TEST", jobKindFor(first))
+	secondProof := seedAdditionalLease(t, pool, &firstProof, second, contract.KindChannelStats, "UC_TEST", jobKindFor(second))
+	publishConsumeStats(t, ctx, pool, repo, consumer, &firstProof, first, 10)
+	publishConsumeStats(t, ctx, pool, repo, consumer, &secondProof, second, 10)
 	var latest string
 	if err := pool.QueryRow(ctx, `
 		SELECT COALESCE(last_resolved_subscriber_count::text, 'nil') || '/' ||

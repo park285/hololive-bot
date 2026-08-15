@@ -10,8 +10,8 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func emptyState() State {
-	return State{Sessions: map[string]SessionState{}, PendingEnds: map[string]PendingEnd{}}
+func emptyState() *State {
+	return &State{Sessions: map[string]SessionState{}, PendingEnds: map[string]PendingEnd{}}
 }
 
 func channelCoverage() contract.GlobalChannelCoverageV1 {
@@ -21,8 +21,8 @@ func channelCoverage() contract.GlobalChannelCoverageV1 {
 	}
 }
 
-func sessionFact(videoID, status string) SessionFact {
-	return SessionFact{VideoID: videoID, ChannelID: "UC_TEST", Status: status}
+func sessionFact(status string) SessionFact {
+	return SessionFact{VideoID: "vid-a", ChannelID: "UC_TEST", Status: status}
 }
 
 func liveEvidence(id int64, at time.Time, completeness contract.Completeness, continuity contract.Continuity, facts ...SessionFact) Evidence {
@@ -42,19 +42,19 @@ func liveEvidence(id int64, at time.Time, completeness contract.Completeness, co
 }
 
 func upcomingA() Evidence {
-	return liveEvidence(1, time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("vid-a", "UPCOMING"))
+	return liveEvidence(1, time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("UPCOMING"))
 }
 
 func liveA() Evidence {
-	return liveEvidence(2, time.Date(2026, 8, 14, 2, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("vid-a", "LIVE"))
+	return liveEvidence(2, time.Date(2026, 8, 14, 2, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("LIVE"))
 }
 
 func endA() Evidence {
-	return liveEvidence(3, time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("vid-a", "ENDED"))
+	return liveEvidence(3, time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("ENDED"))
 }
 
 func cancelA() Evidence {
-	return liveEvidence(8, time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("vid-a", "CANCELLED"))
+	return liveEvidence(8, time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("CANCELLED"))
 }
 
 func absenceAt(id int64, at time.Time) Evidence {
@@ -81,49 +81,49 @@ func gapAbsence() Evidence {
 }
 
 func lateLiveA() Evidence {
-	return liveEvidence(9, time.Date(2026, 8, 14, 5, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("vid-a", "LIVE"))
+	return liveEvidence(9, time.Date(2026, 8, 14, 5, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("LIVE"))
 }
 
 func sameTimeLiveA() Evidence {
-	return liveEvidence(10, time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("vid-a", "LIVE"))
+	return liveEvidence(10, time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("LIVE"))
 }
 
-func mustReduceAll(t *testing.T, state State, evidence []Evidence, grace time.Duration) Decision {
+func mustReduceAll(t *testing.T, state *State, evidence []Evidence, grace time.Duration) *Decision {
 	t.Helper()
-	current := state
-	var decision Decision
+	current := state.clone()
 	latest := time.Time{}
 	for i := range evidence {
 		next, err := Reduce(current, evidence[i], grace, evidence[i].ReceivedAt)
 		if err != nil {
 			t.Fatalf("reduce[%d]: %v", i, err)
 		}
-		decision = next
-		current = stateFromDecision(current, next, evidence[i])
+		current = stateFromDecision(&current, &next)
 		if evidence[i].ReceivedAt.After(latest) {
 			latest = evidence[i].ReceivedAt
 		}
 	}
 	if !latest.IsZero() {
-		decision = FinalizeDue(current, latest, grace)
-		current = stateFromDecision(current, decision, Evidence{})
+		decision := FinalizeDue(current, latest, grace)
+		current = stateFromDecision(&current, &decision)
 	}
-	return decisionFromState(current)
+	return decisionFromState(&current)
 }
 
-func decisionFromState(state State) Decision {
+func decisionFromState(state *State) *Decision {
 	sessions := make([]SessionState, 0, len(state.Sessions))
-	for _, session := range state.Sessions {
+	for videoID := range state.Sessions {
+		session := state.Sessions[videoID]
 		sessions = append(sessions, session)
 	}
 	pending := make([]PendingEnd, 0, len(state.PendingEnds))
-	for _, fact := range state.PendingEnds {
+	for videoID := range state.PendingEnds {
+		fact := state.PendingEnds[videoID]
 		pending = append(pending, fact)
 	}
-	return Decision{Sessions: sessions, PendingEnds: pending}
+	return &Decision{Sessions: sessions, PendingEnds: pending}
 }
 
-func stateFromDecision(previous State, decision Decision, evidence Evidence) State {
+func stateFromDecision(previous *State, decision *Decision) State {
 	next := previous.clone()
 	if next.Sessions == nil {
 		next.Sessions = map[string]SessionState{}
@@ -131,11 +131,13 @@ func stateFromDecision(previous State, decision Decision, evidence Evidence) Sta
 	if next.PendingEnds == nil {
 		next.PendingEnds = map[string]PendingEnd{}
 	}
-	for _, session := range decision.Sessions {
+	for i := range decision.Sessions {
+		session := decision.Sessions[i]
 		next.Sessions[session.VideoID] = session
 	}
 	next.PendingEnds = map[string]PendingEnd{}
-	for _, pending := range decision.PendingEnds {
+	for i := range decision.PendingEnds {
+		pending := decision.PendingEnds[i]
 		next.PendingEnds[pending.VideoID] = pending
 	}
 	if decision.AbsenceSlot != nil {
@@ -150,22 +152,22 @@ func stateFromDecision(previous State, decision Decision, evidence Evidence) Sta
 			next.AbsenceSlots = append(next.AbsenceSlots, *decision.AbsenceSlot)
 		}
 	}
-	_ = evidence
 	return next
 }
 
-func sessionOf(decision Decision, videoID string) SessionState {
-	for _, session := range decision.Sessions {
-		if session.VideoID == videoID {
-			return session
+func sessionOf(decision *Decision) SessionState {
+	for i := range decision.Sessions {
+		if decision.Sessions[i].VideoID == "vid-a" {
+			return decision.Sessions[i]
 		}
 	}
 	return SessionState{}
 }
 
-func snapshotDecision(decision Decision) string {
+func snapshotDecision(decision *Decision) string {
 	parts := make([]string, 0, len(decision.Sessions))
-	for _, session := range decision.Sessions {
+	for i := range decision.Sessions {
+		session := &decision.Sessions[i]
 		reason := ""
 		if session.EndReason != nil {
 			reason = string(*session.EndReason)
@@ -182,7 +184,7 @@ func snapshotDecision(decision Decision) string {
 	return strings.Join(parts, ";")
 }
 
-func assertAllPermutationsConverge(t *testing.T, state State, evidence []Evidence, grace time.Duration) {
+func assertAllPermutationsConverge(t *testing.T, state *State, evidence []Evidence, grace time.Duration) {
 	t.Helper()
 	var want string
 	for _, order := range permutations(evidence) {

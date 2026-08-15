@@ -76,7 +76,7 @@ func requireContractGenerations(result map[contract.ObservationKind]int64, kinds
 	return result, nil
 }
 
-func (p *Publisher) Publish(ctx context.Context, lease contract.LeaseProof, output collectutil.RunOutput) (sourceobservation.PublishBatchResult, error) {
+func (p *Publisher) Publish(ctx context.Context, lease *contract.LeaseProof, output collectutil.RunOutput) (sourceobservation.PublishBatchResult, error) {
 	if p == nil || p.observations == nil {
 		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.Failed, "observation publisher is not configured")
 	}
@@ -86,14 +86,15 @@ func (p *Publisher) Publish(ctx context.Context, lease contract.LeaseProof, outp
 	if len(output.Checkpoints) != len(output.Observations) {
 		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.ParserDrift, "checkpoint count does not match observation count")
 	}
-	result, err := p.observations.PublishBatch(ctx, sourceobservation.PublishBatchInput{
-		Lease: lease,
+	input := &sourceobservation.PublishBatchInput{
+		Lease: *lease,
 		Checkpoint: sourceobservation.CheckpointUpdate{
 			Entries:           output.Checkpoints,
 			CollectionLatency: output.CollectionLatency,
 		},
 		Observations: output.Observations,
-	})
+	}
+	result, err := p.observations.PublishBatch(ctx, input)
 	if err != nil {
 		return sourceobservation.PublishBatchResult{}, collecterr.Wrap(collecterr.PublishRejected, fmt.Errorf("publish observation batch: %w", err))
 	}

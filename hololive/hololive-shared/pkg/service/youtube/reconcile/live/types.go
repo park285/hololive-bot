@@ -1,7 +1,6 @@
 package live
 
 import (
-	"maps"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -142,19 +141,110 @@ type Decision struct {
 	Applications []Application
 }
 
-func (s State) clone() State {
-	cloned := s
+func (s *State) clone() State {
+	cloned := *s
 	cloned.Sessions = make(map[string]SessionState, len(s.Sessions))
-	for key, value := range s.Sessions {
-		if len(value.IgnoredAbsenceScheduledFor) > 0 {
-			value.IgnoredAbsenceScheduledFor = append([]time.Time(nil), value.IgnoredAbsenceScheduledFor...)
-		}
-		cloned.Sessions[key] = value
+	for key := range s.Sessions {
+		value := s.Sessions[key]
+		cloned.Sessions[key] = value.clone()
 	}
 	if len(s.AbsenceSlots) > 0 {
-		cloned.AbsenceSlots = append([]AbsenceSlot(nil), s.AbsenceSlots...)
+		cloned.AbsenceSlots = make([]AbsenceSlot, len(s.AbsenceSlots))
+		for i := range s.AbsenceSlots {
+			cloned.AbsenceSlots[i] = s.AbsenceSlots[i].clone()
+		}
 	}
 	cloned.PendingEnds = make(map[string]PendingEnd, len(s.PendingEnds))
-	maps.Copy(cloned.PendingEnds, s.PendingEnds)
+	for key := range s.PendingEnds {
+		value := s.PendingEnds[key]
+		cloned.PendingEnds[key] = value.clone()
+	}
 	return cloned
+}
+
+func (e *Evidence) clone() Evidence {
+	cloned := *e
+	if len(e.Sessions) > 0 {
+		cloned.Sessions = make([]SessionFact, len(e.Sessions))
+		for i := range e.Sessions {
+			cloned.Sessions[i] = e.Sessions[i].clone()
+		}
+	}
+	cloned.Coverage = cloneCoverage(&e.Coverage)
+	return cloned
+}
+
+func (s *SessionFact) clone() SessionFact {
+	cloned := *s
+	cloned.ScheduledAt = copyOptionalTime(s.ScheduledAt)
+	cloned.StartedAt = copyOptionalTime(s.StartedAt)
+	cloned.EndedAt = copyOptionalTime(s.EndedAt)
+	return cloned
+}
+
+func (s *SessionState) clone() SessionState {
+	cloned := *s
+	cloned.ScheduledStartTime = copyOptionalTime(s.ScheduledStartTime)
+	cloned.StartedAt = copyOptionalTime(s.StartedAt)
+	cloned.EndedAt = copyOptionalTime(s.EndedAt)
+	cloned.LiveFirstSeenAt = copyOptionalTime(s.LiveFirstSeenAt)
+	cloned.Clock.LastUpcomingPositiveAt = copyOptionalTime(s.Clock.LastUpcomingPositiveAt)
+	cloned.Clock.LastUpcomingPositiveSeenAt = copyOptionalTime(s.Clock.LastUpcomingPositiveSeenAt)
+	cloned.Clock.LastLivePositiveAt = copyOptionalTime(s.Clock.LastLivePositiveAt)
+	cloned.Clock.LastLivePositiveSeenAt = copyOptionalTime(s.Clock.LastLivePositiveSeenAt)
+	cloned.Clock.LastEndEvidenceAt = copyOptionalTime(s.Clock.LastEndEvidenceAt)
+	cloned.Clock.LastCompleteAbsenceAt = copyOptionalTime(s.Clock.LastCompleteAbsenceAt)
+	cloned.Clock.NextEndCheckAt = copyOptionalTime(s.Clock.NextEndCheckAt)
+	cloned.Clock.EndedAt = copyOptionalTime(s.Clock.EndedAt)
+	cloned.FirstAbsenceScheduledFor = copyOptionalTime(s.FirstAbsenceScheduledFor)
+	cloned.SecondAbsenceScheduledFor = copyOptionalTime(s.SecondAbsenceScheduledFor)
+	cloned.LastAbsenceScheduledFor = copyOptionalTime(s.LastAbsenceScheduledFor)
+	cloned.EndReason = cloneEndReason(s.EndReason)
+	cloned.Clock.EndCandidateKind = cloneEndEvidenceKind(s.Clock.EndCandidateKind)
+	cloned.Clock.EndCandidateObservationID = cloneInt64(s.Clock.EndCandidateObservationID)
+	cloned.IgnoredAbsenceScheduledFor = append([]time.Time(nil), s.IgnoredAbsenceScheduledFor...)
+	return cloned
+}
+
+func (s *AbsenceSlot) clone() AbsenceSlot {
+	cloned := *s
+	cloned.Coverage = cloneCoverage(&s.Coverage)
+	return cloned
+}
+
+func (p *PendingEnd) clone() PendingEnd {
+	cloned := *p
+	cloned.EndedAt = copyOptionalTime(p.EndedAt)
+	return cloned
+}
+
+func cloneCoverage(value *contract.GlobalChannelCoverageV1) contract.GlobalChannelCoverageV1 {
+	cloned := *value
+	cloned.RequestedChannelIDs = append([]string(nil), value.RequestedChannelIDs...)
+	cloned.Filters.Statuses = append([]string(nil), value.Filters.Statuses...)
+	return cloned
+}
+
+func cloneEndReason(value *EndReason) *EndReason {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneEndEvidenceKind(value *EndEvidenceKind) *EndEvidenceKind {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneInt64(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }

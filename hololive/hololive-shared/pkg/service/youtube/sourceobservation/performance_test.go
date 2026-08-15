@@ -22,6 +22,7 @@ func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
 	)
 	proof := seedPublishLease(
 		b,
+		context.Background(),
 		pool,
 		contract.ProviderYouTubeJS,
 		contract.KindCommunityPage,
@@ -33,14 +34,12 @@ func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if i > 0 {
 			b.StopTimer()
-			proof = advanceLease(b, pool, proof, time.Minute)
+			proof = advanceLease(b, context.Background(), pool, &proof, time.Minute)
 			b.StartTimer()
 		}
 		envelope := communityEnvelope(
 			b,
-			proof,
-			1,
-			contract.CompletenessComplete,
+			&proof,
 			"perf-post-"+strconv.Itoa(i),
 		)
 		if _, err := repository.PublishBatch(ctx, publishInput(envelope)); err != nil {

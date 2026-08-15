@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (c YouTubePlaneConfig) Validate() error {
+func (c *YouTubePlaneConfig) Validate() error {
 	if err := c.validatePool(); err != nil {
 		return err
 	}
@@ -25,14 +25,14 @@ func (c YouTubePlaneConfig) Validate() error {
 	return c.validateStabilityPolicies()
 }
 
-func (c YouTubePlaneConfig) validateRetentionAndReplay() error {
+func (c *YouTubePlaneConfig) validateRetentionAndReplay() error {
 	if err := c.validateRetention(); err != nil {
 		return err
 	}
 	return c.validateReplay()
 }
 
-func (c YouTubePlaneConfig) validateStabilityPolicies() error {
+func (c *YouTubePlaneConfig) validateStabilityPolicies() error {
 	if err := c.validateContentAbsenceGrace(); err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func (c YouTubePlaneConfig) validateStabilityPolicies() error {
 	return c.validatePhotoChange()
 }
 
-func (c YouTubePlaneConfig) validatePool() error {
+func (c *YouTubePlaneConfig) validatePool() error {
 	if c.PostgresPoolMinConns < 0 || c.PostgresPoolMaxConns <= 0 {
 		return errors.New("youtube plane postgres pool bounds are invalid")
 	}
@@ -58,7 +58,7 @@ func (c YouTubePlaneConfig) validatePool() error {
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateConsumers() error {
+func (c *YouTubePlaneConfig) validateConsumers() error {
 	if c.ConsumerWorkers < 1 || c.ConsumerWorkers > youtubePlaneMaxConsumerWorkers {
 		return errors.New("youtube plane consumer workers must be between 1 and 16")
 	}
@@ -71,7 +71,7 @@ func (c YouTubePlaneConfig) validateConsumers() error {
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateClaimAndTimeouts() error {
+func (c *YouTubePlaneConfig) validateClaimAndTimeouts() error {
 	if c.ClaimBatchSize < 1 || c.ClaimBatchSize > youtubePlaneMaxClaimBatchSize {
 		return errors.New("youtube plane claim batch must be between 1 and 100")
 	}
@@ -88,7 +88,7 @@ func (c YouTubePlaneConfig) validateClaimAndTimeouts() error {
 	return c.validateShutdownWindows()
 }
 
-func (c YouTubePlaneConfig) validateTransactionTimeout() error {
+func (c *YouTubePlaneConfig) validateTransactionTimeout() error {
 	if c.TransactionTimeout <= 0 {
 		return errors.New("youtube plane transaction timeout must be positive")
 	}
@@ -98,7 +98,7 @@ func (c YouTubePlaneConfig) validateTransactionTimeout() error {
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateShutdownWindows() error {
+func (c *YouTubePlaneConfig) validateShutdownWindows() error {
 	if c.ClaimInterval <= 0 {
 		return errors.New("youtube plane claim interval must be positive")
 	}
@@ -111,7 +111,7 @@ func (c YouTubePlaneConfig) validateShutdownWindows() error {
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateProjectionAndFinalizer() error {
+func (c *YouTubePlaneConfig) validateProjectionAndFinalizer() error {
 	if c.TargetProjection.Interval <= 0 {
 		return errors.New("youtube plane target projection interval must be positive")
 	}
@@ -124,21 +124,21 @@ func (c YouTubePlaneConfig) validateProjectionAndFinalizer() error {
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateContentAbsenceGrace() error {
+func (c *YouTubePlaneConfig) validateContentAbsenceGrace() error {
 	if c.ContentAbsenceGrace < 0 || c.ContentAbsenceGrace > 24*time.Hour {
 		return errors.New("youtube plane content absence grace must be between 0 and 24h")
 	}
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateLiveEndGrace() error {
+func (c *YouTubePlaneConfig) validateLiveEndGrace() error {
 	if c.LiveEndGrace < 0 || c.LiveEndGrace > 24*time.Hour {
 		return errors.New("youtube plane live end grace must be between 0 and 24h")
 	}
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateProfileClear() error {
+func (c *YouTubePlaneConfig) validateProfileClear() error {
 	return validateStabilityPair(
 		"profile clear",
 		c.ProfileClearMinObservations,
@@ -146,7 +146,7 @@ func (c YouTubePlaneConfig) validateProfileClear() error {
 	)
 }
 
-func (c YouTubePlaneConfig) validatePhotoChange() error {
+func (c *YouTubePlaneConfig) validatePhotoChange() error {
 	return validateStabilityPair(
 		"photo change",
 		c.PhotoChangeMinObservations,

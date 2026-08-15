@@ -52,10 +52,10 @@ func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 	); err != nil {
 		return err
 	}
-	return loadYouTubePlaneRetentionAges(config, defaults)
+	return loadYouTubePlaneRetentionAges(config, &defaults)
 }
 
-func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults YouTubePlaneRetentionConfig) error {
+func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 	if config.Retention.QueueProcessedAge, err = strictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS",
@@ -95,14 +95,14 @@ func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults YouTubeP
 	return loadYouTubePlaneEvidenceAges(config, defaults)
 }
 
-func loadYouTubePlaneEvidenceAges(config *YouTubePlaneConfig, defaults YouTubePlaneRetentionConfig) error {
+func loadYouTubePlaneEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	if err := loadYouTubePlaneContentEvidenceAges(config, defaults); err != nil {
 		return err
 	}
 	return loadYouTubePlaneChannelEvidenceAges(config, defaults)
 }
 
-func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults YouTubePlaneRetentionConfig) error {
+func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 	if config.Retention.CommunityPageAge, err = strictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS",
@@ -135,7 +135,7 @@ func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults Yo
 	return nil
 }
 
-func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults YouTubePlaneRetentionConfig) error {
+func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 	if config.Retention.ChannelStatsAge, err = strictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_CHANNEL_STATS_DAYS",
@@ -197,21 +197,21 @@ func loadYouTubePlaneReplay(config *YouTubePlaneConfig) error {
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateRetention() error {
+func (c *YouTubePlaneConfig) validateRetention() error {
 	if err := validateRetentionLoop("retention", c.Retention.Enabled, c.Retention.Interval, c.Retention.BatchSize); err != nil {
 		return err
 	}
-	if err := validateRetentionAges(c.Retention); err != nil {
+	if err := validateRetentionAges(&c.Retention); err != nil {
 		return err
 	}
 	if c.Retention.Enabled && c.Retention.ReplayAuditAge > 0 &&
-		c.Retention.ReplayAuditAge < maxEvidenceRetentionAge(c.Retention) {
+		c.Retention.ReplayAuditAge < maxEvidenceRetentionAge(&c.Retention) {
 		return fmt.Errorf("youtube plane replay audit retention must cover the longest evidence retention")
 	}
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateReplay() error {
+func (c *YouTubePlaneConfig) validateReplay() error {
 	return validateRetentionLoop("replay", c.Replay.Enabled, c.Replay.Interval, c.Replay.BatchSize)
 }
 
@@ -225,7 +225,7 @@ func validateRetentionLoop(name string, enabled bool, interval time.Duration, ba
 	return nil
 }
 
-func validateRetentionAges(cfg YouTubePlaneRetentionConfig) error {
+func validateRetentionAges(cfg *YouTubePlaneRetentionConfig) error {
 	ages := []struct {
 		name string
 		age  time.Duration
@@ -253,7 +253,7 @@ func validateRetentionAges(cfg YouTubePlaneRetentionConfig) error {
 	return nil
 }
 
-func maxEvidenceRetentionAge(cfg YouTubePlaneRetentionConfig) time.Duration {
+func maxEvidenceRetentionAge(cfg *YouTubePlaneRetentionConfig) time.Duration {
 	ages := []time.Duration{
 		cfg.CommunityPageAge,
 		cfg.VideoListAge,
@@ -281,7 +281,7 @@ func validateRetentionAge(name string, age time.Duration) error {
 	return nil
 }
 
-func (c YouTubePlaneConfig) validateProductionRetention(environment string) error {
+func (c *YouTubePlaneConfig) validateProductionRetention(environment string) error {
 	if !isProductionEnvironment(environment) || !c.Enabled {
 		return nil
 	}

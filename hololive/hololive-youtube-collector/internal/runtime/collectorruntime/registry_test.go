@@ -65,7 +65,7 @@ type stubRunner struct {
 	provider  contract.Provider
 	jobKind   string
 	emissions []contract.ObservationKind
-	collect   func(context.Context, collectutil.RunInput) (collectutil.RunOutput, error)
+	collect   func(context.Context, *collectutil.RunInput) (collectutil.RunOutput, error)
 }
 
 func stubJob(provider contract.Provider, jobKind string, kinds ...contract.ObservationKind) *stubRunner {
@@ -78,7 +78,7 @@ func (s *stubRunner) Emissions() []contract.ObservationKind { return s.emissions
 func (s *stubRunner) TargetKinds() []contract.ObservationKind {
 	return s.emissions
 }
-func (s *stubRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
+func (s *stubRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
 	if s.collect != nil {
 		return s.collect(ctx, input)
 	}

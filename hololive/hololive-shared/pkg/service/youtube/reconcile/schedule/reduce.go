@@ -6,31 +6,32 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func Reduce(state State, evidence Evidence) (Decision, error) {
+func Reduce(state State, evidence Evidence) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
 	if evidence.GroupKey == "" {
 		return Decision{}, fmt.Errorf("schedule reducer received empty group key")
 	}
 	current := state.clone()
+	workingEvidence := evidence.clone()
 	if current.Items == nil {
 		current.Items = map[string]Item{}
 	}
 	if current.Sessions == nil {
 		current.Sessions = map[string]Session{}
 	}
-	items := make([]Item, 0, len(evidence.Items))
+	items := make([]Item, 0, len(workingEvidence.Items))
 	sessions := make([]Session, 0)
-	applications := make([]Application, 0, len(evidence.Items))
-	for i := range evidence.Items {
-		item := evidence.Items[i]
-		item.Provider = evidence.Provider
-		item.GroupKey = evidence.GroupKey
-		key := ItemIdentity(evidence.Provider, item)
-		current.Items[key] = item
-		items = append(items, item)
+	applications := make([]Application, 0, len(workingEvidence.Items))
+	for i := range workingEvidence.Items {
+		item := &workingEvidence.Items[i]
+		item.Provider = workingEvidence.Provider
+		item.GroupKey = workingEvidence.GroupKey
+		key := ItemIdentity(workingEvidence.Provider, item)
+		current.Items[key] = *item
+		items = append(items, *item)
 		applications = append(applications, Application{
 			EntityKind: "youtube_schedule_item", EntityKey: key, Decision: "APPLIED",
 		})
-		if session, ok := mergeSession(current, item); ok {
+		if session, ok := mergeSession(&current, item); ok {
 			current.Sessions[session.VideoID] = session
 			sessions = append(sessions, session)
 			applications = append(applications, Application{
@@ -44,7 +45,7 @@ func Reduce(state State, evidence Evidence) (Decision, error) {
 	return Decision{Items: items, Sessions: sessions, Applications: applications}, nil
 }
 
-func mergeSession(state State, item Item) (Session, bool) {
+func mergeSession(state *State, item *Item) (Session, bool) {
 	if item.VideoID == "" {
 		return Session{}, false
 	}

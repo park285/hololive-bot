@@ -194,7 +194,7 @@ func channelPhotoPayload(channelID string, variants []youtubejs.ChannelPhotoVari
 	}, true
 }
 
-func viewerPayload(videoID string, result youtubejs.ViewerResult, windowStart time.Time, windowSeconds int) contract.ViewerSampleV1 {
+func viewerPayload(videoID string, result *youtubejs.ViewerResult, windowStart time.Time, windowSeconds int) contract.ViewerSampleV1 {
 	return contract.ViewerSampleV1{
 		VideoID:             videoID,
 		ViewerCount:         result.ViewerCount,

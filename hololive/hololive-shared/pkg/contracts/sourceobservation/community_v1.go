@@ -89,11 +89,11 @@ func validateCommunityPosts(p *CommunityPayloadV1) error {
 	return nil
 }
 
-func (p CommunityPayloadV1) Validate(subjectKey string) error {
+func (p *CommunityPayloadV1) Validate(subjectKey string) error {
 	return p.normalizeAndValidate(subjectKey)
 }
 
-func (p CommunityPostV1) validate(channelID string) error {
+func (p *CommunityPostV1) validate(channelID string) error {
 	if err := validateCommunityPostIdentity(p, channelID); err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func (p CommunityPostV1) validate(channelID string) error {
 	return validateThumbnails("images", p.Images)
 }
 
-func validateCommunityPostIdentity(p CommunityPostV1, channelID string) error {
+func validateCommunityPostIdentity(p *CommunityPostV1, channelID string) error {
 	if err := validateIdentifier("post id", p.PostID, 256); err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func validateCommunityPostIdentity(p CommunityPostV1, channelID string) error {
 	return nil
 }
 
-func validateCommunityPostText(p CommunityPostV1) error {
+func validateCommunityPostText(p *CommunityPostV1) error {
 	for name, value := range map[string]string{
 		"author id": p.AuthorID, "author name": p.AuthorName, "content text": p.ContentText,
 		"published text": p.PublishedText, "video id": p.VideoID,
@@ -144,7 +144,7 @@ func communityTextLimit(name string) int {
 	return 512
 }
 
-func validateCommunityPostTimesAndCounts(p CommunityPostV1) error {
+func validateCommunityPostTimesAndCounts(p *CommunityPostV1) error {
 	if p.PublishedAt != nil && p.PublishedAt.IsZero() {
 		return fmt.Errorf("published at must not point to the zero time")
 	}

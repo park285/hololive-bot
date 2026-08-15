@@ -8,6 +8,33 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+func TestReduceCopiesInputBackingStorage(t *testing.T) {
+	t.Parallel()
+	stateTime := at().Add(-time.Hour)
+	originalStateTime := stateTime
+	state := State{Sessions: map[string]Session{
+		"vid-a": {VideoID: "vid-a", ChannelID: "UC_TEST", Status: domain.LiveStatusUpcoming, ScheduledStartTime: &stateTime},
+	}}
+	endedAt := at().Add(time.Hour)
+	originalEndedAt := endedAt
+	incoming := evidence(contract.ProviderHololiveOfficial, Item{
+		ExternalID: "vid-a", VideoID: "vid-a", ChannelID: "UC_TEST", ScheduledAt: at(), EndedAt: &endedAt,
+	})
+	decision, err := Reduce(state, *incoming)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	*incoming.Items[0].EndedAt = endedAt.Add(time.Hour)
+	if decision.Items[0].EndedAt == nil || !decision.Items[0].EndedAt.Equal(originalEndedAt) {
+		t.Fatal("decision shares evidence item pointer")
+	}
+	*decision.Sessions[0].ScheduledStartTime = at().Add(2 * time.Hour)
+	if !state.Sessions["vid-a"].ScheduledStartTime.Equal(originalStateTime) {
+		t.Fatal("decision shares state session pointer")
+	}
+}
+
 func TestReduceYouTubeVideoIDIsCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 	got := mustReduce(t, State{}, evidence(contract.ProviderHololiveOfficial, Item{
@@ -48,8 +75,8 @@ func TestReduceTemporaryIdentityDoesNotMergeIntoYouTubeSession(t *testing.T) {
 	if len(got.Items) != 1 || got.Items[0].VideoID != "" {
 		t.Fatalf("temporary item = %#v", got.Items)
 	}
-	if ItemIdentity(contract.ProviderHolodex, got.Items[0]) != "tmp:holodex:holodex-temp" {
-		t.Fatalf("temporary identity = %s", ItemIdentity(contract.ProviderHolodex, got.Items[0]))
+	if ItemIdentity(contract.ProviderHolodex, &got.Items[0]) != "tmp:holodex:holodex-temp" {
+		t.Fatalf("temporary identity = %s", ItemIdentity(contract.ProviderHolodex, &got.Items[0]))
 	}
 }
 
@@ -68,8 +95,8 @@ func TestReduceDoesNotReactivateEndedSession(t *testing.T) {
 
 func at() time.Time { return time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC) }
 
-func evidence(provider contract.Provider, items ...Item) Evidence {
-	return Evidence{
+func evidence(provider contract.Provider, items ...Item) *Evidence {
+	return &Evidence{
 		ObservationID: 1,
 		Provider:      provider,
 		GroupKey:      "global:hololive-schedule",
@@ -79,9 +106,9 @@ func evidence(provider contract.Provider, items ...Item) Evidence {
 	}
 }
 
-func mustReduce(t *testing.T, state State, evidence Evidence) Decision {
+func mustReduce(t *testing.T, state State, evidence *Evidence) Decision {
 	t.Helper()
-	got, err := Reduce(state, evidence)
+	got, err := Reduce(state, *evidence)
 	if err != nil {
 		t.Fatalf("reduce: %v", err)
 	}

@@ -8,10 +8,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
-type ReconcileWrite func(context.Context, dbx.Tx, Observation) (ReconcileResult, error)
+type ReconcileWrite func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error)
 
 func (r *Repository) EnsureClaimBudget(
 	ctx context.Context,
@@ -73,17 +74,18 @@ func (r *Repository) finalizeTx(
 	if err != nil {
 		return ReconcileResult{}, err
 	}
-	if rejected, result, err := rejectFinalizeObservation(ctx, tx, r.supported, observation); rejected {
+	if rejected, result, err := rejectFinalizeObservation(ctx, tx, r.supported, &observation); rejected {
 		return result, err
 	}
-	result, err := reconcile(ctx, tx, observation)
+	callbackObservation := observation
+	result, err := reconcile(ctx, tx, &callbackObservation)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("finalize source observation: apply canonical domain write: %w", err)
 	}
-	if err := writeFinalizeApplications(ctx, tx, observation, result.Applications); err != nil {
+	if err := writeFinalizeApplications(ctx, tx, &observation, result.Applications); err != nil {
 		return ReconcileResult{}, err
 	}
-	if err := completeFinalizeObservation(ctx, tx, claim, observation); err != nil {
+	if err := completeFinalizeObservation(ctx, tx, claim, &observation); err != nil {
 		return ReconcileResult{}, err
 	}
 	result.EffectiveAt = observation.EffectiveAt
@@ -95,7 +97,7 @@ func rejectFinalizeObservation(
 	ctx context.Context,
 	tx dbx.Tx,
 	supported SupportedContractSet,
-	observation Observation,
+	observation *Observation,
 ) (bool, ReconcileResult, error) {
 	if !supported.Supports(observation.ContractVersion()) {
 		if err := deadLetterUnsupported(ctx, tx, observation); err != nil {
@@ -103,7 +105,8 @@ func rejectFinalizeObservation(
 		}
 		return true, unsupportedFinalizeResult(observation), nil
 	}
-	if _, err := observation.Envelope().ValidateAndCanonicalPayload(); err != nil {
+	envelope := observation.Envelope()
+	if _, err := envelope.ValidateAndCanonicalPayload(); err != nil {
 		if dlErr := deadLetterTx(ctx, tx, DeadLetterInput{
 			ObservationID: observation.ID,
 			LeaseToken:    observation.LeaseToken,
@@ -117,7 +120,7 @@ func rejectFinalizeObservation(
 	return false, ReconcileResult{}, nil
 }
 
-func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation Observation) error {
+func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation *Observation) error {
 	return deadLetterTx(ctx, tx, DeadLetterInput{
 		ObservationID: observation.ID,
 		LeaseToken:    observation.LeaseToken,
@@ -132,7 +135,7 @@ func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation Observati
 	})
 }
 
-func unsupportedFinalizeResult(observation Observation) ReconcileResult {
+func unsupportedFinalizeResult(observation *Observation) ReconcileResult {
 	return ReconcileResult{
 		Unsupported:         true,
 		EffectiveAt:         observation.EffectiveAt,
@@ -140,7 +143,7 @@ func unsupportedFinalizeResult(observation Observation) ReconcileResult {
 	}
 }
 
-func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation Observation, applications []Application) error {
+func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation *Observation, applications []Application) error {
 	if len(applications) > 1000 {
 		return fmt.Errorf("finalize source observation: application count exceeds 1000")
 	}
@@ -152,7 +155,7 @@ func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation Obser
 	return nil
 }
 
-func writeFinalizeApplication(ctx context.Context, tx dbx.Tx, observation Observation, index int, application Application) error {
+func writeFinalizeApplication(ctx context.Context, tx dbx.Tx, observation *Observation, index int, application Application) error {
 	if err := validateText("application entity kind", application.EntityKind, 64); err != nil {
 		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
 	}
@@ -180,7 +183,7 @@ func writeFinalizeApplication(ctx context.Context, tx dbx.Tx, observation Observ
 	return nil
 }
 
-func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, observation Observation) error {
+func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, observation *Observation) error {
 	var observationID int64
 	err := tx.QueryRow(
 		ctx,
@@ -214,13 +217,62 @@ func lockClaim(ctx context.Context, tx dbx.Tx, claim Claim) (Observation, error)
 		claim.ObservationID,
 		claim.LeaseToken,
 	)
-	observation, err := scanObservation(row)
+	observation, err := scanLockedObservation(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Observation{}, ErrClaimLost
 	}
 	if err != nil {
 		return Observation{}, fmt.Errorf("finalize source observation: lock claim: %w", err)
 	}
+	return observation, nil
+}
+
+func scanLockedObservation(row pgx.Row) (Observation, error) {
+	var observation Observation
+	var provider string
+	var kind string
+	var completeness string
+	var continuity string
+	if err := row.Scan(
+		&observation.ID,
+		&provider,
+		&kind,
+		&observation.SubjectKey,
+		&observation.ObservationKey,
+		&observation.SchemaVersion,
+		&observation.ContractGeneration,
+		&observation.ScheduledFor,
+		&observation.ObservedAt,
+		&observation.SourceEventAt,
+		&observation.ReceivedAt,
+		&observation.ScopeSHA256,
+		&completeness,
+		&continuity,
+		&observation.Payload,
+		&observation.PayloadSHA256,
+		&observation.EvidenceSHA256,
+		&observation.CollectorInstance,
+		&observation.JobKey,
+		&observation.CollectionJobKind,
+		&observation.FenceEpoch,
+		&observation.ProjectionGeneration,
+		&observation.AttemptCount,
+		&observation.LeaseOwner,
+		&observation.LeaseToken,
+		&observation.LeaseExpiresAt,
+	); err != nil {
+		return Observation{}, fmt.Errorf("claim source observations: scan row: %w", err)
+	}
+	observation.Provider = contract.Provider(provider)
+	observation.ObservationKind = contract.ObservationKind(kind)
+	observation.Completeness = contract.Completeness(completeness)
+	observation.Continuity = contract.Continuity(continuity)
+	observation.EffectiveAt, observation.SourceEventFallback = contract.EffectiveAt(contract.ObservationClock{
+		ObservationKind: observation.ObservationKind,
+		ScheduledFor:    observation.ScheduledFor,
+		SourceEventAt:   observation.SourceEventAt,
+		ReceivedAt:      observation.ReceivedAt,
+	}, contract.DefaultMaxSourceEventFutureSkew)
 	return observation, nil
 }
 

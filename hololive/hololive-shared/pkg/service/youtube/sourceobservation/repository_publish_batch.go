@@ -46,7 +46,7 @@ type publishContractRow struct {
 	ContractGeneration int64                    `json:"contract_generation"`
 }
 
-func encodePublishBatch(input PublishBatchInput) ([]byte, []byte, error) {
+func encodePublishBatch(input *PublishBatchInput) (observationJSON, contractJSON []byte, err error) {
 	checkpoints := checkpointEntriesByBinding(input.Checkpoint.Entries)
 	if err := validatePublishBatchBytes(input, checkpoints); err != nil {
 		return nil, nil, err
@@ -58,15 +58,15 @@ func encodePublishBatch(input PublishBatchInput) ([]byte, []byte, error) {
 func checkpointEntriesByBinding(entries []CheckpointEntry) map[checkpointBinding]CheckpointEntry {
 	checkpoints := make(map[checkpointBinding]CheckpointEntry, len(entries))
 	for i := range entries {
-		checkpoints[checkpointBindingForEntry(entries[i])] = entries[i]
+		checkpoints[checkpointBindingForEntry(&entries[i])] = entries[i]
 	}
 	return checkpoints
 }
 
-func validatePublishBatchBytes(input PublishBatchInput, checkpoints map[checkpointBinding]CheckpointEntry) error {
+func validatePublishBatchBytes(input *PublishBatchInput, checkpoints map[checkpointBinding]CheckpointEntry) error {
 	aggregateBytes := 0
 	for i := range input.Observations {
-		checkpoint := checkpoints[checkpointBindingForObservation(input.Observations[i])]
+		checkpoint := checkpoints[checkpointBindingForObservation(&input.Observations[i])]
 		inputBytes := len(input.Observations[i].Payload) + len(checkpoint.Cursor)
 		if inputBytes > MaxPublishBatchBytes-aggregateBytes {
 			return fmt.Errorf(
@@ -80,13 +80,13 @@ func validatePublishBatchBytes(input PublishBatchInput, checkpoints map[checkpoi
 	return nil
 }
 
-func encodePublishBatchRows(input PublishBatchInput, checkpoints map[checkpointBinding]CheckpointEntry) ([]publishBatchRow, []publishContractRow) {
+func encodePublishBatchRows(input *PublishBatchInput, checkpoints map[checkpointBinding]CheckpointEntry) (batchRows []publishBatchRow, contractRows []publishContractRow) {
 	rows := make([]publishBatchRow, len(input.Observations))
 	contracts := make([]publishContractRow, len(input.Observations))
 	for i := range input.Observations {
-		observation := input.Observations[i]
+		observation := &input.Observations[i]
 		checkpoint := checkpoints[checkpointBindingForObservation(observation)]
-		rows[i] = newPublishBatchRow(i, observation, checkpoint, input.Checkpoint.CollectionLatency)
+		rows[i] = newPublishBatchRow(i, observation, checkpoint.Cursor, input.Checkpoint.CollectionLatency)
 		contracts[i] = publishContractRow{
 			Provider: observation.Provider, ObservationKind: observation.ObservationKind,
 			SchemaVersion: observation.SchemaVersion, ContractGeneration: observation.ContractGeneration,
@@ -97,8 +97,8 @@ func encodePublishBatchRows(input PublishBatchInput, checkpoints map[checkpointB
 
 func newPublishBatchRow(
 	ordinal int,
-	observation contract.Envelope,
-	checkpoint CheckpointEntry,
+	observation *contract.Envelope,
+	cursor json.RawMessage,
 	latency time.Duration,
 ) publishBatchRow {
 	return publishBatchRow{
@@ -113,11 +113,11 @@ func newPublishBatchRow(
 		EvidenceSHA256: observation.EvidenceSHA256, CollectorInstance: observation.CollectorInstance,
 		JobKey: observation.Lease.JobKey, CollectionJobKind: observation.Lease.CollectionJobKind,
 		FenceEpoch: observation.Lease.FenceEpoch, ProjectionGeneration: observation.Lease.ProjectionGeneration,
-		CollectionLatencyMS: latency.Milliseconds(), Cursor: checkpoint.Cursor,
+		CollectionLatencyMS: latency.Milliseconds(), Cursor: cursor,
 	}
 }
 
-func marshalPublishBatch(rows []publishBatchRow, contracts []publishContractRow) ([]byte, []byte, error) {
+func marshalPublishBatch(rows []publishBatchRow, contracts []publishContractRow) (observationJSON, contractJSON []byte, err error) {
 	encoded, err := json.Marshal(rows)
 	if err != nil {
 		return nil, nil, fmt.Errorf("publish source observation batch: encode set: %w", err)
@@ -185,7 +185,7 @@ func collectPublishSetRows(rows pgx.Rows, want int) (PublishBatchResult, bool, e
 	return result, collision, ensurePublishSetComplete(seen)
 }
 
-func scanPublishSetRow(rows pgx.Rows) (int, int64, PublishOutcome, error) {
+func scanPublishSetRow(rows pgx.Rows) (rowOrdinal int, rowObservationID int64, rowOutcome PublishOutcome, rowErr error) {
 	var ordinal int
 	var observationID int64
 	var outcome PublishOutcome

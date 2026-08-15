@@ -26,7 +26,7 @@ func refreshNotifications(session *reduceSession) {
 	}
 }
 
-func watermarkOf(state State, evidence Evidence) *domain.YouTubeContentWatermark {
+func watermarkOf(state *State, evidence *Evidence) *domain.YouTubeContentWatermark {
 	watermark := &domain.YouTubeContentWatermark{
 		ChannelID:     state.ChannelID,
 		WatermarkType: watermarkType(evidence.Kind),
@@ -39,7 +39,7 @@ func watermarkOf(state State, evidence Evidence) *domain.YouTubeContentWatermark
 	return watermark
 }
 
-func newestContentID(evidence Evidence) string {
+func newestContentID(evidence *Evidence) string {
 	var chosen string
 	var published *time.Time
 	for i := range evidence.Videos {
@@ -70,7 +70,7 @@ func newerPublished(candidate, current *time.Time, candidateID, currentID string
 	return false
 }
 
-func absenceSlotOf(state State, evidence Evidence) *AbsenceSlot {
+func absenceSlotOf(state *State, evidence *Evidence) *AbsenceSlot {
 	if !scopedNegative(evidence) {
 		return nil
 	}
@@ -93,7 +93,7 @@ func shortsTrackingOf(notifications []NotificationIntent) []NotificationIntent {
 	return tracking
 }
 
-func headApplication(state State) []Application {
+func headApplication(state *State) []Application {
 	if state.ChannelID == "" {
 		return nil
 	}
@@ -104,10 +104,10 @@ func headApplication(state State) []Application {
 	}}
 }
 
-func boundApplications(decision Decision) Decision {
+func boundApplications(decision *Decision) Decision {
 	if len(decision.Applications) <= 1000 {
-		return decision
+		return *decision
 	}
 	decision.Applications = decision.Applications[:1000]
-	return decision
+	return *decision
 }

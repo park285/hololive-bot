@@ -13,6 +13,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
+func readWalkedSource(root, path string) ([]byte, error) {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return nil, err
+	}
+	return fs.ReadFile(os.DirFS(root), filepath.ToSlash(relative))
+}
+
 func TestCollectionReadyPayloadFailsClosedWhenPendingQueueIsUnknown(t *testing.T) {
 	t.Parallel()
 	snapshot := collectionReady{firstSuccess: true, pendingQueueOK: false}
@@ -91,7 +99,7 @@ func TestCollectorProductionSourceDoesNotClaimProducerLease(t *testing.T) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		src, readErr := os.ReadFile(path)
+		src, readErr := readWalkedSource(root, path)
 		if readErr != nil {
 			return readErr
 		}
@@ -125,7 +133,7 @@ func TestCollectorProductionSourceDoesNotUseHolodex(t *testing.T) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		src, readErr := os.ReadFile(path)
+		src, readErr := readWalkedSource(root, path)
 		if readErr != nil {
 			return readErr
 		}
@@ -156,7 +164,7 @@ func TestCollectorProductionSourceDoesNotUseHTMLGetCommunityPosts(t *testing.T) 
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		src, readErr := os.ReadFile(path)
+		src, readErr := readWalkedSource(root, path)
 		if readErr != nil {
 			return readErr
 		}

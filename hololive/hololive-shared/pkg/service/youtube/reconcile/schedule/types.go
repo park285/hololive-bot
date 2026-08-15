@@ -1,7 +1,6 @@
 package schedule
 
 import (
-	"maps"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -55,18 +54,53 @@ type Decision struct {
 	Applications []Application
 }
 
-func ItemIdentity(provider contract.Provider, item Item) string {
+func ItemIdentity(provider contract.Provider, item *Item) string {
 	if item.VideoID != "" {
 		return "yt:" + item.VideoID
 	}
 	return "tmp:" + string(provider) + ":" + item.ExternalID
 }
 
-func (s State) clone() State {
-	cloned := s
+func (s *State) clone() State {
+	cloned := *s
 	cloned.Items = make(map[string]Item, len(s.Items))
-	maps.Copy(cloned.Items, s.Items)
+	for key := range s.Items {
+		item := s.Items[key]
+		cloned.Items[key] = item.clone()
+	}
 	cloned.Sessions = make(map[string]Session, len(s.Sessions))
-	maps.Copy(cloned.Sessions, s.Sessions)
+	for key := range s.Sessions {
+		session := s.Sessions[key]
+		cloned.Sessions[key] = session.clone()
+	}
 	return cloned
+}
+
+func (e *Evidence) clone() Evidence {
+	cloned := *e
+	cloned.Items = make([]Item, len(e.Items))
+	for i := range e.Items {
+		cloned.Items[i] = e.Items[i].clone()
+	}
+	return cloned
+}
+
+func (i *Item) clone() Item {
+	cloned := *i
+	cloned.EndedAt = cloneTime(i.EndedAt)
+	return cloned
+}
+
+func (s *Session) clone() Session {
+	cloned := *s
+	cloned.ScheduledStartTime = cloneTime(s.ScheduledStartTime)
+	return cloned
+}
+
+func cloneTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }

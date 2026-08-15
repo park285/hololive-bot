@@ -6,7 +6,7 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func pendingFromFact(session *reduceSession, fact SessionFact, kind EndEvidenceKind) PendingEnd {
+func pendingFromFact(session *reduceSession, fact *SessionFact, kind EndEvidenceKind) PendingEnd {
 	return PendingEnd{
 		Kind:             kind,
 		VideoID:          fact.VideoID,
@@ -21,23 +21,32 @@ func pendingFromFact(session *reduceSession, fact SessionFact, kind EndEvidenceK
 	}
 }
 
-func recordPendingEnd(session *reduceSession, pending PendingEnd) {
+func recordPendingEnd(session *reduceSession, pending *PendingEnd) {
 	existing, ok := session.state.PendingEnds[pending.VideoID]
 	if ok && pending.EffectiveAt.Before(existing.EffectiveAt) {
 		return
 	}
-	session.state.PendingEnds[pending.VideoID] = pending
+	session.state.PendingEnds[pending.VideoID] = *pending
 }
 
 func reapplyStoredAbsences(session *reduceSession) {
-	for _, slot := range session.state.AbsenceSlots {
-		for _, existing := range session.state.Sessions {
-			applyAbsenceToSession(session, existing, slot)
+	for i := range session.state.AbsenceSlots {
+		slot := &session.state.AbsenceSlots[i]
+		for videoID := range session.state.Sessions {
+			existing := session.state.Sessions[videoID]
+			applyAbsenceToSession(session, &existing, slot)
 		}
 	}
 }
 
-func applyAbsenceToSession(session *reduceSession, existing SessionState, slot AbsenceSlot) {
+func applyAbsenceToSession(session *reduceSession, existing *SessionState, slot *AbsenceSlot) {
+	if session == nil || session.state == nil || existing == nil || slot == nil {
+		return
+	}
+	applyAbsenceToKnownSession(session, existing, slot)
+}
+
+func applyAbsenceToKnownSession(session *reduceSession, existing *SessionState, slot *AbsenceSlot) {
 	if existing.Status == StatusEnded || !existing.Present {
 		return
 	}
@@ -47,24 +56,27 @@ func applyAbsenceToSession(session *reduceSession, existing SessionState, slot A
 	}
 	if existing.Clock.LastLivePositiveAt == nil {
 		existing.IgnoredAbsenceScheduledFor = append(existing.IgnoredAbsenceScheduledFor, slot.ScheduledFor)
-		session.state.Sessions[existing.VideoID] = existing
+		session.state.Sessions[existing.VideoID] = *existing
 		markDirty(session, existing.VideoID)
 		return
 	}
-	if !slot.EffectiveAt.After(*existing.Clock.LastLivePositiveAt) || replayedAbsence(existing, slot) {
-		return
-	}
-	recordAbsencePending(session, existing, slot, covers)
+	applyAbsenceAfterPositive(session, existing, slot, covers)
 }
 
-func recordAbsencePending(session *reduceSession, existing SessionState, slot AbsenceSlot, covers bool) {
-	countAbsenceSlot(&existing, slot)
+func applyAbsenceAfterPositive(session *reduceSession, existing *SessionState, slot *AbsenceSlot, covers bool) {
+	if slot.EffectiveAt.After(*existing.Clock.LastLivePositiveAt) && !replayedAbsence(existing, slot) {
+		recordAbsencePending(session, existing, slot, covers)
+	}
+}
+
+func recordAbsencePending(session *reduceSession, existing *SessionState, slot *AbsenceSlot, covers bool) {
+	countAbsenceSlot(existing, slot)
 	existing.Clock.LastCompleteAbsenceAt = copyTime(slot.EffectiveAt)
 	existing.LastAbsenceObservationID = slot.ObservationID
 	existing.LastAbsenceScheduledFor = copyTime(slot.ScheduledFor)
-	session.state.Sessions[existing.VideoID] = existing
+	session.state.Sessions[existing.VideoID] = *existing
 	markDirty(session, existing.VideoID)
-	recordPendingEnd(session, PendingEnd{
+	pending := PendingEnd{
 		Kind:             EndEvidenceScopedAbsence,
 		VideoID:          existing.VideoID,
 		ChannelID:        existing.ChannelID,
@@ -74,11 +86,15 @@ func recordAbsencePending(session *reduceSession, existing SessionState, slot Ab
 		ScheduledFor:     slot.ScheduledFor,
 		NegativeEligible: true,
 		ScopeCovers:      covers,
-	})
+	}
+	recordPendingEnd(session, &pending)
 	reapplyStoredEnds(session, existing.VideoID)
 }
 
-func ignoredAbsence(existing SessionState, scheduledFor time.Time) bool {
+func ignoredAbsence(existing *SessionState, scheduledFor time.Time) bool {
+	if existing == nil {
+		return true
+	}
 	for _, ignored := range existing.IgnoredAbsenceScheduledFor {
 		if ignored.Equal(scheduledFor) {
 			return true
@@ -87,7 +103,10 @@ func ignoredAbsence(existing SessionState, scheduledFor time.Time) bool {
 	return false
 }
 
-func replayedAbsence(existing SessionState, slot AbsenceSlot) bool {
+func replayedAbsence(existing *SessionState, slot *AbsenceSlot) bool {
+	if existing == nil || slot == nil {
+		return true
+	}
 	if slot.ObservationID != 0 && existing.LastAbsenceObservationID == slot.ObservationID {
 		return true
 	}
@@ -95,7 +114,10 @@ func replayedAbsence(existing SessionState, slot AbsenceSlot) bool {
 		sameOptionalTime(existing.SecondAbsenceScheduledFor, &slot.ScheduledFor)
 }
 
-func countAbsenceSlot(entity *SessionState, slot AbsenceSlot) {
+func countAbsenceSlot(entity *SessionState, slot *AbsenceSlot) {
+	if entity == nil || slot == nil {
+		return
+	}
 	switch entity.Clock.ConsecutiveAbsenceSlots {
 	case 0:
 		entity.FirstAbsenceScheduledFor = copyTime(slot.ScheduledFor)

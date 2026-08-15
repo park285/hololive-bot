@@ -21,6 +21,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
+func writeOfficialScheduleResponse(t *testing.T, writer http.ResponseWriter, format string, args ...any) {
+	t.Helper()
+	if _, err := fmt.Fprintf(writer, format, args...); err != nil {
+		t.Errorf("write official schedule response: %v", err)
+	}
+}
+
 func TestGetLiveStreamsByOrgDoesNotUseOfficialSchedule(t *testing.T) {
 	var officialRequests atomic.Int32
 	officialServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
@@ -66,7 +73,7 @@ func TestGetUpcomingStreamsByOrgUsesOfficialScheduleAPIOnlyOnPrimaryFailure(t *t
 			return
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(writer, `{"dateGroupList":[{"videoList":[{
+		writeOfficialScheduleResponse(t, writer, `{"dateGroupList":[{"videoList":[{
 			"datetime":%q,
 			"url":"https://www.youtube.com/watch?v=official",
 			"name":"Member",
@@ -107,7 +114,7 @@ func TestGetUpcomingStreamsByOrgDoesNotFallbackOnSuccessEmpty(t *testing.T) {
 	officialServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		officialRequests.Add(1)
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(writer, `{"dateGroupList":[]}`)
+		writeOfficialScheduleResponse(t, writer, `{"dateGroupList":[]}`)
 	}))
 	t.Cleanup(officialServer.Close)
 
@@ -207,7 +214,7 @@ func TestGetChannelScheduleUsesOfficialScheduleAPIAfterYouTubeFailure(t *testing
 			return
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(writer, `{"dateGroupList":[{"videoList":[
+		writeOfficialScheduleResponse(t, writer, `{"dateGroupList":[{"videoList":[
 			{"datetime":%q,"url":"https://www.youtube.com/watch?v=keep-me","name":"Keep","title":"Keep"},
 			{"datetime":%q,"url":"https://www.youtube.com/watch?v=drop-me","name":"Drop","title":"Drop"}
 		]}]}`, future, future)
@@ -250,7 +257,7 @@ func TestGetChannelScheduleDoesNotFallbackOnHolodexSuccessEmpty(t *testing.T) {
 	officialServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		officialRequests.Add(1)
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(writer, `{"dateGroupList":[]}`)
+		writeOfficialScheduleResponse(t, writer, `{"dateGroupList":[]}`)
 	}))
 	t.Cleanup(officialServer.Close)
 

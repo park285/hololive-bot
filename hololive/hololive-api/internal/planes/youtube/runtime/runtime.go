@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -36,7 +37,7 @@ type observationClaimer interface {
 }
 
 type observationConsumer interface {
-	ConsumeObservation(context.Context, sourceobservation.Observation, string) error
+	ConsumeClaim(context.Context, sourceobservation.Claim) error
 }
 
 type projectionRefresher interface {
@@ -76,7 +77,7 @@ type Runtime struct {
 	now                func() time.Time
 
 	dbSem      chan struct{}
-	workCh     chan sourceobservation.Observation
+	workCh     chan sourceobservation.ClaimWork
 	claim      sourceobservation.ClaimOptions
 	runCancel  context.CancelFunc
 	started    atomic.Bool
@@ -90,19 +91,14 @@ type Runtime struct {
 	inFlight   sync.Map
 }
 
-func Build(ctx context.Context, plane settings.YouTubePlaneConfig, postgres settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
-	if logger == nil {
-		return nil, fmt.Errorf("build youtube plane: logger is not configured")
+func Build(ctx context.Context, plane *settings.YouTubePlaneConfig, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
+	config, postgres, err := validateBuildInputs(plane, postgresConfig, logger)
+	if err != nil {
+		return nil, err
 	}
-	if err := plane.Validate(); err != nil {
-		return nil, fmt.Errorf("build youtube plane: %w", err)
-	}
-	if strings.TrimSpace(postgres.User) != runtimeDatabaseRole {
-		return nil, fmt.Errorf("build youtube plane: requires POSTGRES_USER=%s", runtimeDatabaseRole)
-	}
-	postgres.PoolMinConns = plane.PostgresPoolMinConns
-	postgres.PoolMaxConns = plane.PostgresPoolMaxConns
-	resources, cleanup, err := providers.ProvideDatabaseResources(ctx, &postgres, logger)
+	postgres.PoolMinConns = config.PostgresPoolMinConns
+	postgres.PoolMaxConns = config.PostgresPoolMaxConns
+	resources, cleanup, err := providers.ProvideDatabaseResources(ctx, postgres, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube plane: dedicated pool: %w", err)
 	}
@@ -111,7 +107,7 @@ func Build(ctx context.Context, plane settings.YouTubePlaneConfig, postgres sett
 		cleanup()
 		return nil, fmt.Errorf("build youtube plane: dedicated pool is not configured")
 	}
-	runtime, err := newRuntime(plane, logger, pool, cleanup)
+	runtime, err := newRuntime(config, logger, pool, cleanup)
 	if err != nil {
 		cleanup()
 		return nil, err
@@ -123,8 +119,33 @@ func Build(ctx context.Context, plane settings.YouTubePlaneConfig, postgres sett
 	return runtime, nil
 }
 
+func validateBuildInputs(
+	plane *settings.YouTubePlaneConfig,
+	postgres *settings.PostgresConfig,
+	logger *slog.Logger,
+) (*settings.YouTubePlaneConfig, *settings.PostgresConfig, error) {
+	if logger == nil {
+		return nil, nil, fmt.Errorf("build youtube plane: logger is not configured")
+	}
+	if plane == nil {
+		return nil, nil, fmt.Errorf("build youtube plane: config is not configured")
+	}
+	if postgres == nil {
+		return nil, nil, fmt.Errorf("build youtube plane: postgres config is not configured")
+	}
+	configCopy := *plane
+	postgresCopy := *postgres
+	if err := configCopy.Validate(); err != nil {
+		return nil, nil, fmt.Errorf("build youtube plane: %w", err)
+	}
+	if strings.TrimSpace(postgresCopy.User) != runtimeDatabaseRole {
+		return nil, nil, fmt.Errorf("build youtube plane: requires POSTGRES_USER=%s", runtimeDatabaseRole)
+	}
+	return &configCopy, &postgresCopy, nil
+}
+
 func newRuntime(
-	plane settings.YouTubePlaneConfig,
+	plane *settings.YouTubePlaneConfig,
 	logger *slog.Logger,
 	pool *pgxpool.Pool,
 	cleanup func(),
@@ -136,7 +157,7 @@ func newRuntime(
 	}
 	writer := sourceobservation.NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
 	return &Runtime{
-		Config:    plane,
+		Config:    *plane,
 		Logger:    logger,
 		pool:      pool,
 		closePool: cleanup,
@@ -159,7 +180,7 @@ func newRuntime(
 		},
 		now:        func() time.Time { return time.Now().UTC() },
 		dbSem:      make(chan struct{}, plane.DBOperationConcurrency),
-		workCh:     make(chan sourceobservation.Observation, plane.ConsumerWorkers),
+		workCh:     make(chan sourceobservation.ClaimWork, plane.ConsumerWorkers),
 		loopDone:   make(chan struct{}, youtubeSupervisorLoopCapacity),
 		workerDone: make(chan struct{}, plane.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
@@ -231,16 +252,17 @@ func (r *Runtime) Shutdown(ctx context.Context) error {
 	}
 	shutdownCtx, cancel := context.WithTimeout(ctx, r.Config.ShutdownTimeout)
 	defer cancel()
-	if err := waitForCompletions(shutdownCtx, r.loopDone, r.supervisorLoopCount(), "youtube supervisor loops"); err != nil {
-		return err
+	loopErr := waitForCompletions(shutdownCtx, r.loopDone, r.supervisorLoopCount(), "youtube supervisor loops")
+	if loopErr == nil {
+		r.closeWork.Do(func() {
+			close(r.workCh)
+		})
 	}
-	r.closeWork.Do(func() {
-		close(r.workCh)
-	})
-	if err := waitForCompletions(shutdownCtx, r.workerDone, r.Config.ConsumerWorkers, "youtube workers"); err != nil {
-		return err
-	}
-	return r.releaseInFlight(shutdownCtx)
+	workerErr := waitForCompletions(shutdownCtx, r.workerDone, r.Config.ConsumerWorkers, "youtube workers")
+	releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), r.Config.TransactionTimeout)
+	defer releaseCancel()
+	releaseErr := r.releaseInFlight(releaseCtx)
+	return errors.Join(loopErr, workerErr, releaseErr)
 }
 
 func (r *Runtime) Close() {

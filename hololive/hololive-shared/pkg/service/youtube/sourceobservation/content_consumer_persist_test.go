@@ -21,9 +21,9 @@ func TestContentConsumerDoesNotRewriteAbsentCatalogRow(t *testing.T) {
 	lastSeen := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	seedCatalogVideoWithClock(t, pool, "vid-keep", 42, lastSeen)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
 	consumer := newContentTestConsumer(pool, repo, 0)
-	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, 1, contract.CompletenessComplete, "vid-new"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete, "vid-new"))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
@@ -45,9 +45,9 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedShortsWatermark(t, pool)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, "UC_TEST", "youtubejs_content")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindShortsList, "UC_TEST", "youtubejs_content")
 	consumer := newContentTestConsumer(pool, repo, 0)
-	if _, err := repo.PublishBatch(ctx, publishInput(shortsListEnvelope(t, proof, 1, contract.CompletenessComplete, "vid-s"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(shortsListEnvelope(t, &proof, 1, contract.CompletenessComplete, "vid-s"))); err != nil {
 		t.Fatalf("publish first: %v", err)
 	}
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
@@ -59,8 +59,8 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 	`, domain.OutboxStatusFailed, domain.OutboxKindNewShort, contentID); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
-	proof = advanceLease(t, pool, proof, time.Minute)
-	if _, err := repo.PublishBatch(ctx, publishInput(shortsListEnvelope(t, proof, 1, contract.CompletenessComplete, "vid-s"))); err != nil {
+	proof = advanceLease(t, ctx, pool, &proof, time.Minute)
+	if _, err := repo.PublishBatch(ctx, publishInput(shortsListEnvelope(t, &proof, 1, contract.CompletenessComplete, "vid-s"))); err != nil {
 		t.Fatalf("publish later: %v", err)
 	}
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
@@ -81,26 +81,26 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 func TestContentConsumerPersistPartialThenPositive(t *testing.T) {
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := context.Background()
-	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessPartial)
-	publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete, "vid-a")
-	assertPersistBoundary(t, pool, "vid-a", false, false, 1)
+	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessPartial)
+	publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete, "vid-a")
+	assertPersistBoundary(t, pool, false, false)
 }
 
 func TestContentConsumerPersistLatePositiveClearsMissing(t *testing.T) {
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := context.Background()
-	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete, "vid-a")
-	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete)
-	publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete, "vid-a")
-	assertPersistBoundary(t, pool, "vid-a", false, false, 1)
+	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete, "vid-a")
+	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete)
+	publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete, "vid-a")
+	assertPersistBoundary(t, pool, false, false)
 }
 
 func TestContentConsumerPersistNarrowScopeNegative(t *testing.T) {
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := context.Background()
-	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete, "vid-a")
+	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete, "vid-a")
 	after := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
-	proof = advanceLease(t, pool, proof, time.Minute)
+	proof = advanceLease(t, ctx, pool, &proof, time.Minute)
 	payload, err := contract.MarshalPayloadV1(contract.VideoListV1{
 		ChannelID: "UC_TEST",
 		Videos:    []contract.VideoListItemV1{},
@@ -122,36 +122,36 @@ func TestContentConsumerPersistNarrowScopeNegative(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare narrow: %v", err)
 	}
-	if _, err := repo.PublishBatch(ctx, publishInput(envelope)); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(&envelope)); err != nil {
 		t.Fatalf("publish narrow: %v", err)
 	}
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume narrow: %v", err)
 	}
-	assertPersistBoundary(t, pool, "vid-a", false, false, 1)
+	assertPersistBoundary(t, pool, false, false)
 }
 
 func TestContentConsumerPersistOneNegativeRecordsMissing(t *testing.T) {
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := context.Background()
-	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete, "vid-a")
-	publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete)
-	assertPersistBoundary(t, pool, "vid-a", true, false, 1)
+	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete, "vid-a")
+	publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete)
+	assertPersistBoundary(t, pool, true, false)
 }
 
 func TestContentConsumerPersistTwoNegativesWithGraceWithdraws(t *testing.T) {
 	pool, repo, consumer, proof := startContentPersistGrace(t, time.Hour)
 	ctx := context.Background()
-	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete, "vid-a")
-	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete)
+	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete, "vid-a")
+	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete)
 	var lastPositive time.Time
 	if err := pool.QueryRow(ctx, `
 		SELECT last_positive_received_at FROM youtube_content_evidence_clocks WHERE video_id = 'vid-a'
 	`).Scan(&lastPositive); err != nil {
 		t.Fatal(err)
 	}
-	proof = advanceLease(t, pool, proof, time.Minute)
-	published, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, 1, contract.CompletenessComplete)))
+	proof = advanceLease(t, ctx, pool, &proof, time.Minute)
+	published, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &proof, contract.CompletenessComplete)))
 	if err != nil {
 		t.Fatalf("publish second negative: %v", err)
 	}
@@ -161,14 +161,15 @@ func TestContentConsumerPersistTwoNegativesWithGraceWithdraws(t *testing.T) {
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume second negative: %v", err)
 	}
-	assertPersistBoundary(t, pool, "vid-a", true, true, 1)
+	assertPersistBoundary(t, pool, true, true)
 }
 
 func TestContentConsumerPersistReplayedNegativeDoesNotIncrement(t *testing.T) {
 	pool, repo, consumer, proof := startContentPersist(t)
 	ctx := context.Background()
-	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, proof, contract.CompletenessComplete, "vid-a")
-	published, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, advanceLease(t, pool, proof, time.Minute), 1, contract.CompletenessComplete)))
+	proof = publishConsumeVideos(t, ctx, pool, repo, consumer, &proof, contract.CompletenessComplete, "vid-a")
+	nextProof := advanceLease(t, ctx, pool, &proof, time.Minute)
+	published, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, &nextProof, contract.CompletenessComplete)))
 	if err != nil {
 		t.Fatalf("publish negative: %v", err)
 	}
@@ -186,7 +187,7 @@ func TestContentConsumerPersistReplayedNegativeDoesNotIncrement(t *testing.T) {
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("replay consume: %v", err)
 	}
-	assertPersistBoundary(t, pool, "vid-a", true, false, 1)
+	assertPersistBoundary(t, pool, true, false)
 	if slots := contentConsecutiveSlots(t, pool, "vid-a"); slots != 1 {
 		t.Fatalf("consecutive = %d, want 1", slots)
 	}
@@ -206,7 +207,7 @@ func startContentPersistGrace(t *testing.T, grace time.Duration) (*pgxpool.Pool,
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindVideoList, "UC_TEST", "youtubejs_content")
 	return pool, repo, newContentTestConsumer(pool, repo, grace), proof
 }
 
@@ -216,18 +217,18 @@ func publishConsumeVideos(
 	pool *pgxpool.Pool,
 	repo *Repository,
 	consumer *Consumer,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	completeness contract.Completeness,
 	videoIDs ...string,
 ) contract.LeaseProof {
 	t.Helper()
-	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, 1, completeness, videoIDs...))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(videoListEnvelope(t, proof, completeness, videoIDs...))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
 		t.Fatalf("consume: %v", err)
 	}
-	return advanceLease(t, pool, proof, time.Minute)
+	return advanceLease(t, ctx, pool, proof, time.Minute)
 }
 
 func lockVideoCatalog(t *testing.T, pool *pgxpool.Pool, videoID string) (int64, time.Time) {
@@ -242,12 +243,12 @@ func lockVideoCatalog(t *testing.T, pool *pgxpool.Pool, videoID string) (int64, 
 	return viewCount, lastSeen
 }
 
-func assertPersistBoundary(t *testing.T, pool *pgxpool.Pool, videoID string, missing, withdrawn bool, outbox int) {
+func assertPersistBoundary(t *testing.T, pool *pgxpool.Pool, missing, withdrawn bool) {
 	t.Helper()
-	lockVideoCatalog(t, pool, videoID)
-	assertContentMissing(t, pool, videoID, missing)
-	assertContentWithdrawn(t, pool, videoID, withdrawn)
-	assertTableCount(t, pool, "youtube_notification_outbox", outbox)
+	lockVideoCatalog(t, pool, "vid-a")
+	assertContentMissing(t, pool, "vid-a", missing)
+	assertContentWithdrawn(t, pool, "vid-a", withdrawn)
+	assertTableCount(t, pool, "youtube_notification_outbox", 1)
 }
 
 func contentConsecutiveSlots(t *testing.T, pool *pgxpool.Pool, videoID string) int {

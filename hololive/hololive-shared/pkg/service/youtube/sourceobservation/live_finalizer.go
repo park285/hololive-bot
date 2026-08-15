@@ -40,19 +40,22 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 	}
 	session, ok := state.Sessions[videoID]
 	if !ok || session.Clock.EndCandidateObservationID == nil {
-		return true, clearLiveCandidate(ctx, tx, session, videoID)
+		return true, clearLiveCandidate(ctx, tx, &session, videoID)
 	}
 	if _, err := tx.Exec(ctx, mustSQL("repository_live_observation_lock_0051_51.sql"), *session.Clock.EndCandidateObservationID); err != nil {
 		return false, fmt.Errorf("lock end candidate observation: %w", err)
 	}
 	decision := live.FinalizeDue(state, dbNow, grace)
-	if err := persistLiveDecision(ctx, tx, decision); err != nil {
+	if err := persistLiveDecision(ctx, tx, &decision); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func clearLiveCandidate(ctx context.Context, tx dbx.Tx, session live.SessionState, videoID string) error {
+func clearLiveCandidate(ctx context.Context, tx dbx.Tx, session *live.SessionState, videoID string) error {
+	if session == nil {
+		return fmt.Errorf("clear live candidate: session state is nil")
+	}
 	session.VideoID = videoID
 	if session.Status == "" {
 		session.Status = live.StatusUpcoming

@@ -39,7 +39,7 @@ func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 	t.Parallel()
 	cfg := settings.DefaultYouTubePlaneConfig()
 	cfg.DBOperationConcurrency = cfg.PostgresPoolMaxConns
-	_, err := Build(context.Background(), cfg, settings.PostgresConfig{User: "hololive_runtime"}, slog.Default())
+	_, err := Build(context.Background(), &cfg, &settings.PostgresConfig{User: "hololive_runtime"}, slog.Default())
 	if err == nil || !strings.Contains(err.Error(), "leave one pool connection reserved") {
 		t.Fatalf("Build() = %v", err)
 	}
@@ -47,7 +47,8 @@ func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 
 func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 	t.Parallel()
-	_, err := Build(context.Background(), settings.DefaultYouTubePlaneConfig(), settings.PostgresConfig{User: scraperDatabaseRole}, slog.Default())
+	cfg := settings.DefaultYouTubePlaneConfig()
+	_, err := Build(context.Background(), &cfg, &settings.PostgresConfig{User: scraperDatabaseRole}, slog.Default())
 	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
 		t.Fatalf("Build() = %v", err)
 	}
@@ -55,7 +56,8 @@ func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 
 func TestBuildFailsClosedOnUnexpectedDatabaseRole(t *testing.T) {
 	t.Parallel()
-	_, err := Build(context.Background(), settings.DefaultYouTubePlaneConfig(), settings.PostgresConfig{User: "postgres_admin"}, slog.Default())
+	cfg := settings.DefaultYouTubePlaneConfig()
+	_, err := Build(context.Background(), &cfg, &settings.PostgresConfig{User: "postgres_admin"}, slog.Default())
 	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
 		t.Fatalf("Build() = %v", err)
 	}
@@ -68,15 +70,15 @@ func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 	runtime := newTestRuntime(fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			claims.Add(1)
-			return sourceobservation.ClaimedBatch{Observations: []sourceobservation.Observation{{
-				ID:              7,
+			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
+				ObservationID:   7,
 				LeaseToken:      strings.Repeat("ab", 32),
 				ObservationKind: contract.KindCommunityPage,
 				SubjectKey:      "UC_TEST",
 			}}}, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			select {
 			case <-entered:
 			default:
@@ -185,9 +187,9 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 			if claimed.Swap(true) {
 				return sourceobservation.ClaimedBatch{}, nil
 			}
-			return sourceobservation.ClaimedBatch{Observations: []sourceobservation.Observation{
-				{ID: 1, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
-				{ID: 2, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
+			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
+				{ObservationID: 1, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
+				{ObservationID: 2, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
 			}}, nil
 		},
 		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
@@ -199,7 +201,7 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 		},
 	}
 	runtime := newTestRuntime(claimer, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			select {
 			case <-entered:
 			default:
@@ -210,7 +212,7 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 		},
 	})
 	runtime.Config.ConsumerWorkers = 1
-	runtime.workCh = make(chan sourceobservation.Observation)
+	runtime.workCh = make(chan sourceobservation.ClaimWork)
 	ctx := t.Context()
 	runtime.Start(ctx, make(chan error, 1))
 	select {
@@ -237,14 +239,14 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 	}
 }
 
-func TestShutdownReturnsErrorWhenWorkerDoesNotJoin(t *testing.T) {
+func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var retried atomic.Int64
 	runtime := newTestRuntime(fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
-			return sourceobservation.ClaimedBatch{Observations: []sourceobservation.Observation{{
-				ID:              9,
+			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
+				ObservationID:   9,
 				LeaseToken:      strings.Repeat("ef", 32),
 				ObservationKind: contract.KindCommunityPage,
 				SubjectKey:      "UC_TIMEOUT",
@@ -255,7 +257,7 @@ func TestShutdownReturnsErrorWhenWorkerDoesNotJoin(t *testing.T) {
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			close(entered)
 			<-release
 			return nil
@@ -273,8 +275,8 @@ func TestShutdownReturnsErrorWhenWorkerDoesNotJoin(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "worker") {
 		t.Fatalf("Shutdown() error = %v, want worker join timeout", err)
 	}
-	if retried.Load() != 0 {
-		t.Fatalf("ambiguous active observation retried %d time(s)", retried.Load())
+	if retried.Load() != 1 {
+		t.Fatalf("active observation release attempts = %d, want 1", retried.Load())
 	}
 	close(release)
 	select {
@@ -293,9 +295,9 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 			if claimed.Swap(true) {
 				return sourceobservation.ClaimedBatch{}, nil
 			}
-			return sourceobservation.ClaimedBatch{Observations: []sourceobservation.Observation{
-				{ID: 10, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
-				{ID: 11, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
+			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
+				{ObservationID: 10, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
+				{ObservationID: 11, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
 			}}, nil
 		},
 		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
@@ -305,14 +307,14 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 			return "", errors.New("release failed")
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			close(entered)
 			<-release
 			return nil
 		},
 	})
 	runtime.Config.ConsumerWorkers = 1
-	runtime.workCh = make(chan sourceobservation.Observation)
+	runtime.workCh = make(chan sourceobservation.ClaimWork)
 	runtime.Start(context.Background(), make(chan error, 1))
 	select {
 	case <-entered:
@@ -357,21 +359,21 @@ func TestTransientConsumeErrorUsesBoundedQueueRetry(t *testing.T) {
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			return &pgconn.PgError{Code: "40P01", Message: "deadlock detected"}
 		},
 	})
-	observation := sourceobservation.Observation{
-		ID:              12,
+	observation := sourceobservation.ClaimWork{
+		ObservationID:   12,
 		LeaseToken:      strings.Repeat("ab", 32),
 		ObservationKind: contract.KindCommunityPage,
 		SubjectKey:      "UC_RETRY",
 	}
 
-	if err := runtime.processObservation(context.Background(), observation); err != nil {
-		t.Fatalf("processObservation() error = %v", err)
+	if err := runtime.processClaim(context.Background(), observation); err != nil {
+		t.Fatalf("processClaim() error = %v", err)
 	}
-	if retryInput.ObservationID != observation.ID || retryInput.Delay != runtime.Config.ClaimInterval {
+	if retryInput.ObservationID != observation.ObservationID || retryInput.Delay != runtime.Config.ClaimInterval {
 		t.Fatalf("Retry input = %#v", retryInput)
 	}
 }
@@ -384,20 +386,20 @@ func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			return errors.New("unexpected canonical write failure")
 		},
 	})
-	observation := sourceobservation.Observation{
-		ID:              13,
+	observation := sourceobservation.ClaimWork{
+		ObservationID:   13,
 		LeaseToken:      strings.Repeat("cd", 32),
 		ObservationKind: contract.KindCommunityPage,
 		SubjectKey:      "UC_FATAL",
 	}
 
-	err := runtime.processObservation(context.Background(), observation)
+	err := runtime.processClaim(context.Background(), observation)
 	if err == nil || !strings.Contains(err.Error(), "unexpected canonical write failure") {
-		t.Fatalf("processObservation() error = %v", err)
+		t.Fatalf("processClaim() error = %v", err)
 	}
 	if retries.Load() != 0 {
 		t.Fatalf("unknown error retried %d time(s)", retries.Load())
@@ -412,19 +414,19 @@ func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			return context.Canceled
 		},
 	})
-	observation := sourceobservation.Observation{
-		ID:              15,
+	observation := sourceobservation.ClaimWork{
+		ObservationID:   15,
 		LeaseToken:      strings.Repeat("ab", 32),
 		ObservationKind: contract.KindCommunityPage,
 		SubjectKey:      "UC_CANCELED",
 	}
 
-	if err := runtime.processObservation(context.Background(), observation); !errors.Is(err, context.Canceled) {
-		t.Fatalf("processObservation() error = %v, want context.Canceled", err)
+	if err := runtime.processClaim(context.Background(), observation); !errors.Is(err, context.Canceled) {
+		t.Fatalf("processClaim() error = %v, want context.Canceled", err)
 	}
 	if retries.Load() != 0 {
 		t.Fatalf("unowned cancellation retried %d time(s)", retries.Load())
@@ -437,19 +439,19 @@ func TestRetryDeadLetterDegradesPlane(t *testing.T) {
 			return contract.StatusDeadLetter, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			return &pgconn.PgError{Code: "40001", Message: "serialization failure"}
 		},
 	})
-	observation := sourceobservation.Observation{
-		ID:              16,
+	observation := sourceobservation.ClaimWork{
+		ObservationID:   16,
 		LeaseToken:      strings.Repeat("cd", 32),
 		ObservationKind: contract.KindCommunityPage,
 		SubjectKey:      "UC_DLQ",
 	}
 
-	if err := runtime.processObservation(context.Background(), observation); err != nil {
-		t.Fatalf("processObservation() error = %v", err)
+	if err := runtime.processClaim(context.Background(), observation); err != nil {
+		t.Fatalf("processClaim() error = %v", err)
 	}
 	if !runtime.Degraded() {
 		t.Fatal("DEAD_LETTER retry outcome did not degrade the plane")
@@ -464,22 +466,39 @@ func TestClaimLostDoesNotRetry(t *testing.T) {
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Observation, string) error {
+		consume: func(context.Context, sourceobservation.Claim) error {
 			return sourceobservation.ErrClaimLost
 		},
 	})
-	observation := sourceobservation.Observation{
-		ID:              14,
+	observation := sourceobservation.ClaimWork{
+		ObservationID:   14,
 		LeaseToken:      strings.Repeat("ef", 32),
 		ObservationKind: contract.KindCommunityPage,
 		SubjectKey:      "UC_LOST",
 	}
 
-	if err := runtime.processObservation(context.Background(), observation); err != nil {
-		t.Fatalf("processObservation() error = %v", err)
+	if err := runtime.processClaim(context.Background(), observation); err != nil {
+		t.Fatalf("processClaim() error = %v", err)
 	}
 	if retries.Load() != 0 {
 		t.Fatalf("lost claim retried %d time(s)", retries.Load())
+	}
+}
+
+func TestForgetStaleClaimDoesNotDeleteNewToken(t *testing.T) {
+	t.Parallel()
+	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	oldWork := sourceobservation.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("ab", 32)}
+	newWork := sourceobservation.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("cd", 32)}
+	runtime.remember(oldWork)
+	runtime.remember(newWork)
+
+	runtime.forget(oldWork)
+	if _, ok := runtime.inFlight.Load(oldWork.Key()); ok {
+		t.Fatal("stale claim remained in flight after exact forget")
+	}
+	if got, ok := runtime.inFlight.Load(newWork.Key()); !ok || got != newWork {
+		t.Fatalf("new claim = %#v, present=%t", got, ok)
 	}
 }
 
@@ -517,7 +536,7 @@ func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *R
 		builder:    targetprojection.PolicyBuilder{Reader: emptyRosterReader{}, Schedules: targetprojection.DefaultPolicySchedules()},
 		now:        func() time.Time { return time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC) },
 		dbSem:      make(chan struct{}, cfg.DBOperationConcurrency),
-		workCh:     make(chan sourceobservation.Observation, cfg.ConsumerWorkers),
+		workCh:     make(chan sourceobservation.ClaimWork, cfg.ConsumerWorkers),
 		loopDone:   make(chan struct{}, youtubeSupervisorLoopCapacity),
 		workerDone: make(chan struct{}, cfg.ConsumerWorkers),
 		claim: sourceobservation.ClaimOptions{
@@ -558,14 +577,14 @@ func (f fakeClaimer) Retry(ctx context.Context, input sourceobservation.RetryInp
 }
 
 type fakeConsumer struct {
-	consume func(context.Context, sourceobservation.Observation, string) error
+	consume func(context.Context, sourceobservation.Claim) error
 }
 
-func (f fakeConsumer) ConsumeObservation(ctx context.Context, observation sourceobservation.Observation, consumerName string) error {
+func (f fakeConsumer) ConsumeClaim(ctx context.Context, claim sourceobservation.Claim) error {
 	if f.consume == nil {
 		return nil
 	}
-	return f.consume(ctx, observation, consumerName)
+	return f.consume(ctx, claim)
 }
 
 type fakeRefresher struct{}

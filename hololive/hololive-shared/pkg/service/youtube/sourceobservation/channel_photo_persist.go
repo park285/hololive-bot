@@ -31,7 +31,7 @@ func loadPhotoState(ctx context.Context, tx dbx.Tx, channelID string) (photo.Sta
 	return state, rows.Err()
 }
 
-func persistPhotoDecision(ctx context.Context, tx dbx.Tx, observation Observation, decision photo.Decision) error {
+func persistPhotoDecision(ctx context.Context, tx dbx.Tx, observation *Observation, decision *photo.Decision) error {
 	if err := persistPhotoVariants(ctx, tx, observation, decision); err != nil {
 		return err
 	}
@@ -44,19 +44,19 @@ func persistPhotoDecision(ctx context.Context, tx dbx.Tx, observation Observatio
 	return persistPhotoConflicts(ctx, tx, observation, decision)
 }
 
-func persistPhotoVariants(ctx context.Context, tx dbx.Tx, observation Observation, decision photo.Decision) error {
+func persistPhotoVariants(ctx context.Context, tx dbx.Tx, observation *Observation, decision *photo.Decision) error {
 	if decision.Sample == nil {
 		return nil
 	}
 	for i := range decision.Sample.Variants {
-		if err := persistPhotoVariant(ctx, tx, observation, decision, decision.Sample.Variants[i]); err != nil {
+		if err := persistPhotoVariant(ctx, tx, observation, decision, &decision.Sample.Variants[i]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func persistPhotoVariant(ctx context.Context, tx dbx.Tx, observation Observation, decision photo.Decision, variant photo.Variant) error {
+func persistPhotoVariant(ctx context.Context, tx dbx.Tx, observation *Observation, decision *photo.Decision, variant *photo.Variant) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_photo_variant_upsert_0072_72.sql"),
@@ -78,19 +78,23 @@ func persistPhotoVariant(ctx context.Context, tx dbx.Tx, observation Observation
 	return nil
 }
 
-func persistPhotoHeads(ctx context.Context, tx dbx.Tx, decision photo.Decision) error {
-	for kind, canonical := range decision.Head.Kinds {
+func persistPhotoHeads(ctx context.Context, tx dbx.Tx, decision *photo.Decision) error {
+	for kind := range decision.Head.Kinds {
+		canonical := decision.Head.Kinds[kind]
 		if canonical.Identity == "" && canonical.Candidate == "" {
 			continue
 		}
-		if err := persistPhotoHead(ctx, tx, decision.Head.ChannelID, kind, canonical); err != nil {
+		if err := persistPhotoHead(ctx, tx, decision.Head.ChannelID, kind, &canonical); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func persistPhotoHead(ctx context.Context, tx dbx.Tx, channelID, kind string, canonical photo.Canonical) error {
+func persistPhotoHead(ctx context.Context, tx dbx.Tx, channelID, kind string, canonical *photo.Canonical) error {
+	if canonical == nil {
+		return fmt.Errorf("upsert channel photo head: canonical state is nil")
+	}
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_photo_head_upsert_0074_74.sql"),
@@ -115,7 +119,7 @@ func persistPhotoHead(ctx context.Context, tx dbx.Tx, channelID, kind string, ca
 	return nil
 }
 
-func persistPhotoProduct(ctx context.Context, tx dbx.Tx, decision photo.Decision) error {
+func persistPhotoProduct(ctx context.Context, tx dbx.Tx, decision *photo.Decision) error {
 	if len(decision.WriteProduct) == 0 || decision.Sample == nil {
 		return nil
 	}
@@ -133,7 +137,7 @@ func persistPhotoProduct(ctx context.Context, tx dbx.Tx, decision photo.Decision
 	return nil
 }
 
-func photoProductThumbnails(product map[string]photo.Canonical) (domain.ThumbnailsJSON, domain.ThumbnailsJSON) {
+func photoProductThumbnails(product map[string]photo.Canonical) (avatarThumbnails, bannerThumbnails domain.ThumbnailsJSON) {
 	var avatar, banner domain.ThumbnailsJSON
 	if item, ok := product["avatar"]; ok {
 		avatar = domain.ThumbnailsJSON{{URL: item.URL, Width: item.Width, Height: item.Height}}
@@ -144,7 +148,7 @@ func photoProductThumbnails(product map[string]photo.Canonical) (domain.Thumbnai
 	return avatar, banner
 }
 
-func persistPhotoConflicts(ctx context.Context, tx dbx.Tx, observation Observation, decision photo.Decision) error {
+func persistPhotoConflicts(ctx context.Context, tx dbx.Tx, observation *Observation, decision *photo.Decision) error {
 	for i := range decision.Conflicts {
 		if err := persistReconcileConflict(ctx, tx, observation, "youtube_channel_photo", observation.SubjectKey, decision.Conflicts[i].FieldName, decision.Conflicts[i].ExistingValueSHA256, decision.Conflicts[i].AttemptedValueSHA256, "KEEP_EXISTING"); err != nil {
 			return fmt.Errorf("insert channel photo reconciliation conflict: %w", err)

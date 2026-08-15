@@ -2,14 +2,15 @@ package holodexcollector
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"mime"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -45,7 +46,7 @@ func parseHTTPSOrigin(baseURL, name string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func defaultClientLimits(timeout, fallback time.Duration, maxBody int64) (time.Duration, int64) {
+func defaultClientLimits(timeout, fallback time.Duration, maxBody int64) (resolvedTimeout time.Duration, resolvedMaxBody int64) {
 	if timeout <= 0 {
 		timeout = fallback
 	}
@@ -91,19 +92,29 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 	req.Header.Set("User-Agent", "HololiveBot/1.0")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, collecterr.FromContext(fmt.Errorf("request holodex live: %w", err))
+		return nil, errors.Join(
+			collecterr.FromContext(fmt.Errorf("request holodex live: %w", err)),
+			closeResponse(resp),
+		)
 	}
-	defer resp.Body.Close()
+	if resp == nil || resp.Body == nil {
+		return nil, collecterr.New(collecterr.Failed, "holodex response is nil")
+	}
 	return readJSONBody(resp, c.maxBody, "holodex")
 }
 
 func readJSONBody(resp *http.Response, maxBody int64, name string) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
-	if err != nil {
-		return nil, collecterr.FromContext(fmt.Errorf("read %s: %w", name, err))
+	if resp == nil || resp.Body == nil {
+		return nil, collecterr.New(collecterr.Failed, name+" response is nil")
 	}
-	if int64(len(body)) > maxBody {
-		return nil, collecterr.New(collecterr.ParserDrift, name+" response exceeds body limit")
+	body, readErr := httpbody.ReadAllAndDrain(resp.Body, maxBody)
+	closeErr := resp.Body.Close()
+	err := errors.Join(readErr, closeErr)
+	if err != nil {
+		if errors.Is(err, httpbody.ErrTooLarge) {
+			return nil, errors.Join(collecterr.New(collecterr.ParserDrift, name+" response exceeds body limit"), err)
+		}
+		return nil, collecterr.FromContext(fmt.Errorf("read %s: %w", name, err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, collecterr.FromStatus(name, resp.StatusCode, resp.Header.Get("Retry-After"), time.Now().UTC())
@@ -113,4 +124,13 @@ func readJSONBody(resp *http.Response, maxBody int64, name string) ([]byte, erro
 		return nil, collecterr.New(collecterr.ParserDrift, name+" content type is not JSON")
 	}
 	return body, nil
+}
+
+func closeResponse(resp *http.Response) error {
+	if resp == nil || resp.Body == nil {
+		return nil
+	}
+	drainErr := httpbody.Drain(resp.Body, httpbody.DefaultDrainLimit)
+	closeErr := resp.Body.Close()
+	return errors.Join(drainErr, closeErr)
 }

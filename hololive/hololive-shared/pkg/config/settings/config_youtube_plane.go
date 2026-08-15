@@ -106,10 +106,10 @@ func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	defaults := DefaultYouTubePlaneConfig()
 	config := defaults
-	if err := loadYouTubePlanePool(&config, defaults); err != nil {
+	if err := loadYouTubePlanePool(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if err := loadYouTubePlaneClaim(&config, defaults); err != nil {
+	if err := loadYouTubePlaneClaim(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
 	if err := loadYouTubePlaneRetention(&config); err != nil {
@@ -118,22 +118,22 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	if err := loadYouTubePlaneReplay(&config); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if err := loadYouTubePlaneSchedules(&config, defaults); err != nil {
+	if err := loadYouTubePlaneSchedules(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if err := loadContentAbsenceGrace(&config, defaults); err != nil {
+	if err := loadContentAbsenceGrace(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if err := loadLiveEndGrace(&config, defaults); err != nil {
+	if err := loadLiveEndGrace(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if err := loadProfilePhotoStability(&config, defaults); err != nil {
+	if err := loadProfilePhotoStability(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
 	return config, nil
 }
 
-func loadYouTubePlanePool(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+func loadYouTubePlanePool(config, defaults *YouTubePlaneConfig) error {
 	var err error
 	if config.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_ENABLED", defaults.Enabled); err != nil {
 		return err
@@ -153,7 +153,7 @@ func loadYouTubePlanePool(config *YouTubePlaneConfig, defaults YouTubePlaneConfi
 	return nil
 }
 
-func loadYouTubePlaneClaim(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+func loadYouTubePlaneClaim(config, defaults *YouTubePlaneConfig) error {
 	var err error
 	if config.ClaimBatchSize, err = sharedenv.IntE("YOUTUBE_PLANE_CLAIM_BATCH_SIZE", defaults.ClaimBatchSize); err != nil {
 		return err
@@ -173,7 +173,7 @@ func loadYouTubePlaneClaim(config *YouTubePlaneConfig, defaults YouTubePlaneConf
 	return nil
 }
 
-func loadYouTubePlaneSchedules(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+func loadYouTubePlaneSchedules(config, defaults *YouTubePlaneConfig) error {
 	var err error
 	if config.TargetProjection.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_INTERVAL_MS", defaults.TargetProjection.Interval, time.Millisecond); err != nil {
 		return err
@@ -190,7 +190,7 @@ func loadYouTubePlaneSchedules(config *YouTubePlaneConfig, defaults YouTubePlane
 	return nil
 }
 
-func loadContentAbsenceGrace(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+func loadContentAbsenceGrace(config, defaults *YouTubePlaneConfig) error {
 	value, err := strictDurationUnitEnv("YOUTUBE_PLANE_CONTENT_ABSENCE_GRACE_SECONDS", defaults.ContentAbsenceGrace, time.Second)
 	if err != nil {
 		return err
@@ -199,7 +199,7 @@ func loadContentAbsenceGrace(config *YouTubePlaneConfig, defaults YouTubePlaneCo
 	return nil
 }
 
-func loadLiveEndGrace(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+func loadLiveEndGrace(config, defaults *YouTubePlaneConfig) error {
 	value, err := strictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_GRACE_SECONDS", defaults.LiveEndGrace, time.Second)
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func loadLiveEndGrace(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) e
 	return nil
 }
 
-func loadProfilePhotoStability(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+func loadProfilePhotoStability(config, defaults *YouTubePlaneConfig) error {
 	var err error
 	if config.ProfileClearMinObservations, err = sharedenv.IntE(
 		"YOUTUBE_PLANE_PROFILE_CLEAR_MIN_OBSERVATIONS",

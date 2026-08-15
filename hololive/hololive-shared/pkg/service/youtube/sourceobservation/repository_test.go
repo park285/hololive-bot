@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,8 +21,8 @@ import (
 func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	envelope := communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	envelope := communityEnvelope(t, &proof, "post-1")
 	repo := NewRepository(pool)
 	first, err := repo.PublishBatch(ctx, publishInput(envelope))
 	if err != nil {
@@ -30,7 +31,7 @@ func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
 	if first.Results[0].Outcome != PublishInserted {
 		t.Fatalf("first outcome = %s", first.Results[0].Outcome)
 	}
-	reactivateLease(t, pool, proof)
+	reactivateLease(t, pool, &proof)
 	second, err := repo.PublishBatch(ctx, publishInput(envelope))
 	if err != nil {
 		t.Fatalf("publish duplicate: %v", err)
@@ -45,8 +46,8 @@ func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
 func TestPublishBatchSemanticCollisionAuditsWithoutMutatingEvidenceQueueOrCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	base := communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	base := communityEnvelope(t, &proof, "post-1")
 	repo := NewRepository(pool)
 	if _, err := repo.PublishBatch(ctx, publishInput(base)); err != nil {
 		t.Fatalf("publish base: %v", err)
@@ -54,7 +55,7 @@ func TestPublishBatchSemanticCollisionAuditsWithoutMutatingEvidenceQueueOrCheckp
 
 	for _, mutate := range []func(contract.Envelope) contract.Envelope{
 		func(envelope contract.Envelope) contract.Envelope {
-			return communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-2")
+			return *communityEnvelope(t, &proof, "post-2")
 		},
 		func(envelope contract.Envelope) contract.Envelope {
 			envelope.Completeness = contract.CompletenessPartial
@@ -65,9 +66,9 @@ func TestPublishBatchSemanticCollisionAuditsWithoutMutatingEvidenceQueueOrCheckp
 			return prepared
 		},
 	} {
-		reactivateLease(t, pool, proof)
-		collision := mutate(base)
-		result, err := repo.PublishBatch(ctx, publishInput(collision))
+		reactivateLease(t, pool, &proof)
+		collision := mutate(*base)
+		result, err := repo.PublishBatch(ctx, publishInput(&collision))
 		if err != nil {
 			t.Fatalf("publish collision: %v", err)
 		}
@@ -84,14 +85,14 @@ func TestPublishBatchSemanticCollisionAuditsWithoutMutatingEvidenceQueueOrCheckp
 func TestPublishBatchSamePayloadNextScheduledSlotCreatesTwoObservations(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	firstProof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	firstProof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	repo := NewRepository(pool)
-	first := communityEnvelope(t, firstProof, 1, contract.CompletenessComplete, "post-1")
+	first := communityEnvelope(t, &firstProof, "post-1")
 	if _, err := repo.PublishBatch(ctx, publishInput(first)); err != nil {
 		t.Fatalf("publish first slot: %v", err)
 	}
-	secondProof := advanceLease(t, pool, firstProof, time.Minute)
-	second := communityEnvelope(t, secondProof, 1, contract.CompletenessComplete, "post-1")
+	secondProof := advanceLease(t, context.Background(), pool, &firstProof, time.Minute)
+	second := communityEnvelope(t, &secondProof, "post-1")
 	if first.PayloadSHA256 != second.PayloadSHA256 || first.ObservationKey == second.ObservationKey {
 		t.Fatalf("payload/identity mismatch across slots: first=%s second=%s", first.ObservationKey, second.ObservationKey)
 	}
@@ -105,14 +106,14 @@ func TestPublishBatchSamePayloadNextScheduledSlotCreatesTwoObservations(t *testi
 func TestPublishBatchViewerEqualValueNextWindowCreatesTwoObservations(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	firstProof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
+	firstProof := seedPublishLease(t, context.Background(), pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
 	repo := NewRepository(pool)
-	first := viewerEnvelope(t, firstProof, 1, 100)
+	first := viewerEnvelope(t, &firstProof, 1, 100)
 	if _, err := repo.PublishBatch(ctx, publishInput(first)); err != nil {
 		t.Fatalf("publish first sample: %v", err)
 	}
-	secondProof := advanceLease(t, pool, firstProof, time.Minute)
-	second := viewerEnvelope(t, secondProof, 1, 100)
+	secondProof := advanceLease(t, context.Background(), pool, &firstProof, time.Minute)
+	second := viewerEnvelope(t, &secondProof, 1, 100)
 	if _, err := repo.PublishBatch(ctx, publishInput(second)); err != nil {
 		t.Fatalf("publish second sample: %v", err)
 	}
@@ -122,19 +123,19 @@ func TestPublishBatchViewerEqualValueNextWindowCreatesTwoObservations(t *testing
 func TestRetryRequiresUnexpiredClaim(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	repo := NewRepository(pool)
-	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 {
+	if err != nil || len(batch.Claims) != 1 {
 		t.Fatalf("claim: batch=%#v err=%v", batch, err)
 	}
-	observation := batch.Observations[0]
-	expireObservationClaim(t, pool, observation.ID)
+	observation := batch.Claims[0]
+	expireObservationClaim(t, pool, observation.ObservationID)
 	_, err = repo.Retry(ctx, RetryInput{
-		ObservationID: observation.ID,
+		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
 		Delay:         time.Second,
 		ErrorCode:     "provider_error",
@@ -146,7 +147,7 @@ func TestRetryRequiresUnexpiredClaim(t *testing.T) {
 	var status string
 	if err := pool.QueryRow(ctx, `
 		SELECT status FROM source_observation_queue WHERE observation_id = $1
-	`, observation.ID).Scan(&status); err != nil {
+	`, observation.ObservationID).Scan(&status); err != nil {
 		t.Fatalf("load queue after expired retry: %v", err)
 	}
 	if status != string(contract.StatusProcessing) {
@@ -157,19 +158,19 @@ func TestRetryRequiresUnexpiredClaim(t *testing.T) {
 func TestDeadLetterRequiresUnexpiredClaim(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	repo := NewRepository(pool)
-	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 {
+	if err != nil || len(batch.Claims) != 1 {
 		t.Fatalf("claim: batch=%#v err=%v", batch, err)
 	}
-	observation := batch.Observations[0]
-	expireObservationClaim(t, pool, observation.ID)
+	observation := batch.Claims[0]
+	expireObservationClaim(t, pool, observation.ObservationID)
 	err = repo.DeadLetter(ctx, DeadLetterInput{
-		ObservationID: observation.ID,
+		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
 		ErrorCode:     "unsupported_contract",
 		ErrorDetail:   "unsupported test contract",
@@ -180,7 +181,7 @@ func TestDeadLetterRequiresUnexpiredClaim(t *testing.T) {
 	var status string
 	if err := pool.QueryRow(ctx, `
 		SELECT status FROM source_observation_queue WHERE observation_id = $1
-	`, observation.ID).Scan(&status); err != nil {
+	`, observation.ObservationID).Scan(&status); err != nil {
 		t.Fatalf("load queue after expired dead letter: %v", err)
 	}
 	if status != string(contract.StatusProcessing) {
@@ -191,38 +192,42 @@ func TestDeadLetterRequiresUnexpiredClaim(t *testing.T) {
 func TestRetryExpiryAfterQueueRowLockWaitReturnsClaimLost(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	repo := NewRepository(pool)
-	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 {
+	if err != nil || len(batch.Claims) != 1 {
 		t.Fatalf("claim: batch=%#v err=%v", batch, err)
 	}
-	observation := batch.Observations[0]
+	observation := batch.Claims[0]
 	locker, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin queue locker: %v", err)
 	}
-	defer func() { _ = locker.Rollback(ctx) }()
+	defer func() {
+		if rollbackErr := locker.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback queue locker: %v", rollbackErr)
+		}
+	}()
 	var lockedID int64
 	if err := locker.QueryRow(ctx, `
 		SELECT observation_id
 		FROM source_observation_queue
 		WHERE observation_id = $1
 		FOR UPDATE
-	`, observation.ID).Scan(&lockedID); err != nil {
+	`, observation.ObservationID).Scan(&lockedID); err != nil {
 		t.Fatalf("lock queue row: %v", err)
 	}
-	if lockedID != observation.ID {
-		t.Fatalf("locked observation id = %d, want %d", lockedID, observation.ID)
+	if lockedID != observation.ObservationID {
+		t.Fatalf("locked observation id = %d, want %d", lockedID, observation.ObservationID)
 	}
 	if _, err := locker.Exec(ctx, `
 		UPDATE source_observation_queue
 		SET lease_expires_at = clock_timestamp() - INTERVAL '1 second'
 		WHERE observation_id = $1
-	`, observation.ID); err != nil {
+	`, observation.ObservationID); err != nil {
 		t.Fatalf("expire locked claim: %v", err)
 	}
 	retryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -232,7 +237,7 @@ func TestRetryExpiryAfterQueueRowLockWaitReturnsClaimLost(t *testing.T) {
 	go func() {
 		close(started)
 		_, retryErr := repo.Retry(retryCtx, RetryInput{
-			ObservationID: observation.ID,
+			ObservationID: observation.ObservationID,
 			LeaseToken:    observation.LeaseToken,
 			Delay:         time.Second,
 			ErrorCode:     "provider_error",
@@ -255,7 +260,7 @@ func TestRetryExpiryAfterQueueRowLockWaitReturnsClaimLost(t *testing.T) {
 	var status string
 	if err := pool.QueryRow(ctx, `
 		SELECT status FROM source_observation_queue WHERE observation_id = $1
-	`, observation.ID).Scan(&status); err != nil {
+	`, observation.ObservationID).Scan(&status); err != nil {
 		t.Fatalf("load queue after retry: %v", err)
 	}
 	if status != string(contract.StatusProcessing) {
@@ -266,7 +271,7 @@ func TestRetryExpiryAfterQueueRowLockWaitReturnsClaimLost(t *testing.T) {
 func TestPublishBatchRejectsUnrelatedCheckpointWithoutWrites(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -287,7 +292,7 @@ func TestPublishBatchRejectsUnrelatedCheckpointWithoutWrites(t *testing.T) {
 	`, strings.Repeat("b", 64), oldEvidence, proof.ScheduledFor); err != nil {
 		t.Fatalf("seed unrelated checkpoint: %v", err)
 	}
-	envelope := communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")
+	envelope := communityEnvelope(t, &proof, "post-1")
 	input := publishInput(envelope)
 	input.Checkpoint.Entries[0].SubjectKey = "UC_OTHER"
 	input.Checkpoint.Entries[0].ScopeSHA256 = strings.Repeat("b", 64)
@@ -316,8 +321,8 @@ func TestPublishBatchRejectsUnrelatedCheckpointWithoutWrites(t *testing.T) {
 func TestPublishBatchRejectsMissingCheckpointWithoutWrites(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	input := publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"))
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	input := publishInput(communityEnvelope(t, &proof, "post-1"))
 	input.Checkpoint.Entries = nil
 	_, err := NewRepository(pool).PublishBatch(ctx, input)
 	if !errors.Is(err, ErrInvalidEnvelope) {
@@ -331,7 +336,7 @@ func TestPublishBatchRejectsMissingCheckpointWithoutWrites(t *testing.T) {
 func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -340,15 +345,15 @@ func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 	`, proof.ProjectionGeneration); err != nil {
 		t.Fatalf("seed second kind target: %v", err)
 	}
-	stats := channelStatsEnvelope(t, proof, 1)
-	profile := channelProfileEnvelope(t, proof, 1)
-	input := PublishBatchInput{
+	stats := channelStatsEnvelope(t, &proof, 1)
+	profile := channelProfileEnvelope(t, &proof, 1)
+	input := &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           []CheckpointEntry{checkpointForEnvelope(stats), checkpointForEnvelope(profile)},
 			CollectionLatency: time.Second,
 		},
-		Observations: []contract.Envelope{stats, profile},
+		Observations: []contract.Envelope{*stats, *profile},
 	}
 	result, err := NewRepository(pool).PublishBatch(ctx, input)
 	if err != nil {
@@ -365,7 +370,7 @@ func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 func TestPublishBatchRejectsDuplicateCheckpointBinding(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -374,16 +379,16 @@ func TestPublishBatchRejectsDuplicateCheckpointBinding(t *testing.T) {
 	`, proof.ProjectionGeneration); err != nil {
 		t.Fatalf("seed second kind target: %v", err)
 	}
-	stats := channelStatsEnvelope(t, proof, 1)
-	profile := channelProfileEnvelope(t, proof, 1)
+	stats := channelStatsEnvelope(t, &proof, 1)
+	profile := channelProfileEnvelope(t, &proof, 1)
 	statsCheckpoint := checkpointForEnvelope(stats)
-	_, err := NewRepository(pool).PublishBatch(ctx, PublishBatchInput{
+	_, err := NewRepository(pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           []CheckpointEntry{statsCheckpoint, statsCheckpoint},
 			CollectionLatency: time.Second,
 		},
-		Observations: []contract.Envelope{stats, profile},
+		Observations: []contract.Envelope{*stats, *profile},
 	})
 	if !errors.Is(err, ErrInvalidEnvelope) {
 		t.Fatalf("duplicate checkpoint error = %v, want ErrInvalidEnvelope", err)
@@ -396,8 +401,8 @@ func TestPublishBatchRejectsDuplicateCheckpointBinding(t *testing.T) {
 func TestPublishBatchRejectsStaleContract(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	envelope := communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	envelope := communityEnvelope(t, &proof, "post-1")
 	if _, err := pool.Exec(ctx, `
 		UPDATE observation_contract_generations
 		SET current_generation = 2
@@ -415,8 +420,8 @@ func TestPublishBatchRejectsStaleContract(t *testing.T) {
 func TestClaimDoesNotStrandSupportedOldGenerationAfterCurrentBump(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	envelope := communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	envelope := communityEnvelope(t, &proof, "post-1")
 	repo := NewRepository(pool)
 	if _, err := repo.PublishBatch(ctx, publishInput(envelope)); err != nil {
 		t.Fatalf("publish generation one: %v", err)
@@ -432,30 +437,38 @@ func TestClaimDoesNotStrandSupportedOldGenerationAfterCurrentBump(t *testing.T) 
 	if err != nil {
 		t.Fatalf("claim old supported generation: %v", err)
 	}
-	if len(batch.Observations) != 1 || batch.Observations[0].ContractGeneration != 1 {
-		t.Fatalf("claimed observations = %#v", batch.Observations)
+	if len(batch.Claims) != 1 {
+		t.Fatalf("claimed work = %#v", batch.Claims)
+	}
+	if _, err := repo.Finalize(ctx, batch.Claims[0].Claim(batch.ConsumerName), func(_ context.Context, _ dbx.Tx, claimed *Observation) (ReconcileResult, error) {
+		if claimed.ContractGeneration != 1 {
+			t.Fatalf("locked contract generation = %d, want 1", claimed.ContractGeneration)
+		}
+		return ReconcileResult{}, nil
+	}); err != nil {
+		t.Fatalf("finalize old supported generation: %v", err)
 	}
 }
 
 func TestFinalizeUnsupportedContractDeadLettersWithBoundedAudit(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	envelope := communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	envelope := communityEnvelope(t, &proof, "post-1")
 	if _, err := NewRepository(pool).PublishBatch(ctx, publishInput(envelope)); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	repo := NewRepositoryWithContracts(pool, StaticSupportedContracts{}, InitialJobContracts(), nil)
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 {
+	if err != nil || len(batch.Claims) != 1 {
 		t.Fatalf("claim: batch=%#v err=%v", batch, err)
 	}
-	observation := batch.Observations[0]
+	observation := batch.Claims[0]
 	result, err := repo.Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
-		ObservationID: observation.ID,
+		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
-	}, func(context.Context, dbx.Tx, Observation) (ReconcileResult, error) {
+	}, func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error) {
 		t.Fatal("unsupported contract must not invoke reconcile")
 		return ReconcileResult{}, nil
 	})
@@ -467,7 +480,7 @@ func TestFinalizeUnsupportedContractDeadLettersWithBoundedAudit(t *testing.T) {
 		SELECT status, last_error_code, last_error_detail
 		FROM source_observation_queue
 		WHERE observation_id = $1
-	`, observation.ID).Scan(&status, &code, &detail); err != nil {
+	`, observation.ObservationID).Scan(&status, &code, &detail); err != nil {
 		t.Fatalf("load DLQ: %v", err)
 	}
 	if status != "DEAD_LETTER" || code != "unsupported_contract" || len(detail) > maxErrorTextBytes {
@@ -478,29 +491,28 @@ func TestFinalizeUnsupportedContractDeadLettersWithBoundedAudit(t *testing.T) {
 func TestFinalizeFutureSourceEventFallsBackToScheduledSlot(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	envelope := communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	envelope := communityEnvelope(t, &proof, "post-1")
 	future := time.Now().UTC().Add(time.Hour)
 	envelope.SourceEventAt = &future
-	var err error
-	envelope, err = contract.PrepareEnvelope(envelope)
+	prepared, err := contract.PrepareEnvelope(*envelope)
 	if err != nil {
 		t.Fatalf("prepare future source event: %v", err)
 	}
 	repo := NewRepository(pool)
-	if _, err := repo.PublishBatch(ctx, publishInput(envelope)); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(&prepared)); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 {
+	if err != nil || len(batch.Claims) != 1 {
 		t.Fatalf("claim: batch=%#v err=%v", batch, err)
 	}
-	observation := batch.Observations[0]
+	observation := batch.Claims[0]
 	result, err := repo.Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
-		ObservationID: observation.ID,
+		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
-	}, func(_ context.Context, _ dbx.Tx, claimed Observation) (ReconcileResult, error) {
+	}, func(_ context.Context, _ dbx.Tx, claimed *Observation) (ReconcileResult, error) {
 		if !claimed.SourceEventFallback || !claimed.EffectiveAt.Equal(claimed.ScheduledFor) {
 			t.Fatalf("claimed clock = %#v", claimed)
 		}
@@ -514,22 +526,22 @@ func TestFinalizeFutureSourceEventFallsBackToScheduledSlot(t *testing.T) {
 func TestFinalizeLeaseExpiryAtTerminalUpdateRollsBackAllSideEffects(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	repo := NewRepository(pool)
-	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 {
+	if err != nil || len(batch.Claims) != 1 {
 		t.Fatalf("claim: batch=%#v err=%v", batch, err)
 	}
-	observation := batch.Observations[0]
+	observation := batch.Claims[0]
 	var leaseExpiresAt time.Time
 	if err := pool.QueryRow(ctx, `
 		SELECT lease_expires_at
 		FROM source_observation_queue
 		WHERE observation_id = $1
-	`, observation.ID).Scan(&leaseExpiresAt); err != nil {
+	`, observation.ObservationID).Scan(&leaseExpiresAt); err != nil {
 		t.Fatalf("load initial lease: %v", err)
 	}
 	if !leaseExpiresAt.After(time.Now().UTC()) {
@@ -537,9 +549,9 @@ func TestFinalizeLeaseExpiryAtTerminalUpdateRollsBackAllSideEffects(t *testing.T
 	}
 	_, err = repo.Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
-		ObservationID: observation.ID,
+		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
-	}, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+	}, func(ctx context.Context, tx dbx.Tx, claimed *Observation) (ReconcileResult, error) {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO youtube_community_posts (post_id, channel_id)
 			VALUES ('finalize-expiry-post', $1)
@@ -571,7 +583,7 @@ func TestFinalizeLeaseExpiryAtTerminalUpdateRollsBackAllSideEffects(t *testing.T
 		SELECT status, lease_token
 		FROM source_observation_queue
 		WHERE observation_id = $1
-	`, observation.ID).Scan(&status, &leaseToken); err != nil {
+	`, observation.ObservationID).Scan(&status, &leaseToken); err != nil {
 		t.Fatalf("load queue after rollback: %v", err)
 	}
 	if status != string(contract.StatusProcessing) || leaseToken != observation.LeaseToken {
@@ -582,23 +594,23 @@ func TestFinalizeLeaseExpiryAtTerminalUpdateRollsBackAllSideEffects(t *testing.T
 func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	if _, err := NewRepository(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"))); err != nil {
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	if _, err := NewRepository(pool).PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	claimOptions := claimOptions()
 	claimOptions.LeaseDuration = 2 * time.Second
 	batch, err := NewRepository(pool).ClaimBatch(ctx, claimOptions)
-	if err != nil || len(batch.Observations) != 1 {
+	if err != nil || len(batch.Claims) != 1 {
 		t.Fatalf("claim: batch=%#v err=%v", batch, err)
 	}
-	observation := batch.Observations[0]
+	observation := batch.Claims[0]
 	var leaseExpiresAt time.Time
 	if err := pool.QueryRow(ctx, `
 		SELECT lease_expires_at
 		FROM source_observation_queue
 		WHERE observation_id = $1
-	`, observation.ID).Scan(&leaseExpiresAt); err != nil {
+	`, observation.ObservationID).Scan(&leaseExpiresAt); err != nil {
 		t.Fatalf("load initial lease: %v", err)
 	}
 	if !leaseExpiresAt.After(time.Now().UTC()) {
@@ -610,12 +622,11 @@ func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.
 		InitialJobContracts(),
 		nil,
 	)
-	err = nil
 	_, err = repo.Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
-		ObservationID: observation.ID,
+		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
-	}, func(context.Context, dbx.Tx, Observation) (ReconcileResult, error) {
+	}, func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error) {
 		t.Fatal("unsupported contract must not invoke reconcile")
 		return ReconcileResult{}, nil
 	})
@@ -630,7 +641,7 @@ func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.
 		SELECT status, COALESCE(last_error_code, ''), COALESCE(lease_token, '')
 		FROM source_observation_queue
 		WHERE observation_id = $1
-	`, observation.ID).Scan(&status, &lastErrorCode, &leaseToken); err != nil {
+	`, observation.ObservationID).Scan(&status, &lastErrorCode, &leaseToken); err != nil {
 		t.Fatalf("load queue after expired DLQ rollback: %v", err)
 	}
 	if status != string(contract.StatusProcessing) || lastErrorCode != "" || leaseToken != observation.LeaseToken {
@@ -641,7 +652,7 @@ func TestFinalizeUnsupportedContractExpiryAtDeadLetterRollsBackState(t *testing.
 func TestPublishBatchRollsBackEvidenceAndCheckpointWhenQueueInsertFails(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	if _, err := pool.Exec(ctx, `
 		CREATE FUNCTION source_observation_fail_queue_insert() RETURNS trigger AS $$
 		BEGIN
@@ -659,7 +670,7 @@ func TestPublishBatchRollsBackEvidenceAndCheckpointWhenQueueInsertFails(t *testi
 		t.Fatalf("create trigger: %v", err)
 	}
 	_, err := NewRepository(pool).PublishBatch(ctx, publishInput(
-		communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"),
+		communityEnvelope(t, &proof, "post-1"),
 	))
 	if err == nil {
 		t.Fatal("publish must fail")
@@ -672,27 +683,27 @@ func TestPublishBatchRollsBackEvidenceAndCheckpointWhenQueueInsertFails(t *testi
 func TestReplayReactivatesTerminalQueueWithoutCopyingEvidence(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
 	repo := NewRepository(pool)
-	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1"))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
-	if err != nil || len(batch.Observations) != 1 {
+	if err != nil || len(batch.Claims) != 1 {
 		t.Fatalf("claim: batch=%#v err=%v", batch, err)
 	}
-	observation := batch.Observations[0]
+	observation := batch.Claims[0]
 	if _, err := repo.Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
-		ObservationID: observation.ID,
+		ObservationID: observation.ObservationID,
 		LeaseToken:    observation.LeaseToken,
-	}, func(context.Context, dbx.Tx, Observation) (ReconcileResult, error) {
+	}, func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error) {
 		return ReconcileResult{}, nil
 	}); err != nil {
 		t.Fatalf("finalize: %v", err)
 	}
 	replay, err := repo.RequestReplay(ctx, ReplayInput{
-		ObservationID: observation.ID,
+		ObservationID: observation.ObservationID,
 		RequestedBy:   "test-operator",
 		Reason:        "regression verification",
 	})
@@ -705,7 +716,7 @@ func TestReplayReactivatesTerminalQueueWithoutCopyingEvidence(t *testing.T) {
 	var replayCount int
 	if err := pool.QueryRow(ctx, `
 		SELECT status, replay_count FROM source_observation_queue WHERE observation_id = $1
-	`, observation.ID).Scan(&status, &replayCount); err != nil {
+	`, observation.ObservationID).Scan(&status, &replayCount); err != nil {
 		t.Fatalf("load replayed queue: %v", err)
 	}
 	if status != "PENDING" || replayCount != 1 {
@@ -736,6 +747,17 @@ func TestClaimSQLUsesBoundedSkipLockedWithoutGenerationFilter(t *testing.T) {
 	if strings.Contains(query, "current_generation") {
 		t.Fatal("claim query must not filter immutable evidence by current generation")
 	}
+	for _, forbidden := range []string{"observation.payload", "payload_sha256", "evidence_sha256", "contract_generation"} {
+		if strings.Contains(query, forbidden) {
+			t.Fatalf("claim query returns non-work field %q", forbidden)
+		}
+	}
+}
+
+func TestClaimWorkStaysCompact(t *testing.T) {
+	if size := reflect.TypeFor[ClaimWork]().Size(); size > 64 {
+		t.Fatalf("ClaimWork size = %d bytes, want <= 64", size)
+	}
 }
 
 func TestClaimOptionsBounds(t *testing.T) {
@@ -762,8 +784,8 @@ func TestNewLeaseTokenReturnsBoundedLowercaseHex(t *testing.T) {
 func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	envelope := communityEnvelope(t, proof, 1, contract.CompletenessComplete, "post-1")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	envelope := communityEnvelope(t, &proof, "post-1")
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -785,7 +807,7 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 	if !errors.Is(err, ErrProjectionStale) {
 		t.Fatalf("disabled mid-fetch error = %v", err)
 	}
-	assertPublishSideEffects(t, pool, 0, 0, 0, 0)
+	assertPublishSideEffects(t, pool, 0, 0, 0)
 	var state string
 	if err := pool.QueryRow(ctx, `SELECT slot_state FROM youtube_collection_job_leases WHERE job_key = $1`, proof.JobKey).Scan(&state); err != nil {
 		t.Fatal(err)
@@ -798,7 +820,7 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -807,26 +829,26 @@ func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 	`, proof.ProjectionGeneration); err != nil {
 		t.Fatal(err)
 	}
-	stats := channelStatsEnvelope(t, proof, 1)
-	profile := channelProfileEnvelopeFor(t, proof, 1, "UC_OTHER")
-	_, err := NewRepository(pool).PublishBatch(ctx, PublishBatchInput{
+	stats := channelStatsEnvelope(t, &proof, 1)
+	profile := channelProfileEnvelopeFor(t, &proof, 1, "UC_OTHER")
+	_, err := NewRepository(pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           []CheckpointEntry{checkpointForEnvelope(stats), checkpointForEnvelope(profile)},
 			CollectionLatency: time.Second,
 		},
-		Observations: []contract.Envelope{stats, profile},
+		Observations: []contract.Envelope{*stats, *profile},
 	})
 	if !errors.Is(err, ErrTargetDisabled) {
 		t.Fatalf("out-of-bundle error = %v", err)
 	}
-	assertPublishSideEffects(t, pool, 0, 0, 0, 0)
+	assertPublishSideEffects(t, pool, 0, 0, 0)
 }
 
 func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -835,27 +857,27 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 	`, proof.ProjectionGeneration); err != nil {
 		t.Fatal(err)
 	}
-	first := viewerEnvelopeFor(t, proof, 1, "video-1", 100)
-	second := viewerEnvelopeFor(t, proof, 1, "video-2", 200)
-	_, err := NewRepository(pool).PublishBatch(ctx, PublishBatchInput{
+	first := viewerEnvelopeFor(t, &proof, 1, "video-1", 100)
+	second := viewerEnvelopeFor(t, &proof, 1, "video-2", 200)
+	_, err := NewRepository(pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           []CheckpointEntry{checkpointForEnvelope(first), checkpointForEnvelope(second)},
 			CollectionLatency: time.Second,
 		},
-		Observations: []contract.Envelope{first, second},
+		Observations: []contract.Envelope{*first, *second},
 	})
 	if !errors.Is(err, ErrTargetDisabled) {
 		t.Fatalf("global disabled target error = %v", err)
 	}
-	assertPublishSideEffects(t, pool, 0, 0, 0, 0)
+	assertPublishSideEffects(t, pool, 0, 0, 0)
 }
 
 func TestStaleHolderCannotMutatePublishOrJobState(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proofA := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	envelopeA := communityEnvelope(t, proofA, 1, contract.CompletenessComplete, "post-a")
+	proofA := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+	envelopeA := communityEnvelope(t, &proofA, "post-a")
 	resumeA := make(chan struct{})
 	resultA := make(chan error, 1)
 	go func() {
@@ -882,7 +904,7 @@ func TestStaleHolderCannotMutatePublishOrJobState(t *testing.T) {
 	`, proofB.JobKey, proofB.OwnerInstance, proofB.FenceEpoch); err != nil {
 		t.Fatal(err)
 	}
-	envelopeB := communityEnvelope(t, proofB, 1, contract.CompletenessComplete, "post-b")
+	envelopeB := communityEnvelope(t, &proofB, "post-b")
 	if _, err := NewRepository(pool).PublishBatch(ctx, publishInput(envelopeB)); err != nil {
 		t.Fatalf("new holder publish: %v", err)
 	}
@@ -894,7 +916,7 @@ func TestStaleHolderCannotMutatePublishOrJobState(t *testing.T) {
 	if err := <-resultA; !errors.Is(err, ErrCollectionFenceLost) {
 		t.Fatalf("stale holder error = %v", err)
 	}
-	assertPublishSideEffects(t, pool, 1, 1, 1, 0)
+	assertPublishSideEffects(t, pool, 1, 1, 1)
 	var nextDueAfter time.Time
 	if err := pool.QueryRow(ctx, `SELECT next_due_at FROM youtube_collection_job_leases WHERE job_key = $1`, proofB.JobKey).Scan(&nextDueAfter); err != nil {
 		t.Fatal(err)
@@ -915,8 +937,8 @@ func TestStaleHolderCannotCompleteDuplicateOrCollision(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			ctx := context.Background()
 			pool := dbtest.NewPool(t)
-			proofA := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-			base := communityEnvelope(t, proofA, 1, contract.CompletenessComplete, "post-a")
+			proofA := seedPublishLease(t, context.Background(), pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+			base := communityEnvelope(t, &proofA, "post-a")
 			repo := NewRepository(pool)
 			if _, err := repo.PublishBatch(ctx, publishInput(base)); err != nil {
 				t.Fatalf("publish base: %v", err)
@@ -942,11 +964,11 @@ func TestStaleHolderCannotCompleteDuplicateOrCollision(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			candidate := communityEnvelope(t, proofA, 1, contract.CompletenessComplete, testCase.postID)
+			candidate := communityEnvelope(t, &proofA, testCase.postID)
 			if _, err := repo.PublishBatch(ctx, publishInput(candidate)); !errors.Is(err, ErrCollectionFenceLost) {
 				t.Fatalf("stale %s error = %v", testCase.name, err)
 			}
-			assertPublishSideEffects(t, pool, 1, 1, 1, 0)
+			assertPublishSideEffects(t, pool, 1, 1, 1)
 
 			var state string
 			var owner string
@@ -987,7 +1009,7 @@ func (*targetQueryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQu
 func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_live")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_live")
 	subjects := make([]string, MaxPublishBatchSize-1)
 	kinds := make([]string, MaxPublishBatchSize-1)
 	for i := range subjects {
@@ -1016,9 +1038,13 @@ func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback publish verifier transaction: %v", rollbackErr)
+		}
+	}()
 	counter.queries.Store(0)
-	if err := (sqlPublishFenceVerifier{jobs: InitialJobContracts()}).Verify(ctx, tx, proof, observations); err != nil {
+	if err := (sqlPublishFenceVerifier{jobs: InitialJobContracts()}).Verify(ctx, tx, &proof, observations); err != nil {
 		t.Fatalf("verify max batch: %v", err)
 	}
 	if got := counter.queries.Load(); got != 3 {
@@ -1029,7 +1055,7 @@ func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 func TestPublishBatchStatementCountIsConstant(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_live")
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_live")
 	subjects := make([]string, MaxPublishBatchSize-1)
 	kinds := make([]string, MaxPublishBatchSize-1)
 	for i := range subjects {
@@ -1050,28 +1076,48 @@ func TestPublishBatchStatementCountIsConstant(t *testing.T) {
 	repository := NewRepository(tracedPool)
 	for _, size := range []int{1, 361, MaxPublishBatchSize} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
-			input := viewerPublishBatch(t, proof, size)
-			encoded, contracts, err := encodePublishBatch(input)
-			if err != nil {
-				t.Fatal(err)
-			}
-			tx, err := tracedPool.Begin(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			counter.queries.Store(0)
-			if _, err := repository.publishBatchTx(ctx, tx, input, encoded, contracts); err != nil {
-				_ = tx.Rollback(ctx)
-				t.Fatalf("publish %d observations: %v", size, err)
-			}
-			if got := counter.queries.Load(); got != 6 {
-				_ = tx.Rollback(ctx)
-				t.Fatalf("publish statements = %d, want constant 6", got)
-			}
-			if err := tx.Rollback(ctx); err != nil {
-				t.Fatal(err)
-			}
+			assertPublishBatchStatementCount(t, ctx, tracedPool, repository, counter, &proof, size)
 		})
+	}
+}
+
+func assertPublishBatchStatementCount(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	repository *Repository,
+	counter *targetQueryCounter,
+	proof *contract.LeaseProof,
+	size int,
+) {
+	t.Helper()
+	input := viewerPublishBatch(t, proof, size)
+	encoded, contracts, err := encodePublishBatch(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counter.queries.Store(0)
+	if _, err := repository.publishBatchTx(ctx, tx, input, encoded, contracts); err != nil {
+		rollbackPublishTestTx(t, ctx, tx, "failed publish")
+		t.Fatalf("publish %d observations: %v", size, err)
+	}
+	if got := counter.queries.Load(); got != 6 {
+		rollbackPublishTestTx(t, ctx, tx, "unexpected statement count")
+		t.Fatalf("publish statements = %d, want constant 6", got)
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func rollbackPublishTestTx(t *testing.T, ctx context.Context, tx pgx.Tx, reason string) {
+	t.Helper()
+	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		t.Errorf("rollback %s: %v", reason, err)
 	}
 }
 
@@ -1096,10 +1142,10 @@ func TestPublishBatchRejectsOversizedEncodedSetBeforeDatabaseAccess(t *testing.T
 	observations := make([]contract.Envelope, size)
 	checkpoints := make([]CheckpointEntry, size)
 	for i := range observations {
-		observations[i] = oversizedCommunityEnvelope(t, proof, i)
-		checkpoints[i] = checkpointForEnvelope(observations[i])
+		observations[i] = *oversizedCommunityEnvelope(t, &proof, i)
+		checkpoints[i] = checkpointForEnvelope(&observations[i])
 	}
-	input := PublishBatchInput{
+	input := &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries: checkpoints, CollectionLatency: time.Second,
@@ -1116,16 +1162,16 @@ func TestPublishBatchRejectsOversizedEncodedSetBeforeDatabaseAccess(t *testing.T
 	}
 }
 
-func viewerPublishBatch(t *testing.T, proof contract.LeaseProof, size int) PublishBatchInput {
+func viewerPublishBatch(t *testing.T, proof *contract.LeaseProof, size int) *PublishBatchInput {
 	t.Helper()
 	observations := make([]contract.Envelope, size)
 	checkpoints := make([]CheckpointEntry, size)
 	for i := range observations {
-		observations[i] = viewerEnvelopeFor(t, proof, 1, fmt.Sprintf("video-%03d", i), int64(i+1))
-		checkpoints[i] = checkpointForEnvelope(observations[i])
+		observations[i] = *viewerEnvelopeFor(t, proof, 1, fmt.Sprintf("video-%03d", i), int64(i+1))
+		checkpoints[i] = checkpointForEnvelope(&observations[i])
 	}
-	return PublishBatchInput{
-		Lease: proof,
+	return &PublishBatchInput{
+		Lease: *proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           checkpoints,
 			CollectionLatency: time.Second,
@@ -1134,7 +1180,7 @@ func viewerPublishBatch(t *testing.T, proof contract.LeaseProof, size int) Publi
 	}
 }
 
-func oversizedCommunityEnvelope(t *testing.T, proof contract.LeaseProof, ordinal int) contract.Envelope {
+func oversizedCommunityEnvelope(t *testing.T, proof *contract.LeaseProof, ordinal int) *contract.Envelope {
 	t.Helper()
 	subject := fmt.Sprintf("UC_OVERSIZED_%03d", ordinal)
 	payload, err := contract.MarshalPayloadV1(contract.CommunityPayloadV1{
@@ -1155,24 +1201,25 @@ func oversizedCommunityEnvelope(t *testing.T, proof contract.LeaseProof, ordinal
 		SubjectKey: subject, SchemaVersion: 1, ContractGeneration: 1,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
-		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: proof,
+		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return envelope
+	return &envelope
 }
 
-func assertPublishSideEffects(t *testing.T, pool *pgxpool.Pool, observations, queue, checkpoints, collisions int) {
+func assertPublishSideEffects(t *testing.T, pool *pgxpool.Pool, observations, queue, checkpoints int) {
 	t.Helper()
 	assertTableCount(t, pool, "source_observations", observations)
 	assertTableCount(t, pool, "source_observation_queue", queue)
 	assertTableCount(t, pool, "source_collection_checkpoints", checkpoints)
-	assertTableCount(t, pool, "source_observation_collisions", collisions)
+	assertTableCount(t, pool, "source_observation_collisions", 0)
 }
 
 func seedPublishLease(
 	t testing.TB,
+	ctx context.Context,
 	pool *pgxpool.Pool,
 	provider contract.Provider,
 	kind contract.ObservationKind,
@@ -1180,7 +1227,6 @@ func seedPublishLease(
 	jobKind string,
 ) contract.LeaseProof {
 	t.Helper()
-	ctx := context.Background()
 	scheduledFor := time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC)
 	var generation int64
 	if err := pool.QueryRow(ctx, `
@@ -1224,7 +1270,7 @@ func seedPublishLease(
 	return proof
 }
 
-func reactivateLease(t *testing.T, pool *pgxpool.Pool, proof contract.LeaseProof) {
+func reactivateLease(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `
 		UPDATE youtube_collection_job_leases
@@ -1238,22 +1284,24 @@ func reactivateLease(t *testing.T, pool *pgxpool.Pool, proof contract.LeaseProof
 
 func advanceLease(
 	t testing.TB,
+	ctx context.Context,
 	pool *pgxpool.Pool,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	delta time.Duration,
 ) contract.LeaseProof {
 	t.Helper()
-	proof.FenceEpoch++
-	proof.ScheduledFor = proof.ScheduledFor.Add(delta)
-	if _, err := pool.Exec(context.Background(), `
+	next := *proof
+	next.FenceEpoch++
+	next.ScheduledFor = next.ScheduledFor.Add(delta)
+	if _, err := pool.Exec(ctx, `
 		UPDATE youtube_collection_job_leases
 		SET slot_state = 'ACTIVE', owner_instance = $2, lease_expires_at = NOW() + INTERVAL '1 hour',
 		    retry_not_before = NULL, fence_epoch = $3, scheduled_for = $4, next_due_at = $4
 		WHERE job_key = $1
-	`, proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ScheduledFor); err != nil {
+	`, next.JobKey, next.OwnerInstance, next.FenceEpoch, next.ScheduledFor); err != nil {
 		t.Fatalf("advance lease: %v", err)
 	}
-	return proof
+	return next
 }
 
 func expireObservationClaim(t *testing.T, pool *pgxpool.Pool, observationID int64) {
@@ -1278,17 +1326,15 @@ func (c delayedUnsupportedContracts) Supports(ContractVersion) bool {
 
 func communityEnvelope(
 	t testing.TB,
-	proof contract.LeaseProof,
-	generation int64,
-	completeness contract.Completeness,
+	proof *contract.LeaseProof,
 	postID string,
-) contract.Envelope {
+) *contract.Envelope {
 	t.Helper()
 	payload, err := contract.MarshalPayloadV1(contract.CommunityPayloadV1{
 		ChannelID: "UC_TEST",
 		Posts:     []contract.CommunityPostV1{{PostID: postID, ChannelID: "UC_TEST"}},
 		Coverage: contract.CommunityPageCoverageV1{
-			ChannelID: "UC_TEST", MaxResults: 10, PageCount: 1, Exhausted: completeness == contract.CompletenessComplete,
+			ChannelID: "UC_TEST", MaxResults: 10, PageCount: 1, Exhausted: true,
 		},
 	})
 	if err != nil {
@@ -1299,37 +1345,37 @@ func communityEnvelope(
 		ObservationKind:    contract.KindCommunityPage,
 		SubjectKey:         "UC_TEST",
 		SchemaVersion:      contract.SchemaVersionV1,
-		ContractGeneration: generation,
+		ContractGeneration: 1,
 		ScheduledFor:       proof.ScheduledFor,
 		ObservedAt:         proof.ScheduledFor.Add(time.Second),
-		Completeness:       completeness,
+		Completeness:       contract.CompletenessComplete,
 		Continuity:         contract.ContinuityContiguous,
 		Payload:            payload,
 		CollectorInstance:  proof.OwnerInstance,
-		Lease:              proof,
+		Lease:              *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare community envelope: %v", err)
 	}
-	return envelope
+	return &envelope
 }
 
 func viewerEnvelope(
 	t *testing.T,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	generation int64,
 	count int64,
-) contract.Envelope {
+) *contract.Envelope {
 	return viewerEnvelopeFor(t, proof, generation, "video-1", count)
 }
 
 func viewerEnvelopeFor(
 	t *testing.T,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	generation int64,
 	subject string,
 	count int64,
-) contract.Envelope {
+) *contract.Envelope {
 	t.Helper()
 	payload, err := contract.MarshalPayloadV1(contract.ViewerSampleV1{
 		VideoID:             subject,
@@ -1356,19 +1402,19 @@ func viewerEnvelopeFor(
 		Continuity:         contract.ContinuityNotApplicable,
 		Payload:            payload,
 		CollectorInstance:  proof.OwnerInstance,
-		Lease:              proof,
+		Lease:              *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare viewer envelope: %v", err)
 	}
-	return envelope
+	return &envelope
 }
 
 func channelStatsEnvelope(
 	t *testing.T,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	generation int64,
-) contract.Envelope {
+) *contract.Envelope {
 	t.Helper()
 	count := int64(123)
 	payload, err := contract.MarshalPayloadV1(contract.ChannelStatsV1{
@@ -1393,28 +1439,28 @@ func channelStatsEnvelope(
 		Continuity:         contract.ContinuityContiguous,
 		Payload:            payload,
 		CollectorInstance:  proof.OwnerInstance,
-		Lease:              proof,
+		Lease:              *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare channel stats envelope: %v", err)
 	}
-	return envelope
+	return &envelope
 }
 
 func channelProfileEnvelope(
 	t *testing.T,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	generation int64,
-) contract.Envelope {
+) *contract.Envelope {
 	return channelProfileEnvelopeFor(t, proof, generation, "UC_TEST")
 }
 
 func channelProfileEnvelopeFor(
 	t *testing.T,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	generation int64,
 	subject string,
-) contract.Envelope {
+) *contract.Envelope {
 	t.Helper()
 	payload, err := contract.MarshalPayloadV1(contract.ChannelProfileV1{
 		ChannelID: subject,
@@ -1438,15 +1484,15 @@ func channelProfileEnvelopeFor(
 		Continuity:         contract.ContinuityContiguous,
 		Payload:            payload,
 		CollectorInstance:  proof.OwnerInstance,
-		Lease:              proof,
+		Lease:              *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare channel profile envelope: %v", err)
 	}
-	return envelope
+	return &envelope
 }
 
-func checkpointForEnvelope(envelope contract.Envelope) CheckpointEntry {
+func checkpointForEnvelope(envelope *contract.Envelope) CheckpointEntry {
 	return CheckpointEntry{
 		Provider:           envelope.Provider,
 		ObservationKind:    envelope.ObservationKind,
@@ -1460,8 +1506,8 @@ func checkpointForEnvelope(envelope contract.Envelope) CheckpointEntry {
 	}
 }
 
-func publishInput(envelope contract.Envelope) PublishBatchInput {
-	return PublishBatchInput{
+func publishInput(envelope *contract.Envelope) *PublishBatchInput {
+	return &PublishBatchInput{
 		Lease: envelope.Lease,
 		Checkpoint: CheckpointUpdate{
 			Entries: []CheckpointEntry{func() CheckpointEntry {
@@ -1471,7 +1517,7 @@ func publishInput(envelope contract.Envelope) PublishBatchInput {
 			}()},
 			CollectionLatency: time.Second,
 		},
-		Observations: []contract.Envelope{envelope},
+		Observations: []contract.Envelope{*envelope},
 	}
 }
 

@@ -13,11 +13,10 @@ import (
 
 func videoListEnvelope(
 	t *testing.T,
-	proof contract.LeaseProof,
-	generation int64,
+	proof *contract.LeaseProof,
 	completeness contract.Completeness,
 	videoIDs ...string,
-) contract.Envelope {
+) *contract.Envelope {
 	t.Helper()
 	published := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	videos := make([]contract.VideoListItemV1, 0, len(videoIDs))
@@ -42,19 +41,19 @@ func videoListEnvelope(
 		ObservationKind:    contract.KindVideoList,
 		SubjectKey:         "UC_TEST",
 		SchemaVersion:      contract.SchemaVersionV1,
-		ContractGeneration: generation,
+		ContractGeneration: 1,
 		ScheduledFor:       proof.ScheduledFor,
 		ObservedAt:         proof.ScheduledFor.Add(time.Second),
 		Completeness:       completeness,
 		Continuity:         contract.ContinuityContiguous,
 		Payload:            payload,
 		CollectorInstance:  proof.OwnerInstance,
-		Lease:              proof,
+		Lease:              *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare video list envelope: %v", err)
 	}
-	return envelope
+	return &envelope
 }
 
 func contentClaimOptions() ClaimOptions {
@@ -69,11 +68,11 @@ func contentClaimOptions() ClaimOptions {
 
 func shortsListEnvelope(
 	t *testing.T,
-	proof contract.LeaseProof,
+	proof *contract.LeaseProof,
 	generation int64,
 	completeness contract.Completeness,
 	videoIDs ...string,
-) contract.Envelope {
+) *contract.Envelope {
 	t.Helper()
 	published := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	videos := make([]contract.VideoListItemV1, 0, len(videoIDs))
@@ -105,12 +104,12 @@ func shortsListEnvelope(
 		Continuity:         contract.ContinuityContiguous,
 		Payload:            payload,
 		CollectorInstance:  proof.OwnerInstance,
-		Lease:              proof,
+		Lease:              *proof,
 	})
 	if err != nil {
 		t.Fatalf("prepare shorts list envelope: %v", err)
 	}
-	return envelope
+	return &envelope
 }
 
 func seedContentWatermark(t *testing.T, pool *pgxpool.Pool) {

@@ -13,7 +13,7 @@ import (
 func (c *Consumer) reconcileStats(
 	ctx context.Context,
 	tx dbx.Tx,
-	claimed Observation,
+	claimed *Observation,
 ) (stats.Decision, ReconcileResult, error) {
 	evidence, err := statsEvidenceFromObservation(claimed)
 	if err != nil {
@@ -30,13 +30,13 @@ func (c *Consumer) reconcileStats(
 	if err != nil {
 		return stats.Decision{}, ReconcileResult{}, err
 	}
-	if err := persistStatsDecision(ctx, tx, claimed, decision); err != nil {
+	if err := persistStatsDecision(ctx, tx, claimed, &decision); err != nil {
 		return stats.Decision{}, ReconcileResult{}, err
 	}
 	return decision, ReconcileResult{Applications: mapStatsApplications(decision.Applications)}, nil
 }
 
-func statsEvidenceFromObservation(observation Observation) (stats.Evidence, error) {
+func statsEvidenceFromObservation(observation *Observation) (stats.Evidence, error) {
 	var payload contract.ChannelStatsV1
 	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
 		return stats.Evidence{}, fmt.Errorf("decode channel stats payload: %w", err)

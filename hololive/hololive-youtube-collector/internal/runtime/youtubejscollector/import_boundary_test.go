@@ -3,8 +3,8 @@ package youtubejscollector
 import (
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -34,7 +34,7 @@ func TestYouTubeJSCollectorPackageDoesNotImportCanonicalPersist(t *testing.T) {
 		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		src, readErr := os.ReadFile(filepath.Join(".", name))
+		src, readErr := fs.ReadFile(os.DirFS("."), name)
 		if readErr != nil {
 			t.Fatalf("read %s: %v", name, readErr)
 		}

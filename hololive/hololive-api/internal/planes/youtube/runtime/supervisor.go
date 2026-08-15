@@ -130,26 +130,26 @@ func (r *Runtime) stopAfterProjectionError(ctx context.Context, errCh chan<- err
 func (r *Runtime) runWorker(ctx context.Context, errCh chan<- error) {
 	defer func() { r.workerDone <- struct{}{} }()
 	for {
-		observation, ok := r.nextWork(ctx)
+		work, ok := r.nextWork(ctx)
 		if !ok {
 			return
 		}
-		if err := r.processObservation(ctx, observation); err != nil {
+		if err := r.processClaim(ctx, work); err != nil {
 			r.reportLoopError(ctx, errCh, "consume community observation", err)
 			return
 		}
 	}
 }
 
-func (r *Runtime) nextWork(ctx context.Context) (sourceobservation.Observation, bool) {
+func (r *Runtime) nextWork(ctx context.Context) (sourceobservation.ClaimWork, bool) {
 	if ctx.Err() != nil {
-		return sourceobservation.Observation{}, false
+		return sourceobservation.ClaimWork{}, false
 	}
 	select {
 	case <-ctx.Done():
-		return sourceobservation.Observation{}, false
-	case observation, ok := <-r.workCh:
-		return observation, ok
+		return sourceobservation.ClaimWork{}, false
+	case work, ok := <-r.workCh:
+		return work, ok
 	}
 }
 
@@ -166,96 +166,92 @@ func (r *Runtime) claimTick(ctx context.Context) error {
 		return err
 	}
 	r.observePendingQueue(ctx)
-	for i := range batch.Observations {
-		r.remember(batch.Observations[i])
+	for i := range batch.Claims {
+		r.remember(batch.Claims[i])
 	}
-	for i := range batch.Observations {
-		if err := sendWork(ctx, r.workCh, batch.Observations[i]); err != nil {
+	for i := range batch.Claims {
+		if err := sendWork(ctx, r.workCh, batch.Claims[i]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func sendWork(ctx context.Context, workCh chan<- sourceobservation.Observation, observation sourceobservation.Observation) error {
+func sendWork(ctx context.Context, workCh chan<- sourceobservation.ClaimWork, work sourceobservation.ClaimWork) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case workCh <- observation:
+	case workCh <- work:
 		return nil
 	}
 }
 
-func (r *Runtime) processObservation(ctx context.Context, observation sourceobservation.Observation) error {
-	r.remember(observation)
-	err := r.consumeObservation(ctx, observation)
+func (r *Runtime) processClaim(ctx context.Context, work sourceobservation.ClaimWork) error {
+	r.remember(work)
+	err := r.consumeClaim(ctx, work)
 	if err == nil {
 		youtubeFinalizeTotal.Inc()
 		youtubeConsumeTotal.WithLabelValues("success").Inc()
-		r.forget(observation.ID)
+		r.forget(work)
 		return nil
 	}
-	if r.forgetLostClaim(err, observation.ID) {
+	if r.forgetLostClaim(err, work) {
 		return nil
 	}
 	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 		return nil
 	}
-	return r.handleConsumeFailure(ctx, observation, err)
+	return r.handleConsumeFailure(ctx, work, err)
 }
 
-func (r *Runtime) consumeObservation(ctx context.Context, observation sourceobservation.Observation) error {
+func (r *Runtime) consumeClaim(ctx context.Context, work sourceobservation.ClaimWork) error {
 	txCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
 	defer cancel()
 	return r.withDB(txCtx, func(ctx context.Context) error {
-		claim := sourceobservation.Claim{
-			ConsumerName:  r.claim.ConsumerName,
-			ObservationID: observation.ID,
-			LeaseToken:    observation.LeaseToken,
-		}
+		claim := work.Claim(r.claim.ConsumerName)
 		if err := r.claimer.EnsureClaimBudget(ctx, claim, r.Config.TransactionTimeout); err != nil {
 			return err
 		}
-		return r.consumer.ConsumeObservation(ctx, observation, r.claim.ConsumerName)
+		return r.consumer.ConsumeClaim(ctx, claim)
 	})
 }
 
-func (r *Runtime) forgetLostClaim(err error, observationID int64) bool {
+func (r *Runtime) forgetLostClaim(err error, work sourceobservation.ClaimWork) bool {
 	if !errors.Is(err, sourceobservation.ErrClaimLost) {
 		return false
 	}
 	youtubeClaimLostTotal.Inc()
 	youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
-	r.forget(observationID)
+	r.forget(work)
 	return true
 }
 
-func (r *Runtime) handleConsumeFailure(ctx context.Context, observation sourceobservation.Observation, err error) error {
+func (r *Runtime) handleConsumeFailure(ctx context.Context, work sourceobservation.ClaimWork, err error) error {
 	r.Logger.Error("youtube plane consume failed",
-		slog.Int64("observation_id", observation.ID),
-		slog.String("observation_kind", string(observation.ObservationKind)),
-		slog.String("subject_key", observation.SubjectKey),
+		slog.Int64("observation_id", work.ObservationID),
+		slog.String("observation_kind", string(work.ObservationKind)),
+		slog.String("subject_key", work.SubjectKey),
 		slog.Any("error", err),
 	)
 	if !retryableObservationError(err) {
 		youtubeConsumeTotal.WithLabelValues("fatal").Inc()
-		r.forget(observation.ID)
+		r.forget(work)
 		return err
 	}
-	return r.retryAndForget(ctx, observation, err)
+	return r.retryAndForget(ctx, work, err)
 }
 
-func (r *Runtime) retryAndForget(ctx context.Context, observation sourceobservation.Observation, cause error) error {
-	retryErr := r.retryObservation(ctx, observation, cause)
+func (r *Runtime) retryAndForget(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
+	retryErr := r.retryObservation(ctx, work, cause)
 	if errors.Is(retryErr, sourceobservation.ErrClaimLost) {
 		youtubeClaimLostTotal.Inc()
 		youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
 		retryErr = nil
 	}
-	r.forget(observation.ID)
+	r.forget(work)
 	if retryErr != nil {
 		youtubeConsumeTotal.WithLabelValues("retry_error").Inc()
-		return fmt.Errorf("retry observation %d: %w", observation.ID, retryErr)
+		return fmt.Errorf("retry observation %d: %w", work.ObservationID, retryErr)
 	}
 	return nil
 }
@@ -280,38 +276,38 @@ func (r *Runtime) refreshProjection(ctx context.Context) error {
 	return err
 }
 
-func (r *Runtime) remember(observation sourceobservation.Observation) {
-	r.inFlight.Store(observation.ID, observation)
+func (r *Runtime) remember(work sourceobservation.ClaimWork) {
+	r.inFlight.Store(work.Key(), work)
 }
 
-func (r *Runtime) forget(id int64) {
-	r.inFlight.Delete(id)
+func (r *Runtime) forget(work sourceobservation.ClaimWork) {
+	r.inFlight.CompareAndDelete(work.Key(), work)
 }
 
 func (r *Runtime) releaseInFlight(ctx context.Context) error {
 	var releaseErrors []error
 	r.inFlight.Range(func(key, value any) bool {
-		observation, ok := value.(sourceobservation.Observation)
+		work, ok := value.(sourceobservation.ClaimWork)
 		if !ok {
 			releaseErrors = append(releaseErrors, fmt.Errorf("release youtube observation: invalid in-flight value for %v", key))
 			return true
 		}
-		err := r.retryObservation(ctx, observation, errors.New("youtube plane shutting down"))
+		err := r.retryObservation(ctx, work, errors.New("youtube plane shutting down"))
 		if errors.Is(err, sourceobservation.ErrClaimLost) {
 			youtubeClaimLostTotal.Inc()
 			err = nil
 		}
 		if err != nil {
-			releaseErrors = append(releaseErrors, fmt.Errorf("release observation %d: %w", observation.ID, err))
+			releaseErrors = append(releaseErrors, fmt.Errorf("release observation %d: %w", work.ObservationID, err))
 			return ctx.Err() == nil
 		}
-		r.inFlight.Delete(key)
+		r.inFlight.CompareAndDelete(key, work)
 		return true
 	})
 	return errors.Join(releaseErrors...)
 }
 
-func (r *Runtime) retryObservation(ctx context.Context, observation sourceobservation.Observation, cause error) error {
+func (r *Runtime) retryObservation(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
 	if r.Config.TransactionTimeout <= 0 {
 		return errors.New("youtube plane transaction timeout must be positive")
 	}
@@ -319,8 +315,8 @@ func (r *Runtime) retryObservation(ctx context.Context, observation sourceobserv
 	defer cancel()
 	return r.withDB(retryCtx, func(ctx context.Context) error {
 		status, err := r.claimer.Retry(ctx, sourceobservation.RetryInput{
-			ObservationID: observation.ID,
-			LeaseToken:    observation.LeaseToken,
+			ObservationID: work.ObservationID,
+			LeaseToken:    work.LeaseToken,
 			Delay:         r.Config.ClaimInterval,
 			ErrorCode:     "youtube_plane_retry",
 			ErrorDetail:   boundedError(cause),
@@ -328,7 +324,7 @@ func (r *Runtime) retryObservation(ctx context.Context, observation sourceobserv
 		if err != nil {
 			return err
 		}
-		return r.applyRetryStatus(observation.ID, status)
+		return r.applyRetryStatus(work.ObservationID, status)
 	})
 }
 

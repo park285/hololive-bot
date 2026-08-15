@@ -24,7 +24,7 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	helper, rpc, err := Start(ctx, Config{
+	helper, rpc, err := Start(ctx, &Config{
 		NodePath: nodePath, ScriptPath: scriptPath,
 		SocketPath: filepath.Join(t.TempDir(), "youtubejs.sock"), Timeout: 45 * time.Second,
 	})

@@ -61,9 +61,12 @@ func (r *Runner) TargetKinds() []contract.ObservationKind {
 	return append([]contract.ObservationKind(nil), r.targetKinds...)
 }
 
-func (r *Runner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
+func (r *Runner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "holodex client is not configured")
+	}
+	if err := collectutil.ValidateInput(input); err != nil {
+		return collectutil.RunOutput{}, err
 	}
 	started := time.Now()
 	body, err := r.client.Fetch(ctx)
@@ -81,7 +84,7 @@ func (r *Runner) Collect(ctx context.Context, input collectutil.RunInput) (colle
 	return collectutil.Output(envelopes, started)
 }
 
-func (r *Runner) buildBatch(input collectutil.RunInput, rows []parsedLive) ([]contract.Envelope, error) {
+func (r *Runner) buildBatch(input *collectutil.RunInput, rows []parsedLive) ([]contract.Envelope, error) {
 	allowed := requestedSet(r.requestedIDs(input))
 	envelopes, err := r.channelEnvelopes(input, groupByRequestedChannel(rows, allowed))
 	if err != nil {
@@ -104,16 +107,17 @@ func (r *Runner) buildBatch(input collectutil.RunInput, rows []parsedLive) ([]co
 
 func groupByRequestedChannel(rows []parsedLive, allowed map[string]struct{}) map[string][]parsedLive {
 	byChannel := make(map[string][]parsedLive, len(allowed))
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		if _, ok := allowed[row.channelID]; !ok {
 			continue
 		}
-		byChannel[row.channelID] = append(byChannel[row.channelID], row)
+		byChannel[row.channelID] = append(byChannel[row.channelID], *row)
 	}
 	return byChannel
 }
 
-func (r *Runner) channelEnvelopes(input collectutil.RunInput, byChannel map[string][]parsedLive) ([]contract.Envelope, error) {
+func (r *Runner) channelEnvelopes(input *collectutil.RunInput, byChannel map[string][]parsedLive) ([]contract.Envelope, error) {
 	envelopes := make([]contract.Envelope, 0)
 	for _, channelID := range collectutil.UniqueSorted(keys(byChannel)) {
 		sessions := byChannel[channelID]
@@ -139,7 +143,7 @@ func (r *Runner) channelEnvelopes(input collectutil.RunInput, byChannel map[stri
 }
 
 func (r *Runner) appendChannelKind(
-	input collectutil.RunInput,
+	input *collectutil.RunInput,
 	envelopes []contract.Envelope,
 	kind contract.ObservationKind,
 	channelID string,
@@ -157,7 +161,7 @@ func (r *Runner) appendChannelKind(
 }
 
 func (r *Runner) viewerEnvelopes(
-	input collectutil.RunInput,
+	input *collectutil.RunInput,
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) ([]contract.Envelope, error) {
@@ -167,7 +171,8 @@ func (r *Runner) viewerEnvelopes(
 	windowStart := input.Lease.ScheduledFor.UTC()
 	windowSeconds := collectutil.SampleWindowSeconds(input.Spec.PollInterval)
 	envelopes := make([]contract.Envelope, 0)
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		if _, ok := allowed[row.channelID]; !ok || !subjectAllowed(input, contract.KindViewerSample, row.row.ID) {
 			continue
 		}
@@ -185,7 +190,7 @@ func (r *Runner) viewerEnvelopes(
 }
 
 func (r *Runner) scheduleEnvelope(
-	input collectutil.RunInput,
+	input *collectutil.RunInput,
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) (*contract.Envelope, error) {
@@ -203,7 +208,7 @@ func (r *Runner) scheduleEnvelope(
 	return &envelope, nil
 }
 
-func (r *Runner) requestedIDs(input collectutil.RunInput) []string {
+func (r *Runner) requestedIDs(input *collectutil.RunInput) []string {
 	var ids []string
 	for _, kind := range r.rosterKinds {
 		ids = append(ids, input.EnabledSubjects[kind]...)
@@ -215,7 +220,7 @@ func (r *Runner) emits(kind contract.ObservationKind) bool {
 	return slices.Contains(r.emissions, kind)
 }
 
-func (r *Runner) envelope(input collectutil.RunInput, kind contract.ObservationKind, subject string, payload any) (contract.Envelope, error) {
+func (r *Runner) envelope(input *collectutil.RunInput, kind contract.ObservationKind, subject string, payload any) (contract.Envelope, error) {
 	generation, err := collectutil.Generation(input, kind)
 	if err != nil {
 		return contract.Envelope{}, err
@@ -225,7 +230,7 @@ func (r *Runner) envelope(input collectutil.RunInput, kind contract.ObservationK
 		kind,
 		subject,
 		generation,
-		input.Lease,
+		&input.Lease,
 		contract.CompletenessPartial,
 		contract.ContinuityNotApplicable,
 		payload,

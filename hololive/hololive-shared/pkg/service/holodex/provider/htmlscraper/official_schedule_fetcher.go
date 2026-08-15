@@ -172,7 +172,7 @@ func (s *Service) executeOfficialScheduleAPIRequest(req *http.Request) ([]byte, 
 		return nil, newOfficialScheduleSourceError(officialScheduleReasonTransport, 0, fmt.Errorf("official schedule HTTP client is nil"))
 	}
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.httpClient.Do(req) //nolint:bodyclose // downstream helpers own every non-nil response body path
 	if err != nil {
 		return nil, officialScheduleRequestFailure(resp, err)
 	}
@@ -214,6 +214,9 @@ func (s *Service) readOfficialScheduleAPIResponse(resp *http.Response) ([]byte, 
 }
 
 func validateOfficialScheduleStatus(resp *http.Response) error {
+	if resp == nil || resp.Body == nil {
+		return validateOfficialScheduleResponse(resp)
+	}
 	if resp.StatusCode == http.StatusOK {
 		return nil
 	}
@@ -223,6 +226,9 @@ func validateOfficialScheduleStatus(resp *http.Response) error {
 }
 
 func validateOfficialScheduleResponseContentType(resp *http.Response) error {
+	if resp == nil || resp.Body == nil {
+		return validateOfficialScheduleResponse(resp)
+	}
 	if err := validateOfficialScheduleContentType(resp.Header.Get("Content-Type")); err != nil {
 		closeErr := httputil.DrainAndClose(resp.Body, httputil.DefaultDrainLimit)
 		return newOfficialScheduleSourceError(officialScheduleReasonContentType, resp.StatusCode, errors.Join(err, closeErr))
@@ -231,6 +237,9 @@ func validateOfficialScheduleResponseContentType(resp *http.Response) error {
 }
 
 func (s *Service) readOfficialScheduleResponseBody(resp *http.Response) ([]byte, error) {
+	if resp == nil || resp.Body == nil {
+		return nil, validateOfficialScheduleResponse(resp)
+	}
 	body, err := httputil.ReadAllAndClose(resp.Body, s.maxResponseBodyBytes)
 	if err != nil {
 		return nil, newOfficialScheduleSourceError(

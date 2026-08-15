@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -130,7 +129,7 @@ func DecodeEnvelopeStrict(raw []byte) (Envelope, error) {
 	return envelope, nil
 }
 
-func PrepareEnvelope(envelope Envelope) (Envelope, error) {
+func PrepareEnvelope(envelope Envelope) (Envelope, error) { //nolint:gocritic // public copy-transform boundary preserves caller isolation
 	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(
 		envelope.ObservationKind,
 		envelope.SubjectKey,
@@ -150,7 +149,10 @@ func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	envelope.Payload = canonicalPayload
 	envelope.ScopeSHA256 = SHA256Hex(canonicalScope)
 	envelope.PayloadSHA256 = SHA256Hex(canonicalPayload)
-	envelope.ObservationKey = ObservationKeyForEnvelope(envelope, canonicalScope)
+	envelope.ObservationKey, err = ObservationKeyForEnvelope(&envelope, canonicalScope)
+	if err != nil {
+		return Envelope{}, fmt.Errorf("prepare source observation envelope: %w", err)
+	}
 	evidenceSHA256, err := envelope.expectedEvidenceSHA256()
 	if err != nil {
 		return Envelope{}, fmt.Errorf("prepare source observation envelope: %w", err)
@@ -162,12 +164,12 @@ func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	return envelope, nil
 }
 
-func (e Envelope) Validate() error {
+func (e *Envelope) Validate() error {
 	_, err := e.ValidateAndCanonicalPayload()
 	return err
 }
 
-func (e Envelope) ValidateAndCanonicalPayload() ([]byte, error) {
+func (e *Envelope) ValidateAndCanonicalPayload() ([]byte, error) {
 	if err := e.validateEnvelopeIdentity(); err != nil {
 		return nil, err
 	}
@@ -180,7 +182,7 @@ func (e Envelope) ValidateAndCanonicalPayload() ([]byte, error) {
 	return e.verifyCanonicalPayload()
 }
 
-func (e Envelope) validateEnvelopeIdentity() error {
+func (e *Envelope) validateEnvelopeIdentity() error {
 	if !e.Provider.Valid() {
 		return fmt.Errorf("validate source observation envelope: unsupported provider %q", e.Provider)
 	}
@@ -202,7 +204,7 @@ func (e Envelope) validateEnvelopeIdentity() error {
 	return nil
 }
 
-func (e Envelope) validateEnvelopeClock() error {
+func (e *Envelope) validateEnvelopeClock() error {
 	if e.ScheduledFor.IsZero() || e.ObservedAt.IsZero() {
 		return fmt.Errorf("validate source observation envelope: scheduled for and observed at must be non-zero")
 	}
@@ -221,7 +223,7 @@ func (e Envelope) validateEnvelopeClock() error {
 	return nil
 }
 
-func (e Envelope) validateEnvelopeLeaseAndHashes() error {
+func (e *Envelope) validateEnvelopeLeaseAndHashes() error {
 	if err := e.Lease.validate(e.ScheduledFor); err != nil {
 		return err
 	}
@@ -231,7 +233,7 @@ func (e Envelope) validateEnvelopeLeaseAndHashes() error {
 	return validateEnvelopeSHA256s(e)
 }
 
-func validateEnvelopeSHA256s(e Envelope) error {
+func validateEnvelopeSHA256s(e *Envelope) error {
 	for name, value := range map[string]string{
 		"scope sha256":    e.ScopeSHA256,
 		"payload sha256":  e.PayloadSHA256,
@@ -244,7 +246,7 @@ func validateEnvelopeSHA256s(e Envelope) error {
 	return nil
 }
 
-func (e Envelope) verifyCanonicalPayload() ([]byte, error) {
+func (e *Envelope) verifyCanonicalPayload() ([]byte, error) {
 	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(e.ObservationKind, e.SubjectKey, e.Completeness, e.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("validate source observation envelope: %w", err)
@@ -255,14 +257,18 @@ func (e Envelope) verifyCanonicalPayload() ([]byte, error) {
 	return canonicalPayload, nil
 }
 
-func (e Envelope) matchCanonicalDigests(canonicalPayload, canonicalScope []byte) error {
+func (e *Envelope) matchCanonicalDigests(canonicalPayload, canonicalScope []byte) error {
 	if actual := SHA256Hex(canonicalScope); actual != e.ScopeSHA256 {
 		return fmt.Errorf("validate source observation envelope: scope sha256 mismatch")
 	}
 	if actual := SHA256Hex(canonicalPayload); actual != e.PayloadSHA256 {
 		return fmt.Errorf("validate source observation envelope: payload sha256 mismatch")
 	}
-	if expected := ObservationKeyForEnvelope(e, canonicalScope); expected != e.ObservationKey {
+	expected, err := ObservationKeyForEnvelope(e, canonicalScope)
+	if err != nil {
+		return fmt.Errorf("validate source observation envelope: %w", err)
+	}
+	if expected != e.ObservationKey {
 		return fmt.Errorf("validate source observation envelope: observation key mismatch")
 	}
 	expectedEvidenceSHA256, err := e.expectedEvidenceSHA256()
@@ -275,7 +281,7 @@ func (e Envelope) matchCanonicalDigests(canonicalPayload, canonicalScope []byte)
 	return nil
 }
 
-func (e Envelope) expectedEvidenceSHA256() (string, error) {
+func (e *Envelope) expectedEvidenceSHA256() (string, error) {
 	digest := EvidenceDigestV1{
 		Provider:           e.Provider,
 		ObservationKind:    e.ObservationKind,
@@ -299,99 +305,4 @@ func (e Envelope) expectedEvidenceSHA256() (string, error) {
 		return "", fmt.Errorf("canonicalize evidence digest: %w", err)
 	}
 	return SHA256Hex(canonical), nil
-}
-
-func (proof LeaseProof) validate(scheduledFor time.Time) error {
-	if err := validateBoundedText("lease job key", proof.JobKey, 512); err != nil {
-		return err
-	}
-	if err := validateBoundedText("collection job kind", proof.CollectionJobKind, 128); err != nil {
-		return err
-	}
-	if err := validateBoundedText("lease owner instance", proof.OwnerInstance, 128); err != nil {
-		return err
-	}
-	if proof.FenceEpoch <= 0 || proof.ProjectionGeneration <= 0 {
-		return fmt.Errorf("validate source observation envelope: lease fence and projection generation must be positive")
-	}
-	if proof.ScheduledFor.IsZero() || !proof.ScheduledFor.Equal(scheduledFor) {
-		return fmt.Errorf("validate source observation envelope: lease scheduled slot mismatch")
-	}
-	return nil
-}
-
-func (p Provider) Valid() bool {
-	return p == ProviderHolodex || p == ProviderYouTubeJS || p == ProviderHololiveOfficial
-}
-
-func (k ObservationKind) Valid() bool {
-	switch k {
-	case KindCommunityPage, KindVideoList, KindShortsList, KindLiveSnapshot,
-		KindViewerSample, KindChannelStats, KindChannelProfile, KindChannelPhoto, KindSchedule:
-		return true
-	default:
-		return false
-	}
-}
-
-func (c Completeness) Valid() bool {
-	return c == CompletenessComplete || c == CompletenessPartial || c == CompletenessUnknown
-}
-
-func (c Continuity) Valid() bool {
-	return c == ContinuityContiguous || c == ContinuityGapUnresolved || c == ContinuityNotApplicable
-}
-
-func (s Status) Valid() bool {
-	return s == StatusPending || s == StatusProcessing || s == StatusProcessed || s == StatusDeadLetter
-}
-
-func NegativeEligible(completeness Completeness, continuity Continuity) bool {
-	return completeness == CompletenessComplete &&
-		(continuity == ContinuityContiguous || continuity == ContinuityNotApplicable)
-}
-
-func KindAllowsSourceEventTime(kind ObservationKind) bool {
-	switch kind {
-	case KindCommunityPage, KindLiveSnapshot, KindViewerSample, KindChannelProfile, KindChannelPhoto, KindSchedule:
-		return true
-	default:
-		return false
-	}
-}
-
-func ValidateMaxSourceEventFutureSkew(value time.Duration) error {
-	if value < 0 || value > MaxSourceEventFutureSkew {
-		return fmt.Errorf("source event future skew must be between zero and %s", MaxSourceEventFutureSkew)
-	}
-	return nil
-}
-
-func SourceEventAtAllowed(observation ObservationClock, maxFutureSkew time.Duration) bool {
-	if observation.SourceEventAt == nil || observation.ReceivedAt.IsZero() ||
-		!KindAllowsSourceEventTime(observation.ObservationKind) || ValidateMaxSourceEventFutureSkew(maxFutureSkew) != nil {
-		return false
-	}
-	return !observation.SourceEventAt.After(observation.ReceivedAt.Add(maxFutureSkew))
-}
-
-func EffectiveAt(observation ObservationClock, maxFutureSkew time.Duration) (time.Time, bool) {
-	if SourceEventAtAllowed(observation, maxFutureSkew) {
-		return observation.SourceEventAt.UTC(), false
-	}
-	return observation.ScheduledFor.UTC(), observation.SourceEventAt != nil
-}
-
-func validateBoundedText(name, value string, maxLength int) error {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return fmt.Errorf("validate source observation envelope: %s is empty", name)
-	}
-	if len(value) > maxLength {
-		return fmt.Errorf("validate source observation envelope: %s exceeds %d bytes", name, maxLength)
-	}
-	if trimmed != value {
-		return fmt.Errorf("validate source observation envelope: %s must not contain surrounding whitespace", name)
-	}
-	return nil
 }

@@ -42,7 +42,7 @@ func loadStatsState(ctx context.Context, tx dbx.Tx, channelID string, scheduledF
 		); err != nil {
 			return stats.State{}, fmt.Errorf("scan channel stats evidence: %w", err)
 		}
-		digest, err := stats.SampleDigest(stats.Sample{
+		digest, err := stats.SampleDigest(&stats.Sample{
 			SubscriberCount: item.SubscriberCount, ViewCount: item.ViewCount, VideoCount: item.VideoCount,
 			SubscriberCovered: item.SubscriberCovered, ViewCovered: item.ViewCovered, VideoCovered: item.VideoCovered,
 		})
@@ -55,7 +55,7 @@ func loadStatsState(ctx context.Context, tx dbx.Tx, channelID string, scheduledF
 	return state, rows.Err()
 }
 
-func persistStatsDecision(ctx context.Context, tx dbx.Tx, observation Observation, decision stats.Decision) error {
+func persistStatsDecision(ctx context.Context, tx dbx.Tx, observation *Observation, decision *stats.Decision) error {
 	if err := persistStatsEvidence(ctx, tx, observation, decision); err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func persistStatsDecision(ctx context.Context, tx dbx.Tx, observation Observatio
 	return persistStatsConflict(ctx, tx, observation, decision)
 }
 
-func persistStatsEvidence(ctx context.Context, tx dbx.Tx, observation Observation, decision stats.Decision) error {
+func persistStatsEvidence(ctx context.Context, tx dbx.Tx, observation *Observation, decision *stats.Decision) error {
 	if decision.Sample == nil {
 		return nil
 	}
@@ -93,7 +93,7 @@ func persistStatsEvidence(ctx context.Context, tx dbx.Tx, observation Observatio
 	return nil
 }
 
-func persistStatsHead(ctx context.Context, tx dbx.Tx, decision stats.Decision) error {
+func persistStatsHead(ctx context.Context, tx dbx.Tx, decision *stats.Decision) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_stats_head_upsert_0066_66.sql"),
@@ -113,7 +113,7 @@ func persistStatsHead(ctx context.Context, tx dbx.Tx, decision stats.Decision) e
 	return nil
 }
 
-func persistStatsSnapshots(ctx context.Context, tx dbx.Tx, decision stats.Decision) error {
+func persistStatsSnapshots(ctx context.Context, tx dbx.Tx, decision *stats.Decision) error {
 	if decision.Sample == nil {
 		return nil
 	}
@@ -144,7 +144,7 @@ func persistStatsSnapshots(ctx context.Context, tx dbx.Tx, decision stats.Decisi
 	return nil
 }
 
-func persistStatsConflict(ctx context.Context, tx dbx.Tx, observation Observation, decision stats.Decision) error {
+func persistStatsConflict(ctx context.Context, tx dbx.Tx, observation *Observation, decision *stats.Decision) error {
 	if decision.Conflict == nil || decision.Sample == nil {
 		return nil
 	}

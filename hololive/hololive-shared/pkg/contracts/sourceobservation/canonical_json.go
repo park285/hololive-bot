@@ -200,8 +200,8 @@ func appendJSONControlOrRune(destination []byte, character rune) []byte {
 		return append(
 			destination,
 			'\\', 'u', '0', '0',
-			hexadecimal[byte(character)>>4],
-			hexadecimal[byte(character)&0x0f],
+			hexadecimal[character>>4],
+			hexadecimal[character&0x0f],
 		)
 	}
 	return utf8.AppendRune(destination, character)

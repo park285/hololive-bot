@@ -42,7 +42,7 @@ type Config struct {
 	PollCadence         time.Duration
 }
 
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if err := c.validateLeaseBudgets(); err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func (c Config) Validate() error {
 	return c.validateAcquisition()
 }
 
-func (c Config) validateLeaseBudgets() error {
+func (c *Config) validateLeaseBudgets() error {
 	if c.LeaseTTL < time.Second || c.LeaseTTL > 30*time.Minute {
 		return fmt.Errorf("%w: lease TTL must be between 1 second and 30 minutes", ErrInvalidConfig)
 	}
@@ -66,7 +66,7 @@ func (c Config) validateLeaseBudgets() error {
 	return nil
 }
 
-func (c Config) validateRetryJitter() error {
+func (c *Config) validateRetryJitter() error {
 	if c.MinRetryDelay < 100*time.Millisecond || c.MaxRetryDelay < c.MinRetryDelay || c.MaxRetryDelay > time.Hour {
 		return fmt.Errorf("%w: retry delay bounds are invalid", ErrInvalidConfig)
 	}
@@ -76,7 +76,7 @@ func (c Config) validateRetryJitter() error {
 	return nil
 }
 
-func (c Config) validateAcquisition() error {
+func (c *Config) validateAcquisition() error {
 	if c.AcquisitionBatch < 1 || c.AcquisitionBatch > MaxAcquisitionBatch {
 		return fmt.Errorf("%w: acquisition batch must be between 1 and %d", ErrInvalidConfig, MaxAcquisitionBatch)
 	}
@@ -101,7 +101,7 @@ type JobSpec struct {
 	PollInterval      time.Duration
 }
 
-func (s JobSpec) validate(contracts sourceobservation.JobContractSet) (sourceobservation.JobContract, []contract.ObservationKind, error) {
+func (s *JobSpec) validate(contracts sourceobservation.JobContractSet) (sourceobservation.JobContract, []contract.ObservationKind, error) {
 	if invalidJobSpecIdentity(s) {
 		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: identity or poll interval is outside bounds", ErrInvalidJob)
 	}
@@ -116,7 +116,7 @@ func (s JobSpec) validate(contracts sourceobservation.JobContractSet) (sourceobs
 	return definition, kinds, nil
 }
 
-func invalidJobSpecIdentity(s JobSpec) bool {
+func invalidJobSpecIdentity(s *JobSpec) bool {
 	return invalidBoundedToken(s.JobKey, 512) ||
 		invalidBoundedToken(s.CollectionJobKind, 128) ||
 		invalidBoundedToken(s.SubjectKey, 256) ||

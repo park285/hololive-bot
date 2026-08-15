@@ -3,6 +3,7 @@ package collectorruntime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -28,6 +29,7 @@ type leaseScheduler struct {
 	queued  map[string]struct{}
 	queue   chan joblease.JobSpec
 	cancel  context.CancelFunc
+	done    chan struct{}
 	wg      sync.WaitGroup
 	lastDue int
 }
@@ -42,28 +44,47 @@ func (s *leaseScheduler) Start(ctx context.Context) {
 		return
 	}
 	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
 	s.cancel = cancel
-	s.mu.Unlock()
+	s.done = done
+	s.wg.Add(s.config.WorkerCount + 1)
 	for i := 0; i < s.config.WorkerCount; i++ {
-		s.wg.Add(1)
 		go s.worker(runCtx)
 	}
-	s.wg.Add(1)
 	go s.discover(runCtx)
+	go s.join(done)
+	s.mu.Unlock()
 }
 
-func (s *leaseScheduler) Stop() {
+func (s *leaseScheduler) Stop(ctx context.Context) error {
 	if s == nil {
-		return
+		return nil
 	}
 	s.mu.Lock()
 	cancel := s.cancel
-	s.cancel = nil
+	done := s.done
 	s.mu.Unlock()
-	if cancel != nil {
-		cancel()
-		s.wg.Wait()
+	if cancel == nil || done == nil {
+		return nil
 	}
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("stop lease scheduler: %w", ctx.Err())
+	}
+}
+
+func (s *leaseScheduler) join(done chan struct{}) {
+	s.wg.Wait()
+	close(done)
+	s.mu.Lock()
+	if s.done == done {
+		s.cancel = nil
+		s.done = nil
+	}
+	s.mu.Unlock()
 }
 
 func (s *leaseScheduler) discover(ctx context.Context) {
@@ -137,13 +158,16 @@ func (s *leaseScheduler) logCandidateLoad(runner JobRunner, err error) {
 	if errors.Is(err, joblease.ErrProjectionStale) || errors.Is(err, joblease.ErrTargetDisabled) {
 		return
 	}
-	s.logFailure("candidate_load", collecterr.CandidateFailed, joblease.JobSpec{
+	spec := joblease.JobSpec{
 		Provider: runner.Provider(), CollectionJobKind: runner.JobKind(),
-	}, contract.LeaseProof{})
+	}
+	proof := contract.LeaseProof{}
+	s.logFailure("candidate_load", collecterr.CandidateFailed, &spec, &proof)
 }
 
-func splitCandidates(candidates, globals, subjects []joblease.JobSpec) ([]joblease.JobSpec, []joblease.JobSpec) {
-	for _, candidate := range candidates {
+func splitCandidates(candidates, globals, subjects []joblease.JobSpec) (globalJobs, subjectJobs []joblease.JobSpec) {
+	for i := range candidates {
+		candidate := candidates[i]
 		if candidate.Class == "GLOBAL" {
 			globals = append(globals, candidate)
 			continue
@@ -154,20 +178,20 @@ func splitCandidates(candidates, globals, subjects []joblease.JobSpec) ([]joblea
 }
 
 func (s *leaseScheduler) enqueueAll(ctx context.Context, candidates []joblease.JobSpec) bool {
-	for _, candidate := range candidates {
-		if !s.enqueue(ctx, candidate) {
+	for i := range candidates {
+		if !s.enqueue(ctx, &candidates[i]) {
 			return false
 		}
 	}
 	return true
 }
 
-func (s *leaseScheduler) enqueue(ctx context.Context, candidate joblease.JobSpec) bool {
+func (s *leaseScheduler) enqueue(ctx context.Context, candidate *joblease.JobSpec) bool {
 	if !s.markQueued(candidate.JobKey) {
 		return true
 	}
 	select {
-	case s.queue <- candidate:
+	case s.queue <- *candidate:
 		return true
 	case <-ctx.Done():
 		s.unmarkQueued(candidate.JobKey)
@@ -185,7 +209,7 @@ func (s *leaseScheduler) worker(ctx context.Context) {
 		if !ok {
 			return
 		}
-		s.runSpec(ctx, spec)
+		s.runSpec(ctx, &spec)
 		s.unmarkQueued(spec.JobKey)
 	}
 }

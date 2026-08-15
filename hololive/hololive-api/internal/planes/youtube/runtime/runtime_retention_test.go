@@ -99,7 +99,7 @@ func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
 		ChannelPhotoAge:     age,
 		ScheduleSnapshotAge: age,
 	}
-	ages := evidenceRetentionAges(cfg)
+	ages := evidenceRetentionAges(&cfg)
 	wantKinds := []contract.ObservationKind{
 		contract.KindCommunityPage,
 		contract.KindVideoList,

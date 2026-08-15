@@ -7,11 +7,34 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
+func TestReduceCopiesInputBackingStorage(t *testing.T) {
+	t.Parallel()
+	lastAt := t1()
+	lastCount := int64(10)
+	state := State{ChannelID: "UC_TEST", Head: Head{
+		ChannelID: "UC_TEST", LastResolvedScheduledFor: &lastAt, LastResolvedSubscriberCount: &lastCount,
+	}}
+	evidence := statsAt(2, contract.ProviderYouTubeJS, t2(), 11, 21, 4)
+	decision, err := Reduce(state, evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	*decision.Head.PriorResolvedSubscriberCount = 99
+	*decision.Sample.SubscriberCount = 88
+	if *state.Head.LastResolvedSubscriberCount != 10 {
+		t.Fatal("decision shares state count pointer")
+	}
+	if *evidence.Sample.SubscriberCount != 11 {
+		t.Fatal("decision shares evidence count pointer")
+	}
+}
+
 func TestReduceEqualConsecutiveSamplesAreBothRetainedByScheduledSlot(t *testing.T) {
 	t.Parallel()
 	first := statsAt(1, contract.ProviderYouTubeJS, t1(), 10, 20, 3)
 	second := statsAt(2, contract.ProviderYouTubeJS, t2(), 10, 20, 3)
-	got := mustReduceAll(t, State{}, []Evidence{first, second})
+	got := mustReduceAll(t, []Evidence{first, second})
 	if got.Head.LastResolvedScheduledFor == nil || !got.Head.LastResolvedScheduledFor.Equal(t2()) {
 		t.Fatalf("last resolved = %v, want t2", got.Head.LastResolvedScheduledFor)
 	}
@@ -22,7 +45,7 @@ func TestReduceEqualConsecutiveSamplesAreBothRetainedByScheduledSlot(t *testing.
 
 func TestReduceHiddenCountRemainsNil(t *testing.T) {
 	t.Parallel()
-	got := mustReduceAll(t, State{}, []Evidence{{
+	got := mustReduceAll(t, []Evidence{{
 		ObservationID: 1,
 		Provider:      contract.ProviderYouTubeJS,
 		Sample: Sample{
@@ -42,8 +65,8 @@ func TestReduceEqualTimeConflictDoesNotArrivalOrderOverwrite(t *testing.T) {
 	t.Parallel()
 	first := statsAt(1, contract.ProviderYouTubeJS, t1(), 10, 20, 3)
 	second := statsAt(2, contract.ProviderHolodex, t1(), 99, 20, 3)
-	forward := mustReduceAll(t, State{}, []Evidence{first, second})
-	reverse := mustReduceAll(t, State{}, []Evidence{second, first})
+	forward := mustReduceAll(t, []Evidence{first, second})
+	reverse := mustReduceAll(t, []Evidence{second, first})
 	if forward.Conflict == nil || reverse.Conflict == nil {
 		t.Fatal("equal-time conflict must be recorded")
 	}
@@ -68,7 +91,7 @@ func TestReduceComplementaryCoverageDoesNotConflict(t *testing.T) {
 			ObservationID: 2, ScheduledFor: t1(), EffectiveAt: t1(), ReceivedAt: t1(),
 		},
 	}
-	got := mustReduceAll(t, State{}, []Evidence{full, partial})
+	got := mustReduceAll(t, []Evidence{full, partial})
 	if got.Conflict != nil || got.ClearSnapshot {
 		t.Fatalf("overlapping equal fields must not conflict: %#v", got)
 	}
@@ -79,9 +102,9 @@ func TestReduceProviderArrivalPermutationsYieldSameProjection(t *testing.T) {
 	a1 := statsAt(1, contract.ProviderYouTubeJS, t1(), 10, 20, 3)
 	b1 := statsAt(2, contract.ProviderHolodex, t1(), 10, 20, 3)
 	a2 := statsAt(3, contract.ProviderYouTubeJS, t2(), 11, 21, 4)
-	forward := mustReduceAll(t, State{}, []Evidence{a1, b1, a2})
-	reverse := mustReduceAll(t, State{}, []Evidence{b1, a1, a2})
-	if !sameHead(forward.Head, reverse.Head) {
+	forward := mustReduceAll(t, []Evidence{a1, b1, a2})
+	reverse := mustReduceAll(t, []Evidence{b1, a1, a2})
+	if !sameHead(&forward.Head, &reverse.Head) {
 		t.Fatalf("permutation heads differ: %#v vs %#v", forward.Head, reverse.Head)
 	}
 	if forward.Head.LastResolvedScheduledFor == nil || !forward.Head.LastResolvedScheduledFor.Equal(t2()) {
@@ -105,9 +128,9 @@ func statsAt(id int64, provider contract.Provider, at time.Time, sub, views, vid
 	}
 }
 
-func mustReduceAll(t *testing.T, state State, evidence []Evidence) Decision {
+func mustReduceAll(t *testing.T, evidence []Evidence) *Decision {
 	t.Helper()
-	current := state
+	current := State{}
 	var decision Decision
 	var slot time.Time
 	for i := range evidence {
@@ -120,19 +143,19 @@ func mustReduceAll(t *testing.T, state State, evidence []Evidence) Decision {
 			t.Fatalf("reduce[%d]: %v", i, err)
 		}
 		decision = next
-		current = stateFromDecision(current, next, evidence[i])
+		current = stateFromDecision(&current, &next, &evidence[i])
 	}
-	return decision
+	return &decision
 }
 
-func stateFromDecision(previous State, decision Decision, evidence Evidence) State {
-	next := previous
+func stateFromDecision(previous *State, decision *Decision, evidence *Evidence) State {
+	next := *previous
 	next.ChannelID = evidence.Sample.ChannelID
 	next.Head = decision.Head
 	if decision.Sample == nil {
 		return next
 	}
-	digest, err := sampleDigest(*decision.Sample)
+	digest, err := sampleDigest(decision.Sample)
 	if err != nil {
 		return next
 	}
@@ -155,7 +178,7 @@ func stateFromDecision(previous State, decision Decision, evidence Evidence) Sta
 	return next
 }
 
-func sameHead(left, right Head) bool {
+func sameHead(left, right *Head) bool {
 	return sameOptionalTime(left.LastResolvedScheduledFor, right.LastResolvedScheduledFor) &&
 		sameOptionalCount(left.LastResolvedSubscriberCount, right.LastResolvedSubscriberCount) &&
 		sameOptionalCount(left.LastResolvedViewCount, right.LastResolvedViewCount) &&

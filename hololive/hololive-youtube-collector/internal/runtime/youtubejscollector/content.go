@@ -31,9 +31,12 @@ func (r *ContentRunner) Emissions() []contract.ObservationKind {
 }
 func (r *ContentRunner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
-func (r *ContentRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
+func (r *ContentRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js content client is not configured")
+	}
+	if err := collectutil.ValidateInput(input); err != nil {
+		return collectutil.RunOutput{}, err
 	}
 	started := time.Now()
 	envelopes, err := r.collectEnabledContent(ctx, input)
@@ -43,7 +46,7 @@ func (r *ContentRunner) Collect(ctx context.Context, input collectutil.RunInput)
 	return collectutil.Output(envelopes, started)
 }
 
-func (r *ContentRunner) collectEnabledContent(ctx context.Context, input collectutil.RunInput) ([]contract.Envelope, error) {
+func (r *ContentRunner) collectEnabledContent(ctx context.Context, input *collectutil.RunInput) ([]contract.Envelope, error) {
 	envelopes := make([]contract.Envelope, 0, 2)
 	if err := r.appendContentKind(ctx, input, contract.KindVideoList, "videos", &envelopes); err != nil {
 		return nil, err
@@ -56,7 +59,7 @@ func (r *ContentRunner) collectEnabledContent(ctx context.Context, input collect
 
 func (r *ContentRunner) appendContentKind(
 	ctx context.Context,
-	input collectutil.RunInput,
+	input *collectutil.RunInput,
 	kind contract.ObservationKind,
 	tab string,
 	envelopes *[]contract.Envelope,
@@ -74,7 +77,7 @@ func (r *ContentRunner) appendContentKind(
 	return nil
 }
 
-func subjectEnabled(input collectutil.RunInput, kind contract.ObservationKind) bool {
+func subjectEnabled(input *collectutil.RunInput, kind contract.ObservationKind) bool {
 	subjects, configured := input.EnabledSubjects[kind]
 	if !configured {
 		return true
@@ -82,7 +85,7 @@ func subjectEnabled(input collectutil.RunInput, kind contract.ObservationKind) b
 	return slices.Contains(subjects, input.Spec.SubjectKey)
 }
 
-func (r *ContentRunner) fetchKind(ctx context.Context, input collectutil.RunInput, kind string) (*contract.Envelope, error) {
+func (r *ContentRunner) fetchKind(ctx context.Context, input *collectutil.RunInput, kind string) (*contract.Envelope, error) {
 	result, err := r.client.FetchContent(ctx, youtubejs.ContentRequest{
 		ChannelID:         input.Spec.SubjectKey,
 		Kind:              kind,
@@ -118,7 +121,7 @@ func (r *ContentRunner) fetchKind(ctx context.Context, input collectutil.RunInpu
 		observationKind,
 		input.Spec.SubjectKey,
 		generation,
-		input.Lease,
+		&input.Lease,
 		completeness,
 		continuity,
 		payload,

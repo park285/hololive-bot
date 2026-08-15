@@ -11,7 +11,7 @@ import (
 func (c coverageValue) covers(entity Entity) bool {
 	item := entity.item()
 	if c.Videos != nil {
-		return contract.ChannelListCoversVideo(*c.Videos, item)
+		return contract.ChannelListCoversVideo(c.Videos, &item)
 	}
 	if c.Shorts != nil {
 		return contract.ShortsListCoversVideo(*c.Shorts, item)
@@ -21,7 +21,7 @@ func (c coverageValue) covers(entity Entity) bool {
 
 func (c coverageValue) relationTo(evidence coverageValue) contract.CoverageRelation {
 	if c.Videos != nil && evidence.Videos != nil {
-		return contract.RelateChannelList(*c.Videos, *evidence.Videos)
+		return contract.RelateChannelList(c.Videos, evidence.Videos)
 	}
 	if c.Shorts != nil && evidence.Shorts != nil {
 		return contract.RelateShortsList(*c.Shorts, *evidence.Shorts)
@@ -39,7 +39,7 @@ func (e Entity) item() contract.VideoListItemV1 {
 	}
 }
 
-func valueDigest(entity Entity) string {
+func valueDigest(entity *Entity) string {
 	payload, err := json.Marshal(struct {
 		Title        string     `json:"title"`
 		PublishedAt  *time.Time `json:"published_at,omitempty"`
@@ -74,13 +74,13 @@ func ParseCoverage(kind contract.ObservationKind, raw []byte) (coverageValue, er
 		if err := json.Unmarshal(raw, &coverage); err != nil {
 			return coverageValue{}, fmt.Errorf("decode shorts coverage: %w", err)
 		}
-		return ShortsCoverage(coverage), nil
+		return ShortsCoverage(&coverage), nil
 	}
 	var coverage contract.ChannelListCoverageV1
 	if err := json.Unmarshal(raw, &coverage); err != nil {
 		return coverageValue{}, fmt.Errorf("decode video coverage: %w", err)
 	}
-	return VideoCoverage(coverage), nil
+	return VideoCoverage(&coverage), nil
 }
 
 func MarshalCoverage(value coverageValue) ([]byte, error) {

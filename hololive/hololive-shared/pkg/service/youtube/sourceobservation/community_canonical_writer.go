@@ -20,11 +20,11 @@ func NewBatchCanonicalWriter(repo *batchrepo.PgxBatchRepository) CanonicalWriter
 	return batchCanonicalWriter{repo: repo}
 }
 
-func (w batchCanonicalWriter) PersistTx(ctx context.Context, tx dbx.Tx, batch community.Batch) error {
+func (w batchCanonicalWriter) PersistTx(ctx context.Context, tx dbx.Tx, batch *community.Batch) error {
 	return w.repo.PersistCommunityPostsTx(ctx, tx, batch.Posts, batch.Notifications, batch.Tracking, batch.Watermark)
 }
 
-func (w batchCanonicalWriter) AfterCommit(ctx context.Context, batch community.Batch) {
+func (w batchCanonicalWriter) AfterCommit(ctx context.Context, batch *community.Batch) {
 	w.repo.RecordCommunityLatencyAfterCommit(ctx, batch.Tracking)
 }
 

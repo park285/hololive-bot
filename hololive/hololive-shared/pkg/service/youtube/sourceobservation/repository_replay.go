@@ -67,11 +67,11 @@ func (r *Repository) requestReplayTx(
 	if err != nil {
 		return ReplayResult{}, err
 	}
-	requestID, err := insertReplayRequest(ctx, tx, input, observation, queue.previousAttempts)
+	requestID, err := insertReplayRequest(ctx, tx, input, &observation, queue.previousAttempts)
 	if err != nil {
 		return ReplayResult{}, err
 	}
-	return r.applyReplayDecision(ctx, tx, requestID, input.ObservationID, observation, queue)
+	return r.applyReplayDecision(ctx, tx, requestID, input.ObservationID, &observation, queue)
 }
 
 func (r *Repository) processNextReplayTx(ctx context.Context, tx dbx.Tx) (bool, error) {
@@ -98,7 +98,7 @@ func (r *Repository) processNextReplayTx(ctx context.Context, tx dbx.Tx) (bool, 
 	if err != nil {
 		return false, err
 	}
-	if _, err := r.applyReplayDecision(ctx, tx, requestID, observationID, observation, queue); err != nil {
+	if _, err := r.applyReplayDecision(ctx, tx, requestID, observationID, &observation, queue); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -109,7 +109,7 @@ func (r *Repository) applyReplayDecision(
 	tx dbx.Tx,
 	requestID int64,
 	observationID int64,
-	observation replayObservation,
+	observation *replayObservation,
 	queue replayQueueState,
 ) (ReplayResult, error) {
 	result := ReplayResult{RequestID: requestID}
@@ -198,7 +198,7 @@ func insertReplayRequest(
 	ctx context.Context,
 	tx dbx.Tx,
 	input ReplayInput,
-	observation replayObservation,
+	observation *replayObservation,
 	previousAttempts int,
 ) (int64, error) {
 	var requestID int64
@@ -221,7 +221,7 @@ func insertReplayRequest(
 	return requestID, nil
 }
 
-func lockPendingReplay(ctx context.Context, tx dbx.Tx) (int64, int64, error) {
+func lockPendingReplay(ctx context.Context, tx dbx.Tx) (replayRequestID, replayObservationID int64, scanErr error) {
 	var requestID int64
 	var observationID *int64
 	err := tx.QueryRow(ctx, mustSQL("repository_replay_pending_lock_0080_80.sql")).Scan(&requestID, &observationID)

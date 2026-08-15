@@ -8,8 +8,9 @@ import (
 
 func applyNegative(session *reduceSession) {
 	slot, replay := recordAbsenceSlot(session)
-	for videoID, entity := range session.state.Videos {
-		applyNegativeToEntity(session, videoID, entity, slot, replay)
+	for videoID := range session.state.Videos {
+		entity := session.state.Videos[videoID]
+		applyNegativeToEntity(session, videoID, &entity, &slot, replay)
 	}
 }
 
@@ -39,19 +40,34 @@ func applyStoredNegatives(session *reduceSession, videoID string) {
 	if !ok {
 		return
 	}
-	for _, slot := range session.state.AbsenceSlots {
+	for i := range session.state.AbsenceSlots {
+		slot := &session.state.AbsenceSlots[i]
 		if !slot.EffectiveAt.After(entity.Clock.LastPositiveEffectiveAt) {
 			continue
 		}
-		applyNegativeToEntity(session, videoID, session.state.Videos[videoID], slot, false)
+		entity = session.state.Videos[videoID]
+		applyNegativeToEntity(session, videoID, &entity, slot, false)
 	}
 }
 
 func applyNegativeToEntity(
 	session *reduceSession,
 	videoID string,
-	entity EntityState,
-	slot AbsenceSlot,
+	entity *EntityState,
+	slot *AbsenceSlot,
+	replay bool,
+) {
+	if session == nil || session.state == nil || entity == nil || slot == nil {
+		return
+	}
+	applyNegativeToEntityChecked(session, videoID, entity, slot, replay)
+}
+
+func applyNegativeToEntityChecked(
+	session *reduceSession,
+	videoID string,
+	entity *EntityState,
+	slot *AbsenceSlot,
 	replay bool,
 ) {
 	if entity.LastPositiveValueSHA256 == "" {
@@ -69,12 +85,12 @@ func applyNegativeToEntity(
 	if replayedNegative(entity, slot, replay) {
 		return
 	}
-	recordMissing(&entity, slot, session.grace)
-	session.state.Videos[videoID] = entity
+	recordMissing(entity, slot, session.grace)
+	session.state.Videos[videoID] = *entity
 }
 
-func replayedNegative(entity EntityState, slot AbsenceSlot, replay bool) bool {
-	if replay {
+func replayedNegative(entity *EntityState, slot *AbsenceSlot, replay bool) bool {
+	if replay || entity == nil || slot == nil {
 		return true
 	}
 	if slot.ObservationID != 0 && entity.LastAbsenceObservationID == slot.ObservationID {
@@ -86,7 +102,10 @@ func replayedNegative(entity EntityState, slot AbsenceSlot, replay bool) bool {
 	return sameOptionalTime(entity.SecondAbsenceScheduledFor, &slot.ScheduledFor)
 }
 
-func recordMissing(entity *EntityState, slot AbsenceSlot, grace time.Duration) {
+func recordMissing(entity *EntityState, slot *AbsenceSlot, grace time.Duration) {
+	if entity == nil || slot == nil {
+		return
+	}
 	effective := slot.EffectiveAt
 	entity.Clock.LastNegativeEffectiveAt = &effective
 	received := slot.ReceivedAt
@@ -96,13 +115,16 @@ func recordMissing(entity *EntityState, slot AbsenceSlot, grace time.Duration) {
 		entity.Clock.MissingSinceEffectiveAt = &effective
 	}
 	countAbsenceSlot(entity, slot.ScheduledFor)
-	if entity.ConsecutiveAbsenceSlots >= 2 && graceElapsed(*entity, slot, grace) {
+	if entity.ConsecutiveAbsenceSlots >= 2 && graceElapsed(entity, slot, grace) {
 		withdrawn := slot.EffectiveAt
 		entity.WithdrawnAt = &withdrawn
 	}
 }
 
 func countAbsenceSlot(entity *EntityState, scheduledFor time.Time) {
+	if entity == nil {
+		return
+	}
 	switch entity.ConsecutiveAbsenceSlots {
 	case 0:
 		copied := scheduledFor
@@ -116,11 +138,14 @@ func countAbsenceSlot(entity *EntityState, scheduledFor time.Time) {
 	}
 }
 
-func graceElapsed(entity EntityState, slot AbsenceSlot, grace time.Duration) bool {
+func graceElapsed(entity *EntityState, slot *AbsenceSlot, grace time.Duration) bool {
+	if entity == nil || slot == nil {
+		return false
+	}
 	return !slot.ReceivedAt.Before(entity.Clock.LastPositiveReceivedAt.Add(grace))
 }
 
-func sameOptionalTime(value *time.Time, other *time.Time) bool {
+func sameOptionalTime(value, other *time.Time) bool {
 	if value == nil || other == nil {
 		return false
 	}
