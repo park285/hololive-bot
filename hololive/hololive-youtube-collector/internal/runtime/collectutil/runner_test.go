@@ -24,6 +24,13 @@ func TestOutputAcceptsHololiveSizedBatch(t *testing.T) {
 	}
 }
 
+func TestCompletenessRejectsEmptyContinuity(t *testing.T) {
+	t.Parallel()
+	if _, _, err := Completeness(1, true, ""); err == nil {
+		t.Fatal("empty continuity must fail closed")
+	}
+}
+
 func TestOutputRejectsBatchAbovePublishLimit(t *testing.T) {
 	t.Parallel()
 	envelopes := make([]contract.Envelope, sourceobservation.MaxPublishBatchSize+1)

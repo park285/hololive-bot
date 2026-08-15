@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -134,11 +135,23 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 }
 
 func TestProductionSchedulerHasNoUnleasedPollPath(t *testing.T) {
-	source, err := os.ReadFile("scheduler.go")
+	matches, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := string(source)
+	var source strings.Builder
+	for _, path := range matches {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		chunk, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source.Write(chunk)
+		source.WriteByte('\n')
+	}
+	body := source.String()
 	if strings.Contains(body, "PollWithLease") || strings.Contains(body, "communitycollector") ||
 		strings.Contains(body, "currentCommunityContractGeneration") {
 		t.Fatal("production scheduler must not keep the Community-only publish path")
@@ -156,7 +169,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedRuntimeTargets(t, pool, []leaseSeed{
 		{"UC_TEST", contract.KindLiveSnapshot},
-		{"UC_TEST", contract.KindChannelStats},
+		{"vid-1", contract.KindViewerSample},
 	})
 	config := joblease.Config{
 		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
@@ -169,9 +182,8 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	holodex := stubJob(contract.ProviderHolodex, "holodex_global",
-		contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindChannelStats,
-		contract.KindChannelProfile, contract.KindChannelPhoto, contract.KindSchedule)
+	holodex := stubJob(contract.ProviderHolodex, "holodex_live",
+		contract.KindLiveSnapshot, contract.KindViewerSample)
 	holodex.collect = func(_ context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
 		live, err := collectutil.Envelope(
 			contract.ProviderHolodex, contract.KindLiveSnapshot, "UC_TEST", 1, input.Lease,
@@ -187,18 +199,22 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		if err != nil {
 			return collectutil.RunOutput{}, err
 		}
-		stats, err := collectutil.Envelope(
-			contract.ProviderHolodex, contract.KindChannelStats, "UC_TEST", 1, input.Lease,
-			contract.CompletenessPartial, contract.ContinuityNotApplicable,
-			contract.ChannelStatsV1{
-				ChannelID: "UC_TEST", SubscriberCount: int64Ptr(9),
-				Coverage: contract.ChannelStatsCoverageV1{ChannelID: "UC_TEST", Fields: []string{"subscriber_count"}},
+		viewerCount := int64(9)
+		viewer, err := collectutil.Envelope(
+			contract.ProviderHolodex, contract.KindViewerSample, "vid-1", 1, input.Lease,
+			contract.CompletenessComplete, contract.ContinuityNotApplicable,
+			contract.ViewerSampleV1{
+				VideoID: "vid-1", ViewerCount: &viewerCount, Availability: "AVAILABLE",
+				SampleWindowStart: input.Lease.ScheduledFor, SampleWindowSeconds: 60,
+				Coverage: contract.ViewerSampleCoverageV1{
+					VideoID: "vid-1", SampleWindowStart: input.Lease.ScheduledFor, SampleWindowSeconds: 60,
+				},
 			},
 		)
 		if err != nil {
 			return collectutil.RunOutput{}, err
 		}
-		return collectutil.Output([]contract.Envelope{live, stats}, time.Now())
+		return collectutil.Output([]contract.Envelope{live, viewer}, time.Now())
 	}
 	registry, err := NewRegistry(withOverride(holodex)...)
 	if err != nil {
@@ -213,8 +229,8 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
 	}
 	spec := joblease.JobSpec{
-		JobKey: "collector:holodex:global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
-		CollectionJobKind: "holodex_global", SubjectKey: "global:holodex_global", PollInterval: time.Minute,
+		JobKey: "collector:holodex:holodex_live:global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
+		CollectionJobKind: "holodex_live", SubjectKey: "global:holodex_live", PollInterval: time.Minute,
 	}
 	scheduler.runSpec(ctx, spec)
 	var count int
@@ -343,5 +359,3 @@ func seedRuntimeTargets(t *testing.T, pool *pgxpool.Pool, targets []leaseSeed) {
 		}
 	}
 }
-
-func int64Ptr(value int64) *int64 { return &value }

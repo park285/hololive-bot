@@ -90,75 +90,116 @@ func (b PolicyBuilder) Build(ctx context.Context, tx dbx.Tx, now time.Time) ([]T
 }
 
 func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationKind]Schedule) ([]TargetSpec, []TargetReason, error) {
-	if len(inputs.NotificationChannelIDs) > MaxInputChannelCount ||
-		len(inputs.OperationalChannelIDs) > MaxInputChannelCount ||
-		len(inputs.ViewerVideoIDs) > MaxInputChannelCount {
+	if policyInputOverflow(inputs) {
 		return nil, nil, fmt.Errorf("%w: input channel count exceeds %d", ErrInvalidProjection, MaxInputChannelCount)
 	}
-	notificationKinds := []contract.ObservationKind{
+	builder := newPolicyTargetBuilder(schedules)
+	if err := builder.appendGroup(inputs.NotificationChannelIDs, notificationPolicyKinds(), "notification_target"); err != nil {
+		return nil, nil, err
+	}
+	if err := builder.appendGroup(inputs.OperationalChannelIDs, operationalPolicyKinds(), "operational_roster"); err != nil {
+		return nil, nil, err
+	}
+	if err := rejectChannelViewerSubjects(inputs.ViewerVideoIDs); err != nil {
+		return nil, nil, err
+	}
+	if err := builder.appendGroup(inputs.ViewerVideoIDs, []contract.ObservationKind{contract.KindViewerSample}, "viewer_roster"); err != nil {
+		return nil, nil, err
+	}
+	if err := builder.appendGlobalSchedule(); err != nil {
+		return nil, nil, err
+	}
+	return builder.targets, builder.reasons, nil
+}
+
+func policyInputOverflow(inputs PolicyInputs) bool {
+	return len(inputs.NotificationChannelIDs) > MaxInputChannelCount ||
+		len(inputs.OperationalChannelIDs) > MaxInputChannelCount ||
+		len(inputs.ViewerVideoIDs) > MaxInputChannelCount
+}
+
+func notificationPolicyKinds() []contract.ObservationKind {
+	return []contract.ObservationKind{
 		contract.KindCommunityPage,
 		contract.KindVideoList,
 		contract.KindShortsList,
 	}
-	operationalKinds := []contract.ObservationKind{
+}
+
+func operationalPolicyKinds() []contract.ObservationKind {
+	return []contract.ObservationKind{
 		contract.KindLiveSnapshot,
 		contract.KindChannelStats,
 		contract.KindChannelProfile,
 		contract.KindChannelPhoto,
 	}
-	targets := make([]TargetSpec, 0, len(inputs.NotificationChannelIDs)*len(notificationKinds)+len(inputs.OperationalChannelIDs)*len(operationalKinds)+len(inputs.ViewerVideoIDs)+1)
-	reasons := make([]TargetReason, 0, cap(targets))
-	appendGroup := func(subjectIDs []string, kinds []contract.ObservationKind, reasonKind string) error {
-		for _, rawSubject := range subjectIDs {
-			subject := strings.TrimSpace(rawSubject)
-			if subject == "" {
-				return fmt.Errorf("%w: %s subject is empty", ErrInvalidProjection, reasonKind)
-			}
-			for _, kind := range kinds {
-				schedule, ok := schedules[kind]
-				if !ok {
-					return fmt.Errorf("%w: schedule for %s is missing", ErrInvalidProjection, kind)
-				}
-				targets = append(targets, TargetSpec{
-					SubjectKey: subject, ObservationKind: kind,
-					Priority: schedule.Priority, PollInterval: schedule.PollInterval, Enabled: schedule.Enabled,
-				})
-				reasons = append(reasons, TargetReason{
-					SubjectKey: subject, ObservationKind: kind,
-					ReasonKind: reasonKind, ReasonKey: subject,
-				})
-			}
+}
+
+type policyTargetBuilder struct {
+	schedules map[contract.ObservationKind]Schedule
+	targets   []TargetSpec
+	reasons   []TargetReason
+}
+
+func newPolicyTargetBuilder(schedules map[contract.ObservationKind]Schedule) *policyTargetBuilder {
+	return &policyTargetBuilder{schedules: schedules, targets: make([]TargetSpec, 0), reasons: make([]TargetReason, 0)}
+}
+
+func (b *policyTargetBuilder) appendGroup(subjectIDs []string, kinds []contract.ObservationKind, reasonKind string) error {
+	for _, rawSubject := range subjectIDs {
+		subject := strings.TrimSpace(rawSubject)
+		if subject == "" {
+			return fmt.Errorf("%w: %s subject is empty", ErrInvalidProjection, reasonKind)
 		}
-		return nil
+		if err := b.appendSubjectKinds(subject, kinds, reasonKind); err != nil {
+			return err
+		}
 	}
-	if err := appendGroup(inputs.NotificationChannelIDs, notificationKinds, "notification_target"); err != nil {
-		return nil, nil, err
+	return nil
+}
+
+func (b *policyTargetBuilder) appendSubjectKinds(subject string, kinds []contract.ObservationKind, reasonKind string) error {
+	for _, kind := range kinds {
+		schedule, ok := b.schedules[kind]
+		if !ok {
+			return fmt.Errorf("%w: schedule for %s is missing", ErrInvalidProjection, kind)
+		}
+		b.targets = append(b.targets, TargetSpec{
+			SubjectKey: subject, ObservationKind: kind,
+			Priority: schedule.Priority, PollInterval: schedule.PollInterval, Enabled: schedule.Enabled,
+		})
+		b.reasons = append(b.reasons, TargetReason{
+			SubjectKey: subject, ObservationKind: kind,
+			ReasonKind: reasonKind, ReasonKey: subject,
+		})
 	}
-	if err := appendGroup(inputs.OperationalChannelIDs, operationalKinds, "operational_roster"); err != nil {
-		return nil, nil, err
-	}
-	for _, rawVideoID := range inputs.ViewerVideoIDs {
+	return nil
+}
+
+func rejectChannelViewerSubjects(videoIDs []string) error {
+	for _, rawVideoID := range videoIDs {
 		if looksLikeYouTubeChannelID(rawVideoID) {
-			return nil, nil, fmt.Errorf("%w: viewer_sample subject %q is a channel id", ErrInvalidProjection, strings.TrimSpace(rawVideoID))
+			return fmt.Errorf("%w: viewer_sample subject %q is a channel id", ErrInvalidProjection, strings.TrimSpace(rawVideoID))
 		}
 	}
-	if err := appendGroup(inputs.ViewerVideoIDs, []contract.ObservationKind{contract.KindViewerSample}, "viewer_roster"); err != nil {
-		return nil, nil, err
-	}
-	schedule, ok := schedules[contract.KindSchedule]
+	return nil
+}
+
+func (b *policyTargetBuilder) appendGlobalSchedule() error {
+	schedule, ok := b.schedules[contract.KindSchedule]
 	if !ok {
-		return nil, nil, fmt.Errorf("%w: schedule for %s is missing", ErrInvalidProjection, contract.KindSchedule)
+		return fmt.Errorf("%w: schedule for %s is missing", ErrInvalidProjection, contract.KindSchedule)
 	}
 	const globalScheduleSubject = "global:hololive-schedule"
-	targets = append(targets, TargetSpec{
+	b.targets = append(b.targets, TargetSpec{
 		SubjectKey: globalScheduleSubject, ObservationKind: contract.KindSchedule,
 		Priority: schedule.Priority, PollInterval: schedule.PollInterval, Enabled: schedule.Enabled,
 	})
-	reasons = append(reasons, TargetReason{
+	b.reasons = append(b.reasons, TargetReason{
 		SubjectKey: globalScheduleSubject, ObservationKind: contract.KindSchedule,
 		ReasonKind: "fixed_global", ReasonKey: globalScheduleSubject,
 	})
-	return targets, reasons, nil
+	return nil
 }
 
 func looksLikeYouTubeChannelID(value string) bool {

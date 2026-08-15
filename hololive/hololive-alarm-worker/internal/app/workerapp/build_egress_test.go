@@ -52,6 +52,10 @@ func (*clientRequestIDRecordingIrisSender) SendKaringContentList(context.Context
 	return nil, nil
 }
 
+type staticOpenRooms struct{}
+
+func (staticOpenRooms) OpenChat(context.Context, string) bool { return true }
+
 type workerappEgressTestPostgres struct{}
 
 func (workerappEgressTestPostgres) GetPool() *pgxpool.Pool {
@@ -102,7 +106,7 @@ func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t 
 func TestYouTubeOutboxKaringSenderUsesMarkdownLaneWhenEnabled(t *testing.T) {
 	stub := &clientRequestIDRecordingIrisSender{}
 	sender := dispatchrun.NewYouTubeOutboxKaringSender(
-		egress.NewIrisMessageSender(stub, egress.WithMarkdownReplies(true)),
+		egress.NewIrisMessageSender(stub, egress.WithMarkdownReplies(true), egress.WithRoomChat(staticOpenRooms{})),
 		nil,
 	)
 

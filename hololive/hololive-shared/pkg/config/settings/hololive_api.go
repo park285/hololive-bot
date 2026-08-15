@@ -111,6 +111,16 @@ func (c *HololiveAPIConfig) Validate() error {
 	if c.Bot == nil || c.Admin == nil || c.LLM == nil {
 		return fmt.Errorf("bot, admin and llm plane configs are required")
 	}
+	if err := c.validateSharedPlanes(); err != nil {
+		return err
+	}
+	if err := c.validateYouTubeBindings(); err != nil {
+		return err
+	}
+	return validateHololiveAPIListenerPorts(c)
+}
+
+func (c *HololiveAPIConfig) validateSharedPlanes() error {
 	if err := validateTracingConfig(c.Tracing); err != nil {
 		return err
 	}
@@ -120,16 +130,17 @@ func (c *HololiveAPIConfig) Validate() error {
 	if err := c.validateAlarmProviders(); err != nil {
 		return err
 	}
-	if err := c.validatePlanePools(); err != nil {
-		return err
-	}
+	return c.validatePlanePools()
+}
+
+func (c *HololiveAPIConfig) validateYouTubeBindings() error {
 	if err := c.YouTube.Validate(); err != nil {
 		return fmt.Errorf("youtube plane: %w", err)
 	}
-	if err := validateYouTubePlaneDatabaseRole(c.Bot.Postgres.User); err != nil {
-		return err
+	if err := c.YouTube.validateProductionRetention(c.Bot.Environment); err != nil {
+		return fmt.Errorf("youtube plane: %w", err)
 	}
-	return validateHololiveAPIListenerPorts(c)
+	return validateYouTubePlaneDatabaseRole(c.Bot.Postgres.User)
 }
 
 func (c *HololiveAPIConfig) validatePlaneRuntimes() error {

@@ -13,6 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
@@ -46,7 +47,12 @@ func buildNotificationEgress(
 	if err != nil {
 		return nil, fmt.Errorf("init alarm-worker notification egress iris client: %w", err)
 	}
-	irisSender := egress.NewIrisMessageSender(irisClient, egress.WithMarkdownReplies(appConfig.Bot.MarkdownReplies))
+	rooms := kakaoroom.New(infra.Postgres.GetPool(), kakaoroom.ListerFrom(irisClient), logger)
+	irisSender := egress.NewIrisMessageSender(
+		irisClient,
+		egress.WithMarkdownReplies(appConfig.Bot.MarkdownReplies),
+		egress.WithRoomChat(rooms),
+	)
 
 	alarmDispatchRunner, err := buildAlarmDispatchRunner(infra, irisSender, logger)
 	if err != nil {

@@ -10,6 +10,7 @@ httputil
 internal/guardtext
 json
 jsonutil
+kakaoformat
 llm
 llm/internal/openaidiag
 llm/openaipreset

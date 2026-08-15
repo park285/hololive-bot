@@ -1,5 +1,4 @@
-DELETE FROM source_observations AS observation
-WHERE observation.id IN (
+WITH candidates AS (
     SELECT candidate.id
     FROM source_observations AS candidate
     JOIN unnest($1::text[], $2::timestamptz[]) AS policy(observation_kind, cutoff)
@@ -21,7 +20,11 @@ WHERE observation.id IN (
       )
     ORDER BY candidate.received_at, candidate.id
     LIMIT $3
+    FOR UPDATE OF candidate SKIP LOCKED
 )
+DELETE FROM source_observations AS observation
+USING candidates
+WHERE observation.id = candidates.id
   AND NOT EXISTS (
       SELECT 1
       FROM source_observation_queue AS live_queue

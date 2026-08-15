@@ -318,6 +318,16 @@ TABLE bot_webhook_inbox
   INDEX CREATE INDEX idx_bot_webhook_inbox_terminal_updated ON public.bot_webhook_inbox USING btree (updated_at, id) WHERE (status = ANY (ARRAY['dead'::text, 'succeeded'::text]))
   TRIGGER CREATE TRIGGER bot_webhook_inbox_terminal_payload_scrub BEFORE INSERT OR UPDATE OF status, payload ON bot_webhook_inbox FOR EACH ROW WHEN (new.status = ANY (ARRAY['dead'::text, 'succeeded'::text])) EXECUTE FUNCTION scrub_bot_webhook_inbox_terminal_payload()
 
+TABLE kakao_rooms
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN room_type character varying(64) NOT NULL DEFAULT ''::character varying
+  COLUMN room_link_id character varying(128) NOT NULL DEFAULT ''::character varying
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT kakao_rooms_room_id_len CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
+  CONSTRAINT kakao_rooms_room_link_id_len CHECK ((length((room_link_id)::text) <= 128))
+  CONSTRAINT kakao_rooms_room_type_len CHECK ((length((room_type)::text) <= 64))
+  CONSTRAINT kakao_rooms_pkey PRIMARY KEY (room_id)
+
 TABLE major_event_subscriptions
   COLUMN id integer NOT NULL DEFAULT nextval('major_event_subscriptions_id_seq'::regclass)
   COLUMN room_id character varying(100) NOT NULL
@@ -733,6 +743,7 @@ TABLE youtube_channel_photo_variants
   CONSTRAINT chk_youtube_photo_variant_url CHECK ((((length(url) >= 8) AND (length(url) <= 2048)) AND (url ~~ 'https://%'::text)))
   CONSTRAINT youtube_channel_photo_variants_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_channel_photo_variants_pkey PRIMARY KEY (channel_id, kind, provider, scheduled_for)
+  INDEX CREATE INDEX idx_youtube_channel_photo_variants_observation_id ON public.youtube_channel_photo_variants USING btree (observation_id)
 
 TABLE youtube_channel_profile_evidence
   COLUMN channel_id text NOT NULL
@@ -755,6 +766,7 @@ TABLE youtube_channel_profile_evidence
   CONSTRAINT chk_youtube_profile_evidence_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
   CONSTRAINT youtube_channel_profile_evidence_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_channel_profile_evidence_pkey PRIMARY KEY (channel_id, scheduled_for, provider)
+  INDEX CREATE INDEX idx_youtube_channel_profile_evidence_observation_id ON public.youtube_channel_profile_evidence USING btree (observation_id)
 
 TABLE youtube_channel_profile_heads
   COLUMN channel_id text NOT NULL
@@ -808,6 +820,7 @@ TABLE youtube_channel_stats_evidence
   CONSTRAINT chk_youtube_stats_evidence_provider CHECK ((provider = ANY (ARRAY['youtubejs'::text, 'holodex'::text, 'hololive_official'::text])))
   CONSTRAINT youtube_channel_stats_evidence_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_channel_stats_evidence_pkey PRIMARY KEY (channel_id, scheduled_for, provider)
+  INDEX CREATE INDEX idx_youtube_channel_stats_evidence_observation_id ON public.youtube_channel_stats_evidence USING btree (observation_id)
 
 TABLE youtube_channel_stats_heads
   COLUMN channel_id text NOT NULL
@@ -867,6 +880,7 @@ TABLE youtube_collection_job_leases
   CONSTRAINT youtube_collection_job_leases_projection_generation_fkey FOREIGN KEY (projection_generation) REFERENCES youtube_collection_projection_generations(generation) ON DELETE RESTRICT
   CONSTRAINT youtube_collection_job_leases_pkey PRIMARY KEY (job_key)
   INDEX CREATE INDEX idx_youtube_collection_job_due ON public.youtube_collection_job_leases USING btree (slot_state, next_due_at, retry_not_before, lease_expires_at, job_key)
+  INDEX CREATE INDEX idx_youtube_collection_job_projection_generation ON public.youtube_collection_job_leases USING btree (projection_generation, job_key)
 
 TABLE youtube_collection_projection_generations
   COLUMN generation bigint NOT NULL GENERATED ALWAYS AS IDENTITY
@@ -881,6 +895,7 @@ TABLE youtube_collection_projection_generations
   CONSTRAINT youtube_collection_projection_generations_row_count_check CHECK ((row_count >= 0))
   CONSTRAINT youtube_collection_projection_generations_status_check CHECK ((status = ANY (ARRAY['STAGING'::text, 'CURRENT'::text, 'RETIRED'::text])))
   CONSTRAINT youtube_collection_projection_generations_pkey PRIMARY KEY (generation)
+  INDEX CREATE INDEX idx_youtube_collection_projection_retired_retention ON public.youtube_collection_projection_generations USING btree (valid_until, generation) WHERE (status = 'RETIRED'::text)
   INDEX CREATE UNIQUE INDEX uq_youtube_collection_projection_one_current ON public.youtube_collection_projection_generations USING btree (status) WHERE (status = 'CURRENT'::text)
 
 TABLE youtube_collection_target_reasons
@@ -975,6 +990,7 @@ TABLE youtube_content_absence_slots
   CONSTRAINT chk_youtube_content_absence_kind CHECK ((observation_kind = ANY (ARRAY['video_list'::text, 'shorts_list'::text])))
   CONSTRAINT youtube_content_absence_slots_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_content_absence_slots_pkey PRIMARY KEY (channel_id, observation_kind, scheduled_for)
+  INDEX CREATE INDEX idx_youtube_content_absence_slots_observation_id ON public.youtube_content_absence_slots USING btree (observation_id)
 
 TABLE youtube_content_alarm_tracking
   OPTIONS autovacuum_analyze_scale_factor=0.05,autovacuum_analyze_threshold=100,autovacuum_vacuum_scale_factor=0.05,autovacuum_vacuum_threshold=100
@@ -1034,6 +1050,7 @@ TABLE youtube_content_evidence_clocks
   CONSTRAINT youtube_content_evidence_clock_last_absence_observation_id_fkey FOREIGN KEY (last_absence_observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_content_evidence_clocks_video_id_fkey FOREIGN KEY (video_id) REFERENCES youtube_videos(video_id) ON DELETE CASCADE
   CONSTRAINT youtube_content_evidence_clocks_pkey PRIMARY KEY (video_id)
+  INDEX CREATE INDEX idx_youtube_content_evidence_clocks_last_absence_observation_id ON public.youtube_content_evidence_clocks USING btree (last_absence_observation_id)
 
 TABLE youtube_content_watermarks
   COLUMN channel_id character varying(64) NOT NULL
@@ -1111,6 +1128,7 @@ TABLE youtube_live_viewer_sample_evidence
   CONSTRAINT chk_youtube_viewer_evidence_window CHECK (((sample_window_seconds >= 1) AND (sample_window_seconds <= 86400)))
   CONSTRAINT youtube_live_viewer_sample_evidence_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
   CONSTRAINT youtube_live_viewer_sample_evidence_pkey PRIMARY KEY (video_id, sample_window_start, provider)
+  INDEX CREATE INDEX idx_youtube_live_viewer_sample_evidence_observation_id ON public.youtube_live_viewer_sample_evidence USING btree (observation_id)
 
 TABLE youtube_live_viewer_sample_heads
   COLUMN video_id text NOT NULL

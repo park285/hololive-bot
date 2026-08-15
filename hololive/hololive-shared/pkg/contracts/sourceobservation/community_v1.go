@@ -42,21 +42,40 @@ type Thumbnail struct {
 }
 
 func (p *CommunityPayloadV1) normalizeAndValidate(subjectKey string) error {
+	if err := validateCommunityPayloadIdentity(p, subjectKey); err != nil {
+		return err
+	}
+	if err := prepareCommunityPosts(p); err != nil {
+		return err
+	}
+	if err := validateCommunityPosts(p); err != nil {
+		return err
+	}
+	sort.Slice(p.Posts, func(i, j int) bool { return p.Posts[i].PostID < p.Posts[j].PostID })
+	return nil
+}
+
+func validateCommunityPayloadIdentity(p *CommunityPayloadV1, subjectKey string) error {
 	if err := validateIdentifier("channel id", p.ChannelID, 256); err != nil {
 		return err
 	}
 	if p.ChannelID != subjectKey {
 		return fmt.Errorf("validate community payload: channel id does not match subject key")
 	}
-	if err := p.Coverage.normalizeAndValidate(subjectKey); err != nil {
-		return err
-	}
+	return p.Coverage.normalizeAndValidate(subjectKey)
+}
+
+func prepareCommunityPosts(p *CommunityPayloadV1) error {
 	if len(p.Posts) > MaxCommunityPosts {
 		return fmt.Errorf("validate community payload: post count exceeds %d", MaxCommunityPosts)
 	}
 	if p.Posts == nil {
 		p.Posts = []CommunityPostV1{}
 	}
+	return nil
+}
+
+func validateCommunityPosts(p *CommunityPayloadV1) error {
 	seen := make(map[string]struct{}, len(p.Posts))
 	for i := range p.Posts {
 		if err := p.Posts[i].validate(p.ChannelID); err != nil {
@@ -67,7 +86,6 @@ func (p *CommunityPayloadV1) normalizeAndValidate(subjectKey string) error {
 		}
 		seen[p.Posts[i].PostID] = struct{}{}
 	}
-	sort.Slice(p.Posts, func(i, j int) bool { return p.Posts[i].PostID < p.Posts[j].PostID })
 	return nil
 }
 
@@ -76,32 +94,57 @@ func (p CommunityPayloadV1) Validate(subjectKey string) error {
 }
 
 func (p CommunityPostV1) validate(channelID string) error {
+	if err := validateCommunityPostIdentity(p, channelID); err != nil {
+		return err
+	}
+	if err := validateCommunityPostText(p); err != nil {
+		return err
+	}
+	if err := validateCommunityPostTimesAndCounts(p); err != nil {
+		return err
+	}
+	if err := validateThumbnails("author photo", p.AuthorPhoto); err != nil {
+		return err
+	}
+	return validateThumbnails("images", p.Images)
+}
+
+func validateCommunityPostIdentity(p CommunityPostV1, channelID string) error {
 	if err := validateIdentifier("post id", p.PostID, 256); err != nil {
 		return err
 	}
-	if p.UpstreamPostID != "" {
-		if err := validateIdentifier("upstream post id", p.UpstreamPostID, 256); err != nil {
-			return err
-		}
+	if err := validateOptionalIdentifier("upstream post id", p.UpstreamPostID, 256); err != nil {
+		return err
 	}
 	if p.ChannelID != channelID {
 		return fmt.Errorf("post channel id does not match payload channel id")
 	}
+	return nil
+}
+
+func validateCommunityPostText(p CommunityPostV1) error {
 	for name, value := range map[string]string{
 		"author id": p.AuthorID, "author name": p.AuthorName, "content text": p.ContentText,
 		"published text": p.PublishedText, "video id": p.VideoID,
 	} {
-		limit := 512
-		if name == "content text" {
-			limit = 100000
-		}
-		if name == "video id" {
-			limit = 128
-		}
-		if err := validateOptionalText(name, value, limit); err != nil {
+		if err := validateOptionalText(name, value, communityTextLimit(name)); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func communityTextLimit(name string) int {
+	if name == "content text" {
+		return 100000
+	}
+	if name == "video id" {
+		return 128
+	}
+	return 512
+}
+
+func validateCommunityPostTimesAndCounts(p CommunityPostV1) error {
 	if p.PublishedAt != nil && p.PublishedAt.IsZero() {
 		return fmt.Errorf("published at must not point to the zero time")
 	}
@@ -111,10 +154,7 @@ func (p CommunityPostV1) validate(channelID string) error {
 	if p.LikeCount < 0 || p.CommentCount < 0 {
 		return fmt.Errorf("like and comment counts must be non-negative")
 	}
-	if err := validateThumbnails("author photo", p.AuthorPhoto); err != nil {
-		return err
-	}
-	return validateThumbnails("images", p.Images)
+	return nil
 }
 
 func validateThumbnails(name string, thumbnails []Thumbnail) error {
@@ -122,15 +162,26 @@ func validateThumbnails(name string, thumbnails []Thumbnail) error {
 		return fmt.Errorf("%s count exceeds %d", name, maxCommunityThumbnails)
 	}
 	for i := range thumbnails {
-		if err := validateHTTPSURL(name+" url", thumbnails[i].URL); err != nil {
-			return fmt.Errorf("%s %d: %w", name, i, err)
-		}
-		if thumbnails[i].Width < 0 || thumbnails[i].Width > 10000 ||
-			thumbnails[i].Height < 0 || thumbnails[i].Height > 10000 {
-			return fmt.Errorf("%s %d: dimensions are outside the accepted range", name, i)
+		if err := validateThumbnail(name, i, thumbnails[i]); err != nil {
+			return err
 		}
 	}
-	sort.Slice(thumbnails, func(i, j int) bool {
+	sort.Slice(thumbnails, lessThumbnail(thumbnails))
+	return nil
+}
+
+func validateThumbnail(name string, index int, thumbnail Thumbnail) error {
+	if err := validateHTTPSURL(name+" url", thumbnail.URL); err != nil {
+		return fmt.Errorf("%s %d: %w", name, index, err)
+	}
+	if thumbnail.Width < 0 || thumbnail.Width > 10000 || thumbnail.Height < 0 || thumbnail.Height > 10000 {
+		return fmt.Errorf("%s %d: dimensions are outside the accepted range", name, index)
+	}
+	return nil
+}
+
+func lessThumbnail(thumbnails []Thumbnail) func(int, int) bool {
+	return func(i, j int) bool {
 		if thumbnails[i].URL != thumbnails[j].URL {
 			return thumbnails[i].URL < thumbnails[j].URL
 		}
@@ -138,8 +189,7 @@ func validateThumbnails(name string, thumbnails []Thumbnail) error {
 			return thumbnails[i].Width < thumbnails[j].Width
 		}
 		return thumbnails[i].Height < thumbnails[j].Height
-	})
-	return nil
+	}
 }
 
 func validateHTTPSURL(name, value string) error {

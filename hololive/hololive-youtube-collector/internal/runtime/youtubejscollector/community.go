@@ -28,6 +28,7 @@ func (r *CommunityRunner) JobKind() string             { return "community_colle
 func (r *CommunityRunner) Emissions() []contract.ObservationKind {
 	return []contract.ObservationKind{contract.KindCommunityPage}
 }
+func (r *CommunityRunner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
 func (r *CommunityRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {

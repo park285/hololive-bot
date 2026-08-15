@@ -8,9 +8,15 @@
   },
   "scripts": {
     "test": "node --test src/*.test.mjs",
-    "start": "node src/server.mjs"
+    "start": "node src/server.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p jsconfig.json"
   },
   "dependencies": {
-    "youtubei.js": "17.2.0"
+    "undici": "8.10.0",
+    "youtubei.js": "18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "typescript": "7.0.2"
   }
 }

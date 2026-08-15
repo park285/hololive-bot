@@ -90,6 +90,8 @@ up_line="$(grep -n "up -d --no-build" "$deploy_script" | cut -d: -f1)"
   || fail "AP image build, verification, transfer, load, and no-build up must remain ordered"
 grep -Fq "up -d --no-build" "$deploy_script" \
   || fail "AP cutover must explicitly disable remote Compose builds"
+grep -Fq 'stop_retired_producer_runtime' "$deploy_script" \
+  || fail "AP cutover must stop leftover youtube-producer before starting collector"
 if grep -Fq -- "--remove-orphans" "$deploy_script"; then
   fail "AP deploy must preserve independently managed services in the shared Compose project"
 fi

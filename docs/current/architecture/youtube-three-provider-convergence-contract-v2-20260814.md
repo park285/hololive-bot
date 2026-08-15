@@ -1819,7 +1819,7 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 
 - 동일 collector binary를 AP a/b/c/d 위치에 배치한다.
 - instance별 provider role을 고정하지 않는다.
-- global job은 `collector:holodex:global`, `collector:hololive_official:global`이다.
+- global job key는 provider와 job kind를 모두 포함합니다. Holodex는 `collector:holodex:holodex_live:global`, `collector:holodex:holodex_schedule:global`, `collector:holodex:holodex_metadata:global`, Official은 `collector:hololive_official:official_schedule:global`입니다.
 - YouTube.js job은 `collector:youtubejs:<collection_job_kind>:<subject_key>`다.
 - `collection_job_kind`는 compile-time emission contract를 가지며, 같은 fetch/due cadence를 공유하는 observation kind만 한 subject bundle로 묶는다. cadence가 다르면 별도 job으로 유지한다.
 - 한 instance의 global job과 YouTube.js worker가 공유하는 total concurrency는 bounded semaphore 하나가 소유한다.

@@ -43,6 +43,10 @@ type projectionRefresher interface {
 	Refresh(context.Context, targetprojection.Builder, time.Time) (targetprojection.Result, error)
 }
 
+type projectionRetainer interface {
+	Retain(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error)
+}
+
 type liveEndFinalizer interface {
 	FinalizeNextDueLiveEnd(context.Context, time.Duration) (bool, error)
 }
@@ -59,16 +63,17 @@ type Runtime struct {
 	Config settings.YouTubePlaneConfig
 	Logger *slog.Logger
 
-	pool      *pgxpool.Pool
-	closePool func()
-	claimer   observationClaimer
-	consumer  observationConsumer
-	refresher projectionRefresher
-	finalizer liveEndFinalizer
-	retainer  observationRetainer
-	replayer  observationReplayer
-	builder   targetprojection.Builder
-	now       func() time.Time
+	pool               *pgxpool.Pool
+	closePool          func()
+	claimer            observationClaimer
+	consumer           observationConsumer
+	refresher          projectionRefresher
+	projectionRetainer projectionRetainer
+	finalizer          liveEndFinalizer
+	retainer           observationRetainer
+	replayer           observationReplayer
+	builder            targetprojection.Builder
+	now                func() time.Time
 
 	dbSem      chan struct{}
 	workCh     chan sourceobservation.Observation
@@ -124,7 +129,7 @@ func newRuntime(
 	pool *pgxpool.Pool,
 	cleanup func(),
 ) (*Runtime, error) {
-	repo := sourceobservation.NewRepository(pool)
+	repo := sourceobservation.NewConsumeRepository(pool)
 	refresher, err := targetprojection.NewRefresher(pool, plane.TargetProjection.Validity)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube plane: %w", err)
@@ -143,10 +148,11 @@ func newRuntime(
 				PhotoChangeMinObservations:  plane.PhotoChangeMinObservations,
 				PhotoChangeStability:        plane.PhotoChangeStability,
 			}),
-		refresher: refresher,
-		finalizer: repo,
-		retainer:  repo,
-		replayer:  repo,
+		refresher:          refresher,
+		projectionRetainer: refresher,
+		finalizer:          repo,
+		retainer:           repo,
+		replayer:           repo,
 		builder: targetprojection.PolicyBuilder{
 			Reader:    rosterReader{},
 			Schedules: targetprojection.DefaultPolicySchedules(),
@@ -297,11 +303,18 @@ func (r *Runtime) publishHealth() {
 
 func waitForCompletions(ctx context.Context, done <-chan struct{}, count int, owner string) error {
 	for completed := 0; completed < count; completed++ {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			return fmt.Errorf("%s did not join: %w", owner, ctx.Err())
+		if err := waitOneCompletion(ctx, done, owner); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func waitOneCompletion(ctx context.Context, done <-chan struct{}, owner string) error {
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("%s did not join: %w", owner, ctx.Err())
+	}
 }

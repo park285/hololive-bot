@@ -2,231 +2,7 @@ package live
 
 import (
 	"time"
-
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
-
-func applyUpcomingPositive(session *reduceSession, fact SessionFact) {
-	existing, ok := session.state.Sessions[fact.VideoID]
-	if ok && existing.Status == StatusEnded {
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: fact.VideoID, Decision: "KEEP_ENDED",
-		})
-		return
-	}
-	if !ok {
-		created := newSession(fact, StatusUpcoming, session.evidence)
-		created.Clock.LastUpcomingPositiveAt = copyTime(session.evidence.EffectiveAt)
-		created.Clock.LastUpcomingPositiveSeenAt = copyTime(session.evidence.ReceivedAt)
-		session.state.Sessions[fact.VideoID] = created
-		markDirty(session, fact.VideoID)
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: fact.VideoID, Decision: "APPLIED",
-		})
-		reapplyStoredEnds(session, fact.VideoID)
-		return
-	}
-	if existing.Clock.LastUpcomingPositiveAt != nil && session.evidence.EffectiveAt.Before(*existing.Clock.LastUpcomingPositiveAt) {
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: fact.VideoID, Decision: "OLDER_POSITIVE_RETAINED",
-		})
-		return
-	}
-	existing = mergePositiveFields(existing, fact, session.evidence)
-	existing.Clock.LastUpcomingPositiveAt = copyTime(session.evidence.EffectiveAt)
-	existing.Clock.LastUpcomingPositiveSeenAt = copyTime(session.evidence.ReceivedAt)
-	if shouldClearEnd(existing, session.evidence.EffectiveAt) {
-		clearEndCandidate(&existing)
-		delete(session.state.PendingEnds, fact.VideoID)
-	}
-	session.state.Sessions[fact.VideoID] = existing
-	markDirty(session, fact.VideoID)
-	session.applications = append(session.applications, Application{
-		EntityKind: "youtube_live_session", EntityKey: fact.VideoID, Decision: "APPLIED",
-	})
-}
-
-func applyLivePositive(session *reduceSession, fact SessionFact) {
-	existing, ok := session.state.Sessions[fact.VideoID]
-	if ok && existing.Status == StatusEnded {
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: fact.VideoID, Decision: "KEEP_ENDED",
-		})
-		return
-	}
-	if !ok {
-		created := newSession(fact, StatusLive, session.evidence)
-		created.Clock.LastLivePositiveAt = copyTime(session.evidence.EffectiveAt)
-		created.Clock.LastLivePositiveSeenAt = copyTime(session.evidence.ReceivedAt)
-		created.LiveFirstSeenAt = copyTime(session.evidence.ReceivedAt)
-		created.StartedAt = firstTime(fact.StartedAt, session.evidence.EffectiveAt)
-		session.state.Sessions[fact.VideoID] = created
-		markDirty(session, fact.VideoID)
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: fact.VideoID, Decision: "APPLIED",
-		})
-		reapplyStoredEnds(session, fact.VideoID)
-		return
-	}
-	if existing.Clock.LastLivePositiveAt != nil && session.evidence.EffectiveAt.Before(*existing.Clock.LastLivePositiveAt) {
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: fact.VideoID, Decision: "OLDER_POSITIVE_RETAINED",
-		})
-		return
-	}
-	existing = mergePositiveFields(existing, fact, session.evidence)
-	if existing.Status == StatusUpcoming {
-		existing.Status = StatusLive
-	}
-	if existing.LiveFirstSeenAt == nil {
-		existing.LiveFirstSeenAt = copyTime(session.evidence.ReceivedAt)
-	}
-	if existing.StartedAt == nil {
-		existing.StartedAt = firstTime(fact.StartedAt, session.evidence.EffectiveAt)
-	}
-	existing.Clock.LastLivePositiveAt = copyTime(session.evidence.EffectiveAt)
-	existing.Clock.LastLivePositiveSeenAt = copyTime(session.evidence.ReceivedAt)
-	if shouldClearEnd(existing, session.evidence.EffectiveAt) {
-		clearEndCandidate(&existing)
-		delete(session.state.PendingEnds, fact.VideoID)
-	}
-	session.state.Sessions[fact.VideoID] = existing
-	markDirty(session, fact.VideoID)
-	session.applications = append(session.applications, Application{
-		EntityKind: "youtube_live_session", EntityKey: fact.VideoID, Decision: "APPLIED",
-	})
-}
-
-func newSession(fact SessionFact, status Status, evidence Evidence) SessionState {
-	return SessionState{
-		VideoID:            fact.VideoID,
-		ChannelID:          fact.ChannelID,
-		Status:             status,
-		ScheduledStartTime: copyOptionalTime(fact.ScheduledAt),
-		LastSeenAt:         evidence.ReceivedAt.UTC(),
-		Present:            true,
-	}
-}
-
-func mergePositiveFields(existing SessionState, fact SessionFact, evidence Evidence) SessionState {
-	if fact.ChannelID != "" {
-		existing.ChannelID = fact.ChannelID
-	}
-	if fact.ScheduledAt != nil {
-		existing.ScheduledStartTime = copyOptionalTime(fact.ScheduledAt)
-	}
-	if fact.StartedAt != nil && existing.StartedAt == nil {
-		existing.StartedAt = copyOptionalTime(fact.StartedAt)
-	}
-	if evidence.ReceivedAt.After(existing.LastSeenAt) {
-		existing.LastSeenAt = evidence.ReceivedAt.UTC()
-	}
-	existing.Present = true
-	return existing
-}
-
-func pendingFromFact(session *reduceSession, fact SessionFact, kind EndEvidenceKind) PendingEnd {
-	return PendingEnd{
-		Kind:             kind,
-		VideoID:          fact.VideoID,
-		ChannelID:        fact.ChannelID,
-		ObservationID:    session.evidence.ObservationID,
-		EffectiveAt:      session.evidence.EffectiveAt,
-		ReceivedAt:       session.evidence.ReceivedAt,
-		ScheduledFor:     session.evidence.ScheduledFor,
-		EndedAt:          copyOptionalTime(fact.EndedAt),
-		NegativeEligible: true,
-		ScopeCovers:      true,
-	}
-}
-
-func recordPendingEnd(session *reduceSession, pending PendingEnd) {
-	existing, ok := session.state.PendingEnds[pending.VideoID]
-	if ok && pending.EffectiveAt.Before(existing.EffectiveAt) {
-		return
-	}
-	session.state.PendingEnds[pending.VideoID] = pending
-}
-
-func reapplyStoredAbsences(session *reduceSession) {
-	for _, slot := range session.state.AbsenceSlots {
-		for _, existing := range session.state.Sessions {
-			applyAbsenceToSession(session, existing, slot)
-		}
-	}
-}
-
-func applyAbsenceToSession(session *reduceSession, existing SessionState, slot AbsenceSlot) {
-	if existing.Status == StatusEnded || !existing.Present {
-		return
-	}
-	covers := contract.LiveCoverageCoversSession(slot.Coverage, existing.ChannelID, string(existing.Status))
-	if !covers {
-		return
-	}
-	if ignoredAbsence(existing, slot.ScheduledFor) {
-		return
-	}
-	if existing.Clock.LastLivePositiveAt == nil {
-		existing.IgnoredAbsenceScheduledFor = append(existing.IgnoredAbsenceScheduledFor, slot.ScheduledFor)
-		session.state.Sessions[existing.VideoID] = existing
-		markDirty(session, existing.VideoID)
-		return
-	}
-	if !slot.EffectiveAt.After(*existing.Clock.LastLivePositiveAt) {
-		return
-	}
-	if replayedAbsence(existing, slot) {
-		return
-	}
-	countAbsenceSlot(&existing, slot)
-	existing.Clock.LastCompleteAbsenceAt = copyTime(slot.EffectiveAt)
-	existing.LastAbsenceObservationID = slot.ObservationID
-	existing.LastAbsenceScheduledFor = copyTime(slot.ScheduledFor)
-	session.state.Sessions[existing.VideoID] = existing
-	markDirty(session, existing.VideoID)
-	recordPendingEnd(session, PendingEnd{
-		Kind:             EndEvidenceScopedAbsence,
-		VideoID:          existing.VideoID,
-		ChannelID:        existing.ChannelID,
-		ObservationID:    slot.ObservationID,
-		EffectiveAt:      slot.EffectiveAt,
-		ReceivedAt:       slot.ReceivedAt,
-		ScheduledFor:     slot.ScheduledFor,
-		NegativeEligible: true,
-		ScopeCovers:      covers,
-	})
-	reapplyStoredEnds(session, existing.VideoID)
-}
-
-func ignoredAbsence(existing SessionState, scheduledFor time.Time) bool {
-	for _, ignored := range existing.IgnoredAbsenceScheduledFor {
-		if ignored.Equal(scheduledFor) {
-			return true
-		}
-	}
-	return false
-}
-
-func replayedAbsence(existing SessionState, slot AbsenceSlot) bool {
-	if slot.ObservationID != 0 && existing.LastAbsenceObservationID == slot.ObservationID {
-		return true
-	}
-	return sameOptionalTime(existing.FirstAbsenceScheduledFor, &slot.ScheduledFor) ||
-		sameOptionalTime(existing.SecondAbsenceScheduledFor, &slot.ScheduledFor)
-}
-
-func countAbsenceSlot(entity *SessionState, slot AbsenceSlot) {
-	switch entity.Clock.ConsecutiveAbsenceSlots {
-	case 0:
-		entity.FirstAbsenceScheduledFor = copyTime(slot.ScheduledFor)
-		entity.Clock.ConsecutiveAbsenceSlots = 1
-	case 1:
-		entity.SecondAbsenceScheduledFor = copyTime(slot.ScheduledFor)
-		entity.Clock.ConsecutiveAbsenceSlots = 2
-	default:
-	}
-}
 
 func reapplyStoredEnds(session *reduceSession, videoID string) {
 	existing, ok := session.state.Sessions[videoID]
@@ -244,31 +20,25 @@ func applyPendingEnd(session *reduceSession, existing SessionState, pending Pend
 	evidence := endEvidenceOf(existing, pending)
 	if CanEnd(existing.Clock, evidence, session.dbNow, session.grace) {
 		endSession(&existing, pending, session.dbNow)
-		session.state.Sessions[existing.VideoID] = existing
-		markDirty(session, existing.VideoID)
+		storeSessionDecision(session, existing, "ENDED")
 		delete(session.state.PendingEnds, existing.VideoID)
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: existing.VideoID, Decision: "ENDED",
-		})
 		return
 	}
 	if persistCandidate(existing, evidence) {
 		setEndCandidate(&existing, pending, session.grace)
-		session.state.Sessions[existing.VideoID] = existing
-		markDirty(session, existing.VideoID)
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: existing.VideoID, Decision: "END_CANDIDATE",
-		})
+		storeSessionDecision(session, existing, "END_CANDIDATE")
 		return
 	}
 	if existing.Clock.EndCandidateKind != nil {
 		clearEndCandidate(&existing)
-		session.state.Sessions[existing.VideoID] = existing
-		markDirty(session, existing.VideoID)
-		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_live_session", EntityKey: existing.VideoID, Decision: "END_CANDIDATE_CLEARED",
-		})
+		storeSessionDecision(session, existing, "END_CANDIDATE_CLEARED")
 	}
+}
+
+func storeSessionDecision(session *reduceSession, existing SessionState, decision string) {
+	session.state.Sessions[existing.VideoID] = existing
+	markDirty(session, existing.VideoID)
+	recordApplication(session, existing.VideoID, decision)
 }
 
 func endEvidenceOf(existing SessionState, pending PendingEnd) EndEvidence {
@@ -299,24 +69,40 @@ func persistCandidate(existing SessionState, evidence EndEvidence) bool {
 	if !evidence.Valid || !evidence.EntityMatchesSession || evidence.HasPositiveAtOrAfter {
 		return false
 	}
-	switch evidence.Kind {
-	case EndEvidenceExplicitEnd:
-		return existing.Clock.LastLivePositiveAt != nil && existing.Clock.LastLivePositiveSeenAt != nil &&
-			evidence.EffectiveAt.After(*existing.Clock.LastLivePositiveAt)
-	case EndEvidenceExplicitCancel:
-		return existing.Clock.LastLivePositiveAt == nil &&
-			existing.Clock.LastUpcomingPositiveAt != nil &&
-			existing.Clock.LastUpcomingPositiveSeenAt != nil &&
-			evidence.EffectiveAt.After(*existing.Clock.LastUpcomingPositiveAt)
-	case EndEvidenceScopedAbsence:
-		return evidence.NegativeEligible && evidence.ScopeCoversSession &&
-			existing.Clock.LastLivePositiveAt != nil &&
-			existing.Clock.LastLivePositiveSeenAt != nil &&
-			evidence.EffectiveAt.After(*existing.Clock.LastLivePositiveAt) &&
-			existing.Clock.ConsecutiveAbsenceSlots >= 2
-	default:
-		return false
+	return persistCandidateKind(existing, evidence)
+}
+
+func persistCandidateKind(existing SessionState, evidence EndEvidence) bool {
+	if evidence.Kind == EndEvidenceExplicitEnd {
+		return persistExplicitEnd(existing, evidence)
 	}
+	if evidence.Kind == EndEvidenceExplicitCancel {
+		return persistExplicitCancel(existing, evidence)
+	}
+	if evidence.Kind == EndEvidenceScopedAbsence {
+		return persistScopedAbsence(existing, evidence)
+	}
+	return false
+}
+
+func persistExplicitEnd(existing SessionState, evidence EndEvidence) bool {
+	return existing.Clock.LastLivePositiveAt != nil && existing.Clock.LastLivePositiveSeenAt != nil &&
+		evidence.EffectiveAt.After(*existing.Clock.LastLivePositiveAt)
+}
+
+func persistExplicitCancel(existing SessionState, evidence EndEvidence) bool {
+	return existing.Clock.LastLivePositiveAt == nil &&
+		existing.Clock.LastUpcomingPositiveAt != nil &&
+		existing.Clock.LastUpcomingPositiveSeenAt != nil &&
+		evidence.EffectiveAt.After(*existing.Clock.LastUpcomingPositiveAt)
+}
+
+func persistScopedAbsence(existing SessionState, evidence EndEvidence) bool {
+	return evidence.NegativeEligible && evidence.ScopeCoversSession &&
+		existing.Clock.LastLivePositiveAt != nil &&
+		existing.Clock.LastLivePositiveSeenAt != nil &&
+		evidence.EffectiveAt.After(*existing.Clock.LastLivePositiveAt) &&
+		existing.Clock.ConsecutiveAbsenceSlots >= 2
 }
 
 func settleDueCandidate(session *reduceSession, videoID string) {
@@ -325,33 +111,41 @@ func settleDueCandidate(session *reduceSession, videoID string) {
 		return
 	}
 	if existing.Status == StatusEnded {
-		clearEndCandidate(&existing)
-		session.state.Sessions[videoID] = existing
-		markDirty(session, videoID)
+		clearStoredCandidate(session, videoID, existing)
 		return
 	}
 	pending, ok := session.state.PendingEnds[videoID]
 	if !ok {
-		clearEndCandidate(&existing)
-		session.state.Sessions[videoID] = existing
-		markDirty(session, videoID)
+		clearStoredCandidate(session, videoID, existing)
 		return
 	}
+	refreshDueCandidate(session, existing, pending)
+}
+
+func refreshDueCandidate(session *reduceSession, existing SessionState, pending PendingEnd) {
 	evidence := endEvidenceOf(existing, pending)
 	if CanEnd(existing.Clock, evidence, session.dbNow, session.grace) {
 		return
 	}
 	if persistCandidate(existing, evidence) {
-		next := candidateRecheckAt(existing, pending, session.grace)
-		if next != nil && next.After(session.dbNow) {
-			existing.Clock.NextEndCheckAt = next
-		} else {
-			clearEndCandidate(&existing)
-		}
-		session.state.Sessions[videoID] = existing
-		markDirty(session, videoID)
+		storeRecheckOrClear(session, existing, pending)
 		return
 	}
+	clearStoredCandidate(session, existing.VideoID, existing)
+}
+
+func storeRecheckOrClear(session *reduceSession, existing SessionState, pending PendingEnd) {
+	next := candidateRecheckAt(existing, pending, session.grace)
+	if next != nil && next.After(session.dbNow) {
+		existing.Clock.NextEndCheckAt = next
+	} else {
+		clearEndCandidate(&existing)
+	}
+	session.state.Sessions[existing.VideoID] = existing
+	markDirty(session, existing.VideoID)
+}
+
+func clearStoredCandidate(session *reduceSession, videoID string, existing SessionState) {
 	clearEndCandidate(&existing)
 	session.state.Sessions[videoID] = existing
 	markDirty(session, videoID)

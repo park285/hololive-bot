@@ -135,6 +135,10 @@ pass "ap active-active syncs every Compose helper"
 grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs Iris H3 trust preflight"
 pass "ap active-active syncs Iris H3 trust preflight"
 grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
+grep -Fq 'stop_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap collector cutover stops leftover youtube-producer"
+grep -Fq 'restore_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback restores the recorded youtube-producer state"
+grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback stops collector before restoring producer"
+grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap failed cutover stops collector before restoring producer"
 pass "ap active-active deploy runs Iris H3 trust preflight"
 
 for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
@@ -159,6 +163,10 @@ grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HO
 pass "ap active-active deploy handles token-free prechange transition"
 bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh" \
     || fail "ap deploy propagates the validated Compose release version"
+bash "${ROOT_DIR}/scripts/deploy/lib/youtubejs-node-version_test.sh" \
+    || fail "AP deploy enforces the YouTube.js Node engine contract"
+bash "${ROOT_DIR}/scripts/deploy/lib/retired-producer-cutover_test.sh" \
+    || fail "AP cutover restores only the recorded producer runtime state"
 bash "${ROOT_DIR}/scripts/deploy/source-revision-provenance_test.sh" \
     || fail "image builds and cutovers preserve exact source revision provenance"
 for ap_runtime_script in scripts/deploy/ap-iris-h3-trust-preflight.sh scripts/deploy/ap-completion-check.sh; do
@@ -269,7 +277,7 @@ chmod +x "${rollback_fixture_root}/bin/ssh"
 AP_ROLLBACK_SSH_CAPTURE="${rollback_capture}" \
 PATH="${rollback_fixture_root}/bin:${PATH}" \
 SSH_KEY="${SSH_KEY}" \
-BACKUP_DIR="backups/seoul-active-active-fixture" \
+BACKUP_DIR="backups/seoul-collector-fixture" \
     "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" seoul --dry-run >/dev/null \
     || fail "seoul rollback dry-run emits a backup compose preflight"
 
@@ -285,8 +293,8 @@ grep -Fq "cp \"\$ap_backup_file\" \"\$ap_preflight_file\"" "${rollback_capture}"
     || fail "seoul rollback preflight stages the AP backup"
 grep -Fq "./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet" "${rollback_capture}" \
     || fail "seoul rollback preflight validates the staged compose pair"
-grep -Fq "test -r 'backups/seoul-active-active-fixture/rollback-image-tag'" "${rollback_capture}" \
-    || fail "seoul rollback preflight requires the preserved image tag artifact"
+grep -Fq "if [[ -r 'backups/seoul-collector-fixture/rollback-image-tag' ]]" "${rollback_capture}" \
+    || fail "seoul rollback preflight inspects the preserved image tag artifact"
 grep -Fq 'sudo -n docker image inspect "$rollback_image_tag"' "${rollback_capture}" \
     || fail "seoul rollback preflight verifies the preserved image exists"
 grep -Fq 'up -d --no-build --no-deps' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" \

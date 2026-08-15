@@ -305,7 +305,7 @@ func buildAlarmFoundation(
 	logger *slog.Logger,
 ) (*alarmFoundation, error) {
 	memberData := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	sharedRL, err := providers.ProvideYouTubeProducerRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
+	sharedRL, err := providers.ProvideYouTubeRateLimiterWithConfig(&appConfig.YouTube, infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}

@@ -285,6 +285,7 @@ run_step "production Go workspace gate tests" ./scripts/ci/check-production-go-w
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
 run_step "PostgreSQL capacity gate tests" ./scripts/ci/check-postgres-capacity_test.sh
+run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
 run_step "PostgreSQL capacity mutation-entrypoint tests" ./scripts/deploy/test-postgres-capacity-entrypoints.sh
 run_step "migration 114 restore preflight tests" ./hololive/hololive-api/scripts/migrations/preflight-114-restore_test.sh
 run_step "durable runtime rollback preflight tests" ./hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback_test.sh

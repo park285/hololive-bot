@@ -32,6 +32,28 @@ func TestRetentionTickDeletesAtMostBatchSize(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 3)
 }
 
+func TestDeleteFirstRetentionBatchRunsEveryTable(t *testing.T) {
+	t.Parallel()
+	var ran []string
+	repo := &Repository{}
+	result, err := repo.deleteFirstRetentionBatch(10, []retentionStep{
+		{table: "source_observation_queue", run: func() (int64, error) {
+			ran = append(ran, "queue")
+			return 1, nil
+		}},
+		{table: "source_observation_collisions", run: func() (int64, error) {
+			ran = append(ran, "collisions")
+			return 2, nil
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Deleted != 3 || len(result.ByTable) != 2 || ran[0] != "queue" || ran[1] != "collisions" {
+		t.Fatalf("result=%#v ran=%v", result, ran)
+	}
+}
+
 func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
@@ -88,6 +110,82 @@ func TestRetentionTickDoesNotDeleteEvidenceWhileQueueRemains(t *testing.T) {
 	}
 	assertTableCount(t, pool, "source_observations", 1)
 	assertTableCount(t, pool, "source_observation_queue", 1)
+}
+
+func TestRetentionTickSkipsLockedTerminalQueue(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	ids := publishProcessedObservations(t, ctx, pool, repo, 1)
+	ageQueueTerminal(t, pool, ids, 48*time.Hour)
+
+	holder, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	if _, err := holder.Exec(ctx, `
+		SELECT status FROM source_observation_queue WHERE observation_id = $1 FOR UPDATE
+	`, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
+		QueueProcessedAge: 24 * time.Hour,
+		BatchSize:         10,
+	}, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("retention tick: %v", err)
+	}
+	if result.Deleted != 0 {
+		t.Fatalf("locked terminal queue deleted: %#v", result)
+	}
+	assertQueueStatus(t, pool, ids[0], string(contract.StatusProcessed))
+
+	if _, err := holder.Exec(ctx, `
+		UPDATE source_observation_queue
+		SET status = 'PENDING', processed_at = NULL, updated_at = NOW()
+		WHERE observation_id = $1
+	`, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := holder.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err = repo.RunRetentionTick(context.Background(), RetentionConfig{
+		QueueProcessedAge: 24 * time.Hour,
+		BatchSize:         10,
+	}, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("retention tick after replay: %v", err)
+	}
+	if result.Deleted != 0 {
+		t.Fatalf("replayed queue deleted: %#v", result)
+	}
+	assertQueueStatus(t, pool, ids[0], string(contract.StatusPending))
+}
+
+func TestRetentionTickDoesNotDeleteReplayAuditWhileEvidenceRemains(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	ids := publishProcessedObservations(t, ctx, pool, repo, 1)
+	insertAppliedReplay(t, pool, ids[0])
+	ageReplayAudits(t, pool, ids, 48*time.Hour)
+
+	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
+		ReplayAuditAge: 24 * time.Hour,
+		BatchSize:      10,
+	}, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("retention tick: %v", err)
+	}
+	if result.Deleted != 0 {
+		t.Fatalf("replay audit deleted while evidence remained: %#v", result)
+	}
+	assertTableCount(t, pool, "source_observation_replay_requests", 1)
 }
 
 func TestRetentionTickProcessedAndDLQDurationsDiffer(t *testing.T) {
@@ -207,6 +305,34 @@ func ageQueueTerminal(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Du
 		WHERE observation_id = ANY($1)
 	`, ids, age.Milliseconds()); err != nil {
 		t.Fatalf("age queue: %v", err)
+	}
+}
+
+func insertAppliedReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO source_observation_replay_requests (
+			observation_id, provider, observation_kind, subject_key, observation_key,
+			evidence_sha256, requested_by, reason, previous_attempt_count, status, applied_at
+		)
+		SELECT id, provider, observation_kind, subject_key, observation_key,
+		       evidence_sha256, 'test-operator', 'count replay', 0, 'APPLIED', NOW()
+		FROM source_observations
+		WHERE id = $1
+	`, observationID); err != nil {
+		t.Fatalf("insert applied replay: %v", err)
+	}
+}
+
+func ageReplayAudits(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Duration) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE source_observation_replay_requests
+		SET requested_at = NOW() - ($2 * INTERVAL '1 millisecond'),
+		    applied_at = NOW() - ($2 * INTERVAL '1 millisecond')
+		WHERE observation_id = ANY($1)
+	`, ids, age.Milliseconds()); err != nil {
+		t.Fatalf("age replay audits: %v", err)
 	}
 }
 

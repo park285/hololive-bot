@@ -20,15 +20,19 @@ func (r *Runtime) runClaimLoop(ctx context.Context, errCh chan<- error) {
 	if r.stopAfterClaimError(ctx, errCh, r.claimTick(ctx)) {
 		return
 	}
-	for {
-		select {
-		case <-ctx.Done():
+	for waitTicker(ctx, ticker) {
+		if r.stopAfterClaimError(ctx, errCh, r.claimTick(ctx)) {
 			return
-		case <-ticker.C:
-			if r.stopAfterClaimError(ctx, errCh, r.claimTick(ctx)) {
-				return
-			}
 		}
+	}
+}
+
+func waitTicker(ctx context.Context, ticker *time.Ticker) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-ticker.C:
+		return true
 	}
 }
 
@@ -54,14 +58,9 @@ func (r *Runtime) runLiveEndLoop(ctx context.Context, errCh chan<- error) {
 	if r.stopAfterLiveEndError(ctx, errCh, r.liveEndTick(ctx)) {
 		return
 	}
-	for {
-		select {
-		case <-ctx.Done():
+	for waitTicker(ctx, ticker) {
+		if r.stopAfterLiveEndError(ctx, errCh, r.liveEndTick(ctx)) {
 			return
-		case <-ticker.C:
-			if r.stopAfterLiveEndError(ctx, errCh, r.liveEndTick(ctx)) {
-				return
-			}
 		}
 	}
 }
@@ -106,46 +105,51 @@ func (r *Runtime) runProjectionLoop(ctx context.Context, errCh chan<- error) {
 	defer func() { r.loopDone <- struct{}{} }()
 	ticker := time.NewTicker(r.Config.TargetProjection.Interval)
 	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			err := r.refreshProjection(ctx)
-			if err == nil {
-				continue
-			}
-			if errors.Is(err, context.Canceled) && ctx.Err() != nil {
-				return
-			}
-			if isInputReadError(err) || retryableObservationError(err) {
-				r.Logger.Error("youtube plane projection refresh failed", slog.Any("error", err))
-				continue
-			}
-			r.reportLoopError(ctx, errCh, "refresh target projection", err)
+	for waitTicker(ctx, ticker) {
+		if r.stopAfterProjectionError(ctx, errCh, r.refreshProjection(ctx)) {
 			return
 		}
 	}
 }
 
+func (r *Runtime) stopAfterProjectionError(ctx context.Context, errCh chan<- error, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		return true
+	}
+	if isInputReadError(err) || retryableObservationError(err) {
+		r.Logger.Error("youtube plane projection refresh failed", slog.Any("error", err))
+		return false
+	}
+	r.reportLoopError(ctx, errCh, "refresh target projection", err)
+	return true
+}
+
 func (r *Runtime) runWorker(ctx context.Context, errCh chan<- error) {
 	defer func() { r.workerDone <- struct{}{} }()
 	for {
-		if ctx.Err() != nil {
+		observation, ok := r.nextWork(ctx)
+		if !ok {
 			return
 		}
-		select {
-		case <-ctx.Done():
+		if err := r.processObservation(ctx, observation); err != nil {
+			r.reportLoopError(ctx, errCh, "consume community observation", err)
 			return
-		case observation, ok := <-r.workCh:
-			if !ok {
-				return
-			}
-			if err := r.processObservation(ctx, observation); err != nil {
-				r.reportLoopError(ctx, errCh, "consume community observation", err)
-				return
-			}
 		}
+	}
+}
+
+func (r *Runtime) nextWork(ctx context.Context) (sourceobservation.Observation, bool) {
+	if ctx.Err() != nil {
+		return sourceobservation.Observation{}, false
+	}
+	select {
+	case <-ctx.Done():
+		return sourceobservation.Observation{}, false
+	case observation, ok := <-r.workCh:
+		return observation, ok
 	}
 }
 
@@ -161,24 +165,49 @@ func (r *Runtime) claimTick(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
+	r.observePendingQueue(ctx)
 	for i := range batch.Observations {
 		r.remember(batch.Observations[i])
 	}
 	for i := range batch.Observations {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case r.workCh <- batch.Observations[i]:
+		if err := sendWork(ctx, r.workCh, batch.Observations[i]); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
+func sendWork(ctx context.Context, workCh chan<- sourceobservation.Observation, observation sourceobservation.Observation) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case workCh <- observation:
+		return nil
+	}
+}
+
 func (r *Runtime) processObservation(ctx context.Context, observation sourceobservation.Observation) error {
 	r.remember(observation)
+	err := r.consumeObservation(ctx, observation)
+	if err == nil {
+		youtubeFinalizeTotal.Inc()
+		youtubeConsumeTotal.WithLabelValues("success").Inc()
+		r.forget(observation.ID)
+		return nil
+	}
+	if r.forgetLostClaim(err, observation.ID) {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		return nil
+	}
+	return r.handleConsumeFailure(ctx, observation, err)
+}
+
+func (r *Runtime) consumeObservation(ctx context.Context, observation sourceobservation.Observation) error {
 	txCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
 	defer cancel()
-	err := r.withDB(txCtx, func(ctx context.Context) error {
+	return r.withDB(txCtx, func(ctx context.Context) error {
 		claim := sourceobservation.Claim{
 			ConsumerName:  r.claim.ConsumerName,
 			ObservationID: observation.ID,
@@ -189,18 +218,19 @@ func (r *Runtime) processObservation(ctx context.Context, observation sourceobse
 		}
 		return r.consumer.ConsumeObservation(ctx, observation, r.claim.ConsumerName)
 	})
-	if err == nil {
-		r.forget(observation.ID)
-		return nil
+}
+
+func (r *Runtime) forgetLostClaim(err error, observationID int64) bool {
+	if !errors.Is(err, sourceobservation.ErrClaimLost) {
+		return false
 	}
-	if errors.Is(err, sourceobservation.ErrClaimLost) {
-		youtubeClaimLostTotal.Inc()
-		r.forget(observation.ID)
-		return nil
-	}
-	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
-		return nil
-	}
+	youtubeClaimLostTotal.Inc()
+	youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
+	r.forget(observationID)
+	return true
+}
+
+func (r *Runtime) handleConsumeFailure(ctx context.Context, observation sourceobservation.Observation, err error) error {
 	r.Logger.Error("youtube plane consume failed",
 		slog.Int64("observation_id", observation.ID),
 		slog.String("observation_kind", string(observation.ObservationKind)),
@@ -208,16 +238,23 @@ func (r *Runtime) processObservation(ctx context.Context, observation sourceobse
 		slog.Any("error", err),
 	)
 	if !retryableObservationError(err) {
+		youtubeConsumeTotal.WithLabelValues("fatal").Inc()
 		r.forget(observation.ID)
 		return err
 	}
-	retryErr := r.retryObservation(ctx, observation, err)
+	return r.retryAndForget(ctx, observation, err)
+}
+
+func (r *Runtime) retryAndForget(ctx context.Context, observation sourceobservation.Observation, cause error) error {
+	retryErr := r.retryObservation(ctx, observation, cause)
 	if errors.Is(retryErr, sourceobservation.ErrClaimLost) {
 		youtubeClaimLostTotal.Inc()
+		youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
 		retryErr = nil
 	}
 	r.forget(observation.ID)
 	if retryErr != nil {
+		youtubeConsumeTotal.WithLabelValues("retry_error").Inc()
 		return fmt.Errorf("retry observation %d: %w", observation.ID, retryErr)
 	}
 	return nil
@@ -291,19 +328,24 @@ func (r *Runtime) retryObservation(ctx context.Context, observation sourceobserv
 		if err != nil {
 			return err
 		}
-		switch status {
-		case contract.StatusPending:
-			return nil
-		case contract.StatusDeadLetter:
-			r.degraded.Store(true)
-			if r.started.Load() {
-				r.publishHealth()
-			}
-			return nil
-		default:
-			return fmt.Errorf("retry observation %d: invalid status %q", observation.ID, status)
-		}
+		return r.applyRetryStatus(observation.ID, status)
 	})
+}
+
+func (r *Runtime) applyRetryStatus(observationID int64, status contract.Status) error {
+	if status == contract.StatusPending {
+		youtubeConsumeTotal.WithLabelValues("retry").Inc()
+		return nil
+	}
+	if status == contract.StatusDeadLetter {
+		youtubeConsumeTotal.WithLabelValues("dead_letter").Inc()
+		r.degraded.Store(true)
+		if r.started.Load() {
+			r.publishHealth()
+		}
+		return nil
+	}
+	return fmt.Errorf("retry observation %d: invalid status %q", observationID, status)
 }
 
 func (r *Runtime) reportLoopError(ctx context.Context, errCh chan<- error, action string, err error) {

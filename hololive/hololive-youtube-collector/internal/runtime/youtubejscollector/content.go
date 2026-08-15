@@ -28,35 +28,49 @@ func (r *ContentRunner) JobKind() string             { return "youtubejs_content
 func (r *ContentRunner) Emissions() []contract.ObservationKind {
 	return []contract.ObservationKind{contract.KindVideoList, contract.KindShortsList}
 }
+func (r *ContentRunner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
 func (r *ContentRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {
 		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js content client is not configured")
 	}
 	started := time.Now()
-	var videos *contract.Envelope
-	var shorts *contract.Envelope
-	var err error
-	if subjectEnabled(input, contract.KindVideoList) {
-		videos, err = r.fetchKind(ctx, input, "videos")
-		if err != nil {
-			return collectutil.RunOutput{}, err
-		}
-	}
-	if subjectEnabled(input, contract.KindShortsList) {
-		shorts, err = r.fetchKind(ctx, input, "shorts")
-		if err != nil {
-			return collectutil.RunOutput{}, err
-		}
-	}
-	envelopes := make([]contract.Envelope, 0, 2)
-	if videos != nil {
-		envelopes = append(envelopes, *videos)
-	}
-	if shorts != nil {
-		envelopes = append(envelopes, *shorts)
+	envelopes, err := r.collectEnabledContent(ctx, input)
+	if err != nil {
+		return collectutil.RunOutput{}, err
 	}
 	return collectutil.Output(envelopes, started)
+}
+
+func (r *ContentRunner) collectEnabledContent(ctx context.Context, input collectutil.RunInput) ([]contract.Envelope, error) {
+	envelopes := make([]contract.Envelope, 0, 2)
+	if err := r.appendContentKind(ctx, input, contract.KindVideoList, "videos", &envelopes); err != nil {
+		return nil, err
+	}
+	if err := r.appendContentKind(ctx, input, contract.KindShortsList, "shorts", &envelopes); err != nil {
+		return nil, err
+	}
+	return envelopes, nil
+}
+
+func (r *ContentRunner) appendContentKind(
+	ctx context.Context,
+	input collectutil.RunInput,
+	kind contract.ObservationKind,
+	tab string,
+	envelopes *[]contract.Envelope,
+) error {
+	if !subjectEnabled(input, kind) {
+		return nil
+	}
+	item, err := r.fetchKind(ctx, input, tab)
+	if err != nil {
+		return err
+	}
+	if item != nil {
+		*envelopes = append(*envelopes, *item)
+	}
+	return nil
 }
 
 func subjectEnabled(input collectutil.RunInput, kind contract.ObservationKind) bool {

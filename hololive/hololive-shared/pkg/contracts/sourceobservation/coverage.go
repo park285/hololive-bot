@@ -105,6 +105,13 @@ func (c *CommunityPageCoverageV1) normalizeAndValidate(subject string) error {
 }
 
 func (c *ChannelListCoverageV1) normalizeAndValidate(subject string) error {
+	if err := validateChannelListCoverageIdentity(c, subject); err != nil {
+		return err
+	}
+	return normalizeChannelListCoverageTimes(c)
+}
+
+func validateChannelListCoverageIdentity(c *ChannelListCoverageV1, subject string) error {
 	if c.ChannelID != subject {
 		return fmt.Errorf("video coverage channel does not match subject")
 	}
@@ -117,15 +124,14 @@ func (c *ChannelListCoverageV1) normalizeAndValidate(subject string) error {
 	if err := validateOptionalText("video cursor start", c.CursorStart, 512); err != nil {
 		return err
 	}
-	if err := validateOptionalText("video cursor end", c.CursorEnd, 512); err != nil {
-		return err
-	}
-	if c.Filters.PublishedAfter != nil && c.Filters.PublishedAfter.IsZero() ||
-		c.Filters.PublishedBefore != nil && c.Filters.PublishedBefore.IsZero() {
+	return validateOptionalText("video cursor end", c.CursorEnd, 512)
+}
+
+func normalizeChannelListCoverageTimes(c *ChannelListCoverageV1) error {
+	if optionalTimeIsZero(c.Filters.PublishedAfter) || optionalTimeIsZero(c.Filters.PublishedBefore) {
 		return fmt.Errorf("video coverage time bound is zero")
 	}
-	if c.Filters.PublishedAfter != nil && c.Filters.PublishedBefore != nil &&
-		!c.Filters.PublishedAfter.Before(*c.Filters.PublishedBefore) {
+	if invalidOptionalTimeRange(c.Filters.PublishedAfter, c.Filters.PublishedBefore) {
 		return fmt.Errorf("video coverage time range is invalid")
 	}
 	if err := normalizeOptionalTime(&c.Filters.PublishedAfter); err != nil {
@@ -135,6 +141,10 @@ func (c *ChannelListCoverageV1) normalizeAndValidate(subject string) error {
 		return fmt.Errorf("video coverage published before: %w", err)
 	}
 	return nil
+}
+
+func invalidOptionalTimeRange(start, end *time.Time) bool {
+	return start != nil && end != nil && !start.Before(*end)
 }
 
 func (c *ShortsListCoverageV1) normalizeAndValidate(subject string) error {
@@ -211,10 +221,14 @@ func (c *ScheduleCoverageV1) normalizeAndValidate(subject string) error {
 	if err := validateIdentifier("schedule coverage group", c.GroupKey, 256); err != nil {
 		return err
 	}
-	if c.WindowStart != nil && c.WindowStart.IsZero() || c.WindowEnd != nil && c.WindowEnd.IsZero() {
+	return normalizeScheduleCoverageWindow(c)
+}
+
+func normalizeScheduleCoverageWindow(c *ScheduleCoverageV1) error {
+	if optionalTimeIsZero(c.WindowStart) || optionalTimeIsZero(c.WindowEnd) {
 		return fmt.Errorf("schedule coverage window contains zero time")
 	}
-	if c.WindowStart != nil && c.WindowEnd != nil && !c.WindowStart.Before(*c.WindowEnd) {
+	if invalidOptionalTimeRange(c.WindowStart, c.WindowEnd) {
 		return fmt.Errorf("schedule coverage window is invalid")
 	}
 	if err := normalizeOptionalTime(&c.WindowStart); err != nil {

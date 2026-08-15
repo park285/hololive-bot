@@ -10,11 +10,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
-func TestNewServiceWithYouTubeProducerUsesProvidedClient(t *testing.T) {
+func TestNewServiceWithYouTubeClientUsesProvidedClient(t *testing.T) {
 	client := scraper.NewClient(scraper.WithRateLimiter(ratelimiter.New(0)))
-	service := NewServiceWithYouTubeProducer(nil, nil, client, slog.Default())
-	if service.youtubeProducer != client {
-		t.Fatal("NewServiceWithYouTubeProducer did not keep provided scraper client")
+	service := NewServiceWithYouTubeClient(nil, nil, client, slog.Default())
+	if service.youtubeClient != client {
+		t.Fatal("NewServiceWithYouTubeClient did not keep provided scraper client")
 	}
 }
 

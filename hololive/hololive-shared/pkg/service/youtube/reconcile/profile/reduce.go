@@ -131,36 +131,42 @@ func applyNewer(
 	apps *[]Application,
 	conflicts *[]Conflict,
 ) bool {
-	if current.Set && current.EffectiveAt != nil && sample.EffectiveAt.Before(*current.EffectiveAt) {
-		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "OLDER_RETAINED",
-		})
+	if retainOlderProfile(current, sample) {
+		appendProfileApp(apps, sample.ChannelID, name, "OLDER_RETAINED")
 		return false
 	}
-	if current.Set && current.EffectiveAt != nil && sample.EffectiveAt.Equal(*current.EffectiveAt) && current.Value != value {
+	if conflictEqualProfile(current, value, sample) {
 		*conflicts = append(*conflicts, Conflict{
 			FieldName:            name,
 			ExistingValueSHA256:  contract.SHA256Hex([]byte(current.Value)),
 			AttemptedValueSHA256: contract.SHA256Hex([]byte(value)),
 		})
-		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "CONFLICT",
-		})
+		appendProfileApp(apps, sample.ChannelID, name, "CONFLICT")
 		return false
 	}
 	if current.Set && current.Value == value {
-		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "REPLAY",
-		})
+		appendProfileApp(apps, sample.ChannelID, name, "REPLAY")
 		return false
 	}
 	current.Set = true
 	current.Value = value
 	current.EffectiveAt = copyTime(sample.EffectiveAt)
-	*apps = append(*apps, Application{
-		EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "APPLIED",
-	})
+	appendProfileApp(apps, sample.ChannelID, name, "APPLIED")
 	return true
+}
+
+func retainOlderProfile(current *CanonicalField, sample Sample) bool {
+	return current.Set && current.EffectiveAt != nil && sample.EffectiveAt.Before(*current.EffectiveAt)
+}
+
+func conflictEqualProfile(current *CanonicalField, value string, sample Sample) bool {
+	return current.Set && current.EffectiveAt != nil && sample.EffectiveAt.Equal(*current.EffectiveAt) && current.Value != value
+}
+
+func appendProfileApp(apps *[]Application, channelID, name, decision string) {
+	*apps = append(*apps, Application{
+		EntityKind: "youtube_channel_profile", EntityKey: channelID + "/" + name, Decision: decision,
+	})
 }
 
 func trackEmpty(current *CanonicalField, name string, sample Sample, policy Policy, apps *[]Application) bool {
@@ -232,24 +238,28 @@ func normalizeHandle(value string) (string, bool) {
 func normalizeClearable(name, value string) (string, bool) {
 	trimmed := strings.TrimSpace(value)
 	if name == "country" {
-		if trimmed == "" {
-			return "", true
-		}
-		upper := strings.ToUpper(trimmed)
-		if len(upper) < 2 || len(upper) > 50 {
-			return "", false
-		}
-		for _, r := range upper {
-			if unicode.IsControl(r) {
-				return "", false
-			}
-		}
-		return upper, true
+		return normalizeCountry(trimmed)
 	}
 	if !utf8.ValidString(trimmed) || len(trimmed) > 4096 {
 		return "", false
 	}
 	return trimmed, true
+}
+
+func normalizeCountry(trimmed string) (string, bool) {
+	if trimmed == "" {
+		return "", true
+	}
+	upper := strings.ToUpper(trimmed)
+	if len(upper) < 2 || len(upper) > 50 {
+		return "", false
+	}
+	for _, r := range upper {
+		if unicode.IsControl(r) {
+			return "", false
+		}
+	}
+	return upper, true
 }
 
 func parseJoinedDate(value string) (string, bool) {

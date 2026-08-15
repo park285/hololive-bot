@@ -22,6 +22,7 @@ package ingress
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/park285/iris-client-go/webhook"
 
@@ -43,6 +44,14 @@ func resolveRoom(message *webhook.Message) (chatID, roomName string) {
 // 원본 대신 이 attr만 전달한다. ACL과 응답 송신은 계속 raw chatID를 쓴다.
 func roomLogAttr(chatID, roomName string) slog.Attr {
 	return privacylog.RoomAttr(chatID, roomName)
+}
+
+func roomChatFromMessage(message *webhook.Message) (roomType, roomLinkID string) {
+	if message == nil || message.JSON == nil {
+		return "", ""
+	}
+
+	return strings.TrimSpace(message.JSON.RoomType), strings.TrimSpace(message.JSON.RoomLinkID)
 }
 
 func resolveUser(message *webhook.Message) (userID, userName string) {

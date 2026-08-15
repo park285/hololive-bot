@@ -88,6 +88,7 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 	}
 
 	reqCtx := commandRequestContext(ctx, cmdCtx)
+	reqCtx = transport.WithRoomChat(reqCtx, envelope.RoomType, envelope.RoomLinkID)
 
 	if err := b.executeCommand(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
 		responseErr := b.handleCommandExecutionError(reqCtx, envelope.ChatID, commandType, err)

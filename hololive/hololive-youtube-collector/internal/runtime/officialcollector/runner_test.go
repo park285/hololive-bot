@@ -105,11 +105,11 @@ func mustCollect(t *testing.T, body []byte) collectutil.RunOutput {
 func officialInput() collectutil.RunInput {
 	return collectutil.RunInput{
 		Spec: joblease.JobSpec{
-			JobKey: "collector:hololive_official:global", Provider: contract.ProviderHololiveOfficial,
+			JobKey: "collector:hololive_official:official_schedule:global", Provider: contract.ProviderHololiveOfficial,
 			Class: "GLOBAL", CollectionJobKind: "official_schedule", SubjectKey: officialScheduleSubject, PollInterval: time.Minute,
 		},
 		Lease: contract.LeaseProof{
-			JobKey: "collector:hololive_official:global", CollectionJobKind: "official_schedule",
+			JobKey: "collector:hololive_official:official_schedule:global", CollectionJobKind: "official_schedule",
 			OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
 			ScheduledFor: time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC),
 		},

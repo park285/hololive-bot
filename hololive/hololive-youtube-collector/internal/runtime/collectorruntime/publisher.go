@@ -13,11 +13,11 @@ import (
 
 type Publisher struct {
 	pool         *pgxpool.Pool
-	observations *sourceobservation.Repository
+	observations *sourceobservation.PublishRepository
 }
 
 func NewPublisher(pool *pgxpool.Pool) *Publisher {
-	return &Publisher{pool: pool, observations: sourceobservation.NewRepository(pool)}
+	return &Publisher{pool: pool, observations: sourceobservation.NewPublishRepository(pool)}
 }
 
 func (p *Publisher) LoadContractGenerations(
@@ -32,17 +32,24 @@ func (p *Publisher) LoadContractGenerations(
 	for i := range kinds {
 		values[i] = string(kinds[i])
 	}
-	rows, err := p.pool.Query(ctx, `
-		SELECT observation_kind, current_generation
-		FROM observation_contract_generations
-		WHERE provider = $1
-		  AND observation_kind = ANY($2::text[])
-	`, string(provider), values)
+	rows, err := p.pool.Query(ctx, mustSQL("load_contract_generations.sql"), string(provider), values)
 	if err != nil {
 		return nil, collecterr.Wrap(collecterr.Failed, fmt.Errorf("load observation contract generations: %w", err))
 	}
 	defer rows.Close()
-	result := make(map[contract.ObservationKind]int64, len(kinds))
+	result, err := scanContractGenerations(rows, len(kinds))
+	if err != nil {
+		return nil, err
+	}
+	return requireContractGenerations(result, kinds)
+}
+
+func scanContractGenerations(rows interface {
+	Next() bool
+	Scan(dest ...any) error
+	Err() error
+}, size int) (map[contract.ObservationKind]int64, error) {
+	result := make(map[contract.ObservationKind]int64, size)
 	for rows.Next() {
 		var kind contract.ObservationKind
 		var generation int64
@@ -57,6 +64,10 @@ func (p *Publisher) LoadContractGenerations(
 	if err := rows.Err(); err != nil {
 		return nil, collecterr.Wrap(collecterr.Failed, fmt.Errorf("read observation contract generations: %w", err))
 	}
+	return result, nil
+}
+
+func requireContractGenerations(result map[contract.ObservationKind]int64, kinds []contract.ObservationKind) (map[contract.ObservationKind]int64, error) {
 	for _, kind := range kinds {
 		if _, ok := result[kind]; !ok {
 			return nil, collecterr.New(collecterr.Failed, "observation contract generation is missing for "+string(kind))

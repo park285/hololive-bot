@@ -28,6 +28,7 @@ func (r *ViewerRunner) JobKind() string             { return "youtubejs_viewer" 
 func (r *ViewerRunner) Emissions() []contract.ObservationKind {
 	return []contract.ObservationKind{contract.KindViewerSample}
 }
+func (r *ViewerRunner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
 func (r *ViewerRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {

@@ -41,7 +41,7 @@ func TestNewRegistryAcceptsCompleteAdapterSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.Runners()) != 6 {
+	if len(registry.Runners()) != 9 {
 		t.Fatalf("runners = %d", len(registry.Runners()))
 	}
 }
@@ -50,12 +50,13 @@ func completeStubRunners() []JobRunner {
 	return []JobRunner{
 		stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
-		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel",
-			contract.KindLiveSnapshot, contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto),
+		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_live", contract.KindLiveSnapshot),
+		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_metadata",
+			contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_viewer", contract.KindViewerSample),
-		stubJob(contract.ProviderHolodex, "holodex_global",
-			contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindChannelStats,
-			contract.KindChannelProfile, contract.KindChannelPhoto, contract.KindSchedule),
+		stubJob(contract.ProviderHolodex, "holodex_live", contract.KindLiveSnapshot, contract.KindViewerSample),
+		stubJob(contract.ProviderHolodex, "holodex_metadata", contract.KindChannelStats, contract.KindChannelPhoto),
+		stubJob(contract.ProviderHolodex, "holodex_schedule", contract.KindSchedule),
 		stubJob(contract.ProviderHololiveOfficial, "official_schedule", contract.KindSchedule),
 	}
 }
@@ -74,6 +75,9 @@ func stubJob(provider contract.Provider, jobKind string, kinds ...contract.Obser
 func (s *stubRunner) Provider() contract.Provider           { return s.provider }
 func (s *stubRunner) JobKind() string                       { return s.jobKind }
 func (s *stubRunner) Emissions() []contract.ObservationKind { return s.emissions }
+func (s *stubRunner) TargetKinds() []contract.ObservationKind {
+	return s.emissions
+}
 func (s *stubRunner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
 	if s.collect != nil {
 		return s.collect(ctx, input)

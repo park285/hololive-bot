@@ -113,6 +113,7 @@ exec_tree=(
   "$OPT_CURRENT/scripts/deploy/systemd-compose-down.sh"
   "$OPT_CURRENT/scripts/deploy/compose.sh"
   "$OPT_CURRENT/scripts/deploy/lib/compose-env.sh"
+  "$OPT_CURRENT/scripts/deploy/lib/compose-paths.sh"
   "$OPT_CURRENT/scripts/deploy/lib/removed-runtimes.sh"
   "$OPT_CURRENT/scripts/deploy/lib/health-gate.sh"
 )

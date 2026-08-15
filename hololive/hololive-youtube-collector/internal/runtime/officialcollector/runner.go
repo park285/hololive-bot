@@ -26,6 +26,7 @@ func (r *Runner) JobKind() string             { return "official_schedule" }
 func (r *Runner) Emissions() []contract.ObservationKind {
 	return []contract.ObservationKind{contract.KindSchedule}
 }
+func (r *Runner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
 func (r *Runner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
 	if r == nil || r.client == nil {

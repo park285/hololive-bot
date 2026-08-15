@@ -1,4 +1,4 @@
-SELECT COUNT(*),
+SELECT COUNT(subject_key),
        COALESCE(MIN(poll_interval_ms), 0),
        COALESCE(MAX(poll_interval_ms), 0)
 FROM youtube_collection_targets

@@ -15,6 +15,7 @@ type JobRunner interface {
 	Provider() contract.Provider
 	JobKind() string
 	Emissions() []contract.ObservationKind
+	TargetKinds() []contract.ObservationKind
 	Collect(ctx context.Context, input RunInput) (RunOutput, error)
 }
 
@@ -24,7 +25,6 @@ type RunInput struct {
 	ContractGenerations map[contract.ObservationKind]int64
 	MaxPages            int
 	MaxAggregateBytes   int
-	RequestedChannelIDs []string
 	EnabledSubjects     map[contract.ObservationKind][]string
 }
 
@@ -61,22 +61,34 @@ func Completeness(pageCount int, exhausted bool, continuity string) (contract.Co
 	if pageCount < 1 {
 		return "", "", collecterr.New(collecterr.ParserDrift, "page count is below 1")
 	}
-	switch continuity {
-	case string(contract.ContinuityContiguous), "":
-		if exhausted {
-			return contract.CompletenessComplete, contract.ContinuityContiguous, nil
-		}
-		return contract.CompletenessPartial, contract.ContinuityGapUnresolved, nil
-	case string(contract.ContinuityGapUnresolved):
-		return contract.CompletenessPartial, contract.ContinuityGapUnresolved, nil
-	case string(contract.ContinuityNotApplicable):
-		if exhausted {
-			return contract.CompletenessComplete, contract.ContinuityNotApplicable, nil
-		}
-		return contract.CompletenessPartial, contract.ContinuityNotApplicable, nil
-	default:
-		return "", "", collecterr.New(collecterr.ParserDrift, "unsupported continuity")
+	return completenessForContinuity(exhausted, continuity)
+}
+
+func completenessForContinuity(exhausted bool, continuity string) (contract.Completeness, contract.Continuity, error) {
+	if continuity == string(contract.ContinuityContiguous) {
+		return contiguousCompleteness(exhausted)
 	}
+	if continuity == string(contract.ContinuityGapUnresolved) {
+		return contract.CompletenessPartial, contract.ContinuityGapUnresolved, nil
+	}
+	if continuity == string(contract.ContinuityNotApplicable) {
+		return notApplicableCompleteness(exhausted)
+	}
+	return "", "", collecterr.New(collecterr.ParserDrift, "unsupported continuity")
+}
+
+func contiguousCompleteness(exhausted bool) (contract.Completeness, contract.Continuity, error) {
+	if exhausted {
+		return contract.CompletenessComplete, contract.ContinuityContiguous, nil
+	}
+	return contract.CompletenessPartial, contract.ContinuityGapUnresolved, nil
+}
+
+func notApplicableCompleteness(exhausted bool) (contract.Completeness, contract.Continuity, error) {
+	if exhausted {
+		return contract.CompletenessComplete, contract.ContinuityNotApplicable, nil
+	}
+	return contract.CompletenessPartial, contract.ContinuityNotApplicable, nil
 }
 
 func PaginationOf(page youtubejs.Pagination) (contract.Completeness, contract.Continuity, error) {

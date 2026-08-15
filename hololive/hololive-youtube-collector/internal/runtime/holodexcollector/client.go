@@ -21,32 +21,50 @@ type Client struct {
 }
 
 func NewClient(httpClient *http.Client, baseURL, apiKey string, timeout time.Duration, maxBody int64) (*Client, error) {
-	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	parsed, err := parseHTTPSOrigin(baseURL, "holodex")
 	if err != nil {
-		return nil, collecterr.Wrap(collecterr.Failed, fmt.Errorf("parse holodex base URL: %w", err))
+		return nil, err
 	}
-	if parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return nil, collecterr.New(collecterr.Failed, "holodex base URL must be an HTTPS origin")
-	}
-	if timeout <= 0 {
-		timeout = 25 * time.Second
-	}
-	if maxBody <= 0 {
-		maxBody = 1 << 20
-	}
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: timeout}
-	} else if httpClient.Timeout <= 0 {
-		cloned := *httpClient
-		cloned.Timeout = timeout
-		httpClient = &cloned
-	}
+	timeout, maxBody = defaultClientLimits(timeout, 25*time.Second, maxBody)
 	return &Client{
-		http:    httpClient,
+		http:    applyClientTimeout(httpClient, timeout),
 		baseURL: strings.TrimRight(parsed.String(), "/"),
 		apiKey:  strings.TrimSpace(apiKey),
 		maxBody: maxBody,
 	}, nil
+}
+
+func parseHTTPSOrigin(baseURL, name string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return nil, collecterr.Wrap(collecterr.Failed, fmt.Errorf("parse %s base URL: %w", name, err))
+	}
+	if parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, collecterr.New(collecterr.Failed, name+" base URL must be an HTTPS origin")
+	}
+	return parsed, nil
+}
+
+func defaultClientLimits(timeout, fallback time.Duration, maxBody int64) (time.Duration, int64) {
+	if timeout <= 0 {
+		timeout = fallback
+	}
+	if maxBody <= 0 {
+		maxBody = 1 << 20
+	}
+	return timeout, maxBody
+}
+
+func applyClientTimeout(httpClient *http.Client, timeout time.Duration) *http.Client {
+	if httpClient == nil {
+		return &http.Client{Timeout: timeout}
+	}
+	if httpClient.Timeout > 0 {
+		return httpClient
+	}
+	cloned := *httpClient
+	cloned.Timeout = timeout
+	return &cloned
 }
 
 func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
@@ -76,19 +94,23 @@ func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 		return nil, collecterr.FromContext(fmt.Errorf("request holodex live: %w", err))
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, c.maxBody+1))
+	return readJSONBody(resp, c.maxBody, "holodex")
+}
+
+func readJSONBody(resp *http.Response, maxBody int64, name string) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
-		return nil, collecterr.FromContext(fmt.Errorf("read holodex live: %w", err))
+		return nil, collecterr.FromContext(fmt.Errorf("read %s: %w", name, err))
 	}
-	if int64(len(body)) > c.maxBody {
-		return nil, collecterr.New(collecterr.ParserDrift, "holodex response exceeds body limit")
+	if int64(len(body)) > maxBody {
+		return nil, collecterr.New(collecterr.ParserDrift, name+" response exceeds body limit")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, collecterr.FromStatus("holodex", resp.StatusCode, resp.Header.Get("Retry-After"), time.Now().UTC())
+		return nil, collecterr.FromStatus(name, resp.StatusCode, resp.Header.Get("Retry-After"), time.Now().UTC())
 	}
 	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil || !strings.EqualFold(mediaType, "application/json") {
-		return nil, collecterr.New(collecterr.ParserDrift, "holodex content type is not JSON")
+		return nil, collecterr.New(collecterr.ParserDrift, name+" content type is not JSON")
 	}
 	return body, nil
 }

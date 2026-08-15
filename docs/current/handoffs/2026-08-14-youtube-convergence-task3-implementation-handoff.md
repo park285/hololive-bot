@@ -19,11 +19,14 @@ status = `Task 3 로컬 검증 완료`
   - helper: `youtubejs/src/fetch-community.mjs`, `pagination.mjs`
 - `youtubejs` / `youtubejs_content` → `video_list`, `shorts_list`
   - `testdata/videos.json`, `testdata/shorts.json`
-- `youtubejs` / `youtubejs_channel` → `live_snapshot`, `channel_stats`, `channel_profile`, `channel_photo`
+- `youtubejs` / `youtubejs_channel_live` → `live_snapshot`
+- `youtubejs` / `youtubejs_channel_metadata` → `channel_stats`, `channel_profile`, `channel_photo`
   - `testdata/channel.json`
 - `youtubejs` / `youtubejs_viewer` → `viewer_sample`
   - `testdata/viewer_hidden.json`
-- `holodex` / `holodex_global` → `live_snapshot`, `viewer_sample`, `channel_stats`, `channel_photo`, `schedule_snapshot`
+- `holodex` / `holodex_live` → `live_snapshot`, `viewer_sample`
+- `holodex` / `holodex_schedule` → `schedule_snapshot`
+- `holodex` / `holodex_metadata` → `channel_stats`, `channel_photo`
   - `holodexcollector/testdata/live.json`, `empty.json`
   - `channel_profile`은 live API에 handle/description/country/joined_date가 없어 미발행
 - `hololive_official` / `official_schedule` → `schedule_snapshot`
@@ -85,8 +88,8 @@ YouTube.js process lifetime는 `youtubejs.Helper`, helper HTTP는 `youtubejs.RPC
 ### Task 4 진입 조건
 
 1. `viewer_sample` subject를 video ID로 projection하거나, collector publish fence가 그 identity를 받게 할 것. 현재 Task 2 target은 channel ID입니다.
-2. Holodex `live_snapshot` subject는 channel ID이며 operational roster와 일치합니다. `viewer_sample`만 video ID라 같은 `holodex_global` batch에서 kind별로 subject 공간이 갈라집니다.
-3. Holodex live API는 `channel_profile` 필드를 제공하지 않아 해당 kind를 발행하지 않습니다. profile evidence는 YouTube.js `youtubejs_channel`이 소유합니다.
+2. Holodex `live_snapshot` subject는 channel ID이며 operational roster와 일치합니다. `viewer_sample`은 video ID지만 동일한 2분 cadence의 `holodex_live` batch에서 별도 subject 공간을 사용합니다.
+3. Holodex live API는 `channel_profile` 필드를 제공하지 않아 해당 kind를 발행하지 않습니다. profile evidence는 YouTube.js `youtubejs_channel_metadata`가 소유합니다.
 4. collector는 아직 production에 배포되지 않았고 API YouTube plane/reconciler는 Task 4 이후입니다.
 
 ---
@@ -151,7 +154,7 @@ Task 3은 다음을 새로 만들지 않고 재사용해야 합니다.
 
 - provider/kind typed envelope와 V1 payload/coverage contract
 - `source-observation-canonical-json-v1` 및 language-neutral fixture
-- `InitialJobContracts`의 `community_collect`, `holodex_global`, `official_schedule`, `youtubejs_content`, `youtubejs_channel`, `youtubejs_viewer`
+- `InitialJobContracts`의 `community_collect`, `holodex_live`, `holodex_schedule`, `holodex_metadata`, `official_schedule`, `youtubejs_content`, `youtubejs_channel_live`, `youtubejs_channel_metadata`, `youtubejs_viewer`
 - generation-based target projection과 current/valid target fence
 - PostgreSQL job candidate/acquire/renew/complete/defer/release와 stale epoch fence
 - publish transaction의 per-observation target/job/contract 검증
@@ -282,7 +285,7 @@ Validation은 `joblease.Config.Validate`를 재사용하고 다음을 추가로 
 
 `internal/runtime/holodexcollector`가 Holodex API request, fixture parser, normalization과 batch 구성을 소유합니다.
 
-- `holodex_global` lease와 current projection target set을 사용합니다.
+- cadence별 `holodex_live`, `holodex_schedule`, `holodex_metadata` lease와 current projection target set을 사용합니다.
 - high-level `holodexprovider.Service`의 Official/YouTube fallback, producer retry scheduler 또는 mixed cache result를 evidence로 재사용하지 않습니다.
 - 기존 low-level HTTPS transport/rate-limit utility를 재사용할 수 있지만 provider response body와 provenance는 Holodex로 고정해야 합니다.
 - API 응답 fixture로 입증된 필드만 `live_snapshot`, `viewer_sample`, `channel_stats`, `channel_profile`, `channel_photo`, `schedule_snapshot`에 발행합니다.
@@ -312,7 +315,7 @@ Go collector를 유지하고 TypeScript는 Unix-socket helper로만 사용합니
 
 - helper response는 items만 반환하지 않고 `page_count`, `cursor_start`, `cursor_end`, `exhausted`, `continuity`와 bounded result metadata를 반환합니다.
 - Community는 실제 continuation/exhaustion을 보존합니다. result length로 exhausted를 추정하지 않습니다.
-- `youtubejs_content`, `youtubejs_channel`, `youtubejs_viewer` runner를 추가해 Community 포함 8개 YouTube.js kind를 fixture-backed로 활성화합니다.
+- `youtubejs_content`, `youtubejs_channel_live`, `youtubejs_channel_metadata`, `youtubejs_viewer` runner를 추가해 Community 포함 8개 YouTube.js kind를 fixture-backed로 활성화합니다.
 - kind별 helper endpoint 또는 typed request union을 사용할 수 있지만 universal `map[string]any` response를 만들지 않습니다.
 - helper는 raw provider data와 pagination metadata만 반환합니다. canonical JSON, observation key/hash, lease proof와 DB publish는 Go가 소유합니다.
 - 첫 validated page 전 timeout/transport/parser failure는 no publish입니다. 한 page 이상 검증한 뒤 후속 page 누락·timeout, cursor loop, max-page/max-byte 도달은 검증된 prefix만 `PARTIAL + GAP_UNRESOLVED`로 발행합니다. parser schema drift는 prefix가 있어도 no publish입니다.
@@ -373,7 +376,7 @@ collectorruntime/infrastructure.go  three provider clients, semaphores and clean
 
 holodexcollector/client.go          Holodex-only bounded HTTP calls
 holodexcollector/mapper.go          raw fixture to typed V1 payloads
-holodexcollector/runner.go          holodex_global batch construction
+holodexcollector/runner.go          cadence-specific Holodex batch construction
 holodexcollector/testdata/*.json    raw provider fixtures
 
 officialcollector/client.go         Official JSON API request/status/body bounds

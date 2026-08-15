@@ -43,6 +43,23 @@ func parseScheduleSnapshot(body []byte) (contract.ScheduleSnapshotV1, error) {
 }
 
 func parseScheduleItems(body []byte) ([]contract.ScheduleItemV1, error) {
+	groups, err := decodeScheduleGroups(body)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]contract.ScheduleItemV1, 0)
+	seen := make(map[string]struct{})
+	for index, rawGroup := range groups {
+		groupItems, err := parseScheduleGroup(rawGroup, index, seen)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, groupItems...)
+	}
+	return items, nil
+}
+
+func decodeScheduleGroups(body []byte) ([]json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(body)
 	if !json.Valid(trimmed) || len(trimmed) == 0 || trimmed[0] != '{' {
 		return nil, collecterr.New(collecterr.ParserDrift, "official schedule response is not a JSON object")
@@ -59,30 +76,13 @@ func parseScheduleItems(body []byte) ([]contract.ScheduleItemV1, error) {
 	if err := json.Unmarshal(rawGroups, &groups); err != nil {
 		return nil, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode official schedule dateGroupList: %w", err))
 	}
-	items := make([]contract.ScheduleItemV1, 0)
-	seen := make(map[string]struct{})
-	for index, rawGroup := range groups {
-		groupItems, err := parseScheduleGroup(rawGroup, index, seen)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, groupItems...)
-	}
-	return items, nil
+	return groups, nil
 }
 
 func parseScheduleGroup(rawGroup json.RawMessage, index int, seen map[string]struct{}) ([]contract.ScheduleItemV1, error) {
-	var group map[string]json.RawMessage
-	if err := json.Unmarshal(rawGroup, &group); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode official schedule group %d: %w", index, err))
-	}
-	rawRows, ok := group["videoList"]
-	if !ok || bytes.Equal(bytes.TrimSpace(rawRows), []byte("null")) {
-		return nil, collecterr.New(collecterr.ParserDrift, "official schedule videoList is missing")
-	}
-	var rows []json.RawMessage
-	if err := json.Unmarshal(rawRows, &rows); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode official schedule videoList: %w", err))
+	rows, err := decodeScheduleRows(rawGroup, index)
+	if err != nil {
+		return nil, err
 	}
 	items := make([]contract.ScheduleItemV1, 0, len(rows))
 	for _, rawRow := range rows {
@@ -97,6 +97,22 @@ func parseScheduleGroup(rawGroup json.RawMessage, index int, seen map[string]str
 		items = append(items, item)
 	}
 	return items, nil
+}
+
+func decodeScheduleRows(rawGroup json.RawMessage, index int) ([]json.RawMessage, error) {
+	var group map[string]json.RawMessage
+	if err := json.Unmarshal(rawGroup, &group); err != nil {
+		return nil, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode official schedule group %d: %w", index, err))
+	}
+	rawRows, ok := group["videoList"]
+	if !ok || bytes.Equal(bytes.TrimSpace(rawRows), []byte("null")) {
+		return nil, collecterr.New(collecterr.ParserDrift, "official schedule videoList is missing")
+	}
+	var rows []json.RawMessage
+	if err := json.Unmarshal(rawRows, &rows); err != nil {
+		return nil, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode official schedule videoList: %w", err))
+	}
+	return rows, nil
 }
 
 func parseScheduleRow(rawRow json.RawMessage) (contract.ScheduleItemV1, error) {
@@ -152,10 +168,22 @@ func validVideoID(videoID string) bool {
 		return false
 	}
 	for _, char := range videoID {
-		if char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '-' || char == '_' {
-			continue
+		if !validVideoIDChar(char) {
+			return false
 		}
-		return false
 	}
 	return true
+}
+
+func validVideoIDChar(char rune) bool {
+	if char >= 'a' && char <= 'z' {
+		return true
+	}
+	if char >= 'A' && char <= 'Z' {
+		return true
+	}
+	if char >= '0' && char <= '9' {
+		return true
+	}
+	return char == '-' || char == '_'
 }

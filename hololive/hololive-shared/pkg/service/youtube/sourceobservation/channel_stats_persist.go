@@ -56,26 +56,44 @@ func loadStatsState(ctx context.Context, tx dbx.Tx, channelID string, scheduledF
 }
 
 func persistStatsDecision(ctx context.Context, tx dbx.Tx, observation Observation, decision stats.Decision) error {
-	if decision.Sample != nil {
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_stats_evidence_upsert_0063_63.sql"),
-			decision.Sample.ChannelID,
-			decision.Sample.ScheduledFor,
-			observation.Provider,
-			observation.ID,
-			decision.Sample.SubscriberCount,
-			decision.Sample.ViewCount,
-			decision.Sample.VideoCount,
-			decision.Sample.SubscriberCovered,
-			decision.Sample.ViewCovered,
-			decision.Sample.VideoCovered,
-			decision.Sample.EffectiveAt,
-			decision.Sample.ReceivedAt,
-		); err != nil {
-			return fmt.Errorf("upsert channel stats evidence: %w", err)
-		}
+	if err := persistStatsEvidence(ctx, tx, observation, decision); err != nil {
+		return err
 	}
+	if err := persistStatsHead(ctx, tx, decision); err != nil {
+		return err
+	}
+	if err := persistStatsSnapshots(ctx, tx, decision); err != nil {
+		return err
+	}
+	return persistStatsConflict(ctx, tx, observation, decision)
+}
+
+func persistStatsEvidence(ctx context.Context, tx dbx.Tx, observation Observation, decision stats.Decision) error {
+	if decision.Sample == nil {
+		return nil
+	}
+	if _, err := tx.Exec(
+		ctx,
+		mustSQL("repository_stats_evidence_upsert_0063_63.sql"),
+		decision.Sample.ChannelID,
+		decision.Sample.ScheduledFor,
+		observation.Provider,
+		observation.ID,
+		decision.Sample.SubscriberCount,
+		decision.Sample.ViewCount,
+		decision.Sample.VideoCount,
+		decision.Sample.SubscriberCovered,
+		decision.Sample.ViewCovered,
+		decision.Sample.VideoCovered,
+		decision.Sample.EffectiveAt,
+		decision.Sample.ReceivedAt,
+	); err != nil {
+		return fmt.Errorf("upsert channel stats evidence: %w", err)
+	}
+	return nil
+}
+
+func persistStatsHead(ctx context.Context, tx dbx.Tx, decision stats.Decision) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_stats_head_upsert_0066_66.sql"),
@@ -92,7 +110,14 @@ func persistStatsDecision(ctx context.Context, tx dbx.Tx, observation Observatio
 	); err != nil {
 		return fmt.Errorf("upsert channel stats head: %w", err)
 	}
-	if decision.ClearSnapshot && decision.Sample != nil {
+	return nil
+}
+
+func persistStatsSnapshots(ctx context.Context, tx dbx.Tx, decision stats.Decision) error {
+	if decision.Sample == nil {
+		return nil
+	}
+	if decision.ClearSnapshot {
 		if _, err := tx.Exec(
 			ctx,
 			mustSQL("repository_stats_snapshot_delete_0068_68.sql"),
@@ -102,39 +127,28 @@ func persistStatsDecision(ctx context.Context, tx dbx.Tx, observation Observatio
 			return fmt.Errorf("clear unresolved channel stats snapshot: %w", err)
 		}
 	}
-	if decision.WriteSnapshot && decision.Sample != nil {
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_stats_snapshot_insert_0067_67.sql"),
-			decision.Sample.ChannelID,
-			decision.Sample.ScheduledFor,
-			decision.Sample.SubscriberCount,
-			decision.Sample.ViewCount,
-			decision.Sample.VideoCount,
-		); err != nil {
-			return fmt.Errorf("insert channel stats snapshot: %w", err)
-		}
-	}
-	if decision.Conflict == nil || decision.Sample == nil {
+	if !decision.WriteSnapshot {
 		return nil
 	}
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_reconcile_conflict_insert_0061_61.sql"),
-		observation.ID,
-		observation.Provider,
-		observation.ObservationKind,
-		observation.SubjectKey,
-		observation.ObservationKey,
-		observation.EvidenceSHA256,
-		"youtube_channel_stats",
+		mustSQL("repository_stats_snapshot_insert_0067_67.sql"),
 		decision.Sample.ChannelID,
-		decision.Conflict.FieldName,
-		observation.EffectiveAt,
-		decision.Conflict.ExistingValueSHA256,
-		decision.Conflict.AttemptedValueSHA256,
-		"UNRESOLVED",
+		decision.Sample.ScheduledFor,
+		decision.Sample.SubscriberCount,
+		decision.Sample.ViewCount,
+		decision.Sample.VideoCount,
 	); err != nil {
+		return fmt.Errorf("insert channel stats snapshot: %w", err)
+	}
+	return nil
+}
+
+func persistStatsConflict(ctx context.Context, tx dbx.Tx, observation Observation, decision stats.Decision) error {
+	if decision.Conflict == nil || decision.Sample == nil {
+		return nil
+	}
+	if err := persistReconcileConflict(ctx, tx, observation, "youtube_channel_stats", decision.Sample.ChannelID, decision.Conflict.FieldName, decision.Conflict.ExistingValueSHA256, decision.Conflict.AttemptedValueSHA256, "UNRESOLVED"); err != nil {
 		return fmt.Errorf("insert channel stats reconciliation conflict: %w", err)
 	}
 	return nil

@@ -26,11 +26,13 @@ export function parseShortNumber(text) {
     return 0;
   }
   let multiplier = 1;
-  for (const [suffix, factor] of [
+  /** @type {Array<[string, number]>} */
+  const suffixes = [
     ["K", 1_000],
     ["M", 1_000_000],
     ["B", 1_000_000_000],
-  ]) {
+  ];
+  for (const [suffix, factor] of suffixes) {
     if (value.endsWith(suffix)) {
       value = value.slice(0, -suffix.length);
       multiplier = factor;

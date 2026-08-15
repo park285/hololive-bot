@@ -1,7 +1,6 @@
 package settings
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -15,16 +14,24 @@ const (
 )
 
 type YouTubePlaneRetentionConfig struct {
-	Enabled           bool
-	Interval          time.Duration
-	BatchSize         int
-	QueueProcessedAge time.Duration
-	QueueDLQAge       time.Duration
-	CollisionAge      time.Duration
-	ReplayAuditAge    time.Duration
-	ChannelStatsAge   time.Duration
-	LiveSnapshotAge   time.Duration
-	ViewerSampleAge   time.Duration
+	Enabled              bool
+	PolicyApproved       bool
+	Interval             time.Duration
+	BatchSize            int
+	QueueProcessedAge    time.Duration
+	QueueDLQAge          time.Duration
+	CollisionAge         time.Duration
+	ReplayAuditAge       time.Duration
+	ProjectionRetiredAge time.Duration
+	CommunityPageAge     time.Duration
+	VideoListAge         time.Duration
+	ShortsListAge        time.Duration
+	LiveSnapshotAge      time.Duration
+	ViewerSampleAge      time.Duration
+	ChannelStatsAge      time.Duration
+	ChannelProfileAge    time.Duration
+	ChannelPhotoAge      time.Duration
+	ScheduleSnapshotAge  time.Duration
 }
 
 type YouTubePlaneReplayConfig struct {
@@ -99,35 +106,10 @@ func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	defaults := DefaultYouTubePlaneConfig()
 	config := defaults
-	var err error
-	if config.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_ENABLED", defaults.Enabled); err != nil {
+	if err := loadYouTubePlanePool(&config, defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if config.PostgresPoolMinConns, err = sharedenv.IntE("YOUTUBE_PLANE_POSTGRES_POOL_MIN_CONNS", defaults.PostgresPoolMinConns); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.PostgresPoolMaxConns, err = sharedenv.IntE("YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS", defaults.PostgresPoolMaxConns); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.ConsumerWorkers, err = sharedenv.IntE("YOUTUBE_PLANE_CONSUMER_WORKERS", defaults.ConsumerWorkers); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.DBOperationConcurrency, err = sharedenv.IntE("YOUTUBE_PLANE_DB_OPERATION_CONCURRENCY", defaults.DBOperationConcurrency); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.ClaimBatchSize, err = sharedenv.IntE("YOUTUBE_PLANE_CLAIM_BATCH_SIZE", defaults.ClaimBatchSize); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.ClaimLease, err = strictDurationUnitEnv("YOUTUBE_PLANE_CLAIM_LEASE_SECONDS", defaults.ClaimLease, time.Second); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.ClaimInterval, err = strictDurationUnitEnv("YOUTUBE_PLANE_CLAIM_INTERVAL_MS", defaults.ClaimInterval, time.Millisecond); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.TransactionTimeout, err = strictDurationUnitEnv("YOUTUBE_PLANE_TRANSACTION_TIMEOUT_SECONDS", defaults.TransactionTimeout, time.Second); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.ShutdownTimeout, err = strictDurationUnitEnv("YOUTUBE_PLANE_SHUTDOWN_TIMEOUT_SECONDS", defaults.ShutdownTimeout, time.Second); err != nil {
+	if err := loadYouTubePlaneClaim(&config, defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
 	if err := loadYouTubePlaneRetention(&config); err != nil {
@@ -136,16 +118,7 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	if err := loadYouTubePlaneReplay(&config); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
-	if config.TargetProjection.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_INTERVAL_MS", defaults.TargetProjection.Interval, time.Millisecond); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.TargetProjection.Validity, err = strictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_VALIDITY_SECONDS", defaults.TargetProjection.Validity, time.Second); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.LiveEndFinalizer.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_LIVE_END_FINALIZER_ENABLED", defaults.LiveEndFinalizer.Enabled); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if config.LiveEndFinalizer.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_FINALIZER_INTERVAL_SECONDS", defaults.LiveEndFinalizer.Interval, time.Second); err != nil {
+	if err := loadYouTubePlaneSchedules(&config, defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
 	if err := loadContentAbsenceGrace(&config, defaults); err != nil {
@@ -158,6 +131,63 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 		return YouTubePlaneConfig{}, err
 	}
 	return config, nil
+}
+
+func loadYouTubePlanePool(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+	var err error
+	if config.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_ENABLED", defaults.Enabled); err != nil {
+		return err
+	}
+	if config.PostgresPoolMinConns, err = sharedenv.IntE("YOUTUBE_PLANE_POSTGRES_POOL_MIN_CONNS", defaults.PostgresPoolMinConns); err != nil {
+		return err
+	}
+	if config.PostgresPoolMaxConns, err = sharedenv.IntE("YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS", defaults.PostgresPoolMaxConns); err != nil {
+		return err
+	}
+	if config.ConsumerWorkers, err = sharedenv.IntE("YOUTUBE_PLANE_CONSUMER_WORKERS", defaults.ConsumerWorkers); err != nil {
+		return err
+	}
+	if config.DBOperationConcurrency, err = sharedenv.IntE("YOUTUBE_PLANE_DB_OPERATION_CONCURRENCY", defaults.DBOperationConcurrency); err != nil {
+		return err
+	}
+	return nil
+}
+
+func loadYouTubePlaneClaim(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+	var err error
+	if config.ClaimBatchSize, err = sharedenv.IntE("YOUTUBE_PLANE_CLAIM_BATCH_SIZE", defaults.ClaimBatchSize); err != nil {
+		return err
+	}
+	if config.ClaimLease, err = strictDurationUnitEnv("YOUTUBE_PLANE_CLAIM_LEASE_SECONDS", defaults.ClaimLease, time.Second); err != nil {
+		return err
+	}
+	if config.ClaimInterval, err = strictDurationUnitEnv("YOUTUBE_PLANE_CLAIM_INTERVAL_MS", defaults.ClaimInterval, time.Millisecond); err != nil {
+		return err
+	}
+	if config.TransactionTimeout, err = strictDurationUnitEnv("YOUTUBE_PLANE_TRANSACTION_TIMEOUT_SECONDS", defaults.TransactionTimeout, time.Second); err != nil {
+		return err
+	}
+	if config.ShutdownTimeout, err = strictDurationUnitEnv("YOUTUBE_PLANE_SHUTDOWN_TIMEOUT_SECONDS", defaults.ShutdownTimeout, time.Second); err != nil {
+		return err
+	}
+	return nil
+}
+
+func loadYouTubePlaneSchedules(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
+	var err error
+	if config.TargetProjection.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_INTERVAL_MS", defaults.TargetProjection.Interval, time.Millisecond); err != nil {
+		return err
+	}
+	if config.TargetProjection.Validity, err = strictDurationUnitEnv("YOUTUBE_PLANE_TARGET_PROJECTION_VALIDITY_SECONDS", defaults.TargetProjection.Validity, time.Second); err != nil {
+		return err
+	}
+	if config.LiveEndFinalizer.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_LIVE_END_FINALIZER_ENABLED", defaults.LiveEndFinalizer.Enabled); err != nil {
+		return err
+	}
+	if config.LiveEndFinalizer.Interval, err = strictDurationUnitEnv("YOUTUBE_PLANE_LIVE_END_FINALIZER_INTERVAL_SECONDS", defaults.LiveEndFinalizer.Interval, time.Second); err != nil {
+		return err
+	}
+	return nil
 }
 
 func loadContentAbsenceGrace(config *YouTubePlaneConfig, defaults YouTubePlaneConfig) error {
@@ -222,123 +252,4 @@ func strictDurationUnitEnv(key string, fallback, unit time.Duration) (time.Durat
 		return 0, fmt.Errorf("parse environment variable %s as duration: value is out of range", key)
 	}
 	return time.Duration(value) * unit, nil
-}
-
-func (c YouTubePlaneConfig) Validate() error {
-	if c.PostgresPoolMinConns < 0 || c.PostgresPoolMaxConns <= 0 {
-		return errors.New("youtube plane postgres pool bounds are invalid")
-	}
-	if c.PostgresPoolMaxConns > youtubePlaneMaxPoolConns {
-		return errors.New("youtube plane postgres pool max must not exceed 16")
-	}
-	if c.PostgresPoolMinConns > c.PostgresPoolMaxConns {
-		return errors.New("youtube plane postgres pool min exceeds max")
-	}
-	if c.ConsumerWorkers < 1 || c.ConsumerWorkers > youtubePlaneMaxConsumerWorkers {
-		return errors.New("youtube plane consumer workers must be between 1 and 16")
-	}
-	if c.DBOperationConcurrency < 1 || c.DBOperationConcurrency >= c.PostgresPoolMaxConns {
-		return errors.New("youtube plane DB operation concurrency must leave one pool connection reserved")
-	}
-	if c.ConsumerWorkers > c.DBOperationConcurrency {
-		return errors.New("youtube plane consumers exceed the shared DB operation budget")
-	}
-	if c.ClaimBatchSize < 1 || c.ClaimBatchSize > youtubePlaneMaxClaimBatchSize {
-		return errors.New("youtube plane claim batch must be between 1 and 100")
-	}
-	if c.TransactionTimeout <= 0 {
-		return errors.New("youtube plane transaction timeout must be positive")
-	}
-	if c.TransactionTimeout < time.Second || c.TransactionTimeout > time.Minute {
-		return errors.New("youtube plane transaction timeout must be between 1s and 1m")
-	}
-	minimumLease := time.Duration(c.ClaimBatchSize)*c.TransactionTimeout + 10*time.Second
-	if c.ClaimLease < minimumLease {
-		return fmt.Errorf(
-			"youtube plane claim lease must be at least %s for the configured batch",
-			minimumLease,
-		)
-	}
-	if c.ClaimInterval <= 0 {
-		return errors.New("youtube plane claim interval must be positive")
-	}
-	if c.ShutdownTimeout <= 0 {
-		return errors.New("youtube plane shutdown timeout must be positive")
-	}
-	if c.ShutdownTimeout/2 < c.TransactionTimeout {
-		return errors.New("youtube plane shutdown timeout must cover transaction and claim release timeouts")
-	}
-	if c.TargetProjection.Interval <= 0 {
-		return errors.New("youtube plane target projection interval must be positive")
-	}
-	if c.TargetProjection.Validity < 5*time.Second || c.TargetProjection.Validity > 24*time.Hour {
-		return errors.New("youtube plane target projection validity must be between 5s and 24h")
-	}
-	if err := c.validateRetention(); err != nil {
-		return err
-	}
-	if err := c.validateReplay(); err != nil {
-		return err
-	}
-	if c.LiveEndFinalizer.Enabled && c.LiveEndFinalizer.Interval <= 0 {
-		return errors.New("youtube plane live end finalizer interval must be positive when enabled")
-	}
-	if err := c.validateContentAbsenceGrace(); err != nil {
-		return err
-	}
-	if err := c.validateLiveEndGrace(); err != nil {
-		return err
-	}
-	if err := c.validateProfileClear(); err != nil {
-		return err
-	}
-	return c.validatePhotoChange()
-}
-
-func (c YouTubePlaneConfig) validateContentAbsenceGrace() error {
-	if c.ContentAbsenceGrace < 0 || c.ContentAbsenceGrace > 24*time.Hour {
-		return errors.New("youtube plane content absence grace must be between 0 and 24h")
-	}
-	return nil
-}
-
-func (c YouTubePlaneConfig) validateLiveEndGrace() error {
-	if c.LiveEndGrace < 0 || c.LiveEndGrace > 24*time.Hour {
-		return errors.New("youtube plane live end grace must be between 0 and 24h")
-	}
-	return nil
-}
-
-func (c YouTubePlaneConfig) validateProfileClear() error {
-	return validateStabilityPair(
-		"profile clear",
-		c.ProfileClearMinObservations,
-		c.ProfileClearStability,
-	)
-}
-
-func (c YouTubePlaneConfig) validatePhotoChange() error {
-	return validateStabilityPair(
-		"photo change",
-		c.PhotoChangeMinObservations,
-		c.PhotoChangeStability,
-	)
-}
-
-func validateStabilityPair(name string, minObservations int, stability time.Duration) error {
-	if minObservations < 0 || minObservations > 100 {
-		return fmt.Errorf("youtube plane %s min observations must be between 0 and 100", name)
-	}
-	if stability < 0 || stability > 24*time.Hour {
-		return fmt.Errorf("youtube plane %s stability must be between 0 and 24h", name)
-	}
-	enabledCount := minObservations > 0
-	enabledDuration := stability > 0
-	if enabledCount != enabledDuration {
-		return fmt.Errorf("youtube plane %s min observations and stability must be enabled together", name)
-	}
-	if enabledCount && minObservations < 2 {
-		return fmt.Errorf("youtube plane %s min observations must be at least 2 when enabled", name)
-	}
-	return nil
 }

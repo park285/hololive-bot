@@ -65,91 +65,133 @@ func refreshTx(ctx context.Context, tx dbx.Tx, targets []TargetSpec, reasons []T
 	if err != nil {
 		return Result{}, err
 	}
-	if current.found && current.rowCount == len(targets) && current.hash == hash {
-		if _, err := tx.Exec(ctx, `
-			UPDATE youtube_collection_projection_generations
-			SET valid_until = $2
-			WHERE generation = $1 AND status = 'CURRENT'
-		`, current.generation, validUntil); err != nil {
-			return Result{}, fmt.Errorf("refresh youtube target projection: extend generation validity: %w", err)
-		}
-		if _, err := tx.Exec(ctx, `
-			UPDATE youtube_collection_targets
-			SET valid_until = $2
-			WHERE projection_generation = $1
-		`, current.generation, validUntil); err != nil {
-			return Result{}, fmt.Errorf("refresh youtube target projection: extend target validity: %w", err)
-		}
-		storedReasons, err := loadReasons(ctx, tx, current.generation)
-		if err != nil {
-			return Result{}, err
-		}
-		if !sameReasons(storedReasons, reasons) {
-			if _, err := tx.Exec(ctx, `DELETE FROM youtube_collection_target_reasons WHERE projection_generation = $1`, current.generation); err != nil {
-				return Result{}, fmt.Errorf("refresh youtube target projection: replace reasons: %w", err)
-			}
-			if err := insertReasons(ctx, tx, current.generation, reasons); err != nil {
-				return Result{}, err
-			}
-		}
-		return Result{Generation: current.generation, RowCount: len(targets), SHA256: hash}, nil
+	if sameProjection(current, targets, hash) {
+		return extendUnchangedGeneration(ctx, tx, current, targets, reasons, hash, validUntil)
 	}
+	return activateStagingGeneration(ctx, tx, current, targets, reasons, hash, now, validUntil)
+}
 
-	var generation int64
-	err = tx.QueryRow(ctx, `
-		INSERT INTO youtube_collection_projection_generations (
-			status, row_count, projection_sha256, valid_until
-		) VALUES ('STAGING', $1, $2, $3)
-		RETURNING generation
-	`, len(targets), hash, validUntil).Scan(&generation)
+func sameProjection(current currentProjection, targets []TargetSpec, hash string) bool {
+	return current.found && current.rowCount == len(targets) && current.hash == hash
+}
+
+func extendUnchangedGeneration(
+	ctx context.Context,
+	tx dbx.Tx,
+	current currentProjection,
+	targets []TargetSpec,
+	reasons []TargetReason,
+	hash string,
+	validUntil time.Time,
+) (Result, error) {
+	if _, err := tx.Exec(ctx, mustSQL("extend_generation_validity.sql"), current.generation, validUntil); err != nil {
+		return Result{}, fmt.Errorf("refresh youtube target projection: extend generation validity: %w", err)
+	}
+	if _, err := tx.Exec(ctx, mustSQL("extend_target_validity.sql"), current.generation, validUntil); err != nil {
+		return Result{}, fmt.Errorf("refresh youtube target projection: extend target validity: %w", err)
+	}
+	if err := replaceReasonsIfChanged(ctx, tx, current.generation, reasons); err != nil {
+		return Result{}, err
+	}
+	return Result{Generation: current.generation, RowCount: len(targets), SHA256: hash}, nil
+}
+
+func replaceReasonsIfChanged(ctx context.Context, tx dbx.Tx, generation int64, reasons []TargetReason) error {
+	storedReasons, err := loadReasons(ctx, tx, generation)
 	if err != nil {
-		return Result{}, fmt.Errorf("refresh youtube target projection: insert staging generation: %w", err)
+		return err
 	}
-	if err := insertTargets(ctx, tx, generation, validUntil, targets); err != nil {
-		return Result{}, err
+	if sameReasons(storedReasons, reasons) {
+		return nil
 	}
-	if err := insertReasons(ctx, tx, generation, reasons); err != nil {
-		return Result{}, err
+	if _, err := tx.Exec(ctx, mustSQL("delete_reasons.sql"), generation); err != nil {
+		return fmt.Errorf("refresh youtube target projection: replace reasons: %w", err)
 	}
-	loadedTargets, err := loadTargets(ctx, tx, generation)
+	return insertReasons(ctx, tx, generation, reasons)
+}
+
+func activateStagingGeneration(
+	ctx context.Context,
+	tx dbx.Tx,
+	current currentProjection,
+	targets []TargetSpec,
+	reasons []TargetReason,
+	hash string,
+	now, validUntil time.Time,
+) (Result, error) {
+	generation, err := insertStagingProjection(ctx, tx, targets, reasons, hash, validUntil)
 	if err != nil {
 		return Result{}, err
 	}
-	loadedReasons, err := loadReasons(ctx, tx, generation)
-	if err != nil {
+	if err := verifyStagingProjection(ctx, tx, generation, targets, reasons, hash); err != nil {
 		return Result{}, err
 	}
-	_, _, storedHash, err := normalize(loadedTargets, reasons)
-	if err != nil || len(loadedTargets) != len(targets) || storedHash != hash || !sameReasons(loadedReasons, reasons) {
-		return Result{}, fmt.Errorf("refresh youtube target projection: staging verification failed: %w", ErrInvalidProjection)
-	}
-	if current.found {
-		if _, err := tx.Exec(ctx, `
-			UPDATE youtube_collection_projection_generations
-			SET status = 'RETIRED'
-			WHERE generation = $1 AND status = 'CURRENT'
-		`, current.generation); err != nil {
-			return Result{}, fmt.Errorf("refresh youtube target projection: retire current generation: %w", err)
-		}
-	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE youtube_collection_projection_generations
-		SET status = 'CURRENT', activated_at = $2
-		WHERE generation = $1 AND status = 'STAGING'
-	`, generation, now); err != nil {
-		return Result{}, fmt.Errorf("refresh youtube target projection: activate staging generation: %w", err)
+	if err := promoteStagingGeneration(ctx, tx, current, generation, now); err != nil {
+		return Result{}, err
 	}
 	return Result{Generation: generation, RowCount: len(targets), SHA256: hash, Changed: true}, nil
 }
 
+func insertStagingProjection(
+	ctx context.Context,
+	tx dbx.Tx,
+	targets []TargetSpec,
+	reasons []TargetReason,
+	hash string,
+	validUntil time.Time,
+) (int64, error) {
+	var generation int64
+	err := tx.QueryRow(ctx, mustSQL("insert_staging_generation.sql"), len(targets), hash, validUntil).Scan(&generation)
+	if err != nil {
+		return 0, fmt.Errorf("refresh youtube target projection: insert staging generation: %w", err)
+	}
+	if err := insertTargets(ctx, tx, generation, validUntil, targets); err != nil {
+		return 0, err
+	}
+	if err := insertReasons(ctx, tx, generation, reasons); err != nil {
+		return 0, err
+	}
+	return generation, nil
+}
+
+func verifyStagingProjection(
+	ctx context.Context,
+	tx dbx.Tx,
+	generation int64,
+	targets []TargetSpec,
+	reasons []TargetReason,
+	hash string,
+) error {
+	loadedTargets, err := loadTargets(ctx, tx, generation)
+	if err != nil {
+		return err
+	}
+	loadedReasons, err := loadReasons(ctx, tx, generation)
+	if err != nil {
+		return err
+	}
+	_, _, storedHash, err := normalize(loadedTargets, reasons)
+	if err != nil || len(loadedTargets) != len(targets) || storedHash != hash || !sameReasons(loadedReasons, reasons) {
+		return fmt.Errorf("refresh youtube target projection: staging verification failed: %w", ErrInvalidProjection)
+	}
+	return nil
+}
+
+func promoteStagingGeneration(ctx context.Context, tx dbx.Tx, current currentProjection, generation int64, now time.Time) error {
+	if current.found {
+		if _, err := tx.Exec(ctx, mustSQL("retire_current_generation.sql"), current.generation); err != nil {
+			return fmt.Errorf("refresh youtube target projection: retire current generation: %w", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, mustSQL("activate_staging_generation.sql"), generation, now); err != nil {
+		return fmt.Errorf("refresh youtube target projection: activate staging generation: %w", err)
+	}
+	return nil
+}
+
 func lockCurrent(ctx context.Context, tx dbx.Tx) (currentProjection, error) {
 	var current currentProjection
-	err := tx.QueryRow(ctx, `
-		SELECT generation, row_count, projection_sha256
-		FROM youtube_collection_projection_generations
-		WHERE status = 'CURRENT'
-		FOR UPDATE
-	`).Scan(&current.generation, &current.rowCount, &current.hash)
+	err := tx.QueryRow(ctx, mustSQL("lock_current_generation.sql")).Scan(&current.generation, &current.rowCount, &current.hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return current, nil
 	}
@@ -176,16 +218,7 @@ func insertTargets(ctx context.Context, tx dbx.Tx, generation int64, validUntil 
 		intervals[i] = targets[i].PollInterval.Milliseconds()
 		enabled[i] = targets[i].Enabled
 	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO youtube_collection_targets (
-			projection_generation, subject_key, observation_kind,
-			priority, poll_interval_ms, enabled, valid_until
-		)
-		SELECT $1, input.subject_key, input.observation_kind,
-		       input.priority, input.poll_interval_ms, input.enabled, $7
-		FROM unnest($2::text[], $3::text[], $4::smallint[], $5::bigint[], $6::boolean[])
-		     AS input(subject_key, observation_kind, priority, poll_interval_ms, enabled)
-	`, generation, subjects, kinds, priorities, intervals, enabled, validUntil); err != nil {
+	if _, err := tx.Exec(ctx, mustSQL("insert_targets.sql"), generation, subjects, kinds, priorities, intervals, enabled, validUntil); err != nil {
 		return fmt.Errorf("refresh youtube target projection: insert targets: %w", err)
 	}
 	return nil
@@ -205,26 +238,14 @@ func insertReasons(ctx context.Context, tx dbx.Tx, generation int64, reasons []T
 		reasonKinds[i] = reasons[i].ReasonKind
 		reasonKeys[i] = reasons[i].ReasonKey
 	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO youtube_collection_target_reasons (
-			projection_generation, subject_key, observation_kind, reason_kind, reason_key
-		)
-		SELECT $1, input.subject_key, input.observation_kind, input.reason_kind, input.reason_key
-		FROM unnest($2::text[], $3::text[], $4::text[], $5::text[])
-		     AS input(subject_key, observation_kind, reason_kind, reason_key)
-	`, generation, subjects, kinds, reasonKinds, reasonKeys); err != nil {
+	if _, err := tx.Exec(ctx, mustSQL("insert_reasons.sql"), generation, subjects, kinds, reasonKinds, reasonKeys); err != nil {
 		return fmt.Errorf("refresh youtube target projection: insert reasons: %w", err)
 	}
 	return nil
 }
 
 func loadTargets(ctx context.Context, tx dbx.Tx, generation int64) ([]TargetSpec, error) {
-	rows, err := tx.Query(ctx, `
-		SELECT subject_key, observation_kind, priority, poll_interval_ms, enabled
-		FROM youtube_collection_targets
-		WHERE projection_generation = $1
-		ORDER BY subject_key, observation_kind
-	`, generation)
+	rows, err := tx.Query(ctx, mustSQL("load_targets.sql"), generation)
 	if err != nil {
 		return nil, fmt.Errorf("refresh youtube target projection: verify target rows: %w", err)
 	}
@@ -248,12 +269,7 @@ func loadTargets(ctx context.Context, tx dbx.Tx, generation int64) ([]TargetSpec
 }
 
 func loadReasons(ctx context.Context, tx dbx.Tx, generation int64) ([]TargetReason, error) {
-	rows, err := tx.Query(ctx, `
-		SELECT subject_key, observation_kind, reason_kind, reason_key
-		FROM youtube_collection_target_reasons
-		WHERE projection_generation = $1
-		ORDER BY subject_key, observation_kind, reason_kind, reason_key
-	`, generation)
+	rows, err := tx.Query(ctx, mustSQL("load_reasons.sql"), generation)
 	if err != nil {
 		return nil, fmt.Errorf("refresh youtube target projection: load reasons: %w", err)
 	}

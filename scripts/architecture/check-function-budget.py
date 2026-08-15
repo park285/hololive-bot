@@ -114,21 +114,78 @@ def iter_go_files(root: Path) -> list[Path]:
     return sorted(result_paths)
 
 
-def strip_line_comment(line: str) -> str:
-    in_string = False
-    escaped = False
-    for index, char in enumerate(line):
-        if char == '"' and not escaped:
-            in_string = not in_string
-        if char == "/" and not in_string and index + 1 < len(line) and line[index + 1] == "/":
-            return line[:index]
-        escaped = char == "\\" and not escaped
-    return line
+def mask_non_code(source: str) -> str:
+    out: list[str] = []
+    i = 0
+    n = len(source)
+    while i < n:
+        ch = source[i]
+        nxt = source[i + 1] if i + 1 < n else ""
+        if ch == "/" and nxt == "/":
+            while i < n and source[i] != "\n":
+                out.append(" ")
+                i += 1
+            continue
+        if ch == "/" and nxt == "*":
+            out.extend("  ")
+            i += 2
+            while i < n:
+                if source[i] == "*" and i + 1 < n and source[i + 1] == "/":
+                    out.extend("  ")
+                    i += 2
+                    break
+                out.append("\n" if source[i] == "\n" else " ")
+                i += 1
+            continue
+        if ch == "`":
+            out.append(" ")
+            i += 1
+            while i < n and source[i] != "`":
+                out.append("\n" if source[i] == "\n" else " ")
+                i += 1
+            if i < n:
+                out.append(" ")
+                i += 1
+            continue
+        if ch == '"':
+            out.append(" ")
+            i += 1
+            while i < n:
+                if source[i] == "\\":
+                    out.extend("  ")
+                    i += 2
+                    continue
+                if source[i] == '"':
+                    out.append(" ")
+                    i += 1
+                    break
+                out.append("\n" if source[i] == "\n" else " ")
+                i += 1
+            continue
+        if ch == "'":
+            out.append(" ")
+            i += 1
+            while i < n:
+                if source[i] == "\\":
+                    out.extend("  ")
+                    i += 2
+                    continue
+                if source[i] == "'":
+                    out.append(" ")
+                    i += 1
+                    break
+                out.append(" ")
+                i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def scan_file(root: Path, file_path: Path) -> list[FunctionMetric]:
     rel = file_path.relative_to(root).as_posix()
-    lines = file_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    source = file_path.read_text(encoding="utf-8", errors="ignore")
+    lines = mask_non_code(source).splitlines()
     metrics: list[FunctionMetric] = []
     index = 0
     while index < len(lines):
@@ -145,7 +202,7 @@ def scan_file(root: Path, file_path: Path) -> list[FunctionMetric]:
         complexity = 0
         cursor = index
         while cursor < len(lines):
-            code = strip_line_comment(lines[cursor])
+            code = lines[cursor]
             for _ in CONTROL_RE.finditer(code):
                 complexity += 1 + max(0, brace_depth - 1)
             complexity += code.count("&&") + code.count("||")

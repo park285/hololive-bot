@@ -103,6 +103,74 @@ func TestRefreshProjectionPaths(t *testing.T) {
 	}
 }
 
+func TestRetainDeletesOnlyUnlockedRetiredProjectionState(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	refresher, err := NewRefresher(pool, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := TargetSpec{SubjectKey: "channel:a", ObservationKind: contract.KindCommunityPage, Priority: 50, PollInterval: time.Minute, Enabled: true}
+	first, err := refresher.Refresh(ctx, staticBuilder{targets: []TargetSpec{target}}, projectionNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.PollInterval = 2 * time.Minute
+	second, err := refresher.Refresh(ctx, staticBuilder{targets: []TargetSpec{target}}, projectionNow.Add(30*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.PollInterval = 3 * time.Minute
+	current, err := refresher.Refresh(ctx, staticBuilder{targets: []TargetSpec{target}}, projectionNow.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertProjectionLease(t, pool, "retired-idle", first.Generation, "IDLE", projectionNow.Add(7*24*time.Hour))
+	insertProjectionLease(t, pool, "retired-active", second.Generation, "ACTIVE", projectionNow.Add(7*24*time.Hour))
+
+	result, err := refresher.Retain(ctx, projectionNow.Add(4*24*time.Hour), 24*time.Hour, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.LeasesDeleted != 1 || result.GenerationsDeleted != 1 {
+		t.Fatalf("retention result = %#v", result)
+	}
+	assertGenerationMissing(t, pool, first.Generation)
+	assertGenerationStatus(t, pool, second.Generation, "RETIRED")
+	assertGenerationStatus(t, pool, current.Generation, "CURRENT")
+}
+
+func insertProjectionLease(t *testing.T, pool *pgxpool.Pool, key string, generation int64, state string, expiresAt time.Time) {
+	t.Helper()
+	var owner any
+	var leaseExpires any
+	if state == "ACTIVE" {
+		owner = "collector-a"
+		leaseExpires = expiresAt
+	}
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO youtube_collection_job_leases (
+			job_key, provider, job_class, collection_job_kind, subject_key,
+			projection_generation, poll_interval_ms, slot_state, scheduled_for,
+			next_due_at, owner_instance, lease_expires_at
+		) VALUES ($1, 'youtubejs', 'SUBJECT', 'youtubejs_community', 'channel:a', $2, 60000, $3, $4, $4, $5, $6)
+	`, key, generation, state, projectionNow, owner, leaseExpires)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertGenerationMissing(t *testing.T, pool *pgxpool.Pool, generation int64) {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM youtube_collection_projection_generations WHERE generation = $1`, generation).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("generation %d still exists", generation)
+	}
+}
+
 func TestRefreshInputFailurePreservesCurrent(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)

@@ -64,14 +64,23 @@ func InitialJobContracts() StaticJobContracts {
 			Class: "SUBJECT", Membership: JobMembershipExactSubject,
 			Emissions: []JobEmission{{Provider: contract.ProviderYouTubeJS, Kind: contract.KindCommunityPage}},
 		},
-		"holodex_global": {
+		"holodex_live": {
 			Class: "GLOBAL", Membership: JobMembershipCurrentProjection,
 			Emissions: []JobEmission{
 				{Provider: contract.ProviderHolodex, Kind: contract.KindLiveSnapshot},
 				{Provider: contract.ProviderHolodex, Kind: contract.KindViewerSample},
+			},
+		},
+		"holodex_metadata": {
+			Class: "GLOBAL", Membership: JobMembershipCurrentProjection,
+			Emissions: []JobEmission{
 				{Provider: contract.ProviderHolodex, Kind: contract.KindChannelStats},
-				{Provider: contract.ProviderHolodex, Kind: contract.KindChannelProfile},
 				{Provider: contract.ProviderHolodex, Kind: contract.KindChannelPhoto},
+			},
+		},
+		"holodex_schedule": {
+			Class: "GLOBAL", Membership: JobMembershipCurrentProjection,
+			Emissions: []JobEmission{
 				{Provider: contract.ProviderHolodex, Kind: contract.KindSchedule},
 			},
 		},
@@ -87,10 +96,15 @@ func InitialJobContracts() StaticJobContracts {
 				{Provider: contract.ProviderYouTubeJS, Kind: contract.KindShortsList},
 			},
 		},
-		"youtubejs_channel": {
+		"youtubejs_channel_live": {
 			Class: "SUBJECT", Membership: JobMembershipExactSubject,
 			Emissions: []JobEmission{
 				{Provider: contract.ProviderYouTubeJS, Kind: contract.KindLiveSnapshot},
+			},
+		},
+		"youtubejs_channel_metadata": {
+			Class: "SUBJECT", Membership: JobMembershipExactSubject,
+			Emissions: []JobEmission{
 				{Provider: contract.ProviderYouTubeJS, Kind: contract.KindChannelStats},
 				{Provider: contract.ProviderYouTubeJS, Kind: contract.KindChannelProfile},
 				{Provider: contract.ProviderYouTubeJS, Kind: contract.KindChannelPhoto},

@@ -13,6 +13,31 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
+func TestCollectionReadyPayloadFailsClosedWhenPendingQueueIsUnknown(t *testing.T) {
+	t.Parallel()
+	snapshot := collectionReady{firstSuccess: true, pendingQueueOK: false}
+	payload := snapshot.payload("collector-a", "postgres_queue")
+	if payload["status"] != "not_ready" || payload["dependency"] != "postgres_queue" || payload["pending_queue"] != nil {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCollectionReadyRequiresFirstSuccessfulPublish(t *testing.T) {
+	t.Parallel()
+	snapshot := collectionReady{pendingQueueOK: true, dueJobs: 0}
+	if dependency := snapshot.dependency(); dependency != "first_success" {
+		t.Fatalf("dependency() = %q, want first_success", dependency)
+	}
+	snapshot.firstSuccess = true
+	if dependency := snapshot.dependency(); dependency != "observation_handoff" {
+		t.Fatalf("dependency() = %q, want observation_handoff", dependency)
+	}
+	snapshot.handoffComplete = true
+	if dependency := snapshot.dependency(); dependency != "" {
+		t.Fatalf("dependency() = %q, want ready", dependency)
+	}
+}
+
 func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
 	t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "")
 
@@ -51,6 +76,10 @@ func TestCollectorProductionSourceDoesNotClaimProducerLease(t *testing.T) {
 		"AcquireIngestionLease",
 		"YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED",
 		"ProvideYouTubeProducerRateLimiter",
+		"sourceobservation.NewRepository(",
+		".ClaimBatch(",
+		"ProcessNextReplay",
+		"RunRetentionTick",
 	}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

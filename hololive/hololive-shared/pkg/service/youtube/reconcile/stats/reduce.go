@@ -71,16 +71,8 @@ func firstConflictingDigest(existing []SlotEvidence, sample Sample) string {
 }
 
 func replayOrConflict(state State, sample Sample, digest string, head Head) (Decision, error) {
-	for _, existing := range state.Slot {
-		if existing.Provider == sample.Provider {
-			if existing.Digest == digest {
-				return replayDecision(head, sample), nil
-			}
-			return unresolvedDecision(head, sample, existing.Digest, digest, true), nil
-		}
-		if samplesConflict(slotSample(existing), sample) {
-			return unresolvedDecision(head, sample, existing.Digest, digest, true), nil
-		}
+	if decision, ok := matchSlotEvidence(state.Slot, sample, digest, head); ok {
+		return decision, nil
 	}
 	if sameSlot(head.LastResolvedScheduledFor, sample.ScheduledFor) && lastResolvedConflicts(head, sample) {
 		return unresolvedDecision(head, sample, lastResolvedDigest(head), digest, true), nil
@@ -89,6 +81,21 @@ func replayOrConflict(state State, sample Sample, digest string, head Head) (Dec
 		return replayDecision(head, sample), nil
 	}
 	return advanceResolved(head, sample), nil
+}
+
+func matchSlotEvidence(existing []SlotEvidence, sample Sample, digest string, head Head) (Decision, bool) {
+	for _, item := range existing {
+		if item.Provider == sample.Provider {
+			if item.Digest == digest {
+				return replayDecision(head, sample), true
+			}
+			return unresolvedDecision(head, sample, item.Digest, digest, true), true
+		}
+		if samplesConflict(slotSample(item), sample) {
+			return unresolvedDecision(head, sample, item.Digest, digest, true), true
+		}
+	}
+	return Decision{}, false
 }
 
 func advanceResolved(head Head, sample Sample) Decision {

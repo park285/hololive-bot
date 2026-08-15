@@ -39,8 +39,41 @@ type Metrics struct {
 	leaseLost    *prometheus.CounterVec
 	publish      *prometheus.CounterVec
 
-	mu            sync.Mutex
-	lastSuccessAt map[string]time.Time
+	mu                          sync.Mutex
+	lastSuccessAt               map[string]time.Time
+	firstPublishedObservationID int64
+	firstHandoffComplete        bool
+}
+
+func (m *Metrics) ObservePublishedObservation(observationID int64) {
+	if m == nil || observationID <= 0 {
+		return
+	}
+	m.mu.Lock()
+	if m.firstPublishedObservationID == 0 {
+		m.firstPublishedObservationID = observationID
+	}
+	m.mu.Unlock()
+}
+
+func (m *Metrics) PublishedHandoff() (int64, bool, bool) {
+	if m == nil {
+		return 0, false, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.firstPublishedObservationID, m.firstHandoffComplete, m.firstPublishedObservationID > 0
+}
+
+func (m *Metrics) ObserveHandoffComplete(observationID int64) {
+	if m == nil || observationID <= 0 {
+		return
+	}
+	m.mu.Lock()
+	if observationID == m.firstPublishedObservationID {
+		m.firstHandoffComplete = true
+	}
+	m.mu.Unlock()
 }
 
 func NewMetrics(registerer prometheus.Registerer) *Metrics {
@@ -94,6 +127,15 @@ func (m *Metrics) ObserveAttempt(provider contract.Provider, kind, result string
 	}
 	m.attempts.WithLabelValues(string(provider), kind, boundedResult(result)).Inc()
 	m.duration.WithLabelValues(string(provider), kind).Observe(duration.Seconds())
+}
+
+func (m *Metrics) HasSuccess() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.lastSuccessAt) > 0
 }
 
 func (m *Metrics) ObserveSuccess(provider contract.Provider, kind string, now time.Time) {

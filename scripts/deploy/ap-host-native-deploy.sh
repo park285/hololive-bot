@@ -20,6 +20,8 @@ esac
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 . "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
+NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
+RETIRED_PRODUCER_LIB="$REPO_ROOT/scripts/deploy/lib/retired-producer-cutover.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
@@ -211,8 +213,11 @@ date -u +%Y-%m-%dT%H:%M:%SZ
 REMOTE
 )"
 
-ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" <<'REMOTE'
-set -euo pipefail
+{
+  cat "$NODE_VERSION_LIB"
+  cat "$RETIRED_PRODUCER_LIB"
+  cat <<'REMOTE'
+set -Eeuo pipefail
 payload_name="$1"
 release_id="$2"
 service="$3"
@@ -228,6 +233,7 @@ previous_link="/opt/hololive-bot/youtube-collector/previous"
 host_env="/etc/hololive-bot/youtube-collector-host.env"
 unit_file="/etc/systemd/system/hololive-youtube-collector@.service"
 unit="hololive-youtube-collector@${service}.service"
+producer_state_file="$releases_root/first-cutover-producer.state"
 swapfile="/swapfile"
 
 test -r "$release_path_lib"
@@ -245,6 +251,7 @@ sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
+require_youtubejs_node_version /usr/bin/node
 
 sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
@@ -300,6 +307,11 @@ old_target=""
 if [[ -L "$current_link" ]]; then
   old_target="$(readlink -f "$current_link" || true)"
 fi
+if [[ -z "$old_target" ]]; then
+  write_retired_producer_runtime_state "$service" > "$payload/first-cutover-producer.state"
+  validate_retired_producer_runtime_state "$payload/first-cutover-producer.state" "$service"
+  sudo -n install -m 0600 -o root -g root "$payload/first-cutover-producer.state" "$producer_state_file"
+fi
 release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
 sudo -n rm -rf "$release_dir"
@@ -337,12 +349,42 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
   sudo -n ln -sfn "$old_target" "$previous_link"
 fi
 
+restore_native_after_failed_cutover() {
+  local status="$?"
+  local restore_status=0
+  trap - ERR
+  if ! (
+    set -e
+    stop_named_units_and_require_inactive "$unit"
+    if [[ -n "$old_target" && -d "$old_target" ]]; then
+      rollback_contract_dir="$old_target/rollback-contract"
+      sudo -n install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env" "$host_env"
+      sudo -n install -m 0644 -o root -g root "$rollback_contract_dir/hololive-youtube-collector@.service" "$unit_file"
+      sudo -n ln -sfn "$old_target" "$current_link"
+      sudo -n systemctl daemon-reload
+      sudo -n systemctl enable --now "$unit"
+    else
+      sudo -n rm -f "$current_link" "$host_env" "$unit_file"
+      sudo -n systemctl daemon-reload
+      restore_retired_producer_runtime "$producer_state_file" "$service"
+    fi
+  ); then
+    restore_status=1
+  fi
+  if [[ "$restore_status" -ne 0 ]]; then
+    echo "host-native collector cutover failed and the recorded runtime could not be restored" >&2
+  fi
+  exit "$status"
+}
+trap restore_native_after_failed_cutover ERR
+
 sudo -n install -m 0640 -o root -g root "$payload/youtube-collector-host.env" "$host_env"
 sudo -n install -m 0644 -o root -g root "$payload/hololive-youtube-collector@.service" "$unit_file"
 sudo -n ln -sfn "$release_dir" "$current_link"
 
 sudo -n systemd-analyze verify "$unit_file"
 sudo -n systemctl daemon-reload
+stop_retired_producer_runtime "$service"
 sudo -n systemctl enable --now "$unit"
 sudo -n systemctl restart "$unit"
 
@@ -378,6 +420,10 @@ ready="$(
 )"
 printf '%s\n' "$ready"
 printf '%s' "$ready" | grep -q '"status":"ready"'
+printf '%s' "$ready" | grep -q '"helper":"ok"'
+printf '%s' "$ready" | grep -q '"first_success":true'
+printf '%s' "$ready" | grep -q '"handoff_status":"PROCESSED"'
+printf '%s' "$ready" | grep -q '"pending_queue":'
 
 journal_since="${change_started_at/T/ }"
 journal_since="${journal_since%Z} UTC"
@@ -387,7 +433,9 @@ if journalctl -u "$unit" --since "$journal_since" --no-pager |
    grep -E 'ERR|panic|permission denied|x509|no such file'; then
   exit 1
 fi
+trap - ERR
 REMOTE
+} | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB"
 
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$AP_NAME"
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"

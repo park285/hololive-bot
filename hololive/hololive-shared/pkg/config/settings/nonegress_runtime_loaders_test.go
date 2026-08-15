@@ -62,7 +62,6 @@ func TestLoadYouTubeCollectorRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
 	setRuntimeH3ServerEnv(t)
 	t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
 	t.Setenv("POSTGRES_USER", "hololive_scraper")
-	t.Setenv("YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED", "false")
 	t.Setenv("HOLODEX_API_KEY", "")
 	t.Setenv("HOLODEX_API_KEY_1", "")
 
@@ -98,7 +97,6 @@ func TestNonEgressConfigLoadersSkipWorkerProfileFetchWithAccidentalIrisToken(t *
 				setRuntimeH3ServerEnv(t)
 				t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
 				t.Setenv("POSTGRES_USER", "hololive_scraper")
-				t.Setenv("YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED", "false")
 			},
 			load: LoadYouTubeCollectorRuntime,
 		},

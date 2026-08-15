@@ -204,7 +204,7 @@ standalone producer 모듈은 worktree에 없다. compose/systemd/docs identity�
 Task 9 local retirement는 완료됐다. 다음에 남은 것은 Task 10 full pre-push와 별도 승인된 production apply다.
 
 1. `viewer_sample` target은 live/upcoming video ID만 심는다. channel operational roster는 live/stats/profile/photo만 소유한다.
-2. Holodex `live_snapshot` subject는 channel ID, 같은 `holodex_global` batch의 `viewer_sample`은 video ID이며 fence도 그 공간을 쓴다.
+2. Holodex `live_snapshot` subject는 channel ID, 같은 `holodex_live` batch의 `viewer_sample`은 video ID이며 fence도 그 공간을 쓴다. Schedule과 metadata는 각 cadence별 global lease로 분리된다.
 3. `MaxPublishBatchSize`/`MaxCheckpointCount`는 1024다. Hololive 규모(90채널×4 kind+schedule)는 한 응답 한 batch로 들어간다. 초과는 여전히 부분 drop 없이 fail closed다.
 4. collector Compose는 `HOLODEX_API_KEY`/`HOLODEX_API_KEY_1`을 전달한다. 값이 비면 collect-time fail-closed다.
 5. production migration `144`–`161`, collector AP fleet deploy, restart, live data 변경은 별도 승인 전까지 수행하지 않는다.

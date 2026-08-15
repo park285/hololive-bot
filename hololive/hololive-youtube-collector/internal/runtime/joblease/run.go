@@ -21,33 +21,83 @@ func (r *Repository) Run(ctx context.Context, lease Lease, run RunFunc) error {
 	go func() {
 		result <- run(runCtx, lease.Proof())
 	}()
+	return r.awaitRun(ctx, runCtx, cancel, lease, result)
+}
 
+func (r *Repository) awaitRun(
+	ctx context.Context,
+	runCtx context.Context,
+	cancel context.CancelFunc,
+	lease Lease,
+	result <-chan error,
+) error {
 	ticker := time.NewTicker(r.config.RenewInterval)
 	defer ticker.Stop()
 	for {
-		select {
-		case err := <-result:
-			cancel()
-			if err != nil {
-				return fmt.Errorf("run collection job: %w", err)
-			}
-			return nil
-		case <-ticker.C:
-			if err := lease.Renew(runCtx); err != nil {
-				cancel()
-				runErr := <-result
-				if runErr != nil && !errors.Is(runErr, context.Canceled) {
-					return fmt.Errorf("run collection job: renew lease: %w", errors.Join(err, runErr))
-				}
-				return fmt.Errorf("run collection job: renew lease: %w", err)
-			}
-		case <-ctx.Done():
-			cancel()
-			runErr := <-result
-			releaseCtx, releaseCancel := context.WithTimeout(context.Background(), r.config.PublishBudget)
-			releaseErr := lease.Release(releaseCtx)
-			releaseCancel()
-			return fmt.Errorf("run collection job: canceled: %w", errors.Join(ctx.Err(), runErr, releaseErr))
+		if err, done := r.awaitRunOnce(ctx, runCtx, cancel, lease, result, ticker); done {
+			return err
 		}
 	}
+}
+
+func (r *Repository) awaitRunOnce(
+	ctx context.Context,
+	runCtx context.Context,
+	cancel context.CancelFunc,
+	lease Lease,
+	result <-chan error,
+	ticker *time.Ticker,
+) (error, bool) {
+	select {
+	case err := <-result:
+		return finishRunResult(cancel, err), true
+	case <-ticker.C:
+		return handleRunRenew(runCtx, cancel, lease, result)
+	case <-ctx.Done():
+		return handleRunCancel(ctx, cancel, lease, result, r.config.PublishBudget), true
+	}
+}
+
+func finishRunResult(cancel context.CancelFunc, err error) error {
+	cancel()
+	if err != nil {
+		return fmt.Errorf("run collection job: %w", err)
+	}
+	return nil
+}
+
+func handleRunRenew(
+	runCtx context.Context,
+	cancel context.CancelFunc,
+	lease Lease,
+	result <-chan error,
+) (error, bool) {
+	if err := lease.Renew(runCtx); err != nil {
+		return finishRenewFailure(cancel, result, err), true
+	}
+	return nil, false
+}
+
+func finishRenewFailure(cancel context.CancelFunc, result <-chan error, err error) error {
+	cancel()
+	runErr := <-result
+	if runErr != nil && !errors.Is(runErr, context.Canceled) {
+		return fmt.Errorf("run collection job: renew lease: %w", errors.Join(err, runErr))
+	}
+	return fmt.Errorf("run collection job: renew lease: %w", err)
+}
+
+func handleRunCancel(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	lease Lease,
+	result <-chan error,
+	publishBudget time.Duration,
+) error {
+	cancel()
+	runErr := <-result
+	releaseCtx, releaseCancel := context.WithTimeout(context.Background(), publishBudget)
+	releaseErr := lease.Release(releaseCtx)
+	releaseCancel()
+	return fmt.Errorf("run collection job: canceled: %w", errors.Join(ctx.Err(), runErr, releaseErr))
 }

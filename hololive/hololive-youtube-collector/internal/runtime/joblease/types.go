@@ -43,6 +43,16 @@ type Config struct {
 }
 
 func (c Config) Validate() error {
+	if err := c.validateLeaseBudgets(); err != nil {
+		return err
+	}
+	if err := c.validateRetryJitter(); err != nil {
+		return err
+	}
+	return c.validateAcquisition()
+}
+
+func (c Config) validateLeaseBudgets() error {
 	if c.LeaseTTL < time.Second || c.LeaseTTL > 30*time.Minute {
 		return fmt.Errorf("%w: lease TTL must be between 1 second and 30 minutes", ErrInvalidConfig)
 	}
@@ -53,12 +63,20 @@ func (c Config) Validate() error {
 	if c.RenewInterval <= 0 || c.RenewInterval > c.LeaseTTL/3 {
 		return fmt.Errorf("%w: renew interval must be positive and at most one third of lease TTL", ErrInvalidConfig)
 	}
+	return nil
+}
+
+func (c Config) validateRetryJitter() error {
 	if c.MinRetryDelay < 100*time.Millisecond || c.MaxRetryDelay < c.MinRetryDelay || c.MaxRetryDelay > time.Hour {
 		return fmt.Errorf("%w: retry delay bounds are invalid", ErrInvalidConfig)
 	}
 	if c.MinReleaseJitter < 10*time.Millisecond || c.MaxReleaseJitter < c.MinReleaseJitter || c.MaxReleaseJitter > time.Minute {
 		return fmt.Errorf("%w: release jitter bounds are invalid", ErrInvalidConfig)
 	}
+	return nil
+}
+
+func (c Config) validateAcquisition() error {
 	if c.AcquisitionBatch < 1 || c.AcquisitionBatch > MaxAcquisitionBatch {
 		return fmt.Errorf("%w: acquisition batch must be between 1 and %d", ErrInvalidConfig, MaxAcquisitionBatch)
 	}
@@ -84,26 +102,44 @@ type JobSpec struct {
 }
 
 func (s JobSpec) validate(contracts sourceobservation.JobContractSet) (sourceobservation.JobContract, []contract.ObservationKind, error) {
-	if strings.TrimSpace(s.JobKey) != s.JobKey || s.JobKey == "" || len(s.JobKey) > 512 ||
-		strings.TrimSpace(s.CollectionJobKind) != s.CollectionJobKind || s.CollectionJobKind == "" || len(s.CollectionJobKind) > 128 ||
-		strings.TrimSpace(s.SubjectKey) != s.SubjectKey || s.SubjectKey == "" || len(s.SubjectKey) > 256 ||
-		!s.Provider.Valid() || s.PollInterval < time.Second || s.PollInterval > 24*time.Hour || s.PollInterval%time.Millisecond != 0 {
+	if invalidJobSpecIdentity(s) {
 		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: identity or poll interval is outside bounds", ErrInvalidJob)
 	}
 	definition, ok := contracts.Definition(s.CollectionJobKind)
 	if !ok || definition.Class != s.Class || definition.FixedSubject != "" && definition.FixedSubject != s.SubjectKey {
 		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: compile-time job contract mismatch", ErrInvalidJob)
 	}
-	kinds := make([]contract.ObservationKind, 0, len(definition.Emissions))
-	for _, emission := range definition.Emissions {
-		if emission.Provider == s.Provider {
-			kinds = append(kinds, emission.Kind)
-		}
-	}
+	kinds := emissionsForProvider(definition, s.Provider)
 	if len(kinds) == 0 {
 		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: provider has no declared emissions", ErrInvalidJob)
 	}
 	return definition, kinds, nil
+}
+
+func invalidJobSpecIdentity(s JobSpec) bool {
+	return invalidBoundedToken(s.JobKey, 512) ||
+		invalidBoundedToken(s.CollectionJobKind, 128) ||
+		invalidBoundedToken(s.SubjectKey, 256) ||
+		!s.Provider.Valid() ||
+		invalidPollInterval(s.PollInterval)
+}
+
+func invalidBoundedToken(value string, maxLength int) bool {
+	return strings.TrimSpace(value) != value || value == "" || len(value) > maxLength
+}
+
+func invalidPollInterval(interval time.Duration) bool {
+	return interval < time.Second || interval > 24*time.Hour || interval%time.Millisecond != 0
+}
+
+func emissionsForProvider(definition sourceobservation.JobContract, provider contract.Provider) []contract.ObservationKind {
+	kinds := make([]contract.ObservationKind, 0, len(definition.Emissions))
+	for _, emission := range definition.Emissions {
+		if emission.Provider == provider {
+			kinds = append(kinds, emission.Kind)
+		}
+	}
+	return kinds
 }
 
 type Lease interface {

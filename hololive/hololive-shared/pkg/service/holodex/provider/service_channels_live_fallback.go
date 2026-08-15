@@ -96,7 +96,7 @@ func (h *Service) fetchLiveStatusFallbackSelection(
 }
 
 func (h *Service) fetchLiveStatusFallbackChannel(ctx context.Context, channelID string, result *channelsLiveStatusFallbackResult) {
-	streams, err := h.scraper.FetchFromYouTubeProducerWaitAdmission(ctx, channelID)
+	streams, err := h.scraper.FetchYouTubeScheduleWaitAdmission(ctx, channelID)
 	if err != nil {
 		recordLiveStatusFallbackChannelError(result, channelID, err)
 		return

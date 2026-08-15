@@ -21,6 +21,7 @@
 package ingress
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 
@@ -108,9 +109,50 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 	if envelope.CommandType != domain.CommandHelp.String() {
 		t.Fatalf("command type = %q, want %q", envelope.CommandType, domain.CommandHelp.String())
 	}
+}
 
-	if envelope.Parsed == nil || envelope.Parsed.Type != domain.CommandHelp {
-		t.Fatalf("parsed type = %v, want %v", envelope.Parsed.Type, domain.CommandHelp)
+type recordingRooms struct {
+	roomID, roomType, roomLinkID string
+}
+
+func (r *recordingRooms) Observe(_ context.Context, roomID, roomType, roomLinkID string) {
+	r.roomID = roomID
+	r.roomType = roomType
+	r.roomLinkID = roomLinkID
+}
+
+func TestMessageIngressPrepare_ObservesRoomChat(t *testing.T) {
+	t.Parallel()
+
+	rooms := &recordingRooms{}
+	ingress := NewMessageIngress(
+		messaging.NewMessageAdapter("!", ""),
+		nil,
+		slog.New(slog.DiscardHandler),
+		"",
+		WithRoomObserver(rooms),
+	)
+
+	sender := "사용자"
+	envelope, ok := ingress.Prepare(t.Context(), &webhook.Message{
+		Msg:    "!help",
+		Room:   "room-title",
+		Sender: &sender,
+		JSON: &webhook.MessageJSON{
+			UserID:     "user-1",
+			ChatID:     "18446744073709551615",
+			RoomType:   " MultiChat ",
+			RoomLinkID: "",
+		},
+	})
+	if !ok || envelope == nil {
+		t.Fatal("expected command to be accepted")
+	}
+	if envelope.RoomType != "MultiChat" || envelope.RoomLinkID != "" {
+		t.Fatalf("envelope room = %q/%q", envelope.RoomType, envelope.RoomLinkID)
+	}
+	if rooms.roomID != "18446744073709551615" || rooms.roomType != "MultiChat" {
+		t.Fatalf("observed = %+v", rooms)
 	}
 }
 

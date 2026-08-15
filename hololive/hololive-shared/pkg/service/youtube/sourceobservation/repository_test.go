@@ -105,7 +105,7 @@ func TestPublishBatchSamePayloadNextScheduledSlotCreatesTwoObservations(t *testi
 func TestPublishBatchViewerEqualValueNextWindowCreatesTwoObservations(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	firstProof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_global")
+	firstProof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
 	repo := NewRepository(pool)
 	first := viewerEnvelope(t, firstProof, 1, 100)
 	if _, err := repo.PublishBatch(ctx, publishInput(first)); err != nil {
@@ -331,7 +331,7 @@ func TestPublishBatchRejectsMissingCheckpointWithoutWrites(t *testing.T) {
 func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel")
+	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -365,7 +365,7 @@ func TestPublishBatchAllowsOneCheckpointPerMultiKindObservation(t *testing.T) {
 func TestPublishBatchRejectsDuplicateCheckpointBinding(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel")
+	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -713,6 +713,21 @@ func TestReplayReactivatesTerminalQueueWithoutCopyingEvidence(t *testing.T) {
 	}
 }
 
+func TestRetentionSQLLocksCandidatesWithSkipLocked(t *testing.T) {
+	queue := mustSQL("repository_retention_delete_queue_0076_76.sql")
+	if !strings.Contains(queue, "FOR UPDATE OF candidate SKIP LOCKED") {
+		t.Fatal("queue retention must lock candidates with SKIP LOCKED")
+	}
+	evidence := mustSQL("repository_retention_delete_evidence_0079_79.sql")
+	if !strings.Contains(evidence, "FOR UPDATE OF candidate SKIP LOCKED") {
+		t.Fatal("evidence retention must lock candidates with SKIP LOCKED")
+	}
+	replay := mustSQL("repository_retention_delete_replay_0078_78.sql")
+	if !strings.Contains(replay, "NOT EXISTS") || !strings.Contains(replay, "source_observations") {
+		t.Fatal("replay audit retention must keep rows while evidence remains")
+	}
+}
+
 func TestClaimSQLUsesBoundedSkipLockedWithoutGenerationFilter(t *testing.T) {
 	query := mustSQL("repository_claim_0012_12.sql")
 	if !strings.Contains(query, "LIMIT $2") || !strings.Contains(query, "FOR UPDATE OF queue SKIP LOCKED") {
@@ -783,7 +798,7 @@ func TestPublishBatchTargetDisableDuringFetchRollsBackEverything(t *testing.T) {
 func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel")
+	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindChannelStats, "UC_TEST", "youtubejs_channel_metadata")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -811,7 +826,7 @@ func TestPublishBatchRejectsOutOfBundleTargetAtomically(t *testing.T) {
 func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_global")
+	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_collection_targets (
 			projection_generation, subject_key, observation_kind,
@@ -972,7 +987,7 @@ func (*targetQueryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQu
 func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_global")
+	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_live")
 	subjects := make([]string, MaxPublishBatchSize-1)
 	kinds := make([]string, MaxPublishBatchSize-1)
 	for i := range subjects {
@@ -1014,7 +1029,7 @@ func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 func TestPublishBatchStatementCountIsConstant(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
-	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_global")
+	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-000", "holodex_live")
 	subjects := make([]string, MaxPublishBatchSize-1)
 	kinds := make([]string, MaxPublishBatchSize-1)
 	for i := range subjects {
@@ -1157,7 +1172,7 @@ func assertPublishSideEffects(t *testing.T, pool *pgxpool.Pool, observations, qu
 }
 
 func seedPublishLease(
-	t *testing.T,
+	t testing.TB,
 	pool *pgxpool.Pool,
 	provider contract.Provider,
 	kind contract.ObservationKind,
@@ -1193,7 +1208,7 @@ func seedPublishLease(
 		ScheduledFor:         scheduledFor,
 	}
 	jobClass := "SUBJECT"
-	if jobKind == "holodex_global" || jobKind == "official_schedule" {
+	if strings.HasPrefix(jobKind, "holodex_") || jobKind == "official_schedule" {
 		jobClass = "GLOBAL"
 	}
 	if _, err := pool.Exec(ctx, `
@@ -1222,7 +1237,7 @@ func reactivateLease(t *testing.T, pool *pgxpool.Pool, proof contract.LeaseProof
 }
 
 func advanceLease(
-	t *testing.T,
+	t testing.TB,
 	pool *pgxpool.Pool,
 	proof contract.LeaseProof,
 	delta time.Duration,
@@ -1262,7 +1277,7 @@ func (c delayedUnsupportedContracts) Supports(ContractVersion) bool {
 }
 
 func communityEnvelope(
-	t *testing.T,
+	t testing.TB,
 	proof contract.LeaseProof,
 	generation int64,
 	completeness contract.Completeness,

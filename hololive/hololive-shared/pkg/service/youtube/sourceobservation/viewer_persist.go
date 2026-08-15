@@ -52,24 +52,42 @@ func loadViewerState(ctx context.Context, tx dbx.Tx, videoID string, windowStart
 }
 
 func persistViewerDecision(ctx context.Context, tx dbx.Tx, observation Observation, decision viewer.Decision, channelID string) error {
-	if decision.Sample != nil {
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_viewer_evidence_upsert_0054_54.sql"),
-			decision.Sample.VideoID,
-			decision.Sample.WindowStart,
-			observation.Provider,
-			observation.ID,
-			decision.Sample.ViewerCount,
-			decision.Sample.Availability,
-			decision.Sample.WindowSeconds,
-			decision.Sample.ScheduledFor,
-			decision.Sample.EffectiveAt,
-			decision.Sample.ReceivedAt,
-		); err != nil {
-			return fmt.Errorf("upsert viewer evidence: %w", err)
-		}
+	if err := persistViewerEvidence(ctx, tx, observation, decision); err != nil {
+		return err
 	}
+	if err := persistViewerHead(ctx, tx, decision); err != nil {
+		return err
+	}
+	if err := persistViewerProduct(ctx, tx, decision, channelID); err != nil {
+		return err
+	}
+	return persistViewerConflict(ctx, tx, observation, decision)
+}
+
+func persistViewerEvidence(ctx context.Context, tx dbx.Tx, observation Observation, decision viewer.Decision) error {
+	if decision.Sample == nil {
+		return nil
+	}
+	if _, err := tx.Exec(
+		ctx,
+		mustSQL("repository_viewer_evidence_upsert_0054_54.sql"),
+		decision.Sample.VideoID,
+		decision.Sample.WindowStart,
+		observation.Provider,
+		observation.ID,
+		decision.Sample.ViewerCount,
+		decision.Sample.Availability,
+		decision.Sample.WindowSeconds,
+		decision.Sample.ScheduledFor,
+		decision.Sample.EffectiveAt,
+		decision.Sample.ReceivedAt,
+	); err != nil {
+		return fmt.Errorf("upsert viewer evidence: %w", err)
+	}
+	return nil
+}
+
+func persistViewerHead(ctx context.Context, tx dbx.Tx, decision viewer.Decision) error {
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_viewer_head_upsert_0055_55.sql"),
@@ -84,7 +102,14 @@ func persistViewerDecision(ctx context.Context, tx dbx.Tx, observation Observati
 	); err != nil {
 		return fmt.Errorf("upsert viewer head: %w", err)
 	}
-	if decision.ClearProduct && decision.Sample != nil {
+	return nil
+}
+
+func persistViewerProduct(ctx context.Context, tx dbx.Tx, decision viewer.Decision, channelID string) error {
+	if decision.Sample == nil {
+		return nil
+	}
+	if decision.ClearProduct {
 		if _, err := tx.Exec(
 			ctx,
 			mustSQL("repository_viewer_product_delete_0057_57.sql"),
@@ -93,42 +118,35 @@ func persistViewerDecision(ctx context.Context, tx dbx.Tx, observation Observati
 		); err != nil {
 			return fmt.Errorf("clear unresolved viewer product: %w", err)
 		}
+		return nil
 	}
-	if !decision.ClearProduct && decision.Sample != nil &&
-		decision.Sample.Availability == viewer.AvailabilityAvailable &&
-		decision.Sample.ViewerCount != nil &&
-		channelID != "" {
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_viewer_product_upsert_0056_56.sql"),
-			decision.Sample.VideoID,
-			decision.Sample.WindowStart,
-			channelID,
-			int(*decision.Sample.ViewerCount),
-		); err != nil {
-			return fmt.Errorf("upsert viewer product sample: %w", err)
-		}
-	}
-	if decision.Conflict == nil || decision.Sample == nil {
+	if !shouldWriteViewerProduct(decision, channelID) {
 		return nil
 	}
 	if _, err := tx.Exec(
 		ctx,
-		mustSQL("repository_reconcile_conflict_insert_0061_61.sql"),
-		observation.ID,
-		observation.Provider,
-		observation.ObservationKind,
-		observation.SubjectKey,
-		observation.ObservationKey,
-		observation.EvidenceSHA256,
-		"youtube_live_viewer_sample",
+		mustSQL("repository_viewer_product_upsert_0056_56.sql"),
 		decision.Sample.VideoID,
-		decision.Conflict.FieldName,
-		observation.EffectiveAt,
-		decision.Conflict.ExistingValueSHA256,
-		decision.Conflict.AttemptedValueSHA256,
-		"UNRESOLVED",
+		decision.Sample.WindowStart,
+		channelID,
+		int(*decision.Sample.ViewerCount),
 	); err != nil {
+		return fmt.Errorf("upsert viewer product sample: %w", err)
+	}
+	return nil
+}
+
+func shouldWriteViewerProduct(decision viewer.Decision, channelID string) bool {
+	return decision.Sample.Availability == viewer.AvailabilityAvailable &&
+		decision.Sample.ViewerCount != nil &&
+		channelID != ""
+}
+
+func persistViewerConflict(ctx context.Context, tx dbx.Tx, observation Observation, decision viewer.Decision) error {
+	if decision.Conflict == nil || decision.Sample == nil {
+		return nil
+	}
+	if err := persistReconcileConflict(ctx, tx, observation, "youtube_live_viewer_sample", decision.Sample.VideoID, decision.Conflict.FieldName, decision.Conflict.ExistingValueSHA256, decision.Conflict.AttemptedValueSHA256, "UNRESOLVED"); err != nil {
 		return fmt.Errorf("insert viewer reconciliation conflict: %w", err)
 	}
 	return nil

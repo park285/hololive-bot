@@ -16,13 +16,7 @@ func (r *Repository) Retry(ctx context.Context, input RetryInput) (contract.Stat
 	if err := r.validate(); err != nil {
 		return "", err
 	}
-	if input.ObservationID <= 0 || !lowercaseHexToken(input.LeaseToken) {
-		return "", fmt.Errorf("validate source observation retry: invalid observation id or lease token")
-	}
-	if input.Delay < 0 || input.Delay > 24*time.Hour {
-		return "", fmt.Errorf("validate source observation retry: delay is outside the accepted range")
-	}
-	if err := validateErrorFields("retry", input.ErrorCode, input.ErrorDetail); err != nil {
+	if err := validateRetryInput(input); err != nil {
 		return "", err
 	}
 	var status string
@@ -47,6 +41,16 @@ func (r *Repository) Retry(ctx context.Context, input RetryInput) (contract.Stat
 		return "", fmt.Errorf("retry source observation: invalid persisted status %q", status)
 	}
 	return persisted, nil
+}
+
+func validateRetryInput(input RetryInput) error {
+	if input.ObservationID <= 0 || !lowercaseHexToken(input.LeaseToken) {
+		return fmt.Errorf("validate source observation retry: invalid observation id or lease token")
+	}
+	if input.Delay < 0 || input.Delay > 24*time.Hour {
+		return fmt.Errorf("validate source observation retry: delay is outside the accepted range")
+	}
+	return validateErrorFields("retry", input.ErrorCode, input.ErrorDetail)
 }
 
 func (r *Repository) DeadLetter(ctx context.Context, input DeadLetterInput) error {

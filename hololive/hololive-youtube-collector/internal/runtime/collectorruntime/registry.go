@@ -31,31 +31,80 @@ func NewRegistry(runners ...JobRunner) (*Registry, error) {
 	}
 	seenContracts := make(map[string]struct{}, len(contracts))
 	for _, runner := range runners {
-		if runner == nil {
-			return nil, fmt.Errorf("register collection job runner: runner is nil")
-		}
-		key := runnerKey{provider: runner.Provider(), jobKind: runner.JobKind()}
-		if !key.provider.Valid() || key.jobKind == "" {
-			return nil, fmt.Errorf("register collection job runner: identity is invalid")
-		}
-		if _, exists := registry.byKey[key]; exists {
-			return nil, fmt.Errorf("register collection job runner: duplicate %s/%s", key.provider, key.jobKind)
-		}
-		definition, ok := contracts.Definition(key.jobKind)
-		if !ok {
-			return nil, fmt.Errorf("register collection job runner: unknown job kind %s", key.jobKind)
-		}
-		if err := matchEmissions(key, definition, runner.Emissions()); err != nil {
+		if err := registerRunner(registry, contracts, seenContracts, runner); err != nil {
 			return nil, err
 		}
-		registry.byKey[key] = runner
-		registry.runners = append(registry.runners, runner)
-		seenContracts[key.jobKind] = struct{}{}
 	}
 	if len(seenContracts) != len(contracts) {
 		return nil, fmt.Errorf("register collection job runner: InitialJobContracts coverage is incomplete")
 	}
 	return registry, nil
+}
+
+func registerRunner(
+	registry *Registry,
+	contracts sourceobservation.JobContractSet,
+	seenContracts map[string]struct{},
+	runner JobRunner,
+) error {
+	if runner == nil {
+		return fmt.Errorf("register collection job runner: runner is nil")
+	}
+	key := runnerKey{provider: runner.Provider(), jobKind: runner.JobKind()}
+	if !key.provider.Valid() || key.jobKind == "" {
+		return fmt.Errorf("register collection job runner: identity is invalid")
+	}
+	if _, exists := registry.byKey[key]; exists {
+		return fmt.Errorf("register collection job runner: duplicate %s/%s", key.provider, key.jobKind)
+	}
+	definition, ok := contracts.Definition(key.jobKind)
+	if !ok {
+		return fmt.Errorf("register collection job runner: unknown job kind %s", key.jobKind)
+	}
+	if err := matchEmissions(key, definition, runner.Emissions()); err != nil {
+		return err
+	}
+	if err := validateTargetKinds(key, runner.Emissions(), runner.TargetKinds()); err != nil {
+		return err
+	}
+	registry.byKey[key] = runner
+	registry.runners = append(registry.runners, runner)
+	seenContracts[key.jobKind] = struct{}{}
+	return nil
+}
+
+func validateTargetKinds(
+	key runnerKey,
+	emissions []contract.ObservationKind,
+	targetKinds []contract.ObservationKind,
+) error {
+	if len(targetKinds) == 0 {
+		return fmt.Errorf("register collection job runner: %s/%s has no target kinds", key.provider, key.jobKind)
+	}
+	targetSet, err := targetKindSet(key, targetKinds)
+	if err != nil {
+		return err
+	}
+	for _, kind := range emissions {
+		if _, ok := targetSet[kind]; !ok {
+			return fmt.Errorf("register collection job runner: %s/%s emission is missing from target kinds", key.provider, key.jobKind)
+		}
+	}
+	return nil
+}
+
+func targetKindSet(key runnerKey, targetKinds []contract.ObservationKind) (map[contract.ObservationKind]struct{}, error) {
+	targetSet := make(map[contract.ObservationKind]struct{}, len(targetKinds))
+	for _, kind := range targetKinds {
+		if !kind.Valid() {
+			return nil, fmt.Errorf("register collection job runner: %s/%s target kind is invalid", key.provider, key.jobKind)
+		}
+		if _, exists := targetSet[kind]; exists {
+			return nil, fmt.Errorf("register collection job runner: %s/%s target kind is duplicated", key.provider, key.jobKind)
+		}
+		targetSet[kind] = struct{}{}
+	}
+	return targetSet, nil
 }
 
 func matchEmissions(key runnerKey, definition sourceobservation.JobContract, emissions []contract.ObservationKind) error {

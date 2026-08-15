@@ -304,7 +304,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		client := &acceptedTestIrisClient{}
 		transport := bottransport.NewCommandTransport(client, nil, bottransport.WithMarkdownReplies(true))
 
-		require.NoError(t, transport.SendMessage(ctx, "room", "hello"))
+		require.NoError(t, transport.SendMessage(bottransport.WithRoomChat(ctx, "OM", ""), "room", "hello"))
 		assert.Equal(t, 1, client.markdownCalls)
 		assert.Equal(t, 0, client.acceptedCalls)
 		assert.Equal(t, "hello", client.lastMessage)
@@ -408,7 +408,7 @@ func TestEnsureTransportFollowsMarkdownRepliesFlag(t *testing.T) {
 			markdownReplies: true,
 		}
 
-		require.NoError(t, b.ensureTransport().SendMessage(ctx, "room", "hello"))
+		require.NoError(t, b.ensureTransport().SendMessage(bottransport.WithRoomChat(ctx, "OM", ""), "room", "hello"))
 		assert.Equal(t, 1, client.markdownCalls)
 		assert.Equal(t, 0, client.acceptedCalls)
 	})
