@@ -136,7 +136,7 @@ WITH input AS MATERIALIZED (
     WHERE collision_state.has_collision
       AND existing.existing_id IS NOT NULL
       AND existing.existing_evidence_sha256 <> existing.evidence_sha256
-    RETURNING id
+    RETURNING 1 AS inserted
 ), observation_write AS (
     INSERT INTO source_observations (
         provider,
@@ -246,7 +246,7 @@ WITH input AS MATERIALIZED (
         updated_at = NOW()
     RETURNING provider
 ), effects AS MATERIALIZED (
-    SELECT (SELECT count(id) FROM collision_write)
+    SELECT (SELECT count(inserted) FROM collision_write)
          + (SELECT count(observation_id) FROM queue_write)
          + (SELECT count(provider) FROM checkpoint_write) AS affected_count
 )
