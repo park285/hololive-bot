@@ -730,12 +730,19 @@ func TestRetentionSQLLocksCandidatesWithSkipLocked(t *testing.T) {
 		t.Fatal("queue retention must lock candidates with SKIP LOCKED")
 	}
 	evidence := mustSQL("repository_retention_delete_evidence_0079_79.sql")
-	if !strings.Contains(evidence, "FOR UPDATE OF candidate SKIP LOCKED") {
-		t.Fatal("evidence retention must lock candidates with SKIP LOCKED")
+	if !strings.Contains(evidence, "delete_source_observation_retention_batch") || strings.Contains(evidence, "FOR UPDATE") {
+		t.Fatal("evidence retention must use the restricted retention function")
 	}
 	replay := mustSQL("repository_retention_delete_replay_0078_78.sql")
 	if !strings.Contains(replay, "NOT EXISTS") || !strings.Contains(replay, "source_observations") {
 		t.Fatal("replay audit retention must keep rows while evidence remains")
+	}
+}
+
+func TestLiveObservationLockUsesRestrictedFunction(t *testing.T) {
+	query := mustSQL("repository_live_observation_lock_0051_51.sql")
+	if !strings.Contains(query, "lock_source_observation") || strings.Contains(query, "FOR UPDATE") {
+		t.Fatal("live observation lock must use the restricted lock function")
 	}
 }
 

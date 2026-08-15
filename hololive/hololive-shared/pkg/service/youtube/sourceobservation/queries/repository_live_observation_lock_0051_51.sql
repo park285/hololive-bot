@@ -1,4 +1,2 @@
-SELECT id
-FROM source_observations
-WHERE id = $1
-FOR UPDATE
+SELECT 1
+FROM public.lock_source_observation($1)
