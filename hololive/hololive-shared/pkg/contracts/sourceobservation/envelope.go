@@ -1,17 +1,11 @@
 package sourceobservation
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"reflect"
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 const (
@@ -174,75 +168,111 @@ func (e Envelope) Validate() error {
 }
 
 func (e Envelope) ValidateAndCanonicalPayload() ([]byte, error) {
+	if err := e.validateEnvelopeIdentity(); err != nil {
+		return nil, err
+	}
+	if err := e.validateEnvelopeClock(); err != nil {
+		return nil, err
+	}
+	if err := e.validateEnvelopeLeaseAndHashes(); err != nil {
+		return nil, err
+	}
+	return e.verifyCanonicalPayload()
+}
+
+func (e Envelope) validateEnvelopeIdentity() error {
 	if !e.Provider.Valid() {
-		return nil, fmt.Errorf("validate source observation envelope: unsupported provider %q", e.Provider)
+		return fmt.Errorf("validate source observation envelope: unsupported provider %q", e.Provider)
 	}
 	if !e.ObservationKind.Valid() {
-		return nil, fmt.Errorf("validate source observation envelope: unsupported observation kind %q", e.ObservationKind)
+		return fmt.Errorf("validate source observation envelope: unsupported observation kind %q", e.ObservationKind)
 	}
 	if err := validateBoundedText("subject key", e.SubjectKey, 256); err != nil {
-		return nil, err
+		return err
 	}
 	if err := validateBoundedText("observation key", e.ObservationKey, 512); err != nil {
-		return nil, err
+		return err
 	}
 	if e.SchemaVersion != SchemaVersionV1 {
-		return nil, fmt.Errorf("validate source observation envelope: unsupported schema version %d", e.SchemaVersion)
+		return fmt.Errorf("validate source observation envelope: unsupported schema version %d", e.SchemaVersion)
 	}
 	if e.ContractGeneration <= 0 {
-		return nil, fmt.Errorf("validate source observation envelope: contract generation must be positive")
+		return fmt.Errorf("validate source observation envelope: contract generation must be positive")
 	}
+	return nil
+}
+
+func (e Envelope) validateEnvelopeClock() error {
 	if e.ScheduledFor.IsZero() || e.ObservedAt.IsZero() {
-		return nil, fmt.Errorf("validate source observation envelope: scheduled for and observed at must be non-zero")
+		return fmt.Errorf("validate source observation envelope: scheduled for and observed at must be non-zero")
 	}
 	if e.SourceEventAt != nil && e.SourceEventAt.IsZero() {
-		return nil, fmt.Errorf("validate source observation envelope: source event at must not point to zero time")
+		return fmt.Errorf("validate source observation envelope: source event at must not point to zero time")
 	}
 	if e.SourceEventAt != nil && !KindAllowsSourceEventTime(e.ObservationKind) {
-		return nil, fmt.Errorf("validate source observation envelope: observation kind does not allow source event time")
+		return fmt.Errorf("validate source observation envelope: observation kind does not allow source event time")
 	}
 	if !e.Completeness.Valid() {
-		return nil, fmt.Errorf("validate source observation envelope: invalid completeness %q", e.Completeness)
+		return fmt.Errorf("validate source observation envelope: invalid completeness %q", e.Completeness)
 	}
 	if !e.Continuity.Valid() {
-		return nil, fmt.Errorf("validate source observation envelope: invalid continuity %q", e.Continuity)
+		return fmt.Errorf("validate source observation envelope: invalid continuity %q", e.Continuity)
 	}
+	return nil
+}
+
+func (e Envelope) validateEnvelopeLeaseAndHashes() error {
 	if err := e.Lease.validate(e.ScheduledFor); err != nil {
-		return nil, err
+		return err
 	}
 	if err := validateBoundedText("collector instance", e.CollectorInstance, 128); err != nil {
-		return nil, err
+		return err
 	}
+	return validateEnvelopeSHA256s(e)
+}
+
+func validateEnvelopeSHA256s(e Envelope) error {
 	for name, value := range map[string]string{
 		"scope sha256":    e.ScopeSHA256,
 		"payload sha256":  e.PayloadSHA256,
 		"evidence sha256": e.EvidenceSHA256,
 	} {
 		if !lowercaseSHA256Pattern.MatchString(value) {
-			return nil, fmt.Errorf("validate source observation envelope: %s must be 64 lowercase hexadecimal characters", name)
+			return fmt.Errorf("validate source observation envelope: %s must be 64 lowercase hexadecimal characters", name)
 		}
 	}
+	return nil
+}
+
+func (e Envelope) verifyCanonicalPayload() ([]byte, error) {
 	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(e.ObservationKind, e.SubjectKey, e.Completeness, e.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("validate source observation envelope: %w", err)
 	}
+	if err := e.matchCanonicalDigests(canonicalPayload, canonicalScope); err != nil {
+		return nil, err
+	}
+	return canonicalPayload, nil
+}
+
+func (e Envelope) matchCanonicalDigests(canonicalPayload, canonicalScope []byte) error {
 	if actual := SHA256Hex(canonicalScope); actual != e.ScopeSHA256 {
-		return nil, fmt.Errorf("validate source observation envelope: scope sha256 mismatch")
+		return fmt.Errorf("validate source observation envelope: scope sha256 mismatch")
 	}
 	if actual := SHA256Hex(canonicalPayload); actual != e.PayloadSHA256 {
-		return nil, fmt.Errorf("validate source observation envelope: payload sha256 mismatch")
+		return fmt.Errorf("validate source observation envelope: payload sha256 mismatch")
 	}
 	if expected := ObservationKeyForEnvelope(e, canonicalScope); expected != e.ObservationKey {
-		return nil, fmt.Errorf("validate source observation envelope: observation key mismatch")
+		return fmt.Errorf("validate source observation envelope: observation key mismatch")
 	}
 	expectedEvidenceSHA256, err := e.expectedEvidenceSHA256()
 	if err != nil {
-		return nil, fmt.Errorf("validate source observation envelope: %w", err)
+		return fmt.Errorf("validate source observation envelope: %w", err)
 	}
 	if expectedEvidenceSHA256 != e.EvidenceSHA256 {
-		return nil, fmt.Errorf("validate source observation envelope: evidence sha256 mismatch")
+		return fmt.Errorf("validate source observation envelope: evidence sha256 mismatch")
 	}
-	return canonicalPayload, nil
+	return nil
 }
 
 func (e Envelope) expectedEvidenceSHA256() (string, error) {
@@ -350,347 +380,6 @@ func EffectiveAt(observation ObservationClock, maxFutureSkew time.Duration) (tim
 		return observation.SourceEventAt.UTC(), false
 	}
 	return observation.ScheduledFor.UTC(), observation.SourceEventAt != nil
-}
-
-func decodeStrictJSON(raw []byte, destination any) error {
-	if err := validateJSONText(raw); err != nil {
-		return err
-	}
-	if err := rejectDuplicateJSONNames(raw); err != nil {
-		return err
-	}
-	if err := rejectNonCanonicalJSONFields(raw, reflect.TypeOf(destination)); err != nil {
-		return err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		return err
-	}
-	return ensureJSONEOF(decoder)
-}
-
-func ensureJSONEOF(decoder *json.Decoder) error {
-	var trailing any
-	err := decoder.Decode(&trailing)
-	if err == nil {
-		return fmt.Errorf("decode json: trailing value")
-	}
-	if err != io.EOF {
-		return fmt.Errorf("decode json trailing data: %w", err)
-	}
-	return nil
-}
-
-func rejectDuplicateJSONNames(raw []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := inspectJSONValue(decoder, 0); err != nil {
-		return fmt.Errorf("validate json structure: %w", err)
-	}
-	return ensureJSONEOF(decoder)
-}
-
-var (
-	timeType       = reflect.TypeOf(time.Time{})
-	rawMessageType = reflect.TypeOf(json.RawMessage{})
-)
-
-func rejectNonCanonicalJSONFields(raw []byte, destinationType reflect.Type) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	if err := inspectJSONValueWithType(decoder, indirectJSONType(destinationType)); err != nil {
-		return fmt.Errorf("validate json fields: %w", err)
-	}
-	return ensureJSONEOF(decoder)
-}
-
-func inspectJSONValueWithType(decoder *json.Decoder, valueType reflect.Type) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	if token == nil {
-		return nil
-	}
-	delimiter, ok := token.(json.Delim)
-	if !ok {
-		return nil
-	}
-	if valueType == nil {
-		return consumeJSONContainer(decoder, delimiter)
-	}
-	switch delimiter {
-	case '{':
-		return inspectJSONObjectFields(decoder, valueType)
-	case '[':
-		return inspectJSONArrayFields(decoder, valueType)
-	default:
-		return fmt.Errorf("unexpected delimiter %q", delimiter)
-	}
-}
-
-func inspectJSONObjectFields(decoder *json.Decoder, valueType reflect.Type) error {
-	valueType = indirectJSONType(valueType)
-	if valueType == nil || valueType == rawMessageType || valueType == timeType || valueType.Kind() != reflect.Struct {
-		return consumeJSONContainer(decoder, '{')
-	}
-	fields := jsonFieldTypes(valueType)
-	seen := make(map[string]struct{}, len(fields))
-	for decoder.More() {
-		nameToken, err := decoder.Token()
-		if err != nil {
-			return err
-		}
-		name, ok := nameToken.(string)
-		if !ok {
-			return fmt.Errorf("object field name is not a string")
-		}
-		fieldType, ok := fields[name]
-		if !ok {
-			return fmt.Errorf("field %q is not a canonical field name", name)
-		}
-		if _, exists := seen[name]; exists {
-			return fmt.Errorf("duplicate object field %q", name)
-		}
-		seen[name] = struct{}{}
-		if err := inspectJSONValueWithType(decoder, fieldType); err != nil {
-			return err
-		}
-	}
-	_, err := decoder.Token()
-	return err
-}
-
-func inspectJSONArrayFields(decoder *json.Decoder, valueType reflect.Type) error {
-	valueType = indirectJSONType(valueType)
-	itemType := reflect.TypeOf((*any)(nil)).Elem()
-	if valueType != nil && (valueType.Kind() == reflect.Array || valueType.Kind() == reflect.Slice) {
-		itemType = valueType.Elem()
-	}
-	for decoder.More() {
-		if err := inspectJSONValueWithType(decoder, itemType); err != nil {
-			return err
-		}
-	}
-	_, err := decoder.Token()
-	return err
-}
-
-func consumeJSONContainer(decoder *json.Decoder, opening json.Delim) error {
-	closing := json.Delim('}')
-	if opening == '[' {
-		closing = ']'
-	}
-	for decoder.More() {
-		if err := inspectJSONValueWithType(decoder, nil); err != nil {
-			return err
-		}
-	}
-	if token, err := decoder.Token(); err != nil {
-		return err
-	} else if token != closing {
-		return fmt.Errorf("unexpected delimiter %q", token)
-	}
-	return nil
-}
-
-func indirectJSONType(valueType reflect.Type) reflect.Type {
-	for valueType != nil && valueType.Kind() == reflect.Pointer {
-		valueType = valueType.Elem()
-	}
-	return valueType
-}
-
-func jsonFieldTypes(valueType reflect.Type) map[string]reflect.Type {
-	fields := make(map[string]reflect.Type, valueType.NumField())
-	for i := 0; i < valueType.NumField(); i++ {
-		field := valueType.Field(i)
-		if field.PkgPath != "" && !field.Anonymous {
-			continue
-		}
-		tag := field.Tag.Get("json")
-		name := strings.Split(tag, ",")[0]
-		if name == "-" {
-			continue
-		}
-		if name == "" {
-			name = field.Name
-		}
-		fields[name] = field.Type
-	}
-	return fields
-}
-
-func validateJSONText(raw []byte) error {
-	if !utf8.Valid(raw) {
-		return fmt.Errorf("decode json: invalid UTF-8")
-	}
-	for i := 0; i < len(raw); i++ {
-		if raw[i] != '"' {
-			continue
-		}
-		end, err := validateJSONString(raw, i+1)
-		if err != nil {
-			return err
-		}
-		i = end
-	}
-	return nil
-}
-
-func validateJSONString(raw []byte, start int) (int, error) {
-	for i := start; i < len(raw); i++ {
-		switch raw[i] {
-		case '"':
-			return i, nil
-		case '\\':
-			end, err := validateJSONEscape(raw, i)
-			if err != nil {
-				return 0, err
-			}
-			i = end
-		default:
-			if raw[i] < 0x20 {
-				return 0, fmt.Errorf("decode json: invalid control character in string")
-			}
-		}
-	}
-	return 0, fmt.Errorf("decode json: unterminated string")
-}
-
-func validateJSONEscape(raw []byte, start int) (int, error) {
-	if start+1 >= len(raw) {
-		return 0, fmt.Errorf("decode json: unterminated escape sequence")
-	}
-	if raw[start+1] != 'u' {
-		switch raw[start+1] {
-		case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
-			return start + 1, nil
-		default:
-			return 0, fmt.Errorf("decode json: invalid escape sequence")
-		}
-	}
-	if start+6 > len(raw) {
-		return 0, fmt.Errorf("decode json: incomplete Unicode escape")
-	}
-	codeUnit, ok := parseJSONHex4(raw[start+2 : start+6])
-	if !ok {
-		return 0, fmt.Errorf("decode json: invalid Unicode escape")
-	}
-	if codeUnit >= 0xD800 && codeUnit <= 0xDBFF {
-		return validateJSONLowSurrogate(raw, start)
-	}
-	if codeUnit >= 0xDC00 && codeUnit <= 0xDFFF {
-		return 0, fmt.Errorf("decode json: low surrogate is not preceded by a high surrogate")
-	}
-	return start + 5, nil
-}
-
-func validateJSONLowSurrogate(raw []byte, highStart int) (int, error) {
-	lowStart := highStart + 6
-	if lowStart+6 > len(raw) || raw[lowStart] != '\\' || raw[lowStart+1] != 'u' {
-		return 0, fmt.Errorf("decode json: high surrogate is not followed by a low surrogate")
-	}
-	low, ok := parseJSONHex4(raw[lowStart+2 : lowStart+6])
-	if !ok || low < 0xDC00 || low > 0xDFFF {
-		return 0, fmt.Errorf("decode json: high surrogate is not followed by a low surrogate")
-	}
-	return lowStart + 5, nil
-}
-
-func parseJSONHex4(raw []byte) (uint16, bool) {
-	if len(raw) != 4 {
-		return 0, false
-	}
-	var value uint16
-	for _, digit := range raw {
-		value <<= 4
-		switch {
-		case digit >= '0' && digit <= '9':
-			value += uint16(digit - '0')
-		case digit >= 'a' && digit <= 'f':
-			value += uint16(digit-'a') + 10
-		case digit >= 'A' && digit <= 'F':
-			value += uint16(digit-'A') + 10
-		default:
-			return 0, false
-		}
-	}
-	return value, true
-}
-
-func inspectJSONValue(decoder *json.Decoder, depth int) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, ok := token.(json.Delim)
-	if !ok {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		if depth >= MaxCanonicalJSONDepth {
-			return fmt.Errorf("json nesting exceeds %d", MaxCanonicalJSONDepth)
-		}
-		return inspectJSONNames(decoder, depth+1)
-	case '[':
-		if depth >= MaxCanonicalJSONDepth {
-			return fmt.Errorf("json nesting exceeds %d", MaxCanonicalJSONDepth)
-		}
-		return inspectJSONArray(decoder, depth+1)
-	default:
-		return fmt.Errorf("unexpected delimiter %q", delimiter)
-	}
-}
-
-func inspectJSONNames(decoder *json.Decoder, depth int) error {
-	seen := make(map[string]struct{})
-	for decoder.More() {
-		nameToken, err := decoder.Token()
-		if err != nil {
-			return err
-		}
-		name, ok := nameToken.(string)
-		if !ok {
-			return fmt.Errorf("object field name is not a string")
-		}
-		if _, exists := seen[name]; exists {
-			return fmt.Errorf("duplicate object field %q", name)
-		}
-		seen[name] = struct{}{}
-		if err := inspectJSONValue(decoder, depth); err != nil {
-			return err
-		}
-	}
-	_, err := decoder.Token()
-	return err
-}
-
-func inspectJSONArray(decoder *json.Decoder, depth int) error {
-	for decoder.More() {
-		if err := inspectJSONValue(decoder, depth); err != nil {
-			return err
-		}
-	}
-	_, err := decoder.Token()
-	return err
-}
-
-func canonicalJSON(value any) ([]byte, error) {
-	if err := validateCanonicalJSONStrings(value); err != nil {
-		return nil, err
-	}
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-	return CanonicalizeJSON(encoded)
-}
-
-func SHA256Hex(payload []byte) string {
-	sum := sha256.Sum256(payload)
-	return hex.EncodeToString(sum[:])
 }
 
 func validateBoundedText(name, value string, maxLength int) error {

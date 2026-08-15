@@ -1,5 +1,6 @@
 import { textOf } from "./map-posts.mjs";
 
+/** @param {YouTubeJSFetchOptions} [options] */
 export async function fetchViewerFeed({ videoId, innertube } = {}) {
   const id = String(videoId ?? "").trim();
   if (id === "") {
@@ -15,6 +16,17 @@ export async function fetchViewerFeed({ videoId, innertube } = {}) {
 export function mapViewer(info, videoId) {
   const basic = info?.basic_info ?? info?.basicInfo ?? {};
   const streaming = info?.streaming_data ?? info?.streamingData ?? {};
+  const isLive = basic.is_live === true || basic.isLive === true;
+  if (!isLive) {
+    return {
+      video_id: textOf(basic.id || videoId).trim() || videoId,
+      viewer_count: null,
+      availability: "UNAVAILABLE",
+      page_count: 1,
+      exhausted: true,
+      continuity: "CONTIGUOUS",
+    };
+  }
   const raw =
     basic.view_count ??
     basic.viewCount ??

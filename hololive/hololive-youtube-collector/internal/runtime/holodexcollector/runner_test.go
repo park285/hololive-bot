@@ -41,7 +41,7 @@ func TestRunnerBuildsOneBatchFromLiveFixture(t *testing.T) {
 func TestRunnerSameSlotRetryKeepsViewerSampleIdentity(t *testing.T) {
 	t.Parallel()
 	input := holodexInput([]string{"UC_A", "UC_B"})
-	runner := NewRunner(&staticFetcher{body: testdata(t, "live.json")})
+	runner := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")})
 	first, err := runner.Collect(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := holodexInput([]string{"UC_A", "UC_B"})
-	runner := NewRunner(&staticFetcher{})
+	runner := NewLiveRunner(&staticFetcher{})
 	first, err := runner.buildBatch(input, parsed)
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 
 func TestRunnerDoesNotPublishOnTimeout(t *testing.T) {
 	t.Parallel()
-	output, err := NewRunner(&staticFetcher{err: collecterr.New(collecterr.Timeout, "timeout")}).Collect(
+	output, err := NewLiveRunner(&staticFetcher{err: collecterr.New(collecterr.Timeout, "timeout")}).Collect(
 		context.Background(), holodexInput([]string{"UC_A"}),
 	)
 	if err == nil || collecterr.Code(err) != collecterr.Timeout || len(output.Observations) != 0 {
@@ -142,7 +142,7 @@ func TestRunnerDoesNotPublishOnTimeout(t *testing.T) {
 
 func TestRunnerRejectsMalformedSchema(t *testing.T) {
 	t.Parallel()
-	_, err := NewRunner(&staticFetcher{body: []byte(`{"id":"x"}`)}).Collect(context.Background(), holodexInput([]string{"UC_A"}))
+	_, err := NewLiveRunner(&staticFetcher{body: []byte(`{"id":"x"}`)}).Collect(context.Background(), holodexInput([]string{"UC_A"}))
 	if err == nil || collecterr.Code(err) != collecterr.ParserDrift {
 		t.Fatalf("error = %v", err)
 	}
@@ -152,7 +152,7 @@ func TestRunnerDoesNotEmitViewerForChannelSubjects(t *testing.T) {
 	t.Parallel()
 	input := holodexInput([]string{"UC_A", "UC_B"})
 	input.EnabledSubjects[contract.KindViewerSample] = []string{"UC_A", "UC_B"}
-	output, err := NewRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(context.Background(), input)
+	output, err := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,9 +174,51 @@ func TestRunnerEmitsNothingForEmptyLiveArray(t *testing.T) {
 	}
 }
 
+func TestRunnersKeepCadenceKindsSeparate(t *testing.T) {
+	t.Parallel()
+	body := testdata(t, "live.json")
+	tests := []struct {
+		name      string
+		runner    *Runner
+		jobKind   string
+		wantKinds map[contract.ObservationKind]bool
+	}{
+		{
+			name: "live", runner: NewLiveRunner(&staticFetcher{body: body}), jobKind: "holodex_live",
+			wantKinds: map[contract.ObservationKind]bool{contract.KindLiveSnapshot: true, contract.KindViewerSample: true},
+		},
+		{
+			name: "metadata", runner: NewMetadataRunner(&staticFetcher{body: body}), jobKind: "holodex_metadata",
+			wantKinds: map[contract.ObservationKind]bool{contract.KindChannelStats: true, contract.KindChannelPhoto: true},
+		},
+		{
+			name: "schedule", runner: NewScheduleRunner(&staticFetcher{body: body}), jobKind: "holodex_schedule",
+			wantKinds: map[contract.ObservationKind]bool{contract.KindSchedule: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			input := holodexInputFor(tt.jobKind, []string{"UC_A", "UC_B"})
+			output, err := tt.runner.Collect(context.Background(), input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(output.Observations) == 0 {
+				t.Fatal("runner emitted no observations")
+			}
+			for _, envelope := range output.Observations {
+				if !tt.wantKinds[envelope.ObservationKind] {
+					t.Fatalf("%s emitted undeclared kind %s", tt.jobKind, envelope.ObservationKind)
+				}
+			}
+		})
+	}
+}
+
 func mustCollect(t *testing.T, body []byte, requested []string) collectutil.RunOutput {
 	t.Helper()
-	output, err := NewRunner(&staticFetcher{body: body}).Collect(context.Background(), holodexInput(requested))
+	output, err := NewLiveRunner(&staticFetcher{body: body}).Collect(context.Background(), holodexInput(requested))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,6 +258,10 @@ func hashes(output collectutil.RunOutput) string {
 }
 
 func holodexInput(requested []string) collectutil.RunInput {
+	return holodexInputFor("holodex_live", requested)
+}
+
+func holodexInputFor(jobKind string, requested []string) collectutil.RunInput {
 	enabled := map[contract.ObservationKind][]string{
 		contract.KindLiveSnapshot:   requested,
 		contract.KindChannelStats:   requested,
@@ -226,11 +272,11 @@ func holodexInput(requested []string) collectutil.RunInput {
 	}
 	return collectutil.RunInput{
 		Spec: joblease.JobSpec{
-			JobKey: "collector:holodex:global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
-			CollectionJobKind: "holodex_global", SubjectKey: "global:holodex_global", PollInterval: time.Minute,
+			JobKey: "collector:holodex:" + jobKind + ":global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
+			CollectionJobKind: jobKind, SubjectKey: "global:" + jobKind, PollInterval: time.Minute,
 		},
 		Lease: contract.LeaseProof{
-			JobKey: "collector:holodex:global", CollectionJobKind: "holodex_global",
+			JobKey: "collector:holodex:" + jobKind + ":global", CollectionJobKind: jobKind,
 			OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
 			ScheduledFor: time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC),
 		},
@@ -238,8 +284,7 @@ func holodexInput(requested []string) collectutil.RunInput {
 			contract.KindLiveSnapshot: 1, contract.KindViewerSample: 1, contract.KindChannelStats: 1,
 			contract.KindChannelProfile: 1, contract.KindChannelPhoto: 1, contract.KindSchedule: 1,
 		},
-		RequestedChannelIDs: requested,
-		EnabledSubjects:     enabled,
+		EnabledSubjects: enabled,
 	}
 }
 

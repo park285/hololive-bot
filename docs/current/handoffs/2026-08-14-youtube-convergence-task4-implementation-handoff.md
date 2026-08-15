@@ -70,7 +70,7 @@ Canonical source of truth는 두 번째 문서의 v2.1 contract입니다. 규범
   - Holodex는 channel roster를 viewer subject로 쓰면 sample을 만들지 않음
   - YouTube.js `ViewerRunner`는 channel subject를 video ID로 fetch하지 않음
 - `MaxPublishBatchSize`와 `MaxCheckpointCount`는 1024 (M1). Hololive 규모 361건은 한 batch
-- `holodex_global`은 kind별 poll interval이 달라도 `MIN(poll_interval)`로 acquire (live 2m / stats 6h 허용)
+- Holodex global work는 `holodex_live`, `holodex_schedule`, `holodex_metadata`로 나뉘며 각 lease의 emission cadence가 동일해야 합니다.
 - collector `syncCandidates`는 GLOBAL job을 먼저 enqueue하고 queue full에서 다른 runner를 중단하지 않음 (M4)
 - collector Compose는 `HOLODEX_API_KEY`/`HOLODEX_API_KEY_1` interpolation (M2). 값이 비면 collect-time fail-closed
 

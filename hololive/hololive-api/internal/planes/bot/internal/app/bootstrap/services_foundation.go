@@ -23,7 +23,7 @@ func InitScraperHolodexFoundation(
 
 	scraperProxyConfig := providersScraperProxyConfig(appConfig)
 
-	sharedRL, err := providers.ProvideYouTubeProducerRateLimiter(infra.Cache, logger)
+	sharedRL, err := providers.ProvideYouTubeRateLimiter(infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube producer rate limiter: %w", err)
 	}

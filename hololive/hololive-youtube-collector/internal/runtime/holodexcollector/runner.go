@@ -14,24 +14,50 @@ type Fetcher interface {
 }
 
 type Runner struct {
-	client Fetcher
+	client      Fetcher
+	jobKind     string
+	emissions   []contract.ObservationKind
+	targetKinds []contract.ObservationKind
+	rosterKinds []contract.ObservationKind
 }
 
-func NewRunner(client Fetcher) *Runner {
-	return &Runner{client: client}
+func NewLiveRunner(client Fetcher) *Runner {
+	return &Runner{
+		client:      client,
+		jobKind:     "holodex_live",
+		emissions:   []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample},
+		targetKinds: []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample},
+		rosterKinds: []contract.ObservationKind{contract.KindLiveSnapshot},
+	}
+}
+
+func NewMetadataRunner(client Fetcher) *Runner {
+	return &Runner{
+		client:      client,
+		jobKind:     "holodex_metadata",
+		emissions:   []contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
+		targetKinds: []contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
+		rosterKinds: []contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
+	}
+}
+
+func NewScheduleRunner(client Fetcher) *Runner {
+	return &Runner{
+		client:      client,
+		jobKind:     "holodex_schedule",
+		emissions:   []contract.ObservationKind{contract.KindSchedule},
+		targetKinds: []contract.ObservationKind{contract.KindSchedule, contract.KindLiveSnapshot},
+		rosterKinds: []contract.ObservationKind{contract.KindLiveSnapshot},
+	}
 }
 
 func (r *Runner) Provider() contract.Provider { return contract.ProviderHolodex }
-func (r *Runner) JobKind() string             { return "holodex_global" }
+func (r *Runner) JobKind() string             { return r.jobKind }
 func (r *Runner) Emissions() []contract.ObservationKind {
-	return []contract.ObservationKind{
-		contract.KindLiveSnapshot,
-		contract.KindViewerSample,
-		contract.KindChannelStats,
-		contract.KindChannelProfile,
-		contract.KindChannelPhoto,
-		contract.KindSchedule,
-	}
+	return append([]contract.ObservationKind(nil), r.emissions...)
+}
+func (r *Runner) TargetKinds() []contract.ObservationKind {
+	return append([]contract.ObservationKind(nil), r.targetKinds...)
 }
 
 func (r *Runner) Collect(ctx context.Context, input collectutil.RunInput) (collectutil.RunOutput, error) {
@@ -55,7 +81,7 @@ func (r *Runner) Collect(ctx context.Context, input collectutil.RunInput) (colle
 }
 
 func (r *Runner) buildBatch(input collectutil.RunInput, rows []parsedLive) ([]contract.Envelope, error) {
-	allowed := requestedSet(requestedIDs(input))
+	allowed := requestedSet(r.requestedIDs(input))
 	envelopes, err := r.channelEnvelopes(input, groupByRequestedChannel(rows, allowed))
 	if err != nil {
 		return nil, err
@@ -119,7 +145,7 @@ func (r *Runner) appendChannelKind(
 	payload any,
 	ok bool,
 ) ([]contract.Envelope, error) {
-	if !ok || !subjectAllowed(input, kind, channelID) {
+	if !r.emits(kind) || !ok || !subjectAllowed(input, kind, channelID) {
 		return envelopes, nil
 	}
 	envelope, err := r.envelope(input, kind, channelID, payload)
@@ -134,6 +160,9 @@ func (r *Runner) viewerEnvelopes(
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) ([]contract.Envelope, error) {
+	if !r.emits(contract.KindViewerSample) {
+		return nil, nil
+	}
 	windowStart := input.Lease.ScheduledFor.UTC()
 	windowSeconds := collectutil.SampleWindowSeconds(input.Spec.PollInterval)
 	envelopes := make([]contract.Envelope, 0)
@@ -159,7 +188,7 @@ func (r *Runner) scheduleEnvelope(
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) (*contract.Envelope, error) {
-	if !subjectAllowed(input, contract.KindSchedule, officialScheduleSubject) {
+	if !r.emits(contract.KindSchedule) || !subjectAllowed(input, contract.KindSchedule, officialScheduleSubject) {
 		return nil, nil
 	}
 	payload := schedulePayload(rows, allowed)
@@ -171,6 +200,23 @@ func (r *Runner) scheduleEnvelope(
 		return nil, err
 	}
 	return &envelope, nil
+}
+
+func (r *Runner) requestedIDs(input collectutil.RunInput) []string {
+	var ids []string
+	for _, kind := range r.rosterKinds {
+		ids = append(ids, input.EnabledSubjects[kind]...)
+	}
+	return collectutil.UniqueSorted(ids)
+}
+
+func (r *Runner) emits(kind contract.ObservationKind) bool {
+	for _, emission := range r.emissions {
+		if emission == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runner) envelope(input collectutil.RunInput, kind contract.ObservationKind, subject string, payload any) (contract.Envelope, error) {

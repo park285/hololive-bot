@@ -86,30 +86,41 @@ func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs [
 	}
 	defer rows.Close()
 	for rows.Next() {
-		head, pending, err := scanLiveHead(rows)
-		if err != nil {
+		if err := applyLiveHeadRow(rows, state); err != nil {
 			return err
-		}
-		existing := state.Sessions[head.VideoID]
-		existing.VideoID = head.VideoID
-		if existing.Status == "" {
-			existing.Status = head.Status
-		}
-		existing.Clock = head.Clock
-		existing.EndReason = head.EndReason
-		existing.LastAbsenceScheduledFor = head.LastAbsenceScheduledFor
-		if existing.Clock.ConsecutiveAbsenceSlots == 1 {
-			existing.FirstAbsenceScheduledFor = existing.LastAbsenceScheduledFor
-		}
-		if existing.Clock.ConsecutiveAbsenceSlots >= 2 {
-			existing.SecondAbsenceScheduledFor = existing.LastAbsenceScheduledFor
-		}
-		state.Sessions[head.VideoID] = existing
-		if pending != nil {
-			state.PendingEnds[head.VideoID] = *pending
 		}
 	}
 	return rows.Err()
+}
+
+func applyLiveHeadRow(rows pgx.Rows, state *live.State) error {
+	head, pending, err := scanLiveHead(rows)
+	if err != nil {
+		return err
+	}
+	existing := state.Sessions[head.VideoID]
+	existing.VideoID = head.VideoID
+	if existing.Status == "" {
+		existing.Status = head.Status
+	}
+	existing.Clock = head.Clock
+	existing.EndReason = head.EndReason
+	existing.LastAbsenceScheduledFor = head.LastAbsenceScheduledFor
+	applyAbsenceSlotHints(&existing)
+	state.Sessions[head.VideoID] = existing
+	if pending != nil {
+		state.PendingEnds[head.VideoID] = *pending
+	}
+	return nil
+}
+
+func applyAbsenceSlotHints(existing *live.SessionState) {
+	if existing.Clock.ConsecutiveAbsenceSlots == 1 {
+		existing.FirstAbsenceScheduledFor = existing.LastAbsenceScheduledFor
+	}
+	if existing.Clock.ConsecutiveAbsenceSlots >= 2 {
+		existing.SecondAbsenceScheduledFor = existing.LastAbsenceScheduledFor
+	}
 }
 
 func scanLiveHead(rows pgx.Rows) (live.SessionState, *live.PendingEnd, error) {

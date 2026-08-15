@@ -37,7 +37,7 @@ func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
 		t.Fatalf("seed session: %v", err)
 	}
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, "UC_TEST", "youtubejs_channel")
+	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, "UC_TEST", "youtubejs_channel_live")
 	consumer := newLiveTestConsumer(pool, repo, 0)
 	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, proof, liveSession("vid-new", "LIVE")))); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -254,7 +254,7 @@ func startLivePersistGrace(t *testing.T, grace time.Duration) (*pgxpool.Pool, *R
 	t.Helper()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, "UC_TEST", "youtubejs_channel")
+	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, "UC_TEST", "youtubejs_channel_live")
 	return pool, repo, newLiveTestConsumer(pool, repo, grace), proof
 }
 

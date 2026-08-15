@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "$REPO_ROOT/.." && pwd)}"
@@ -185,6 +185,7 @@ AP_COMPOSE_LEGACY_FILE="$(basename "$AP_COMPOSE_FILE")"
 change_id="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="backups/$AP_BACKUP_PREFIX-$change_id"
 rollback_image_tag="hololive-youtube-collector:rollback-$change_id"
+producer_state_file="$backup_dir/retired-producer-runtime.state"
 
 remote "set -euo pipefail
 cd ~/hololive-bot
@@ -255,6 +256,36 @@ change_started_at="$(
 
 remote "set -euo pipefail
 cd ~/hololive-bot
+. scripts/deploy/lib/retired-producer-cutover.sh
+write_retired_producer_runtime_state > '$producer_state_file'
+validate_retired_producer_runtime_state '$producer_state_file'"
+
+cutover_armed=true
+restore_retired_producer_after_failed_cutover() {
+  local status="$?"
+  local restore_status=0
+  trap - ERR
+  if [[ "${cutover_armed:-false}" == "true" ]]; then
+    set +e
+    remote "set -euo pipefail
+cd ~/hololive-bot
+. scripts/deploy/lib/retired-producer-cutover.sh
+stop_named_containers_and_require_inactive $containers_list
+restore_retired_producer_runtime '$producer_state_file'"
+    restore_status="$?"
+    set -e
+    if [[ "$restore_status" -ne 0 ]]; then
+      echo "AP collector cutover failed and the recorded producer runtime could not be restored" >&2
+    fi
+  fi
+  exit "$status"
+}
+trap restore_retired_producer_after_failed_cutover ERR
+
+remote "set -euo pipefail
+cd ~/hololive-bot
+. scripts/deploy/lib/retired-producer-cutover.sh
+stop_retired_producer_runtime
 sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
 sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
 echo change_started_at='$change_started_at'"
@@ -295,3 +326,5 @@ done"
 "$REPO_ROOT/scripts/logs/ap-smoke.sh" "$AP_NAME"
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"
 "$REPO_ROOT/scripts/logs/ap-status.sh" "$AP_NAME"
+cutover_armed=false
+trap - ERR

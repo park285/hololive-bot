@@ -83,9 +83,15 @@ func TestIrisMessageSenderPreservesKaringClientRequestID(t *testing.T) {
 	assert.Equal(t, clientRequestID, *client.karingRequests[0].ClientRequestID)
 }
 
+type staticRooms map[string]bool
+
+func (s staticRooms) OpenChat(_ context.Context, roomID string) bool {
+	return s[roomID]
+}
+
 func TestIrisMessageSenderUsesMarkdownLaneWhenEnabled(t *testing.T) {
 	client := &irisSenderTestClient{}
-	sender := NewIrisMessageSender(client, WithMarkdownReplies(true))
+	sender := NewIrisMessageSender(client, WithMarkdownReplies(true), WithRoomChat(staticRooms{"room-1": true}))
 
 	require.NoError(t, sender.SendMessage(t.Context(), "room-1", "**hello**"))
 
@@ -96,16 +102,27 @@ func TestIrisMessageSenderUsesMarkdownLaneWhenEnabled(t *testing.T) {
 	assert.Zero(t, client.markdownCalls[0].opts)
 }
 
+func TestIrisMessageSenderUsesPlainLaneForRegularChat(t *testing.T) {
+	client := &irisSenderTestClient{}
+	sender := NewIrisMessageSender(client, WithMarkdownReplies(true), WithRoomChat(staticRooms{"room-1": false}))
+
+	require.NoError(t, sender.SendMessage(t.Context(), "room-1", "## **hello**"))
+
+	assert.Empty(t, client.markdownCalls)
+	require.Len(t, client.textCalls, 1)
+	assert.Equal(t, "【𝗵𝗲𝗹𝗹𝗼】", client.textCalls[0].message)
+}
+
 func TestIrisMessageSenderUsesTextLaneWhenDisabled(t *testing.T) {
 	client := &irisSenderTestClient{}
 	sender := NewIrisMessageSender(client, WithMarkdownReplies(false))
 
-	require.NoError(t, sender.SendMessage(t.Context(), "room-1", "hello"))
+	require.NoError(t, sender.SendMessage(t.Context(), "room-1", "**hello**"))
 
 	assert.Empty(t, client.markdownCalls)
 	require.Len(t, client.textCalls, 1)
 	assert.Equal(t, "room-1", client.textCalls[0].roomID)
-	assert.Equal(t, "hello", client.textCalls[0].message)
+	assert.Equal(t, "𝗵𝗲𝗹𝗹𝗼", client.textCalls[0].message)
 	assert.Zero(t, client.textCalls[0].opts)
 }
 
@@ -121,7 +138,7 @@ func TestIrisMessageSenderDefaultsToTextLane(t *testing.T) {
 
 func TestIrisMessageSenderMarkdownLanePropagatesClientRequestID(t *testing.T) {
 	client := &irisSenderTestClient{}
-	sender := NewIrisMessageSender(client, WithMarkdownReplies(true))
+	sender := NewIrisMessageSender(client, WithMarkdownReplies(true), WithRoomChat(staticRooms{"room-1": true}))
 
 	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), "room-1", "**hello**", "req-1"))
 
@@ -145,7 +162,7 @@ func TestIrisMessageSenderTextLanePropagatesClientRequestID(t *testing.T) {
 
 func TestIrisMessageSenderMarkdownLaneWrapsError(t *testing.T) {
 	client := &irisSenderTestClient{markdownErr: fmt.Errorf("boom")}
-	sender := NewIrisMessageSender(client, WithMarkdownReplies(true))
+	sender := NewIrisMessageSender(client, WithMarkdownReplies(true), WithRoomChat(staticRooms{"room-1": true}))
 
 	err := sender.SendMessageWithClientRequestID(t.Context(), "room-1", "**hello**", "req-1")
 

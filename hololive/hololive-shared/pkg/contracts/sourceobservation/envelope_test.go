@@ -712,7 +712,7 @@ func newViewerEnvelope(t *testing.T, window time.Time, count int64) Envelope {
 		ScheduledFor: window, ObservedAt: window.Add(time.Second),
 		Completeness: CompletenessComplete, Continuity: ContinuityNotApplicable,
 		Payload: payload, CollectorInstance: "collector-a",
-		Lease: LeaseProof{JobKey: "collector:holodex:global", CollectionJobKind: "holodex_global",
+		Lease: LeaseProof{JobKey: "collector:holodex:holodex_live:global", CollectionJobKind: "holodex_live",
 			OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1, ScheduledFor: window},
 	}
 }

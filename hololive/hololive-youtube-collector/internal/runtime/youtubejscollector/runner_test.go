@@ -113,20 +113,29 @@ func TestContentRunnerFetchesAndEmitsOnlyEnabledKind(t *testing.T) {
 	}
 }
 
-func TestChannelRunnerEmitsFixtureKinds(t *testing.T) {
+func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 	t.Parallel()
 	var result youtubejs.ChannelResult
 	loadJSON(t, "channel.json", &result)
-	runner := NewChannelRunner(&channelFake{result: result})
-	output, err := runner.Collect(context.Background(), youtubeInput(
-		"UC_TEST", "youtubejs_channel",
-		contract.KindLiveSnapshot, contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+	fake := &channelFake{result: result}
+	live, err := NewChannelLiveRunner(fake).Collect(context.Background(), youtubeInput(
+		"UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot,
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(output.Observations) != 4 {
-		t.Fatalf("observations = %d", len(output.Observations))
+	metadata, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(
+		"UC_TEST", "youtubejs_channel_metadata",
+		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(live.Observations) != 1 || live.Observations[0].ObservationKind != contract.KindLiveSnapshot {
+		t.Fatalf("live observations = %#v", live.Observations)
+	}
+	if len(metadata.Observations) != 3 {
+		t.Fatalf("metadata observations = %#v", metadata.Observations)
 	}
 }
 
@@ -135,9 +144,9 @@ func TestChannelPhotoDoesNotFetchMediaOrSynthesizeFingerprint(t *testing.T) {
 	var result youtubejs.ChannelResult
 	loadJSON(t, "channel.json", &result)
 	fake := &channelFake{result: result}
-	output, err := NewChannelRunner(fake).Collect(context.Background(), youtubeInput(
-		"UC_TEST", "youtubejs_channel",
-		contract.KindLiveSnapshot, contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+	output, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(
+		"UC_TEST", "youtubejs_channel_metadata",
+		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -175,16 +184,15 @@ func TestChannelRunnerEmitsOnlyEnabledKinds(t *testing.T) {
 	loadJSON(t, "channel.json", &result)
 	fake := &channelFake{result: result}
 	input := youtubeInput(
-		"UC_TEST", "youtubejs_channel",
-		contract.KindLiveSnapshot, contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+		"UC_TEST", "youtubejs_channel_metadata",
+		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	)
 	input.EnabledSubjects = map[contract.ObservationKind][]string{
-		contract.KindLiveSnapshot:   {},
 		contract.KindChannelStats:   {"UC_TEST"},
 		contract.KindChannelProfile: {},
 		contract.KindChannelPhoto:   {},
 	}
-	output, err := NewChannelRunner(fake).Collect(context.Background(), input)
+	output, err := NewChannelMetadataRunner(fake).Collect(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}

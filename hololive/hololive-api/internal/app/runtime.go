@@ -40,70 +40,84 @@ func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, lo
 	if logger == nil {
 		return nil, errors.New("logger must not be nil")
 	}
+	planes, err := buildAPIPlanes(ctx, appConfig, logger)
+	if err != nil {
+		return nil, err
+	}
+	return assembleAPIRuntime(appConfig, logger, planes), nil
+}
 
+type apiPlanes struct {
+	bot     *botruntime2.BotRuntime
+	admin   *app.AdminAPIRuntime
+	llm     *llmruntime.LLMSchedulerRuntime
+	youtube *youtuberuntime.Runtime
+}
+
+func buildAPIPlanes(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (apiPlanes, error) {
 	llm, err := llmruntime.BuildLLMSchedulerRuntime(ctx, appConfig.LLM, logger.With(slog.String("plane", "llm")))
 	if err != nil {
-		return nil, fmt.Errorf("build llm plane: %w", err)
+		return apiPlanes{}, fmt.Errorf("build llm plane: %w", err)
 	}
-
 	admin, err := app.BuildAdminAPIRuntime(ctx, appConfig.Admin, logger.With(slog.String("plane", "admin")))
 	if err != nil {
 		llm.Close()
-		return nil, fmt.Errorf("build admin plane: %w", err)
+		return apiPlanes{}, fmt.Errorf("build admin plane: %w", err)
 	}
-
 	bot, err := botruntime2.BuildRuntime(ctx, appConfig.Bot, logger.With(slog.String("plane", "bot")))
 	if err != nil {
 		admin.Close()
 		llm.Close()
-		return nil, fmt.Errorf("build bot plane: %w", err)
+		return apiPlanes{}, fmt.Errorf("build bot plane: %w", err)
 	}
-
-	var youtube *youtuberuntime.Runtime
-	if appConfig.YouTube.Enabled {
-		youtube, err = youtuberuntime.Build(ctx, appConfig.YouTube, appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
-		if err != nil {
-			bot.Close()
-			admin.Close()
-			llm.Close()
-			return nil, fmt.Errorf("build youtube plane: %w", err)
-		}
+	youtube, err := buildYouTubePlane(ctx, appConfig, logger)
+	if err != nil {
+		bot.Close()
+		admin.Close()
+		llm.Close()
+		return apiPlanes{}, err
 	}
+	return apiPlanes{bot: bot, admin: admin, llm: llm, youtube: youtube}, nil
+}
 
+func buildYouTubePlane(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (*youtuberuntime.Runtime, error) {
+	if !appConfig.YouTube.Enabled {
+		return nil, nil
+	}
+	youtube, err := youtuberuntime.Build(ctx, appConfig.YouTube, appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
+	if err != nil {
+		return nil, fmt.Errorf("build youtube plane: %w", err)
+	}
+	return youtube, nil
+}
+
+func assembleAPIRuntime(appConfig *settings.HololiveAPIConfig, logger *slog.Logger, planes apiPlanes) *Runtime {
 	runtime := &Runtime{
 		Config:  appConfig,
 		Logger:  logger,
-		Bot:     bot,
-		Admin:   admin,
-		LLM:     llm,
-		YouTube: youtube,
+		Bot:     planes.bot,
+		Admin:   planes.admin,
+		LLM:     planes.llm,
+		YouTube: planes.youtube,
 	}
+	runtime.group = applifecycle.NewGroupRuntime(logger, apiPlaneComponents(planes)...)
+	return runtime
+}
+
+func apiPlaneComponents(planes apiPlanes) []applifecycle.GroupComponent {
 	components := []applifecycle.GroupComponent{
-		{
-			Name:     "llm",
-			Start:    llm.Start,
-			Shutdown: llm.Shutdown,
-		},
-		{
-			Name:     "admin",
-			Start:    admin.Start,
-			Shutdown: admin.Shutdown,
-		},
-		{
-			Name:     "bot",
-			Start:    bot.Start,
-			Shutdown: bot.Shutdown,
-		},
+		{Name: "llm", Start: planes.llm.Start, Shutdown: planes.llm.Shutdown},
+		{Name: "admin", Start: planes.admin.Start, Shutdown: planes.admin.Shutdown},
+		{Name: "bot", Start: planes.bot.Start, Shutdown: planes.bot.Shutdown},
 	}
-	if youtube != nil {
-		components = append([]applifecycle.GroupComponent{{
-			Name:     "youtube",
-			Start:    youtube.Start,
-			Shutdown: youtube.Shutdown,
-		}}, components...)
+	if planes.youtube == nil {
+		return components
 	}
-	runtime.group = applifecycle.NewGroupRuntime(logger, components...)
-	return runtime, nil
+	return append([]applifecycle.GroupComponent{{
+		Name:     "youtube",
+		Start:    planes.youtube.Start,
+		Shutdown: planes.youtube.Shutdown,
+	}}, components...)
 }
 
 func (r *Runtime) Run() error {

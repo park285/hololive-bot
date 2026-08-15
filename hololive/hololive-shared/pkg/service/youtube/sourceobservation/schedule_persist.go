@@ -33,18 +33,20 @@ func loadScheduleState(ctx context.Context, tx dbx.Tx, groupKey string, items []
 	if err := rows.Err(); err != nil {
 		return schedule.State{}, err
 	}
-	videoIDs := make([]string, 0, len(items))
-	for i := range items {
-		if items[i].VideoID != "" {
-			videoIDs = append(videoIDs, items[i].VideoID)
-		}
+	if err := loadScheduleSessions(ctx, tx, &state, items); err != nil {
+		return schedule.State{}, err
 	}
+	return state, nil
+}
+
+func loadScheduleSessions(ctx context.Context, tx dbx.Tx, state *schedule.State, items []schedule.Item) error {
+	videoIDs := scheduleVideoIDs(items)
 	if len(videoIDs) == 0 {
-		return state, nil
+		return nil
 	}
 	liveState, err := loadLiveState(ctx, tx, nil, videoIDs)
 	if err != nil {
-		return schedule.State{}, err
+		return err
 	}
 	for videoID, session := range liveState.Sessions {
 		state.Sessions[videoID] = schedule.Session{
@@ -56,7 +58,17 @@ func loadScheduleState(ctx context.Context, tx dbx.Tx, groupKey string, items []
 			LastSeenAt:         session.LastSeenAt,
 		}
 	}
-	return state, nil
+	return nil
+}
+
+func scheduleVideoIDs(items []schedule.Item) []string {
+	videoIDs := make([]string, 0, len(items))
+	for i := range items {
+		if items[i].VideoID != "" {
+			videoIDs = append(videoIDs, items[i].VideoID)
+		}
+	}
+	return videoIDs
 }
 
 func scanScheduleItem(rows pgx.Rows) (schedule.Item, error) {

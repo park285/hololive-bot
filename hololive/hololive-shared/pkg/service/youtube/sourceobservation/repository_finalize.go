@@ -73,84 +73,126 @@ func (r *Repository) finalizeTx(
 	if err != nil {
 		return ReconcileResult{}, err
 	}
-	if !r.supported.Supports(observation.ContractVersion()) {
-		if err := deadLetterTx(ctx, tx, DeadLetterInput{
-			ObservationID: observation.ID,
-			LeaseToken:    observation.LeaseToken,
-			ErrorCode:     "unsupported_contract",
-			ErrorDetail: boundedErrorDetail(fmt.Sprintf(
-				"provider=%s kind=%s schema=%d generation=%d",
-				observation.Provider,
-				observation.ObservationKind,
-				observation.SchemaVersion,
-				observation.ContractGeneration,
-			)),
-		}); err != nil {
-			return ReconcileResult{}, err
-		}
-		return ReconcileResult{
-			Unsupported:         true,
-			EffectiveAt:         observation.EffectiveAt,
-			SourceEventFallback: observation.SourceEventFallback,
-		}, nil
-	}
-	if _, err := observation.Envelope().ValidateAndCanonicalPayload(); err != nil {
-		if err := deadLetterTx(ctx, tx, DeadLetterInput{
-			ObservationID: observation.ID,
-			LeaseToken:    observation.LeaseToken,
-			ErrorCode:     "invalid_payload",
-			ErrorDetail:   boundedErrorDetail(err.Error()),
-		}); err != nil {
-			return ReconcileResult{}, err
-		}
-		return ReconcileResult{EffectiveAt: observation.EffectiveAt, SourceEventFallback: observation.SourceEventFallback}, nil
+	if rejected, result, err := rejectFinalizeObservation(ctx, tx, r.supported, observation); rejected {
+		return result, err
 	}
 	result, err := reconcile(ctx, tx, observation)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("finalize source observation: apply canonical domain write: %w", err)
 	}
-	if len(result.Applications) > 1000 {
-		return ReconcileResult{}, fmt.Errorf("finalize source observation: application count exceeds 1000")
+	if err := writeFinalizeApplications(ctx, tx, observation, result.Applications); err != nil {
+		return ReconcileResult{}, err
 	}
-	for i := range result.Applications {
-		application := result.Applications[i]
-		if err := validateText("application entity kind", application.EntityKind, 64); err != nil {
-			return ReconcileResult{}, fmt.Errorf("finalize source observation: application %d: %w", i, err)
+	if err := completeFinalizeObservation(ctx, tx, claim, observation); err != nil {
+		return ReconcileResult{}, err
+	}
+	result.EffectiveAt = observation.EffectiveAt
+	result.SourceEventFallback = observation.SourceEventFallback
+	return result, nil
+}
+
+func rejectFinalizeObservation(
+	ctx context.Context,
+	tx dbx.Tx,
+	supported SupportedContractSet,
+	observation Observation,
+) (bool, ReconcileResult, error) {
+	if !supported.Supports(observation.ContractVersion()) {
+		if err := deadLetterUnsupported(ctx, tx, observation); err != nil {
+			return true, ReconcileResult{}, err
 		}
-		if err := validateText("application entity key", application.EntityKey, 256); err != nil {
-			return ReconcileResult{}, fmt.Errorf("finalize source observation: application %d: %w", i, err)
+		return true, unsupportedFinalizeResult(observation), nil
+	}
+	if _, err := observation.Envelope().ValidateAndCanonicalPayload(); err != nil {
+		if dlErr := deadLetterTx(ctx, tx, DeadLetterInput{
+			ObservationID: observation.ID,
+			LeaseToken:    observation.LeaseToken,
+			ErrorCode:     "invalid_payload",
+			ErrorDetail:   boundedErrorDetail(err.Error()),
+		}); dlErr != nil {
+			return true, ReconcileResult{}, dlErr
 		}
-		if err := validateText("application decision", application.Decision, 128); err != nil {
-			return ReconcileResult{}, fmt.Errorf("finalize source observation: application %d: %w", i, err)
-		}
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_application_insert_0014_14.sql"),
-			observation.ID,
+		return true, ReconcileResult{EffectiveAt: observation.EffectiveAt, SourceEventFallback: observation.SourceEventFallback}, nil
+	}
+	return false, ReconcileResult{}, nil
+}
+
+func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation Observation) error {
+	return deadLetterTx(ctx, tx, DeadLetterInput{
+		ObservationID: observation.ID,
+		LeaseToken:    observation.LeaseToken,
+		ErrorCode:     "unsupported_contract",
+		ErrorDetail: boundedErrorDetail(fmt.Sprintf(
+			"provider=%s kind=%s schema=%d generation=%d",
 			observation.Provider,
 			observation.ObservationKind,
-			observation.SubjectKey,
-			observation.EvidenceSHA256,
-			application.EntityKind,
-			application.EntityKey,
-			application.Decision,
-			observation.EffectiveAt,
-		); err != nil {
-			return ReconcileResult{}, fmt.Errorf("finalize source observation: insert application audit: %w", err)
+			observation.SchemaVersion,
+			observation.ContractGeneration,
+		)),
+	})
+}
+
+func unsupportedFinalizeResult(observation Observation) ReconcileResult {
+	return ReconcileResult{
+		Unsupported:         true,
+		EffectiveAt:         observation.EffectiveAt,
+		SourceEventFallback: observation.SourceEventFallback,
+	}
+}
+
+func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation Observation, applications []Application) error {
+	if len(applications) > 1000 {
+		return fmt.Errorf("finalize source observation: application count exceeds 1000")
+	}
+	for i := range applications {
+		if err := writeFinalizeApplication(ctx, tx, observation, i, applications[i]); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func writeFinalizeApplication(ctx context.Context, tx dbx.Tx, observation Observation, index int, application Application) error {
+	if err := validateText("application entity kind", application.EntityKind, 64); err != nil {
+		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
+	}
+	if err := validateText("application entity key", application.EntityKey, 256); err != nil {
+		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
+	}
+	if err := validateText("application decision", application.Decision, 128); err != nil {
+		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
+	}
+	if _, err := tx.Exec(
+		ctx,
+		mustSQL("repository_application_insert_0014_14.sql"),
+		observation.ID,
+		observation.Provider,
+		observation.ObservationKind,
+		observation.SubjectKey,
+		observation.EvidenceSHA256,
+		application.EntityKind,
+		application.EntityKey,
+		application.Decision,
+		observation.EffectiveAt,
+	); err != nil {
+		return fmt.Errorf("finalize source observation: insert application audit: %w", err)
+	}
+	return nil
+}
+
+func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, observation Observation) error {
 	var observationID int64
-	err = tx.QueryRow(
+	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_complete_0015_15.sql"),
 		observation.ID,
 		observation.LeaseToken,
 	).Scan(&observationID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ReconcileResult{}, ErrClaimLost
+		return ErrClaimLost
 	}
 	if err != nil {
-		return ReconcileResult{}, fmt.Errorf("finalize source observation: complete queue item: %w", err)
+		return fmt.Errorf("finalize source observation: complete queue item: %w", err)
 	}
 	if _, err := tx.Exec(
 		ctx,
@@ -160,11 +202,9 @@ func (r *Repository) finalizeTx(
 		observation.ID,
 		observation.EffectiveAt,
 	); err != nil {
-		return ReconcileResult{}, fmt.Errorf("finalize source observation: update consumer offset: %w", err)
+		return fmt.Errorf("finalize source observation: update consumer offset: %w", err)
 	}
-	result.EffectiveAt = observation.EffectiveAt
-	result.SourceEventFallback = observation.SourceEventFallback
-	return result, nil
+	return nil
 }
 
 func lockClaim(ctx context.Context, tx dbx.Tx, claim Claim) (Observation, error) {

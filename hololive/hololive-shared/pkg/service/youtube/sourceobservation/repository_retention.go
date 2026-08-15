@@ -23,6 +23,7 @@ type RetentionResult struct {
 	Table      string
 	Deleted    int64
 	BacklogAge time.Duration
+	ByTable    []RetentionResult
 }
 
 func (c RetentionConfig) Validate() error {
@@ -32,7 +33,11 @@ func (c RetentionConfig) Validate() error {
 	if c.QueueProcessedAge < 0 || c.QueueDLQAge < 0 || c.CollisionAge < 0 || c.ReplayAuditAge < 0 {
 		return fmt.Errorf("retention ages must not be negative")
 	}
-	for kind, age := range c.EvidenceAgeByKind {
+	return validateEvidenceAges(c.EvidenceAgeByKind)
+}
+
+func validateEvidenceAges(ages map[contract.ObservationKind]time.Duration) error {
+	for kind, age := range ages {
 		if !kind.Valid() {
 			return fmt.Errorf("retention evidence kind %q is invalid", kind)
 		}
@@ -64,7 +69,15 @@ func (r *Repository) ListRetentionCandidates(
 		return nil, fmt.Errorf("list source observation retention candidates: %w", err)
 	}
 	defer rows.Close()
-	result := make([]int64, 0, query.Limit)
+	return scanRetentionIDs(rows, query.Limit)
+}
+
+func scanRetentionIDs(rows interface {
+	Next() bool
+	Scan(dest ...any) error
+	Err() error
+}, limit int) ([]int64, error) {
+	result := make([]int64, 0, limit)
 	for rows.Next() {
 		var observationID int64
 		if err := rows.Scan(&observationID); err != nil {
@@ -135,7 +148,8 @@ type retentionStep struct {
 	run   func() (int64, error)
 }
 
-func (r *Repository) deleteFirstRetentionBatch(batchSize int, steps []retentionStep) (RetentionResult, error) {
+func (r *Repository) deleteFirstRetentionBatch(_ int, steps []retentionStep) (RetentionResult, error) {
+	var combined RetentionResult
 	for _, step := range steps {
 		deleted, err := step.run()
 		if err != nil {
@@ -144,13 +158,13 @@ func (r *Repository) deleteFirstRetentionBatch(batchSize int, steps []retentionS
 		if deleted == 0 {
 			continue
 		}
-		result := RetentionResult{Table: step.table, Deleted: deleted}
-		if deleted == int64(batchSize) {
-			result.BacklogAge = step.age
+		combined.Deleted += deleted
+		combined.ByTable = append(combined.ByTable, RetentionResult{Table: step.table, Deleted: deleted})
+		if combined.Table == "" {
+			combined.Table = step.table
 		}
-		return result, nil
 	}
-	return RetentionResult{}, nil
+	return combined, nil
 }
 
 func (r *Repository) deleteQueueBatch(ctx context.Context, cfg RetentionConfig, now time.Time) (int64, error) {

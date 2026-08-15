@@ -50,7 +50,7 @@ func TestChannelStatsConsumerHiddenCountRemainsNil(t *testing.T) {
 func TestChannelStatsConsumerEqualTimeConflictDoesNotOverwrite(t *testing.T) {
 	pool, repo, consumer, proof := startChannelPersist(t, contract.KindChannelStats)
 	ctx := context.Background()
-	alt := seedAdditionalLease(t, pool, proof, contract.ProviderHolodex, contract.KindChannelStats, "UC_TEST", "holodex_global")
+	alt := seedAdditionalLease(t, pool, proof, contract.ProviderHolodex, contract.KindChannelStats, "UC_TEST", "holodex_metadata")
 	publishConsumeStats(t, ctx, pool, repo, consumer, proof, contract.ProviderYouTubeJS, 10, 20, 3)
 	publishConsumeStats(t, ctx, pool, repo, consumer, alt, contract.ProviderHolodex, 99, 20, 3)
 	assertTableCount(t, pool, "youtube_channel_stats_snapshots", 0)
@@ -200,7 +200,7 @@ func seedAdditionalLease(
 		t.Fatalf("seed additional target: %v", err)
 	}
 	jobClass := "SUBJECT"
-	if jobKind == "holodex_global" || jobKind == "official_schedule" {
+	if jobKind == "holodex_metadata" || jobKind == "official_schedule" {
 		jobClass = "GLOBAL"
 	}
 	if _, err := pool.Exec(context.Background(), `
@@ -229,7 +229,7 @@ func startChannelPersistPolicy(
 	t.Helper()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, kind, "UC_TEST", "youtubejs_channel")
+	proof := seedPublishLease(t, pool, contract.ProviderYouTubeJS, kind, "UC_TEST", "youtubejs_channel_metadata")
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0).
 		WithChannelPolicy(policy)
 	return pool, repo, consumer, proof
@@ -390,9 +390,9 @@ func statsEnvelope(t *testing.T, proof contract.LeaseProof, provider contract.Pr
 
 func jobKindFor(provider contract.Provider) string {
 	if provider == contract.ProviderHolodex {
-		return "holodex_global"
+		return "holodex_metadata"
 	}
-	return "youtubejs_channel"
+	return "youtubejs_channel_metadata"
 }
 
 func present(value string) contract.FieldValue[string] {

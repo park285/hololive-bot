@@ -27,31 +27,31 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-func TestProvideYouTubeProducerRateLimiter_DisabledDistributed_AllowsNilCache(t *testing.T) {
+func TestProvideYouTubeRateLimiter_DisabledDistributed_AllowsNilCache(t *testing.T) {
 	ytCfg := settings.DefaultYouTubeOperationalConfig()
-	ytCfg.ProducerDistributedRateLimit.Enabled = false
+	ytCfg.DistributedRateLimit.Enabled = false
 
-	limiter, err := ProvideYouTubeProducerRateLimiterWithConfig(&ytCfg, nil, nil)
+	limiter, err := ProvideYouTubeRateLimiterWithConfig(&ytCfg, nil, nil)
 	if err != nil {
-		t.Fatalf("ProvideYouTubeProducerRateLimiterWithConfig() error = %v, want nil", err)
+		t.Fatalf("ProvideYouTubeRateLimiterWithConfig() error = %v, want nil", err)
 	}
 	if limiter == nil {
-		t.Fatal("ProvideYouTubeProducerRateLimiterWithConfig() limiter is nil")
+		t.Fatal("ProvideYouTubeRateLimiterWithConfig() limiter is nil")
 	}
 }
 
-func TestProvideYouTubeProducerRateLimiter_EnabledDistributed_RequiresCache(t *testing.T) {
+func TestProvideYouTubeRateLimiter_EnabledDistributed_RequiresCache(t *testing.T) {
 	ytCfg := settings.DefaultYouTubeOperationalConfig()
-	ytCfg.ProducerDistributedRateLimit.Enabled = true
+	ytCfg.DistributedRateLimit.Enabled = true
 
-	limiter, err := ProvideYouTubeProducerRateLimiterWithConfig(&ytCfg, nil, nil)
+	limiter, err := ProvideYouTubeRateLimiterWithConfig(&ytCfg, nil, nil)
 	if err == nil {
-		t.Fatal("ProvideYouTubeProducerRateLimiterWithConfig() expected error, got nil")
+		t.Fatal("ProvideYouTubeRateLimiterWithConfig() expected error, got nil")
 	}
 	if limiter != nil {
-		t.Fatal("ProvideYouTubeProducerRateLimiterWithConfig() limiter must be nil on error")
+		t.Fatal("ProvideYouTubeRateLimiterWithConfig() limiter must be nil on error")
 	}
-	if !strings.Contains(err.Error(), "initialize youtube producer distributed rate limiter") {
-		t.Fatalf("ProvideYouTubeProducerRateLimiterWithConfig() error = %q, want contains %q", err.Error(), "initialize youtube producer distributed rate limiter")
+	if !strings.Contains(err.Error(), "initialize youtube distributed rate limiter") {
+		t.Fatalf("ProvideYouTubeRateLimiterWithConfig() error = %q, want contains %q", err.Error(), "initialize youtube distributed rate limiter")
 	}
 }

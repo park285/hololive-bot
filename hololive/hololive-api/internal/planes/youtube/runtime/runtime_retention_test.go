@@ -2,10 +2,14 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
@@ -52,6 +56,68 @@ func TestRetentionAndReplayLoopsStayStoppedWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
+	var sourceTicks atomic.Int64
+	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+	runtime.Config.Retention.Enabled = true
+	runtime.Config.Retention.ProjectionRetiredAge = 24 * time.Hour
+	runtime.projectionRetainer = fakeProjectionRetainer{
+		retain: func(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error) {
+			return targetprojection.RetentionResult{}, errors.New("projection retain failed")
+		},
+	}
+	runtime.retainer = fakeRetainer{
+		tick: func(context.Context, sourceobservation.RetentionConfig, time.Time) (sourceobservation.RetentionResult, error) {
+			sourceTicks.Add(1)
+			return sourceobservation.RetentionResult{Table: "source_observation_queue", Deleted: 1}, nil
+		},
+	}
+
+	errCh := make(chan error, 1)
+	runtime.Start(context.Background(), errCh)
+	waitForTicks(t, &sourceTicks)
+	select {
+	case err := <-errCh:
+		t.Fatalf("retention must not kill the process: %v", err)
+	default:
+	}
+	if err := runtime.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+}
+
+func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
+	age := 24 * time.Hour
+	cfg := settings.YouTubePlaneRetentionConfig{
+		CommunityPageAge:    age,
+		VideoListAge:        age,
+		ShortsListAge:       age,
+		LiveSnapshotAge:     age,
+		ViewerSampleAge:     age,
+		ChannelStatsAge:     age,
+		ChannelProfileAge:   age,
+		ChannelPhotoAge:     age,
+		ScheduleSnapshotAge: age,
+	}
+	ages := evidenceRetentionAges(cfg)
+	wantKinds := []contract.ObservationKind{
+		contract.KindCommunityPage,
+		contract.KindVideoList,
+		contract.KindShortsList,
+		contract.KindLiveSnapshot,
+		contract.KindViewerSample,
+		contract.KindChannelStats,
+		contract.KindChannelProfile,
+		contract.KindChannelPhoto,
+		contract.KindSchedule,
+	}
+	for _, kind := range wantKinds {
+		if ages[kind] != age {
+			t.Fatalf("retention age for %s = %s, want %s", kind, ages[kind], age)
+		}
+	}
+}
+
 func waitForTicks(t *testing.T, ticks *atomic.Int64) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -77,6 +143,22 @@ func (f fakeRetainer) RunRetentionTick(
 		return sourceobservation.RetentionResult{}, nil
 	}
 	return f.tick(ctx, cfg, now)
+}
+
+type fakeProjectionRetainer struct {
+	retain func(context.Context, time.Time, time.Duration, int) (targetprojection.RetentionResult, error)
+}
+
+func (f fakeProjectionRetainer) Retain(
+	ctx context.Context,
+	now time.Time,
+	age time.Duration,
+	batchSize int,
+) (targetprojection.RetentionResult, error) {
+	if f.retain == nil {
+		return targetprojection.RetentionResult{}, nil
+	}
+	return f.retain(ctx, now, age, batchSize)
 }
 
 type fakeReplayer struct {

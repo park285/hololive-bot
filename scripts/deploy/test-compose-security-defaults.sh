@@ -188,7 +188,7 @@ participants = {
     for name, service in services.items()
     if "observability-traces" in (service.get("networks", {}) or {})
 }
-expected = {"hololive-api", "hololive-alarm-worker", "youtube-collector", "youtube-collector-c"}
+expected = {"hololive-api", "hololive-alarm-worker", "youtube-collector"}
 if participants != expected:
     print(f"[FAIL] observability-traces participants: expected {sorted(expected)}, got {sorted(participants)}")
     sys.exit(1)

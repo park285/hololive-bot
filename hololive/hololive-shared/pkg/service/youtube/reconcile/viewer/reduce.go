@@ -49,33 +49,38 @@ func windowHasConflict(existing []WindowEvidence, digest string) bool {
 }
 
 func replayOrConflict(state State, sample Sample, digest string, head Head, decision string) (Decision, error) {
-	for _, existing := range state.Window {
-		if existing.Provider == sample.Provider {
-			if existing.Digest == digest {
-				return Decision{
-					Sample: &sample,
-					Head:   head,
-					Applications: []Application{{
-						EntityKind: "youtube_live_viewer_sample", EntityKey: windowKey(sample), Decision: "REPLAY",
-					}},
-				}, nil
-			}
-			return unresolvedDecision(head, sample, existing.Digest, digest), nil
-		}
-		if existing.Digest != digest {
-			return unresolvedDecision(head, sample, existing.Digest, digest), nil
-		}
+	if matched, ok := matchWindowEvidence(state.Window, sample, digest, head); ok {
+		return matched, nil
 	}
 	if decision == "EQUAL_WINDOW" && lastResolvedDigest(head) != digest {
 		return unresolvedDecision(head, sample, lastResolvedDigest(head), digest), nil
 	}
+	return replayViewerDecision(head, sample), nil
+}
+
+func matchWindowEvidence(existing []WindowEvidence, sample Sample, digest string, head Head) (Decision, bool) {
+	for _, item := range existing {
+		if item.Provider == sample.Provider {
+			if item.Digest == digest {
+				return replayViewerDecision(head, sample), true
+			}
+			return unresolvedDecision(head, sample, item.Digest, digest), true
+		}
+		if item.Digest != digest {
+			return unresolvedDecision(head, sample, item.Digest, digest), true
+		}
+	}
+	return Decision{}, false
+}
+
+func replayViewerDecision(head Head, sample Sample) Decision {
 	return Decision{
 		Sample: &sample,
 		Head:   head,
 		Applications: []Application{{
 			EntityKind: "youtube_live_viewer_sample", EntityKey: windowKey(sample), Decision: "REPLAY",
 		}},
-	}, nil
+	}
 }
 
 func advanceResolved(head Head, sample Sample) Decision {

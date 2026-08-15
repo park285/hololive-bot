@@ -68,7 +68,10 @@ func TestLoadYouTubeCollectorConfigNonDefaultOverride(t *testing.T) {
 	t.Setenv("YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", "65536")
 	t.Setenv("YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS", "5")
 
-	cfg := loadYouTubeCollectorConfig()
+	cfg, err := loadYouTubeCollectorConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubeCollectorConfig() error = %v", err)
+	}
 	if cfg.TotalWorkers != 8 || cfg.QueueCapacity != 24 || cfg.AcquisitionBatch != 12 {
 		t.Fatalf("workers/queue/batch = %d %d %d", cfg.TotalWorkers, cfg.QueueCapacity, cfg.AcquisitionBatch)
 	}
@@ -86,6 +89,41 @@ func TestLoadYouTubeCollectorConfigNonDefaultOverride(t *testing.T) {
 	}
 	if err := cfg.Validate(25*time.Second, 15*time.Second); err != nil {
 		t.Fatalf("overridden config must be valid: %v", err)
+	}
+}
+
+func TestLoadYouTubeCollectorConfigRejectsInvalidExplicitValues(t *testing.T) {
+	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "0")
+	if _, err := loadYouTubeCollectorConfig(); err == nil {
+		t.Fatal("explicit zero workers must fail closed")
+	}
+	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "4")
+	t.Setenv("YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS", "abc")
+	if _, err := loadYouTubeCollectorConfig(); err == nil {
+		t.Fatal("unparseable lease TTL must fail closed")
+	}
+}
+
+func TestRequiredCollectorNumericEnvRejectsExplicitEmptyValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "empty", value: ""},
+		{name: "whitespace", value: "   "},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", test.value)
+			if _, err := requiredPositiveIntEnv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", 4); err == nil {
+				t.Fatal("requiredPositiveIntEnv accepted an explicitly empty value")
+			}
+
+			t.Setenv("YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS", test.value)
+			if _, err := requiredDurationUnitEnv("YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS", time.Minute, time.Second); err == nil {
+				t.Fatal("requiredDurationUnitEnv accepted an explicitly empty value")
+			}
+		})
 	}
 }
 

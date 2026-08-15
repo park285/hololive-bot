@@ -251,7 +251,7 @@ func mergeChannelsLiveStatusFailures(failed, deferred map[string]error) map[stri
 
 func firstChannelsLiveStatusSourceLevelError(channelIDs []string, failed map[string]error) error {
 	for _, channelID := range channelIDs {
-		if channelErr, ok := failed[channelID]; ok && isYouTubeProducerSourceLevelFallbackError(channelErr) {
+		if channelErr, ok := failed[channelID]; ok && isYouTubeScraperSourceLevelFallbackError(channelErr) {
 			return channelErr
 		}
 	}
@@ -268,7 +268,7 @@ func joinChannelsLiveStatusFailures(channelIDs []string, failed map[string]error
 	return stdErrors.Join(errs...)
 }
 
-func isYouTubeProducerSourceLevelFallbackError(err error) bool {
+func isYouTubeScraperSourceLevelFallbackError(err error) bool {
 	return stdErrors.Is(err, scraper.ErrRateLimited) ||
 		stdErrors.Is(err, scraper.ErrForbidden) ||
 		stdErrors.Is(err, scraper.ErrBlockedResponse)

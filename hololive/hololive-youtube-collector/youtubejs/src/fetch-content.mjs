@@ -1,6 +1,8 @@
 import { paginate } from "./pagination.mjs";
 import { textOf } from "./map-posts.mjs";
+import { videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 
+/** @param {YouTubeJSFetchOptions} [options] */
 export async function fetchContentFeed({
   channelId,
   kind,
@@ -65,9 +67,9 @@ export function mapContentItems(feed, channelId) {
     : Array.isArray(feed?.items)
       ? feed.items
       : [];
-    const mapped = [];
+  const mapped = [];
   for (const row of rows) {
-    const videoId = textOf(row?.id || row?.video_id || row?.videoId).trim();
+    const videoId = videoIDOf(row);
     if (videoId === "") {
       const err = new Error("content row is missing video id");
       err.code = "parser_drift";
@@ -76,7 +78,7 @@ export function mapContentItems(feed, channelId) {
     mapped.push({
       video_id: videoId,
       channel_id: textOf(row?.author?.id || row?.channel_id || channelId).trim() || channelId,
-      title: textOf(row?.title),
+      title: videoTitleOf(row),
       published_at: optionalTime(row?.published || row?.published_at),
       scheduled_for: optionalTime(row?.scheduled || row?.scheduled_for),
     });

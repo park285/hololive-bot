@@ -8,33 +8,33 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
-func (s *Service) FetchFromYouTubeProducer(ctx context.Context, channelID string) ([]*domain.Stream, error) {
-	return s.fetchFromYouTubeProducer(ctx, channelID, false)
+func (s *Service) FetchYouTubeSchedule(ctx context.Context, channelID string) ([]*domain.Stream, error) {
+	return s.fetchYouTubeSchedule(ctx, channelID, false)
 }
 
-func (s *Service) FetchFromYouTubeProducerWaitAdmission(ctx context.Context, channelID string) ([]*domain.Stream, error) {
-	return s.fetchFromYouTubeProducer(ctx, channelID, true)
+func (s *Service) FetchYouTubeScheduleWaitAdmission(ctx context.Context, channelID string) ([]*domain.Stream, error) {
+	return s.fetchYouTubeSchedule(ctx, channelID, true)
 }
 
-func (s *Service) fetchFromYouTubeProducer(ctx context.Context, channelID string, waitAdmission bool) ([]*domain.Stream, error) {
-	events, err := s.fetchYouTubeProducerEvents(ctx, channelID, waitAdmission)
+func (s *Service) fetchYouTubeSchedule(ctx context.Context, channelID string, waitAdmission bool) ([]*domain.Stream, error) {
+	events, err := s.fetchYouTubeEvents(ctx, channelID, waitAdmission)
 	if err != nil {
-		return nil, fmt.Errorf("youtube producer error: %w", err)
+		return nil, fmt.Errorf("youtube scraper error: %w", err)
 	}
 
 	return s.convertEventsToStreams(events, channelID), nil
 }
 
-func (s *Service) fetchYouTubeProducerEvents(ctx context.Context, channelID string, waitAdmission bool) ([]*parser.UpcomingEvent, error) {
+func (s *Service) fetchYouTubeEvents(ctx context.Context, channelID string, waitAdmission bool) ([]*parser.UpcomingEvent, error) {
 	switch {
 	case s.fetchUpcoming != nil:
 		return s.fetchUpcoming(ctx, channelID)
-	case s.youtubeProducer != nil && waitAdmission:
-		return s.youtubeProducer.GetUpcomingEventsWaitAdmission(ctx, channelID)
-	case s.youtubeProducer != nil:
-		return s.youtubeProducer.GetUpcomingEvents(ctx, channelID)
+	case s.youtubeClient != nil && waitAdmission:
+		return s.youtubeClient.GetUpcomingEventsWaitAdmission(ctx, channelID)
+	case s.youtubeClient != nil:
+		return s.youtubeClient.GetUpcomingEvents(ctx, channelID)
 	default:
-		return nil, fmt.Errorf("youtube producer not configured")
+		return nil, fmt.Errorf("youtube scraper not configured")
 	}
 }
 

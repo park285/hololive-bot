@@ -19,6 +19,27 @@ test("mapLiveSessions fail-closes on unknown statuses", () => {
   );
 });
 
+test("mapLiveSessions maps current YouTube.js LockupView rows", () => {
+  const sessions = mapLiveSessions(
+    {
+      videos: [
+        {
+          type: "LockupView",
+          content_type: "VIDEO",
+          content_id: "upcoming-1",
+          content_image: { overlays: [{ badges: [{ text: "Upcoming" }] }] },
+        },
+        { type: "LockupView", content_type: "VIDEO", content_id: "ended-1", content_image: { overlays: [] } },
+      ],
+    },
+    "UC_TEST",
+  );
+  assert.deepEqual(sessions.map((item) => [item.video_id, item.status]), [
+    ["upcoming-1", "UPCOMING"],
+    ["ended-1", "ENDED"],
+  ]);
+});
+
 test("fetchChannelFeed fail-closes when live rows lack status", async () => {
   const innertube = {
     getChannel: async () => ({

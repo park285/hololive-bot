@@ -56,17 +56,25 @@ func parseLiveRows(body []byte) ([]parsedLive, error) {
 	rows := make([]parsedLive, 0, len(rawRows))
 	seen := make(map[string]struct{}, len(rawRows))
 	for _, raw := range rawRows {
-		row, err := parseLiveRow(raw)
+		row, err := appendUniqueLiveRow(raw, seen)
 		if err != nil {
 			return nil, err
 		}
-		if _, exists := seen[row.row.ID]; exists {
-			return nil, collecterr.New(collecterr.ParserDrift, "holodex live response has duplicate video id")
-		}
-		seen[row.row.ID] = struct{}{}
 		rows = append(rows, row)
 	}
 	return rows, nil
+}
+
+func appendUniqueLiveRow(raw json.RawMessage, seen map[string]struct{}) (parsedLive, error) {
+	row, err := parseLiveRow(raw)
+	if err != nil {
+		return parsedLive{}, err
+	}
+	if _, exists := seen[row.row.ID]; exists {
+		return parsedLive{}, collecterr.New(collecterr.ParserDrift, "holodex live response has duplicate video id")
+	}
+	seen[row.row.ID] = struct{}{}
+	return row, nil
 }
 
 func parseLiveRow(raw json.RawMessage) (parsedLive, error) {
@@ -133,13 +141,6 @@ func parseOptionalTime(raw string) (*time.Time, error) {
 	}
 	utc := parsed.UTC()
 	return &utc, nil
-}
-
-func requestedIDs(input collectutil.RunInput) []string {
-	if len(input.RequestedChannelIDs) > 0 {
-		return collectutil.UniqueSorted(input.RequestedChannelIDs)
-	}
-	return collectutil.UniqueSorted(input.EnabledSubjects[contract.KindLiveSnapshot])
 }
 
 func requestedSet(ids []string) map[string]struct{} {
@@ -237,16 +238,7 @@ func livePayload(channelID string, sessions []parsedLive) contract.LiveSnapshotV
 }
 
 func statsPayload(channelID string, rows []parsedLive) (contract.ChannelStatsV1, bool) {
-	var subscriber *int64
-	var videos *int64
-	for _, row := range rows {
-		if subscriber == nil && row.row.Channel.SubscriberCount != nil {
-			subscriber = row.row.Channel.SubscriberCount
-		}
-		if videos == nil && row.row.Channel.VideoCount != nil {
-			videos = row.row.Channel.VideoCount
-		}
-	}
+	subscriber, videos := firstStatsCounts(rows)
 	fields := make([]string, 0, 2)
 	if subscriber != nil {
 		fields = append(fields, "subscriber_count")
@@ -266,6 +258,20 @@ func statsPayload(channelID string, rows []parsedLive) (contract.ChannelStatsV1,
 			Fields:    fields,
 		},
 	}, true
+}
+
+func firstStatsCounts(rows []parsedLive) (*int64, *int64) {
+	var subscriber *int64
+	var videos *int64
+	for _, row := range rows {
+		if subscriber == nil && row.row.Channel.SubscriberCount != nil {
+			subscriber = row.row.Channel.SubscriberCount
+		}
+		if videos == nil && row.row.Channel.VideoCount != nil {
+			videos = row.row.Channel.VideoCount
+		}
+	}
+	return subscriber, videos
 }
 
 func photoPayload(channelID string, rows []parsedLive) (contract.ChannelPhotoV1, bool) {
@@ -290,32 +296,43 @@ func schedulePayload(rows []parsedLive, allowed map[string]struct{}) contract.Sc
 	items := make([]contract.ScheduleItemV1, 0, len(rows))
 	seen := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		if _, ok := allowed[row.channelID]; !ok || row.scheduled == nil {
-			continue
+		if item, ok := scheduleItemFromRow(row, allowed, seen); ok {
+			items = append(items, item)
 		}
-		if _, exists := seen[row.row.ID]; exists {
-			continue
-		}
-		seen[row.row.ID] = struct{}{}
-		title := strings.TrimSpace(row.row.Title)
-		if title == "" {
-			title = strings.TrimSpace(row.row.Channel.Name)
-		}
-		if title == "" {
-			continue
-		}
-		items = append(items, contract.ScheduleItemV1{
-			ExternalID:  row.row.ID,
-			VideoID:     row.row.ID,
-			ChannelID:   row.channelID,
-			Title:       title,
-			ScheduledAt: *row.scheduled,
-			IsLive:      row.status == "LIVE",
-		})
 	}
 	return contract.ScheduleSnapshotV1{
 		GroupKey: officialScheduleSubject,
 		Items:    items,
 		Coverage: contract.ScheduleCoverageV1{GroupKey: officialScheduleSubject},
 	}
+}
+
+func scheduleItemFromRow(row parsedLive, allowed, seen map[string]struct{}) (contract.ScheduleItemV1, bool) {
+	if _, ok := allowed[row.channelID]; !ok || row.scheduled == nil {
+		return contract.ScheduleItemV1{}, false
+	}
+	if _, exists := seen[row.row.ID]; exists {
+		return contract.ScheduleItemV1{}, false
+	}
+	title := scheduleTitle(row)
+	if title == "" {
+		return contract.ScheduleItemV1{}, false
+	}
+	seen[row.row.ID] = struct{}{}
+	return contract.ScheduleItemV1{
+		ExternalID:  row.row.ID,
+		VideoID:     row.row.ID,
+		ChannelID:   row.channelID,
+		Title:       title,
+		ScheduledAt: *row.scheduled,
+		IsLive:      row.status == "LIVE",
+	}, true
+}
+
+func scheduleTitle(row parsedLive) string {
+	title := strings.TrimSpace(row.row.Title)
+	if title != "" {
+		return title
+	}
+	return strings.TrimSpace(row.row.Channel.Name)
 }

@@ -32,93 +32,121 @@ func loadPhotoState(ctx context.Context, tx dbx.Tx, channelID string) (photo.Sta
 }
 
 func persistPhotoDecision(ctx context.Context, tx dbx.Tx, observation Observation, decision photo.Decision) error {
-	if decision.Sample != nil {
-		for i := range decision.Sample.Variants {
-			variant := decision.Sample.Variants[i]
-			if _, err := tx.Exec(
-				ctx,
-				mustSQL("repository_photo_variant_upsert_0072_72.sql"),
-				decision.Sample.ChannelID,
-				variant.Kind,
-				observation.Provider,
-				decision.Sample.ScheduledFor,
-				variant.URL,
-				variant.Width,
-				variant.Height,
-				variant.StableMediaID,
-				variant.ContentFingerprint,
-				observation.ID,
-				decision.Sample.EffectiveAt,
-				decision.Sample.ReceivedAt,
-			); err != nil {
-				return fmt.Errorf("upsert channel photo variant: %w", err)
-			}
+	if err := persistPhotoVariants(ctx, tx, observation, decision); err != nil {
+		return err
+	}
+	if err := persistPhotoHeads(ctx, tx, decision); err != nil {
+		return err
+	}
+	if err := persistPhotoProduct(ctx, tx, decision); err != nil {
+		return err
+	}
+	return persistPhotoConflicts(ctx, tx, observation, decision)
+}
+
+func persistPhotoVariants(ctx context.Context, tx dbx.Tx, observation Observation, decision photo.Decision) error {
+	if decision.Sample == nil {
+		return nil
+	}
+	for i := range decision.Sample.Variants {
+		if err := persistPhotoVariant(ctx, tx, observation, decision, decision.Sample.Variants[i]); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func persistPhotoVariant(ctx context.Context, tx dbx.Tx, observation Observation, decision photo.Decision, variant photo.Variant) error {
+	if _, err := tx.Exec(
+		ctx,
+		mustSQL("repository_photo_variant_upsert_0072_72.sql"),
+		decision.Sample.ChannelID,
+		variant.Kind,
+		observation.Provider,
+		decision.Sample.ScheduledFor,
+		variant.URL,
+		variant.Width,
+		variant.Height,
+		variant.StableMediaID,
+		variant.ContentFingerprint,
+		observation.ID,
+		decision.Sample.EffectiveAt,
+		decision.Sample.ReceivedAt,
+	); err != nil {
+		return fmt.Errorf("upsert channel photo variant: %w", err)
+	}
+	return nil
+}
+
+func persistPhotoHeads(ctx context.Context, tx dbx.Tx, decision photo.Decision) error {
 	for kind, canonical := range decision.Head.Kinds {
 		if canonical.Identity == "" && canonical.Candidate == "" {
 			continue
 		}
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_photo_head_upsert_0074_74.sql"),
-			decision.Head.ChannelID,
-			kind,
-			canonical.Identity,
-			canonical.URL,
-			canonical.Width,
-			canonical.Height,
-			canonical.EffectiveAt,
-			canonical.Candidate,
-			canonical.CandidateURL,
-			canonical.CandidateW,
-			canonical.CandidateH,
-			canonical.Slots,
-			canonical.FirstAt,
-			canonical.LastAt,
-			canonical.FirstRx,
-		); err != nil {
-			return fmt.Errorf("upsert channel photo head: %w", err)
+		if err := persistPhotoHead(ctx, tx, decision.Head.ChannelID, kind, canonical); err != nil {
+			return err
 		}
 	}
-	if len(decision.WriteProduct) > 0 && decision.Sample != nil {
-		var avatar, banner domain.ThumbnailsJSON
-		if item, ok := decision.WriteProduct["avatar"]; ok {
-			avatar = domain.ThumbnailsJSON{{URL: item.URL, Width: item.Width, Height: item.Height}}
-		}
-		if item, ok := decision.WriteProduct["banner"]; ok {
-			banner = domain.ThumbnailsJSON{{URL: item.URL, Width: item.Width, Height: item.Height}}
-		}
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_photo_product_upsert_0075_75.sql"),
-			decision.Sample.ChannelID,
-			nullableThumbnails(avatar),
-			nullableThumbnails(banner),
-			decision.Sample.EffectiveAt,
-		); err != nil {
-			return fmt.Errorf("upsert channel photo product: %w", err)
-		}
+	return nil
+}
+
+func persistPhotoHead(ctx context.Context, tx dbx.Tx, channelID, kind string, canonical photo.Canonical) error {
+	if _, err := tx.Exec(
+		ctx,
+		mustSQL("repository_photo_head_upsert_0074_74.sql"),
+		channelID,
+		kind,
+		canonical.Identity,
+		canonical.URL,
+		canonical.Width,
+		canonical.Height,
+		canonical.EffectiveAt,
+		canonical.Candidate,
+		canonical.CandidateURL,
+		canonical.CandidateW,
+		canonical.CandidateH,
+		canonical.Slots,
+		canonical.FirstAt,
+		canonical.LastAt,
+		canonical.FirstRx,
+	); err != nil {
+		return fmt.Errorf("upsert channel photo head: %w", err)
 	}
+	return nil
+}
+
+func persistPhotoProduct(ctx context.Context, tx dbx.Tx, decision photo.Decision) error {
+	if len(decision.WriteProduct) == 0 || decision.Sample == nil {
+		return nil
+	}
+	avatar, banner := photoProductThumbnails(decision.WriteProduct)
+	if _, err := tx.Exec(
+		ctx,
+		mustSQL("repository_photo_product_upsert_0075_75.sql"),
+		decision.Sample.ChannelID,
+		nullableThumbnails(avatar),
+		nullableThumbnails(banner),
+		decision.Sample.EffectiveAt,
+	); err != nil {
+		return fmt.Errorf("upsert channel photo product: %w", err)
+	}
+	return nil
+}
+
+func photoProductThumbnails(product map[string]photo.Canonical) (domain.ThumbnailsJSON, domain.ThumbnailsJSON) {
+	var avatar, banner domain.ThumbnailsJSON
+	if item, ok := product["avatar"]; ok {
+		avatar = domain.ThumbnailsJSON{{URL: item.URL, Width: item.Width, Height: item.Height}}
+	}
+	if item, ok := product["banner"]; ok {
+		banner = domain.ThumbnailsJSON{{URL: item.URL, Width: item.Width, Height: item.Height}}
+	}
+	return avatar, banner
+}
+
+func persistPhotoConflicts(ctx context.Context, tx dbx.Tx, observation Observation, decision photo.Decision) error {
 	for i := range decision.Conflicts {
-		conflict := decision.Conflicts[i]
-		if _, err := tx.Exec(
-			ctx,
-			mustSQL("repository_reconcile_conflict_insert_0061_61.sql"),
-			observation.ID,
-			observation.Provider,
-			observation.ObservationKind,
-			observation.SubjectKey,
-			observation.ObservationKey,
-			observation.EvidenceSHA256,
-			"youtube_channel_photo",
-			observation.SubjectKey,
-			conflict.FieldName,
-			observation.EffectiveAt,
-			conflict.ExistingValueSHA256,
-			conflict.AttemptedValueSHA256,
-			"KEEP_EXISTING",
-		); err != nil {
+		if err := persistReconcileConflict(ctx, tx, observation, "youtube_channel_photo", observation.SubjectKey, decision.Conflicts[i].FieldName, decision.Conflicts[i].ExistingValueSHA256, decision.Conflicts[i].AttemptedValueSHA256, "KEEP_EXISTING"); err != nil {
 			return fmt.Errorf("insert channel photo reconciliation conflict: %w", err)
 		}
 	}

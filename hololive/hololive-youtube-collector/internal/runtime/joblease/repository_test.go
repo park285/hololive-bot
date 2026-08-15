@@ -79,7 +79,7 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 	seedProjection(t, pool, []leaseTarget{{"global:hololive-schedule", contract.KindSchedule, time.Minute, true}})
 	repository := newTestRepository(t, pool)
 	spec := JobSpec{
-		JobKey: "collector:hololive_official:global", Provider: contract.ProviderHololiveOfficial,
+		JobKey: "collector:hololive_official:official_schedule:global", Provider: contract.ProviderHololiveOfficial,
 		Class: "GLOBAL", CollectionJobKind: "official_schedule",
 		SubjectKey: "global:hololive-schedule", PollInterval: time.Minute,
 	}
@@ -98,23 +98,68 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 	}
 }
 
-func TestHolodexGlobalCandidatesUseFastestIntervalWhenKindsDiffer(t *testing.T) {
+func TestYouTubeJSChannelCandidatesKeepLiveAndMetadataCadencesSeparate(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{
 		{"UC_A", contract.KindLiveSnapshot, 2 * time.Minute, true},
 		{"UC_A", contract.KindChannelStats, 6 * time.Hour, true},
+		{"UC_A", contract.KindChannelProfile, 6 * time.Hour, true},
+		{"UC_A", contract.KindChannelPhoto, 6 * time.Hour, true},
 	})
 	repository := newTestRepository(t, pool)
-	candidates, err := repository.Candidates(ctx, contract.ProviderHolodex, "holodex_global", 1)
+	live, err := repository.Candidates(ctx, contract.ProviderYouTubeJS, "youtubejs_channel_live", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(candidates) != 1 || candidates[0].PollInterval != 2*time.Minute {
-		t.Fatalf("candidates = %#v", candidates)
+	if len(live) != 1 || live[0].PollInterval != 2*time.Minute {
+		t.Fatalf("live candidates = %#v", live)
 	}
-	if _, err := repository.Acquire(ctx, candidates[0], "collector-a"); err != nil {
-		t.Fatalf("acquire mixed-cadence global candidate: %v", err)
+	metadata, err := repository.Candidates(ctx, contract.ProviderYouTubeJS, "youtubejs_channel_metadata", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata) != 1 || metadata[0].PollInterval != 6*time.Hour {
+		t.Fatalf("metadata candidates = %#v", metadata)
+	}
+	if _, err := repository.Acquire(ctx, live[0], "collector-a"); err != nil {
+		t.Fatalf("acquire youtubejs live candidate: %v", err)
+	}
+	if _, err := repository.Acquire(ctx, metadata[0], "collector-a"); err != nil {
+		t.Fatalf("acquire youtubejs metadata candidate: %v", err)
+	}
+}
+
+func TestHolodexCandidatesKeepLiveScheduleAndMetadataCadencesSeparate(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{
+		{"UC_A", contract.KindLiveSnapshot, 2 * time.Minute, true},
+		{"video-A", contract.KindViewerSample, 2 * time.Minute, true},
+		{"UC_A", contract.KindChannelStats, 6 * time.Hour, true},
+		{"UC_A", contract.KindChannelPhoto, 6 * time.Hour, true},
+		{"global:hololive-schedule", contract.KindSchedule, 5 * time.Minute, true},
+	})
+	repository := newTestRepository(t, pool)
+	tests := []struct {
+		jobKind  string
+		interval time.Duration
+	}{
+		{"holodex_live", 2 * time.Minute},
+		{"holodex_schedule", 5 * time.Minute},
+		{"holodex_metadata", 6 * time.Hour},
+	}
+	for _, tt := range tests {
+		candidates, err := repository.Candidates(ctx, contract.ProviderHolodex, tt.jobKind, 1)
+		if err != nil {
+			t.Fatalf("%s candidates: %v", tt.jobKind, err)
+		}
+		if len(candidates) != 1 || candidates[0].PollInterval != tt.interval {
+			t.Fatalf("%s candidates = %#v", tt.jobKind, candidates)
+		}
+		if _, err := repository.Acquire(ctx, candidates[0], "collector-a"); err != nil {
+			t.Fatalf("acquire %s candidate: %v", tt.jobKind, err)
+		}
 	}
 }
 

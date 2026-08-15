@@ -32,18 +32,18 @@ import (
 )
 
 // 분산 제한이 활성화된 경우 Valkey 기반 SlidingWindowLimiter를 함께 구성합니다.
-func ProvideYouTubeProducerRateLimiter(cacheClient cache.Client, logger *slog.Logger) (*ratelimiter.RateLimiter, error) {
+func ProvideYouTubeRateLimiter(cacheClient cache.Client, logger *slog.Logger) (*ratelimiter.RateLimiter, error) {
 	ytCfg := settings.DefaultYouTubeOperationalConfig()
-	return ProvideYouTubeProducerRateLimiterWithConfig(&ytCfg, cacheClient, logger)
+	return ProvideYouTubeRateLimiterWithConfig(&ytCfg, cacheClient, logger)
 }
 
-func ProvideYouTubeProducerRateLimiterWithConfig(ytCfg *settings.YouTubeConfig, cacheClient cache.Client, logger *slog.Logger) (*ratelimiter.RateLimiter, error) {
+func ProvideYouTubeRateLimiterWithConfig(ytCfg *settings.YouTubeConfig, cacheClient cache.Client, logger *slog.Logger) (*ratelimiter.RateLimiter, error) {
 	if ytCfg == nil {
 		return nil, fmt.Errorf("youtube config is nil")
 	}
-	limiter := ratelimiter.New(ytCfg.ProducerRequestInterval)
+	limiter := ratelimiter.New(ytCfg.RequestInterval)
 
-	drl := ytCfg.ProducerDistributedRateLimit
+	drl := ytCfg.DistributedRateLimit
 	if !drl.Enabled {
 		return limiter, nil
 	}
@@ -54,14 +54,14 @@ func ProvideYouTubeProducerRateLimiterWithConfig(ytCfg *settings.YouTubeConfig, 
 		logger,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("initialize youtube producer distributed rate limiter: %w", err)
+		return nil, fmt.Errorf("initialize youtube distributed rate limiter: %w", err)
 	}
 	if err := limiter.ConfigureDistributed(
 		distributedLimiter,
 		drl.Limit,
 		drl.Window,
 	); err != nil {
-		return nil, fmt.Errorf("configure youtube producer distributed rate limiter: %w", err)
+		return nil, fmt.Errorf("configure youtube distributed rate limiter: %w", err)
 	}
 
 	return limiter, nil

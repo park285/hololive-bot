@@ -1,5 +1,7 @@
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
+import { isVideoLockup, lockupBadgeTexts, videoIDOf } from "./map-lockup.mjs";
 
+/** @param {YouTubeJSFetchOptions} [options] */
 export async function fetchChannelFeed({ channelId, innertube } = {}) {
   const id = String(channelId ?? "").trim();
   if (id === "") {
@@ -24,9 +26,9 @@ export async function fetchChannelFeed({ channelId, innertube } = {}) {
 
 export function mapLiveSessions(feed, channelId) {
   const rows = Array.isArray(feed?.videos) ? feed.videos : Array.isArray(feed?.items) ? feed.items : [];
-    const sessions = [];
+  const sessions = [];
   for (const row of rows) {
-    const videoId = textOf(row?.id || row?.video_id || row?.videoId).trim();
+    const videoId = videoIDOf(row);
     const status = mapLiveStatus(row);
     if (videoId === "") {
       const err = new Error("live row is missing video id");
@@ -90,6 +92,12 @@ function mapLiveStatus(row) {
   const status = textOf(row?.status).toUpperCase();
   if (status === "LIVE" || status === "UPCOMING" || status === "ENDED" || status === "CANCELLED") {
     return status;
+  }
+  if (isVideoLockup(row)) {
+    const badges = lockupBadgeTexts(row);
+    if (badges.includes("live")) return "LIVE";
+    if (badges.includes("upcoming")) return "UPCOMING";
+    return "ENDED";
   }
   return "";
 }

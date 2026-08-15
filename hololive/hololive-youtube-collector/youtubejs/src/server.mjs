@@ -1,137 +1,40 @@
+// @ts-check
 import { createServer } from "node:http";
 import { unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { fetchCommunityFeed, createInnertube, emptyCommunityPage } from "./fetch-community.mjs";
-import { fetchContentFeed } from "./fetch-content.mjs";
-import { fetchChannelFeed } from "./fetch-channel.mjs";
-import { fetchViewerFeed } from "./fetch-viewer.mjs";
+import { emptyCommunityPage } from "./fetch-community.mjs";
+import { realFetchers, setProxyUrl, stubFetchers } from "./real-fetchers.mjs";
+import {
+  handleChannelRequest,
+  handleCommunityRequest,
+  handleContentRequest,
+  handleViewerRequest,
+} from "./rpc-boundary.mjs";
+import { rpcErrorBody } from "./rpc-validation.mjs";
+
+export {
+  handleChannelRequest,
+  handleCommunityRequest,
+  handleContentRequest,
+  handleViewerRequest,
+  setProxyUrl,
+};
+
+/** @typedef {import("node:http").IncomingMessage} IncomingMessage */
+/** @typedef {import("node:http").ServerResponse} ServerResponse */
+/** @typedef {import("./contracts.d.ts").FetcherSet} FetcherSet */
 
 const maxBodyBytes = 64 * 1024;
-let proxyUrl = "";
-let innertubePromise;
 
-export function setProxyUrl(url) {
-  proxyUrl = String(url ?? "").trim();
-}
-
-export async function handleJSONRequest(rawBody, required, run) {
-  let payload;
-  try {
-    payload = JSON.parse(rawBody || "{}");
-  } catch {
-    return { status: 400, body: { error: "request is not JSON", error_code: "collection_failed" } };
-  }
-  const values = {};
-  for (const field of required) {
-    const value = String(payload[field] ?? "").trim();
-    if (value === "") {
-      return { status: 400, body: { error: `${field} is required`, error_code: "collection_failed" } };
-    }
-    values[field] = value;
-  }
-  setProxyUrl(payload.proxy_url);
-  try {
-    const body = await run(payload, values);
-    return { status: 200, body };
-  } catch (err) {
-    return { status: 500, body: helperError(err) };
-  }
-}
-
-export async function handleCommunityRequest(rawBody, fetchCommunity) {
-  return handleJSONRequest(rawBody, ["channel_id"], async (payload, values) =>
-    fetchCommunity({
-      channelId: values.channel_id,
-      maxResults: payload.max_results,
-      maxPages: payload.max_pages,
-      maxAggregateBytes: payload.max_aggregate_bytes,
-    }),
-  );
-}
-
-export async function handleContentRequest(rawBody, fetchContent) {
-  return handleJSONRequest(rawBody, ["channel_id", "kind"], async (payload, values) =>
-    fetchContent({
-      channelId: values.channel_id,
-      kind: values.kind,
-      maxResults: payload.max_results,
-      maxPages: payload.max_pages,
-      maxAggregateBytes: payload.max_aggregate_bytes,
-    }),
-  );
-}
-
-export async function handleChannelRequest(rawBody, fetchChannel) {
-  return handleJSONRequest(rawBody, ["channel_id"], async (payload, values) =>
-    fetchChannel({
-      channelId: values.channel_id,
-      maxPages: payload.max_pages,
-      maxAggregateBytes: payload.max_aggregate_bytes,
-    }),
-  );
-}
-
-export async function handleViewerRequest(rawBody, fetchViewer) {
-  return handleJSONRequest(rawBody, ["video_id"], async (payload, values) =>
-    fetchViewer({
-      videoId: values.video_id,
-      maxAggregateBytes: payload.max_aggregate_bytes,
-    }),
-  );
-}
-
+/** @type {(err: unknown) => import("./contracts.d.ts").HelperErrorBody} */
 function helperError(err) {
-  const code = String(err?.code || "collection_failed");
-  return {
-    error: String(err?.message || err),
-    error_code: code,
-  };
+  return rpcErrorBody(err);
 }
 
-async function proxiedFetch(input, init = {}) {
-  if (proxyUrl === "") {
-    return globalThis.fetch(input, init);
-  }
-  const { ProxyAgent, fetch } = await import("undici");
-  return fetch(input, { ...init, dispatcher: new ProxyAgent(proxyUrl) });
-}
-
-async function innertubeClient() {
-  if (innertubePromise == null) {
-    innertubePromise = createInnertube({ fetchImpl: proxiedFetch });
-  }
-  return innertubePromise;
-}
-
-async function realFetchCommunity(options) {
-  const innertube = await innertubeClient();
-  const { YTNodes } = await import("youtubei.js");
-  return fetchCommunityFeed({
-    ...options,
-    innertube,
-    postType: YTNodes.BackstagePost,
-  });
-}
-
-async function realFetchContent(options) {
-  return fetchContentFeed({ ...options, innertube: await innertubeClient() });
-}
-
-async function realFetchChannel(options) {
-  return fetchChannelFeed({ ...options, innertube: await innertubeClient() });
-}
-
-async function realFetchViewer(options) {
-  return fetchViewerFeed({ ...options, innertube: await innertubeClient() });
-}
-
-export function createHelperServer({
-  fetchCommunity = realFetchCommunity,
-  fetchContent = realFetchContent,
-  fetchChannel = realFetchChannel,
-  fetchViewer = realFetchViewer,
-} = {}) {
+/** @type {(overrides?: Partial<FetcherSet>) => import("node:http").Server} */
+export function createHelperServer(overrides = {}) {
+  const fetchers = { ...realFetchers, ...overrides };
   return createServer(async (req, res) => {
     try {
       if (req.method === "GET" && req.url === "/health") {
@@ -139,22 +42,22 @@ export function createHelperServer({
         return;
       }
       if (req.method === "POST" && req.url === "/v1/community") {
-        const result = await handleCommunityRequest(await readBody(req), fetchCommunity);
+        const result = await handleCommunityRequest(await readBody(req), fetchers.fetchCommunity, setProxyUrl);
         writeJSON(res, result.status, result.body);
         return;
       }
       if (req.method === "POST" && req.url === "/v1/content") {
-        const result = await handleContentRequest(await readBody(req), fetchContent);
+        const result = await handleContentRequest(await readBody(req), fetchers.fetchContent, setProxyUrl);
         writeJSON(res, result.status, result.body);
         return;
       }
       if (req.method === "POST" && req.url === "/v1/channel") {
-        const result = await handleChannelRequest(await readBody(req), fetchChannel);
+        const result = await handleChannelRequest(await readBody(req), fetchers.fetchChannel, setProxyUrl);
         writeJSON(res, result.status, result.body);
         return;
       }
       if (req.method === "POST" && req.url === "/v1/viewer") {
-        const result = await handleViewerRequest(await readBody(req), fetchViewer);
+        const result = await handleViewerRequest(await readBody(req), fetchers.fetchViewer, setProxyUrl);
         writeJSON(res, result.status, result.body);
         return;
       }
@@ -165,6 +68,7 @@ export function createHelperServer({
   });
 }
 
+/** @type {(res: ServerResponse, status: number, body: unknown) => void} */
 function writeJSON(res, status, body) {
   const raw = JSON.stringify(body);
   res.writeHead(status, {
@@ -174,30 +78,34 @@ function writeJSON(res, status, body) {
   res.end(raw);
 }
 
+/** @type {(req: IncomingMessage) => Promise<string>} */
 function readBody(req) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolveBody, reject) => {
+    /** @type {Buffer[]} */
     const chunks = [];
     let size = 0;
     req.on("data", (chunk) => {
-      size += chunk.length;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buf.length;
       if (size > maxBodyBytes) {
         reject(new Error("request body too large"));
         req.destroy();
         return;
       }
-      chunks.push(chunk);
+      chunks.push(buf);
     });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("end", () => resolveBody(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
 }
 
+/** @type {(argv: string[]) => { socket: string, stub: boolean }} */
 function parseArgs(argv) {
   const args = { socket: "", stub: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--socket") {
-      args.socket = String(argv[i + 1] || "");
+      args.socket = String(argv[i + 1] ?? "");
       i += 1;
       continue;
     }
@@ -208,47 +116,12 @@ function parseArgs(argv) {
   return args;
 }
 
-function stubCommunity() {
-  return {
-    posts: [],
-    page_count: 1,
-    exhausted: true,
-    continuity: "CONTIGUOUS",
-  };
+/** @type {(err: unknown) => boolean} */
+function isENOENT(err) {
+  return typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT";
 }
 
-function stubContent() {
-  return {
-    items: [],
-    page_count: 1,
-    exhausted: true,
-    continuity: "CONTIGUOUS",
-  };
-}
-
-function stubChannel() {
-  return {
-    live_sessions: [],
-    stats: {},
-    profile: {},
-    photo: [],
-    page_count: 1,
-    exhausted: true,
-    continuity: "CONTIGUOUS",
-  };
-}
-
-function stubViewer({ videoId } = {}) {
-  return {
-    video_id: String(videoId ?? ""),
-    viewer_count: null,
-    availability: "UNAVAILABLE",
-    page_count: 1,
-    exhausted: true,
-    continuity: "CONTIGUOUS",
-  };
-}
-
+/** @type {(socketPath: string, fetchers?: Partial<FetcherSet>) => Promise<import("node:http").Server>} */
 export async function listenUnix(socketPath, fetchers = {}) {
   if (!socketPath) {
     throw new Error("unix socket path is required");
@@ -256,14 +129,14 @@ export async function listenUnix(socketPath, fetchers = {}) {
   try {
     unlinkSync(socketPath);
   } catch (err) {
-    if (err?.code !== "ENOENT") {
+    if (!isENOENT(err)) {
       throw err;
     }
   }
   const server = createHelperServer(fetchers);
-  await new Promise((resolve, reject) => {
+  await new Promise((resolveListen, reject) => {
     server.once("error", reject);
-    server.listen(socketPath, () => resolve());
+    server.listen(socketPath, () => resolveListen(undefined));
   });
   return server;
 }
@@ -271,15 +144,7 @@ export async function listenUnix(socketPath, fetchers = {}) {
 const isMain = process.argv[1] != null && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isMain) {
   const args = parseArgs(process.argv.slice(2));
-  const fetchers = args.stub
-    ? {
-        fetchCommunity: stubCommunity,
-        fetchContent: stubContent,
-        fetchChannel: stubChannel,
-        fetchViewer: stubViewer,
-      }
-    : {};
-  const server = await listenUnix(args.socket, fetchers);
+  const server = await listenUnix(args.socket, args.stub ? stubFetchers : {});
   const shutdown = () => {
     server.close(() => process.exit(0));
   };

@@ -193,6 +193,18 @@ func BuildBatch(
 	detectedAt time.Time,
 	keywords []string,
 ) Batch {
+	batch := buildPostBatch(channelID, newPosts, initialized, detectedAt, keywords)
+	batch.Watermark = buildCommunityWatermark(channelID, collected)
+	return batch
+}
+
+func buildPostBatch(
+	channelID string,
+	newPosts []*parser.CommunityPost,
+	initialized bool,
+	detectedAt time.Time,
+	keywords []string,
+) Batch {
 	batch := Batch{
 		Posts:         make([]*domain.YouTubeCommunityPost, 0, len(newPosts)),
 		Notifications: make([]*domain.YouTubeNotificationOutbox, 0, len(newPosts)),
@@ -210,15 +222,19 @@ func BuildBatch(
 			batch.Notifications = append(batch.Notifications, notification)
 		}
 	}
-	if len(collected) > 0 && collected[0] != nil {
-		batch.Watermark = &domain.YouTubeContentWatermark{
-			ChannelID:     channelID,
-			WatermarkType: domain.WatermarkTypeCommunityPost,
-			Initialized:   true,
-			LastContentID: polling.NormalizeContentID(domain.OutboxKindCommunityPost, collected[0].PostID),
-		}
-	}
 	return batch
+}
+
+func buildCommunityWatermark(channelID string, collected []*parser.CommunityPost) *domain.YouTubeContentWatermark {
+	if len(collected) == 0 || collected[0] == nil {
+		return nil
+	}
+	return &domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeCommunityPost,
+		Initialized:   true,
+		LastContentID: polling.NormalizeContentID(domain.OutboxKindCommunityPost, collected[0].PostID),
+	}
 }
 
 func ArtifactsFromPayload(

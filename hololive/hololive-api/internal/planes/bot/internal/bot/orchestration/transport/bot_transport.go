@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/shared-go/pkg/kakaoformat"
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
@@ -62,6 +63,7 @@ type CommandTransport struct {
 	irisClient      iris.BotClient
 	formatter       *messageformatter.ResponseFormatter
 	markdownReplies bool
+	rooms           RoomChat
 	replyOutbox     ReplyOutboxWriter
 }
 
@@ -70,6 +72,12 @@ type Option func(*CommandTransport)
 func WithMarkdownReplies(enabled bool) Option {
 	return func(t *CommandTransport) {
 		t.markdownReplies = enabled
+	}
+}
+
+func WithRoomChatLookup(rooms RoomChat) Option {
+	return func(t *CommandTransport) {
+		t.rooms = rooms
 	}
 }
 
@@ -92,6 +100,11 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 		return errors.New("send message: iris client is not configured")
 	}
 
+	useMarkdown := markdownForRoom(ctx, room, t.markdownReplies, t.rooms)
+	if !useMarkdown {
+		message = kakaoformat.Render(message)
+	}
+
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
@@ -100,7 +113,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	emission := issueReplyEmission(sendCtx)
 	if t.replyOutboxWriter() != nil {
 		kind := StoredReplyKindText
-		if t.markdownReplies {
+		if useMarkdown {
 			kind = StoredReplyKindMarkdown
 		}
 		threadID, _ := ThreadIDFromContext(sendCtx)
@@ -109,7 +122,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 		}
 		return nil
 	}
-	if err := t.sendMessage(sendCtx, room, message, emission.clientRequestID, opts...); err != nil {
+	if err := t.sendMessage(sendCtx, room, message, emission.clientRequestID, useMarkdown, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message: %w", serviceErr)
 	}
@@ -117,8 +130,8 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	return nil
 }
 
-func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestID string, opts ...iris.SendOption) error {
-	if t.markdownReplies {
+func (t *CommandTransport) sendMessage(ctx context.Context, room, message, clientRequestID string, useMarkdown bool, opts ...iris.SendOption) error {
+	if useMarkdown {
 		lane := replyLane{send: t.irisClient.SendMarkdown, getter: t.irisClient}
 		return sendReply(ctx, lane, room, message, clientRequestID, opts)
 	}

@@ -84,6 +84,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/database/mocks
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/holodex/provider
+github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/kakaoroom
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/notification/alarmservice
@@ -96,6 +97,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park2
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/runtime/bootstrap
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/park285/iris-client-go/iris
+github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/park285/shared-go/pkg/kakaoformat
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-dbtest
@@ -475,6 +477,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> g
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/chzzk
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/kakaoroom
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration -> github.com/kapu/hololive-shared/pkg/service/settings
@@ -510,6 +513,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/tran
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/park285/iris-client-go/iris
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/park285/shared-go/pkg/kakaoformat
 github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent -> github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent
 github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent -> github.com/kapu/hololive-shared/pkg/contracts/common
 github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent -> github.com/kapu/hololive-shared/pkg/contracts/majorevent
@@ -1070,6 +1074,9 @@ github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping -> gi
 github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/shared-go/pkg/envutil
 github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/shared-go/pkg/h3
 github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/shared-go/pkg/httputil
+github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/kapu/hololive-shared/pkg/sqlassets
+github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/park285/iris-client-go/iris
+github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/park285/shared-go/pkg/kakaoformat
 github.com/kapu/hololive-shared/pkg/service/lease -> github.com/kapu/hololive-shared/pkg/privacylog
 github.com/kapu/hololive-shared/pkg/service/lease -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/lease -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
@@ -1296,6 +1303,7 @@ github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> 
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation
+github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector

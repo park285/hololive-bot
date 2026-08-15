@@ -14,6 +14,15 @@ test("mapContentItems fail-closes when a row is missing video id", () => {
   );
 });
 
+test("mapContentItems maps current YouTube.js LockupView rows", () => {
+  const items = mapContentItems(
+    { videos: [{ type: "LockupView", content_type: "VIDEO", content_id: "video-1", metadata: { title: "Title" } }] },
+    "UC_TEST",
+  );
+  assert.equal(items[0].video_id, "video-1");
+  assert.equal(items[0].title, "Title");
+});
+
 test("fetchContentFeed fail-closes when every row is missing video id", async () => {
   const innertube = {
     getChannel: async () => ({

@@ -80,17 +80,17 @@ func DefaultHolodexOperationalConfig() HolodexConfig {
 
 func DefaultYouTubeOperationalConfig() YouTubeConfig {
 	return YouTubeConfig{
-		CacheExpiration:         2 * time.Hour,
-		MaxPageBodyBytes:        8 << 20,
-		ScraperHTTPTimeout:      15 * time.Second,
-		ScraperDialTimeout:      5 * time.Second,
-		ScraperHeaderTimeout:    12 * time.Second,
-		ScraperPhaseTimeout:     45 * time.Second,
-		CacheSaveTimeout:        5 * time.Second,
-		CommunityMissingTTL:     24 * time.Hour,
-		VideoRSSBackoffTTL:      6 * time.Hour,
-		ProducerRequestInterval: 3 * time.Second,
-		ProducerDistributedRateLimit: DistributedRateLimitConfig{
+		CacheExpiration:      2 * time.Hour,
+		MaxPageBodyBytes:     8 << 20,
+		ScraperHTTPTimeout:   15 * time.Second,
+		ScraperDialTimeout:   5 * time.Second,
+		ScraperHeaderTimeout: 12 * time.Second,
+		ScraperPhaseTimeout:  45 * time.Second,
+		CacheSaveTimeout:     5 * time.Second,
+		CommunityMissingTTL:  24 * time.Hour,
+		VideoRSSBackoffTTL:   6 * time.Hour,
+		RequestInterval:      3 * time.Second,
+		DistributedRateLimit: DistributedRateLimitConfig{
 			Enabled:    true,
 			Limit:      1,
 			Window:     3 * time.Second,

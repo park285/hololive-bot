@@ -22,25 +22,12 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 	}
 	apps := make([]Application, 0, 4)
 	conflicts := make([]Conflict, 0, 2)
-	product := map[string]Canonical{}
+	var product map[string]Canonical
 	byKind, err := groupVariants(sample.Variants)
 	if err != nil {
 		return Decision{}, err
 	}
-	for _, kind := range []string{"avatar", "banner"} {
-		variants := byKind[kind]
-		if len(variants) == 0 {
-			continue
-		}
-		current := head.Kinds[kind]
-		next, writeProduct, kindApps, kindConflicts := reduceKind(current, kind, variants, sample, policy)
-		head.Kinds[kind] = next
-		apps = append(apps, kindApps...)
-		conflicts = append(conflicts, kindConflicts...)
-		if writeProduct {
-			product[kind] = next
-		}
-	}
+	head, product, apps, conflicts = reducePhotoKinds(head, byKind, sample, policy, apps, conflicts)
 	if len(apps) == 0 {
 		apps = append(apps, Application{
 			EntityKind: "youtube_channel_photo", EntityKey: sample.ChannelID, Decision: "RAW_RETAINED",
@@ -55,28 +42,53 @@ func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 	}, nil
 }
 
+func reducePhotoKinds(
+	head Head,
+	byKind map[string][]Variant,
+	sample Sample,
+	policy Policy,
+	apps []Application,
+	conflicts []Conflict,
+) (Head, map[string]Canonical, []Application, []Conflict) {
+	product := map[string]Canonical{}
+	for _, kind := range []string{"avatar", "banner"} {
+		variants := byKind[kind]
+		if len(variants) == 0 {
+			continue
+		}
+		next, writeProduct, kindApps, kindConflicts := reduceKind(head.Kinds[kind], kind, variants, sample, policy)
+		head.Kinds[kind] = next
+		apps = append(apps, kindApps...)
+		conflicts = append(conflicts, kindConflicts...)
+		if writeProduct {
+			product[kind] = next
+		}
+	}
+	return head, product, apps, conflicts
+}
+
 func reduceKind(current Canonical, kind string, variants []Variant, sample Sample, policy Policy) (Canonical, bool, []Application, []Conflict) {
 	key := sample.ChannelID + "/" + kind
-	identified, unidentified := splitIdentified(variants)
-	apps := []Application{}
+	identified := identifiedVariants(variants)
 	if len(identified) == 0 {
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "RAW_RETAINED"})
-		return current, false, apps, nil
+		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "RAW_RETAINED"}}, nil
 	}
 	chosen, ok, conflict := chooseIdentity(identified)
 	if !ok {
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CONFLICT"})
-		return current, false, apps, []Conflict{conflict}
+		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CONFLICT"}}, []Conflict{conflict}
 	}
-	_ = unidentified
-	identity := Identity(chosen)
+	if rejected, next, apps, conflicts := rejectPhotoChange(current, kind, key, Identity(chosen), sample); rejected {
+		return next, false, apps, conflicts
+	}
+	return applyPhotoChange(current, key, chosen, sample, policy)
+}
+
+func rejectPhotoChange(current Canonical, kind, key, identity string, sample Sample) (bool, Canonical, []Application, []Conflict) {
 	if current.Identity != "" && current.EffectiveAt != nil && sample.EffectiveAt.Before(*current.EffectiveAt) {
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "OLDER_RETAINED"})
-		return current, false, apps, nil
+		return true, current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "OLDER_RETAINED"}}, nil
 	}
 	if current.Identity != "" && current.EffectiveAt != nil && sample.EffectiveAt.Equal(*current.EffectiveAt) && current.Identity != identity {
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CONFLICT"})
-		return current, false, apps, []Conflict{{
+		return true, current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CONFLICT"}}, []Conflict{{
 			FieldName:            kind,
 			ExistingValueSHA256:  contract.SHA256Hex([]byte(current.Identity)),
 			AttemptedValueSHA256: contract.SHA256Hex([]byte(identity)),
@@ -84,21 +96,38 @@ func reduceKind(current Canonical, kind string, variants []Variant, sample Sampl
 	}
 	if current.Identity == identity {
 		resetCandidate(&current)
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CANONICAL_UNCHANGED"})
-		return current, false, apps, nil
+		return true, current, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CANONICAL_UNCHANGED"}}, nil
 	}
+	return false, current, nil, nil
+}
+
+func applyPhotoChange(current Canonical, key string, chosen Variant, sample Sample, policy Policy) (Canonical, bool, []Application, []Conflict) {
+	identity := Identity(chosen)
 	if !policy.ChangeEnabled() {
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_DISABLED"})
-		return current, false, apps, nil
+		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_DISABLED"}}, nil
 	}
 	if !sample.Complete {
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_PENDING"})
-		return current, false, apps, nil
+		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_PENDING"}}, nil
 	}
 	if current.LastAt != nil && current.LastAt.Equal(sample.ScheduledFor) && current.Candidate == identity {
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "REPLAY"})
-		return current, false, apps, nil
+		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "REPLAY"}}, nil
 	}
+	trackPhotoCandidate(&current, chosen, identity, sample)
+	if current.Slots < policy.ChangeMinObservations ||
+		current.FirstRx == nil ||
+		sample.ReceivedAt.Before(current.FirstRx.Add(policy.ChangeStability)) {
+		return current, false, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_PENDING"}}, nil
+	}
+	current.Identity = identity
+	current.URL = chosen.URL
+	current.Width = chosen.Width
+	current.Height = chosen.Height
+	current.EffectiveAt = copyTime(sample.EffectiveAt)
+	resetCandidate(&current)
+	return current, true, []Application{{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "APPLIED"}}, nil
+}
+
+func trackPhotoCandidate(current *Canonical, chosen Variant, identity string, sample Sample) {
 	if current.Candidate != identity {
 		current.Candidate = identity
 		current.CandidateURL = chosen.URL
@@ -108,27 +137,13 @@ func reduceKind(current Canonical, kind string, variants []Variant, sample Sampl
 		current.FirstAt = copyTime(sample.ScheduledFor)
 		current.LastAt = copyTime(sample.ScheduledFor)
 		current.FirstRx = copyTime(sample.ReceivedAt)
-	} else {
-		current.Slots++
-		current.LastAt = copyTime(sample.ScheduledFor)
-		current.CandidateURL = chosen.URL
-		current.CandidateW = chosen.Width
-		current.CandidateH = chosen.Height
+		return
 	}
-	if current.Slots < policy.ChangeMinObservations ||
-		current.FirstRx == nil ||
-		sample.ReceivedAt.Before(current.FirstRx.Add(policy.ChangeStability)) {
-		apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "CHANGE_PENDING"})
-		return current, false, apps, nil
-	}
-	current.Identity = identity
-	current.URL = chosen.URL
-	current.Width = chosen.Width
-	current.Height = chosen.Height
-	current.EffectiveAt = copyTime(sample.EffectiveAt)
-	resetCandidate(&current)
-	apps = append(apps, Application{EntityKind: "youtube_channel_photo", EntityKey: key, Decision: "APPLIED"})
-	return current, true, apps, nil
+	current.Slots++
+	current.LastAt = copyTime(sample.ScheduledFor)
+	current.CandidateURL = chosen.URL
+	current.CandidateW = chosen.Width
+	current.CandidateH = chosen.Height
 }
 
 func groupVariants(variants []Variant) (map[string][]Variant, error) {
@@ -154,15 +169,15 @@ func validateStoredURL(raw string) error {
 	return nil
 }
 
-func splitIdentified(variants []Variant) (identified, unidentified []Variant) {
+func identifiedVariants(variants []Variant) []Variant {
+	identified := make([]Variant, 0, len(variants))
 	for i := range variants {
 		if Identity(variants[i]) == "" {
-			unidentified = append(unidentified, variants[i])
 			continue
 		}
 		identified = append(identified, variants[i])
 	}
-	return identified, unidentified
+	return identified
 }
 
 func chooseIdentity(variants []Variant) (Variant, bool, Conflict) {

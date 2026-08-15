@@ -54,10 +54,33 @@ WITH input AS MATERIALIZED (
     FROM input
     ORDER BY identity
 ), lock_barrier AS MATERIALIZED (
-    SELECT count(*) AS acquired_count
+    SELECT count(acquired) AS acquired_count
     FROM identity_locks
 ), existing AS MATERIALIZED (
-    SELECT input.*,
+    SELECT input.ordinal,
+           input.identity,
+           input.provider,
+           input.observation_kind,
+           input.subject_key,
+           input.observation_key,
+           input.schema_version,
+           input.contract_generation,
+           input.scheduled_for,
+           input.observed_at,
+           input.source_event_at,
+           input.scope_sha256,
+           input.completeness,
+           input.continuity,
+           input.payload,
+           input.payload_sha256,
+           input.evidence_sha256,
+           input.collector_instance,
+           input.job_key,
+           input.collection_job_kind,
+           input.fence_epoch,
+           input.projection_generation,
+           input.collection_latency_ms,
+           input.cursor,
            current.id AS existing_id,
            current.evidence_sha256 AS existing_evidence_sha256
     FROM input
@@ -223,9 +246,9 @@ WITH input AS MATERIALIZED (
         updated_at = NOW()
     RETURNING provider
 ), effects AS MATERIALIZED (
-    SELECT (SELECT count(*) FROM collision_write)
-         + (SELECT count(*) FROM queue_write)
-         + (SELECT count(*) FROM checkpoint_write) AS affected_count
+    SELECT (SELECT count(id) FROM collision_write)
+         + (SELECT count(observation_id) FROM queue_write)
+         + (SELECT count(provider) FROM checkpoint_write) AS affected_count
 )
 SELECT existing.ordinal,
        COALESCE(existing.existing_id, observation_write.id, 0) AS observation_id,

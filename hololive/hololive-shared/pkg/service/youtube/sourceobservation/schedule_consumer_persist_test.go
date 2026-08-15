@@ -80,7 +80,7 @@ func TestScheduleConsumerTemporaryItemDoesNotMergeSession(t *testing.T) {
 		t.Fatalf("seed session: %v", err)
 	}
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindSchedule, "global:hololive-schedule", "holodex_global")
+	proof := seedPublishLease(t, pool, contract.ProviderHolodex, contract.KindSchedule, "global:hololive-schedule", "holodex_schedule")
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
 	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, proof, contract.ScheduleItemV1{
 		ExternalID: "holodex-temp", Title: "Temp", ScheduledAt: time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC),
@@ -123,7 +123,7 @@ func scheduleEnvelope(t *testing.T, proof contract.LeaseProof, items ...contract
 }
 
 func proofProvider(proof contract.LeaseProof) contract.Provider {
-	if proof.CollectionJobKind == "holodex_global" {
+	if proof.CollectionJobKind == "holodex_schedule" {
 		return contract.ProviderHolodex
 	}
 	return contract.ProviderHololiveOfficial

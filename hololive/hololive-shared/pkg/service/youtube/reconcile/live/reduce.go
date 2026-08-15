@@ -55,15 +55,24 @@ func applyFacts(session *reduceSession) {
 }
 
 func applySessionFact(session *reduceSession, fact SessionFact) {
-	switch fact.Status {
-	case "UPCOMING":
+	if fact.Status == "UPCOMING" {
 		applyUpcomingPositive(session, fact)
-	case "LIVE":
+		return
+	}
+	if fact.Status == "LIVE" {
 		applyLivePositive(session, fact)
-	case "ENDED":
+		return
+	}
+	applyNegativeFact(session, fact)
+}
+
+func applyNegativeFact(session *reduceSession, fact SessionFact) {
+	if fact.Status == "ENDED" {
 		recordPendingEnd(session, pendingFromFact(session, fact, EndEvidenceExplicitEnd))
 		reapplyStoredEnds(session, fact.VideoID)
-	case "CANCELLED":
+		return
+	}
+	if fact.Status == "CANCELLED" {
 		recordPendingEnd(session, pendingFromFact(session, fact, EndEvidenceExplicitCancel))
 		reapplyStoredEnds(session, fact.VideoID)
 	}

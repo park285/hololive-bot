@@ -69,6 +69,26 @@ else
   record_fail "ap-host-native deploy must preserve the installed host env and systemd unit"
 fi
 
+if grep -Fq 'write_retired_producer_runtime_state "$service"' "${DEPLOY}" &&
+   grep -Fq 'stop_retired_producer_runtime "$service"' "${DEPLOY}"; then
+  pass "ap-host-native deploy records and stops the prior producer runtime before enabling collector"
+else
+  record_fail "ap-host-native deploy must record and stop the prior producer runtime"
+fi
+
+if grep -Fq 'validate_retired_producer_runtime_state "$producer_state_file" "$service"' "${ROLLBACK}" &&
+   grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${ROLLBACK}" &&
+   grep -Fq 'restore_retired_producer_runtime "$producer_state_file" "$service"' "${ROLLBACK}"; then
+  pass "ap-host-native rollback restores the recorded producer runtime on first cutover"
+else
+  record_fail "ap-host-native rollback must stop collector then restore the recorded producer runtime"
+fi
+if grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${DEPLOY}"; then
+  pass "ap-host-native failed cutover stops collector before restoring producer"
+else
+  record_fail "ap-host-native failed cutover must stop collector before restoring producer"
+fi
+
 capture_line="$(grep -nF '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${DEPLOY}" | head -1 | cut -d: -f1)"
 install_line="$(grep -nF '"$payload/youtube-collector-host.env" "$host_env"' "${DEPLOY}" | head -1 | cut -d: -f1)"
 if [[ -n "${capture_line}" && -n "${install_line}" ]] && (( capture_line < install_line )); then
@@ -253,6 +273,9 @@ printf '%s\n' "${!#}" > "${capture_dir}/call-${call}.cmd"
 payload="$(cat)"
 printf '%s\n' "${payload}" > "${capture_dir}/call-${call}.stdin"
 
+if grep -Fq "printf '%s\\n' collector" <<<"${payload}"; then
+  printf 'collector\n'
+fi
 if grep -Fq 'date -u +%Y-%m-%dT%H:%M:%SZ' <<<"${payload}"; then
   printf '2026-08-01T03:04:05Z\n'
 fi
@@ -275,8 +298,8 @@ else
   record_fail "ap-host-native rollback orchestration must succeed when restore and completion checks pass"
 fi
 
-restore_payload="${tmp}/success/call-2.stdin"
-completion_cmd="${tmp}/success/call-4.cmd"
+restore_payload="${tmp}/success/call-3.stdin"
+completion_cmd="${tmp}/success/call-5.cmd"
 if [[ -r "${restore_payload}" ]] &&
    bash -n "${restore_payload}" &&
    grep -Fq 'native_rollback_validate "$previous_target"' "${restore_payload}" &&

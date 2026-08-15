@@ -25,6 +25,7 @@ export async function fetchCommunityPosts(options = {}) {
   return result.posts;
 }
 
+/** @param {YouTubeJSFetchOptions} [options] */
 export async function fetchCommunityFeed({
   channelId,
   maxResults,
@@ -105,6 +106,7 @@ export function emptyCommunityPage() {
   };
 }
 
+/** @param {YouTubeJSFetchOptions} [options] */
 export async function createInnertube({ fetchImpl } = {}) {
   const { Innertube } = await import("youtubei.js");
   return Innertube.create({

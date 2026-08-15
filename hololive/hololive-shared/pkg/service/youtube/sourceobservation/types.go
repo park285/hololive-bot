@@ -241,11 +241,24 @@ func (o ClaimOptions) validate() error {
 	if err := validateText("lease owner", o.LeaseOwner, 128); err != nil {
 		return fmt.Errorf("validate source observation claim: %w", err)
 	}
-	if len(o.Kinds) == 0 || len(o.Kinds) > 9 {
+	if err := validateClaimKinds(o.Kinds); err != nil {
+		return err
+	}
+	if o.Limit < 1 || o.Limit > MaxClaimBatchSize {
+		return fmt.Errorf("validate source observation claim: limit must be between 1 and %d", MaxClaimBatchSize)
+	}
+	if o.LeaseDuration < time.Second || o.LeaseDuration > 10*time.Minute {
+		return fmt.Errorf("validate source observation claim: lease duration must be between 1 second and 10 minutes")
+	}
+	return nil
+}
+
+func validateClaimKinds(kinds []contract.ObservationKind) error {
+	if len(kinds) == 0 || len(kinds) > 9 {
 		return fmt.Errorf("validate source observation claim: kind count must be between 1 and 9")
 	}
-	seen := make(map[contract.ObservationKind]struct{}, len(o.Kinds))
-	for _, kind := range o.Kinds {
+	seen := make(map[contract.ObservationKind]struct{}, len(kinds))
+	for _, kind := range kinds {
 		if !kind.Valid() {
 			return fmt.Errorf("validate source observation claim: invalid kind %q", kind)
 		}
@@ -253,12 +266,6 @@ func (o ClaimOptions) validate() error {
 			return fmt.Errorf("validate source observation claim: duplicate kind %q", kind)
 		}
 		seen[kind] = struct{}{}
-	}
-	if o.Limit < 1 || o.Limit > MaxClaimBatchSize {
-		return fmt.Errorf("validate source observation claim: limit must be between 1 and %d", MaxClaimBatchSize)
-	}
-	if o.LeaseDuration < time.Second || o.LeaseDuration > 10*time.Minute {
-		return fmt.Errorf("validate source observation claim: lease duration must be between 1 second and 10 minutes")
 	}
 	return nil
 }

@@ -41,9 +41,15 @@ type Envelope struct {
 	CommandType string
 	ChatID      string
 	RoomName    string
+	RoomType    string
+	RoomLinkID  string
 	UserID      string
 	UserName    string
 	Parsed      *messaging.ParsedCommand
+}
+
+type RoomObserver interface {
+	Observe(ctx context.Context, roomID, roomType, roomLinkID string)
 }
 
 type MessageIngress struct {
@@ -51,6 +57,15 @@ type MessageIngress struct {
 	acl            *acl.Service
 	logger         *slog.Logger
 	selfSender     string
+	rooms          RoomObserver
+}
+
+type IngressOption func(*MessageIngress)
+
+func WithRoomObserver(rooms RoomObserver) IngressOption {
+	return func(i *MessageIngress) {
+		i.rooms = rooms
+	}
 }
 
 func NewMessageIngress(
@@ -58,13 +73,21 @@ func NewMessageIngress(
 	aclService *acl.Service,
 	logger *slog.Logger,
 	selfSender string,
+	opts ...IngressOption,
 ) *MessageIngress {
-	return &MessageIngress{
+	ingress := &MessageIngress{
 		messageAdapter: messageAdapter,
 		acl:            aclService,
 		logger:         logger,
 		selfSender:     selfSender,
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(ingress)
+		}
+	}
+
+	return ingress
 }
 
 func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) (*Envelope, bool) {
@@ -84,6 +107,11 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 		return nil, false
 	}
 
+	roomType, roomLinkID := roomChatFromMessage(message)
+	if i.rooms != nil {
+		i.rooms.Observe(ctx, chatID, roomType, roomLinkID)
+	}
+
 	parsed := i.parseCommand(ctx, message, roomAttr)
 	if parsed == nil {
 		return nil, false
@@ -96,6 +124,8 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 		CommandType: commandType,
 		ChatID:      chatID,
 		RoomName:    roomName,
+		RoomType:    roomType,
+		RoomLinkID:  roomLinkID,
 		UserID:      userID,
 		UserName:    userName,
 		Parsed:      parsed,

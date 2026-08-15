@@ -29,7 +29,7 @@ type ChannelPolicy struct {
 }
 
 type Consumer struct {
-	repo      *Repository
+	repo      observationClaimFinalizer
 	writer    CanonicalWriter
 	keywords  []string
 	grace     time.Duration
@@ -37,12 +37,12 @@ type Consumer struct {
 	channel   ChannelPolicy
 }
 
-func NewConsumer(repo *Repository, writer CanonicalWriter, keywords []string) *Consumer {
+func NewConsumer(repo observationClaimFinalizer, writer CanonicalWriter, keywords []string) *Consumer {
 	return NewConsumerWithAbsenceGrace(repo, writer, keywords, 0)
 }
 
 func NewConsumerWithAbsenceGrace(
-	repo *Repository,
+	repo observationClaimFinalizer,
 	writer CanonicalWriter,
 	keywords []string,
 	grace time.Duration,
@@ -51,7 +51,7 @@ func NewConsumerWithAbsenceGrace(
 }
 
 func NewConsumerWithGraces(
-	repo *Repository,
+	repo observationClaimFinalizer,
 	writer CanonicalWriter,
 	keywords []string,
 	grace time.Duration,
@@ -121,14 +121,24 @@ func (c *Consumer) ConsumeObservation(
 	if result.Unsupported || !canonicalApplied {
 		return nil
 	}
-	switch appliedKind {
-	case contract.KindCommunityPage:
+	c.afterCommit(ctx, appliedKind, persisted, contentDecision)
+	return nil
+}
+
+func (c *Consumer) afterCommit(
+	ctx context.Context,
+	appliedKind contract.ObservationKind,
+	persisted community.Batch,
+	contentDecision content.Decision,
+) {
+	if appliedKind == contract.KindCommunityPage {
 		c.writer.AfterCommit(ctx, persisted)
-	case contract.KindVideoList, contract.KindShortsList:
+		return
+	}
+	if appliedKind == contract.KindVideoList || appliedKind == contract.KindShortsList {
 		_, _, tracking := contentArtifacts(Observation{}, contentDecision)
 		c.writer.AfterCommitVideos(ctx, tracking)
 	}
-	return nil
 }
 
 func (c *Consumer) finalizeObservation(
@@ -140,44 +150,78 @@ func (c *Consumer) finalizeObservation(
 	appliedKind *contract.ObservationKind,
 	canonicalApplied *bool,
 ) (ReconcileResult, error) {
-	switch claimed.ObservationKind {
-	case contract.KindCommunityPage:
+	if claimed.ObservationKind == contract.KindCommunityPage {
 		return c.finalizeCommunity(ctx, tx, claimed, persisted, appliedKind, canonicalApplied)
-	case contract.KindVideoList, contract.KindShortsList:
+	}
+	if claimed.ObservationKind == contract.KindVideoList || claimed.ObservationKind == contract.KindShortsList {
 		return c.finalizeContent(ctx, tx, claimed, contentDecision, appliedKind, canonicalApplied)
-	case contract.KindLiveSnapshot:
-		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
-			_, rec, err := c.reconcileLive(ctx, tx, claimed)
-			return rec, err
-		})
-	case contract.KindViewerSample:
-		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
-			_, rec, err := c.reconcileViewer(ctx, tx, claimed)
-			return rec, err
-		})
-	case contract.KindSchedule:
-		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
-			_, rec, err := c.reconcileSchedule(ctx, tx, claimed)
-			return rec, err
-		})
-	case contract.KindChannelStats:
-		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
-			_, rec, err := c.reconcileStats(ctx, tx, claimed)
-			return rec, err
-		})
-	case contract.KindChannelProfile:
-		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
-			_, rec, err := c.reconcileProfile(ctx, tx, claimed)
-			return rec, err
-		})
-	case contract.KindChannelPhoto:
-		return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
-			_, rec, err := c.reconcilePhoto(ctx, tx, claimed)
-			return rec, err
-		})
-	default:
+	}
+	return c.finalizeDomainObservation(ctx, tx, claimed, appliedKind, canonicalApplied)
+}
+
+func (c *Consumer) finalizeDomainObservation(
+	ctx context.Context,
+	tx dbx.Tx,
+	claimed Observation,
+	appliedKind *contract.ObservationKind,
+	canonicalApplied *bool,
+) (ReconcileResult, error) {
+	reconcile, ok := c.domainReconcile(claimed.ObservationKind)
+	if !ok {
 		return ReconcileResult{}, fmt.Errorf("youtube consumer received kind %q", claimed.ObservationKind)
 	}
+	return c.finalizeKind(ctx, tx, claimed, appliedKind, canonicalApplied, reconcile)
+}
+
+func (c *Consumer) domainReconcile(kind contract.ObservationKind) (func(context.Context, dbx.Tx, Observation) (ReconcileResult, error), bool) {
+	if fn, ok := c.liveReconcile(kind); ok {
+		return fn, true
+	}
+	return c.channelReconcile(kind)
+}
+
+func (c *Consumer) liveReconcile(kind contract.ObservationKind) (func(context.Context, dbx.Tx, Observation) (ReconcileResult, error), bool) {
+	if kind == contract.KindLiveSnapshot {
+		return func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileLive(ctx, tx, claimed)
+			return rec, err
+		}, true
+	}
+	if kind == contract.KindViewerSample {
+		return func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileViewer(ctx, tx, claimed)
+			return rec, err
+		}, true
+	}
+	if kind == contract.KindSchedule {
+		return func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileSchedule(ctx, tx, claimed)
+			return rec, err
+		}, true
+	}
+	return nil, false
+}
+
+func (c *Consumer) channelReconcile(kind contract.ObservationKind) (func(context.Context, dbx.Tx, Observation) (ReconcileResult, error), bool) {
+	if kind == contract.KindChannelStats {
+		return func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileStats(ctx, tx, claimed)
+			return rec, err
+		}, true
+	}
+	if kind == contract.KindChannelProfile {
+		return func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcileProfile(ctx, tx, claimed)
+			return rec, err
+		}, true
+	}
+	if kind == contract.KindChannelPhoto {
+		return func(ctx context.Context, tx dbx.Tx, claimed Observation) (ReconcileResult, error) {
+			_, rec, err := c.reconcilePhoto(ctx, tx, claimed)
+			return rec, err
+		}, true
+	}
+	return nil, false
 }
 
 func (c *Consumer) finalizeKind(
