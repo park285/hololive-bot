@@ -107,26 +107,36 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
+	return t.dispatchMessage(sendCtx, room, message, useMarkdown)
+}
 
-	opts := appendThreadIDOption(sendCtx, nil)
-
-	emission := issueReplyEmission(sendCtx)
+func (t *CommandTransport) dispatchMessage(ctx context.Context, room, message string, useMarkdown bool) error {
+	opts := appendThreadIDOption(ctx, nil)
+	emission := issueReplyEmission(ctx)
 	if t.replyOutboxWriter() != nil {
-		kind := StoredReplyKindText
-		if useMarkdown {
-			kind = StoredReplyKindMarkdown
-		}
-		threadID, _ := ThreadIDFromContext(sendCtx)
-		if err := t.recordReply(sendCtx, room, emission, &StoredReply{Kind: kind, Message: message, ThreadID: threadID}); err != nil {
-			return fmt.Errorf("record reply: %w", err)
-		}
-		return nil
+		return t.recordTextReply(ctx, room, message, emission, useMarkdown)
 	}
-	if err := t.sendMessage(sendCtx, room, message, emission.clientRequestID, useMarkdown, opts...); err != nil {
+	if err := t.sendMessage(ctx, room, message, emission.clientRequestID, useMarkdown, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message: %w", serviceErr)
 	}
+	return nil
+}
 
+func (t *CommandTransport) recordTextReply(
+	ctx context.Context,
+	room, message string,
+	emission replyEmission,
+	useMarkdown bool,
+) error {
+	kind := StoredReplyKindText
+	if useMarkdown {
+		kind = StoredReplyKindMarkdown
+	}
+	threadID, _ := ThreadIDFromContext(ctx)
+	if err := t.recordReply(ctx, room, emission, &StoredReply{Kind: kind, Message: message, ThreadID: threadID}); err != nil {
+		return fmt.Errorf("record reply: %w", err)
+	}
 	return nil
 }
 
