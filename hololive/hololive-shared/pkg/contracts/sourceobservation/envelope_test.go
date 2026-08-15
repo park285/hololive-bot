@@ -726,11 +726,6 @@ func mustMarshalPayload(t *testing.T, value any) json.RawMessage {
 	return payload
 }
 
-//go:fix inline
-func timePointer(value time.Time) *time.Time {
-	return new(value)
-}
-
 func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload json.RawMessage, completeness Completeness) Envelope {
 	t.Helper()
 	scheduledFor := time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC)
