@@ -175,11 +175,15 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 163 live viewer schedule migration: %v", err)
 	}
+	runtimeLockRetention, err := fs.ReadFile(migrations, "175_youtube_runtime_lock_retention_api.sql")
+	if err != nil {
+		t.Fatalf("read 175 runtime lock retention API migration: %v", err)
+	}
 	grantPreexistingScraperPrivileges(t, pool, roles.scraper)
 	sql := strings.NewReplacer(
 		"hololive_scraper", roles.scraper,
 		"hololive_runtime", roles.runtime,
-	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads) + "\n" + string(contentClocks) + "\n" + string(liveSchedule))
+	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads) + "\n" + string(contentClocks) + "\n" + string(liveSchedule) + "\n" + string(runtimeLockRetention))
 	if _, err := pool.Exec(ctx, sql); err != nil {
 		t.Fatalf("apply source observation migration with isolated roles: %v", err)
 	}
@@ -199,6 +203,7 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	assertPreexistingScraperPrivilegesRevoked(t, pool, roles.scraper)
 	assertObservationGrantMatrix(t, pool, roles)
 	assertObservationLockAPIAccess(t, pool, roles)
+	assertObservationRetentionAPIAccess(t, pool, roles)
 }
 
 func TestSourceObservationLockAPIMigrationIsAtomic(t *testing.T) {
@@ -513,6 +518,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		roles.runtime: {
 			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
 			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
+			{name: "repository_live_observation_lock_0051_51.sql", args: []any{int64(0)}},
 		},
 	}
 	for role, queries := range checks {
@@ -542,6 +548,56 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		if err := tx.Rollback(context.Background()); err != nil {
 			t.Fatalf("rollback observation lock API check for %s: %v", role, err)
 		}
+	}
+}
+
+func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
+	t.Helper()
+	functions := []string{
+		"public.delete_retired_youtube_collection_job_leases(timestamp with time zone,integer)",
+		"public.delete_source_observation_retention_batch(text[],timestamp with time zone[],integer)",
+	}
+	for role, want := range map[string]bool{roles.scraper: false, roles.runtime: true} {
+		for _, function := range functions {
+			var got bool
+			if err := pool.QueryRow(
+				context.Background(),
+				"SELECT has_function_privilege($1, $2, 'EXECUTE')",
+				role,
+				function,
+			).Scan(&got); err != nil {
+				t.Fatalf("check retention function %s privilege for %s: %v", function, role, err)
+			}
+			if got != want {
+				t.Errorf("retention function %s privilege for %s = %t, want %t", function, role, got, want)
+			}
+		}
+	}
+	tx, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin runtime retention API check: %v", err)
+	}
+	if _, err := tx.Exec(context.Background(), "SET LOCAL ROLE "+pgx.Identifier{roles.runtime}.Sanitize()); err != nil {
+		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
+			t.Errorf("rollback runtime retention role setup: %v", rollbackErr)
+		}
+		t.Fatalf("set runtime retention role: %v", err)
+	}
+	for _, query := range []string{
+		"SELECT * FROM public.delete_retired_youtube_collection_job_leases(clock_timestamp(), 1)",
+		"SELECT * FROM public.delete_source_observation_retention_batch(ARRAY['community_page']::text[], ARRAY[clock_timestamp()]::timestamptz[], 1)",
+	} {
+		rows, queryErr := tx.Query(context.Background(), query)
+		if queryErr != nil {
+			if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
+				t.Errorf("rollback runtime retention API query: %v", rollbackErr)
+			}
+			t.Fatalf("execute runtime retention API query: %v", queryErr)
+		}
+		rows.Close()
+	}
+	if err := tx.Rollback(context.Background()); err != nil {
+		t.Fatalf("rollback runtime retention API check: %v", err)
 	}
 }
 
