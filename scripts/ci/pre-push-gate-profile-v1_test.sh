@@ -101,8 +101,8 @@ cp "${ROOT_DIR}/scripts/ci/local-ci.sh" "${fingerprint_fixture}/scripts/ci/"
 cat >"${fingerprint_fixture}/fake-bin/go" <<'SH'
 #!/bin/bash
 case "${1:-}" in
-  version) echo 'go version go1.26.5 linux/amd64' ;;
-  env) printf 'go1.26.5\nlinux\namd64\ngo1.26.5+auto\n' ;;
+  version) echo 'go version go1.26.6 linux/amd64' ;;
+  env) printf 'go1.26.6\nlinux\namd64\ngo1.26.6+auto\n' ;;
   *) exit 1 ;;
 esac
 SH

@@ -18,7 +18,7 @@ write_fixture() {
   cat >"${dir}/service/go.mod" <<'EOF'
 module example.com/pgo-policy-fixture
 
-go 1.26.5
+go 1.26.6
 EOF
   cat >"${dir}/service/cmd/app/main.go" <<'EOF'
 package main
