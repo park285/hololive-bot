@@ -23,6 +23,21 @@ test("mapContentItems maps current YouTube.js LockupView rows", () => {
   assert.equal(items[0].title, "Title");
 });
 
+test("mapContentItems maps current YouTube.js ShortsLockupView rows", () => {
+  const items = mapContentItems(
+    {
+      videos: [{
+        type: "ShortsLockupView",
+        on_tap_endpoint: { payload: { videoId: "short-1" } },
+        overlay_metadata: { primary_text: { text: "Short title" } },
+      }],
+    },
+    "UC_TEST",
+  );
+  assert.equal(items[0].video_id, "short-1");
+  assert.equal(items[0].title, "Short title");
+});
+
 test("fetchContentFeed fail-closes when every row is missing video id", async () => {
   const innertube = {
     getChannel: async () => ({
