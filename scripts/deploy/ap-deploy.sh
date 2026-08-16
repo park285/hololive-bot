@@ -285,15 +285,16 @@ trap restore_retired_producer_after_failed_cutover ERR
 remote "set -euo pipefail
 cd ~/hololive-bot
 . scripts/deploy/lib/retired-producer-cutover.sh
-. scripts/deploy/lib/ap-collector-readiness.sh
 stop_retired_producer_runtime
 sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
 sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' REVISION='$REVISION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
 echo change_started_at='$change_started_at'"
 
 remote "set -euo pipefail
+cd ~/hololive-bot
 since='$change_started_at'
 expected_revision='$REVISION'
+. scripts/deploy/lib/ap-collector-readiness.sh
 since_epoch=\$(date -u -d \"\$since\" +%s)
 for container in $containers_list; do
   for _ in \$(seq 1 30); do
