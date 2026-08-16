@@ -56,10 +56,11 @@ export function thumbnailsOf(value) {
         : [];
   const mapped = [];
   for (const row of rows) {
-    const url = textOf(row?.url).trim();
-    if (url === "") {
+    const rawUrl = textOf(row?.url).trim();
+    if (rawUrl === "") {
       continue;
     }
+    const url = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
     mapped.push({
       url,
       width: toDimension(row?.width),
