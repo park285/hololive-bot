@@ -378,6 +378,40 @@ func TestTransientConsumeErrorUsesBoundedQueueRetry(t *testing.T) {
 	}
 }
 
+func TestClaimLoopImmediatelyDrainsFullBatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	secondClaim := make(chan struct{})
+	var calls atomic.Int64
+	runtime := newTestRuntime(fakeClaimer{
+		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+			if calls.Add(1) == 2 {
+				close(secondClaim)
+				cancel()
+				return sourceobservation.ClaimedBatch{}, nil
+			}
+			claims := make([]sourceobservation.ClaimWork, runtimeClaimBatchSizeForTest)
+			for i := range claims {
+				claims[i] = sourceobservation.ClaimWork{ObservationID: int64(i + 1)}
+			}
+			return sourceobservation.ClaimedBatch{Claims: claims}, nil
+		},
+	}, fakeConsumer{})
+	runtime.Config.ClaimInterval = time.Hour
+	runtime.claim.Limit = runtimeClaimBatchSizeForTest
+	runtime.workCh = make(chan sourceobservation.ClaimWork, runtimeClaimBatchSizeForTest)
+	runtime.claiming.Store(true)
+
+	go runtime.runClaimLoop(ctx, make(chan error, 1))
+	select {
+	case <-secondClaim:
+	case <-time.After(time.Second):
+		t.Fatal("full claim batch did not trigger an immediate follow-up claim")
+	}
+}
+
+const runtimeClaimBatchSizeForTest = 4
+
 func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 	var retries atomic.Int64
 	runtime := newTestRuntime(fakeClaimer{
