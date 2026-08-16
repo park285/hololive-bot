@@ -133,6 +133,9 @@ func (r *ChannelRunner) appendLiveEnvelope(
 	if !enabled[contract.KindLiveSnapshot] {
 		return nil
 	}
+	if result.MissingTab {
+		return nil
+	}
 	live, err := r.envelope(input, contract.KindLiveSnapshot, completeness, continuity, liveSnapshotPayload(input.Spec.SubjectKey, result.LiveSessions))
 	if err != nil {
 		return err

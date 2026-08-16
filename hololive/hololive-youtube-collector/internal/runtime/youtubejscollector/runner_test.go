@@ -139,6 +139,33 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 	}
 }
 
+func TestChannelRunnersSkipMissingLiveTabButKeepMetadata(t *testing.T) {
+	t.Parallel()
+	var result youtubejs.ChannelResult
+	loadJSON(t, "channel.json", &result)
+	result.MissingTab = true
+	fake := &channelFake{result: result}
+	live, err := NewChannelLiveRunner(fake).Collect(context.Background(), youtubeInput(
+		"UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(
+		"UC_TEST", "youtubejs_channel_metadata",
+		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(live.Observations) != 0 {
+		t.Fatalf("missing live tab published %#v", live.Observations)
+	}
+	if len(metadata.Observations) != 3 {
+		t.Fatalf("metadata observations = %#v", metadata.Observations)
+	}
+}
+
 func TestChannelPhotoDoesNotFetchMediaOrSynthesizeFingerprint(t *testing.T) {
 	t.Parallel()
 	var result youtubejs.ChannelResult

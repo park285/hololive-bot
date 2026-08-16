@@ -15,6 +15,7 @@ export async function fetchChannelFeed({ channelId, innertube } = {}) {
   const channel = await innertube.getChannel(id);
   const about = typeof channel.getAbout === "function" ? await channel.getAbout() : {};
   let liveFeed = { videos: [] };
+  let missingTab = false;
   if (typeof channel.getLiveStreams === "function") {
     try {
       liveFeed = await channel.getLiveStreams();
@@ -22,7 +23,10 @@ export async function fetchChannelFeed({ channelId, innertube } = {}) {
       if (!isMissingStreamsTab(err)) {
         throw err;
       }
+      missingTab = true;
     }
+  } else {
+    missingTab = true;
   }
   return {
     live_sessions: mapLiveSessions(liveFeed, id),
@@ -32,6 +36,7 @@ export async function fetchChannelFeed({ channelId, innertube } = {}) {
     page_count: 1,
     exhausted: true,
     continuity: "CONTIGUOUS",
+    ...(missingTab ? { missing_tab: true } : {}),
   };
 }
 
