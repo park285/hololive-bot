@@ -88,7 +88,7 @@ func runSmoke() {
 		}
 	}
 
-	if err := healthprobe.CheckURL("https://www.google.com"); err != nil {
+	if err := runExternalSmoke(healthprobe.CheckURL); err != nil {
 		fmt.Fprintf(os.Stderr, "https ca smoke: %v\n", err)
 		os.Exit(1)
 	}
@@ -97,4 +97,14 @@ func runSmoke() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func runExternalSmoke(checkURL func(string) error) error {
+	if err := os.Unsetenv(healthprobe.CACertFileEnv); err != nil {
+		return fmt.Errorf("clear internal ca override: %w", err)
+	}
+	if err := os.Unsetenv(healthprobe.ServerNameEnv); err != nil {
+		return fmt.Errorf("clear internal server name override: %w", err)
+	}
+	return checkURL("https://www.google.com/generate_204")
 }
