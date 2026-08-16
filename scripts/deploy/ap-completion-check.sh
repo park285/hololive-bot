@@ -5,6 +5,7 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 CHANGE_STARTED_AT="${CHANGE_STARTED_AT:-}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
+READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
@@ -34,6 +35,7 @@ run_native_completion_check() {
   ap_remote_bash "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_NAME" < "$REPO_ROOT/scripts/deploy/lib/require-quic-udp-buffer.sh"
   {
     cat "$NODE_VERSION_LIB"
+    cat "$READINESS_LIB"
     cat <<'REMOTE'
 set -euo pipefail
 service="$1"
@@ -84,11 +86,7 @@ ready="$(
   "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
 )"
 printf '%s\n' "$ready"
-printf '%s' "$ready" | grep -q '"status":"ready"'
-printf '%s' "$ready" | grep -q '"helper":"ok"'
-printf '%s' "$ready" | grep -q '"first_success":true'
-printf '%s' "$ready" | grep -q '"handoff_status":"PROCESSED"'
-printf '%s' "$ready" | grep -q '"pending_queue":'
+collector_readiness_validate "$ready"
 
 if [[ -n "$change_started_at" ]]; then
   journal_since="${change_started_at/T/ }"
@@ -118,6 +116,7 @@ ports_list="${AP_PORTS[*]}"
 remote "set -euo pipefail
 cd ~/hololive-bot
 . scripts/deploy/lib/youtubejs-node-version.sh
+. scripts/deploy/lib/ap-collector-readiness.sh
 bash scripts/deploy/lib/require-quic-udp-buffer.sh '$AP_REQUIRED_UDP_BUFFER_BYTES' '$AP_NAME'
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
@@ -136,11 +135,7 @@ ports=($ports_list)
 idx=0
 for container in $containers_list; do
   ready=\$(docker exec \"\$container\" ./bin/healthcheck --body \"https://127.0.0.1:\${ports[\$idx]}/ready\")
-  printf '%s' \"\$ready\" | grep -q '\"status\":\"ready\"'
-  printf '%s' \"\$ready\" | grep -q '\"helper\":\"ok\"'
-  printf '%s' \"\$ready\" | grep -q '\"first_success\":true'
-  printf '%s' \"\$ready\" | grep -q '\"handoff_status\":\"PROCESSED\"'
-  printf '%s' \"\$ready\" | grep -q '\"pending_queue\":'
+  collector_readiness_validate \"\$ready\"
   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \"\$container\" | grep -qx 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true'
   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \"\$container\" | grep -qx 'POSTGRES_USER=hololive_scraper'
   idx=\$((idx + 1))
