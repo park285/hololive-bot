@@ -1,3 +1,5 @@
+BEGIN;
+
 ALTER TABLE youtube_collection_job_leases
     ADD COLUMN IF NOT EXISTS last_failure_code TEXT;
 
@@ -9,32 +11,6 @@ ALTER TABLE youtube_collection_job_leases
 
 ALTER TABLE youtube_collection_job_leases
     ADD COLUMN IF NOT EXISTS last_failure_at TIMESTAMPTZ;
-
-ALTER TABLE youtube_collection_job_leases
-    DROP CONSTRAINT IF EXISTS chk_youtube_collection_job_last_failure_shape;
-
-ALTER TABLE youtube_collection_job_leases
-    ADD CONSTRAINT chk_youtube_collection_job_last_failure_shape
-    CHECK (
-        (
-            last_failure_code IS NULL
-            AND last_failure_class IS NULL
-            AND last_failure_detail IS NULL
-            AND last_failure_at IS NULL
-        )
-        OR (
-            last_failure_code IS NOT NULL
-            AND length(last_failure_code) BETWEEN 1 AND 128
-            AND last_failure_class IS NOT NULL
-            AND last_failure_class ~ '^[A-Za-z][A-Za-z0-9_]{0,63}$'
-            AND last_failure_detail IS NOT NULL
-            AND octet_length(last_failure_detail) <= 2048
-            AND last_failure_at IS NOT NULL
-        )
-    ) NOT VALID;
-
-ALTER TABLE youtube_collection_job_leases
-    VALIDATE CONSTRAINT chk_youtube_collection_job_last_failure_shape;
 
 CREATE OR REPLACE FUNCTION populate_youtube_collection_job_lease_failure_diagnostics()
 RETURNS trigger
@@ -65,3 +41,44 @@ CREATE OR REPLACE TRIGGER youtube_collection_job_lease_failure_diagnostics_backf
     ON youtube_collection_job_leases
     FOR EACH ROW
     EXECUTE FUNCTION populate_youtube_collection_job_lease_failure_diagnostics();
+
+UPDATE youtube_collection_job_leases
+SET last_failure_code = last_error_code,
+    last_failure_class = 'legacy_collector',
+    last_failure_detail = 'legacy_collector',
+    last_failure_at = updated_at
+WHERE slot_state = 'DEFERRED'
+  AND last_error_code IS NOT NULL
+  AND last_error_code <> 'shutdown_release'
+  AND last_failure_code IS NULL
+  AND last_failure_class IS NULL
+  AND last_failure_detail IS NULL
+  AND last_failure_at IS NULL;
+
+ALTER TABLE youtube_collection_job_leases
+    DROP CONSTRAINT IF EXISTS chk_youtube_collection_job_last_failure_shape;
+
+ALTER TABLE youtube_collection_job_leases
+    ADD CONSTRAINT chk_youtube_collection_job_last_failure_shape
+    CHECK (
+        (
+            last_failure_code IS NULL
+            AND last_failure_class IS NULL
+            AND last_failure_detail IS NULL
+            AND last_failure_at IS NULL
+        )
+        OR (
+            last_failure_code IS NOT NULL
+            AND length(last_failure_code) BETWEEN 1 AND 128
+            AND last_failure_class IS NOT NULL
+            AND last_failure_class ~ '^[A-Za-z][A-Za-z0-9_]{0,63}$'
+            AND last_failure_detail IS NOT NULL
+            AND octet_length(last_failure_detail) <= 2048
+            AND last_failure_at IS NOT NULL
+        )
+    ) NOT VALID;
+
+ALTER TABLE youtube_collection_job_leases
+    VALIDATE CONSTRAINT chk_youtube_collection_job_last_failure_shape;
+
+COMMIT;
