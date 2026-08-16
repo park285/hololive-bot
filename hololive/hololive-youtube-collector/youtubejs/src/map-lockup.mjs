@@ -1,11 +1,17 @@
 import { textOf } from "./map-posts.mjs";
 
 export function videoIDOf(row) {
-  return textOf(row?.id || row?.video_id || row?.videoId || row?.content_id).trim();
+  return textOf(
+    row?.id ||
+    row?.video_id ||
+    row?.videoId ||
+    row?.content_id ||
+    row?.on_tap_endpoint?.payload?.videoId,
+  ).trim();
 }
 
 export function videoTitleOf(row) {
-  return textOf(row?.title || row?.metadata?.title).trim();
+  return textOf(row?.title || row?.metadata?.title || row?.overlay_metadata?.primary_text).trim();
 }
 
 export function isVideoLockup(row) {
