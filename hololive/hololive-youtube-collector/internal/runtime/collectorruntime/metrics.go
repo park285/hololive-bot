@@ -16,6 +16,7 @@ const (
 	resultParserDrift   = "parser_drift"
 	resultPaginationGap = "pagination_gap"
 	resultFailed        = "failed"
+	resultSuperseded    = "superseded"
 	resultNotAcquired   = "not_acquired"
 	resultError         = "error"
 	resultAcquired      = "acquired"
@@ -26,6 +27,7 @@ const (
 	outcomeDuplicate    = "duplicate"
 	outcomeCollision    = "collision"
 	outcomeRejected     = "rejected"
+	outcomeSuperseded   = "superseded"
 	outcomeEmpty        = "empty"
 )
 
@@ -192,7 +194,7 @@ func (m *Metrics) ObservePublish(provider contract.Provider, kind, outcome strin
 
 func boundedResult(value string) string {
 	switch value {
-	case resultSuccess, resultTimeout, resultCanceled, resultParserDrift, resultPaginationGap, resultFailed:
+	case resultSuccess, resultTimeout, resultCanceled, resultParserDrift, resultPaginationGap, resultFailed, resultSuperseded:
 		return value
 	default:
 		return resultFailed
@@ -219,7 +221,7 @@ func boundedPhase(value string) string {
 
 func boundedOutcome(value string) string {
 	switch value {
-	case outcomeInserted, outcomeDuplicate, outcomeCollision, outcomeRejected, outcomeEmpty:
+	case outcomeInserted, outcomeDuplicate, outcomeCollision, outcomeRejected, outcomeSuperseded, outcomeEmpty:
 		return value
 	default:
 		return outcomeRejected
