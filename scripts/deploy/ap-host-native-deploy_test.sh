@@ -77,6 +77,22 @@ else
   record_fail "ap-host-native deploy must record and stop the prior producer runtime"
 fi
 
+scraper_password_line="$(grep -nF 'export POSTGRES_PASSWORD="$HOLOLIVE_SCRAPER_PASSWORD"' "${DEPLOY}" | head -1 | cut -d: -f1)"
+runtime_password_line="$(grep -nF 'export POSTGRES_PASSWORD="$HOLOLIVE_DB_PASSWORD"' "${DEPLOY}" | head -1 | cut -d: -f1)"
+if [[ -n "${scraper_password_line}" && -n "${runtime_password_line}" ]] &&
+   (( scraper_password_line < runtime_password_line )) &&
+   grep -Fq '[ "$POSTGRES_USER" = "${HOLOLIVE_SCRAPER_USER:-hololive_scraper}" ]' "${DEPLOY}"; then
+  pass "ap-host-native wrapper selects the scraper credential for the scraper role"
+else
+  record_fail "ap-host-native wrapper must prefer the scraper credential for the scraper role"
+fi
+
+if grep -Fq 'install -m 0644 -o root -g root "$payload/first-cutover-producer.state" "$producer_state_file"' "${REMOTE_APPLY}"; then
+  pass "ap-host-native first-cutover state is immutable and readable by rollback orchestration"
+else
+  record_fail "ap-host-native first-cutover state must remain readable by rollback orchestration"
+fi
+
 if grep -Fq 'validate_retired_producer_runtime_state "$producer_state_file" "$service"' "${ROLLBACK}" &&
    grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${ROLLBACK}" &&
    grep -Fq 'restore_retired_producer_runtime "$producer_state_file" "$service"' "${ROLLBACK}"; then

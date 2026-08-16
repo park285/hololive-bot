@@ -91,7 +91,7 @@ fi
 if [[ -z "$old_target" ]]; then
   write_retired_producer_runtime_state "$service" > "$payload/first-cutover-producer.state"
   validate_retired_producer_runtime_state "$payload/first-cutover-producer.state" "$service"
-  sudo -n install -m 0600 -o root -g root "$payload/first-cutover-producer.state" "$producer_state_file"
+  sudo -n install -m 0644 -o root -g root "$payload/first-cutover-producer.state" "$producer_state_file"
 fi
 release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$current_link")"
 
