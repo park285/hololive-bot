@@ -58,6 +58,30 @@ test("handleCommunityRequest fail-closes when the fetcher throws", async () => {
   assert.equal(result.status, 500);
   assert.match(result.body.error, /innertube down/);
   assert.equal(result.body.error_code, "collection_failed");
+  assert.equal(result.body.error_class, "Error");
+});
+
+test("handleChannelRequest reports the typed parser response error class", async () => {
+  const result = await handleChannelRequest(
+    JSON.stringify({ channel_id: "UC_TEST" }),
+    async () => ({ live_sessions: "not-an-array" }),
+  );
+  assert.equal(result.status, 500);
+  assert.equal(result.body.error_code, "parser_drift");
+  assert.equal(result.body.error_class, "RpcResponseError");
+});
+
+test("handleCommunityRequest rejects an invalid custom error name", async () => {
+  const result = await handleCommunityRequest(
+    JSON.stringify({ channel_id: "UC_TEST" }),
+    async () => {
+      const error = new Error("custom failure");
+      error.name = "invalid custom name";
+      throw error;
+    },
+  );
+  assert.equal(result.status, 500);
+  assert.equal(result.body.error_class, "unknown_error");
 });
 
 test("handleCommunityRequest rejects invalid JSON", async () => {
