@@ -17,7 +17,19 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    IF OLD.slot_state = 'ACTIVE'
+    IF OLD.slot_state = 'DEFERRED'
+        AND OLD.last_error_code IS NOT NULL
+        AND OLD.last_error_code <> 'shutdown_release'
+        AND OLD.last_failure_code IS NULL
+        AND OLD.last_failure_class IS NULL
+        AND OLD.last_failure_detail IS NULL
+        AND OLD.last_failure_at IS NULL
+    THEN
+        NEW.last_failure_code := OLD.last_error_code;
+        NEW.last_failure_class := 'legacy_collector';
+        NEW.last_failure_detail := 'legacy_collector';
+        NEW.last_failure_at := OLD.updated_at;
+    ELSIF OLD.slot_state = 'ACTIVE'
         AND NEW.slot_state = 'DEFERRED'
         AND NEW.last_error_code IS NOT NULL
         AND NEW.last_error_code <> 'shutdown_release'
@@ -42,6 +54,39 @@ CREATE OR REPLACE TRIGGER youtube_collection_job_lease_failure_diagnostics_backf
     FOR EACH ROW
     EXECUTE FUNCTION populate_youtube_collection_job_lease_failure_diagnostics();
 
+DO $migration$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'youtube_collection_job_leases'::regclass
+          AND conname = 'chk_youtube_collection_job_last_failure_shape'
+    ) THEN
+        ALTER TABLE youtube_collection_job_leases
+            ADD CONSTRAINT chk_youtube_collection_job_last_failure_shape
+            CHECK (
+                (
+                    last_failure_code IS NULL
+                    AND last_failure_class IS NULL
+                    AND last_failure_detail IS NULL
+                    AND last_failure_at IS NULL
+                )
+                OR (
+                    last_failure_code IS NOT NULL
+                    AND length(last_failure_code) BETWEEN 1 AND 128
+                    AND last_failure_class IS NOT NULL
+                    AND last_failure_class ~ '^[A-Za-z][A-Za-z0-9_]{0,63}$'
+                    AND last_failure_detail IS NOT NULL
+                    AND octet_length(last_failure_detail) <= 2048
+                    AND last_failure_at IS NOT NULL
+                )
+            ) NOT VALID;
+    END IF;
+END
+$migration$;
+
+COMMIT;
+
 UPDATE youtube_collection_job_leases
 SET last_failure_code = last_error_code,
     last_failure_class = 'legacy_collector',
@@ -56,29 +101,4 @@ WHERE slot_state = 'DEFERRED'
   AND last_failure_at IS NULL;
 
 ALTER TABLE youtube_collection_job_leases
-    DROP CONSTRAINT IF EXISTS chk_youtube_collection_job_last_failure_shape;
-
-ALTER TABLE youtube_collection_job_leases
-    ADD CONSTRAINT chk_youtube_collection_job_last_failure_shape
-    CHECK (
-        (
-            last_failure_code IS NULL
-            AND last_failure_class IS NULL
-            AND last_failure_detail IS NULL
-            AND last_failure_at IS NULL
-        )
-        OR (
-            last_failure_code IS NOT NULL
-            AND length(last_failure_code) BETWEEN 1 AND 128
-            AND last_failure_class IS NOT NULL
-            AND last_failure_class ~ '^[A-Za-z][A-Za-z0-9_]{0,63}$'
-            AND last_failure_detail IS NOT NULL
-            AND octet_length(last_failure_detail) <= 2048
-            AND last_failure_at IS NOT NULL
-        )
-    ) NOT VALID;
-
-ALTER TABLE youtube_collection_job_leases
     VALIDATE CONSTRAINT chk_youtube_collection_job_last_failure_shape;
-
-COMMIT;

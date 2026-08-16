@@ -404,6 +404,35 @@ func TestLegacyDeferBackfillsDiagnosticsWithoutOverwritingNewWriter(t *testing.T
 	assertFailureDiagnostics(t, ctx, pool, spec.JobKey, current.code, current.class, current.detail, current.at)
 }
 
+func TestAcquirePreservesLegacyDeferredFailureDuringMigrationBackfill(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+
+	first := mustAcquireLease(t, ctx, repository, spec, "collector-a")
+	if err := first.Complete(ctx); err != nil {
+		t.Fatalf("complete initial lease: %v", err)
+	}
+	var failureAt time.Time
+	if err := pool.QueryRow(ctx, `
+		UPDATE youtube_collection_job_leases
+		SET slot_state = 'DEFERRED',
+		    retry_not_before = clock_timestamp() - INTERVAL '1 second',
+		    last_error_code = 'pretrigger_failure',
+		    updated_at = clock_timestamp() - INTERVAL '1 minute'
+		WHERE job_key = $1
+		RETURNING updated_at
+	`, spec.JobKey).Scan(&failureAt); err != nil {
+		t.Fatalf("seed legacy deferred failure: %v", err)
+	}
+
+	mustAcquireLease(t, ctx, repository, spec, "collector-b")
+	assertFailureDiagnostics(t, ctx, pool, spec.JobKey,
+		"pretrigger_failure", "legacy_collector", "legacy_collector", failureAt)
+}
+
 type failureDiagnostics struct {
 	code   string
 	class  string
