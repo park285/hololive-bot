@@ -95,7 +95,8 @@ type ChannelResult struct {
 	Profile      ChannelProfileItem    `json:"profile"`
 	Photo        []ChannelPhotoVariant `json:"photo"`
 	Pagination
-	Error string `json:"error,omitempty"`
+	MissingTab bool   `json:"missing_tab,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 type ViewerRequest struct {
