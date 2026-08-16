@@ -17,7 +17,7 @@ func (s *leaseScheduler) runSpec(ctx context.Context, spec *joblease.JobSpec) {
 	runner, ok := s.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	if !ok {
 		proof := contract.LeaseProof{}
-		s.logFailure("collect", collecterr.Failed, spec, &proof)
+		s.logFailure("collect", collecterr.Failed, collecterr.UnknownClass, "", spec, &proof)
 		return
 	}
 	lease, err := s.acquireLease(ctx, spec)
@@ -42,12 +42,12 @@ func (s *leaseScheduler) acquireLease(ctx context.Context, spec *joblease.JobSpe
 }
 
 func (s *leaseScheduler) observeAcquireError(spec *joblease.JobSpec, err error) {
-	if errors.Is(err, joblease.ErrProjectionStale) || errors.Is(err, joblease.ErrTargetDisabled) {
+	if supersededError(err) {
 		return
 	}
 	s.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultError)
 	proof := contract.LeaseProof{}
-	s.logFailure("acquire", collecterr.AcquireFailed, spec, &proof)
+	s.logFailure("acquire", collecterr.AcquireFailed, collecterr.Class(err), collecterr.Detail(err), spec, &proof)
 }
 
 func (s *leaseScheduler) runAcquired(ctx context.Context, runner JobRunner, spec *joblease.JobSpec, lease joblease.Lease, _ error) {
@@ -68,8 +68,7 @@ func ignoreRunError(err error) bool {
 	return err == nil ||
 		errors.Is(err, context.Canceled) ||
 		errors.Is(err, joblease.ErrFenceLost) ||
-		errors.Is(err, sourceobservation.ErrProjectionStale) ||
-		errors.Is(err, sourceobservation.ErrTargetDisabled)
+		supersededError(err)
 }
 
 func (s *leaseScheduler) observeFenceLost(spec *joblease.JobSpec, err error) {
@@ -86,11 +85,14 @@ func (s *leaseScheduler) deferFailedRun(
 	err error,
 ) {
 	retryAt := s.retryAt(err)
-	if deferErr := lease.Defer(ctx, retryAt, collecterr.Code(err)); deferErr != nil && !errors.Is(deferErr, joblease.ErrFenceLost) {
-		s.logFailure("defer", collecterr.DeferFailed, spec, proof)
+	code := collecterr.Code(err)
+	class := collecterr.Class(err)
+	detail := collecterr.Detail(err)
+	if deferErr := lease.Defer(ctx, retryAt, code, class, detail); deferErr != nil && !errors.Is(deferErr, joblease.ErrFenceLost) {
+		s.logFailure("defer", collecterr.DeferFailed, collecterr.Class(deferErr), collecterr.Detail(deferErr), spec, proof)
 		return
 	}
-	s.logFailure("collect", collecterr.Code(err), spec, proof)
+	s.logFailure("collect", code, class, detail, spec, proof)
 }
 
 func (s *leaseScheduler) collectAndPublish(
@@ -255,8 +257,8 @@ func attemptResult(err error) string {
 }
 
 func supersededError(err error) bool {
-	return errors.Is(err, sourceobservation.ErrProjectionStale) ||
-		errors.Is(err, sourceobservation.ErrTargetDisabled)
+	return errors.Is(err, joblease.ErrProjectionStale) ||
+		errors.Is(err, joblease.ErrTargetDisabled)
 }
 
 func attemptFailureResult(code string) string {
@@ -295,10 +297,11 @@ func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
 	return retryAt.UTC()
 }
 
-func (s *leaseScheduler) logFailure(phase, code string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+func (s *leaseScheduler) logFailure(phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	if s.logger == nil {
 		return
 	}
+	detail = collecterr.SanitizeDetail(detail)
 	s.logger.Warn("YouTube collection job failed",
 		slog.String("job_key", spec.JobKey),
 		slog.String("provider", string(spec.Provider)),
@@ -307,6 +310,8 @@ func (s *leaseScheduler) logFailure(phase, code string, spec *joblease.JobSpec, 
 		slog.Int64("fence_epoch", proof.FenceEpoch),
 		slog.Int64("projection_generation", proof.ProjectionGeneration),
 		slog.String("error_code", code),
+		slog.String("error_class", class),
+		slog.String("error_detail", detail),
 		slog.String("phase", phase),
 	)
 }

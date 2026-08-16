@@ -16,6 +16,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
 func TestClientFetchCommunityDecodesHelperPosts(t *testing.T) {
@@ -78,6 +79,23 @@ func TestClientFetchFailClosesOnHelperError(t *testing.T) {
 	_, err := client.FetchCommunity(context.Background(), CommunityRequest{ChannelID: "UC_FAIL"})
 	if err == nil || !strings.Contains(err.Error(), "innertube down") {
 		t.Fatalf("FetchCommunity error = %v, want innertube down", err)
+	}
+}
+
+func TestClientFetchPreservesHelperErrorClass(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		if _, err := w.Write([]byte(`{"error":"innertube down","error_code":"collection_failed","error_class":"InnertubeError"}`)); err != nil {
+			t.Errorf("write helper error: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewRPC(server.Client(), server.URL, nil)
+	_, err := client.FetchCommunity(context.Background(), CommunityRequest{ChannelID: "UC_FAIL"})
+	if err == nil || collecterr.Class(err) != "InnertubeError" {
+		t.Fatalf("FetchCommunity class = %q, error = %v", collecterr.Class(err), err)
 	}
 }
 

@@ -84,6 +84,7 @@ export interface RpcEndpoint<Request, Response> {
 export interface HelperErrorBody {
   error: string;
   error_code: string;
+  error_class: string;
 }
 
 export interface CommunityResult extends Pagination {

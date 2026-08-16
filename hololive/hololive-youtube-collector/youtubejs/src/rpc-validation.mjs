@@ -6,12 +6,15 @@
  * @param {string} rawBody
  * @param {import("./contracts.d.ts").RpcEndpoint<Request, Response>} endpoint
  * @param {(request: Request) => Promise<unknown>} run
- * @returns {Promise<{ status: number, body: Response | { error: string, error_code: string } }>}
+ * @returns {Promise<{ status: number, body: Response | import("./contracts.d.ts").HelperErrorBody }>}
  */
 export async function handleRpcRequest(rawBody, endpoint, run) {
   const parsed = parseRpcRequest(rawBody, endpoint.validateRequest);
   if (parsed.ok === false) {
-    return { status: 400, body: { error: parsed.error, error_code: "collection_failed" } };
+    return {
+      status: 400,
+      body: { error: parsed.error, error_code: "collection_failed", error_class: "RpcRequestError" },
+    };
   }
   try {
     return { status: 200, body: endpoint.validateResponse(await run(parsed.value)) };
@@ -26,6 +29,7 @@ export class RpcResponseError extends Error {
   /** @param {string} message */
   constructor(message) {
     super(message);
+    this.name = "RpcResponseError";
     this.code = "parser_drift";
   }
 }
@@ -33,7 +37,15 @@ export class RpcResponseError extends Error {
 /** @param {unknown} error */
 export function rpcErrorBody(error) {
   const code = isRecord(error) && typeof error.code === "string" ? error.code : "collection_failed";
-  return { error: errorMessage(error), error_code: code };
+  return { error: errorMessage(error), error_code: code, error_class: errorClass(error) };
+}
+
+const errorClassPattern = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
+/** @param {unknown} error */
+function errorClass(error) {
+  const name = isRecord(error) && typeof error.name === "string" ? error.name : "";
+  return errorClassPattern.test(name) ? name : "unknown_error";
 }
 
 /**
