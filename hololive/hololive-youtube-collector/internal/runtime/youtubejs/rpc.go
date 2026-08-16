@@ -182,8 +182,9 @@ func closeHTTPResponse(resp *http.Response) error {
 
 func helperStatusError(status int, payload []byte) error {
 	var decoded struct {
-		Error string `json:"error"`
-		Code  string `json:"error_code"`
+		ErrorClass string `json:"error_class"`
+		Error      string `json:"error"`
+		Code       string `json:"error_code"`
 	}
 	decodeErr := json.Unmarshal(payload, &decoded)
 	errText := strings.TrimSpace(decoded.Error)
@@ -194,7 +195,7 @@ func helperStatusError(status int, payload []byte) error {
 	if code == "" {
 		code = collecterr.Failed
 	}
-	statusErr := collecterr.Wrap(code, fmt.Errorf("youtube.js helper status %d: %s", status, errText))
+	statusErr := collecterr.WrapClass(code, decoded.ErrorClass, fmt.Errorf("youtube.js helper status %d: %s", status, errText))
 	if decodeErr != nil {
 		return errors.Join(statusErr, fmt.Errorf("decode youtube.js helper error response: %w", decodeErr))
 	}
