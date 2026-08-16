@@ -113,20 +113,20 @@ write_wrapper() {
 #!/usr/bin/env sh
 set -eu
 
-# compose의 ${HOLOLIVE_DB_PASSWORD:-${DB_PASSWORD}} 폴백과 동일한 우선순위를 native에서 재현한다.
-if [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${HOLOLIVE_DB_PASSWORD:-}" ]; then
-  export POSTGRES_PASSWORD="$HOLOLIVE_DB_PASSWORD"
-elif [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${DB_PASSWORD:-}" ]; then
-  export POSTGRES_PASSWORD="$DB_PASSWORD"
-fi
 if [ -z "${POSTGRES_USER:-}" ]; then
   export POSTGRES_USER="${HOLOLIVE_SCRAPER_USER:-hololive_scraper}"
 fi
 if [ -z "${POSTGRES_DB:-}" ]; then
   export POSTGRES_DB=hololive
 fi
-if [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${HOLOLIVE_SCRAPER_PASSWORD:-}" ]; then
+if [ -z "${POSTGRES_PASSWORD:-}" ] &&
+   [ "$POSTGRES_USER" = "${HOLOLIVE_SCRAPER_USER:-hololive_scraper}" ] &&
+   [ -n "${HOLOLIVE_SCRAPER_PASSWORD:-}" ]; then
   export POSTGRES_PASSWORD="$HOLOLIVE_SCRAPER_PASSWORD"
+elif [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${HOLOLIVE_DB_PASSWORD:-}" ]; then
+  export POSTGRES_PASSWORD="$HOLOLIVE_DB_PASSWORD"
+elif [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${DB_PASSWORD:-}" ]; then
+  export POSTGRES_PASSWORD="$DB_PASSWORD"
 fi
 exec /opt/hololive-bot/youtube-collector/current/bin/youtube-collector
 EOF
