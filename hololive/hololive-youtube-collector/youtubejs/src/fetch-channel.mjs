@@ -1,3 +1,5 @@
+import { Utils } from "youtubei.js";
+
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
 import { isVideoLockup, lockupBadgeTexts, videoIDOf } from "./map-lockup.mjs";
 
@@ -12,7 +14,16 @@ export async function fetchChannelFeed({ channelId, innertube } = {}) {
   }
   const channel = await innertube.getChannel(id);
   const about = typeof channel.getAbout === "function" ? await channel.getAbout() : {};
-  const liveFeed = typeof channel.getLiveStreams === "function" ? await channel.getLiveStreams() : { videos: [] };
+  let liveFeed = { videos: [] };
+  if (typeof channel.getLiveStreams === "function") {
+    try {
+      liveFeed = await channel.getLiveStreams();
+    } catch (err) {
+      if (!isMissingStreamsTab(err)) {
+        throw err;
+      }
+    }
+  }
   return {
     live_sessions: mapLiveSessions(liveFeed, id),
     stats: mapStats(channel, about),
@@ -22,6 +33,10 @@ export async function fetchChannelFeed({ channelId, innertube } = {}) {
     exhausted: true,
     continuity: "CONTIGUOUS",
   };
+}
+
+function isMissingStreamsTab(err) {
+  return err instanceof Utils.InnertubeError && err.message === 'Tab "streams" not found';
 }
 
 export function mapLiveSessions(feed, channelId) {

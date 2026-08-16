@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Utils } from "youtubei.js";
 
-import { mapViewer } from "./fetch-viewer.mjs";
+import { fetchViewerFeed, mapViewer } from "./fetch-viewer.mjs";
 
 test("mapViewer keeps a hidden count typed and non-zero", () => {
   const result = mapViewer({ basic_info: { is_live: true, hidden_view_count: true } }, "vid-1");
@@ -33,4 +34,34 @@ test("mapViewer does not treat a VOD view count as a live viewer sample", () => 
   const result = mapViewer({ basic_info: { id: "vid-5", is_live: false, view_count: Number.NaN } }, "vid-5");
   assert.equal(result.viewer_count, null);
   assert.equal(result.availability, "UNAVAILABLE");
+});
+
+test("fetchViewerFeed maps a typed unavailable video to the existing unavailable payload", async () => {
+  const innertube = {
+    getInfo: async () => {
+      throw new Utils.InnertubeError("This video is unavailable", { status: "ERROR" });
+    },
+  };
+  const result = await fetchViewerFeed({ videoId: "vid-unavailable", innertube });
+  assert.deepEqual(result, {
+    video_id: "vid-unavailable",
+    viewer_count: null,
+    availability: "UNAVAILABLE",
+    page_count: 1,
+    exhausted: true,
+    continuity: "CONTIGUOUS",
+  });
+});
+
+test("fetchViewerFeed propagates unknown getInfo errors", async () => {
+  const expected = new Error("network unavailable");
+  const innertube = {
+    getInfo: async () => {
+      throw expected;
+    },
+  };
+  await assert.rejects(
+    () => fetchViewerFeed({ videoId: "vid-unknown", innertube }),
+    (err) => err === expected,
+  );
 });
