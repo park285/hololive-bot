@@ -104,4 +104,22 @@ grep -Fq "[[ \\\"\\${literal_dollar}actual_revision\\\" == \\\"\\${literal_dolla
 grep -Fq "if [[ \"\$AP_RUNTIME_MODE\" != \"compose\" ]]; then" "$deploy_script" \
   || fail "Compose AP deploy must reject non-Compose hosts before resolving the release version"
 
+readiness_source_count="$(grep -Fc '. scripts/deploy/lib/ap-collector-readiness.sh' "$deploy_script")"
+[[ "$readiness_source_count" -eq 1 ]] \
+  || fail "AP readiness helper must be sourced exactly once"
+awk '
+  /^remote "set -euo pipefail$/ { remote_block += 1 }
+  /cd ~\/hololive-bot/ { cwd_block = remote_block; cwd_line = NR }
+  /\. scripts\/deploy\/lib\/ap-collector-readiness\.sh/ { source_block = remote_block; source_line = NR }
+  /collector_readiness_validate/ { validate_block = remote_block; validate_line = NR }
+  END {
+    if (cwd_block == 0 || source_block == 0 || validate_block == 0 ||
+        cwd_block != source_block || source_block != validate_block ||
+        cwd_line >= source_line || source_line >= validate_line) {
+      exit 1
+    }
+  }
+' "$deploy_script" \
+  || fail "AP readiness helper must be sourced from the repository in the same remote block that validates readiness"
+
 echo "all AP Compose release version checks passed"
