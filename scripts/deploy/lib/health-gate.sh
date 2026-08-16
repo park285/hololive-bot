@@ -12,12 +12,38 @@ compose_health_resolve_container() {
         ps -q "${service}" 2>/dev/null | head -1
 }
 
+health_gate_duration_seconds() {
+    local remaining="$1"
+    local total=0
+    local amount="" unit=""
+
+    while [[ -n "${remaining}" ]]; do
+        if [[ ! "${remaining}" =~ ^([0-9]+)(h|m|s)(.*)$ ]]; then
+            return 1
+        fi
+        amount="${BASH_REMATCH[1]}"
+        unit="${BASH_REMATCH[2]}"
+        remaining="${BASH_REMATCH[3]}"
+        case "${unit}" in
+            h) total=$((total + 10#${amount} * 3600)) ;;
+            m) total=$((total + 10#${amount} * 60)) ;;
+            s) total=$((total + 10#${amount})) ;;
+        esac
+    done
+    printf '%s\n' "${total}"
+}
+
 wait_for_service_health() {
     local service="$1"
     local timeout="${HEALTH_GATE_TIMEOUT:-120}"
     local interval=3
     local elapsed=0
     local container=""
+
+    if [[ ! "${timeout}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "[HEALTH] HEALTH_GATE_TIMEOUT must be a positive integer" >&2
+        return 1
+    fi
 
     while (( elapsed < timeout )); do
         container="$(compose_health_resolve_container "${service}")"
@@ -29,6 +55,12 @@ wait_for_service_health() {
     if [[ -z "${container}" ]]; then
         echo "[HEALTH] no container resolved for ${service} within ${timeout}s" >&2
         return 1
+    fi
+
+    local start_period="" start_period_seconds=""
+    start_period="$("${CONTAINER_CLI}" inspect -f '{{if .Config.Healthcheck}}{{.Config.Healthcheck.StartPeriod}}{{end}}' "${container}" 2>/dev/null || true)"
+    if start_period_seconds="$(health_gate_duration_seconds "${start_period}")"; then
+        timeout=$((timeout + start_period_seconds))
     fi
 
     local baseline_restarts=0

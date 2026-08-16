@@ -55,6 +55,7 @@ cat >"${tmpdir}/fakebin/container-cli" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
+    *'{{if .Config.Healthcheck}}{{.Config.Healthcheck.StartPeriod}}{{end}}'*) printf '%s\n' "${FAKE_START_PERIOD:-0s}" ;;
     *'{{if .State.Health}}yes{{end}}'*) printf 'yes\n' ;;
     *'{{.State.Status}}'*) printf 'running\n' ;;
     *'{{.RestartCount}}'*) printf '0\n' ;;
@@ -84,6 +85,24 @@ if (
     pass "health gate waits through a transient Compose replacement gap"
 else
     record_fail "health gate should wait for the replacement container to resolve"
+fi
+
+if (
+    compose_health_resolve_container() { printf 'collector-container\n'; }
+    sleep() { :; }
+    CONTAINER_CLI="${tmpdir}/fakebin/container-cli"
+    FAKE_START_PERIOD=3m0s
+    HEALTH_GATE_TIMEOUT=6
+    export FAKE_START_PERIOD
+    wait_for_service_health youtube-collector
+) >"${tmpdir}/startup-grace.out" 2>"${tmpdir}/startup-grace.err"; then
+    if grep -Fq '(0s/186s)' "${tmpdir}/startup-grace.out"; then
+        pass "health gate adds the container startup grace to its bounded timeout"
+    else
+        record_fail "health gate did not report the startup-grace-adjusted timeout"
+    fi
+else
+    record_fail "health gate should honor the container startup grace"
 fi
 
 if (
