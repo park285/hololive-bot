@@ -1,8 +1,11 @@
 package collectorruntime
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,6 +103,20 @@ func TestUnknownPublishErrorRemainsFailedAndRejected(t *testing.T) {
 		"provider": string(contract.ProviderYouTubeJS), "kind": string(contract.KindCommunityPage), "outcome": outcomeRejected,
 	}); got != 1 {
 		t.Fatalf("rejected publish count = %v, want 1", got)
+	}
+}
+
+func TestLogFailureUsesStructuredSecretSafeDiagnostics(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	scheduler := &leaseScheduler{logger: slog.New(slog.NewJSONHandler(&output, nil))}
+	spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: "community_collect", SubjectKey: "UC_TEST"}
+	scheduler.logFailure("collect", collecterr.Failed, "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
+	if strings.Contains(output.String(), "secret-value") {
+		t.Fatalf("structured log leaked diagnostic credential: %s", output.String())
+	}
+	if !strings.Contains(output.String(), `"error_class":"HelperError"`) || !strings.Contains(output.String(), `"error_detail"`) {
+		t.Fatalf("structured log omitted diagnostics: %s", output.String())
 	}
 }
 

@@ -8,12 +8,14 @@ import (
 	"math/big"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
 type Repository struct {
@@ -232,15 +234,37 @@ func (l *JobLease) Renew(ctx context.Context) error {
 }
 
 func (l *JobLease) Complete(ctx context.Context) error {
-	return l.finish(ctx, "", time.Time{}, "complete")
+	return l.finish(ctx, "", time.Time{}, "", "", "complete")
 }
 
-func (l *JobLease) Defer(ctx context.Context, retryAt time.Time, code string) error {
+func (l *JobLease) Defer(ctx context.Context, retryAt time.Time, code, class, detail string) error {
 	code = strings.TrimSpace(code)
-	if retryAt.IsZero() || code == "" || len(code) > 128 {
+	class = strings.TrimSpace(class)
+	if retryAt.IsZero() || code == "" || len(code) > 128 || invalidDiagnosticClass(class) || len(detail) > collecterr.MaxDetailBytes || !utf8.ValidString(detail) {
 		return fmt.Errorf("defer collection job lease: %w", ErrInvalidJob)
 	}
-	return l.finish(ctx, code, retryAt.UTC(), "defer")
+	detail = collecterr.SanitizeDetail(detail)
+	return l.finish(ctx, code, retryAt.UTC(), class, detail, "defer")
+}
+
+func invalidDiagnosticClass(value string) bool {
+	if value == "" || len(value) > 64 {
+		return true
+	}
+	for index := range len(value) {
+		if !validDiagnosticClassByte(value[index], index == 0) {
+			return true
+		}
+	}
+	return false
+}
+
+func validDiagnosticClassByte(value byte, first bool) bool {
+	letter := value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z'
+	if first {
+		return letter
+	}
+	return letter || value >= '0' && value <= '9' || value == '_'
 }
 
 func (l *JobLease) Release(ctx context.Context) error {
@@ -260,7 +284,7 @@ func (l *JobLease) Release(ctx context.Context) error {
 	return nil
 }
 
-func (l *JobLease) finish(ctx context.Context, code string, retryAt time.Time, action string) error {
+func (l *JobLease) finish(ctx context.Context, code string, retryAt time.Time, class, detail, action string) error {
 	if l == nil || l.repository == nil {
 		return fmt.Errorf("%s collection job lease: %w", action, ErrFenceLost)
 	}
@@ -273,7 +297,7 @@ func (l *JobLease) finish(ctx context.Context, code string, retryAt time.Time, a
 		minDelay := l.repository.config.MinRetryDelay
 		maxDelay := l.repository.config.MaxRetryDelay
 		err = l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_defer_0144_12.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
-			l.proof.ProjectionGeneration, l.proof.ScheduledFor, retryAt, code,
+			l.proof.ProjectionGeneration, l.proof.ScheduledFor, retryAt, code, class, detail,
 			minDelay.Milliseconds(), maxDelay.Milliseconds()).Scan(&jobKey)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
