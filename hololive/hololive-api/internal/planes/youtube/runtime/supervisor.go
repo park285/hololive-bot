@@ -17,11 +17,16 @@ func (r *Runtime) runClaimLoop(ctx context.Context, errCh chan<- error) {
 	defer func() { r.loopDone <- struct{}{} }()
 	ticker := time.NewTicker(r.Config.ClaimInterval)
 	defer ticker.Stop()
-	if r.stopAfterClaimError(ctx, errCh, r.claimTick(ctx)) {
-		return
-	}
-	for waitTicker(ctx, ticker) {
-		if r.stopAfterClaimError(ctx, errCh, r.claimTick(ctx)) {
+	for {
+		full, err := r.claimTick(ctx)
+		if r.stopAfterClaimError(ctx, errCh, err) {
+			return
+		}
+		if full {
+			continue
+		}
+		ticker.Reset(r.Config.ClaimInterval)
+		if !waitTicker(ctx, ticker) {
 			return
 		}
 	}
@@ -153,9 +158,9 @@ func (r *Runtime) nextWork(ctx context.Context) (sourceobservation.ClaimWork, bo
 	}
 }
 
-func (r *Runtime) claimTick(ctx context.Context) error {
+func (r *Runtime) claimTick(ctx context.Context) (bool, error) {
 	if r == nil || !r.claiming.Load() {
-		return nil
+		return false, nil
 	}
 	var batch sourceobservation.ClaimedBatch
 	if err := r.withDB(ctx, func(ctx context.Context) error {
@@ -163,7 +168,7 @@ func (r *Runtime) claimTick(ctx context.Context) error {
 		batch, err = r.claimer.ClaimBatch(ctx, r.claim)
 		return err
 	}); err != nil {
-		return err
+		return false, err
 	}
 	r.observePendingQueue(ctx)
 	for i := range batch.Claims {
@@ -171,10 +176,10 @@ func (r *Runtime) claimTick(ctx context.Context) error {
 	}
 	for i := range batch.Claims {
 		if err := sendWork(ctx, r.workCh, batch.Claims[i]); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return len(batch.Claims) >= r.claim.Limit, nil
 }
 
 func sendWork(ctx context.Context, workCh chan<- sourceobservation.ClaimWork, work sourceobservation.ClaimWork) error {
