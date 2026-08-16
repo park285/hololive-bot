@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
 func testConfig() Config {
@@ -257,7 +258,7 @@ func assertActionPreservesScheduledSlot(t *testing.T, action string) {
 		t.Fatal(err)
 	}
 	if action == "defer" {
-		err = first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "provider_timeout")
+		err = first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "provider_timeout", "TimeoutError", "provider timed out")
 	} else {
 		err = first.Release(ctx)
 	}
@@ -285,7 +286,7 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := lease.Defer(ctx, time.Now().UTC(), "rate_limited"); err != nil {
+	if err := lease.Defer(ctx, time.Now().UTC(), "rate_limited", "RateLimitError", "provider rate limited"); err != nil {
 		t.Fatalf("defer short retry: %v", err)
 	}
 	var state string
@@ -295,6 +296,254 @@ func TestDeferClampsShortRetryAgainstDatabaseClock(t *testing.T) {
 	}
 	if state != "DEFERRED" || retryAt.Before(time.Now().UTC()) || retryAt.After(time.Now().UTC().Add(repository.config.MaxRetryDelay)) {
 		t.Fatalf("deferred state=%s retry_at=%s", state, retryAt)
+	}
+}
+
+func TestDeferAndCompleteRetainFailureDiagnostics(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	first, err := repository.Acquire(ctx, communityJob(), "collector-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawDetail := "youtube.js helper: Authorization: Bearer secret-value"
+	detail := collecterr.SanitizeDetail(rawDetail)
+	if err := first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "provider_failed", "HelperError", rawDetail); err != nil {
+		t.Fatalf("defer: %v", err)
+	}
+
+	var currentCode, failureCode, failureClass, failureDetail string
+	var failureAtSet bool
+	if err := pool.QueryRow(ctx, `
+		SELECT COALESCE(last_error_code, ''), last_failure_code, last_failure_class, last_failure_detail,
+		       last_failure_at IS NOT NULL
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, first.Proof().JobKey).Scan(&currentCode, &failureCode, &failureClass, &failureDetail, &failureAtSet); err != nil {
+		t.Fatal(err)
+	}
+	if currentCode != "provider_failed" || failureCode != "provider_failed" || failureClass != "HelperError" || !failureAtSet {
+		t.Fatalf("deferred diagnostics = code:%q failure_code:%q class:%q at:%t", currentCode, failureCode, failureClass, failureAtSet)
+	}
+	if strings.Contains(failureDetail, "secret-value") || failureDetail != detail {
+		t.Fatalf("failure detail = %q, want redacted %q", failureDetail, detail)
+	}
+
+	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), first.Proof().JobKey); err != nil {
+		t.Fatal(err)
+	}
+	second, err := repository.Acquire(ctx, communityJob(), "collector-b")
+	if err != nil {
+		t.Fatalf("reacquire: %v", err)
+	}
+	if err := second.Complete(ctx); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+
+	var retryCleared bool
+	var retainedCode, retainedClass, retainedDetail string
+	var retainedAtSet bool
+	if err := pool.QueryRow(ctx, `
+		SELECT last_error_code IS NULL, last_failure_code, last_failure_class, last_failure_detail,
+		       last_failure_at IS NOT NULL
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, first.Proof().JobKey).Scan(&retryCleared, &retainedCode, &retainedClass, &retainedDetail, &retainedAtSet); err != nil {
+		t.Fatal(err)
+	}
+	if !retryCleared || retainedCode != failureCode || retainedClass != failureClass || retainedDetail != failureDetail || !retainedAtSet {
+		t.Fatalf("retained diagnostics = retry_cleared:%t code:%q class:%q detail:%q at:%t", retryCleared, retainedCode, retainedClass, retainedDetail, retainedAtSet)
+	}
+}
+
+func TestLegacyDeferBackfillsDiagnosticsWithoutOverwritingNewWriter(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+
+	first, err := repository.Acquire(ctx, spec, "collector-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "first_failure", "FirstWriter", "first detail"); err != nil {
+		t.Fatalf("first new-writer defer: %v", err)
+	}
+	var staleCode, staleClass, staleDetail string
+	var staleAt time.Time
+	if err := pool.QueryRow(ctx, `
+		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, spec.JobKey).Scan(&staleCode, &staleClass, &staleDetail, &staleAt); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+	second, err := repository.Acquire(ctx, spec, "collector-b")
+	if err != nil {
+		t.Fatalf("reacquire for legacy defer: %v", err)
+	}
+
+	const legacyDeferSQL = `UPDATE youtube_collection_job_leases
+SET slot_state = 'DEFERRED',
+    owner_instance = NULL,
+    lease_expires_at = NULL,
+    retry_not_before = LEAST(
+        GREATEST($6, statement_timestamp() + ($8::bigint * INTERVAL '1 millisecond')),
+        statement_timestamp() + ($9::bigint * INTERVAL '1 millisecond')
+    ),
+    last_error_code = $7,
+    updated_at = clock_timestamp()
+WHERE job_key = $1
+  AND owner_instance = $2
+  AND fence_epoch = $3
+  AND projection_generation = $4
+  AND scheduled_for = $5
+  AND slot_state = 'ACTIVE'
+  AND lease_expires_at > clock_timestamp()
+RETURNING job_key`
+	legacyRetryAt := time.Now().UTC().Add(500 * time.Millisecond)
+	var legacyJobKey string
+	if err := pool.QueryRow(ctx, legacyDeferSQL,
+		second.Proof().JobKey, second.Proof().OwnerInstance, second.Proof().FenceEpoch,
+		second.Proof().ProjectionGeneration, second.Proof().ScheduledFor, legacyRetryAt, "legacy_failure",
+		repository.config.MinRetryDelay.Milliseconds(), repository.config.MaxRetryDelay.Milliseconds(),
+	).Scan(&legacyJobKey); err != nil {
+		t.Fatalf("legacy defer: %v", err)
+	}
+	if legacyJobKey != spec.JobKey {
+		t.Fatalf("legacy defer job key = %q, want %q", legacyJobKey, spec.JobKey)
+	}
+
+	var legacyCode, legacyClass, legacyDetail string
+	var legacyAt time.Time
+	if err := pool.QueryRow(ctx, `
+		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, spec.JobKey).Scan(&legacyCode, &legacyClass, &legacyDetail, &legacyAt); err != nil {
+		t.Fatal(err)
+	}
+	if legacyCode != "legacy_failure" || legacyClass != "legacy_collector" || legacyDetail != "legacy_collector" {
+		t.Fatalf("legacy diagnostics = code:%q class:%q detail:%q", legacyCode, legacyClass, legacyDetail)
+	}
+	if !legacyAt.After(staleAt) {
+		t.Fatalf("legacy failure timestamp = %s, stale timestamp = %s", legacyAt, staleAt)
+	}
+
+	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+	third, err := repository.Acquire(ctx, spec, "collector-c")
+	if err != nil {
+		t.Fatalf("reacquire for new defer: %v", err)
+	}
+	if err := third.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "second_failure", "SecondWriter", "second detail"); err != nil {
+		t.Fatalf("second new-writer defer: %v", err)
+	}
+	var currentCode, currentClass, currentDetail string
+	var currentAt time.Time
+	if err := pool.QueryRow(ctx, `
+		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, spec.JobKey).Scan(&currentCode, &currentClass, &currentDetail, &currentAt); err != nil {
+		t.Fatal(err)
+	}
+	if currentCode != "second_failure" || currentClass != "SecondWriter" || currentDetail != "second detail" {
+		t.Fatalf("new-writer diagnostics = code:%q class:%q detail:%q", currentCode, currentClass, currentDetail)
+	}
+	if !currentAt.After(legacyAt) {
+		t.Fatalf("new-writer timestamp = %s, legacy timestamp = %s", currentAt, legacyAt)
+	}
+
+	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+	fourth, err := repository.Acquire(ctx, spec, "collector-d")
+	if err != nil {
+		t.Fatalf("reacquire for legacy-compatible complete: %v", err)
+	}
+	if err := fourth.Complete(ctx); err != nil {
+		t.Fatalf("complete after new-writer defer: %v", err)
+	}
+	assertFailureDiagnostics(t, ctx, pool, spec.JobKey, currentCode, currentClass, currentDetail, currentAt)
+	if _, err := pool.Exec(ctx, mustTestSQL("make_lease_overdue.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.Acquire(ctx, spec, "collector-e"); err != nil {
+		t.Fatalf("acquire after legacy-compatible complete: %v", err)
+	}
+	assertFailureDiagnostics(t, ctx, pool, spec.JobKey, currentCode, currentClass, currentDetail, currentAt)
+}
+
+func TestReleasePreservesExistingFailureDiagnostics(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+
+	first, err := repository.Acquire(ctx, spec, "collector-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "provider_failure", "ProviderError", "provider detail"); err != nil {
+		t.Fatalf("record provider failure: %v", err)
+	}
+	var failureCode, failureClass, failureDetail string
+	var failureAt time.Time
+	if err := pool.QueryRow(ctx, `
+		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, spec.JobKey).Scan(&failureCode, &failureClass, &failureDetail, &failureAt); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+	second, err := repository.Acquire(ctx, spec, "collector-b")
+	if err != nil {
+		t.Fatalf("reacquire for release: %v", err)
+	}
+	if err := second.Release(ctx); err != nil {
+		t.Fatalf("release after provider failure: %v", err)
+	}
+
+	var retryCode string
+	if err := pool.QueryRow(ctx, `
+		SELECT last_error_code FROM youtube_collection_job_leases WHERE job_key = $1
+	`, spec.JobKey).Scan(&retryCode); err != nil {
+		t.Fatal(err)
+	}
+	if retryCode != "shutdown_release" {
+		t.Fatalf("release retry code = %q, want shutdown_release", retryCode)
+	}
+	assertFailureDiagnostics(t, ctx, pool, spec.JobKey, failureCode, failureClass, failureDetail, failureAt)
+}
+
+func assertFailureDiagnostics(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jobKey, wantCode, wantClass, wantDetail string, wantAt time.Time) {
+	t.Helper()
+	var gotCode, gotClass, gotDetail string
+	var gotAt time.Time
+	if err := pool.QueryRow(ctx, `
+		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, jobKey).Scan(&gotCode, &gotClass, &gotDetail, &gotAt); err != nil {
+		t.Fatal(err)
+	}
+	if gotCode != wantCode || gotClass != wantClass || gotDetail != wantDetail || !gotAt.Equal(wantAt) {
+		t.Fatalf("failure diagnostics = code:%q class:%q detail:%q at:%s, want code:%q class:%q detail:%q at:%s", gotCode, gotClass, gotDetail, gotAt, wantCode, wantClass, wantDetail, wantAt)
+	}
+}
+
+func TestDeferRejectsInvalidDiagnosticBounds(t *testing.T) {
+	lease := &JobLease{}
+	err := lease.Defer(context.Background(), time.Now().UTC().Add(time.Second), "provider_failed", "HelperError", strings.Repeat("x", collecterr.MaxDetailBytes+1))
+	if !errors.Is(err, ErrInvalidJob) {
+		t.Fatalf("oversized diagnostic error = %v, want ErrInvalidJob", err)
 	}
 }
 
@@ -352,8 +601,8 @@ func (l *fakeLease) Renew(context.Context) error {
 	l.renewCalls.Add(1)
 	return ErrFenceLost
 }
-func (l *fakeLease) Complete(context.Context) error                 { return nil }
-func (l *fakeLease) Defer(context.Context, time.Time, string) error { return nil }
+func (l *fakeLease) Complete(context.Context) error                                 { return nil }
+func (l *fakeLease) Defer(context.Context, time.Time, string, string, string) error { return nil }
 func (l *fakeLease) Release(context.Context) error {
 	l.releaseCalls.Add(1)
 	return nil

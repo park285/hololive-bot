@@ -2,7 +2,6 @@ package collectorruntime
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -168,14 +167,14 @@ func (s *leaseScheduler) loadCandidates(ctx context.Context) (globals, subjects 
 }
 
 func (s *leaseScheduler) logCandidateLoad(runner JobRunner, err error) {
-	if errors.Is(err, joblease.ErrProjectionStale) || errors.Is(err, joblease.ErrTargetDisabled) {
+	if supersededError(err) {
 		return
 	}
 	spec := joblease.JobSpec{
 		Provider: runner.Provider(), CollectionJobKind: runner.JobKind(),
 	}
 	proof := contract.LeaseProof{}
-	s.logFailure("candidate_load", collecterr.CandidateFailed, &spec, &proof)
+	s.logFailure("candidate_load", collecterr.CandidateFailed, collecterr.Class(err), collecterr.Detail(err), &spec, &proof)
 }
 
 func splitCandidates(candidates, globals, subjects []joblease.JobSpec) (globalJobs, subjectJobs []joblease.JobSpec) {
