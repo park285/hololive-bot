@@ -46,28 +46,20 @@ func TestFetchBodyWithAPIKeyEnvRejectsMissingEnv(t *testing.T) {
 	}
 }
 
-func TestRunExternalSmokeClearsInternalTLSOverrides(t *testing.T) {
+func TestClearInternalTLSOverrides(t *testing.T) {
 	t.Setenv(healthprobe.CACertFileEnv, "/run/internal-ca.pem")
 	t.Setenv(healthprobe.ServerNameEnv, "127.0.0.1")
 
-	called := false
-	err := runExternalSmoke(func(rawURL string) error {
-		called = true
-		if rawURL != "https://www.google.com/generate_204" {
-			t.Fatalf("rawURL = %q", rawURL)
-		}
-		if value := os.Getenv(healthprobe.CACertFileEnv); value != "" {
-			t.Fatalf("%s = %q", healthprobe.CACertFileEnv, value)
-		}
-		if value := os.Getenv(healthprobe.ServerNameEnv); value != "" {
-			t.Fatalf("%s = %q", healthprobe.ServerNameEnv, value)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("runExternalSmoke() error = %v", err)
+	if err := clearInternalTLSOverrides(); err != nil {
+		t.Fatalf("clearInternalTLSOverrides() error = %v", err)
 	}
-	if !called {
-		t.Fatal("external smoke check was not called")
+	if value := os.Getenv(healthprobe.CACertFileEnv); value != "" {
+		t.Fatalf("%s = %q", healthprobe.CACertFileEnv, value)
+	}
+	if value := os.Getenv(healthprobe.ServerNameEnv); value != "" {
+		t.Fatalf("%s = %q", healthprobe.ServerNameEnv, value)
+	}
+	if externalSmokeURL != "https://www.google.com/generate_204" {
+		t.Fatalf("externalSmokeURL = %q", externalSmokeURL)
 	}
 }
