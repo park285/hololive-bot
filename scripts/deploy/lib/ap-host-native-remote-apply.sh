@@ -193,12 +193,24 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-ready="$(
-  sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
-  HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-  "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
-)"
+ready=""
+for _ in $(seq 1 90); do
+  systemctl is-active --quiet "$unit"
+  if ready="$(
+    sudo -n -u hololive env \
+      HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
+      HEALTHCHECK_SERVER_NAME=127.0.0.1 \
+      "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready" 2>/dev/null
+  )" &&
+     printf '%s' "$ready" | grep -q '"status":"ready"' &&
+     printf '%s' "$ready" | grep -q '"helper":"ok"' &&
+     printf '%s' "$ready" | grep -q '"first_success":true' &&
+     printf '%s' "$ready" | grep -q '"handoff_status":"PROCESSED"' &&
+     printf '%s' "$ready" | grep -q '"pending_queue":'; then
+    break
+  fi
+  sleep 2
+done
 printf '%s\n' "$ready"
 printf '%s' "$ready" | grep -q '"status":"ready"'
 printf '%s' "$ready" | grep -q '"helper":"ok"'
