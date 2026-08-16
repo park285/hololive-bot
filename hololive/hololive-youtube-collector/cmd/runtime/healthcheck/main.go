@@ -11,6 +11,8 @@ import (
 	"github.com/park285/shared-go/pkg/healthprobe"
 )
 
+const externalSmokeURL = "https://www.google.com/generate_204"
+
 func main() {
 	args := os.Args[1:]
 	if len(args) == 2 && args[0] == "--body" {
@@ -88,7 +90,11 @@ func runSmoke() {
 		}
 	}
 
-	if err := healthprobe.CheckURL("https://www.google.com"); err != nil {
+	if err := clearInternalTLSOverrides(); err != nil {
+		fmt.Fprintf(os.Stderr, "https ca smoke: %v\n", err)
+		os.Exit(1)
+	}
+	if err := healthprobe.CheckURL(externalSmokeURL); err != nil {
 		fmt.Fprintf(os.Stderr, "https ca smoke: %v\n", err)
 		os.Exit(1)
 	}
@@ -97,4 +103,14 @@ func runSmoke() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func clearInternalTLSOverrides() error {
+	if err := os.Unsetenv(healthprobe.CACertFileEnv); err != nil {
+		return fmt.Errorf("clear internal ca override: %w", err)
+	}
+	if err := os.Unsetenv(healthprobe.ServerNameEnv); err != nil {
+		return fmt.Errorf("clear internal server name override: %w", err)
+	}
+	return nil
 }
