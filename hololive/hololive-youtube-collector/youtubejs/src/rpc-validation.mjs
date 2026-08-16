@@ -140,6 +140,7 @@ export function validateChannelResponse(value) {
     },
     photo: arrayField(record, "photo").map(validatePhoto),
     ...validatePagination(record),
+    ...optionalBoolean(record, "missing_tab"),
     ...optionalResponseString(record, "error"),
   };
 }
