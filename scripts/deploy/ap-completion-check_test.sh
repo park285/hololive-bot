@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+READINESS_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-collector-readiness.sh"
 
 fail() {
   echo "[FAIL] $*" >&2
@@ -11,6 +12,9 @@ fail() {
 pass() {
   echo "[PASS] $*"
 }
+
+# shellcheck source=scripts/deploy/lib/ap-collector-readiness.sh
+. "${READINESS_LIB}"
 
 tmp="$(mktemp -d)"
 cleanup() {
@@ -23,6 +27,7 @@ fakebin="$tmp/bin"
 mkdir -p "$fixture_root/scripts/deploy/lib" "$fixture_root/scripts/deploy/ap-hosts" "$fixture_root/deploy/compose" "$fakebin"
 cp "$ROOT_DIR/scripts/deploy/lib/ap-host.sh" "$fixture_root/scripts/deploy/lib/ap-host.sh"
 cp "$ROOT_DIR/scripts/deploy/lib/youtubejs-node-version.sh" "$fixture_root/scripts/deploy/lib/youtubejs-node-version.sh"
+cp "$ROOT_DIR/scripts/deploy/lib/ap-collector-readiness.sh" "$fixture_root/scripts/deploy/lib/ap-collector-readiness.sh"
 cat > "$fixture_root/scripts/deploy/lib/require-quic-udp-buffer.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -163,5 +168,40 @@ if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
   fail "native completion check must reject an incomplete API handoff"
 fi
+
+ready_payload='{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","pending_queue":0}'
+readiness_attempts="$tmp/readiness-attempts"
+readiness_probe() {
+  local attempt=0
+  if [[ -r "$readiness_attempts" ]]; then
+    attempt="$(cat "$readiness_attempts")"
+  fi
+  attempt=$((attempt + 1))
+  printf '%s\n' "$attempt" >"$readiness_attempts"
+  if [[ "$attempt" -eq 1 ]]; then
+    printf '%s\n' '{"status":"not_ready","dependency":"postgres_queue"}'
+  else
+    printf '%s\n' "$ready_payload"
+  fi
+}
+if polled_ready="$(collector_readiness_poll 2 0 readiness_probe)" &&
+   [[ "$polled_ready" == "$ready_payload" ]]; then
+  pass "collector readiness poll accepts not_ready then ready"
+else
+  fail "collector readiness poll must retry not_ready and return the ready payload"
+fi
+
+invalid_readiness_payloads=(
+  'not-json'
+  '{"status":"ready" "helper":"ok","first_success":true,"handoff_status":"PROCESSED","pending_queue":0}'
+  '{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED"}'
+  '{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","pending_queue":}'
+)
+for invalid_payload in "${invalid_readiness_payloads[@]}"; do
+  if collector_readiness_validate "$invalid_payload"; then
+    fail "collector readiness validator must reject malformed or missing fields: $invalid_payload"
+  fi
+done
+pass "collector readiness validator rejects malformed and missing required fields"
 
 pass "ap-completion-check supports host-native APs"
