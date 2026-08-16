@@ -8,9 +8,20 @@
 
 ## 미출시
 
+### 추가
+
+- YouTube collector의 provider 실패 class와 lease 실패 진단을 durable schema에 보존합니다.
+  기존 deferred 실패를 backfill하고 acquire 경합 및 migration 중에도 진단이 유실되지 않도록
+  trigger와 constraint 설치·검증 순서를 고정했습니다.
+
 ### 변경
 
 - standalone YouTube scrape/outbox runtime 모듈을 제거하고 AP a/b/c/d identity를 `youtube-collector` fleet로 통일했습니다. Canonical consume/notification/retention은 `hololive-api` YouTube plane, `members.photo`는 admin PhotoSync, egress는 `alarm-worker`입니다. production apply는 포함하지 않습니다.
+- YouTube.js 18과 current response shape를 채택하고 Official Schedule, Community와 YouTube.js
+  관측의 ownership을 collector plane으로 모았습니다. Kakao room catalog의 DB 오류를 not-found나
+  빈 관측으로 바꾸지 않으며 retention과 projection 권한을 최소 privilege로 제한합니다.
+- Go toolchain과 builder 기준을 `1.26.6`으로, `shared-go`를 `v1.51.0`으로 갱신하고 일반챗
+  plaintext/open-chat 판별을 공용 `kakaoformat` 정본으로 수렴했습니다.
 - **service 로그 인코딩이 text에서 JSON으로 바뀝니다.** shared-go 로깅이 text
   인코더를 제거하고 빈 `Format` 기본값이 JSON이 되면서, `hololive-api`,
   `hololive-alarm-worker`, `hololive-youtube-collector`, admin-dashboard backend의
@@ -20,6 +31,12 @@
 
 ### 수정
 
+- collector가 명시적 no-data를 정상 결과로 처리하고 mixed collision batch의 독립 observation과
+  checkpoint를 보존하도록 했습니다. missing live tab은 부재 증거로 사용하지 않으며 handoff
+  backlog가 재시작 루프를 만들지 않습니다.
+- AP/Compose collector의 credential precedence, startup grace, external H3 TLS smoke, readiness와
+  rollback 상태 검증을 하나의 fail-closed 계약으로 맞췄습니다. 원격 apply shell fragment도
+  독립 ShellCheck가 가능한 구조로 정리했습니다.
 - Iris가 `409` + `CLIENT_REQUEST_ID_FAILED`로 답한 reply를 더 이상 즉시 terminal로
   종결하지 않고, generation suffix(`:r1`, `:r2`)를 붙인 새 `clientRequestId`로 같은
   payload를 최대 2세대까지 재전송합니다. 이 code는 durable queue handoff 이전 실패,
