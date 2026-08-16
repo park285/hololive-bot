@@ -93,6 +93,15 @@ else
   record_fail "ap-host-native first-cutover state must remain readable by rollback orchestration"
 fi
 
+if grep -Fq 'for _ in $(seq 1 90); do' "${REMOTE_APPLY}" &&
+   grep -Fq 'systemctl is-active --quiet "$unit"' "${REMOTE_APPLY}" &&
+   grep -Fq '"first_success":true' "${REMOTE_APPLY}" &&
+   grep -Fq '"handoff_status":"PROCESSED"' "${REMOTE_APPLY}"; then
+  pass "ap-host-native cutover waits for the strict readiness contract"
+else
+  record_fail "ap-host-native cutover must allow startup grace without weakening readiness"
+fi
+
 if grep -Fq 'validate_retired_producer_runtime_state "$producer_state_file" "$service"' "${ROLLBACK}" &&
    grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${ROLLBACK}" &&
    grep -Fq 'restore_retired_producer_runtime "$producer_state_file" "$service"' "${ROLLBACK}"; then
