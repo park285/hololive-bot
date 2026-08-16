@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 set -Eeuo pipefail
 payload_name="$1"
 release_id="$2"
@@ -18,6 +19,8 @@ producer_state_file="$releases_root/first-cutover-producer.state"
 swapfile="/swapfile"
 
 test -r "$release_path_lib"
+# 검증한 release payload 내부의 동적 경로만 source합니다.
+# shellcheck disable=SC1090
 . "$release_path_lib"
 
 if ! getent group opc >/dev/null; then
