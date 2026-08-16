@@ -82,7 +82,9 @@ WITH input AS MATERIALIZED (
            input.collection_latency_ms,
            input.cursor,
            current.id AS existing_id,
-           current.evidence_sha256 AS existing_evidence_sha256
+           current.evidence_sha256 AS existing_evidence_sha256,
+           current.id IS NOT NULL
+               AND current.evidence_sha256 <> input.evidence_sha256 AS is_collision
     FROM input
     CROSS JOIN lock_barrier
     LEFT JOIN LATERAL lock_source_observation_identity(
@@ -93,15 +95,6 @@ WITH input AS MATERIALIZED (
         input.schema_version,
         input.contract_generation
     ) AS current ON TRUE
-), collision_state AS MATERIALIZED (
-    SELECT COALESCE(
-        bool_or(
-            existing_id IS NOT NULL
-            AND existing_evidence_sha256 <> evidence_sha256
-        ),
-        FALSE
-    ) AS has_collision
-    FROM existing
 ), collision_write AS (
     INSERT INTO source_observation_collisions (
         existing_observation_id,
@@ -132,10 +125,7 @@ WITH input AS MATERIALIZED (
            existing.job_key,
            existing.fence_epoch
     FROM existing
-    CROSS JOIN collision_state
-    WHERE collision_state.has_collision
-      AND existing.existing_id IS NOT NULL
-      AND existing.existing_evidence_sha256 <> existing.evidence_sha256
+    WHERE existing.is_collision
     RETURNING 1 AS inserted
 ), observation_write AS (
     INSERT INTO source_observations (
@@ -181,8 +171,7 @@ WITH input AS MATERIALIZED (
            existing.fence_epoch,
            existing.projection_generation
     FROM existing
-    CROSS JOIN collision_state
-    WHERE NOT collision_state.has_collision
+    WHERE NOT existing.is_collision
       AND existing.existing_id IS NULL
     ORDER BY existing.ordinal
     RETURNING id,
@@ -230,8 +219,7 @@ WITH input AS MATERIALIZED (
            NULL,
            NULL
     FROM existing
-    CROSS JOIN collision_state
-    WHERE NOT collision_state.has_collision
+    WHERE NOT existing.is_collision
     ON CONFLICT (provider, observation_kind, subject_key, scope_sha256) DO UPDATE
     SET contract_generation = EXCLUDED.contract_generation,
         last_observation_key = EXCLUDED.last_observation_key,
@@ -253,12 +241,11 @@ WITH input AS MATERIALIZED (
 SELECT existing.ordinal,
        COALESCE(existing.existing_id, observation_write.id, 0) AS observation_id,
        CASE
-           WHEN collision_state.has_collision THEN 'COLLISION'
+           WHEN existing.is_collision THEN 'COLLISION'
            WHEN existing.existing_id IS NOT NULL THEN 'DUPLICATE'
            ELSE 'INSERTED'
        END AS outcome
 FROM existing
-CROSS JOIN collision_state
 CROSS JOIN effects
 LEFT JOIN observation_write
   ON observation_write.provider = existing.provider

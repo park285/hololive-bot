@@ -162,10 +162,14 @@ func (s *leaseScheduler) publishOutput(
 }
 
 func (s *leaseScheduler) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
+	if supersededError(err) {
+		s.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
+		return
+	}
 	if errors.Is(err, joblease.ErrFenceLost) {
 		s.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phasePublish)
 	}
-	s.observeRejected(spec.Provider, output)
+	s.observePublishOutcome(spec.Provider, output, outcomeRejected)
 }
 
 func (s *leaseScheduler) loadEnabledSubjects(
@@ -233,10 +237,10 @@ func publishedOutcome(result sourceobservation.PublishBatchResult, index int) st
 	return outcomeInserted
 }
 
-func (s *leaseScheduler) observeRejected(provider contract.Provider, output collectutil.RunOutput) {
+func (s *leaseScheduler) observePublishOutcome(provider contract.Provider, output collectutil.RunOutput, outcome string) {
 	for i := range output.Observations {
 		envelope := &output.Observations[i]
-		s.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcomeRejected)
+		s.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcome)
 	}
 }
 
@@ -244,7 +248,15 @@ func attemptResult(err error) string {
 	if err == nil {
 		return resultSuccess
 	}
+	if supersededError(err) {
+		return resultSuperseded
+	}
 	return attemptFailureResult(collecterr.Code(err))
+}
+
+func supersededError(err error) bool {
+	return errors.Is(err, sourceobservation.ErrProjectionStale) ||
+		errors.Is(err, sourceobservation.ErrTargetDisabled)
 }
 
 func attemptFailureResult(code string) string {

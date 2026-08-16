@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Utils } from "youtubei.js";
 
 import { fetchChannelFeed, mapLiveSessions, mapPhoto, mapProfile, mapStats } from "./fetch-channel.mjs";
 
@@ -50,6 +51,35 @@ test("fetchChannelFeed fail-closes when live rows lack status", async () => {
   await assert.rejects(
     () => fetchChannelFeed({ channelId: "UC_TEST", innertube }),
     (err) => err.code === "parser_drift",
+  );
+});
+
+test("fetchChannelFeed treats a typed missing streams tab as an empty live feed", async () => {
+  const innertube = {
+    getChannel: async () => ({
+      getAbout: async () => ({}),
+      getLiveStreams: async () => {
+        throw new Utils.InnertubeError('Tab "streams" not found');
+      },
+    }),
+  };
+  const result = await fetchChannelFeed({ channelId: "UC_TEST", innertube });
+  assert.deepEqual(result.live_sessions, []);
+});
+
+test("fetchChannelFeed propagates an untyped missing streams error", async () => {
+  const expected = new Error('Tab "streams" not found');
+  const innertube = {
+    getChannel: async () => ({
+      getAbout: async () => ({}),
+      getLiveStreams: async () => {
+        throw expected;
+      },
+    }),
+  };
+  await assert.rejects(
+    () => fetchChannelFeed({ channelId: "UC_TEST", innertube }),
+    (err) => err === expected,
   );
 });
 

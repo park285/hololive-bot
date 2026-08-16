@@ -1,3 +1,5 @@
+import { Utils } from "youtubei.js";
+
 import { textOf } from "./map-posts.mjs";
 
 /** @param {YouTubeJSFetchOptions} [options] */
@@ -9,8 +11,20 @@ export async function fetchViewerFeed({ videoId, innertube } = {}) {
   if (innertube == null || typeof innertube.getInfo !== "function") {
     throw new Error("innertube client is required");
   }
-  const info = await innertube.getInfo(id);
+  let info;
+  try {
+    info = await innertube.getInfo(id);
+  } catch (err) {
+    if (!isUnavailableVideo(err)) {
+      throw err;
+    }
+    return mapViewer({ basic_info: { id } }, id);
+  }
   return mapViewer(info, id);
+}
+
+function isUnavailableVideo(err) {
+  return err instanceof Utils.InnertubeError && err.message === "This video is unavailable";
 }
 
 export function mapViewer(info, videoId) {
