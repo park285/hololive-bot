@@ -363,119 +363,114 @@ func TestLegacyDeferBackfillsDiagnosticsWithoutOverwritingNewWriter(t *testing.T
 	repository := newTestRepository(t, pool)
 	spec := communityJob()
 
-	first, err := repository.Acquire(ctx, spec, "collector-a")
-	if err != nil {
-		t.Fatal(err)
+	first := mustAcquireLease(t, ctx, repository, spec, "collector-a")
+	mustDeferLease(t, ctx, first, "first_failure", "FirstWriter", "first detail")
+	stale := readFailureDiagnostics(t, ctx, pool, spec.JobKey)
+
+	makeRetryDue(t, ctx, pool, spec.JobKey)
+	second := mustAcquireLease(t, ctx, repository, spec, "collector-b")
+	legacyDefer(t, ctx, pool, repository, second, "legacy_failure")
+	legacy := readFailureDiagnostics(t, ctx, pool, spec.JobKey)
+	if legacy.code != "legacy_failure" || legacy.class != "legacy_collector" || legacy.detail != "legacy_collector" {
+		t.Fatalf("legacy diagnostics = code:%q class:%q detail:%q", legacy.code, legacy.class, legacy.detail)
 	}
-	if err := first.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "first_failure", "FirstWriter", "first detail"); err != nil {
-		t.Fatalf("first new-writer defer: %v", err)
-	}
-	var staleCode, staleClass, staleDetail string
-	var staleAt time.Time
-	if err := pool.QueryRow(ctx, `
-		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
-		FROM youtube_collection_job_leases WHERE job_key = $1
-	`, spec.JobKey).Scan(&staleCode, &staleClass, &staleDetail, &staleAt); err != nil {
-		t.Fatal(err)
+	if !legacy.at.After(stale.at) {
+		t.Fatalf("legacy failure timestamp = %s, stale timestamp = %s", legacy.at, stale.at)
 	}
 
-	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
-		t.Fatal(err)
+	makeRetryDue(t, ctx, pool, spec.JobKey)
+	third := mustAcquireLease(t, ctx, repository, spec, "collector-c")
+	mustDeferLease(t, ctx, third, "second_failure", "SecondWriter", "second detail")
+	current := readFailureDiagnostics(t, ctx, pool, spec.JobKey)
+	if current.code != "second_failure" || current.class != "SecondWriter" || current.detail != "second detail" {
+		t.Fatalf("new-writer diagnostics = code:%q class:%q detail:%q", current.code, current.class, current.detail)
 	}
-	second, err := repository.Acquire(ctx, spec, "collector-b")
-	if err != nil {
-		t.Fatalf("reacquire for legacy defer: %v", err)
-	}
-
-	const legacyDeferSQL = `UPDATE youtube_collection_job_leases
-SET slot_state = 'DEFERRED',
-    owner_instance = NULL,
-    lease_expires_at = NULL,
-    retry_not_before = LEAST(
-        GREATEST($6, statement_timestamp() + ($8::bigint * INTERVAL '1 millisecond')),
-        statement_timestamp() + ($9::bigint * INTERVAL '1 millisecond')
-    ),
-    last_error_code = $7,
-    updated_at = clock_timestamp()
-WHERE job_key = $1
-  AND owner_instance = $2
-  AND fence_epoch = $3
-  AND projection_generation = $4
-  AND scheduled_for = $5
-  AND slot_state = 'ACTIVE'
-  AND lease_expires_at > clock_timestamp()
-RETURNING job_key`
-	legacyRetryAt := time.Now().UTC().Add(500 * time.Millisecond)
-	var legacyJobKey string
-	if err := pool.QueryRow(ctx, legacyDeferSQL,
-		second.Proof().JobKey, second.Proof().OwnerInstance, second.Proof().FenceEpoch,
-		second.Proof().ProjectionGeneration, second.Proof().ScheduledFor, legacyRetryAt, "legacy_failure",
-		repository.config.MinRetryDelay.Milliseconds(), repository.config.MaxRetryDelay.Milliseconds(),
-	).Scan(&legacyJobKey); err != nil {
-		t.Fatalf("legacy defer: %v", err)
-	}
-	if legacyJobKey != spec.JobKey {
-		t.Fatalf("legacy defer job key = %q, want %q", legacyJobKey, spec.JobKey)
+	if !current.at.After(legacy.at) {
+		t.Fatalf("new-writer timestamp = %s, legacy timestamp = %s", current.at, legacy.at)
 	}
 
-	var legacyCode, legacyClass, legacyDetail string
-	var legacyAt time.Time
-	if err := pool.QueryRow(ctx, `
-		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
-		FROM youtube_collection_job_leases WHERE job_key = $1
-	`, spec.JobKey).Scan(&legacyCode, &legacyClass, &legacyDetail, &legacyAt); err != nil {
-		t.Fatal(err)
-	}
-	if legacyCode != "legacy_failure" || legacyClass != "legacy_collector" || legacyDetail != "legacy_collector" {
-		t.Fatalf("legacy diagnostics = code:%q class:%q detail:%q", legacyCode, legacyClass, legacyDetail)
-	}
-	if !legacyAt.After(staleAt) {
-		t.Fatalf("legacy failure timestamp = %s, stale timestamp = %s", legacyAt, staleAt)
-	}
-
-	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
-		t.Fatal(err)
-	}
-	third, err := repository.Acquire(ctx, spec, "collector-c")
-	if err != nil {
-		t.Fatalf("reacquire for new defer: %v", err)
-	}
-	if err := third.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), "second_failure", "SecondWriter", "second detail"); err != nil {
-		t.Fatalf("second new-writer defer: %v", err)
-	}
-	var currentCode, currentClass, currentDetail string
-	var currentAt time.Time
-	if err := pool.QueryRow(ctx, `
-		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
-		FROM youtube_collection_job_leases WHERE job_key = $1
-	`, spec.JobKey).Scan(&currentCode, &currentClass, &currentDetail, &currentAt); err != nil {
-		t.Fatal(err)
-	}
-	if currentCode != "second_failure" || currentClass != "SecondWriter" || currentDetail != "second detail" {
-		t.Fatalf("new-writer diagnostics = code:%q class:%q detail:%q", currentCode, currentClass, currentDetail)
-	}
-	if !currentAt.After(legacyAt) {
-		t.Fatalf("new-writer timestamp = %s, legacy timestamp = %s", currentAt, legacyAt)
-	}
-
-	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), spec.JobKey); err != nil {
-		t.Fatal(err)
-	}
-	fourth, err := repository.Acquire(ctx, spec, "collector-d")
-	if err != nil {
-		t.Fatalf("reacquire for legacy-compatible complete: %v", err)
-	}
+	makeRetryDue(t, ctx, pool, spec.JobKey)
+	fourth := mustAcquireLease(t, ctx, repository, spec, "collector-d")
 	if err := fourth.Complete(ctx); err != nil {
 		t.Fatalf("complete after new-writer defer: %v", err)
 	}
-	assertFailureDiagnostics(t, ctx, pool, spec.JobKey, currentCode, currentClass, currentDetail, currentAt)
+	assertFailureDiagnostics(t, ctx, pool, spec.JobKey, current.code, current.class, current.detail, current.at)
 	if _, err := pool.Exec(ctx, mustTestSQL("make_lease_overdue.sql"), spec.JobKey); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repository.Acquire(ctx, spec, "collector-e"); err != nil {
 		t.Fatalf("acquire after legacy-compatible complete: %v", err)
 	}
-	assertFailureDiagnostics(t, ctx, pool, spec.JobKey, currentCode, currentClass, currentDetail, currentAt)
+	assertFailureDiagnostics(t, ctx, pool, spec.JobKey, current.code, current.class, current.detail, current.at)
+}
+
+type failureDiagnostics struct {
+	code   string
+	class  string
+	detail string
+	at     time.Time
+}
+
+func readFailureDiagnostics(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jobKey string) failureDiagnostics {
+	t.Helper()
+	var diagnostics failureDiagnostics
+	if err := pool.QueryRow(ctx, `
+		SELECT last_failure_code, last_failure_class, last_failure_detail, last_failure_at
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, jobKey).Scan(&diagnostics.code, &diagnostics.class, &diagnostics.detail, &diagnostics.at); err != nil {
+		t.Fatal(err)
+	}
+	return diagnostics
+}
+
+func makeRetryDue(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jobKey string) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, mustTestSQL("make_retry_due.sql"), jobKey); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustAcquireLease(t *testing.T, ctx context.Context, repository *Repository, spec *JobSpec, owner string) *JobLease {
+	t.Helper()
+	lease, err := repository.Acquire(ctx, spec, owner)
+	if err != nil {
+		t.Fatalf("acquire lease for %s: %v", owner, err)
+	}
+	return lease
+}
+
+func mustDeferLease(t *testing.T, ctx context.Context, lease *JobLease, code, class, detail string) {
+	t.Helper()
+	if err := lease.Defer(ctx, time.Now().UTC().Add(500*time.Millisecond), code, class, detail); err != nil {
+		t.Fatalf("defer lease: %v", err)
+	}
+}
+
+func legacyDefer(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repository *Repository, lease *JobLease, code string) {
+	t.Helper()
+	const query = `UPDATE youtube_collection_job_leases
+SET slot_state = 'DEFERRED', owner_instance = NULL, lease_expires_at = NULL,
+    retry_not_before = LEAST(
+        GREATEST($6, statement_timestamp() + ($8::bigint * INTERVAL '1 millisecond')),
+        statement_timestamp() + ($9::bigint * INTERVAL '1 millisecond')
+    ),
+    last_error_code = $7, updated_at = clock_timestamp()
+WHERE job_key = $1 AND owner_instance = $2 AND fence_epoch = $3
+  AND projection_generation = $4 AND scheduled_for = $5
+  AND slot_state = 'ACTIVE' AND lease_expires_at > clock_timestamp()
+RETURNING job_key`
+	proof := lease.Proof()
+	var jobKey string
+	if err := pool.QueryRow(ctx, query,
+		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
+		time.Now().UTC().Add(500*time.Millisecond), code,
+		repository.config.MinRetryDelay.Milliseconds(), repository.config.MaxRetryDelay.Milliseconds(),
+	).Scan(&jobKey); err != nil {
+		t.Fatalf("legacy defer: %v", err)
+	}
+	if jobKey != proof.JobKey {
+		t.Fatalf("legacy defer job key = %q, want %q", jobKey, proof.JobKey)
+	}
 }
 
 func TestReleasePreservesExistingFailureDiagnostics(t *testing.T) {
