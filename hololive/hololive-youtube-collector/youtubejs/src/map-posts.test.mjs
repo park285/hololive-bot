@@ -22,6 +22,13 @@ test("thumbnailsOf keeps https urls", () => {
   );
 });
 
+test("thumbnailsOf makes protocol-relative YouTube urls absolute", () => {
+  assert.deepEqual(
+    thumbnailsOf([{ url: "//yt3.googleusercontent.com/a.jpg", width: 88, height: 88 }]),
+    [{ url: "https://yt3.googleusercontent.com/a.jpg", width: 88, height: 88 }],
+  );
+});
+
 test("mapPost copies BackstagePost fields into the Go CommunityPost wire shape", () => {
   const mapped = mapPost({
     id: "post-1",
