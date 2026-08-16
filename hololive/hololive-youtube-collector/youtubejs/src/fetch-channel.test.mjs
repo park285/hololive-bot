@@ -54,10 +54,10 @@ test("fetchChannelFeed fail-closes when live rows lack status", async () => {
   );
 });
 
-test("fetchChannelFeed treats a typed missing streams tab as an empty live feed", async () => {
+test("fetchChannelFeed signals a typed missing streams tab without claiming live absence", async () => {
   const innertube = {
     getChannel: async () => ({
-      getAbout: async () => ({}),
+      getAbout: async () => ({ subscriber_count: 12, handle: "@test" }),
       getLiveStreams: async () => {
         throw new Utils.InnertubeError('Tab "streams" not found');
       },
@@ -65,6 +65,38 @@ test("fetchChannelFeed treats a typed missing streams tab as an empty live feed"
   };
   const result = await fetchChannelFeed({ channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
+  assert.equal(result.missing_tab, true);
+  assert.equal(result.stats.subscriber_count, 12);
+  assert.equal(result.profile.handle, "@test");
+});
+
+test("fetchChannelFeed signals an unsupported live streams tab without claiming live absence", async () => {
+  const innertube = {
+    getChannel: async () => ({
+      getAbout: async () => ({ subscriber_count: 7, handle: "@unsupported" }),
+    }),
+  };
+  const result = await fetchChannelFeed({ channelId: "UC_TEST", innertube });
+  assert.deepEqual(result.live_sessions, []);
+  assert.equal(result.missing_tab, true);
+  assert.equal(result.stats.subscriber_count, 7);
+  assert.equal(result.profile.handle, "@unsupported");
+});
+
+test("fetchChannelFeed propagates a typed error with a different message", async () => {
+  const expected = new Utils.InnertubeError("streams request failed");
+  const innertube = {
+    getChannel: async () => ({
+      getAbout: async () => ({}),
+      getLiveStreams: async () => {
+        throw expected;
+      },
+    }),
+  };
+  await assert.rejects(
+    () => fetchChannelFeed({ channelId: "UC_TEST", innertube }),
+    (err) => err === expected,
+  );
 });
 
 test("fetchChannelFeed propagates an untyped missing streams error", async () => {

@@ -1281,14 +1281,14 @@ func (r *Repository) PublishBatch(
 5. 각 provider/kind의 current schema version·generation을 검증한다.
 6. batch의 모든 observation identity를 preflight한다.
 7. existing identity가 없으면 `INSERTED` 후보, 같은 `evidence_sha256`이면 `DUPLICATE` 후보로 분류한다.
-8. 하나라도 다른 `evidence_sha256`이면 batch 안의 모든 collision audit를 insert하고 observation, queue, checkpoint는 하나도 변경하지 않는다.
-9. collision batch는 job row에 bounded error code를 기록하고 다음 정상 slot으로 전진시킨 뒤 `COLLISION` 결과로 commit한다. known collision은 audit 보존을 위해 Go error로 rollback시키지 않는다.
-10. collision이 없으면 모든 new immutable observation과 queue row를 insert한다.
-11. checkpoint를 upsert한다.
+8. 다른 `evidence_sha256`를 가진 identity는 row 단위로 collision audit에 기록하고 해당 identity의 evidence를 덮어쓰거나 queue에 넣지 않는다.
+9. collision row를 격리한 뒤에도 독립적인 non-collision row는 자체 outcome에 따라 immutable observation을 insert하고 queue에 넣을 수 있으며, 각 row의 checkpoint를 upsert하고 `INSERTED`·`DUPLICATE`·`COLLISION` 결과를 ordinal별로 반환한다.
+10. 하나라도 collision이면 job row에 bounded error code를 기록하고 다음 정상 slot으로 전진한다. known collision은 audit 보존을 위해 Go error로 rollback시키지 않으며, 같은 transaction 안의 독립 row side effect는 함께 commit한다.
+11. collision이 없을 때도 모든 new immutable observation과 queue row를 insert하고 checkpoint를 upsert한다.
 12. job lease를 complete해 `slot_state=IDLE`로 전환하고 owner, lease expiry, retry 시각을 clear한 뒤 `next_due_at = scheduled_for + poll_interval`로 전진시킨다.
 13. commit한다.
 
-`PublishCollision`은 batch 전체에 대한 fail-closed permanent outcome이다. 같은 external fetch가 만든 stats/profile/photo 중 일부만 publish하지 않는다. collector는 canonical processing을 기대하지 않고 metric과 bounded log를 남기며 같은 candidate를 무한 retry하지 않는다.
+`PublishCollision`은 충돌한 identity에 대한 fail-closed permanent outcome이다. 같은 external fetch가 만든 stats/profile/photo batch에 collision row가 있어도 독립적인 non-collision row를 억제하지 않는다. collided identity는 기존 immutable evidence를 보존하고 queue에 넣지 않으며, collector는 canonical processing을 기대하지 않고 row outcome별 metric과 bounded log를 남기며 같은 candidate를 무한 retry하지 않는다.
 
 ### 10.3 Error classes
 

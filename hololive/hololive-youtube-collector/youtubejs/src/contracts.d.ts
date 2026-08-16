@@ -161,6 +161,7 @@ export interface ChannelResult extends Pagination {
   stats: ChannelStatsItem;
   profile: ChannelProfileItem;
   photo: ChannelPhotoVariant[];
+  missing_tab?: boolean;
   error?: string;
 }
 

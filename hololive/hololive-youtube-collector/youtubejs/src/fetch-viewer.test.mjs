@@ -53,6 +53,19 @@ test("fetchViewerFeed maps a typed unavailable video to the existing unavailable
   });
 });
 
+test("fetchViewerFeed propagates typed getInfo errors with a non-exact message", async () => {
+  const expected = new Utils.InnertubeError("This video is unavailable for this client", { status: "ERROR" });
+  const innertube = {
+    getInfo: async () => {
+      throw expected;
+    },
+  };
+  await assert.rejects(
+    () => fetchViewerFeed({ videoId: "vid-typed-error", innertube }),
+    (err) => err === expected,
+  );
+});
+
 test("fetchViewerFeed propagates unknown getInfo errors", async () => {
   const expected = new Error("network unavailable");
   const innertube = {
