@@ -3,10 +3,12 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	"github.com/park285/shared-go/pkg/healthprobe"
 )
 
 func TestFetchBodyWithAPIKeyEnvSendsAPIKeyHeader(t *testing.T) {
@@ -41,5 +43,31 @@ func TestFetchBodyWithAPIKeyEnvRejectsMissingEnv(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "PROBE_API_KEY") {
 		t.Fatalf("error = %q, want env name", err.Error())
+	}
+}
+
+func TestRunExternalSmokeClearsInternalTLSOverrides(t *testing.T) {
+	t.Setenv(healthprobe.CACertFileEnv, "/run/internal-ca.pem")
+	t.Setenv(healthprobe.ServerNameEnv, "127.0.0.1")
+
+	called := false
+	err := runExternalSmoke(func(rawURL string) error {
+		called = true
+		if rawURL != "https://www.google.com/generate_204" {
+			t.Fatalf("rawURL = %q", rawURL)
+		}
+		if value := os.Getenv(healthprobe.CACertFileEnv); value != "" {
+			t.Fatalf("%s = %q", healthprobe.CACertFileEnv, value)
+		}
+		if value := os.Getenv(healthprobe.ServerNameEnv); value != "" {
+			t.Fatalf("%s = %q", healthprobe.ServerNameEnv, value)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("runExternalSmoke() error = %v", err)
+	}
+	if !called {
+		t.Fatal("external smoke check was not called")
 	}
 }
