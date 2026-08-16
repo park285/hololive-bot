@@ -857,6 +857,7 @@ scripts/deploy/ap-hosts/seoul.conf
 scripts/deploy/ap-iris-h3-trust-preflight.sh
 scripts/deploy/ap-rsync-files.txt
 scripts/deploy/compose.sh
+scripts/deploy/lib/ap-collector-readiness.sh
 scripts/deploy/lib/ap-host.sh
 scripts/deploy/lib/compose-env.sh
 scripts/deploy/lib/compose-paths.sh
