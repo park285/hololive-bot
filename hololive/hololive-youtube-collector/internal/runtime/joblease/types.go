@@ -146,6 +146,6 @@ type Lease interface {
 	Proof() contract.LeaseProof
 	Renew(ctx context.Context) error
 	Complete(ctx context.Context) error
-	Defer(ctx context.Context, retryAt time.Time, code string) error
+	Defer(ctx context.Context, retryAt time.Time, code, class, detail string) error
 	Release(ctx context.Context) error
 }
