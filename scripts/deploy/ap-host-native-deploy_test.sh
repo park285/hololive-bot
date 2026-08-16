@@ -77,30 +77,21 @@ else
   record_fail "ap-host-native deploy must record and stop the prior producer runtime"
 fi
 
-scraper_password_line="$(grep -nF 'export POSTGRES_PASSWORD="$HOLOLIVE_SCRAPER_PASSWORD"' "${DEPLOY}" | head -1 | cut -d: -f1)"
-runtime_password_line="$(grep -nF 'export POSTGRES_PASSWORD="$HOLOLIVE_DB_PASSWORD"' "${DEPLOY}" | head -1 | cut -d: -f1)"
-if [[ -n "${scraper_password_line}" && -n "${runtime_password_line}" ]] &&
-   (( scraper_password_line < runtime_password_line )) &&
-   grep -Fq '[ "$POSTGRES_USER" = "${HOLOLIVE_SCRAPER_USER:-hololive_scraper}" ]' "${DEPLOY}"; then
-  pass "ap-host-native wrapper selects the scraper credential for the scraper role"
-else
-  record_fail "ap-host-native wrapper must prefer the scraper credential for the scraper role"
-fi
-
 if grep -Fq 'install -m 0644 -o root -g root "$payload/first-cutover-producer.state" "$producer_state_file"' "${REMOTE_APPLY}"; then
   pass "ap-host-native first-cutover state is immutable and readable by rollback orchestration"
 else
   record_fail "ap-host-native first-cutover state must remain readable by rollback orchestration"
 fi
 
-if grep -Fq 'for _ in $(seq 1 90); do' "${REMOTE_APPLY}" &&
+if grep -Fq 'collector_readiness_poll 90 2 collector_readiness_fetch' "${REMOTE_APPLY}" &&
    grep -Fq 'systemctl is-active --quiet "$unit"' "${REMOTE_APPLY}" &&
-   grep -Fq '"first_success":true' "${REMOTE_APPLY}" &&
-   grep -Fq '"handoff_status":"PROCESSED"' "${REMOTE_APPLY}"; then
+   grep -Fq 'collector_readiness_validate "$ready"' "${REMOTE_APPLY}"; then
   pass "ap-host-native cutover waits for the strict readiness contract"
 else
   record_fail "ap-host-native cutover must allow startup grace without weakening readiness"
 fi
+
+bash "${ROOT_DIR}/scripts/deploy/ap-host-native-collector-wrapper_test.sh"
 
 if grep -Fq 'validate_retired_producer_runtime_state "$producer_state_file" "$service"' "${ROLLBACK}" &&
    grep -Fq 'stop_named_units_and_require_inactive "$unit"' "${ROLLBACK}" &&

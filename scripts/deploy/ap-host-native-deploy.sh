@@ -23,6 +23,8 @@ esac
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
 RETIRED_PRODUCER_LIB="$REPO_ROOT/scripts/deploy/lib/retired-producer-cutover.sh"
 REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
+COLLECTOR_WRAPPER_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-collector-wrapper.sh"
+READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
@@ -109,27 +111,7 @@ write_host_env() {
 
 write_wrapper() {
   local dest="$1"
-  cat > "$dest" <<'EOF'
-#!/usr/bin/env sh
-set -eu
-
-if [ -z "${POSTGRES_USER:-}" ]; then
-  export POSTGRES_USER="${HOLOLIVE_SCRAPER_USER:-hololive_scraper}"
-fi
-if [ -z "${POSTGRES_DB:-}" ]; then
-  export POSTGRES_DB=hololive
-fi
-if [ -z "${POSTGRES_PASSWORD:-}" ] &&
-   [ "$POSTGRES_USER" = "${HOLOLIVE_SCRAPER_USER:-hololive_scraper}" ] &&
-   [ -n "${HOLOLIVE_SCRAPER_PASSWORD:-}" ]; then
-  export POSTGRES_PASSWORD="$HOLOLIVE_SCRAPER_PASSWORD"
-elif [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${HOLOLIVE_DB_PASSWORD:-}" ]; then
-  export POSTGRES_PASSWORD="$HOLOLIVE_DB_PASSWORD"
-elif [ -z "${POSTGRES_PASSWORD:-}" ] && [ -n "${DB_PASSWORD:-}" ]; then
-  export POSTGRES_PASSWORD="$DB_PASSWORD"
-fi
-exec /opt/hololive-bot/youtube-collector/current/bin/youtube-collector
-EOF
+  cp "$COLLECTOR_WRAPPER_LIB" "$dest"
   chmod 0755 "$dest"
 }
 
@@ -217,6 +199,7 @@ REMOTE
 {
   cat "$NODE_VERSION_LIB"
   cat "$RETIRED_PRODUCER_LIB"
+  cat "$READINESS_LIB"
   cat "$REMOTE_APPLY_LIB"
 } | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB"
 
