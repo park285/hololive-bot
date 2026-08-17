@@ -162,6 +162,67 @@ test("known transport errors remain explicitly transient", async () => {
   }
 });
 
+test("upstream HTTP 500 is typed transient before youtubei.js can erase status", async () => {
+  let canceled = 0;
+  class ProxyAgent {
+    async close() {}
+    destroy() {}
+  }
+  const transport = await createFetchTransport({
+    proxy: { enabled: true, url: "http://proxy.test:8080" },
+    currentSignal: () => undefined,
+    loadUndici: async () => ({
+      ProxyAgent,
+      fetch: async () => new Response(new ReadableStream({
+        cancel() {
+          canceled += 1;
+        },
+      }), { status: 500 }),
+    }),
+  });
+  try {
+    let failure;
+    try {
+      await transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" });
+    } catch (error) {
+      failure = error;
+    }
+    assert.equal(failure?.code, "collection_failed");
+    assert.equal(failure?.failureClass, "TRANSIENT");
+    assert.equal(canceled, 1);
+    const result = rpcErrorResultFor(failure);
+    assert.equal(result.status, 502);
+    assert.equal(result.body.error.code, "collection_failed");
+    assert.equal(result.body.error.class, "TRANSIENT");
+  } finally {
+    await transport.close();
+  }
+});
+
+test("direct upstream HTTP 500 follows the same typed failure path", async () => {
+  const originalFetch = globalThis.fetch;
+  let canceled = 0;
+  globalThis.fetch = async () => new Response(new ReadableStream({
+    cancel() {
+      canceled += 1;
+    },
+  }), { status: 500 });
+  const transport = await createFetchTransport({
+    proxy: { enabled: false },
+    currentSignal: () => undefined,
+  });
+  try {
+    await assert.rejects(
+      transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" }),
+      (error) => error.code === "collection_failed" && error.failureClass === "TRANSIENT",
+    );
+    assert.equal(canceled, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await transport.close();
+  }
+});
+
 test("PXY-007 request-scoped cancellation affects only one of twenty requests", async () => {
   const fixture = await proxyFixture();
   let signal;
