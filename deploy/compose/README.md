@@ -66,6 +66,12 @@ The central unsuffixed `youtube-collector` (`c`) also uses scoped
 `youtube-collector.env`; it still must not receive Iris egress tokens or the
 monolithic Compose env file as an `env_file`.
 
+`youtube-collector.env` must provide a non-empty `API_SECRET_KEY`, the shared
+`OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true`
+for every deployed slot. Host-native `a`/`d` bind metrics to their tailnet
+address, so omitting `API_SECRET_KEY` is a startup configuration error rather
+than a keyless metrics mode.
+
 Collector compatibility env pairs use `${NEW-${OLD-default}}` / `${OLD-${NEW-default}}` interpolation. This preserves explicit empty values so the collector loader fails closed, while unset, new-only, old-only, equal, and conflicting inputs retain the truth table documented in [`youtube-collector.md`](../../docs/current/runbooks/youtube-collector.md#key-environment-variables).
 
 Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored

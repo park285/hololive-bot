@@ -87,19 +87,22 @@ function effectiveFetch(currentSignal, proxyFetch, proxyAgent) {
       throw abortError(requestSignal, effective.signal);
     }
     try {
+      let response;
       if (proxyFetch == null || proxyAgent == null) {
-        return await globalThis.fetch(effective, { signal: combinedSignal });
+        response = await globalThis.fetch(effective, { signal: combinedSignal });
+      } else {
+        const proxyInit = {
+          method: effective.method,
+          headers: Array.from(effective.headers.entries()),
+          body: effective.body,
+          redirect: effective.redirect,
+          signal: combinedSignal,
+          dispatcher: proxyAgent,
+          ...(effective.body == null ? {} : { duplex: "half" }),
+        };
+        response = await proxyFetch(effective.url, proxyInit);
       }
-      const proxyInit = {
-        method: effective.method,
-        headers: Array.from(effective.headers.entries()),
-        body: effective.body,
-        redirect: effective.redirect,
-        signal: combinedSignal,
-        dispatcher: proxyAgent,
-        ...(effective.body == null ? {} : { duplex: "half" }),
-      };
-      return await proxyFetch(effective.url, proxyInit);
+      return await classifyUpstreamResponse(response);
     } catch (error) {
       if (combinedSignal.aborted) {
         throw abortError(requestSignal, effective.signal);
@@ -115,6 +118,27 @@ function effectiveFetch(currentSignal, proxyFetch, proxyAgent) {
       throw error;
     }
   };
+}
+
+async function classifyUpstreamResponse(response) {
+  if (response.status < 500 || response.status > 599) {
+    return response;
+  }
+  try {
+    await response.body?.cancel();
+  } catch (error) {
+    throw new FetchTransportError(
+      "helper_internal_invariant",
+      "INTERNAL",
+      "upstream response cleanup failed",
+      { cause: error },
+    );
+  }
+  throw new FetchTransportError(
+    "collection_failed",
+    "TRANSIENT",
+    `upstream request failed with status code ${response.status}`,
+  );
 }
 
 function abortError(requestSignal, requestInitSignal) {

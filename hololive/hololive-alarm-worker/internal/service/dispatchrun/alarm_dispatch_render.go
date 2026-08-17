@@ -8,18 +8,19 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, group alarmDispatchGroup) (string, error) {
+func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (string, error) {
 	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, group); handled {
 		return message, err
 	}
 	if len(group.notifications) == 1 {
-		return renderAlarmDispatchNotification(ctx, renderer, messageStrings, &group.notifications[0])
+		return renderAlarmDispatchNotification(ctx, renderer, messageStrings, members, &group.notifications[0])
 	}
-	return renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, group)
+	return renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, members, group)
 }
 
 func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, group alarmDispatchGroup) (message string, handled bool, err error) {
@@ -55,6 +56,7 @@ type alarmDispatchItemView struct {
 	MemberName      string
 	Title           string
 	URL             string
+	CollabMembers   string
 	ScheduleMessage string
 	MinutesUntil    int
 	IsStarting      bool
@@ -69,18 +71,26 @@ type alarmDispatchGroupView struct {
 	Entries      []alarmDispatchItemView
 }
 
-func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification, groupMinutesUntil int) alarmDispatchItemView {
+func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification, groupMinutesUntil int) alarmDispatchItemView {
 	starting := notification.IsStarting()
 	return alarmDispatchItemView{
 		MemberName:      resolveAlarmDispatchMemberName(ctx, store, notification),
 		Title:           resolveAlarmDispatchTitle(ctx, store, notification),
 		URL:             resolveAlarmDispatchURL(notification),
+		CollabMembers:   formatAlarmDispatchCollabMembers(members, notification.Stream),
 		ScheduleMessage: strings.TrimSpace(notification.ScheduleChangeMessage),
 		MinutesUntil:    notification.MinutesUntil,
 		IsStarting:      starting,
 		IsScheduled:     !starting && groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil,
 		IsPremiere:      notification.Stream != nil && notification.Stream.IsPremiere,
 	}
+}
+
+func formatAlarmDispatchCollabMembers(members domain.MemberDataProvider, stream *domain.Stream) string {
+	if stream == nil {
+		return ""
+	}
+	return officialidentity.Format(officialidentity.DisplayNames(members, stream.CollaboTalentNames, stream.ChannelID))
 }
 
 func alarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
@@ -107,19 +117,20 @@ func alarmDispatchGroupAllPremiere(group alarmDispatchGroup) bool {
 	return true
 }
 
-func buildAlarmDispatchGroupView(ctx context.Context, store *messagestrings.Store, group alarmDispatchGroup) alarmDispatchGroupView {
-	return buildAlarmDispatchGroupViewWithShortLinks(ctx, store, group, shortlinkservice.YouTubeBuilder{})
+func buildAlarmDispatchGroupView(ctx context.Context, store *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) alarmDispatchGroupView {
+	return buildAlarmDispatchGroupViewWithShortLinks(ctx, store, members, group, shortlinkservice.YouTubeBuilder{})
 }
 
 func buildAlarmDispatchGroupViewWithShortLinks(
 	ctx context.Context,
 	store *messagestrings.Store,
+	members domain.MemberDataProvider,
 	group alarmDispatchGroup,
 	shortLinks shortlinkservice.YouTubeBuilder,
 ) alarmDispatchGroupView {
 	entries := make([]alarmDispatchItemView, 0, len(group.notifications))
 	for i := range group.notifications {
-		entry := buildAlarmDispatchItemView(ctx, store, &group.notifications[i], group.minutesUntil)
+		entry := buildAlarmDispatchItemView(ctx, store, members, &group.notifications[i], group.minutesUntil)
 		entry.URL = resolveAlarmDispatchGroupURL(&group.notifications[i], shortLinks)
 		entries = append(entries, entry)
 	}
@@ -131,7 +142,7 @@ func buildAlarmDispatchGroupViewWithShortLinks(
 	}
 }
 
-func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, group alarmDispatchGroup) (string, error) {
+func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (string, error) {
 	shortLinks, err := configuredAlarmShortLinkBuilder()
 	if err != nil {
 		return "", fmt.Errorf("render alarm dispatch notification group: short links: %w", err)
@@ -140,7 +151,7 @@ func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *templat
 		ctx,
 		domain.TemplateKeyAlarmDispatchNotificationGroup,
 		"",
-		buildAlarmDispatchGroupViewWithShortLinks(ctx, store, group, shortLinks),
+		buildAlarmDispatchGroupViewWithShortLinks(ctx, store, members, group, shortLinks),
 	)
 	if err != nil {
 		return "", fmt.Errorf("render alarm dispatch notification group: %w", err)
@@ -148,8 +159,8 @@ func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *templat
 	return message, nil
 }
 
-func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, notification *domain.AlarmNotification) (string, error) {
-	view := buildAlarmDispatchItemView(ctx, store, notification, -1)
+func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, notification *domain.AlarmNotification) (string, error) {
+	view := buildAlarmDispatchItemView(ctx, store, members, notification, -1)
 	message, err := renderer.Render(ctx, domain.TemplateKeyAlarmDispatchNotification, "", view)
 	if err != nil {
 		return "", fmt.Errorf("render alarm dispatch notification: %w", err)

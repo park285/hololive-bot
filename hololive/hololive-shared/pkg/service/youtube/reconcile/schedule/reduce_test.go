@@ -48,6 +48,19 @@ func TestReduceYouTubeVideoIDIsCanonicalIdentity(t *testing.T) {
 	}
 }
 
+func TestReducePreservesCollaboTalentNames(t *testing.T) {
+	t.Parallel()
+	incoming := evidence(contract.ProviderHololiveOfficial, Item{
+		ExternalID: "vid-a", VideoID: "vid-a", Title: "Collab", ScheduledAt: at(),
+		CollaboTalentNames: []string{"Guest One"},
+	})
+	got := mustReduce(t, State{}, incoming)
+	incoming.Items[0].CollaboTalentNames[0] = "mutated"
+	if len(got.Items) != 1 || got.Items[0].CollaboTalentNames[0] != "Guest One" {
+		t.Fatalf("names = %#v", got.Items)
+	}
+}
+
 func TestReduceOfficialIsLiveDoesNotFlipLive(t *testing.T) {
 	t.Parallel()
 	state := State{Sessions: map[string]Session{

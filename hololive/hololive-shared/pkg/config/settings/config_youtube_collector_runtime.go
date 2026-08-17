@@ -170,7 +170,7 @@ func (c *YouTubeCollectorRuntimeConfig) Validate() error {
 	if err := c.validateServer(); err != nil {
 		return err
 	}
-	if err := validateTracingConfig(c.Tracing); err != nil {
+	if err := c.validateTracing(); err != nil {
 		return err
 	}
 	if err := c.validateOwnership(); err != nil {
@@ -195,7 +195,21 @@ func (c *YouTubeCollectorRuntimeConfig) validateServer() error {
 	if err := validateServerTransports(&c.Server); err != nil {
 		return err
 	}
-	return nil
+	return validateAPISecretKey(c.Environment, c.Server.APIKey)
+}
+
+func (c *YouTubeCollectorRuntimeConfig) validateTracing() error {
+	if err := validateTracingConfig(c.Tracing); err != nil {
+		return err
+	}
+	if !isProductionEnvironment(c.Environment) || c.Tracing.Enabled {
+		return nil
+	}
+	enabledEnv, err := youtubeCollectorTracingEnabledEnv(c.Collector.InstanceID)
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("%s=true is required in production", enabledEnv)
 }
 
 func (c *YouTubeCollectorRuntimeConfig) validateOwnership() error {

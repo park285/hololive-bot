@@ -77,6 +77,8 @@ video identity는 검증된 `v` query입니다. output link는 `https://www.yout
 
 `collaboTalents`는 owner 판정에 사용하지 않습니다. talent icon URL도 현재 domain에 저장하지 않습니다.
 
+공식 collector는 `collaboTalents[].name`만 guest evidence로 보존합니다. 빈 배열은 솔로 일정으로 해석하며, 호스트 자신의 이름은 제외합니다. 이 값은 `youtube_schedule_items.collabo_talent_names`에 저장되고, 기존 호스트 live/upcoming Kakao 알림에 표시용 `콜라보:` 한 줄로만 붙습니다. collab 멤버 구독자에게 알림을 팬아웃하지 않습니다. Holodex mentions는 사용하지 않습니다.
+
 ## Channel identity
 
 공식 API는 stable channel ID를 제공하지 않습니다. runtime은 member data가 소유하는 다음 값을 normalized exact key로 인덱싱합니다.

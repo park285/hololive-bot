@@ -1,6 +1,7 @@
 package workerapp
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -29,6 +30,7 @@ import (
 )
 
 func buildNotificationEgress(
+	ctx context.Context,
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
@@ -54,7 +56,7 @@ func buildNotificationEgress(
 		egress.WithRoomChat(rooms),
 	)
 
-	alarmDispatchRunner, err := buildAlarmDispatchRunner(infra, irisSender, logger)
+	alarmDispatchRunner, err := buildAlarmDispatchRunner(ctx, infra, irisSender, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +103,7 @@ func buildDeliveryOutboxDispatcher(
 }
 
 func buildAlarmDispatchRunner(
+	ctx context.Context,
 	infra *sharedmodules.InfraModule,
 	sender dispatchrun.Sender,
 	logger *slog.Logger,
@@ -122,13 +125,17 @@ func buildAlarmDispatchRunner(
 	}
 
 	consumer := newAlarmDispatchConsumer(infra, logger)
+	config := alarmDispatchRunnerConfig()
+	if infra.MemberCache != nil {
+		config.Members = providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
+	}
 	return dispatchrun.NewRunner(
 		consumer,
 		sender,
 		template.NewRenderer(infra.Postgres.GetPool(), logger),
 		alarmDispatchMessageStrings(infra, logger),
 		dispatchrun.NewWakeupWaiter(infra.Cache, logger),
-		alarmDispatchRunnerConfig(),
+		config,
 		logger,
 	), nil
 }

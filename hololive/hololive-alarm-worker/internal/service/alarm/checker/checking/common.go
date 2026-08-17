@@ -89,7 +89,18 @@ func CloneStream(stream *domain.Stream) *domain.Stream {
 		copied.Channel = &channelCopy
 	}
 
+	copied.CollaboTalentNames = cloneStringSlice(stream.CollaboTalentNames)
+
 	return &copied
+}
+
+func cloneStringSlice(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	cloned := make([]string, len(values))
+	copy(cloned, values)
+	return cloned
 }
 
 func EnsureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stream {

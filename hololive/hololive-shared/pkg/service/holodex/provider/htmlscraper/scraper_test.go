@@ -161,13 +161,13 @@ func TestOfficialScheduleIdentityRequiresOneDistinctChannel(t *testing.T) {
 		{Name: "Duplicate Same ID", ChannelID: "channel-3", Aliases: &domain.Aliases{Ja: []string{"同じ"}}},
 		{Name: "Duplicate Same ID Again", ChannelID: "channel-3", Aliases: &domain.Aliases{Ja: []string{"同じ"}}},
 	}})
-	if got := index.resolve("Shared"); got != "" {
+	if got := index.Resolve("Shared"); got != "" {
 		t.Fatalf("ambiguous identity resolved to %q", got)
 	}
-	if got := index.resolve("同じ"); got != "channel-3" {
+	if got := index.Resolve("同じ"); got != "channel-3" {
 		t.Fatalf("same-channel duplicate resolved to %q", got)
 	}
-	if got := index.resolve("unknown"); got != "" {
+	if got := index.Resolve("unknown"); got != "" {
 		t.Fatalf("unknown identity resolved to %q", got)
 	}
 }

@@ -30,7 +30,17 @@ func cloneStream(stream *domain.Stream) *domain.Stream {
 	cloned.TopicID = cloneStringPtr(stream.TopicID)
 	cloned.Channel = cloneChannelPtr(stream.Channel)
 	cloned.ViewerCount = cloneIntPtr(stream.ViewerCount)
+	cloned.CollaboTalentNames = cloneStringSlice(stream.CollaboTalentNames)
 	return &cloned
+}
+
+func cloneStringSlice(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	cloned := make([]string, len(values))
+	copy(cloned, values)
+	return cloned
 }
 
 func cloneTimePtr(value *time.Time) *time.Time {

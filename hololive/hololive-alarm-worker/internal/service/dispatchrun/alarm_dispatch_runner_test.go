@@ -877,7 +877,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 	second.Notification.Stream.StartScheduled = &start
 	group := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{first, second})[0]
 
-	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, group)
+	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "## ⏰ 방송 1분 전\n\n"+
@@ -905,7 +905,7 @@ func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t 
 		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "## 🔴 방송 시작\n\n"+
@@ -933,7 +933,7 @@ func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader
 		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "## ⏰ 방송 5분 전\n\n"+
@@ -951,7 +951,7 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(
 	notification.Stream.StartScheduled = &start
 	notification.Stream.StartActual = &start
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -968,7 +968,7 @@ func TestRenderAlarmDispatchNotificationLiveStatusUsesStartingMessage(t *testing
 	notification.Stream.Title = "Live Title"
 	notification.Stream.Status = domain.StreamStatusLive
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -985,7 +985,7 @@ func TestRenderAlarmDispatchNotificationUpcomingKeepsPreliveMessage(t *testing.T
 	notification.Stream.Title = "Upcoming Title"
 	notification.Stream.Status = domain.StreamStatusUpcoming
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -1010,7 +1010,7 @@ func TestRenderAlarmDispatchNotificationLinksSingleStreamTitle(t *testing.T) {
 	notification.Stream.Link = &link
 	notification.Stream.Status = domain.StreamStatusUpcoming
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -1028,7 +1028,7 @@ func TestRenderAlarmDispatchNotificationKeepsIntegratedURLsReadable(t *testing.T
 	notification.Stream.IsIntegrated = true
 	notification.Stream.ChzzkLiveURL = "https://chzzk.naver.com/live/integrated-1"
 
-	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
+	got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
 
 	require.NoError(t, err)
 	assert.Equal(t,
@@ -1068,7 +1068,7 @@ func TestRenderAlarmDispatchNotificationLinksDirectPlatformTitles(t *testing.T) 
 			notification.Stream.Title = "플랫폼 방송"
 			tt.configure(notification.Stream)
 
-			got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, &notification)
+			got, err := renderAlarmDispatchNotification(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, &notification)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)

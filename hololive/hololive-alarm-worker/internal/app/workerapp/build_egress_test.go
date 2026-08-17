@@ -119,7 +119,7 @@ func TestYouTubeOutboxKaringSenderUsesMarkdownLaneWhenEnabled(t *testing.T) {
 }
 
 func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
-	runner, err := buildNotificationEgress(&settings.Config{}, &sharedmodules.InfraModule{}, nil)
+	runner, err := buildNotificationEgress(t.Context(), &settings.Config{}, &sharedmodules.InfraModule{}, nil)
 
 	require.Error(t, err)
 	assert.Nil(t, runner)
@@ -132,7 +132,7 @@ func TestBuildAlarmDispatchRunnerBuildsPGRunner(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), infra, egress.NewIrisMessageSender(nil), nil)
 	require.NoError(t, err)
 
 	runner, ok := scheduler.(*dispatchrun.Runner)
@@ -161,7 +161,7 @@ func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), infra, egress.NewIrisMessageSender(nil), nil)
 	require.NoError(t, err)
 
 	runner, ok := scheduler.(*dispatchrun.Runner)
@@ -178,7 +178,7 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "false")
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "false")
 
-	scheduler, err := buildAlarmDispatchRunner(nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), nil, egress.NewIrisMessageSender(nil), nil)
 	require.NoError(t, err)
 	assert.Nil(t, scheduler)
 
@@ -196,7 +196,7 @@ func TestBuildEgressDispatchersRejectMissingInfraWhenEnabled(t *testing.T) {
 	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
 	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
 
-	scheduler, err := buildAlarmDispatchRunner(nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), nil, egress.NewIrisMessageSender(nil), nil)
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
 	assert.Contains(t, err.Error(), "infra is required")

@@ -63,10 +63,17 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *YouTubeCollectorRuntimeCo
 		Version:     "test",
 		Server: ServerConfig{
 			Port:           30025,
+			APIKey:         "test-api-key",
 			HTTPTransports: []string{"h3"},
 			H3Addr:         ":30025",
 			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
 			H3KeyFile:      "/run/hololive-bot/certs/hololive-h3.key",
+		},
+		Tracing: TracingConfig{
+			Enabled:    true,
+			Endpoint:   "otel-collector:4317",
+			Insecure:   true,
+			SampleRate: defaultOTELSampleRate,
 		},
 		Postgres: PostgresConfig{
 			User:        postgresScraperRoleUser,
@@ -215,6 +222,16 @@ func TestCFG003ProductionValidationExact(t *testing.T) {
 			wantSub: "SERVER_PORT",
 		},
 		{
+			name:    "api key empty",
+			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Server.APIKey = "" },
+			wantSub: "API_SECRET_KEY",
+		},
+		{
+			name:    "tracing disabled",
+			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Tracing.Enabled = false },
+			wantSub: tracingYouTubeCollectorCEnabledEnv,
+		},
+		{
 			name:    "h3 cert missing",
 			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Server.H3CertFile = "" },
 			wantSub: "HOLOLIVE_H3_CERT_FILE",
@@ -273,12 +290,13 @@ func TestCFG003ProductionAcceptsCompleteConfig(t *testing.T) {
 	}
 }
 
-func TestCFG003ProductionAcceptsMissingAPISecret(t *testing.T) {
+func TestCFG003ProductionRejectsMissingAPISecret(t *testing.T) {
 	clearRuntimeRoleEnv(t)
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 	cfg.Server.APIKey = ""
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v, want collector runtime without API_SECRET_KEY", err)
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "API_SECRET_KEY") {
+		t.Fatalf("Validate() error = %v, want API_SECRET_KEY rejection", err)
 	}
 }
 

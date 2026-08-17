@@ -15,7 +15,7 @@ func TestBuildAlarmDispatchRunnerRejectsInvalidShortLinkOrigin(t *testing.T) {
 	t.Setenv("ALARM_SHORT_LINK_BASE_URL", "http://go.example.com")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), infra, egress.NewIrisMessageSender(nil), nil)
 
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
@@ -28,7 +28,7 @@ func TestBuildAlarmDispatchRunnerRejectsShortLinksWithKaring(t *testing.T) {
 	t.Setenv("ALARM_SHORT_LINK_BASE_URL", "https://short.holoshi.com")
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler, err := buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), infra, egress.NewIrisMessageSender(nil), nil)
 
 	require.Error(t, err)
 	assert.Nil(t, scheduler)

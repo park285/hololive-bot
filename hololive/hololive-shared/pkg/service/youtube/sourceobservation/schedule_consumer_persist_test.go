@@ -40,6 +40,33 @@ func TestScheduleConsumerOfficialIsLiveDoesNotFlipLive(t *testing.T) {
 	}
 }
 
+func TestScheduleConsumerPersistsOfficialCollaboTalentNames(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	proof := seedPublishLease(t, context.Background(), pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
+	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
+		ExternalID: "vid-a", VideoID: "vid-a", ChannelID: "UC_TEST", Title: "Official Collab",
+		ScheduledAt:        time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC),
+		CollaboTalentNames: []string{"Guest One", "Guest Two"},
+	}))); err != nil {
+		t.Fatalf("publish schedule: %v", err)
+	}
+	if err := consumer.Consume(ctx, liveClaimOptions()); err != nil {
+		t.Fatalf("consume schedule: %v", err)
+	}
+	var names []string
+	if err := pool.QueryRow(ctx, `
+		SELECT collabo_talent_names FROM youtube_schedule_items WHERE external_id = 'vid-a'
+	`).Scan(&names); err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 2 || names[0] != "Guest One" || names[1] != "Guest Two" {
+		t.Fatalf("collabo_talent_names = %#v", names)
+	}
+}
+
 func TestScheduleConsumerDoesNotAdvanceLiveLastSeenAt(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)

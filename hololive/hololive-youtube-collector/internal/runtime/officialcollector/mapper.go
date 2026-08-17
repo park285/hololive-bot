@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/pkg/stringutil"
+
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
@@ -28,6 +30,7 @@ type scheduleVideoRow struct {
 	Talent   struct {
 		Name string `json:"name"`
 	} `json:"talent"`
+	CollaboTalents json.RawMessage `json:"collaboTalents"`
 }
 
 func parseScheduleSnapshot(body []byte) (contract.ScheduleSnapshotV1, error) {
@@ -150,13 +153,92 @@ func parseScheduleRow(rawRow json.RawMessage) (contract.ScheduleItemV1, error) {
 	if title == "" {
 		return contract.ScheduleItemV1{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule row title is empty")
 	}
+	collaboTalentNames, err := parseCollaboTalentNames(row.CollaboTalents, row.Name, row.Talent.Name)
+	if err != nil {
+		return contract.ScheduleItemV1{}, err
+	}
 	return contract.ScheduleItemV1{
-		ExternalID:  videoID,
-		VideoID:     videoID,
-		Title:       title,
-		ScheduledAt: scheduledAt.UTC(),
-		IsLive:      row.IsLive,
+		ExternalID:         videoID,
+		VideoID:            videoID,
+		Title:              title,
+		ScheduledAt:        scheduledAt.UTC(),
+		IsLive:             row.IsLive,
+		CollaboTalentNames: collaboTalentNames,
 	}, nil
+}
+
+func parseCollaboTalentNames(raw json.RawMessage, hostNames ...string) ([]string, error) {
+	names, err := decodeCollaboTalentNames(raw)
+	if err != nil {
+		return nil, err
+	}
+	return collectCollaboTalentNames(names, collaboHostSkipSet(hostNames))
+}
+
+func decodeCollaboTalentNames(raw json.RawMessage) ([]string, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+	var talents []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(trimmed, &talents); err != nil {
+		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule collaboTalents: %w", err))
+	}
+	names := make([]string, 0, len(talents))
+	for _, talent := range talents {
+		names = append(names, talent.Name)
+	}
+	return names, nil
+}
+
+func collaboHostSkipSet(hostNames []string) map[string]struct{} {
+	skipped := make(map[string]struct{}, len(hostNames))
+	for _, name := range hostNames {
+		if key := stringutil.Normalize(name); key != "" {
+			skipped[key] = struct{}{}
+		}
+	}
+	return skipped
+}
+
+func collectCollaboTalentNames(names []string, skipped map[string]struct{}) ([]string, error) {
+	out := make([]string, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		collected, ok, err := collectCollaboTalentName(name, skipped, seen)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		out = append(out, collected)
+		if len(out) > contract.MaxScheduleCollaboTalentNames {
+			return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule collaboTalents exceeds contract limit")
+		}
+	}
+	return out, nil
+}
+
+func collectCollaboTalentName(name string, skipped, seen map[string]struct{}) (collected string, include bool, err error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", false, nil
+	}
+	if len(trimmed) > contract.MaxScheduleCollaboTalentNameBytes {
+		return "", false, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule collabo talent name exceeds contract limit")
+	}
+	key := stringutil.Normalize(trimmed)
+	if _, skip := skipped[key]; skip {
+		return "", false, nil
+	}
+	if _, exists := seen[key]; exists {
+		return "", false, nil
+	}
+	seen[key] = struct{}{}
+	return trimmed, true, nil
 }
 
 func parseScheduleVideoID(rawURL string) (string, error) {

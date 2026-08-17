@@ -173,6 +173,9 @@ func fillMissingYouTubeStreamPointerFields(dst, src *domain.Stream) {
 		channel := *src.Channel
 		dst.Channel = &channel
 	}
+	if len(dst.CollaboTalentNames) == 0 && len(src.CollaboTalentNames) > 0 {
+		dst.CollaboTalentNames = cloneStringSlice(src.CollaboTalentNames)
+	}
 }
 
 func firstTimePtr(primary, fallback *time.Time) *time.Time {
