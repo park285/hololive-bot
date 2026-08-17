@@ -101,7 +101,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "scheduler", err)
 	}
 
-	notificationEgress, err := buildNotificationEgress(appConfig, infra, logger)
+	notificationEgress, err := buildNotificationEgress(ctx, appConfig, infra, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, "notification egress", err)
 	}

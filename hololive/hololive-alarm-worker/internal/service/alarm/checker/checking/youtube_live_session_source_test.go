@@ -72,6 +72,8 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 		},
 	})
 
+	insertOfficialScheduleCollaboTalents(t, pool, "live-included", []string{"Guest One", "Guest Two"})
+
 	source := &PgYouTubeLiveSessionSource{pool: pool}
 	sessions, err := source.LoadRecentSessions(t.Context(), []string{"ch-1"}, now)
 	require.NoError(t, err)
@@ -92,6 +94,8 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	assert.Equal(t, "https://i.ytimg.com/vi/live-included/maxresdefault.jpg", *sessionsByID(sessions)["live-included"].Stream.Thumbnail)
 	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.Link)
 	assert.Equal(t, "https://youtube.com/watch?v=live-included", *sessionsByID(sessions)["live-included"].Stream.Link)
+	assert.Equal(t, []string{"Guest One", "Guest Two"}, sessionsByID(sessions)["live-included"].Stream.CollaboTalentNames)
+	assert.Empty(t, sessionsByID(sessions)["upcoming-included"].Stream.CollaboTalentNames)
 
 	insertAlarmDispatchEvents(t, pool, []testAlarmDispatchEvent{
 		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: "live-included", CreatedAt: now.Add(-time.Hour)},
@@ -218,6 +222,17 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 		)
 		require.NoError(t, err)
 	}
+}
+
+func insertOfficialScheduleCollaboTalents(t *testing.T, pool liveSessionPool, videoID string, names []string) {
+	t.Helper()
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_schedule_items(
+			group_key, provider, external_id, video_id, title, scheduled_at, collabo_talent_names
+		)
+		VALUES ('global:hololive-schedule', 'hololive_official', $1, $1, 'schedule title', NOW(), $2)
+	`, videoID, names)
+	require.NoError(t, err)
 }
 
 func insertAlarmDispatchEvents(t *testing.T, pool liveSessionPool, events []testAlarmDispatchEvent) {

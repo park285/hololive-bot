@@ -511,6 +511,7 @@ hololive/hololive-shared/pkg/service/member/repository_query.go
 hololive/hololive-shared/pkg/service/member/repository_scan.go
 hololive/hololive-shared/pkg/service/member/rows_collect.go
 hololive/hololive-shared/pkg/service/member/sql.go
+hololive/hololive-shared/pkg/service/officialidentity/index.go
 hololive/hololive-shared/pkg/service/ratelimit/sliding_window.go
 hololive/hololive-shared/pkg/service/settings/interface.go
 hololive/hololive-shared/pkg/service/settings/service.go

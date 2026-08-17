@@ -324,6 +324,7 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 				"MemberName":      "유닛 B",
 				"Title":           markerTitle,
 				"URL":             shortURL,
+				"CollabMembers":   "",
 				"ScheduleMessage": "",
 				"MinutesUntil":    5,
 				"IsStarting":      false,

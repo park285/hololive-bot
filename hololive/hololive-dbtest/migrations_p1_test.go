@@ -187,11 +187,15 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 176 projection retention revoke migration: %v", err)
 	}
+	scheduleCollaboTalents, err := fs.ReadFile(migrations, "178_youtube_schedule_collabo_talent_names.sql")
+	if err != nil {
+		t.Fatalf("read 178 schedule collabo talents migration: %v", err)
+	}
 	grantPreexistingScraperPrivileges(t, pool, roles.scraper)
 	sql := strings.NewReplacer(
 		"hololive_scraper", roles.scraper,
 		"hololive_runtime", roles.runtime,
-	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads) + "\n" + string(contentClocks) + "\n" + string(liveSchedule) + "\n" + string(projectionRetentionGrant) + "\n" + string(runtimeLockRetention) + "\n" + string(projectionRetentionRevoke))
+	).Replace(string(raw) + "\n" + string(lockAPI) + "\n" + string(subjectHeads) + "\n" + string(contentClocks) + "\n" + string(liveSchedule) + "\n" + string(projectionRetentionGrant) + "\n" + string(runtimeLockRetention) + "\n" + string(projectionRetentionRevoke) + "\n" + string(scheduleCollaboTalents))
 	if _, err := pool.Exec(ctx, sql); err != nil {
 		t.Fatalf("apply source observation migration with isolated roles: %v", err)
 	}
@@ -212,6 +216,7 @@ func TestSourceObservationMigrationGrantsAreLeastPrivilege(t *testing.T) {
 	assertObservationGrantMatrix(t, pool, roles)
 	assertObservationLockAPIAccess(t, pool, roles)
 	assertObservationRetentionAPIAccess(t, pool, roles)
+	assertScheduleCollaboConstraintAccess(t, pool, roles)
 }
 
 func TestSourceObservationLockAPIMigrationIsAtomic(t *testing.T) {
@@ -607,6 +612,49 @@ func assertObservationRetentionAPIAccess(t *testing.T, pool *pgxpool.Pool, roles
 	}
 	if err := tx.Rollback(context.Background()); err != nil {
 		t.Fatalf("rollback runtime retention API check: %v", err)
+	}
+}
+
+func assertScheduleCollaboConstraintAccess(t *testing.T, pool *pgxpool.Pool, roles observationGrantRoles) {
+	t.Helper()
+	function := "public.youtube_schedule_collabo_talent_names_valid(text[])"
+	for role, want := range map[string]bool{roles.scraper: false, roles.runtime: true} {
+		var got bool
+		if err := pool.QueryRow(
+			context.Background(),
+			"SELECT has_function_privilege($1, $2, 'EXECUTE')",
+			role,
+			function,
+		).Scan(&got); err != nil {
+			t.Fatalf("check schedule collabo constraint function privilege for %s: %v", role, err)
+		}
+		if got != want {
+			t.Errorf("schedule collabo constraint function privilege for %s = %t, want %t", role, got, want)
+		}
+	}
+
+	tx, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin schedule collabo constraint runtime check: %v", err)
+	}
+	if _, err := tx.Exec(context.Background(), "SET LOCAL ROLE "+pgx.Identifier{roles.runtime}.Sanitize()); err != nil {
+		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
+			t.Errorf("rollback schedule collabo constraint role setup: %v", rollbackErr)
+		}
+		t.Fatalf("set schedule collabo constraint runtime role: %v", err)
+	}
+	if _, err := tx.Exec(context.Background(), `
+		INSERT INTO public.youtube_schedule_items(
+			group_key, provider, external_id, title, scheduled_at, collabo_talent_names
+		) VALUES ('grant-check', 'hololive_official', 'grant-check', 'grant-check', clock_timestamp(), ARRAY['Guest'])
+	`); err != nil {
+		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
+			t.Errorf("rollback schedule collabo constraint runtime insert: %v", rollbackErr)
+		}
+		t.Fatalf("insert schedule item through collabo constraint as runtime role: %v", err)
+	}
+	if err := tx.Rollback(context.Background()); err != nil {
+		t.Fatalf("rollback schedule collabo constraint runtime check: %v", err)
 	}
 }
 

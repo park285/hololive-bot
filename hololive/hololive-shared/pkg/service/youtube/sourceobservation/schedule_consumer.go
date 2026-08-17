@@ -44,15 +44,16 @@ func scheduleEvidenceFromObservation(observation *Observation) (schedule.Evidenc
 	items := make([]schedule.Item, 0, len(payload.Items))
 	for i := range payload.Items {
 		items = append(items, schedule.Item{
-			GroupKey:    payload.GroupKey,
-			Provider:    observation.Provider,
-			ExternalID:  payload.Items[i].ExternalID,
-			VideoID:     payload.Items[i].VideoID,
-			ChannelID:   payload.Items[i].ChannelID,
-			Title:       payload.Items[i].Title,
-			ScheduledAt: payload.Items[i].ScheduledAt,
-			EndedAt:     payload.Items[i].EndedAt,
-			IsLive:      payload.Items[i].IsLive,
+			GroupKey:           payload.GroupKey,
+			Provider:           observation.Provider,
+			ExternalID:         payload.Items[i].ExternalID,
+			VideoID:            payload.Items[i].VideoID,
+			ChannelID:          payload.Items[i].ChannelID,
+			Title:              payload.Items[i].Title,
+			ScheduledAt:        payload.Items[i].ScheduledAt,
+			EndedAt:            payload.Items[i].EndedAt,
+			IsLive:             payload.Items[i].IsLive,
+			CollaboTalentNames: persistedCollaboTalentNames(payload.Items[i].CollaboTalentNames),
 		})
 	}
 	return schedule.Evidence{

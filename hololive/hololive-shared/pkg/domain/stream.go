@@ -52,20 +52,21 @@ func (s StreamStatus) IsValid() bool {
 }
 
 type Stream struct {
-	ID             string       `json:"id"`
-	Title          string       `json:"title"`
-	ChannelID      string       `json:"channel_id"`
-	ChannelName    string       `json:"channel_name"`
-	Status         StreamStatus `json:"status"`
-	StartScheduled *time.Time   `json:"start_scheduled,omitempty"`
-	StartActual    *time.Time   `json:"start_actual,omitempty"`
-	Duration       *int         `json:"duration,omitempty"`
-	Thumbnail      *string      `json:"thumbnail,omitempty"`
-	Link           *string      `json:"link,omitempty"`
-	TopicID        *string      `json:"topic_id,omitempty"`
-	Channel        *Channel     `json:"channel,omitempty"`
-	ViewerCount    *int         `json:"viewer_count,omitempty"`
-	IsPremiere     bool         `json:"is_premiere,omitempty"`
+	ID                 string       `json:"id"`
+	Title              string       `json:"title"`
+	ChannelID          string       `json:"channel_id"`
+	ChannelName        string       `json:"channel_name"`
+	Status             StreamStatus `json:"status"`
+	StartScheduled     *time.Time   `json:"start_scheduled,omitempty"`
+	StartActual        *time.Time   `json:"start_actual,omitempty"`
+	Duration           *int         `json:"duration,omitempty"`
+	Thumbnail          *string      `json:"thumbnail,omitempty"`
+	Link               *string      `json:"link,omitempty"`
+	TopicID            *string      `json:"topic_id,omitempty"`
+	Channel            *Channel     `json:"channel,omitempty"`
+	ViewerCount        *int         `json:"viewer_count,omitempty"`
+	IsPremiere         bool         `json:"is_premiere,omitempty"`
+	CollaboTalentNames []string     `json:"collabo_talent_names,omitempty"`
 
 	// Chzzk 관련 필드
 	ChzzkChannelID string `json:"chzzk_channel_id,omitempty"` // Chzzk 채널 ID

@@ -52,12 +52,14 @@ type Runner struct {
 	batchesSinceWake  int
 	yield             func(context.Context) bool
 	logger            *slog.Logger
+	members           domain.MemberDataProvider
 }
 
 type RunnerConfig struct {
 	KaringEnabled     bool
 	MaxBatch          int
 	MaxBatchesPerWake int
+	Members           domain.MemberDataProvider
 }
 
 func NewRunner(
@@ -79,6 +81,7 @@ func NewRunner(
 		maxBatch:          config.MaxBatch,
 		maxBatchesPerWake: config.MaxBatchesPerWake,
 		logger:            logger,
+		members:           config.Members,
 	}
 }
 
@@ -129,7 +132,7 @@ func alarmDispatchGroupUsesTextPath(group alarmDispatchGroup) bool {
 }
 
 func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
-	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, group)
+	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, group)
 	if err != nil {
 		return r.persistPreSendFailure(ctx, group.envelopes, err)
 	}

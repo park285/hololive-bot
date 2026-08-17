@@ -22,7 +22,7 @@ func TestBuildAlarmDispatchGroupViewUsesShortLinksForYouTube(t *testing.T) {
 		},
 	}
 
-	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, group, builder)
+	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, nil, group, builder)
 
 	require.Len(t, view.Entries, 2)
 	assert.Equal(t, "https://go.example.com/l/dQw4w9WgXcQ", view.Entries[0].URL)
@@ -38,7 +38,7 @@ func TestBuildAlarmDispatchGroupViewPreservesDirectPlatformLinks(t *testing.T) {
 	twitch.Stream.IsTwitchOnly = true
 	twitch.Stream.TwitchLiveURL = "https://twitch.tv/member"
 
-	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmDispatchGroup{
+	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, nil, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{twitch},
 	}, builder)
@@ -54,7 +54,7 @@ func TestBuildAlarmDispatchGroupViewFallsBackForInvalidVideoID(t *testing.T) {
 	require.NoError(t, err)
 	notification := alarmShortLinkNotification("invalid", "Fallback")
 
-	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmDispatchGroup{
+	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, nil, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{notification},
 	}, builder)
@@ -72,7 +72,7 @@ func TestBuildAlarmDispatchGroupViewPreservesIntegratedSecondaryLink(t *testing.
 	integrated.Stream.IsIntegrated = true
 	integrated.Stream.ChzzkLiveURL = "https://chzzk.naver.com/live/channel"
 
-	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, alarmDispatchGroup{
+	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, nil, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{integrated},
 	}, builder)
@@ -90,7 +90,7 @@ func TestBuildAlarmDispatchItemViewKeepsSingleNotificationURL(t *testing.T) {
 
 	notification := alarmShortLinkNotification("dQw4w9WgXcQ", "Single")
 
-	view := buildAlarmDispatchItemView(t.Context(), nil, &notification, -1)
+	view := buildAlarmDispatchItemView(t.Context(), nil, nil, &notification, -1)
 
 	assert.Equal(t, domain.YouTubeWatchURL("dQw4w9WgXcQ"), view.URL)
 }
@@ -106,7 +106,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, group)
 
 	require.NoError(t, err)
 	assert.Contains(t, message, alarmShortLinkOrigin+"/l/dQw4w9WgXcQ")
@@ -125,7 +125,7 @@ func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *te
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, group)
 
 	require.Error(t, err)
 	assert.Empty(t, message)

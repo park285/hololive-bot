@@ -1,6 +1,7 @@
 package dispatchrun
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -86,6 +87,9 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	} else if title != "" {
 		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, title)
 	}
+	if collabMembers := formatAlarmDispatchCollabMembers(nil, n.Stream); collabMembers != "" {
+		fmt.Fprintf(&b, "\n콜라보: %s", util.MarkdownNeutralize(collabMembers))
+	}
 	if scheduleMessage := strings.TrimSpace(n.ScheduleChangeMessage); scheduleMessage != "" {
 		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(scheduleMessage))
 	}
@@ -160,10 +164,10 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 	premiere.Stream.IsPremiere = true
 	regular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("regular", "Regular Title"))
 
-	item := buildAlarmDispatchItemView(t.Context(), nil, &premiere, 5)
+	item := buildAlarmDispatchItemView(t.Context(), nil, nil, &premiere, 5)
 	assert.True(t, item.IsPremiere)
 
-	allPremiere := buildAlarmDispatchGroupView(t.Context(), nil, alarmDispatchGroup{
+	allPremiere := buildAlarmDispatchGroupView(t.Context(), nil, nil, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, premiere},
 	})
@@ -172,7 +176,7 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 	assert.True(t, allPremiere.Entries[0].IsPremiere)
 	assert.True(t, allPremiere.Entries[1].IsPremiere)
 
-	mixed := buildAlarmDispatchGroupView(t.Context(), nil, alarmDispatchGroup{
+	mixed := buildAlarmDispatchGroupView(t.Context(), nil, nil, alarmDispatchGroup{
 		minutesUntil:  5,
 		notifications: []domain.AlarmNotification{premiere, regular},
 	})
@@ -234,7 +238,7 @@ func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) 
 			notification := tc.notification
 			want := goldenAlarmDispatchItem(&notification, -1)
 
-			got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, &notification)
+			got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, nil, &notification)
 
 			require.NoError(t, err)
 			assert.Equal(t, want, got)
@@ -262,7 +266,7 @@ func TestRenderAlarmDispatchNotificationPreservesScheduleMessageFormatting(t *te
 			notification := tc.notification
 			want := goldenAlarmDispatchItem(&notification, -1)
 
-			got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, &notification)
+			got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, nil, &notification)
 
 			require.NoError(t, err)
 			assert.Equal(t, want, got)
@@ -347,7 +351,7 @@ func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			want := goldenAlarmDispatchGroup(tc.group)
 
-			got, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, tc.group)
+			got, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, tc.group)
 
 			require.NoError(t, err)
 			assert.Equal(t, want, got)
@@ -363,3 +367,45 @@ func TestRenderAlarmDispatchPlaceholderResolvesFromMessageStrings(t *testing.T) 
 	assert.Equal(t, "제목 없음", store.Get(messagestrings.NamespaceMisc, "alarm_no_title"))
 	assert.Equal(t, "방송 정보 없음", store.Get(messagestrings.NamespaceMisc, "alarm_no_stream"))
 }
+
+func TestRenderAlarmDispatchNotificationIncludesCollabMembers(t *testing.T) {
+	renderer, store := newAlarmDispatchTestRendering(t)
+	notification := alarmGoldenNotification("미코", 5, alarmGoldenStream("collab-1", "콜라보 방송"))
+	notification.Stream.ChannelID = "ch-miko"
+	notification.Stream.CollaboTalentNames = []string{"星街すいせい", "Gawr Gura"}
+
+	got, err := renderAlarmDispatchNotification(t.Context(), renderer, store, collabTestMembers{}, &notification)
+	require.NoError(t, err)
+	assert.Contains(t, got, "콜라보: 스이세이, Gawr Gura")
+}
+
+type collabTestMembers struct{}
+
+func (m collabTestMembers) GetAllMembers() []*domain.Member {
+	return []*domain.Member{
+		{
+			Name:            "Hoshimachi Suisei",
+			NameJa:          "星街すいせい",
+			ShortKoreanName: "스이세이",
+			ChannelID:       "ch-sui",
+		},
+	}
+}
+
+func (m collabTestMembers) FindMemberByChannelID(channelID string) *domain.Member {
+	for _, member := range m.GetAllMembers() {
+		if member.ChannelID == channelID {
+			return member
+		}
+	}
+	return nil
+}
+
+func (collabTestMembers) FindMemberByName(string) *domain.Member  { return nil }
+func (collabTestMembers) FindMemberByAlias(string) *domain.Member { return nil }
+func (collabTestMembers) GetChannelIDs() []string                 { return nil }
+func (m collabTestMembers) WithContext(context.Context) domain.MemberDataProvider {
+	return m
+}
+func (collabTestMembers) FindMembersByName(string) []*domain.Member  { return nil }
+func (collabTestMembers) FindMembersByAlias(string) []*domain.Member { return nil }

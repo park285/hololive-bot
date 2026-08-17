@@ -220,6 +220,7 @@ github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/alarm/queue
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/messagestrings
+github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/officialidentity
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/shortlink
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun -> github.com/kapu/hololive-shared/pkg/sqlassets
@@ -1065,6 +1066,7 @@ github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> gith
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
+github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/pkg/service/officialidentity
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/pkg/service/youtube/admission
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping
 github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser
@@ -1136,6 +1138,8 @@ github.com/kapu/hololive-shared/pkg/service/notification/platformmap -> github.c
 github.com/kapu/hololive-shared/pkg/service/notification/platformmap -> github.com/kapu/hololive-shared/pkg/testutil
 github.com/kapu/hololive-shared/pkg/service/notification/platformmap -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/notification/platformmap -> github.com/park285/shared-go/pkg/stringutil
+github.com/kapu/hololive-shared/pkg/service/officialidentity -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/officialidentity -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/ratelimit -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/settings -> github.com/kapu/hololive-shared/pkg/service/alarm/checker
 github.com/kapu/hololive-shared/pkg/service/settings -> github.com/park285/shared-go/pkg/json
@@ -1343,6 +1347,7 @@ github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector ->
 github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/kapu/hololive-youtube-collector/internal/runtime/joblease
 github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/kapu/hololive-youtube-collector/internal/runtime/providerhttp
 github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/kapu/hololive-youtube-collector/internal/testutil
+github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector -> github.com/park285/shared-go/pkg/stringutil
 github.com/kapu/hololive-youtube-collector/internal/runtime/providerhttp -> github.com/kapu/hololive-shared/pkg/contracts/sourceobservation
 github.com/kapu/hololive-youtube-collector/internal/runtime/providerhttp -> github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr
 github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs -> github.com/kapu/hololive-shared/pkg/contracts/sourceobservation

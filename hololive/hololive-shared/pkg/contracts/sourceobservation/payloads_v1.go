@@ -84,14 +84,20 @@ type ChannelPhotoV1 struct {
 	Coverage  ChannelPhotoCoverageV1 `json:"coverage"`
 }
 
+const (
+	MaxScheduleCollaboTalentNames     = 32
+	MaxScheduleCollaboTalentNameBytes = 256
+)
+
 type ScheduleItemV1 struct {
-	ExternalID  string     `json:"external_id"`
-	VideoID     string     `json:"video_id,omitempty"`
-	ChannelID   string     `json:"channel_id,omitempty"`
-	Title       string     `json:"title"`
-	ScheduledAt time.Time  `json:"scheduled_at"`
-	EndedAt     *time.Time `json:"ended_at,omitempty"`
-	IsLive      bool       `json:"is_live"`
+	ExternalID         string     `json:"external_id"`
+	VideoID            string     `json:"video_id,omitempty"`
+	ChannelID          string     `json:"channel_id,omitempty"`
+	Title              string     `json:"title"`
+	ScheduledAt        time.Time  `json:"scheduled_at"`
+	EndedAt            *time.Time `json:"ended_at,omitempty"`
+	IsLive             bool       `json:"is_live"`
+	CollaboTalentNames []string   `json:"collabo_talent_names,omitempty"`
 }
 
 type ScheduleSnapshotV1 struct {

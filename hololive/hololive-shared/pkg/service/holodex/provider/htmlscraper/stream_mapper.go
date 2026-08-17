@@ -118,7 +118,7 @@ func (s *Service) mapOfficialScheduleRow(rawRow json.RawMessage) (*officialSched
 		stream: &domain.Stream{
 			ID:             videoID,
 			Title:          title,
-			ChannelID:      s.identityIndex.resolve(channelName),
+			ChannelID:      s.identityIndex.Resolve(channelName),
 			ChannelName:    channelName,
 			Status:         domain.StreamStatusUpcoming,
 			StartScheduled: &startTime,

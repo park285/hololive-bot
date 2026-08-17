@@ -8,15 +8,16 @@ import (
 )
 
 type Item struct {
-	GroupKey    string
-	Provider    contract.Provider
-	ExternalID  string
-	VideoID     string
-	ChannelID   string
-	Title       string
-	ScheduledAt time.Time
-	EndedAt     *time.Time
-	IsLive      bool
+	GroupKey           string
+	Provider           contract.Provider
+	ExternalID         string
+	VideoID            string
+	ChannelID          string
+	Title              string
+	ScheduledAt        time.Time
+	EndedAt            *time.Time
+	IsLive             bool
+	CollaboTalentNames []string
 }
 
 type Session struct {
@@ -88,6 +89,7 @@ func (e *Evidence) clone() Evidence {
 func (i *Item) clone() Item {
 	cloned := *i
 	cloned.EndedAt = cloneTime(i.EndedAt)
+	cloned.CollaboTalentNames = cloneStrings(i.CollaboTalentNames)
 	return cloned
 }
 
@@ -103,4 +105,13 @@ func cloneTime(value *time.Time) *time.Time {
 	}
 	cloned := *value
 	return &cloned
+}
+
+func cloneStrings(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	cloned := make([]string, len(values))
+	copy(cloned, values)
+	return cloned
 }

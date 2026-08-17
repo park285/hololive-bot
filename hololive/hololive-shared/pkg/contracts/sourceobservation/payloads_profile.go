@@ -191,10 +191,32 @@ func normalizeScheduleItem(item *ScheduleItemV1, coverage ScheduleCoverageV1, se
 	if err := validateScheduleItemTiming(item, coverage); err != nil {
 		return err
 	}
+	if err := normalizeCollaboTalentNames(item); err != nil {
+		return err
+	}
 	if _, ok := seen[item.ExternalID]; ok {
 		return fmt.Errorf("duplicate schedule external id %q", item.ExternalID)
 	}
 	seen[item.ExternalID] = struct{}{}
+	return nil
+}
+
+func normalizeCollaboTalentNames(item *ScheduleItemV1) error {
+	names := make([]string, 0, len(item.CollaboTalentNames))
+	for _, name := range item.CollaboTalentNames {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+		if len(trimmed) > MaxScheduleCollaboTalentNameBytes {
+			return fmt.Errorf("schedule collabo talent name exceeds %d bytes", MaxScheduleCollaboTalentNameBytes)
+		}
+		names = append(names, trimmed)
+		if len(names) > MaxScheduleCollaboTalentNames {
+			return fmt.Errorf("schedule collabo talent names exceed %d", MaxScheduleCollaboTalentNames)
+		}
+	}
+	item.CollaboTalentNames = names
 	return nil
 }
 

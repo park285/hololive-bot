@@ -907,6 +907,16 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 	}
 }
 
+func TestFillMissingYouTubeStreamCopiesCollaboTalentNames(t *testing.T) {
+	t.Parallel()
+	dst := &domain.Stream{ID: "vid"}
+	src := &domain.Stream{ID: "vid", CollaboTalentNames: []string{"Guest One"}}
+	fillMissingYouTubeStreamFields(dst, src)
+	require.Equal(t, []string{"Guest One"}, dst.CollaboTalentNames)
+	dst.CollaboTalentNames[0] = "mutated"
+	assert.Equal(t, "Guest One", src.CollaboTalentNames[0])
+}
+
 func TestCloneStream(t *testing.T) {
 	t.Parallel()
 
@@ -921,10 +931,11 @@ func TestCloneStream(t *testing.T) {
 		start := time.Now().UTC()
 		actual := start.Add(-5 * time.Minute)
 		original := &domain.Stream{
-			ID:             "s1",
-			StartScheduled: &start,
-			StartActual:    &actual,
-			Channel:        &domain.Channel{ID: "ch1"},
+			ID:                 "s1",
+			StartScheduled:     &start,
+			StartActual:        &actual,
+			Channel:            &domain.Channel{ID: "ch1"},
+			CollaboTalentNames: []string{"Guest"},
 		}
 		copied := CloneStream(original)
 
@@ -932,6 +943,8 @@ func TestCloneStream(t *testing.T) {
 		assert.NotSame(t, original.StartScheduled, copied.StartScheduled)
 		assert.NotSame(t, original.StartActual, copied.StartActual)
 		assert.NotSame(t, original.Channel, copied.Channel)
+		copied.CollaboTalentNames[0] = "mutated"
+		assert.Equal(t, "Guest", original.CollaboTalentNames[0])
 	})
 }
 

@@ -77,11 +77,12 @@ func scanScheduleItem(rows pgx.Rows) (schedule.Item, error) {
 	var provider string
 	if err := rows.Scan(
 		&item.GroupKey, &provider, &item.ExternalID, &item.VideoID, &item.ChannelID,
-		&item.Title, &item.ScheduledAt, &item.EndedAt, &item.IsLive,
+		&item.Title, &item.ScheduledAt, &item.EndedAt, &item.IsLive, &item.CollaboTalentNames,
 	); err != nil {
 		return schedule.Item{}, fmt.Errorf("scan schedule item: %w", err)
 	}
 	item.Provider = contract.Provider(provider)
+	item.CollaboTalentNames = persistedCollaboTalentNames(item.CollaboTalentNames)
 	return item, nil
 }
 
@@ -100,6 +101,7 @@ func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation *Observ
 			item.ScheduledAt,
 			item.EndedAt,
 			item.IsLive,
+			persistedCollaboTalentNames(item.CollaboTalentNames),
 		); err != nil {
 			return fmt.Errorf("upsert schedule item: %w", err)
 		}
@@ -118,4 +120,13 @@ func persistScheduleDecision(ctx context.Context, tx dbx.Tx, observation *Observ
 		}
 	}
 	return nil
+}
+
+func persistedCollaboTalentNames(names []string) []string {
+	if names == nil {
+		return []string{}
+	}
+	cloned := make([]string, len(names))
+	copy(cloned, names)
+	return cloned
 }
