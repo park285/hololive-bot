@@ -37,6 +37,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 	streams []*domain.Stream,
 	window sharedchecker.EvaluationWindow,
 	now time.Time,
+	sentRoomsByStreamID map[string]map[string]struct{},
 	liveObservedAtByStreamID ...map[string]time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(streams)*len(subscriberRooms))
@@ -52,7 +53,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 
 		notifications = append(notifications, upcomingNotifications...)
 
-		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, channelID, stream, subscriberRooms, now, liveObservedAt(stream, liveObservedAtByStreamID...))
+		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, channelID, stream, subscriberRooms, now, sentRoomsByStreamID[stream.ID], liveObservedAt(stream, liveObservedAtByStreamID...))
 		if err != nil {
 			return nil, fmt.Errorf("build channel notifications: build live catchup notifications: %w", err)
 		}

@@ -68,6 +68,7 @@ const (
 	LogicalScheduleTransitionKeyPrefix = "notified:schedule:transition:event:"
 	ChzzkLiveNotifiedKeyPrefix         = "notified:chzzk:live:"
 	IntegratedNotifiedKeyPrefix        = "notified:integrated:"
+	NotificationCategoryLiveCatchup    = "live_catchup"
 )
 
 func BuildRoomAlarmKey(roomID string) string {
@@ -173,6 +174,13 @@ func NormalizeScheduledMinute(t time.Time) time.Time {
 	return t.Truncate(time.Minute)
 }
 
+func normalizedScheduledUnix(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return NormalizeScheduledMinute(t).Unix()
+}
+
 // normalizeTitleForFingerprint: alarm dedup 전용 title 정규화.
 // NormalizeKey 기반에 CJK full-width 구두점을 추가로 제거한다.
 // NormalizeKey 전역 수정 시 멤버 검색/LLM 필터 side effect 발생하므로 분리.
@@ -212,13 +220,13 @@ func BuildTitleFingerprint(title, streamID string) string {
 
 // "notified:claim:{roomID}:{streamID}:{scheduleUnix}:{category}"
 func BuildNotifyClaimKey(roomID, streamID string, startScheduled time.Time, category string) string {
-	scheduleUnix := NormalizeScheduledMinute(startScheduled).Unix()
+	scheduleUnix := normalizedScheduledUnix(startScheduled)
 	return fmt.Sprintf("%s%s:%s:%d:%s", NotifyClaimKeyPrefix, roomID, streamID, scheduleUnix, category)
 }
 
 // "notified:claim:event:{roomID}:{channelID}:{scheduleUnix}:{titleFP}:{category}"
 func BuildLogicalEventClaimKey(roomID, channelID, streamID, title string, startScheduled time.Time, category string) string {
-	scheduleUnix := NormalizeScheduledMinute(startScheduled).Unix()
+	scheduleUnix := normalizedScheduledUnix(startScheduled)
 	titleFP := BuildTitleFingerprint(title, streamID)
 	return fmt.Sprintf("%s%s:%s:%d:%s:%s", NotifyLogicalClaimKeyPrefix, roomID, channelID, scheduleUnix, titleFP, category)
 }

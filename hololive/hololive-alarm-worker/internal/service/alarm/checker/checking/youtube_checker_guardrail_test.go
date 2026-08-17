@@ -266,6 +266,63 @@ func TestRecentLiveDispatchEvidenceTrimsPersistedDispatchIDs(t *testing.T) {
 	assert.NotContains(t, evidence.pgDispatchedStreamIDs, "")
 }
 
+func TestObservePersistedLiveGuardrailsReturnsSentRooms(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 17, 1, 4, 0, 0, time.UTC)
+	checker := &YouTubeChecker{
+		persistedLiveSource: &guardrailEvidenceSource{
+			sentRooms: map[string]map[string]struct{}{
+				"stream-1": {"room-1": {}},
+			},
+		},
+		logger: newCheckerTestLogger(),
+	}
+	sessions := []PersistedYouTubeLiveSession{{
+		Stream:          &domain.Stream{ID: "stream-1", ChannelID: "channel-1", Status: domain.StreamStatusLive},
+		LastSeenAt:      now,
+		LiveFirstSeenAt: now.Add(-3 * time.Minute),
+	}}
+
+	evidence := checker.observePersistedLiveGuardrails(
+		t.Context(),
+		sessions,
+		map[string][]*domain.Stream{"channel-1": {sessions[0].Stream}},
+		map[string][]string{"channel-1": {"room-1", "room-2"}},
+		now,
+	)
+	assert.Contains(t, evidence.sentRoomsByStreamID["stream-1"], "room-1")
+}
+
+func TestObservePersistedLiveGuardrailsLoadsSentRoomsDuringGrace(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 17, 0, 32, 0, 0, time.UTC)
+	stream := &domain.Stream{ID: "stream-grace", ChannelID: "channel-1", Status: domain.StreamStatusLive}
+	checker := &YouTubeChecker{
+		persistedLiveSource: &guardrailEvidenceSource{
+			sentRooms: map[string]map[string]struct{}{
+				stream.ID: {"room-1": {}},
+			},
+		},
+		logger: newCheckerTestLogger(),
+	}
+	sessions := []PersistedYouTubeLiveSession{{
+		Stream:          stream,
+		LastSeenAt:      now,
+		LiveFirstSeenAt: now.Add(-time.Second),
+	}}
+
+	evidence := checker.observePersistedLiveGuardrails(
+		t.Context(),
+		sessions,
+		map[string][]*domain.Stream{"channel-1": {stream}},
+		map[string][]string{"channel-1": {"room-1"}},
+		now,
+	)
+	assert.Contains(t, evidence.sentRoomsByStreamID[stream.ID], "room-1")
+}
+
 func TestObservePersistedLiveGuardrailMetaLogsOnlyRejectedDeliveryStates(t *testing.T) {
 	t.Parallel()
 

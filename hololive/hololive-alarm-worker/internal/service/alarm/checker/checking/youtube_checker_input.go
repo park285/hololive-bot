@@ -12,17 +12,22 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
+type youtubeLiveCheckEvidence struct {
+	observedAtByStreamID map[string]time.Time
+	sentRoomsByStreamID  map[string]map[string]struct{}
+}
+
 func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 	ctx context.Context,
 	now time.Time,
-) (dueChannels []string, streamsByChannel map[string][]*domain.Stream, liveObservedAtByStreamID map[string]time.Time, subscriberMap map[string][]string, err error) {
+) (dueChannels []string, streamsByChannel map[string][]*domain.Stream, liveEvidence youtubeLiveCheckEvidence, subscriberMap map[string][]string, err error) {
 	channelIDs, err := c.cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
+		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
 	}
 
 	if len(channelIDs) == 0 {
-		return nil, nil, nil, nil, nil
+		return nil, nil, youtubeLiveCheckEvidence{}, nil, nil
 	}
 
 	dueChannels = c.tierScheduler.SelectDueChannels(channelIDs)
@@ -33,7 +38,7 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		dueChannels = mergeSortedUniqueStrings(dueChannels, persistedLiveChannels)
 	}
 	if len(dueChannels) == 0 {
-		return nil, nil, nil, nil, nil
+		return nil, nil, youtubeLiveCheckEvidence{}, nil, nil
 	}
 	sort.Strings(dueChannels)
 
@@ -43,22 +48,23 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		c.logPersistedLiveSourceError(persistedErr)
 	}
 	if c.shouldFailAfterHolodexError(holodexErr, persistedErr, persistedSessions) {
-		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: fetch channels live status: %w", holodexErr)
+		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: fetch channels live status: %w", holodexErr)
 	}
-	liveObservedAtByStreamID = mergePersistedLiveSessionStreams(streamsByChannel, persistedSessions)
+	liveEvidence.observedAtByStreamID = mergePersistedLiveSessionStreams(streamsByChannel, persistedSessions)
 	memberNames, err := LoadMemberNamesByChannel(ctx, c.cacheClient, dueChannels)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: load member names: %w", err)
+		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: load member names: %w", err)
 	}
 	ApplyMemberNamesToStreams(streamsByChannel, memberNames)
 
 	subscriberMap, err = LoadSubscriberRoomsByChannel(ctx, c.cacheClient, dueChannels)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
+		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
 	}
-	c.observePersistedLiveGuardrails(ctx, persistedSessions, subscriberMap, now)
+	evidence := c.observePersistedLiveGuardrails(ctx, persistedSessions, streamsByChannel, subscriberMap, now)
+	liveEvidence.sentRoomsByStreamID = evidence.sentRoomsByStreamID
 
-	return dueChannels, streamsByChannel, liveObservedAtByStreamID, subscriberMap, nil
+	return dueChannels, streamsByChannel, liveEvidence, subscriberMap, nil
 }
 
 func (c *YouTubeChecker) loadPersistedLiveChannelIDs(

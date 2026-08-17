@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -14,10 +15,15 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) (claimKey
 		n.dedupService.TargetMinutesSnapshot(),
 		payload.notification.MinutesUntil,
 	)
+	dedupeScheduled := payload.startScheduled
+	if payload.notification.IsLiveCatchup() {
+		category = keys.NotificationCategoryLiveCatchup
+		dedupeScheduled = time.Time{}
+	}
 	notifyKey := keys.BuildNotifyClaimKey(
 		payload.notification.RoomID,
 		payload.streamID,
-		payload.startScheduled,
+		dedupeScheduled,
 		category,
 	)
 	logicalKey := keys.BuildLogicalEventClaimKey(
@@ -25,7 +31,7 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) (claimKey
 		payload.channelID,
 		payload.notification.Stream.ID,
 		payload.notification.Stream.Title,
-		payload.startScheduled,
+		dedupeScheduled,
 		category,
 	)
 

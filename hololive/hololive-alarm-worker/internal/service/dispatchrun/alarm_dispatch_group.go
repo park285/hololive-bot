@@ -185,7 +185,7 @@ func alarmDispatchKaringGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 		return alarmDispatchGroupKey(envelope)
 	}
 	phase := "prelive"
-	if alarmDispatchNotificationIsStarting(&envelope.Notification) {
+	if envelope.Notification.IsStarting() {
 		phase = "starting"
 	}
 	return fmt.Sprintf(

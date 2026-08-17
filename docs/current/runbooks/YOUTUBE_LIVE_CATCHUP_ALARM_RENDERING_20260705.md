@@ -195,6 +195,7 @@ Rollback impact:
 
 ## References
 
+- `YOUTUBE_LIVE_CATCHUP_DEDUPE_COLLISION_20260817.md` — 2026-08-17: 같은 `MinutesUntil=5` identity가 5분 전 알림과 live catchup을 한 키로 묶어 시작 시각 `방송 시작`이 삼켜지고 종료 직후 재전송된 사건. 이 문서의 표시 버그와 별개다.
 - `hololive/hololive-alarm-worker/internal/service/alarm/checker/internal/checking/youtube_checker_live.go`
 - `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_render.go`
 - `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_karing.go`

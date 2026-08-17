@@ -70,7 +70,7 @@ type alarmDispatchGroupView struct {
 }
 
 func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification, groupMinutesUntil int) alarmDispatchItemView {
-	starting := alarmDispatchNotificationIsStarting(notification)
+	starting := notification.IsStarting()
 	return alarmDispatchItemView{
 		MemberName:      resolveAlarmDispatchMemberName(ctx, store, notification),
 		Title:           resolveAlarmDispatchTitle(ctx, store, notification),
@@ -83,25 +83,12 @@ func buildAlarmDispatchItemView(ctx context.Context, store *messagestrings.Store
 	}
 }
 
-func alarmDispatchNotificationIsStarting(notification *domain.AlarmNotification) bool {
-	if notification == nil {
-		return false
-	}
-	if notification.MinutesUntil <= 0 {
-		return true
-	}
-	if notification.Stream == nil {
-		return false
-	}
-	return notification.Stream.IsLive() || notification.Stream.StartActual != nil
-}
-
 func alarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
 	if len(group.notifications) == 0 {
 		return group.minutesUntil <= 0
 	}
 	for i := range group.notifications {
-		if !alarmDispatchNotificationIsStarting(&group.notifications[i]) {
+		if !group.notifications[i].IsStarting() {
 			return false
 		}
 	}

@@ -7,27 +7,26 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (c *YouTubeChecker) observePersistedLiveGuardrails(
 	ctx context.Context,
 	sessions []PersistedYouTubeLiveSession,
+	streamsByChannel map[string][]*domain.Stream,
 	subscriberMap map[string][]string,
 	now time.Time,
-) {
+) recentLiveDispatchEvidence {
+	evidence := newRecentLiveDispatchEvidence()
 	if c.persistedLiveSource == nil {
-		return
+		return evidence
 	}
 
 	since := now.Add(-persistedLiveDispatchRecentWindow)
-	metas := persistedLiveGuardrailMetas(sessions, subscriberMap, now)
-	if len(metas) == 0 {
-		return
-	}
-
-	streamIDs := make([]string, 0, len(metas))
-	for _, meta := range metas {
-		streamIDs = append(streamIDs, meta.streamID)
+	streamIDs := currentLiveStreamIDs(streamsByChannel)
+	if len(streamIDs) == 0 {
+		return evidence
 	}
 
 	evidence, err := c.recentLiveDispatchEvidence(ctx, streamIDs, since)
@@ -36,12 +35,27 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 		c.logger.Warn("YouTube live guardrail dispatch check failed",
 			slog.Any("error", err),
 		)
-		return
+		return evidence
 	}
 
+	metas := persistedLiveGuardrailMetas(sessions, subscriberMap, now)
 	for _, meta := range metas {
 		c.observePersistedLiveGuardrailMeta(&meta, evidence, since)
 	}
+	return evidence
+}
+
+func currentLiveStreamIDs(streamsByChannel map[string][]*domain.Stream) []string {
+	streamIDs := make([]string, 0, len(streamsByChannel))
+	for _, streams := range streamsByChannel {
+		for _, stream := range streams {
+			if stream == nil || !stream.IsLive() {
+				continue
+			}
+			streamIDs = append(streamIDs, stream.ID)
+		}
+	}
+	return UniqueStrings(streamIDs)
 }
 
 func (c *YouTubeChecker) observePersistedLiveGuardrailMeta(
@@ -157,11 +171,7 @@ func (c *YouTubeChecker) recentLiveDispatchEvidence(
 	streamIDs []string,
 	since time.Time,
 ) (recentLiveDispatchEvidence, error) {
-	evidence := recentLiveDispatchEvidence{
-		pgDispatchedStreamIDs:   make(map[string]struct{}),
-		valkeyNotifiedStreamIDs: make(map[string]struct{}),
-		sentRoomsByStreamID:     make(map[string]map[string]struct{}),
-	}
+	evidence := newRecentLiveDispatchEvidence()
 	errs := make([]error, 0, 2)
 	deliveryErrs := make([]error, 0, 1)
 
@@ -178,6 +188,14 @@ func (c *YouTubeChecker) recentLiveDispatchEvidence(
 		return evidence, nil
 	}
 	return evidence, errors.Join(append(errs, deliveryErrs...)...)
+}
+
+func newRecentLiveDispatchEvidence() recentLiveDispatchEvidence {
+	return recentLiveDispatchEvidence{
+		pgDispatchedStreamIDs:   make(map[string]struct{}),
+		valkeyNotifiedStreamIDs: make(map[string]struct{}),
+		sentRoomsByStreamID:     make(map[string]map[string]struct{}),
+	}
 }
 
 func (c *YouTubeChecker) collectPgLiveDispatchEvidence(

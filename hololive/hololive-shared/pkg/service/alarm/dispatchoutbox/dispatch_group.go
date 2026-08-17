@@ -47,20 +47,10 @@ func dispatchGroupSourceParts(envelope *domain.AlarmQueueEnvelope) []string {
 
 func notificationDispatchGroupParts(notification *domain.AlarmNotification) []string {
 	phase := "prelive"
-	if notificationIsStarting(notification) {
+	if notification.IsStarting() {
 		phase = "starting"
 	}
 	return []string{"notification", string(notification.AlarmType), phase, strconv.Itoa(notification.MinutesUntil)}
-}
-
-func notificationIsStarting(notification *domain.AlarmNotification) bool {
-	if notification == nil {
-		return false
-	}
-	if notification.MinutesUntil <= 0 {
-		return true
-	}
-	return notification.Stream != nil && (notification.Stream.IsLive() || notification.Stream.StartActual != nil)
 }
 
 func assignSendUnits(deliveries []deliveryInsert) {

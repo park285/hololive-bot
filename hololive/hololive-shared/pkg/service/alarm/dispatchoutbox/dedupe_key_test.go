@@ -93,6 +93,67 @@ func TestBuildDedupeKeyUsesCanonicalLivePrefix(t *testing.T) {
 	}
 }
 
+func TestLiveCatchupEventKeySeparatesPreliveAndIgnoresScheduleDrift(t *testing.T) {
+	t.Parallel()
+
+	initialScheduled := time.Date(2026, time.August, 16, 15, 30, 0, 0, time.UTC)
+	driftedScheduled := initialScheduled.Add(time.Minute)
+	actualStart := time.Date(2026, time.August, 16, 15, 31, 45, 0, time.UTC)
+
+	prelive := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType:    domain.AlarmTypeLive,
+			RoomID:       "room-1",
+			Channel:      &domain.Channel{ID: "channel-1"},
+			Stream:       &domain.Stream{ID: "stream-1", ChannelID: "channel-1", Status: domain.StreamStatusUpcoming, StartScheduled: &initialScheduled},
+			MinutesUntil: 5,
+		},
+		Version: 1,
+	}
+	catchup := prelive
+	catchup.Notification.Stream = &domain.Stream{
+		ID:             "stream-1",
+		ChannelID:      "channel-1",
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &initialScheduled,
+		StartActual:    &actualStart,
+	}
+	driftedCatchup := catchup
+	driftedCatchup.Notification.Stream = &domain.Stream{
+		ID:             "stream-1",
+		ChannelID:      "channel-1",
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &driftedScheduled,
+		StartActual:    &actualStart,
+	}
+
+	preliveInput := prepareEnvelopeDedupeInput(&prelive)
+	catchupInput := prepareEnvelopeDedupeInput(&catchup)
+	driftedInput := prepareEnvelopeDedupeInput(&driftedCatchup)
+	preliveEvent := preliveInput.eventKey()
+	catchupEvent := catchupInput.eventKey()
+	driftedEvent := driftedInput.eventKey()
+
+	if preliveEvent == catchupEvent {
+		t.Fatalf("prelive and catchup event keys collide: %q", preliveEvent)
+	}
+	if catchupEvent != driftedEvent {
+		t.Fatalf("catchup event key changed after schedule drift: %q != %q", catchupEvent, driftedEvent)
+	}
+	want := "live:channel-1:stream-1:0:live_catchup:LIVE"
+	if catchupEvent != want {
+		t.Fatalf("catchup event key = %q, want %q", catchupEvent, want)
+	}
+
+	event, _, err := buildLedgerRows(&catchup, StatusPending)
+	if err != nil {
+		t.Fatalf("buildLedgerRows() error = %v", err)
+	}
+	if event.Category != "live_catchup" {
+		t.Fatalf("event category = %q, want live_catchup", event.Category)
+	}
+}
+
 func TestMarshalEventPayloadOmitsRoomSpecificFields(t *testing.T) {
 	payload, err := marshalEventPayload(&domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
