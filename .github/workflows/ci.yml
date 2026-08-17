@@ -82,6 +82,18 @@ jobs:
           # leg별 캐시 키 분리 — 목록 공유 시 7개 leg가 같은 키를 놓고 경쟁해 6개가 영구 캐시 미스가 된다.
           cache-dependency-path: ${{ matrix.module == '.' && 'go.sum' || format('{0}/go.sum', matrix.module) }}
 
+      - name: Setup Node for collector helper integration tests
+        if: matrix.module == 'hololive/hololive-youtube-collector'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: hololive/hololive-youtube-collector/youtubejs/package-lock.json
+
+      - name: Install collector helper dependencies
+        if: matrix.module == 'hololive/hololive-youtube-collector'
+        run: bash scripts/ci/public-pr-collector-helper-install.sh
+
       - name: Setup Docker Compose for repository contract tests
         if: matrix.module == 'hololive/hololive-shared'
         env:
