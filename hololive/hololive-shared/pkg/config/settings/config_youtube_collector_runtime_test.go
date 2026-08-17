@@ -63,7 +63,6 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *YouTubeCollectorRuntimeCo
 		Version:     "test",
 		Server: ServerConfig{
 			Port:           30025,
-			APIKey:         "x",
 			HTTPTransports: []string{"h3"},
 			H3Addr:         ":30025",
 			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
@@ -216,11 +215,6 @@ func TestCFG003ProductionValidationExact(t *testing.T) {
 			wantSub: "SERVER_PORT",
 		},
 		{
-			name:    "api key empty",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Server.APIKey = "" },
-			wantSub: "API_SECRET_KEY",
-		},
-		{
 			name:    "h3 cert missing",
 			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Server.H3CertFile = "" },
 			wantSub: "HOLOLIVE_H3_CERT_FILE",
@@ -276,6 +270,15 @@ func TestCFG003ProductionAcceptsCompleteConfig(t *testing.T) {
 	}
 	if cfg.Collector.QueueCapacity != cfg.Collector.TotalWorkers*4 {
 		t.Fatalf("applied collector queue = %d, want %d", cfg.Collector.QueueCapacity, cfg.Collector.TotalWorkers*4)
+	}
+}
+
+func TestCFG003ProductionAcceptsMissingAPISecret(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	cfg := validYouTubeCollectorRuntimeConfig(t)
+	cfg.Server.APIKey = ""
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want collector runtime without API_SECRET_KEY", err)
 	}
 }
 

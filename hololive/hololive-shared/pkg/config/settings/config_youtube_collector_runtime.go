@@ -195,7 +195,7 @@ func (c *YouTubeCollectorRuntimeConfig) validateServer() error {
 	if err := validateServerTransports(&c.Server); err != nil {
 		return err
 	}
-	return validateAPISecretKey(c.Environment, c.Server.APIKey)
+	return nil
 }
 
 func (c *YouTubeCollectorRuntimeConfig) validateOwnership() error {
