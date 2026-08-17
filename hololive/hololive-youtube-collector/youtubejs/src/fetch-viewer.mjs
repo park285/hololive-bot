@@ -46,6 +46,22 @@ function isUnavailableVideo(err) {
   return err instanceof Utils.InnertubeError && err.message === "This video is unavailable";
 }
 
+function isExplicitlyUnavailableCount(info) {
+  const summary = info?.primary_info?.view_count ?? info?.primaryInfo?.viewCount;
+  const markedNotLive = summary?.is_live === false || summary?.isLive === false;
+  const markedLive = summary?.is_live === true || summary?.isLive === true;
+  if (!markedNotLive || markedLive) {
+    return false;
+  }
+  const labels = [
+    summary.view_count,
+    summary.viewCount,
+    summary.short_view_count,
+    summary.shortViewCount,
+  ];
+  return labels.some((value) => textOf(value).trim().toUpperCase() === "N/A");
+}
+
 export function mapViewer(info, videoId) {
   const basic = info?.basic_info ?? info?.basicInfo ?? {};
   const streaming = info?.streaming_data ?? info?.streamingData ?? {};
@@ -77,6 +93,14 @@ export function mapViewer(info, videoId) {
   }
   const count = Number(raw);
   if (!Number.isFinite(count) || count < 0) {
+    if (Number.isNaN(count) && isExplicitlyUnavailableCount(info)) {
+      return {
+        video_id: textOf(basic.id || videoId).trim() || videoId,
+        viewer_count: null,
+        availability: "UNAVAILABLE",
+        ...pagination,
+      };
+    }
     const err = new Error("viewer count schema drifted");
     err.code = "parser_drift";
     throw err;
