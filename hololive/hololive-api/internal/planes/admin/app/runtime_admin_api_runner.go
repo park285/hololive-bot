@@ -24,6 +24,7 @@ import (
 	"context"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 func (r *AdminAPIRuntime) Run() error {
@@ -40,7 +41,9 @@ func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
 	}
 
 	if r.PhotoSync != nil {
-		go r.PhotoSync.Start(ctx)
+		panicguard.Go(r.Logger, "admin-photo-sync", func() {
+			r.PhotoSync.Start(ctx)
+		})
 	}
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:          r.Logger,
