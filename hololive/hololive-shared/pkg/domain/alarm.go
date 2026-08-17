@@ -174,6 +174,20 @@ func (n *AlarmNotification) UserCount() int {
 	return len(n.Users)
 }
 
+func (n *AlarmNotification) IsStarting() bool {
+	if n == nil {
+		return false
+	}
+	if n.MinutesUntil <= 0 {
+		return true
+	}
+	return n.Stream != nil && (n.Stream.IsLive() || n.Stream.StartActual != nil)
+}
+
+func (n *AlarmNotification) IsLiveCatchup() bool {
+	return n != nil && n.MinutesUntil > 0 && n.IsStarting()
+}
+
 func (n *AlarmNotification) ValidateLiveDispatchRoute() error {
 	if n == nil {
 		return fmt.Errorf("live alarm route: notification is nil")

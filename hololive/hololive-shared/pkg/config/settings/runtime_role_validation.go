@@ -218,8 +218,9 @@ func trimmedEnv(key string) string {
 }
 
 func validateYouTubeCollectorPostgresUser(user string) error {
-	if strings.TrimSpace(user) != postgresScraperRoleUser {
-		return fmt.Errorf("%s requires POSTGRES_USER=%s", runtimeYouTubeCollector, postgresScraperRoleUser)
+	want := resolvedHololiveScraperUser()
+	if strings.TrimSpace(user) != want {
+		return fmt.Errorf("%s requires POSTGRES_USER=%s", runtimeYouTubeCollector, want)
 	}
 	return nil
 }

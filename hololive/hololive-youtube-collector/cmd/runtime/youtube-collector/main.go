@@ -20,9 +20,10 @@ import (
 )
 
 var Version = "dev"
+var Revision = "unknown"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *observability.ManagedRuntime[*collectorruntime.Runtime]]{
+	os.Exit(bootstrap.Run(bootstrap.Options[*settings.YouTubeCollectorRuntimeConfig, *observability.ManagedRuntime[*collectorruntime.Runtime]]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
@@ -30,7 +31,7 @@ func main() {
 		},
 		LoadConfig:             settings.LoadYouTubeCollectorRuntime,
 		LoadConfigErrorMessage: "Failed to load youtube collector config",
-		LoggerConfig: func(appConfig *settings.Config) sharedlogging.Config {
+		LoggerConfig: func(appConfig *settings.YouTubeCollectorRuntimeConfig) sharedlogging.Config {
 			return sharedlogging.Config{
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
@@ -40,17 +41,17 @@ func main() {
 			}
 		},
 		LoggerFileName: youtubeCollectorLogFileName(),
-		LoggerLevel: func(appConfig *settings.Config) string {
+		LoggerLevel: func(appConfig *settings.YouTubeCollectorRuntimeConfig) string {
 			return appConfig.Logging.Level
 		},
 		StartupMessage: "YouTube Collector starting...",
-		StartupFields: func(appConfig *settings.Config) []any {
+		StartupFields: func(appConfig *settings.YouTubeCollectorRuntimeConfig) []any {
 			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
 		BuildTimeout: constants.AppTimeout.Build,
 		BuildRuntime: func(
 			ctx context.Context,
-			appConfig *settings.Config,
+			appConfig *settings.YouTubeCollectorRuntimeConfig,
 			logger *slog.Logger,
 		) (*observability.ManagedRuntime[*collectorruntime.Runtime], error) {
 			traceConfig := youtubeCollectorTelemetryConfig(appConfig, Version)
@@ -67,7 +68,7 @@ func main() {
 	}))
 }
 
-func youtubeCollectorTelemetryConfig(appConfig *settings.Config, version string) telemetry.Config {
+func youtubeCollectorTelemetryConfig(appConfig *settings.YouTubeCollectorRuntimeConfig, version string) telemetry.Config {
 	return telemetry.Config{
 		Enabled:        appConfig.Tracing.Enabled,
 		ServiceName:    "youtube-collector",

@@ -19,15 +19,7 @@ func buildConfig(
 	irisConfig := loadIrisConfig(webhookToken, botToken)
 	workerProfile := resolveIrisBotWebhookWorkerProfile(&irisConfig, options)
 	scraperConfig := loadScraperConfig()
-	collectorConfig, err := loadYouTubeCollectorConfig()
-	if err != nil {
-		return nil, err
-	}
-	tracingInstanceID := scraperConfig.ActiveActive.InstanceID
-	if options.TracingRuntime == tracingRuntimeYouTubeCollector {
-		tracingInstanceID = collectorConfig.InstanceID
-	}
-	tracingConfig, err := loadTracingConfig(options.TracingRuntime, tracingInstanceID)
+	tracingConfig, err := loadTracingConfig(options.TracingRuntime, scraperConfig.ActiveActive.InstanceID)
 	if err != nil {
 		return nil, fmt.Errorf("load tracing config: %w", err)
 	}
@@ -46,7 +38,6 @@ func buildConfig(
 	config.Ingestion = loadIngestionConfig(communityShortsBigBangCutoverAt)
 	config.Tracing = tracingConfig
 	config.Scraper = scraperConfig
-	config.YouTubeCollector = collectorConfig
 	config.Webhook = loadWebhookConfig(&workerProfile)
 	config.WorkerPool = loadWorkerPoolConfig(&workerProfile)
 	config.WorkerProfile = WorkerProfileConfig{Version: workerProfile.Version, Hash: workerProfile.ProfileHash()}

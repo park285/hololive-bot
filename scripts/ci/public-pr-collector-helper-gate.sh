@@ -7,8 +7,8 @@ if (( $# != 0 )); then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+bash "${ROOT_DIR}/scripts/ci/public-pr-collector-helper-install.sh"
 cd "${ROOT_DIR}/hololive/hololive-youtube-collector/youtubejs"
 
-npm ci --ignore-scripts
 npm run typecheck
 npm test

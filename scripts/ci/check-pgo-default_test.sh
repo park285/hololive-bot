@@ -192,7 +192,19 @@ case_default_policy_has_exact_rows() {
   printf 'ok - production off-only policy has exact service rows\n'
 }
 
+case_shared_collector_script_is_accepted() {
+  local dir="${TMP_ROOT}/shared-script"
+  write_fixture "${dir}"
+  cat >"${dir}/service/Dockerfile" <<'EOF'
+FROM scratch
+RUN sh /workspace/scripts/build/build-youtube-collector-go.sh --output-dir /dist
+EOF
+  run_gate "${dir}"
+  assert_success "Dockerfile may delegate collector compile to shared script"
+}
+
 case_off_policy_passes
+case_shared_collector_script_is_accepted
 case_artifacts_rejected
 case_on_row_rejected
 case_env_override_rejected

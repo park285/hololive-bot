@@ -14,6 +14,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
+const maxCheckpointCursorBytes = 16384
+
 func validatePublishBatch(input *PublishBatchInput) error {
 	if err := validatePublishBatchCounts(input); err != nil {
 		return err
@@ -154,7 +156,7 @@ func validateCheckpointTextField(name, value string, index int) error {
 }
 
 func validateCheckpointCursor(entry *CheckpointEntry, index int) error {
-	if len(entry.Cursor) > 16384 {
+	if len(entry.Cursor) > maxCheckpointCursorBytes {
 		return fmt.Errorf("%w: checkpoint %d cursor is too large", ErrInvalidEnvelope, index)
 	}
 	if len(entry.Cursor) == 0 {

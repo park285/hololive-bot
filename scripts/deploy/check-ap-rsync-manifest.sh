@@ -29,6 +29,7 @@ done < <(rg -o 'scripts/deploy/lib/[[:alnum:]_.-]+\.sh' "$ROOT_DIR/scripts/deplo
 required_context_files=(
   hololive/hololive-dbtest/go.mod
   hololive/hololive-dbtest/go.sum
+  scripts/build/build-youtube-collector-go.sh
 )
 for path in "${required_context_files[@]}"; do
   if ! grep -qxF "$path" "$MANIFEST"; then

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 type DedupeInput struct {
@@ -176,6 +177,11 @@ func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) Ded
 			scheduled = *notification.Stream.StartScheduled
 		}
 	}
+	category := ""
+	if notification.IsLiveCatchup() {
+		category = sharedalarmkeys.NotificationCategoryLiveCatchup
+		scheduled = time.Time{}
+	}
 	return DedupeInput{
 		RoomID:                      notification.RoomID,
 		ChannelID:                   channelID,
@@ -185,6 +191,7 @@ func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) Ded
 		StartScheduled:              scheduled,
 		MinutesUntil:                notification.MinutesUntil,
 		ScheduleChangePreviousStart: notification.ScheduleChangePreviousStart,
+		Category:                    category,
 	}
 }
 

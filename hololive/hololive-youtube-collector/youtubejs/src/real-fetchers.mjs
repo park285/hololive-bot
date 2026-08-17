@@ -7,66 +7,60 @@ import { fetchViewerFeed } from "./fetch-viewer.mjs";
 /** @typedef {import("./contracts.d.ts").FetcherSet} FetcherSet */
 /** @typedef {import("./upstream-feeds.d.ts").InnertubeFetch} InnertubeFetch */
 
-let proxyUrl = "";
-/** @type {Promise<unknown> | undefined} */
-let innertubePromise;
+/**
+ * @param {{
+ *   fetchImpl?: InnertubeFetch,
+ *   createInnertubeImpl?: typeof createInnertube,
+ * }} [options]
+ * @returns {FetcherSet}
+ */
+export function createRealFetchers(options = {}) {
+  const fetchImpl = options.fetchImpl;
+  const initInnertube = options.createInnertubeImpl ?? createInnertube;
+  /** @type {Promise<unknown> | undefined} */
+  let innertubePromise;
 
-/** @type {import("./contracts.d.ts").ProxyConfigurator} */
-export function setProxyUrl(url) {
-  proxyUrl = String(url ?? "").trim();
-}
-
-/** @type {InnertubeFetch} */
-async function proxiedFetch(input, init = {}) {
-  if (proxyUrl === "") {
-    return globalThis.fetch(
-      /** @type {Parameters<typeof fetch>[0]} */ (input),
-      /** @type {RequestInit | undefined} */ (init),
-    );
+  async function innertubeClient() {
+    if (innertubePromise == null) {
+      innertubePromise = initInnertube({ fetchImpl }).catch((err) => {
+        innertubePromise = undefined;
+        throw err;
+      });
+    }
+    return innertubePromise;
   }
-  const undici = await import("undici");
-  return undici.fetch(/** @type {string} */ (String(input)), {
-    dispatcher: new undici.ProxyAgent(proxyUrl),
-  });
-}
 
-async function innertubeClient() {
-  if (innertubePromise == null) {
-    innertubePromise = createInnertube({ fetchImpl: proxiedFetch });
-  }
-  return innertubePromise;
+  return {
+    async fetchCommunity(fetchOptions) {
+      const innertube = await innertubeClient();
+      const youtubejs = await import("youtubei.js");
+      return fetchCommunityFeed({
+        ...fetchOptions,
+        innertube,
+        postType: youtubejs.YTNodes.BackstagePost,
+      });
+    },
+    async fetchContent(fetchOptions) {
+      return fetchContentFeed({
+        ...fetchOptions,
+        innertube: await innertubeClient(),
+      });
+    },
+    async fetchChannel(fetchOptions) {
+      return fetchChannelFeed({
+        ...fetchOptions,
+        innertube: await innertubeClient(),
+      });
+    },
+    async fetchViewer(fetchOptions) {
+      return fetchViewerFeed({
+        ...fetchOptions,
+        innertube: await innertubeClient(),
+      });
+    },
+    async close() {},
+  };
 }
-
-/** @satisfies {FetcherSet} */
-export const realFetchers = {
-  async fetchCommunity(options) {
-    const innertube = await innertubeClient();
-    const youtubejs = await import("youtubei.js");
-    return fetchCommunityFeed({
-      ...options,
-      innertube,
-      postType: youtubejs.YTNodes.BackstagePost,
-    });
-  },
-  async fetchContent(options) {
-    return fetchContentFeed({
-      ...options,
-      innertube: await innertubeClient(),
-    });
-  },
-  async fetchChannel(options) {
-    return fetchChannelFeed({
-      ...options,
-      innertube: await innertubeClient(),
-    });
-  },
-  async fetchViewer(options) {
-    return fetchViewerFeed({
-      ...options,
-      innertube: await innertubeClient(),
-    });
-  },
-};
 
 /** @satisfies {FetcherSet} */
 export const stubFetchers = {
@@ -76,6 +70,7 @@ export const stubFetchers = {
       page_count: 1,
       exhausted: true,
       continuity: "CONTIGUOUS",
+      termination_reason: "exhausted",
     };
   },
   fetchContent() {
@@ -84,6 +79,7 @@ export const stubFetchers = {
       page_count: 1,
       exhausted: true,
       continuity: "CONTIGUOUS",
+      termination_reason: "exhausted",
     };
   },
   fetchChannel() {
@@ -94,17 +90,20 @@ export const stubFetchers = {
       photo: [],
       page_count: 1,
       exhausted: true,
-      continuity: "CONTIGUOUS",
+      continuity: "NOT_APPLICABLE",
+      termination_reason: "exhausted",
     };
   },
-  fetchViewer(options) {
+  fetchViewer(fetchOptions) {
     return {
-      video_id: options.videoId,
+      video_id: fetchOptions.videoId,
       viewer_count: null,
       availability: "UNAVAILABLE",
       page_count: 1,
       exhausted: true,
-      continuity: "CONTIGUOUS",
+      continuity: "NOT_APPLICABLE",
+      termination_reason: "exhausted",
     };
   },
+  async close() {},
 };

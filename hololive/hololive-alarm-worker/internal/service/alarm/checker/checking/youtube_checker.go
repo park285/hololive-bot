@@ -133,7 +133,7 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
 func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
 	now := time.Now().UTC()
-	dueChannels, streamsByChannel, liveObservedAtByStreamID, subscriberMap, err := c.loadDueYouTubeCheckInputs(ctx, now)
+	dueChannels, streamsByChannel, liveEvidence, subscriberMap, err := c.loadDueYouTubeCheckInputs(ctx, now)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,15 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 		return []*domain.AlarmNotification{}, nil
 	}
 
-	return c.collectDueYouTubeNotifications(ctx, dueChannels, streamsByChannel, liveObservedAtByStreamID, subscriberMap, now)
+	return c.collectDueYouTubeNotifications(
+		ctx,
+		dueChannels,
+		streamsByChannel,
+		liveEvidence.observedAtByStreamID,
+		subscriberMap,
+		liveEvidence.sentRoomsByStreamID,
+		now,
+	)
 }
 
 func (c *YouTubeChecker) collectDueYouTubeNotifications(
@@ -151,6 +159,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 	streamsByChannel map[string][]*domain.Stream,
 	liveObservedAtByStreamID map[string]time.Time,
 	subscriberMap map[string][]string,
+	sentRoomsByStreamID map[string]map[string]struct{},
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(dueChannels)*5)
@@ -164,7 +173,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 		if !ok {
 			continue
 		}
-		c.startYouTubeChannelWorker(eg, egCtx, &work, liveObservedAtByStreamID, now, &mu, &notifications)
+		c.startYouTubeChannelWorker(eg, egCtx, &work, liveObservedAtByStreamID, sentRoomsByStreamID, now, &mu, &notifications)
 	}
 
 	if err := eg.Wait(); err != nil {
@@ -179,6 +188,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 	ctx context.Context,
 	work *youtubeChannelCheckWork,
 	liveObservedAtByStreamID map[string]time.Time,
+	sentRoomsByStreamID map[string]map[string]struct{},
 	now time.Time,
 	mu *sync.Mutex,
 	notifications *[]*domain.AlarmNotification,
@@ -191,6 +201,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 			work.streams,
 			work.window,
 			now,
+			sentRoomsByStreamID,
 			liveObservedAtByStreamID,
 		)
 		if err != nil {

@@ -188,6 +188,26 @@ Mitigation:
 Rollback:
 - 구 alarm-worker image는 전체 방 fan-out 의미를 가지므로 rollback 전에 `BIRTHDAY_STREAM_RUNNER_ENABLED=false`로 runner를 중지합니다.
 
+### 5. 5분 전 알림 뒤에 종료 직후 `방송 시작`이 다시 나감
+
+Symptoms:
+- 예정 시각 기준 `방송 5분 전`은 나갔다.
+- 실제 시작 시각의 `방송 시작`은 없다.
+- 방송이 끝난 직후 같은 영상에 `방송 시작`이 다시 나간다.
+- `youtube_notification_outbox`의 `NEW_VIDEO`/`LIVE_STREAM` 행은 없다.
+
+Diagnosis:
+- `YOUTUBE_LIVE_CATCHUP_DEDUPE_COLLISION_20260817.md`
+- `alarm_dispatch_events`에서 같은 `stream_id`의 첫 행은 `status=upcoming`, `minutes_until=5`이고, 마지막 행은 `status=live`에 `start_actual`이 있으며 `start_scheduled`가 1–2분 이동했는지 본다.
+- `youtube_live_sessions.live_first_seen_at`가 실제 시작 근처면 수집 지연이 아니라 checker dedupe 쪽이다.
+
+Mitigation:
+- `YOUTUBE_LIVE_CATCHUP_DEDUPE_COLLISION_20260817.md`의 수정이 포함된 alarm-worker image를 배포한다.
+- 배포 후 live catchup event category가 `live_catchup`이고, 같은 `stream_id`의 기존 sent room이 예정 시각 보정 뒤에도 다시 선택되지 않는지 확인한다.
+
+Rollback:
+- 수정 전 image로 rollback하면 같은 증상이 다시 열리므로, 이 결함만으로는 rollback하지 않고 current revision을 fix-forward한다.
+
 ## Smoke test
 
 ```bash

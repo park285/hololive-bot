@@ -44,13 +44,11 @@ change_started_at="$3"
 unit="hololive-youtube-collector@${service}.service"
 current_link="/opt/hololive-bot/youtube-collector/current"
 
-sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
 sudo -n test -r /etc/hololive-bot/youtube-collector-host.env
-sudo -n test -d /var/lib/hololive-bot/youtube-collector/settings
 sudo -n test -x "$current_link/bin/healthcheck"
 sudo -n test -f "$current_link/youtubejs/src/server.mjs"
 require_youtubejs_node_version node
@@ -59,9 +57,13 @@ systemctl is-active --quiet "$unit"
 active_state="$(systemctl show "$unit" -p ActiveState --value)"
 sub_state="$(systemctl show "$unit" -p SubState --value)"
 restart_count="$(systemctl show "$unit" -p NRestarts --value)"
+environment_files="$(systemctl show "$unit" -p EnvironmentFiles --value)"
 [[ "$active_state" == active ]]
 [[ "$sub_state" == running ]]
 [[ "$restart_count" == 0 ]]
+[[ "$environment_files" == *'/etc/stack-secrets/hololive-bot/youtube-collector.env'* ]]
+[[ "$environment_files" == *'/etc/hololive-bot/youtube-collector-host.env'* ]]
+[[ "$environment_files" != *'compose.env'* ]]
 
 if [[ -n "$change_started_at" ]]; then
   since_epoch="$(date -u -d "$change_started_at" +%s)"
@@ -72,8 +74,6 @@ fi
 
 sudo -n grep -qx 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true' /etc/hololive-bot/youtube-collector-host.env
 sudo -n grep -qx 'POSTGRES_USER=hololive_scraper' /etc/hololive-bot/youtube-collector-host.env
-sudo -n grep -qx 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-collector/settings' /etc/hololive-bot/youtube-collector-host.env
-sudo -n -u hololive test -w /var/lib/hololive-bot/youtube-collector/settings
 
 sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \

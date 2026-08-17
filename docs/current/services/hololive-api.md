@@ -37,7 +37,7 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 | majorevent | HTTP JSON | `/internal/majorevent/*` | `hololive-api` (bot plane) |
 | trigger | HTTP JSON | `/internal/trigger/*` | `hololive-api` (admin plane) |
 | Admin HTTP API | HTTP JSON | 검토 필요 | `admin-dashboard` |
-| settings.update | Valkey Pub/Sub | `config:update` | `hololive-api`, `alarm-worker`, `youtube-collector` |
+| settings.update | Valkey Pub/Sub | `config:update` | `hololive-api`, `alarm-worker` |
 | alarm HTTP compatibility | HTTP JSON | `/internal/alarm/*` | migration callers (target owner is `alarm-worker`) |
 
 ## Consumes

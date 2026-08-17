@@ -49,7 +49,8 @@ test("fetchViewerFeed maps a typed unavailable video to the existing unavailable
     availability: "UNAVAILABLE",
     page_count: 1,
     exhausted: true,
-    continuity: "CONTIGUOUS",
+    continuity: "NOT_APPLICABLE",
+    termination_reason: "exhausted",
   });
 });
 

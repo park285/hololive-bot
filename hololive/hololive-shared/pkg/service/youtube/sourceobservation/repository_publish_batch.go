@@ -69,11 +69,7 @@ func validatePublishBatchBytes(input *PublishBatchInput, checkpoints map[checkpo
 		checkpoint := checkpoints[checkpointBindingForObservation(&input.Observations[i])]
 		inputBytes := len(input.Observations[i].Payload) + len(checkpoint.Cursor)
 		if inputBytes > MaxPublishBatchBytes-aggregateBytes {
-			return fmt.Errorf(
-				"publish source observation batch: %w: aggregate payload and cursor bytes exceed %d",
-				ErrInvalidEnvelope,
-				MaxPublishBatchBytes,
-			)
+			return fmt.Errorf("publish source observation batch: %w", publishBatchBytesError())
 		}
 		aggregateBytes += inputBytes
 	}
@@ -207,7 +203,7 @@ func recordPublishSetRow(
 		return fmt.Errorf("publish source observation batch: invalid set result")
 	}
 	seen[ordinal] = true
-	result.Results[ordinal] = PublishedObservation{ObservationID: observationID, Outcome: outcome}
+	result.Results[ordinal] = NewPublishedObservation(observationID, outcome, ordinal)
 	return nil
 }
 

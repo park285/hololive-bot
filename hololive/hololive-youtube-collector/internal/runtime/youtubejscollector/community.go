@@ -5,6 +5,7 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
@@ -23,53 +24,64 @@ func NewCommunityRunner(client CommunityClient, maxResults int) *CommunityRunner
 	return &CommunityRunner{client: client, maxResults: collectutil.MaxResults(maxResults)}
 }
 
-func (r *CommunityRunner) Provider() contract.Provider { return contract.ProviderYouTubeJS }
-func (r *CommunityRunner) JobKind() string             { return "community_collect" }
-func (r *CommunityRunner) Emissions() []contract.ObservationKind {
-	return []contract.ObservationKind{contract.KindCommunityPage}
+func (r *CommunityRunner) JobID() sourceobservation.JobID {
+	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: "community_collect"}
 }
-func (r *CommunityRunner) TargetKinds() []contract.ObservationKind { return r.Emissions() }
 
-func (r *CommunityRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
+func (r *CommunityRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "youtube.js community client is not configured")
+		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js community client is not configured")
 	}
-	if err := collectutil.ValidateInput(input); err != nil {
-		return collectutil.RunOutput{}, err
+	if input == nil {
+		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 	started := time.Now()
+	spec := input.Spec()
 	result, err := r.client.FetchCommunity(ctx, youtubejs.CommunityRequest{
-		ChannelID:         input.Spec.SubjectKey,
-		MaxResults:        r.maxResults,
-		MaxPages:          input.MaxPages,
-		MaxAggregateBytes: input.MaxAggregateBytes,
+		ChannelID:               spec.SubjectKey,
+		MaxResults:              r.maxResults,
+		MaxPages:                input.MaxPages(),
+		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
 	})
 	if err != nil {
-		return collectutil.RunOutput{}, err
+		return collectutil.CollectResult{}, err
+	}
+	if err := validateCommunityRows(result.Posts); err != nil {
+		return collectutil.CollectResult{}, err
 	}
 	if result.MissingTab {
-		return collectutil.Output(nil, started)
+		return collectutil.CompleteFromEnvelopes(nil, started)
 	}
-	generation, err := collectutil.Generation(input, contract.KindCommunityPage)
+	envelope, err := r.communityEnvelope(input, &result)
 	if err != nil {
-		return collectutil.RunOutput{}, err
+		return collectutil.CollectResult{}, err
 	}
-	completeness, continuity, err := collectutil.PaginationOf(result.Pagination)
+	return collectutil.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
+}
+
+func (r *CommunityRunner) communityEnvelope(input *collectutil.RunInput, result *youtubejs.CommunityResult) (contract.Envelope, error) {
+	spec := input.Spec()
+	generation, err := input.Generation(contract.KindCommunityPage)
 	if err != nil {
-		return collectutil.RunOutput{}, err
+		return contract.Envelope{}, err
 	}
+	completeness, continuity, err := collectutil.PaginationOf(&result.Pagination)
+	if err != nil {
+		return contract.Envelope{}, err
+	}
+	lease := input.Lease()
 	envelope, err := collectutil.Envelope(
 		contract.ProviderYouTubeJS,
 		contract.KindCommunityPage,
-		input.Spec.SubjectKey,
+		spec.SubjectKey,
 		generation,
-		&input.Lease,
+		&lease,
 		completeness,
 		continuity,
-		communityPayload(input.Spec.SubjectKey, result.Posts, r.maxResults, result.Pagination),
+		communityPayload(spec.SubjectKey, result.Posts, r.maxResults, &result.Pagination),
 	)
 	if err != nil {
-		return collectutil.RunOutput{}, collecterr.Wrap(collecterr.ParserDrift, err)
+		return contract.Envelope{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
 	}
-	return collectutil.Output([]contract.Envelope{envelope}, started)
+	return envelope, nil
 }

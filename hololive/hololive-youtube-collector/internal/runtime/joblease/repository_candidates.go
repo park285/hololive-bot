@@ -2,31 +2,27 @@ package joblease
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
-func (r *Repository) candidateDefinition(provider contract.Provider, jobKind string, limit int) (sourceobservation.JobContract, []contract.ObservationKind, error) {
-	if r == nil || r.pool == nil || r.contracts == nil || !provider.Valid() || limit < 1 || limit > r.config.AcquisitionBatch {
-		return sourceobservation.JobContract{}, nil, fmt.Errorf("list collection job candidates: %w", ErrInvalidJob)
-	}
-	definition, ok := r.contracts.Definition(jobKind)
-	if !ok {
-		return sourceobservation.JobContract{}, nil, fmt.Errorf("list collection job candidates: %w: unknown job kind", ErrInvalidJob)
-	}
-	kinds := emissionKinds(definition, provider)
-	if len(kinds) == 0 {
-		return sourceobservation.JobContract{}, nil, fmt.Errorf("list collection job candidates: %w: provider has no emissions", ErrInvalidJob)
-	}
-	return definition, kinds, nil
+type CandidatePage struct {
+	Jobs      []JobSpec
+	Truncated bool
 }
 
-func (r *Repository) currentProjectionGeneration(ctx context.Context) (int64, error) {
+func (r *Repository) CurrentProjectionGeneration(ctx context.Context) (int64, error) {
+	if r == nil || r.pool == nil {
+		return 0, fmt.Errorf("list collection job candidates: %w", ErrInvalidJob)
+	}
 	var generation int64
 	err := r.pool.QueryRow(ctx, mustSQL("repository_projection_current_0144_01.sql")).Scan(&generation)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -38,170 +34,243 @@ func (r *Repository) currentProjectionGeneration(ctx context.Context) (int64, er
 	return generation, nil
 }
 
-func (r *Repository) globalCandidate(
+func (r *Repository) CandidatesForProjection(
 	ctx context.Context,
-	provider contract.Provider,
-	jobKind string,
 	generation int64,
-	kindValues []string,
-	definition sourceobservation.JobContract,
-) ([]JobSpec, error) {
-	subject := definition.FixedSubject
-	if subject == "" {
-		subject = "global:" + jobKind
+	job sourceobservation.JobContract,
+	excludedJobKeys []string,
+	limit int,
+) (CandidatePage, error) {
+	if err := r.validateCandidateRequest(generation, job, limit); err != nil {
+		return CandidatePage{}, err
 	}
-	interval, err := r.loadCandidateInterval(ctx, generation, kindValues, definition.Membership, subject)
+	excluded, err := normalizeExcludedJobKeys(excludedJobKeys, r.config.QueueCapacity)
 	if err != nil {
-		return nil, err
+		return CandidatePage{}, err
 	}
-	return []JobSpec{{
-		JobKey: "collector:" + string(provider) + ":" + jobKind + ":global", Provider: provider,
-		Class: definition.Class, CollectionJobKind: jobKind, SubjectKey: subject, PollInterval: interval,
-	}}, nil
+	kindValues, err := cadenceKindValues(job)
+	if err != nil {
+		return CandidatePage{}, err
+	}
+	if job.Class() == sourceobservation.JobClassGlobal {
+		return r.globalCandidatesForProjection(ctx, generation, job, kindValues, excluded)
+	}
+	return r.subjectCandidatesForProjection(ctx, generation, job, kindValues, excluded, limit)
 }
 
-func (r *Repository) scanTargetCandidates(
+func (r *Repository) validateCandidateRequest(generation int64, job sourceobservation.JobContract, limit int) error {
+	if r == nil || r.pool == nil || r.contracts == nil {
+		return fmt.Errorf("list collection job candidates: %w", ErrInvalidJob)
+	}
+	if generation <= 0 || limit < 1 || limit > r.config.AcquisitionBatch {
+		return fmt.Errorf("list collection job candidates: %w: generation or limit is outside bounds", ErrInvalidJob)
+	}
+	if err := job.Validate(); err != nil {
+		return collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+	}
+	if !r.isCanonicalJob(job) {
+		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: job contract is not canonical")
+	}
+	return nil
+}
+
+func (r *Repository) isCanonicalJob(job sourceobservation.JobContract) bool {
+	canonical, ok := r.contracts.Definition(job.ID())
+	return ok && canonical.Class() == job.Class() && canonical.Membership() == job.Membership() &&
+		canonical.LeaseSubject() == job.LeaseSubject()
+}
+
+func (r *Repository) subjectCandidatesForProjection(
 	ctx context.Context,
-	provider contract.Provider,
-	jobKind string,
 	generation int64,
+	job sourceobservation.JobContract,
 	kindValues []string,
-	class string,
+	excluded []string,
 	limit int,
-) ([]JobSpec, error) {
+) (CandidatePage, error) {
 	rows, err := r.pool.Query(
 		ctx,
 		mustSQL("repository_candidates_0144_02.sql"),
 		generation,
 		kindValues,
+		string(job.ID().Provider),
+		string(job.ID().Kind),
+		excluded,
 		limit,
-		string(provider),
-		jobKind,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list collection job candidates: query targets: %w", err)
+		return CandidatePage{}, fmt.Errorf("list collection job candidates: query targets: %w", err)
 	}
 	defer rows.Close()
-	return collectTargetCandidates(rows, provider, jobKind, class, limit)
+	return collectCandidatePage(rows, job, limit)
 }
 
-func collectTargetCandidates(
+func (r *Repository) globalCandidatesForProjection(
+	ctx context.Context,
+	generation int64,
+	job sourceobservation.JobContract,
+	kindValues []string,
+	excluded []string,
+) (CandidatePage, error) {
+	subject, err := ExpectedLeaseSubject(job, "")
+	if err != nil {
+		return CandidatePage{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+	}
+	jobKey, err := BuildJobKey(job.ID(), subject)
+	if err != nil {
+		return CandidatePage{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
+	}
+	rows, err := r.pool.Query(
+		ctx,
+		mustSQL("repository_candidates_global_0144_17.sql"),
+		generation,
+		kindValues,
+		job.Membership() == sourceobservation.JobMembershipExactSubject,
+		subject,
+		jobKey,
+		excluded,
+	)
+	if err != nil {
+		return CandidatePage{}, fmt.Errorf("list collection job candidates: query global target set: %w", err)
+	}
+	defer rows.Close()
+	return collectCandidatePage(rows, job, 1)
+}
+
+func collectCandidatePage(
 	rows interface {
 		Next() bool
 		Scan(dest ...any) error
 		Err() error
 	},
-	provider contract.Provider,
-	jobKind, class string,
+	job sourceobservation.JobContract,
 	limit int,
-) ([]JobSpec, error) {
-	result := make([]JobSpec, 0, limit)
+) (CandidatePage, error) {
+	jobs := make([]JobSpec, 0, limit)
+	sawRow := false
+	projectionCurrent := false
 	for rows.Next() {
-		spec, err := scanTargetCandidate(rows, provider, jobKind, class)
+		row, err := scanCandidateRow(rows)
 		if err != nil {
-			return nil, err
+			return CandidatePage{}, err
 		}
-		result = append(result, spec)
+		sawRow = true
+		projectionCurrent = row.current
+		if !row.current || row.subject == "" {
+			continue
+		}
+		spec, err := specFromCandidateRow(job, row)
+		if err != nil {
+			return CandidatePage{}, err
+		}
+		jobs = append(jobs, spec)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list collection job candidates: read targets: %w", err)
+		return CandidatePage{}, fmt.Errorf("list collection job candidates: read targets: %w", err)
 	}
-	return result, nil
+	if !sawRow {
+		return CandidatePage{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: candidate page is missing projection status")
+	}
+	if !projectionCurrent {
+		return CandidatePage{}, ErrProjectionStale
+	}
+	truncated := len(jobs) > limit
+	if truncated {
+		jobs = jobs[:limit]
+	}
+	return CandidatePage{Jobs: jobs, Truncated: truncated}, nil
 }
 
-func scanTargetCandidate(
-	rows interface {
-		Scan(dest ...any) error
-	},
-	provider contract.Provider,
-	jobKind, class string,
-) (JobSpec, error) {
-	var subject string
-	var minIntervalMS int64
-	var maxIntervalMS int64
-	if err := rows.Scan(&subject, &minIntervalMS, &maxIntervalMS); err != nil {
-		return JobSpec{}, fmt.Errorf("list collection job candidates: scan target: %w", err)
+type candidateRow struct {
+	current bool
+	subject string
+	minMS   int64
+	maxMS   int64
+}
+
+func scanCandidateRow(rows interface{ Scan(dest ...any) error }) (candidateRow, error) {
+	var current bool
+	var subject sql.NullString
+	var minMS sql.NullInt64
+	var maxMS sql.NullInt64
+	if err := rows.Scan(&current, &subject, &minMS, &maxMS); err != nil {
+		return candidateRow{}, fmt.Errorf("list collection job candidates: scan target: %w", err)
 	}
-	if minIntervalMS <= 0 {
-		return JobSpec{}, fmt.Errorf("list collection job candidates: %w: subject bundle has no poll interval", ErrInvalidJob)
+	row := candidateRow{current: current}
+	if subject.Valid {
+		row.subject = subject.String
 	}
-	if minIntervalMS != maxIntervalMS {
-		return JobSpec{}, fmt.Errorf("list collection job candidates: %w: subject bundle has mixed poll intervals", ErrInvalidJob)
+	if minMS.Valid {
+		row.minMS = minMS.Int64
+	}
+	if maxMS.Valid {
+		row.maxMS = maxMS.Int64
+	}
+	return row, nil
+}
+
+func specFromCandidateRow(job sourceobservation.JobContract, row candidateRow) (JobSpec, error) {
+	if row.minMS <= 0 {
+		return JobSpec{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: target bundle has no poll interval")
+	}
+	if row.minMS != row.maxMS {
+		return JobSpec{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: target bundle has mixed poll intervals")
+	}
+	jobKey, err := BuildJobKey(job.ID(), row.subject)
+	if err != nil {
+		return JobSpec{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err)
 	}
 	return JobSpec{
-		JobKey: "collector:" + string(provider) + ":" + jobKind + ":" + subject, Provider: provider, Class: class,
-		CollectionJobKind: jobKind, SubjectKey: subject,
-		PollInterval: time.Duration(minIntervalMS) * time.Millisecond,
+		JobKey:            jobKey,
+		Provider:          job.ID().Provider,
+		Class:             string(job.Class()),
+		CollectionJobKind: string(job.ID().Kind),
+		SubjectKey:        row.subject,
+		PollInterval:      time.Duration(row.minMS) * time.Millisecond,
 	}, nil
 }
 
-func (r *Repository) EnabledSubjects(ctx context.Context, generation int64, kind contract.ObservationKind) ([]string, error) {
-	if r == nil || r.pool == nil || generation <= 0 || !kind.Valid() {
-		return nil, fmt.Errorf("list enabled collection subjects: %w", ErrInvalidJob)
+func cadenceKindValues(job sourceobservation.JobContract) ([]string, error) {
+	kinds := job.CadenceKinds()
+	if len(kinds) == 0 {
+		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: cadence kinds are empty")
 	}
-	rows, err := r.pool.Query(
-		ctx,
-		mustSQL("repository_enabled_subjects_0144_03.sql"),
-		generation,
-		string(kind),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list enabled collection subjects: query targets: %w", err)
+	values := make([]string, len(kinds))
+	for i, kind := range kinds {
+		values[i] = string(kind)
 	}
-	defer rows.Close()
-	return scanEnabledSubjects(rows)
+	return values, nil
 }
 
-func scanEnabledSubjects(rows interface {
-	Next() bool
-	Scan(dest ...any) error
-	Err() error
-}) ([]string, error) {
-	subjects := make([]string, 0)
-	for rows.Next() {
-		var subject string
-		if err := rows.Scan(&subject); err != nil {
-			return nil, fmt.Errorf("list enabled collection subjects: scan target: %w", err)
+func normalizeExcludedJobKeys(keys []string, capacity int) ([]string, error) {
+	if capacity < 1 {
+		return nil, fmt.Errorf("list collection job candidates: %w: queue capacity is outside bounds", ErrInvalidJob)
+	}
+	if len(keys) == 0 {
+		return []string{}, nil
+	}
+	cloned := slices.Clone(keys)
+	slices.Sort(cloned)
+	unique := make([]string, 0, len(cloned))
+	for _, key := range cloned {
+		if invalidExcludedJobKey(key) {
+			return nil, fmt.Errorf("list collection job candidates: %w: excluded job key is outside bounds", ErrInvalidJob)
 		}
-		subjects = append(subjects, subject)
+		if duplicateLast(unique, key) {
+			continue
+		}
+		unique = append(unique, key)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list enabled collection subjects: read targets: %w", err)
+	if len(unique) > capacity {
+		return nil, fmt.Errorf("list collection job candidates: %w: excluded job keys exceed queue capacity", ErrInvalidJob)
 	}
-	return subjects, nil
+	return unique, nil
 }
 
-func (r *Repository) loadCandidateInterval(
-	ctx context.Context,
-	generation int64,
-	kinds []string,
-	membership sourceobservation.JobMembership,
-	subject string,
-) (time.Duration, error) {
-	var count int
-	var minIntervalMS int64
-	var maxIntervalMS int64
-	exact := membership == sourceobservation.JobMembershipExactSubject
-	err := r.pool.QueryRow(
-		ctx,
-		mustSQL("repository_target_bundle_0144_04.sql"),
-		generation,
-		kinds,
-		exact,
-		subject,
-	).Scan(&count, &minIntervalMS, &maxIntervalMS)
-	if err != nil {
-		return 0, fmt.Errorf("list collection job candidates: inspect global target set: %w", err)
-	}
-	if count == 0 {
-		return 0, ErrTargetDisabled
-	}
-	if minIntervalMS <= 0 {
-		return 0, fmt.Errorf("list collection job candidates: %w: target bundle has no poll interval", ErrInvalidJob)
-	}
-	_ = membership
-	if minIntervalMS != maxIntervalMS {
-		return 0, fmt.Errorf("list collection job candidates: %w: target bundle has mixed poll intervals", ErrInvalidJob)
-	}
-	return time.Duration(minIntervalMS) * time.Millisecond, nil
+func invalidExcludedJobKey(key string) bool {
+	return strings.TrimSpace(key) != key || key == ""
+}
+
+func duplicateLast(keys []string, key string) bool {
+	return len(keys) > 0 && keys[len(keys)-1] == key
 }

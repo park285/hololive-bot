@@ -40,42 +40,10 @@ type Metrics struct {
 	leaseAcquire *prometheus.CounterVec
 	leaseLost    *prometheus.CounterVec
 	publish      *prometheus.CounterVec
+	enqueue      *prometheus.CounterVec
 
-	mu                          sync.Mutex
-	lastSuccessAt               map[string]time.Time
-	firstPublishedObservationID int64
-	firstHandoffComplete        bool
-}
-
-func (m *Metrics) ObservePublishedObservation(observationID int64) {
-	if m == nil || observationID <= 0 {
-		return
-	}
-	m.mu.Lock()
-	if m.firstPublishedObservationID == 0 {
-		m.firstPublishedObservationID = observationID
-	}
-	m.mu.Unlock()
-}
-
-func (m *Metrics) PublishedHandoff() (observationID int64, complete, ok bool) {
-	if m == nil {
-		return 0, false, false
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.firstPublishedObservationID, m.firstHandoffComplete, m.firstPublishedObservationID > 0
-}
-
-func (m *Metrics) ObserveHandoffComplete(observationID int64) {
-	if m == nil || observationID <= 0 {
-		return
-	}
-	m.mu.Lock()
-	if observationID == m.firstPublishedObservationID {
-		m.firstHandoffComplete = true
-	}
-	m.mu.Unlock()
+	mu            sync.Mutex
+	lastSuccessAt map[string]time.Time
 }
 
 func NewMetrics(registerer prometheus.Registerer) *Metrics {
@@ -116,9 +84,13 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 		Name: "youtube_observation_publish_total",
 		Help: "YouTube observation publish outcomes.",
 	}, []string{"provider", "kind", "outcome"})
+	metrics.enqueue = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_collection_enqueue_total",
+		Help: "YouTube collection local queue enqueue results.",
+	}, []string{"result"})
 	registerer.MustRegister(
 		metrics.attempts, metrics.duration, metrics.lastSuccess, metrics.freshness,
-		metrics.completeness, metrics.leaseAcquire, metrics.leaseLost, metrics.publish,
+		metrics.completeness, metrics.leaseAcquire, metrics.leaseLost, metrics.publish, metrics.enqueue,
 	)
 	return metrics
 }
@@ -129,15 +101,6 @@ func (m *Metrics) ObserveAttempt(provider contract.Provider, kind, result string
 	}
 	m.attempts.WithLabelValues(string(provider), kind, boundedResult(result)).Inc()
 	m.duration.WithLabelValues(string(provider), kind).Observe(duration.Seconds())
-}
-
-func (m *Metrics) HasSuccess() bool {
-	if m == nil {
-		return false
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.lastSuccessAt) > 0
 }
 
 func (m *Metrics) ObserveSuccess(provider contract.Provider, kind string, now time.Time) {
@@ -192,6 +155,13 @@ func (m *Metrics) ObservePublish(provider contract.Provider, kind, outcome strin
 	m.publish.WithLabelValues(string(provider), kind, boundedOutcome(outcome)).Inc()
 }
 
+func (m *Metrics) ObserveEnqueue(result EnqueueResult) {
+	if m == nil {
+		return
+	}
+	m.enqueue.WithLabelValues(boundedEnqueue(string(result))).Inc()
+}
+
 func boundedResult(value string) string {
 	switch value {
 	case resultSuccess, resultTimeout, resultCanceled, resultParserDrift, resultPaginationGap, resultFailed, resultSuperseded:
@@ -225,5 +195,14 @@ func boundedOutcome(value string) string {
 		return value
 	default:
 		return outcomeRejected
+	}
+}
+
+func boundedEnqueue(value string) string {
+	switch EnqueueResult(value) {
+	case EnqueueAccepted, EnqueueDeduped, EnqueueFull, EnqueueCanceled, EnqueueInvalid:
+		return value
+	default:
+		return string(EnqueueInvalid)
 	}
 }

@@ -114,6 +114,58 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 	}
 }
 
+func TestNotifierClaimsLiveCatchupSeparatelyAndAcrossScheduleDrift(t *testing.T) {
+	t.Parallel()
+
+	cacheClient := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	notifier := &Notifier{dedupService: dedup.NewService(cacheClient, []int{5, 3, 1}, logger), logger: logger}
+
+	scheduled := time.Date(2026, time.August, 16, 15, 30, 0, 0, time.UTC)
+	actualStart := scheduled.Add(105 * time.Second)
+	preliveStream := &domain.Stream{
+		ID:             "stream-catchup",
+		Title:          "catchup identity",
+		ChannelID:      "channel-catchup",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &scheduled,
+	}
+	prelive := &sendInput{
+		notification:   domain.NewAlarmNotification("room-catchup", nil, preliveStream, 5, nil, ""),
+		streamID:       preliveStream.ID,
+		channelID:      preliveStream.ChannelID,
+		startScheduled: scheduled,
+	}
+
+	_, claimed, err := notifier.claimDedup(t.Context(), prelive)
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	catchupStream := *preliveStream
+	catchupStream.Status = domain.StreamStatusLive
+	catchupStream.StartActual = &actualStart
+	catchup := &sendInput{
+		notification:   domain.NewAlarmNotification("room-catchup", nil, &catchupStream, 5, nil, ""),
+		streamID:       catchupStream.ID,
+		channelID:      catchupStream.ChannelID,
+		startScheduled: scheduled,
+	}
+	claimKeys, claimed, err := notifier.claimDedup(t.Context(), catchup)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	require.Len(t, claimKeys, 2)
+	for _, key := range claimKeys {
+		assert.Contains(t, key, ":0:")
+		assert.Contains(t, key, ":live_catchup")
+	}
+
+	drifted := *catchup
+	drifted.startScheduled = scheduled.Add(time.Minute)
+	_, claimed, err = notifier.claimDedup(t.Context(), &drifted)
+	require.NoError(t, err)
+	assert.False(t, claimed)
+}
+
 func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	t.Parallel()
 

@@ -2,9 +2,27 @@ import { Utils } from "youtubei.js";
 
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
 import { isVideoLockup, lockupBadgeTexts, videoIDOf } from "./map-lockup.mjs";
+import { assertResponseBudget, encodedSize, paginationResult } from "./pagination.mjs";
+
+const responseReserveBytes = encodedSize({
+  protocol_version: 1,
+  live_sessions: [],
+  stats: {},
+  profile: {},
+  photo: [],
+  ...paginationResult({
+    pageCount: 1,
+    reason: "exhausted",
+    continuity: "NOT_APPLICABLE",
+  }),
+});
 
 /** @param {YouTubeJSFetchOptions} [options] */
-export async function fetchChannelFeed({ channelId, innertube } = {}) {
+export async function fetchChannelFeed({
+  channelId,
+  maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
+  innertube,
+} = {}) {
   const id = String(channelId ?? "").trim();
   if (id === "") {
     throw new Error("channel id is required");
@@ -12,6 +30,7 @@ export async function fetchChannelFeed({ channelId, innertube } = {}) {
   if (innertube == null || typeof innertube.getChannel !== "function") {
     throw new Error("innertube client is required");
   }
+  assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
   const channel = await innertube.getChannel(id);
   const about = typeof channel.getAbout === "function" ? await channel.getAbout() : {};
   let liveFeed = { videos: [] };
@@ -33,9 +52,11 @@ export async function fetchChannelFeed({ channelId, innertube } = {}) {
     stats: mapStats(channel, about),
     profile: mapProfile(channel, about),
     photo: mapPhoto(channel, about),
-    page_count: 1,
-    exhausted: true,
-    continuity: "CONTIGUOUS",
+    ...paginationResult({
+      pageCount: 1,
+      reason: "exhausted",
+      continuity: "NOT_APPLICABLE",
+    }),
     ...(missingTab ? { missing_tab: true } : {}),
   };
 }
@@ -45,7 +66,16 @@ function isMissingStreamsTab(err) {
 }
 
 export function mapLiveSessions(feed, channelId) {
-  const rows = Array.isArray(feed?.videos) ? feed.videos : Array.isArray(feed?.items) ? feed.items : [];
+  let rows;
+  if (Array.isArray(feed?.videos)) {
+    rows = feed.videos;
+  } else if (Array.isArray(feed?.items)) {
+    rows = feed.items;
+  } else {
+    const error = new Error("live page shape is not recognized");
+    error.code = "parser_drift";
+    throw error;
+  }
   const sessions = [];
   for (const row of rows) {
     const videoId = videoIDOf(row);

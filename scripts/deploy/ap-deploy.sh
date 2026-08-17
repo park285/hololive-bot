@@ -131,7 +131,7 @@ validate_preview "$preview_file"
 
 "$REPO_ROOT/scripts/deploy/check-ap-rsync-manifest.sh" "$FILES_FROM"
 
-"$REPO_ROOT/scripts/deploy/ap-iris-h3-trust-preflight.sh" "$AP_NAME"
+"$REPO_ROOT/scripts/deploy/ap-collector-preflight.sh" "$AP_NAME"
 
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "[DRY-RUN] No remote files or containers changed."

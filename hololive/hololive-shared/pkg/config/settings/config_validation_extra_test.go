@@ -247,3 +247,48 @@ func TestLoadAdminAPIRuntime_RequiresHolodexKey(t *testing.T) {
 		t.Fatalf("LoadAdminAPIRuntime() error = %v, want HOLODEX_API_KEY is required", err)
 	}
 }
+
+func TestLoadAdminAPIRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
+	setAdminAPIRuntimeEnv(t)
+	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "0")
+	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
+
+	cfg, err := LoadAdminAPIRuntime()
+	if err != nil {
+		t.Fatalf("LoadAdminAPIRuntime() error = %v, want success when collector env is invalid", err)
+	}
+	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
+		t.Fatalf("YouTubeCollector = %#v, want zero value unused by admin API loader", cfg.YouTubeCollector)
+	}
+}
+
+func TestLoadBotRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	setRequiredLoadEnv(t)
+	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "0")
+	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
+
+	cfg, err := LoadBotRuntime()
+	if err != nil {
+		t.Fatalf("LoadBotRuntime() error = %v, want success when collector env is invalid", err)
+	}
+	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
+		t.Fatalf("YouTubeCollector = %#v, want zero value unused by bot loader", cfg.YouTubeCollector)
+	}
+}
+
+func TestLoadAlarmWorkerRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
+	clearRuntimeRoleEnv(t)
+	setRequiredLoadEnv(t)
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "0")
+	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
+
+	cfg, err := LoadAlarmWorkerRuntime()
+	if err != nil {
+		t.Fatalf("LoadAlarmWorkerRuntime() error = %v, want success when collector env is invalid", err)
+	}
+	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
+		t.Fatalf("YouTubeCollector = %#v, want zero value unused by alarm-worker loader", cfg.YouTubeCollector)
+	}
+}

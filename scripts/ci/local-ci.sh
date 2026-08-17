@@ -280,6 +280,12 @@ check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "PGO default policy tests" ./scripts/ci/check-pgo-default_test.sh
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
+run_step "collector go-test-json parser tests" python3 ./scripts/ci/check-go-test-json_test.py
+run_step "collector hardening-contract parser tests" ./scripts/ci/check-youtube-collector-hardening-contract_test.sh
+run_step "collector hardening-contract gate" ./scripts/ci/check-youtube-collector-hardening-contract.sh
+run_step "collector production build entrypoint tests" ./scripts/build/build-youtube-collector-go_test.sh
+run_step "collector production sonic tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
+run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
 run_step "production Go workspace gate tests" ./scripts/ci/check-production-go-workspace_test.sh
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh

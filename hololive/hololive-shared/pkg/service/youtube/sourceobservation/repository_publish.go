@@ -67,8 +67,8 @@ func (v sqlPublishFenceVerifier) loadPublishFence(
 	if job.collectionJobKind != proof.CollectionJobKind {
 		return publishFenceJob{}, ErrCollectionFenceLost
 	}
-	definition, ok := v.jobs.Definition(job.collectionJobKind)
-	if !ok || definition.Class != jobClass || definition.FixedSubject != "" && definition.FixedSubject != job.jobSubject {
+	definition, ok := v.jobs.Definition(JobID{Provider: contract.Provider(job.provider), Kind: JobKind(job.collectionJobKind)})
+	if !ok || string(definition.Class()) != jobClass || leaseSubjectMismatch(definition, job.jobSubject) {
 		return publishFenceJob{}, ErrCollectionFenceLost
 	}
 	job.definition = definition
@@ -105,13 +105,13 @@ func (v sqlPublishFenceVerifier) collectPublishSubjects(
 
 func (v sqlPublishFenceVerifier) validatePublishObservation(job *publishFenceJob, observation *contract.Envelope, index int) error {
 	if job.provider != string(observation.Provider) ||
-		!v.jobs.Allows(job.collectionJobKind, observation.Provider, observation.ObservationKind) {
+		!v.jobs.Allows(JobID{Provider: observation.Provider, Kind: JobKind(job.collectionJobKind)}, observation.ObservationKind) {
 		return fmt.Errorf("verify collection job emission %d: %w", index, ErrTargetDisabled)
 	}
-	if job.definition.Membership == JobMembershipExactSubject && observation.SubjectKey != job.jobSubject {
+	if job.definition.Membership() == JobMembershipExactSubject && observation.SubjectKey != job.jobSubject {
 		return fmt.Errorf("verify collection job membership %d: %w", index, ErrTargetDisabled)
 	}
-	if job.definition.Membership != JobMembershipExactSubject && job.definition.Membership != JobMembershipCurrentProjection {
+	if job.definition.Membership() != JobMembershipExactSubject && job.definition.Membership() != JobMembershipCurrentProjection {
 		return fmt.Errorf("verify collection job membership %d: %w", index, ErrTargetDisabled)
 	}
 	return nil
@@ -134,51 +134,141 @@ func (v sqlPublishFenceVerifier) verifyTargetsEnabled(
 	return nil
 }
 
+type preparedPublishBatch struct {
+	input        PublishBatchInput
+	observations []byte
+	contracts    []byte
+}
+
+type leaseTerminalFunc func(
+	context.Context,
+	dbx.Tx,
+	*contract.LeaseProof,
+	PublishBatchResult,
+	bool,
+) error
+
 func (r *Repository) PublishBatch(
 	ctx context.Context,
 	input *PublishBatchInput,
 ) (PublishBatchResult, error) {
-	if input == nil {
-		return PublishBatchResult{}, fmt.Errorf("publish source observation batch: input is nil")
-	}
 	if err := r.validate(); err != nil {
 		return PublishBatchResult{}, err
 	}
-	if err := validatePublishBatch(input); err != nil {
-		return PublishBatchResult{}, fmt.Errorf("publish source observation batch: %w", err)
-	}
-	encoded, contracts, err := encodePublishBatch(input)
+	prepared, err := preparePublishBatch(input)
 	if err != nil {
 		return PublishBatchResult{}, err
 	}
+	return r.runPreparedPublish(ctx, &prepared, r.completePublishTerminal)
+}
+
+func (r *Repository) PublishBatchAndDefer(
+	ctx context.Context,
+	input *PublishBatchInput,
+	deferInput DeferCollectionInput,
+) (PublishBatchResult, error) {
+	if err := r.validate(); err != nil {
+		return PublishBatchResult{}, err
+	}
+	if err := deferInput.Validate(); err != nil {
+		return PublishBatchResult{}, fmt.Errorf("publish source observation batch: %w", err)
+	}
+	prepared, err := preparePublishBatch(input)
+	if err != nil {
+		return PublishBatchResult{}, err
+	}
+	return r.runPreparedPublish(ctx, &prepared, deferPublishTerminal(deferInput))
+}
+
+func (r *Repository) runPreparedPublish(
+	ctx context.Context,
+	prepared *preparedPublishBatch,
+	terminal leaseTerminalFunc,
+) (PublishBatchResult, error) {
 	return dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (PublishBatchResult, error) {
-		return r.publishBatchTx(ctx, tx, input, encoded, contracts)
+		return r.publishPreparedTx(ctx, tx, prepared, terminal)
 	})
 }
 
-func (r *Repository) publishBatchTx(
+func (r *Repository) publishPreparedTx(
 	ctx context.Context,
 	tx dbx.Tx,
-	input *PublishBatchInput,
-	encoded []byte,
-	contracts []byte,
+	prepared *preparedPublishBatch,
+	terminal leaseTerminalFunc,
 ) (PublishBatchResult, error) {
-	if err := r.fenceVerifier.Verify(ctx, tx, &input.Lease, input.Observations); err != nil {
-		return PublishBatchResult{}, fmt.Errorf("publish source observation batch: verify job fence: %w", err)
-	}
-	if err := verifyCurrentContracts(ctx, tx, contracts); err != nil {
+	if err := r.verifyPreparedPublish(ctx, tx, prepared); err != nil {
 		return PublishBatchResult{}, err
 	}
-	result, collision, err := publishObservationSet(ctx, tx, encoded, len(input.Observations))
+	result, collision, err := r.publishPreparedObservations(ctx, tx, prepared)
 	if err != nil {
 		return PublishBatchResult{}, err
 	}
-	errorCode := ""
-	if collision {
-		errorCode = "observation_collision"
+	if err := terminal(ctx, tx, &prepared.input.Lease, result, collision); err != nil {
+		return PublishBatchResult{}, err
 	}
-	if err := completeCollectionJob(ctx, tx, &input.Lease, errorCode); err != nil {
+	if err := r.applyPublishFault(ctx, tx, faultBeforeCommit); err != nil {
 		return PublishBatchResult{}, err
 	}
 	return result, nil
+}
+
+func (r *Repository) verifyPreparedPublish(
+	ctx context.Context,
+	tx dbx.Tx,
+	prepared *preparedPublishBatch,
+) error {
+	if err := r.fenceVerifier.Verify(
+		ctx,
+		tx,
+		&prepared.input.Lease,
+		prepared.input.Observations,
+	); err != nil {
+		return fmt.Errorf("publish source observation batch: verify fence: %w", err)
+	}
+	if err := r.applyPublishFault(ctx, tx, faultAfterFenceVerify); err != nil {
+		return err
+	}
+	if err := verifyCurrentContracts(ctx, tx, prepared.contracts); err != nil {
+		return err
+	}
+	if err := r.applyPublishFault(ctx, tx, faultAfterContractCheck); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Repository) publishPreparedObservations(
+	ctx context.Context,
+	tx dbx.Tx,
+	prepared *preparedPublishBatch,
+) (PublishBatchResult, bool, error) {
+	result, collision, err := publishObservationSet(
+		ctx,
+		tx,
+		prepared.observations,
+		len(prepared.input.Observations),
+	)
+	if err != nil {
+		return PublishBatchResult{}, false, err
+	}
+	if r.rewritePublishResult != nil {
+		result = r.rewritePublishResult(result)
+	}
+	if err := r.applyPublishFault(ctx, tx, faultAfterObservationSet); err != nil {
+		return PublishBatchResult{}, false, err
+	}
+	if err := ValidatePublishBatchResult(len(prepared.input.Observations), result); err != nil {
+		return PublishBatchResult{}, false, err
+	}
+	if err := r.applyPublishFault(ctx, tx, faultBeforeTerminal); err != nil {
+		return PublishBatchResult{}, false, err
+	}
+	return result, collision, nil
+}
+
+func (r *Repository) applyPublishFault(ctx context.Context, tx dbx.Tx, point publishFaultPoint) error {
+	if r == nil || r.publishFault == nil {
+		return nil
+	}
+	return r.publishFault(ctx, tx, point)
 }

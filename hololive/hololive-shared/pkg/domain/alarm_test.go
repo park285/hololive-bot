@@ -22,6 +22,7 @@ package domain_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	json "github.com/park285/shared-go/pkg/json"
@@ -232,6 +233,57 @@ func TestNewAlarmNotification_UsesExplicitLiveDispatchRoute(t *testing.T) {
 	}
 	if err := notification.ValidateLiveDispatchRoute(); err != nil {
 		t.Fatalf("ValidateLiveDispatchRoute() error = %v", err)
+	}
+}
+
+func TestAlarmNotificationStartingPhase(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, time.August, 17, 0, 31, 45, 0, time.UTC)
+	tests := map[string]struct {
+		notification *domain.AlarmNotification
+		wantStarting bool
+		wantCatchup  bool
+	}{
+		"nil": {},
+		"zero minute starts without stream state": {
+			notification: &domain.AlarmNotification{MinutesUntil: 0},
+			wantStarting: true,
+		},
+		"positive minute upcoming stays prelive": {
+			notification: &domain.AlarmNotification{
+				MinutesUntil: 5,
+				Stream:       &domain.Stream{Status: domain.StreamStatusUpcoming},
+			},
+		},
+		"positive minute live is catchup": {
+			notification: &domain.AlarmNotification{
+				MinutesUntil: 5,
+				Stream:       &domain.Stream{Status: domain.StreamStatusLive},
+			},
+			wantStarting: true,
+			wantCatchup:  true,
+		},
+		"positive minute actual start is catchup": {
+			notification: &domain.AlarmNotification{
+				MinutesUntil: 5,
+				Stream:       &domain.Stream{Status: domain.StreamStatusUpcoming, StartActual: &startedAt},
+			},
+			wantStarting: true,
+			wantCatchup:  true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.notification.IsStarting(); got != tc.wantStarting {
+				t.Fatalf("IsStarting() = %t, want %t", got, tc.wantStarting)
+			}
+			if got := tc.notification.IsLiveCatchup(); got != tc.wantCatchup {
+				t.Fatalf("IsLiveCatchup() = %t, want %t", got, tc.wantCatchup)
+			}
+		})
 	}
 }
 

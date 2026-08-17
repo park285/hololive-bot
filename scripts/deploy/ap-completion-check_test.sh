@@ -92,7 +92,7 @@ case "${1:-}" in
     done
     if [[ "${1:-}" == */bin/healthcheck ]]; then
       if [[ " $* " == *" --body "* ]]; then
-        printf '{"status":"ready","helper":"ok","first_success":%s,"handoff_status":"%s","due_jobs":0,"pending_queue":0,"version":"test"}\n' \
+        printf '{"status":"ready","helper":"ok","first_success":%s,"handoff_status":"%s","handoff_processed":true,"due_jobs":0,"pending_queue":0,"version":"test"}\n' \
           "${MOCK_FIRST_SUCCESS:-true}" "${MOCK_HANDOFF_STATUS:-PROCESSED}"
       fi
       exit 0
@@ -116,7 +116,7 @@ if [[ "${1:-}" == "show" ]]; then
   prop=""
   for arg in "$@"; do
     case "$arg" in
-      ActiveState|SubState|NRestarts|ActiveEnterTimestamp) prop="$arg" ;;
+      ActiveState|SubState|NRestarts|ActiveEnterTimestamp|EnvironmentFiles) prop="$arg" ;;
     esac
   done
   case "$prop" in
@@ -124,6 +124,7 @@ if [[ "${1:-}" == "show" ]]; then
     SubState) echo running ;;
     NRestarts) echo 0 ;;
     ActiveEnterTimestamp) echo "Tue 2026-06-30 08:14:12 UTC" ;;
+    EnvironmentFiles) echo "${MOCK_ENVIRONMENT_FILES:-/etc/stack-secrets/hololive-bot/youtube-collector.env /etc/hololive-bot/youtube-collector-host.env}" ;;
     *) exit 1 ;;
   esac
   exit 0
@@ -168,8 +169,15 @@ if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
   fail "native completion check must reject an incomplete API handoff"
 fi
+if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
+  MOCK_ENVIRONMENT_FILES='/etc/stack-secrets/hololive-bot/ap-compose.env /etc/stack-secrets/hololive-bot/youtube-collector.env /etc/hololive-bot/youtube-collector-host.env' \
+  CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
+  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
+  fail "native completion check must reject a unit that still loads ap-compose.env"
+fi
+pass "native completion check rejects shared Compose env exposure"
 
-ready_payload='{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","pending_queue":0}'
+ready_payload='{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","handoff_processed":true,"pending_queue":0}'
 readiness_attempts="$tmp/readiness-attempts"
 readiness_probe() {
   local attempt=0
@@ -196,6 +204,7 @@ invalid_readiness_payloads=(
   '{"status":"ready" "helper":"ok","first_success":true,"handoff_status":"PROCESSED","pending_queue":0}'
   '{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED"}'
   '{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","pending_queue":}'
+  '{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","pending_queue":0}'
 )
 for invalid_payload in "${invalid_readiness_payloads[@]}"; do
   if collector_readiness_validate "$invalid_payload"; then
@@ -203,5 +212,19 @@ for invalid_payload in "${invalid_readiness_payloads[@]}"; do
   fi
 done
 pass "collector readiness validator rejects malformed and missing required fields"
+
+COMPLETION="${ROOT_DIR}/scripts/deploy/ap-completion-check.sh"
+native_completion="$(awk '/^run_native_completion_check\(\) \{/,/^}$/' "${COMPLETION}")"
+if grep -Fq '/etc/stack-secrets/hololive-bot/ap-compose.env' <<<"${native_completion}"; then
+  fail "native completion check must not require the shared AP Compose env"
+fi
+grep -Fq '/etc/stack-secrets/hololive-bot/youtube-collector.env' <<<"${native_completion}" ||
+  fail "native completion check must retain the collector-scoped secret env prerequisite"
+pass "native completion check excludes ap-compose.env and preserves collector-scoped env"
+
+if grep -Eq 'SETTINGS_DIR=|/var/lib/hololive-bot/youtube-collector/settings' "${COMPLETION}"; then
+  fail "ap-completion-check must not require unused collector SETTINGS_DIR"
+fi
+pass "ap-completion-check does not require unused collector SETTINGS_DIR"
 
 pass "ap-completion-check supports host-native APs"

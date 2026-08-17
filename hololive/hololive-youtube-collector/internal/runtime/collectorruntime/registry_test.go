@@ -2,9 +2,12 @@ package collectorruntime
 
 import (
 	"context"
+	"math"
 	"testing"
+	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 )
 
@@ -19,11 +22,11 @@ func TestNewRegistryRejectsDuplicateJob(t *testing.T) {
 	}
 }
 
-func TestNewRegistryRejectsEmissionMismatch(t *testing.T) {
+func TestNewRegistryRejectsUnknownJob(t *testing.T) {
 	t.Parallel()
-	_, err := NewRegistry(stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindVideoList))
+	_, err := NewRegistry(stubJob(contract.ProviderYouTubeJS, "unknown_job", contract.KindVideoList))
 	if err == nil {
-		t.Fatal("emission mismatch must fail closed")
+		t.Fatal("unknown job must fail closed")
 	}
 }
 
@@ -46,6 +49,30 @@ func TestNewRegistryAcceptsCompleteAdapterSet(t *testing.T) {
 	}
 }
 
+func TestExecutionProfileMinimumIncludesReservations(t *testing.T) {
+	t.Parallel()
+	profile, err := NewExecutionProfile(2, 3*time.Second, time.Second, 4, 2*time.Second, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := profile.MinimumCollectTimeout(), 15*time.Second; got != want {
+		t.Fatalf("minimum collect timeout = %s, want %s", got, want)
+	}
+	if profile.CollectTimeout() != profile.MinimumCollectTimeout() {
+		t.Fatal("zero configured timeout did not select exact minimum")
+	}
+}
+
+func TestExecutionProfileRejectsDurationOverflowAndUndersizedTimeout(t *testing.T) {
+	t.Parallel()
+	if _, err := NewExecutionProfile(math.MaxInt, time.Duration(math.MaxInt64), 0, 2, time.Second, 0); err == nil {
+		t.Fatal("overflowing execution profile was accepted")
+	}
+	if _, err := NewExecutionProfile(2, time.Second, time.Second, 2, time.Second, 2*time.Second); err == nil {
+		t.Fatal("undersized collect timeout was accepted")
+	}
+}
+
 func completeStubRunners() []JobRunner {
 	return []JobRunner{
 		stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage),
@@ -62,25 +89,21 @@ func completeStubRunners() []JobRunner {
 }
 
 type stubRunner struct {
-	provider  contract.Provider
-	jobKind   string
-	emissions []contract.ObservationKind
-	collect   func(context.Context, *collectutil.RunInput) (collectutil.RunOutput, error)
+	provider contract.Provider
+	jobKind  string
+	collect  func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error)
 }
 
-func stubJob(provider contract.Provider, jobKind string, kinds ...contract.ObservationKind) *stubRunner {
-	return &stubRunner{provider: provider, jobKind: jobKind, emissions: kinds}
+func stubJob(provider contract.Provider, jobKind string, _ ...contract.ObservationKind) *stubRunner {
+	return &stubRunner{provider: provider, jobKind: jobKind}
 }
 
-func (s *stubRunner) Provider() contract.Provider           { return s.provider }
-func (s *stubRunner) JobKind() string                       { return s.jobKind }
-func (s *stubRunner) Emissions() []contract.ObservationKind { return s.emissions }
-func (s *stubRunner) TargetKinds() []contract.ObservationKind {
-	return s.emissions
+func (s *stubRunner) JobID() sourceobservation.JobID {
+	return sourceobservation.JobID{Provider: s.provider, Kind: sourceobservation.JobKind(s.jobKind)}
 }
-func (s *stubRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
+func (s *stubRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	if s.collect != nil {
 		return s.collect(ctx, input)
 	}
-	return collectutil.RunOutput{}, nil
+	return collectutil.NewCompleteResult(collectutil.RunOutput{})
 }

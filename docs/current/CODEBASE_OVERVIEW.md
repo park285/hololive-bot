@@ -22,7 +22,7 @@
 └── deploy/compose/                 # Docker Compose baselines and overlays
     ├── docker-compose.prod.yml     # production compose baseline
     ├── docker-compose.seoul.yml    # Seoul split-host AP (youtube-collector-b)
-    └── docker-compose.main-ap.yml  # main-host active-active AP (youtube-collector-c, profile main-ap)
+    └── docker-compose.main-ap.yml  # main-host AP overlay reserved for collector-c live-compat; service remains youtube-collector
 ```
 
 `go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.26.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
@@ -96,8 +96,10 @@ The `hololive-api` llm plane owns major event and member-news scheduling. Other 
 runtime services
   -> shared config loader
   -> PostgreSQL and Valkey
-  -> settings Pub/Sub / alarm queues / runtime cache / YouTube poll coordination
+  -> settings Pub/Sub / alarm queues / runtime cache
 ```
+
+`youtube-collector` scheduling uses PostgreSQL leases. It does not join this Valkey Pub/Sub or cache path.
 
 Queue and Pub/Sub behavior should be checked against `QUEUE_AND_PUBSUB_CONTRACTS.md` and `CONTRACT_MAP.md` before changing producers or consumers.
 
@@ -107,7 +109,7 @@ The production baseline is Docker Compose, not Kubernetes. The main files are:
 
 - `deploy/compose/docker-compose.prod.yml`: production service shape;
 - `deploy/compose/docker-compose.seoul.yml`: Seoul split-host active-active AP (`youtube-collector-b`);
-- `deploy/compose/docker-compose.main-ap.yml`: main-host active-active AP (`youtube-collector-c`, profile `main-ap`);
+- `deploy/compose/docker-compose.main-ap.yml`: main-host AP overlay reserved for collector-c live-compat; Compose service remains `youtube-collector`;
 - `scripts/deploy/`: deployment and compose validation helpers;
 - `scripts/logs/`: status and smoke-check helpers;
 - `docs/current/runbooks/`: current service runbooks (`youtube-collector.md` is the YouTube collect runtime);
@@ -117,7 +119,7 @@ Live deploy, restart, rollback, secret writes, and production config mutation re
 
 ## YouTube Collector Fleet Notes
 
-`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (Compose, 30015), central unsuffixed `youtube-collector` (`c`, 30025), Osaka2 `d` (host-native, 30035). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS) and optional Valkey contention optimization. The important invariants are:
+`youtube-collector` is the four-member AP fleet: Osaka `a` (host-native, 30005), Seoul `b` (Compose, 30015), central unsuffixed `youtube-collector` (`c`, 30025), Osaka2 `d` (host-native, 30035). There is no extra central singleton beyond fleet member `c`. All four members share PostgreSQL collection leases (`hololive_scraper`, `verify-full` TLS). The important invariants are:
 
 - collector owns fetch/normalize/lease/checkpoint/`source_observations` Publish only;
 - `hololive-api` YouTube plane owns claim/finalize, canonical persist, notification intent, live-end finalizer, and retention/replay;

@@ -26,19 +26,19 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 	defer cancel()
 	helper, rpc, err := Start(ctx, &Config{
 		NodePath: nodePath, ScriptPath: scriptPath,
-		SocketPath: filepath.Join(t.TempDir(), "youtubejs.sock"), Timeout: 45 * time.Second,
+		RuntimeBaseDir: t.TempDir(), RequestTimeout: 45 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := helper.Close(); err != nil {
+		if err := helper.Close(context.Background()); err != nil {
 			t.Errorf("close helper: %v", err)
 		}
 	})
 
 	channel, err := rpc.FetchChannel(ctx, ChannelRequest{
-		ChannelID: channelID, MaxPages: 1, MaxAggregateBytes: 1 << 20,
+		ChannelID: channelID, MaxPages: 1, MaxSuccessResponseBytes: 1 << 20,
 	})
 	if err != nil {
 		t.Fatalf("fetch real channel: %v", err)
@@ -48,7 +48,7 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 	}
 
 	content, err := rpc.FetchContent(ctx, ContentRequest{
-		ChannelID: channelID, Kind: "videos", MaxResults: 3, MaxPages: 1, MaxAggregateBytes: 1 << 20,
+		ChannelID: channelID, Kind: "videos", MaxResults: 3, MaxPages: 1, MaxSuccessResponseBytes: 1 << 20,
 	})
 	if err != nil {
 		t.Fatalf("fetch real content: %v", err)
@@ -60,7 +60,7 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 		t.Fatal("real channel returned no video items")
 	}
 	viewer, err := rpc.FetchViewer(ctx, ViewerRequest{
-		VideoID: content.Items[0].VideoID, MaxAggregateBytes: 1 << 20,
+		VideoID: content.Items[0].VideoID, MaxSuccessResponseBytes: 1 << 20,
 	})
 	if err != nil {
 		t.Fatalf("fetch real viewer: %v", err)

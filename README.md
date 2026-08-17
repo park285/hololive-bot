@@ -20,7 +20,7 @@
 |---|---|---|---:|---|
 | hololive-api | hololive-api | hololive-api | 30001/30003/30006 | bot/admin/llm plane 통합 런타임: Kakao/Iris 웹훅 라우팅·챗 명령어 파싱(bot), 관리자 API 컨트롤 플레인(admin), 이벤트/뉴스 정규화 및 LLM 스케줄러(llm) |
 | alarm-worker | hololive-alarm-worker | hololive-alarm-worker | 30007 | 방송 정보 주기적 분석, 발송 대기열 소비 및 Iris outbound 호출 |
-| youtube-collector | hololive-youtube-collector | youtube-collector | 30005/15/25/35 | 유튜브 수집 AP fleet: fetch/normalize/lease/Publish |
+| youtube-collector | hololive-youtube-collector | youtube-collector | 30005/15/25/35 | 유튜브 수집 AP fleet: fetch/normalize/lease/Publish. PostgreSQL만 소비하며 Valkey를 요구하지 않습니다. |
 
 ### 공유 라이브러리 (Shared Libraries)
 

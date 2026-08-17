@@ -37,25 +37,6 @@ func NewRepository(pool *pgxpool.Pool, config *Config) (*Repository, error) {
 	return &Repository{pool: pool, config: *config, contracts: sourceobservation.InitialJobContracts()}, nil
 }
 
-func (r *Repository) Candidates(ctx context.Context, provider contract.Provider, jobKind string, limit int) ([]JobSpec, error) {
-	definition, kinds, err := r.candidateDefinition(provider, jobKind, limit)
-	if err != nil {
-		return nil, err
-	}
-	generation, err := r.currentProjectionGeneration(ctx)
-	if err != nil {
-		return nil, err
-	}
-	kindValues := make([]string, len(kinds))
-	for i := range kinds {
-		kindValues[i] = string(kinds[i])
-	}
-	if definition.Class == "GLOBAL" {
-		return r.globalCandidate(ctx, provider, jobKind, generation, kindValues, definition)
-	}
-	return r.scanTargetCandidates(ctx, provider, jobKind, generation, kindValues, definition.Class, limit)
-}
-
 func (r *Repository) Acquire(ctx context.Context, spec *JobSpec, owner string) (*JobLease, error) {
 	if r == nil || r.pool == nil || r.contracts == nil {
 		return nil, fmt.Errorf("acquire collection job lease: repository is not configured")
@@ -77,7 +58,7 @@ func (r *Repository) Acquire(ctx context.Context, spec *JobSpec, owner string) (
 	if err != nil {
 		return nil, err
 	}
-	return &JobLease{repository: r, spec: *spec, proof: proof}, nil
+	return &JobLease{repository: r, spec: *spec, contract: definition.Clone(), proof: proof}, nil
 }
 
 func (r *Repository) acquireTx(
@@ -128,7 +109,7 @@ func (r *Repository) verifyAcquireTargets(
 	var targetCount int
 	var minIntervalMS int64
 	var maxIntervalMS int64
-	exact := definition.Membership == sourceobservation.JobMembershipExactSubject
+	exact := definition.Membership() == sourceobservation.JobMembershipExactSubject
 	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_target_bundle_0144_04.sql"),
@@ -207,6 +188,7 @@ func acquireLeaseProof(
 type JobLease struct {
 	repository *Repository
 	spec       JobSpec
+	contract   sourceobservation.JobContract
 	proof      contract.LeaseProof
 }
 
@@ -240,46 +222,82 @@ func (l *JobLease) Complete(ctx context.Context) error {
 func (l *JobLease) Defer(ctx context.Context, retryAt time.Time, code, class, detail string) error {
 	code = strings.TrimSpace(code)
 	class = strings.TrimSpace(class)
-	if retryAt.IsZero() || code == "" || len(code) > 128 || invalidDiagnosticClass(class) || len(detail) > collecterr.MaxDetailBytes || !utf8.ValidString(detail) {
+	if retryAt.IsZero() || !validDeferFailureTuple(code, class) || invalidDeferDetail(detail) {
 		return fmt.Errorf("defer collection job lease: %w", ErrInvalidJob)
 	}
 	detail = collecterr.SanitizeDetail(detail)
+	if strings.TrimSpace(detail) == "" {
+		detail = code
+	}
 	return l.finish(ctx, code, retryAt.UTC(), class, detail, "defer")
 }
 
-func invalidDiagnosticClass(value string) bool {
-	if value == "" || len(value) > 64 {
-		return true
-	}
-	for index := range len(value) {
-		if !validDiagnosticClassByte(value[index], index == 0) {
-			return true
-		}
-	}
-	return false
+func validDeferFailureTuple(code, class string) bool {
+	typed := contract.CollectionErrorCode(code)
+	return contract.ValidDurableFailureTuple(typed, contract.FailureClass(class)) && typed.Deferable()
 }
 
-func validDiagnosticClassByte(value byte, first bool) bool {
-	letter := value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z'
-	if first {
-		return letter
-	}
-	return letter || value >= '0' && value <= '9' || value == '_'
+func invalidDeferDetail(detail string) bool {
+	return len(detail) > collecterr.MaxDetailBytes || !utf8.ValidString(detail) || strings.IndexByte(detail, 0) >= 0
 }
 
-func (l *JobLease) Release(ctx context.Context) error {
+func (l *JobLease) Release(ctx context.Context, reason ReleaseReason) error {
+	if !reason.Valid() {
+		return fmt.Errorf("release collection job lease: %w", ErrInvalidJob)
+	}
 	if l == nil || l.repository == nil {
 		return fmt.Errorf("release collection job lease: %w", ErrFenceLost)
 	}
 	delay := deterministicJitter(&l.proof, l.repository.config.MinReleaseJitter, l.repository.config.MaxReleaseJitter)
+	if reason == ReleaseSuperseded {
+		delay = 0
+	}
+	return dbx.InPgxTx(ctx, l.repository.pool, func(tx dbx.Tx) error {
+		return releaseLeaseTx(ctx, tx, &l.proof, reason, delay)
+	})
+}
+
+func releaseLeaseTx(
+	ctx context.Context,
+	tx dbx.Tx,
+	proof *contract.LeaseProof,
+	reason ReleaseReason,
+	delay time.Duration,
+) error {
+	var failureCode, failureClass, failureDetail *string
+	var failureAt *time.Time
+	err := tx.QueryRow(
+		ctx,
+		mustSQL("repository_lease_failure_lock_0144_14.sql"),
+		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
+	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrFenceLost
+	}
+	if err != nil {
+		return fmt.Errorf("release collection job lease: lock job row: %w", err)
+	}
 	var jobKey string
-	err := l.repository.pool.QueryRow(ctx, mustSQL("repository_lease_release_0144_10.sql"), l.proof.JobKey, l.proof.OwnerInstance, l.proof.FenceEpoch,
-		l.proof.ProjectionGeneration, l.proof.ScheduledFor, delay.Milliseconds()).Scan(&jobKey)
+	err = tx.QueryRow(
+		ctx,
+		mustSQL("repository_lease_release_0144_10.sql"),
+		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
+		delay.Milliseconds(), string(reason.ErrorCode()),
+	).Scan(&jobKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrFenceLost
 	}
 	if err != nil {
 		return fmt.Errorf("release collection job lease: %w", err)
+	}
+	// 177 trigger가 renew DEFERRED를 legacy_collector로 덮어쓰므로 잠근 사전 값을 되돌린다.
+	err = tx.QueryRow(ctx, mustSQL("repository_lease_release_restore_0144_13.sql"),
+		jobKey, failureCode, failureClass, failureDetail, failureAt).Scan(&jobKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrFenceLost
+	}
+	if err != nil {
+		return fmt.Errorf("release collection job lease: restore failure history: %w", err)
 	}
 	return nil
 }
@@ -319,14 +337,4 @@ func deterministicJitter(proof *contract.LeaseProof, minimum, maximum time.Durat
 	offset := new(big.Int).SetUint64(hash.Sum64())
 	offset.Mod(offset, span)
 	return minimum + time.Duration(offset.Int64())
-}
-
-func emissionKinds(definition sourceobservation.JobContract, provider contract.Provider) []contract.ObservationKind {
-	kinds := make([]contract.ObservationKind, 0, len(definition.Emissions))
-	for _, emission := range definition.Emissions {
-		if emission.Provider == provider {
-			kinds = append(kinds, emission.Kind)
-		}
-	}
-	return kinds
 }

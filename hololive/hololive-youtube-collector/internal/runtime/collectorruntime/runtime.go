@@ -2,12 +2,11 @@ package collectorruntime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -27,7 +26,7 @@ const (
 )
 
 type Runtime struct {
-	Config          *settings.Config
+	Config          *settings.YouTubeCollectorRuntimeConfig
 	Logger          *slog.Logger
 	Scheduler       *leaseScheduler
 	servers         *sharedserver.RuntimeHTTPServers
@@ -37,17 +36,17 @@ type Runtime struct {
 	cleanupReported bool
 }
 
-func Build(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*Runtime, error) {
+func Build(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfig, logger *slog.Logger) (*Runtime, error) {
 	if appConfig == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
 	if logger == nil {
 		return nil, fmt.Errorf("logger must not be nil")
 	}
-	if !runtimeAllowed() {
+	if !appConfig.RuntimeOwnership.RuntimeAllowed {
 		return nil, fmt.Errorf("youtube collector runtime disabled: set %s=true on the owning host", runtimeAllowedEnv)
 	}
-	if !appConfig.Ingestion.YouTubeEnabled {
+	if !appConfig.RuntimeOwnership.YouTubeIngestionEnabled {
 		return nil, fmt.Errorf("youtube collector requires YOUTUBE_INGESTION_ENABLED=true")
 	}
 
@@ -58,19 +57,14 @@ func Build(ctx context.Context, appConfig *settings.Config, logger *slog.Logger)
 
 	runtime, err := assembleRuntime(ctx, appConfig, logger, infra)
 	if err != nil {
-		return nil, errors.Join(err, infra.Close())
+		return nil, errors.Join(err, infra.Close(ctx))
 	}
 	return runtime, nil
 }
 
-func runtimeAllowed() bool {
-	allowed, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(runtimeAllowedEnv)))
-	return err == nil && allowed
-}
-
 func assembleRuntime(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *settings.YouTubeCollectorRuntimeConfig,
 	logger *slog.Logger,
 	infra *collectorInfrastructure,
 ) (*Runtime, error) {
@@ -106,9 +100,31 @@ func assembleRuntime(
 }
 
 type collectorReadiness struct {
-	appConfig *settings.Config
+	appConfig *settings.YouTubeCollectorRuntimeConfig
 	infra     *collectorInfrastructure
 	scheduler *leaseScheduler
+}
+
+type readinessResponse struct {
+	Status                string         `json:"status"`
+	Runtime               string         `json:"runtime"`
+	InstanceID            string         `json:"instance_id"`
+	State                 ReadinessState `json:"state"`
+	Dependency            string         `json:"dependency,omitempty"`
+	Helper                string         `json:"helper"`
+	HelperProtocolVersion int            `json:"helper_protocol_version"`
+	FirstSuccess          bool           `json:"first_success"`
+	HandoffStatus         HandoffState   `json:"handoff_status"`
+	HandoffProcessed      bool           `json:"handoff_processed"`
+	HandoffCandidates     int            `json:"handoff_candidates"`
+	PendingQueue          *int           `json:"pending_queue"`
+	PendingQueueCapped    bool           `json:"pending_queue_capped"`
+	DueJobs               int            `json:"due_jobs"`
+	DueJobsExact          bool           `json:"due_jobs_exact"`
+	QueueDepth            int            `json:"queue_depth"`
+	QueueCapacity         int            `json:"queue_capacity"`
+	QueueFull             bool           `json:"queue_full"`
+	DiscoveryTruncated    bool           `json:"discovery_truncated"`
 }
 
 func (r *collectorReadiness) configure(opts *sharedserver.RuntimeRouterOptions) {
@@ -117,135 +133,52 @@ func (r *collectorReadiness) configure(opts *sharedserver.RuntimeRouterOptions) 
 }
 
 func (r *collectorReadiness) respond(c *gin.Context) {
-	writeCollectorReady(c, collectorInstanceID(r.appConfig), r.infra, r.scheduler)
+	cfg := settings.YouTubeCollectorConfig{}
+	if r.appConfig != nil {
+		cfg = r.appConfig.Collector.OrDefault()
+	}
+	probeCtx, cancel := context.WithTimeout(c.Request.Context(), cfg.ReadinessTimeout)
+	defer cancel()
+	deps := r.deps(&cfg)
+	body := evaluateReadiness(probeCtx, &deps)
+	payload, err := json.Marshal(body)
+	if err != nil {
+		fallback := readinessResponse{Runtime: runtimeName, Helper: helperNotReady}
+		fallback = notReady(&fallback, ReadyDegraded, "scheduler")
+		c.Status(readinessHTTPStatus(&fallback))
+		return
+	}
+	c.Data(readinessHTTPStatus(&body), gin.MIMEJSON, payload)
 }
 
-func collectorInstanceID(appConfig *settings.Config) string {
+func (r *collectorReadiness) deps(cfg *settings.YouTubeCollectorConfig) readinessDeps {
+	var helper helperHealth
+	if r != nil && r.infra != nil && r.infra.youtubejs != nil {
+		helper = r.infra.youtubejs
+	}
+	var sched schedulerView
+	var tracker *readinessTracker
+	if r != nil && r.scheduler != nil {
+		sched = r.scheduler
+		tracker = r.scheduler.readiness
+	}
+	return readinessDeps{
+		instanceID:    collectorInstanceID(r.appConfig),
+		helperTimeout: cfg.HelperHealthTimeout,
+		dbTimeout:     cfg.DBTimeout,
+		pendingCap:    pendingQueueCap,
+		scheduler:     sched,
+		helper:        helper,
+		store:         queueStoreFrom(r.infra),
+		tracker:       tracker,
+	}
+}
+
+func collectorInstanceID(appConfig *settings.YouTubeCollectorRuntimeConfig) string {
 	if appConfig == nil {
-		return runtimeName
+		return ""
 	}
-	if id := strings.TrimSpace(appConfig.YouTubeCollector.InstanceID); id != "" {
-		return id
-	}
-	return runtimeName
-}
-
-func writeCollectorReady(c *gin.Context, instanceID string, infra *collectorInfrastructure, sched *leaseScheduler) {
-	if infra.youtubejs == nil || infra.youtubejs.Exited() || !infra.youtubejs.Healthy(c.Request.Context()) {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "runtime": runtimeName, "instance_id": instanceID, "dependency": "youtubejs"})
-		return
-	}
-	snap := collectionReadySnapshot(c.Request.Context(), infra, sched)
-	if dependency := snap.dependency(); dependency != "" {
-		c.JSON(http.StatusServiceUnavailable, snap.payload(instanceID, dependency))
-		return
-	}
-	c.JSON(http.StatusOK, snap.payload(instanceID, ""))
-}
-
-type collectionReady struct {
-	firstSuccess    bool
-	handoffComplete bool
-	handoffStatus   string
-	dueJobs         int
-	pendingQueue    int
-	pendingQueueOK  bool
-}
-
-func (s collectionReady) dependency() string {
-	if !s.pendingQueueOK {
-		return "postgres_queue"
-	}
-	if !s.firstSuccess {
-		return "first_success"
-	}
-	if !s.handoffComplete {
-		return "observation_handoff"
-	}
-	return ""
-}
-
-func collectionReadySnapshot(ctx context.Context, infra *collectorInfrastructure, sched *leaseScheduler) collectionReady {
-	pending, err := pendingObservationCount(ctx, infra)
-	snap := collectionReady{pendingQueue: pending, pendingQueueOK: err == nil}
-	if sched == nil {
-		return snap
-	}
-	snap.firstSuccess, snap.handoffComplete, snap.handoffStatus, err = collectionHandoffSnapshot(ctx, infra, sched.metrics)
-	if err != nil {
-		snap.pendingQueueOK = false
-	}
-	snap.dueJobs = sched.DueJobs()
-	return snap
-}
-
-func collectionHandoffSnapshot(
-	ctx context.Context,
-	infra *collectorInfrastructure,
-	metrics *Metrics,
-) (hasFirstSuccess, handoffComplete bool, handoffStatus string, handoffErr error) {
-	if metrics == nil {
-		return false, false, "", nil
-	}
-	firstSuccess := metrics.HasSuccess()
-	observationID, complete, ok := metrics.PublishedHandoff()
-	if complete {
-		return firstSuccess, true, "PROCESSED", nil
-	}
-	if !ok {
-		return firstSuccess, false, "", nil
-	}
-	status, err := observationHandoffStatus(ctx, infra, observationID)
-	if err != nil {
-		return firstSuccess, false, "", err
-	}
-	complete = status == "PROCESSED"
-	if complete {
-		metrics.ObserveHandoffComplete(observationID)
-	}
-	return firstSuccess, complete, status, nil
-}
-
-func (s collectionReady) payload(instanceID, dependency string) gin.H {
-	body := gin.H{
-		"runtime": runtimeName, "instance_id": instanceID, "helper": "ok",
-		"first_success": s.firstSuccess, "handoff_status": s.handoffStatus, "due_jobs": s.dueJobs,
-	}
-	if s.pendingQueueOK {
-		body["pending_queue"] = s.pendingQueue
-	} else {
-		body["pending_queue"] = nil
-	}
-	if dependency != "" {
-		body["status"] = "not_ready"
-		body["dependency"] = dependency
-		return body
-	}
-	body["status"] = "ready"
-	return body
-}
-
-func observationHandoffStatus(ctx context.Context, infra *collectorInfrastructure, observationID int64) (string, error) {
-	if infra == nil || infra.postgres == nil || infra.postgres.GetPool() == nil || observationID <= 0 {
-		return "", fmt.Errorf("load observation handoff status: request is invalid")
-	}
-	var status string
-	if err := infra.postgres.GetPool().QueryRow(ctx, mustSQL("observation_handoff_status.sql"), observationID).Scan(&status); err != nil {
-		return "", fmt.Errorf("load observation handoff status: %w", err)
-	}
-	return status, nil
-}
-
-func pendingObservationCount(ctx context.Context, infra *collectorInfrastructure) (int, error) {
-	if infra == nil || infra.postgres == nil || infra.postgres.GetPool() == nil {
-		return 0, nil
-	}
-	var pending int
-	err := infra.postgres.GetPool().QueryRow(ctx, mustSQL("pending_observation_count.sql")).Scan(&pending)
-	if err != nil {
-		return 0, fmt.Errorf("count pending source observations: %w", err)
-	}
-	return pending, nil
+	return strings.TrimSpace(appConfig.Collector.InstanceID)
 }
 
 func (r *Runtime) Run() error {
@@ -273,11 +206,44 @@ func (r *Runtime) Run() error {
 
 func (r *Runtime) start(ctx context.Context, errCh chan<- error) {
 	r.watchHelper(ctx, errCh)
-	r.startScheduler(ctx)
+	r.startScheduler(ctx, errCh)
+	r.watchSchedulerFatal(ctx, errCh)
 	r.startServers(errCh)
 	sharedlog.Info(ctx, r.Logger, "youtube_collector_started", "youtube collector started",
 		sharedlog.Runtime(runtimeName),
 	)
+}
+
+func (r *Runtime) watchSchedulerFatal(ctx context.Context, errCh chan<- error) {
+	if r.Scheduler == nil {
+		return
+	}
+	fatal := r.Scheduler.Fatal()
+	if fatal == nil {
+		return
+	}
+	panicguard.Go(r.Logger, "youtube-collector-scheduler-fatal", func() {
+		err := receiveSchedulerFatal(ctx, fatal)
+		if err != nil {
+			forwardRuntimeError(ctx, errCh, err)
+		}
+	})
+}
+
+func receiveSchedulerFatal(ctx context.Context, fatal <-chan error) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-fatal:
+		return err
+	}
+}
+
+func forwardRuntimeError(ctx context.Context, errCh chan<- error, err error) {
+	select {
+	case errCh <- err:
+	case <-ctx.Done():
+	}
 }
 
 func (r *Runtime) watchHelper(ctx context.Context, errCh chan<- error) {
@@ -314,11 +280,14 @@ func (r *Runtime) reportHelperExit(ctx context.Context, errCh chan<- error) {
 	}
 }
 
-func (r *Runtime) startScheduler(ctx context.Context) {
+func (r *Runtime) startScheduler(ctx context.Context, errCh chan<- error) {
 	if r.Scheduler == nil {
 		return
 	}
-	r.Scheduler.Start(ctx)
+	if err := r.Scheduler.Start(ctx); err != nil {
+		forwardRuntimeError(ctx, errCh, err)
+		return
+	}
 	r.Logger.Info("Scraper scheduler started", slog.String("runtime", runtimeName))
 }
 
@@ -344,7 +313,7 @@ func (r *Runtime) shutdown(ctx context.Context) error {
 			shutdownErr = errors.Join(shutdownErr, err)
 		}
 	}
-	shutdownErr = errors.Join(shutdownErr, r.closeInfrastructure())
+	shutdownErr = errors.Join(shutdownErr, r.closeInfrastructure(ctx))
 	if shutdownErr == nil {
 		sharedlog.Info(ctx, r.Logger, "youtube_collector_stopped", "youtube collector stopped",
 			sharedlog.Runtime(runtimeName),
@@ -357,18 +326,18 @@ func (r *Runtime) Close() {
 	if r == nil {
 		return
 	}
-	if err := r.closeInfrastructure(); err != nil && r.Logger != nil {
+	if err := r.closeInfrastructure(context.Background()); err != nil && r.Logger != nil {
 		r.Logger.Error("YouTube collector cleanup failed", slog.Any("error", err))
 	}
 }
 
-func (r *Runtime) closeInfrastructure() error {
+func (r *Runtime) closeInfrastructure(ctx context.Context) error {
 	r.cleanupMu.Lock()
 	defer r.cleanupMu.Unlock()
 	if r.infra == nil {
 		return nil
 	}
-	err := r.infra.Close()
+	err := r.infra.Close(ctx)
 	if err == nil || r.cleanupReported {
 		return nil
 	}

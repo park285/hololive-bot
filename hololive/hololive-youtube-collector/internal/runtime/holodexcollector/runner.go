@@ -2,10 +2,10 @@ package holodexcollector
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 )
@@ -15,77 +15,64 @@ type Fetcher interface {
 }
 
 type Runner struct {
-	client      Fetcher
-	jobKind     string
-	emissions   []contract.ObservationKind
-	targetKinds []contract.ObservationKind
-	rosterKinds []contract.ObservationKind
+	client  Fetcher
+	jobKind string
 }
 
 func NewLiveRunner(client Fetcher) *Runner {
 	return &Runner{
-		client:      client,
-		jobKind:     "holodex_live",
-		emissions:   []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample},
-		targetKinds: []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample},
-		rosterKinds: []contract.ObservationKind{contract.KindLiveSnapshot},
+		client:  client,
+		jobKind: "holodex_live",
 	}
 }
 
 func NewMetadataRunner(client Fetcher) *Runner {
 	return &Runner{
-		client:      client,
-		jobKind:     "holodex_metadata",
-		emissions:   []contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
-		targetKinds: []contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
-		rosterKinds: []contract.ObservationKind{contract.KindChannelStats, contract.KindChannelPhoto},
+		client:  client,
+		jobKind: "holodex_metadata",
 	}
 }
 
 func NewScheduleRunner(client Fetcher) *Runner {
 	return &Runner{
-		client:      client,
-		jobKind:     "holodex_schedule",
-		emissions:   []contract.ObservationKind{contract.KindSchedule},
-		targetKinds: []contract.ObservationKind{contract.KindSchedule, contract.KindLiveSnapshot},
-		rosterKinds: []contract.ObservationKind{contract.KindLiveSnapshot},
+		client:  client,
+		jobKind: "holodex_schedule",
 	}
 }
 
-func (r *Runner) Provider() contract.Provider { return contract.ProviderHolodex }
-func (r *Runner) JobKind() string             { return r.jobKind }
-func (r *Runner) Emissions() []contract.ObservationKind {
-	return append([]contract.ObservationKind(nil), r.emissions...)
-}
-func (r *Runner) TargetKinds() []contract.ObservationKind {
-	return append([]contract.ObservationKind(nil), r.targetKinds...)
+func (r *Runner) JobID() sourceobservation.JobID {
+	return sourceobservation.JobID{Provider: contract.ProviderHolodex, Kind: sourceobservation.JobKind(r.jobKind)}
 }
 
-func (r *Runner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
+func (r *Runner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	if r == nil || r.client == nil {
-		return collectutil.RunOutput{}, collecterr.New(collecterr.Failed, "holodex client is not configured")
+		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex client is not configured")
 	}
-	if err := collectutil.ValidateInput(input); err != nil {
-		return collectutil.RunOutput{}, err
+	if input == nil {
+		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 	started := time.Now()
 	body, err := r.client.Fetch(ctx)
 	if err != nil {
-		return collectutil.RunOutput{}, err
+		return collectutil.CollectResult{}, err
 	}
 	rows, err := parseLiveRows(body)
 	if err != nil {
-		return collectutil.RunOutput{}, err
+		return collectutil.CollectResult{}, err
 	}
 	envelopes, err := r.buildBatch(input, rows)
 	if err != nil {
-		return collectutil.RunOutput{}, err
+		return collectutil.CollectResult{}, err
 	}
-	return collectutil.Output(envelopes, started)
+	return collectutil.CompleteFromEnvelopes(envelopes, started)
 }
 
 func (r *Runner) buildBatch(input *collectutil.RunInput, rows []parsedLive) ([]contract.Envelope, error) {
-	allowed := requestedSet(r.requestedIDs(input))
+	requested, err := r.requestedIDs(input)
+	if err != nil {
+		return nil, err
+	}
+	allowed := requestedSet(requested)
 	envelopes, err := r.channelEnvelopes(input, groupByRequestedChannel(rows, allowed))
 	if err != nil {
 		return nil, err
@@ -120,26 +107,33 @@ func groupByRequestedChannel(rows []parsedLive, allowed map[string]struct{}) map
 func (r *Runner) channelEnvelopes(input *collectutil.RunInput, byChannel map[string][]parsedLive) ([]contract.Envelope, error) {
 	envelopes := make([]contract.Envelope, 0)
 	for _, channelID := range collectutil.UniqueSorted(keys(byChannel)) {
-		sessions := byChannel[channelID]
-		added, err := r.appendChannelKind(input, envelopes, contract.KindLiveSnapshot, channelID, livePayload(channelID, sessions), true)
+		added, err := r.channelEnvelopesFor(input, channelID, byChannel[channelID])
 		if err != nil {
 			return nil, err
 		}
-		envelopes = added
-		stats, ok := statsPayload(channelID, sessions)
-		added, err = r.appendChannelKind(input, envelopes, contract.KindChannelStats, channelID, stats, ok)
-		if err != nil {
-			return nil, err
-		}
-		envelopes = added
-		photo, ok := photoPayload(channelID, sessions)
-		added, err = r.appendChannelKind(input, envelopes, contract.KindChannelPhoto, channelID, photo, ok)
-		if err != nil {
-			return nil, err
-		}
-		envelopes = added
+		envelopes = append(envelopes, added...)
 	}
 	return envelopes, nil
+}
+
+func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, channelID string, sessions []parsedLive) ([]contract.Envelope, error) {
+	envelopes, err := r.appendChannelKind(input, nil, contract.KindLiveSnapshot, channelID, livePayload(channelID, sessions), true)
+	if err != nil {
+		return nil, err
+	}
+	stats, ok, err := statsPayload(channelID, sessions)
+	if err != nil {
+		return nil, err
+	}
+	envelopes, err = r.appendChannelKind(input, envelopes, contract.KindChannelStats, channelID, stats, ok)
+	if err != nil {
+		return nil, err
+	}
+	photo, ok, err := photoPayload(channelID, sessions)
+	if err != nil {
+		return nil, err
+	}
+	return r.appendChannelKind(input, envelopes, contract.KindChannelPhoto, channelID, photo, ok)
 }
 
 func (r *Runner) appendChannelKind(
@@ -150,7 +144,14 @@ func (r *Runner) appendChannelKind(
 	payload any,
 	ok bool,
 ) ([]contract.Envelope, error) {
-	if !r.emits(kind) || !ok || !subjectAllowed(input, kind, channelID) {
+	if !input.Job().Emits(kind) || !ok {
+		return envelopes, nil
+	}
+	allowed, err := subjectAllowed(input, kind, channelID)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
 		return envelopes, nil
 	}
 	envelope, err := r.envelope(input, kind, channelID, payload)
@@ -165,15 +166,23 @@ func (r *Runner) viewerEnvelopes(
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) ([]contract.Envelope, error) {
-	if !r.emits(contract.KindViewerSample) {
+	if !input.Job().Emits(contract.KindViewerSample) {
 		return nil, nil
 	}
-	windowStart := input.Lease.ScheduledFor.UTC()
-	windowSeconds := collectutil.SampleWindowSeconds(input.Spec.PollInterval)
+	lease := input.Lease()
+	windowStart := lease.ScheduledFor.UTC()
+	windowSeconds := collectutil.SampleWindowSeconds(input.Spec().PollInterval)
 	envelopes := make([]contract.Envelope, 0)
 	for i := range rows {
 		row := &rows[i]
-		if _, ok := allowed[row.channelID]; !ok || !subjectAllowed(input, contract.KindViewerSample, row.row.ID) {
+		if _, ok := allowed[row.channelID]; !ok {
+			continue
+		}
+		isAllowed, err := subjectAllowed(input, contract.KindViewerSample, row.row.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !isAllowed {
 			continue
 		}
 		payload, err := viewerPayload(row, windowStart, windowSeconds)
@@ -194,7 +203,14 @@ func (r *Runner) scheduleEnvelope(
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) (*contract.Envelope, error) {
-	if !r.emits(contract.KindSchedule) || !subjectAllowed(input, contract.KindSchedule, officialScheduleSubject) {
+	if !input.Job().Emits(contract.KindSchedule) {
+		return nil, nil
+	}
+	allowedSubject, err := subjectAllowed(input, contract.KindSchedule, officialScheduleSubject)
+	if err != nil {
+		return nil, err
+	}
+	if !allowedSubject {
 		return nil, nil
 	}
 	payload := schedulePayload(rows, allowed)
@@ -208,35 +224,36 @@ func (r *Runner) scheduleEnvelope(
 	return &envelope, nil
 }
 
-func (r *Runner) requestedIDs(input *collectutil.RunInput) []string {
+func (r *Runner) requestedIDs(input *collectutil.RunInput) ([]string, error) {
 	var ids []string
-	for _, kind := range r.rosterKinds {
-		ids = append(ids, input.EnabledSubjects[kind]...)
+	for _, kind := range input.Job().RosterKinds() {
+		subjects, err := input.Roster(kind)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, subjects...)
 	}
-	return collectutil.UniqueSorted(ids)
-}
-
-func (r *Runner) emits(kind contract.ObservationKind) bool {
-	return slices.Contains(r.emissions, kind)
+	return collectutil.UniqueSorted(ids), nil
 }
 
 func (r *Runner) envelope(input *collectutil.RunInput, kind contract.ObservationKind, subject string, payload any) (contract.Envelope, error) {
-	generation, err := collectutil.Generation(input, kind)
+	generation, err := input.Generation(kind)
 	if err != nil {
 		return contract.Envelope{}, err
 	}
+	lease := input.Lease()
 	envelope, err := collectutil.Envelope(
 		contract.ProviderHolodex,
 		kind,
 		subject,
 		generation,
-		&input.Lease,
+		&lease,
 		contract.CompletenessPartial,
 		contract.ContinuityNotApplicable,
 		payload,
 	)
 	if err != nil {
-		return contract.Envelope{}, collecterr.Wrap(collecterr.ParserDrift, err)
+		return contract.Envelope{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
 	}
 	return envelope, nil
 }

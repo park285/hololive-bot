@@ -108,6 +108,8 @@ Runtime service names:
 - `hololive-alarm-worker`
 - `youtube-collector`
 
+`youtube-collector` Valkey/config projection rollback is an exact repository revision: Go binary/image, bundled Node helper, Compose base and AP overlays, host-native generator/wrapper, and the collector runbook together. See [`youtube-collector.md`](youtube-collector.md#rollback). Binary-only Valkey rollback is forbidden. Schema/data rollback is none. Mixed-version boundaries follow the hardening contract v6 §20.16: Go binary and Node helper stay lockstep in the same image/native artifact; fleet mixed binaries are allowed when both writers satisfy migration 177; old/new phase env dual-render is allowed for one release. This paragraph is a change-record draft. Production canary and rollback were not executed.
+
 `hololive-api`가 durable bot admission migration 123~136을 적용하고 traffic을 수락한 뒤에는 이전 image나 구 bot runtime이 `bot_webhook_inbox`/`bot_reply_outbox`를 소비하지 못합니다. 따라서 `docs/current/runbooks/hololive-api.md`의 rollback 절차가 우선하며, ingress quiescence와 zero-backlog preflight가 성공하지 않으면 image rollback 대신 현재 durable runtime을 fix-forward합니다.
 
 ## 5→3 Cutover Emergency Rollback (hololive-api → 구 bot/admin/llm)

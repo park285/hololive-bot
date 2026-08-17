@@ -1,0 +1,45 @@
+[PASS] ap-host-native H3 not bound to all interfaces
+[PASS] ap-host-native H3 bound to loopback
+[PASS] ap-host-native enables the collector runtime
+[PASS] ap-host-native stamps revision via deploy_source_revision
+[PASS] ap-host-native does not use raw git rev-parse for revision
+[PASS] ap-host-native uses stable PostgreSQL DNS
+[PASS] ap-host-native generated env has 0 CACHE lines
+[PASS] generated host env contents have 0 CACHE lines
+[PASS] ap-host-native settings dir uses persistent varlib path
+[PASS] ap-host-native settings dir is writable for hololive
+[PASS] ap-host-native keeps /etc/stack-secrets read-only under ProtectSystem=strict
+[PASS] ap-host-native deploy preserves the installed host env and systemd unit with the previous release
+[PASS] ap-host-native deploy records and stops the prior producer runtime before enabling collector
+[PASS] ap-host-native first-cutover state is immutable and readable by rollback orchestration
+[PASS] ap-host-native cutover waits for the strict readiness contract
+[PASS] collector wrapper is an executable shared artifact
+[PASS] collector wrapper credential matrix: default scraper role
+[PASS] collector wrapper credential matrix: explicit scraper role
+[PASS] collector wrapper credential matrix: custom scraper role
+[PASS] collector wrapper credential matrix: explicit password wins
+[PASS] collector wrapper credential matrix: runtime role uses database credential
+[PASS] collector wrapper credential matrix: legacy database fallback
+[PASS] collector wrapper credential matrix: missing password preserves empty value
+[PASS] collector wrapper preserves target command failure
+[PASS] ap-host-native rollback restores the recorded producer runtime on first cutover
+[PASS] ap-host-native failed cutover stops collector before restoring producer
+[PASS] ap-host-native deploy captures the old contract before installing the new contract
+[PASS] ap-host-native deploy seals the complete rollback payload before publishing previous
+[PASS] ap-host-native deploy runs the shared completion gate after status inspection
+[PASS] ap-host-native deploy rejects RELEASE_ID traversal before artifact creation
+[PASS] host-native release resolver accepts a contained inactive release
+[PASS] host-native release resolver rejects a canonical alias of the active release
+[PASS] host-native release resolver rejects canonical containment escape
+[PASS] remote canonical release guard runs before release deletion
+[PASS] native rollback validation accepts a complete integrity fixture
+[PASS] native rollback validation rejects a missing healthcheck
+[PASS] native rollback validation rejects a corrupt binary
+[PASS] native rollback validation rejects an invalid systemd unit
+[PASS] native rollback dry-run and apply share the payload integrity gate
+[PASS] ap-host-native rollback completes only after the shared completion gate
+[PASS] ap-host-native rollback restores binary-adjacent contract files before restarting
+[PASS] native rollback validates payload integrity and unit before mutation
+[PASS] ap-host-native rollback forwards change_started_at to the completion gate
+[PASS] ap-host-native rollback propagates completion gate failure
+all ap-host-native release checks passed

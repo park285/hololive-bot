@@ -22,8 +22,12 @@ func TestDefaultYouTubeCollectorConfigMatchesCurrentBehavior(t *testing.T) {
 	if cfg.AcquisitionCadence != time.Second || cfg.LeaseTTL != time.Minute || cfg.RenewInterval != 20*time.Second {
 		t.Fatalf("cadence/ttl/renew = %s %s %s", cfg.AcquisitionCadence, cfg.LeaseTTL, cfg.RenewInterval)
 	}
-	if cfg.NormalizationBudget != 5*time.Second || cfg.PublishBudget != 5*time.Second {
-		t.Fatalf("budgets = %s %s", cfg.NormalizationBudget, cfg.PublishBudget)
+	if cfg.CollectionOverhead != 5*time.Second || cfg.PublishTimeout != 5*time.Second ||
+		cfg.DBTimeout != 5*time.Second || cfg.RenewTimeout != 5*time.Second || cfg.CleanupTimeout != 5*time.Second {
+		t.Fatalf("phase timeouts = %#v", cfg)
+	}
+	if cfg.ReadinessTimeout != 2*time.Second || cfg.HelperHealthTimeout != time.Second {
+		t.Fatalf("readiness timeouts = %s %s", cfg.ReadinessTimeout, cfg.HelperHealthTimeout)
 	}
 	if cfg.RetryMin != retry.ErrorBackoffMin || cfg.RetryMax != retry.ErrorBackoffMax {
 		t.Fatalf("retry = %s %s", cfg.RetryMin, cfg.RetryMax)
@@ -34,12 +38,17 @@ func TestDefaultYouTubeCollectorConfigMatchesCurrentBehavior(t *testing.T) {
 	if cfg.HolodexMaxInflight != workers || cfg.OfficialMaxInflight != workers || cfg.YouTubeJSMaxInflight != workers {
 		t.Fatalf("inflight = %d %d %d", cfg.HolodexMaxInflight, cfg.OfficialMaxInflight, cfg.YouTubeJSMaxInflight)
 	}
-	if cfg.YouTubeJSTimeout != 30*time.Second || cfg.MaxPages != 1 || cfg.MaxAggregateBytes != youtubeCollectorMaxAggregateBytes {
-		t.Fatalf("helper bounds = %s %d %d", cfg.YouTubeJSTimeout, cfg.MaxPages, cfg.MaxAggregateBytes)
+	if cfg.YouTubeJSRequestTimeout != 30*time.Second || cfg.MaxPages != 1 ||
+		cfg.MaxSuccessResponseBytes != youtubeCollectorMaxSuccessResponseBytes {
+		t.Fatalf("helper bounds = %s %d %d", cfg.YouTubeJSRequestTimeout, cfg.MaxPages, cfg.MaxSuccessResponseBytes)
 	}
 	if cfg.RequestInterval != 2*time.Second {
 		t.Fatalf("RequestInterval = %s, want 2s", cfg.RequestInterval)
 	}
+	if cfg.InstanceID != "" {
+		t.Fatalf("InstanceID = %q, want empty default", cfg.InstanceID)
+	}
+	cfg.InstanceID = "youtube-collector-c"
 	holodex := DefaultHolodexOperationalConfig().Timeout
 	official := DefaultOfficialScheduleConfig().Timeout
 	if err := cfg.Validate(holodex, official); err != nil {
@@ -48,14 +57,21 @@ func TestDefaultYouTubeCollectorConfigMatchesCurrentBehavior(t *testing.T) {
 }
 
 func TestLoadYouTubeCollectorConfigNonDefaultOverride(t *testing.T) {
+	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "youtube-collector-c")
 	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "8")
 	t.Setenv("YOUTUBE_COLLECTOR_QUEUE_CAPACITY", "24")
 	t.Setenv("YOUTUBE_COLLECTOR_ACQUISITION_BATCH", "12")
 	t.Setenv("YOUTUBE_COLLECTOR_ACQUISITION_CADENCE_MS", "250")
 	t.Setenv("YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS", "90")
 	t.Setenv("YOUTUBE_COLLECTOR_RENEW_INTERVAL_SECONDS", "15")
-	t.Setenv("YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS", "8")
-	t.Setenv("YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS", "7")
+	t.Setenv("YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS", "8")
+	t.Setenv("YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS", "7")
+	t.Setenv("YOUTUBE_COLLECTOR_DB_TIMEOUT_SECONDS", "6")
+	t.Setenv("YOUTUBE_COLLECTOR_RENEW_TIMEOUT_SECONDS", "5")
+	t.Setenv("YOUTUBE_COLLECTOR_CLEANUP_TIMEOUT_SECONDS", "4")
+	t.Setenv("YOUTUBE_COLLECTOR_PROVIDER_ADMISSION_TIMEOUT_SECONDS", "3")
+	t.Setenv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", "3")
+	t.Setenv("YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS", "1")
 	t.Setenv("YOUTUBE_COLLECTOR_RETRY_MIN_SECONDS", "45")
 	t.Setenv("YOUTUBE_COLLECTOR_RETRY_MAX_SECONDS", "180")
 	t.Setenv("YOUTUBE_COLLECTOR_RELEASE_JITTER_MIN_MS", "200")
@@ -63,9 +79,11 @@ func TestLoadYouTubeCollectorConfigNonDefaultOverride(t *testing.T) {
 	t.Setenv("YOUTUBE_COLLECTOR_HOLODEX_MAX_INFLIGHT", "3")
 	t.Setenv("YOUTUBE_COLLECTOR_OFFICIAL_MAX_INFLIGHT", "2")
 	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_MAX_INFLIGHT", "4")
-	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS", "40")
+	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS", "40")
+	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS", "41")
+	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS", "4")
 	t.Setenv("YOUTUBE_COLLECTOR_MAX_PAGES", "3")
-	t.Setenv("YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", "65536")
+	t.Setenv("YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES", "65536")
 	t.Setenv("YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS", "5")
 
 	cfg, err := loadYouTubeCollectorConfig()
@@ -81,11 +99,17 @@ func TestLoadYouTubeCollectorConfigNonDefaultOverride(t *testing.T) {
 	if cfg.HolodexMaxInflight != 3 || cfg.OfficialMaxInflight != 2 || cfg.YouTubeJSMaxInflight != 4 {
 		t.Fatalf("inflight = %d %d %d", cfg.HolodexMaxInflight, cfg.OfficialMaxInflight, cfg.YouTubeJSMaxInflight)
 	}
-	if cfg.YouTubeJSTimeout != 40*time.Second || cfg.MaxPages != 3 || cfg.MaxAggregateBytes != 65536 {
-		t.Fatalf("helper bounds = %s %d %d", cfg.YouTubeJSTimeout, cfg.MaxPages, cfg.MaxAggregateBytes)
+	if cfg.YouTubeJSRequestTimeout != 40*time.Second || cfg.MaxPages != 3 || cfg.MaxSuccessResponseBytes != 65536 {
+		t.Fatalf("helper bounds = %s %d %d", cfg.YouTubeJSRequestTimeout, cfg.MaxPages, cfg.MaxSuccessResponseBytes)
 	}
 	if cfg.RequestInterval != 5*time.Second {
 		t.Fatalf("RequestInterval = %s, want 5s", cfg.RequestInterval)
+	}
+	if cfg.ReadinessTimeout != 3*time.Second || cfg.HelperHealthTimeout != time.Second {
+		t.Fatalf("readiness timeouts = %s %s", cfg.ReadinessTimeout, cfg.HelperHealthTimeout)
+	}
+	if cfg.InstanceID != "youtube-collector-c" {
+		t.Fatalf("InstanceID = %q, want youtube-collector-c", cfg.InstanceID)
 	}
 	if err := cfg.Validate(25*time.Second, 15*time.Second); err != nil {
 		t.Fatalf("overridden config must be valid: %v", err)
@@ -101,6 +125,137 @@ func TestLoadYouTubeCollectorConfigRejectsInvalidExplicitValues(t *testing.T) {
 	t.Setenv("YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS", "abc")
 	if _, err := loadYouTubeCollectorConfig(); err == nil {
 		t.Fatal("unparseable lease TTL must fail closed")
+	}
+}
+
+func TestCFG005MaxSuccessResponseBytesDualEnvMatrix(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		newRaw, oldRaw string
+		hasNew, hasOld bool
+		want           int
+		wantErr        bool
+	}{
+		{name: "new only", newRaw: "2048", hasNew: true, want: 2048},
+		{name: "old only", oldRaw: "4096", hasOld: true, want: 4096},
+		{name: "both equal", newRaw: "8192", oldRaw: "8192", hasNew: true, hasOld: true, want: 8192},
+		{name: "both differ", newRaw: "8192", oldRaw: "4096", hasNew: true, hasOld: true, wantErr: true},
+		{name: "neither", want: 1024},
+		{name: "new explicitly empty", hasNew: true, wantErr: true},
+		{name: "old explicitly empty", hasOld: true, wantErr: true},
+		{name: "both explicitly empty", hasNew: true, hasOld: true, wantErr: true},
+		{name: "new invalid", newRaw: "not-an-integer", hasNew: true, wantErr: true},
+		{name: "old zero", oldRaw: "0", hasOld: true, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := resolveDualPositiveInt(
+				"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES", test.newRaw, test.hasNew,
+				"YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", test.oldRaw, test.hasOld,
+				1024,
+			)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("resolve error = %v, wantErr %t", err, test.wantErr)
+			}
+			if err == nil && got != test.want {
+				t.Fatalf("resolved value = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCFG005CollectorDurationAliasTruthTable(t *testing.T) {
+	t.Parallel()
+	pairs := []struct {
+		name             string
+		newName, oldName string
+	}{
+		{
+			name:    "collection overhead",
+			newName: "YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS",
+			oldName: "YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS",
+		},
+		{
+			name:    "publish timeout",
+			newName: "YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS",
+			oldName: "YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS",
+		},
+		{
+			name:    "youtubejs request timeout",
+			newName: "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
+			oldName: "YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
+		},
+	}
+	cases := []struct {
+		name           string
+		newRaw, oldRaw string
+		hasNew, hasOld bool
+		want           time.Duration
+		wantErr        bool
+	}{
+		{name: "new only", newRaw: "7", hasNew: true, want: 7 * time.Second},
+		{name: "old only", oldRaw: "11", hasOld: true, want: 11 * time.Second},
+		{name: "both equal", newRaw: "13", oldRaw: "13", hasNew: true, hasOld: true, want: 13 * time.Second},
+		{name: "both differ", newRaw: "7", oldRaw: "11", hasNew: true, hasOld: true, wantErr: true},
+		{name: "neither", want: 5 * time.Second},
+		{name: "new explicitly empty", hasNew: true, wantErr: true},
+		{name: "old explicitly empty", hasOld: true, wantErr: true},
+		{name: "both explicitly empty", hasNew: true, hasOld: true, wantErr: true},
+		{name: "new empty old valid", oldRaw: "11", hasNew: true, hasOld: true, wantErr: true},
+		{name: "new valid old empty", newRaw: "7", hasNew: true, hasOld: true, wantErr: true},
+		{name: "negative", newRaw: "-1", hasNew: true, wantErr: true},
+		{name: "out of range", newRaw: "9223372036854775807", hasNew: true, wantErr: true},
+	}
+	for _, pair := range pairs {
+		t.Run(pair.name, func(t *testing.T) {
+			t.Parallel()
+			for _, test := range cases {
+				t.Run(test.name, func(t *testing.T) {
+					t.Parallel()
+					got, err := resolveDualPositiveDurationUnit(
+						pair.newName, test.newRaw, test.hasNew,
+						pair.oldName, test.oldRaw, test.hasOld,
+						5*time.Second,
+						time.Second,
+					)
+					if (err != nil) != test.wantErr {
+						t.Fatalf("resolve error = %v, wantErr %t", err, test.wantErr)
+					}
+					if err == nil && got != test.want {
+						t.Fatalf("resolved value = %s, want %s", got, test.want)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestCFG005CollectorLegacyDurationAliasesReachCanonicalFields(t *testing.T) {
+	for _, key := range []string{
+		"YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS",
+		"YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
+	} {
+		unsetEnvForTest(t, key)
+	}
+	t.Setenv("YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS", "8")
+	t.Setenv("YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS", "7")
+	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS", "40")
+
+	cfg, err := loadYouTubeCollectorConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubeCollectorConfig() error = %v", err)
+	}
+	if cfg.CollectionOverhead != 8*time.Second {
+		t.Fatalf("CollectionOverhead = %s, want 8s", cfg.CollectionOverhead)
+	}
+	if cfg.PublishTimeout != 7*time.Second {
+		t.Fatalf("PublishTimeout = %s, want 7s", cfg.PublishTimeout)
+	}
+	if cfg.YouTubeJSRequestTimeout != 40*time.Second {
+		t.Fatalf("YouTubeJSRequestTimeout = %s, want 40s", cfg.YouTubeJSRequestTimeout)
 	}
 }
 
@@ -129,6 +284,7 @@ func TestRequiredCollectorNumericEnvRejectsExplicitEmptyValues(t *testing.T) {
 
 func TestYouTubeCollectorConfigRejectsInvalidBudgets(t *testing.T) {
 	base := DefaultYouTubeCollectorConfig()
+	base.InstanceID = "youtube-collector-c"
 	holodex := 25 * time.Second
 	official := 15 * time.Second
 	tests := []struct {
@@ -138,9 +294,11 @@ func TestYouTubeCollectorConfigRejectsInvalidBudgets(t *testing.T) {
 		{name: "workers below 1", mutate: func(c *YouTubeCollectorConfig) { c.TotalWorkers = 0 }},
 		{name: "inflight above workers", mutate: func(c *YouTubeCollectorConfig) { c.HolodexMaxInflight = c.TotalWorkers + 1 }},
 		{name: "pages above 100", mutate: func(c *YouTubeCollectorConfig) { c.MaxPages = 101 }},
-		{name: "aggregate above 1MiB", mutate: func(c *YouTubeCollectorConfig) { c.MaxAggregateBytes = youtubeCollectorMaxAggregateBytes + 1 }},
-		{name: "renew above ttl/3", mutate: func(c *YouTubeCollectorConfig) { c.RenewInterval = 21 * time.Second }},
-		{name: "timeout fills ttl", mutate: func(c *YouTubeCollectorConfig) { c.YouTubeJSTimeout = 50 * time.Second }},
+		{name: "response above 1MiB", mutate: func(c *YouTubeCollectorConfig) {
+			c.MaxSuccessResponseBytes = youtubeCollectorMaxSuccessResponseBytes + 1
+		}},
+		{name: "renew timing fills ttl", mutate: func(c *YouTubeCollectorConfig) { c.RenewInterval = 55 * time.Second }},
+		{name: "database timeout below bound", mutate: func(c *YouTubeCollectorConfig) { c.DBTimeout = 50 * time.Millisecond }},
 		{name: "retry inverted", mutate: func(c *YouTubeCollectorConfig) { c.RetryMin = time.Minute; c.RetryMax = 30 * time.Second }},
 		{name: "jitter inverted", mutate: func(c *YouTubeCollectorConfig) {
 			c.ReleaseJitterMin = time.Second
@@ -159,34 +317,31 @@ func TestYouTubeCollectorConfigRejectsInvalidBudgets(t *testing.T) {
 	}
 }
 
-func TestValidateYouTubeCollectorRuntimeAppliesCollectorConfig(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	cfg := validRuntimeRoleConfig()
-	cfg.Postgres.User = "hololive_scraper"
-	cfg.Holodex.APIKey = ""
-	cfg.Holodex.Timeout = 25 * time.Second
-	cfg.YouTubeCollector.TotalWorkers = 8
-	cfg.YouTubeCollector.YouTubeJSTimeout = 40 * time.Second
-	if err := cfg.ValidateYouTubeCollectorRuntime(); err != nil {
-		t.Fatalf("ValidateYouTubeCollectorRuntime() error = %v", err)
+func TestRDY015ProductionInstanceIDRejectedWhenEmptyOrInvalid(t *testing.T) {
+	holodex := DefaultHolodexOperationalConfig().Timeout
+	official := DefaultOfficialScheduleConfig().Timeout
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{name: "empty", id: ""},
+		{name: "uppercase", id: "YouTube-Collector-C"},
+		{name: "underscore", id: "youtube_collector_c"},
+		{name: "too long", id: strings.Repeat("a", 65)},
+		{name: "leading hyphen", id: "-collector"},
 	}
-	if cfg.YouTubeCollector.TotalWorkers != 8 || cfg.YouTubeCollector.QueueCapacity != 32 {
-		t.Fatalf("applied collector config = %#v", cfg.YouTubeCollector)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := DefaultYouTubeCollectorConfig()
+			cfg.InstanceID = test.id
+			if err := cfg.Validate(holodex, official); err == nil {
+				t.Fatal("invalid production instance ID must fail closed")
+			}
+		})
 	}
-	if cfg.YouTubeCollector.HolodexMaxInflight != 8 || cfg.YouTubeCollector.YouTubeJSTimeout != 40*time.Second {
-		t.Fatalf("applied inflight/timeout = %d %s", cfg.YouTubeCollector.HolodexMaxInflight, cfg.YouTubeCollector.YouTubeJSTimeout)
-	}
-}
-
-func TestValidateYouTubeCollectorRuntimeRejectsInvalidCollectorBudget(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	cfg := validRuntimeRoleConfig()
-	cfg.Postgres.User = "hololive_scraper"
-	cfg.Holodex.Timeout = 25 * time.Second
-	cfg.YouTubeCollector = DefaultYouTubeCollectorConfig()
-	cfg.YouTubeCollector.YouTubeJSTimeout = 55 * time.Second
-	err := cfg.ValidateYouTubeCollectorRuntime()
-	if err == nil || !strings.Contains(err.Error(), "LEASE_TTL") {
-		t.Fatalf("ValidateYouTubeCollectorRuntime() error = %v, want lease TTL rejection", err)
+	cfg := DefaultYouTubeCollectorConfig()
+	cfg.InstanceID = "youtube-collector-c"
+	if err := cfg.Validate(holodex, official); err != nil {
+		t.Fatalf("valid production instance ID must be accepted: %v", err)
 	}
 }

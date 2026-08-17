@@ -1115,7 +1115,7 @@ func assertPublishBatchStatementCount(
 ) {
 	t.Helper()
 	input := viewerPublishBatch(t, proof, size)
-	encoded, contracts, err := encodePublishBatch(input)
+	prepared, err := preparePublishBatch(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1124,7 +1124,7 @@ func assertPublishBatchStatementCount(
 		t.Fatal(err)
 	}
 	counter.queries.Store(0)
-	if _, err := repository.publishBatchTx(ctx, tx, input, encoded, contracts); err != nil {
+	if _, err := repository.publishPreparedTx(ctx, tx, &prepared, repository.completePublishTerminal); err != nil {
 		rollbackPublishTestTx(t, ctx, tx, "failed publish")
 		t.Fatalf("publish %d observations: %v", size, err)
 	}

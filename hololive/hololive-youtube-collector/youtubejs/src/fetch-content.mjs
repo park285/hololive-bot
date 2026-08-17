@@ -1,6 +1,13 @@
-import { paginate } from "./pagination.mjs";
+import {
+  assertResponseBudget,
+  paginate,
+  paginationEnvelopeReserve,
+  paginationResult,
+} from "./pagination.mjs";
 import { textOf } from "./map-posts.mjs";
 import { videoIDOf, videoTitleOf } from "./map-lockup.mjs";
+
+const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, items: [] });
 
 /** @param {YouTubeJSFetchOptions} [options] */
 export async function fetchContentFeed({
@@ -8,7 +15,7 @@ export async function fetchContentFeed({
   kind,
   maxResults,
   maxPages,
-  maxAggregateBytes,
+  maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
   innertube,
 } = {}) {
   const id = String(channelId ?? "").trim();
@@ -24,14 +31,17 @@ export async function fetchContentFeed({
   if (innertube == null || typeof innertube.getChannel !== "function") {
     throw new Error("innertube client is required");
   }
+  assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
   const channel = await innertube.getChannel(id);
   const loader = contentKind === "shorts" ? channel.getShorts : channel.getVideos;
   if (typeof loader !== "function") {
     return {
       items: [],
-      page_count: 0,
-      exhausted: false,
-      continuity: "GAP_UNRESOLVED",
+      ...paginationResult({
+        pageCount: 1,
+        reason: "exhausted",
+        continuity: "NOT_APPLICABLE",
+      }),
       missing_tab: true,
     };
   }
@@ -41,32 +51,32 @@ export async function fetchContentFeed({
     getContinuation: async (current) => {
       if (typeof current.getContinuation !== "function") {
         const err = new Error("content continuation is missing");
-        err.code = "pagination_gap";
+        err.code = "parser_drift";
         throw err;
       }
       return current.getContinuation();
     },
-    mapPage: (current) => mapContentItems(current, id),
+    mapPage: (current) => ({ recognized_shape: true, items: mapContentItems(current, id) }),
     maxPages,
     maxResults,
-    maxAggregateBytes,
+    maxSuccessResponseBytes,
+    reservedEnvelopeBytes: responseReserveBytes,
+    buildResult: (items, pagination) => ({ items, ...pagination }),
   });
-  return {
-    items: paged.items,
-    page_count: paged.page_count,
-    cursor_start: paged.cursor_start,
-    cursor_end: paged.cursor_end,
-    exhausted: paged.exhausted,
-    continuity: paged.continuity,
-  };
+  return paged;
 }
 
 export function mapContentItems(feed, channelId) {
-  const rows = Array.isArray(feed?.videos)
-    ? feed.videos
-    : Array.isArray(feed?.items)
-      ? feed.items
-      : [];
+  let rows;
+  if (Array.isArray(feed?.videos)) {
+    rows = feed.videos;
+  } else if (Array.isArray(feed?.items)) {
+    rows = feed.items;
+  } else {
+    const error = new Error("content page shape is not recognized");
+    error.code = "parser_drift";
+    throw error;
+  }
   const mapped = [];
   for (const row of rows) {
     const videoId = videoIDOf(row);

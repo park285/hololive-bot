@@ -27,19 +27,19 @@ var (
 )
 
 type Config struct {
-	LeaseTTL            time.Duration
-	RenewInterval       time.Duration
-	ProviderTimeout     time.Duration
-	NormalizationBudget time.Duration
-	PublishBudget       time.Duration
-	MinRetryDelay       time.Duration
-	MaxRetryDelay       time.Duration
-	MinReleaseJitter    time.Duration
-	MaxReleaseJitter    time.Duration
-	AcquisitionBatch    int
-	WorkerCount         int
-	QueueCapacity       int
-	PollCadence         time.Duration
+	LeaseTTL         time.Duration
+	RenewInterval    time.Duration
+	RenewTimeout     time.Duration
+	DBTimeout        time.Duration
+	CleanupTimeout   time.Duration
+	MinRetryDelay    time.Duration
+	MaxRetryDelay    time.Duration
+	MinReleaseJitter time.Duration
+	MaxReleaseJitter time.Duration
+	AcquisitionBatch int
+	WorkerCount      int
+	QueueCapacity    int
+	PollCadence      time.Duration
 }
 
 func (c *Config) Validate() error {
@@ -56,14 +56,25 @@ func (c *Config) validateLeaseBudgets() error {
 	if c.LeaseTTL < time.Second || c.LeaseTTL > 30*time.Minute {
 		return fmt.Errorf("%w: lease TTL must be between 1 second and 30 minutes", ErrInvalidConfig)
 	}
-	if c.ProviderTimeout <= 0 || c.NormalizationBudget <= 0 || c.PublishBudget <= 0 ||
-		c.LeaseTTL <= c.ProviderTimeout+c.NormalizationBudget+c.PublishBudget {
-		return fmt.Errorf("%w: lease TTL must exceed provider, normalization, and publish budgets", ErrInvalidConfig)
+	if invalidRenewTimeout(c.RenewTimeout) || invalidRuntimeTimeout(c.DBTimeout) || invalidRuntimeTimeout(c.CleanupTimeout) {
+		return fmt.Errorf("%w: renew, database, or cleanup timeout is outside bounds", ErrInvalidConfig)
 	}
-	if c.RenewInterval <= 0 || c.RenewInterval > c.LeaseTTL/3 {
-		return fmt.Errorf("%w: renew interval must be positive and at most one third of lease TTL", ErrInvalidConfig)
+	if invalidRenewBudget(c.RenewInterval, c.RenewTimeout, c.LeaseTTL) {
+		return fmt.Errorf("%w: renew interval and timeout do not fit the lease TTL", ErrInvalidConfig)
 	}
 	return nil
+}
+
+func invalidRenewTimeout(timeout time.Duration) bool {
+	return timeout <= 0 || timeout > time.Minute
+}
+
+func invalidRuntimeTimeout(timeout time.Duration) bool {
+	return timeout < 100*time.Millisecond || timeout > time.Minute
+}
+
+func invalidRenewBudget(interval, timeout, ttl time.Duration) bool {
+	return interval <= 0 || interval >= ttl || interval+timeout+time.Second >= ttl
 }
 
 func (c *Config) validateRetryJitter() error {
@@ -105,13 +116,14 @@ func (s *JobSpec) validate(contracts sourceobservation.JobContractSet) (sourceob
 	if invalidJobSpecIdentity(s) {
 		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: identity or poll interval is outside bounds", ErrInvalidJob)
 	}
-	definition, ok := contracts.Definition(s.CollectionJobKind)
-	if !ok || definition.Class != s.Class || definition.FixedSubject != "" && definition.FixedSubject != s.SubjectKey {
+	definition, ok := contracts.Definition(sourceobservation.JobID{Provider: s.Provider, Kind: sourceobservation.JobKind(s.CollectionJobKind)})
+	if !ok || string(definition.Class()) != s.Class ||
+		definition.Class() == sourceobservation.JobClassGlobal && definition.LeaseSubject() != s.SubjectKey {
 		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: compile-time job contract mismatch", ErrInvalidJob)
 	}
-	kinds := emissionsForProvider(definition, s.Provider)
+	kinds := cadenceKindsForProvider(definition, s.Provider)
 	if len(kinds) == 0 {
-		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: provider has no declared emissions", ErrInvalidJob)
+		return sourceobservation.JobContract{}, nil, fmt.Errorf("%w: provider has no declared cadence kinds", ErrInvalidJob)
 	}
 	return definition, kinds, nil
 }
@@ -132,20 +144,71 @@ func invalidPollInterval(interval time.Duration) bool {
 	return interval < time.Second || interval > 24*time.Hour || interval%time.Millisecond != 0
 }
 
-func emissionsForProvider(definition sourceobservation.JobContract, provider contract.Provider) []contract.ObservationKind {
-	kinds := make([]contract.ObservationKind, 0, len(definition.Emissions))
-	for _, emission := range definition.Emissions {
-		if emission.Provider == provider {
-			kinds = append(kinds, emission.Kind)
-		}
+func cadenceKindsForProvider(definition sourceobservation.JobContract, provider contract.Provider) []contract.ObservationKind {
+	if definition.ID().Provider != provider {
+		return nil
 	}
-	return kinds
+	return definition.CadenceKinds()
 }
 
 type Lease interface {
 	Proof() contract.LeaseProof
 	Renew(ctx context.Context) error
-	Complete(ctx context.Context) error
+	CompleteCurrent(ctx context.Context) error
 	Defer(ctx context.Context, retryAt time.Time, code, class, detail string) error
-	Release(ctx context.Context) error
+	Release(ctx context.Context, reason ReleaseReason) error
+}
+
+type ReleaseReason contract.CollectionErrorCode
+
+const (
+	ReleaseShutdown   ReleaseReason = ReleaseReason(contract.ErrorShutdownRelease)
+	ReleaseSuperseded ReleaseReason = ReleaseReason(contract.ErrorSupersededRelease)
+	ReleaseRenewFail  ReleaseReason = ReleaseReason(contract.ErrorRenewFailedRelease)
+)
+
+func (r ReleaseReason) Valid() bool {
+	return contract.CollectionErrorCode(r).Releasable()
+}
+
+func (r ReleaseReason) ErrorCode() contract.CollectionErrorCode {
+	return contract.CollectionErrorCode(r)
+}
+
+type RetryDecisionKind string
+
+const (
+	RetryDecisionDelay RetryDecisionKind = "DELAY"
+	RetryDecisionAt    RetryDecisionKind = "AT"
+)
+
+type RetryDecision struct {
+	kind  RetryDecisionKind
+	delay time.Duration
+	at    time.Time
+}
+
+func NewRetryDelay(delay time.Duration) (RetryDecision, error) {
+	decision := RetryDecision{kind: RetryDecisionDelay, delay: delay}
+	return decision, decision.Validate()
+}
+
+func NewRetryAt(at time.Time) (RetryDecision, error) {
+	decision := RetryDecision{kind: RetryDecisionAt, at: at.UTC()}
+	return decision, decision.Validate()
+}
+
+func (d RetryDecision) Kind() RetryDecisionKind { return d.kind }
+func (d RetryDecision) Delay() (time.Duration, bool) {
+	return d.delay, d.kind == RetryDecisionDelay
+}
+func (d RetryDecision) At() (time.Time, bool) { return d.at, d.kind == RetryDecisionAt }
+func (d RetryDecision) Validate() error {
+	if d.kind == RetryDecisionDelay && d.delay > 0 && d.at.IsZero() {
+		return nil
+	}
+	if d.kind == RetryDecisionAt && !d.at.IsZero() && d.delay == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: retry decision is invalid", ErrInvalidJob)
 }

@@ -21,7 +21,7 @@ func TestYouTubeCollectorLogFileNameRejectsPathSeparators(t *testing.T) {
 }
 
 func TestYouTubeCollectorTelemetryServiceNameIsStable(t *testing.T) {
-	cfg := &settings.Config{
+	cfg := &settings.YouTubeCollectorRuntimeConfig{
 		Environment: "production",
 		Tracing: settings.TracingConfig{
 			Enabled:    true,

@@ -18,6 +18,7 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	stream *domain.Stream,
 	subscriberRooms []string,
 	now time.Time,
+	sentRooms map[string]struct{},
 	observedAt ...*time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	if !isLiveCatchupCandidate(stream) {
@@ -34,7 +35,7 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	if resolvedStream == nil {
 		return nil, nil
 	}
-	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms, minutesUntil)
+	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms, sentRooms, minutesUntil)
 	if err != nil {
 		return nil, err
 	}
@@ -78,11 +79,16 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 	channelID string,
 	stream *domain.Stream,
 	subscriberRooms []string,
+	sentRooms map[string]struct{},
 	minutesUntil int,
 ) ([]*domain.AlarmNotification, int, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
 	suppressedRooms := 0
 	for _, roomID := range subscriberRooms {
+		if _, sent := sentRooms[roomID]; sent {
+			suppressedRooms++
+			continue
+		}
 		recentlyUpcoming, err := c.roomHasRecentUpcomingNotification(ctx, roomID, channelID, stream)
 		if err != nil {
 			if ctx.Err() != nil {

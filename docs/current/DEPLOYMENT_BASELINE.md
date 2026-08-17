@@ -52,7 +52,7 @@ Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스�
 |---|---|---:|---|---|---|
 | `hololive-api` | `hololive-api` | 30001/30003/30006 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, docker-proxy |
 | `alarm-worker` | `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
-| `youtube-collector` | `youtube-collector` | 30025 (`c`; AP `a/b/d` 30005/30015/30035) | app file log, cache, PostgreSQL (`hololive_scraper`) | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
+| `youtube-collector` | `youtube-collector` | 30025 (`c`; AP `a/b/d` 30005/30015/30035) | app file log, PostgreSQL (`hololive_scraper`) | `data`, `logs` | PostgreSQL, migration |
 
 ## Infra Services
 

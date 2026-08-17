@@ -30,8 +30,11 @@ if ! id hololive >/dev/null 2>&1; then
   sudo -n useradd --system --gid opc --home-dir /nonexistent --shell /usr/sbin/nologin hololive
 fi
 
-sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
+if sudo -n grep -Eq '^CACHE_(PASSWORD|HOST|PORT|DB|SOCKET_PATH)=' /etc/stack-secrets/hololive-bot/youtube-collector.env; then
+  echo "collector-scoped env must not contain Valkey/cache configuration" >&2
+  exit 1
+fi
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
@@ -39,7 +42,6 @@ require_youtubejs_node_version /usr/bin/node
 
 sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive
-sudo -n install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-collector/settings
 sudo -n install -d -m 0750 -o root -g root /etc/hololive-bot
 sudo -n install -d -m 0755 -o root -g root /etc/sysctl.d
 sudo -n tee /etc/logrotate.d/hololive-bot >/dev/null <<'LOGROTATE'

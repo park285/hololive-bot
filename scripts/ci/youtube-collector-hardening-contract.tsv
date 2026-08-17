@@ -1,0 +1,43 @@
+# rule_id	enabled	owner_pr	path_glob	polarity	regex	min	max	allowlist
+HC-001	true	PR-03	hololive/hololive-youtube-collector/youtubejs/src/real-fetchers.mjs	forbidden	String\(input\)	0	0	-
+HC-002	true	PR-03	hololive/hololive-youtube-collector/youtubejs/src/fetch-transport.mjs	required	new ProxyAgent	1	1	-
+HC-002	true	PR-03	hololive/hololive-youtube-collector/youtubejs/src/real-fetchers.mjs	forbidden	new [A-Za-z0-9_.]*ProxyAgent	0	0	-
+HC-003	true	PR-03	hololive/hololive-youtube-collector/youtubejs/src/rpc-validation.mjs	forbidden	proxy_url	0	0	-
+HC-003	true	PR-03	hololive/hololive-youtube-collector/youtubejs/src/contracts.d.ts	forbidden	proxy_url	0	0	-
+HC-003	true	PR-03	hololive/hololive-youtube-collector/internal/runtime/youtubejs/protocol.go	forbidden	json:"proxy_url	0	0	-
+HC-004	true	PR-02	hololive/hololive-youtube-collector/internal/runtime/youtubejs/helper.go	forbidden	YOUTUBEJS_SOCKET	0	0	-
+HC-005	true	PR-08	hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/content.go	forbidden	if !configured \{\s*return true	0	0	-
+HC-005	true	PR-08	hololive/hololive-youtube-collector/internal/runtime/holodexcollector/mapper.go	forbidden	if !ok \{\s*return true	0	0	-
+HC-006	true	PR-06	hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_run.go	forbidden	index >= len\(result\.Results\)\s*\{\s*return outcomeInserted	0	0	-
+HC-007	true	PR-11	hololive/hololive-youtube-collector/internal/runtime/collectorruntime/infrastructure.go	forbidden	ProvideCacheResources	0	0	-
+HC-007	true	PR-11	hololive/hololive-youtube-collector/internal/runtime/collectorruntime/*.go	forbidden	service/cache	0	0	scripts/ci/hardening-allowlists/hc-007-collectorruntime-tests.txt
+HC-008	true	PR-11	scripts/deploy/ap-host-native-deploy.sh	forbidden	CACHE_HOST	0	0	-
+HC-008	true	PR-11	deploy/compose/docker-compose.osaka.yml	forbidden	CACHE_HOST	0	0	-
+HC-008	true	PR-11	deploy/compose/docker-compose.seoul.yml	forbidden	CACHE_HOST	0	0	-
+HC-008	true	PR-11	deploy/compose/docker-compose.osaka2.yml	forbidden	CACHE_HOST	0	0	-
+HC-009	true	PR-00	scripts/build/build-youtube-collector-go.sh	required	-pgo=off	1	2	-
+HC-009	true	PR-00	scripts/build/build-youtube-collector-go.sh	required	-tags\s+sonic	1	1	-
+HC-009	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	required	build-youtube-collector-go\.sh	1	1	-
+HC-009	true	PR-00	scripts/deploy/ap-host-native-deploy.sh	required	build-youtube-collector-go\.sh	1	1	-
+HC-009	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	forbidden	\sgo\s+build\s	0	0	-
+HC-009	true	PR-00	scripts/deploy/ap-host-native-deploy.sh	forbidden	\sgo\s+build\s	0	0	-
+HC-010	true	PR-00	hololive/hololive-youtube-collector/Makefile	required	-tags\s+go_json	1	1	-
+HC-010	true	PR-00	scripts/build/build-youtube-collector-go.sh	forbidden	go_json	0	0	-
+HC-010	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	forbidden	go_json	0	0	-
+HC-010	true	PR-00	scripts/deploy/ap-host-native-deploy.sh	forbidden	go_json	0	0	-
+HC-011	true	PR-10	hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go	required	handoff_processed	1	1	-
+HC-011	true	PR-10	scripts/deploy/lib/ap-collector-readiness.sh	required	handoff_processed	1	1	-
+HC-012	true	PR-10	scripts/deploy/ap-deploy-version_test.sh	required	same remote block that validates readiness	1	1	-
+HC-012	true	PR-10	scripts/deploy/ap-deploy.sh	required	\. scripts/deploy/lib/ap-collector-readiness\.sh	1	1	-
+HC-012	true	PR-10	scripts/deploy/ap-deploy.sh	required	collector_readiness_validate	1	1	-
+# HC-013 remove_after: cleanup PR after collector fleet a/b/c/d runs a revision that understands YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES. Disable this rule and delete the alias together.
+HC-013	true	PR-07	hololive/hololive-shared/pkg/config/settings/config_youtube_collector_env.go	required	legacyEnv|compatEnv	1	1	-
+HC-014	true	PR-01	hololive/hololive-youtube-collector/**/*.go	forbidden	collecterr\.(WrapClass|Code|Class|Detail)\(	0	0	-
+HC-015	true	PR-12	docs/current/services/youtube-collector.md	forbidden	Valkey	0	0	-
+HC-015	true	PR-12	docs/current/runbooks/youtube-collector.md	forbidden	Valkey	0	0	-
+HC-015	true	PR-12	docs/current/services/youtube-collector.md	forbidden	optional contention	0	0	-
+HC-015	true	PR-12	docs/current/runbooks/youtube-collector.md	forbidden	optional contention	0	0	-
+HC-015	true	PR-12	docs/current/services/youtube-collector.md	forbidden	hard kill deadline	0	0	-
+HC-015	true	PR-12	docs/current/runbooks/youtube-collector.md	forbidden	hard kill deadline	0	0	-
+HC-015	true	PR-12	docs/current/services/youtube-collector.md	forbidden	optional optimization	0	0	-
+HC-015	true	PR-12	docs/current/runbooks/youtube-collector.md	forbidden	optional optimization	0	0	-

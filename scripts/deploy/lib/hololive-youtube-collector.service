@@ -8,9 +8,8 @@ Type=simple
 User=hololive
 Group=opc
 WorkingDirectory=/opt/hololive-bot/youtube-collector/current
-EnvironmentFile=-/etc/stack-secrets/hololive-bot/compose.env
-EnvironmentFile=-/etc/stack-secrets/hololive-bot/youtube-collector.env
-EnvironmentFile=-/etc/hololive-bot/youtube-collector-host.env
+EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env
+EnvironmentFile=/etc/hololive-bot/youtube-collector-host.env
 Environment=YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true
 Environment=YOUTUBE_INGESTION_ENABLED=true
 Environment=PHOTO_SYNC_ENABLED=false

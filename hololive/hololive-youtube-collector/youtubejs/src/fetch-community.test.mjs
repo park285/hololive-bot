@@ -50,7 +50,7 @@ test("fetchCommunityFeed maps stub Innertube posts without live YouTube", async 
   assert.equal(result.continuity, "CONTIGUOUS");
 });
 
-test("fetchCommunityFeed does not treat a missing tab as complete absence", async () => {
+test("PAG-011 fetchCommunityFeed keeps missing tab as a capability signal", async () => {
   const innertube = {
     getChannel: async () => ({
       has_community: false,
@@ -61,8 +61,8 @@ test("fetchCommunityFeed does not treat a missing tab as complete absence", asyn
   };
   const result = await fetchCommunityFeed({ channelId: "UC_NONE", innertube });
   assert.equal(result.missing_tab, true);
-  assert.equal(result.exhausted, false);
-  assert.equal(result.page_count, 0);
+  assert.equal(result.continuity, "NOT_APPLICABLE");
+  assert.equal(result.termination_reason, "exhausted");
   assert.deepEqual(result.posts, []);
 });
 
@@ -88,6 +88,21 @@ test("fetchCommunityFeed fail-closes on Innertube errors", async () => {
   await assert.rejects(
     () => fetchCommunityFeed({ channelId: "UC_FAIL", innertube }),
     /innertube unavailable/,
+  );
+});
+
+test("fetchCommunityFeed fail-closes when a community post id is missing", async () => {
+  const innertube = {
+    getChannel: async () => ({
+      has_community: true,
+      getCommunity: async () => ({
+        posts: [{ author: { id: "UC_TEST", name: "Author" }, content: "missing id" }],
+      }),
+    }),
+  };
+  await assert.rejects(
+    () => fetchCommunityFeed({ channelId: "UC_TEST", innertube }),
+    (error) => error.code === "parser_drift",
   );
 });
 
