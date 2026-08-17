@@ -1,0 +1,65 @@
+{
+  "schema_version": 2,
+  "document": {
+    "name": "youtube-collector-code-level-hardening-implementation-contract",
+    "version": "6.0",
+    "sha256": "84743f3b3d84fd43e6302e890eb1cb6afd20f6b5ff48de90ac95c0c9502f89d6"
+  },
+  "repository": "park285/hololive-bot",
+  "baseline_sha": "81883b7fad0483a7b1563779b294073d450fac76",
+  "head_sha": "81883b7fad0483a7b1563779b294073d450fac76",
+  "merge_base_sha": "81883b7fad0483a7b1563779b294073d450fac76",
+  "pr_contract": "PR-12",
+  "facts": [
+    "FACT-22",
+    "FACT-23",
+    "FACT-26",
+    "FACT-28",
+    "FACT-40"
+  ],
+  "invariants": [
+    "OPS-INV-02",
+    "OPS-INV-03",
+    "DEPLOY-INV-01",
+    "DATA-INV-09"
+  ],
+  "test_contract_ids": [
+    "CFG-001",
+    "CFG-008",
+    "HC-006",
+    "HC-007",
+    "HC-012",
+    "HC-013",
+    "HC-015"
+  ],
+  "changed_symbols": [
+    "working_tree_dirty: PR-00..PR-12 uncommitted on HEAD 81883b7fad0483a7b1563779b294073d450fac76",
+    "collectorInstanceIDForTest moved runtime.go -> readiness_test.go",
+    "compose x-scraper-env anchor and youtube-collector merge removed",
+    "settings.update consumers: hololive-api, alarm-worker only",
+    "collecterr WrapClass/Code/Class/Detail retained (tests)",
+    "YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES dual-render retained (HC-013)",
+    "host-native SETTINGS_DIR dropped from collector generator/completion-check/remote-apply",
+    "HC-006 enabled with leftover-only regex; publishedOutcome bounds check retained",
+    "buildConfig no longer loads YouTubeCollector for API/alarm/bot runtimes",
+    "blocked (applicable, not run): live_explain, image_digest, go_race, go_sonic, local-ci.sh"
+  ],
+  "toolchains": {
+    "go": "go1.26.6 linux/amd64",
+    "node": "v22.23.2",
+    "npm": "12.0.1",
+    "postgres": "unavailable",
+    "docker": "29.1.3",
+    "compose": "2.40.3+ds1-0ubuntu1"
+  },
+  "results": {
+    "passed": 95,
+    "failed": 0,
+    "unexpected_skipped": 0,
+    "unexecuted": 6
+  },
+  "commands_file": "commands.jsonl",
+  "traceability_file": "traceability.json",
+  "rollback_revision": "81883b7fad0483a7b1563779b294073d450fac76",
+  "production_change_performed": false
+}

@@ -1,0 +1,2 @@
+ok  	github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime	3.904s
+ok  	github.com/kapu/hololive-youtube-collector/cmd/runtime/youtube-collector	0.010s

@@ -11,10 +11,12 @@ import (
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
+	"github.com/kapu/hololive-youtube-collector/internal/testutil"
 )
 
 func TestCommunityRunnerPublishesExhaustedFixture(t *testing.T) {
@@ -22,24 +24,25 @@ func TestCommunityRunnerPublishesExhaustedFixture(t *testing.T) {
 	var result youtubejs.CommunityResult
 	loadJSON(t, "community.json", &result)
 	runner := NewCommunityRunner(&communityFake{result: result}, 10)
-	output, err := runner.Collect(context.Background(), youtubeInput("UC_TEST", "community_collect", contract.KindCommunityPage))
+	output, err := runner.Collect(context.Background(), youtubeInput(t, "UC_TEST", "community_collect", contract.KindCommunityPage))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(output.Observations) != 1 || output.Observations[0].Completeness != contract.CompletenessComplete {
-		t.Fatalf("output = %#v", output.Observations)
+	observations := output.Output().Observations()
+	if len(observations) != 1 || observations[0].Completeness != contract.CompletenessComplete {
+		t.Fatalf("output = %#v", observations)
 	}
 }
 
 func TestCommunityRunnerSkipsMissingTab(t *testing.T) {
 	t.Parallel()
 	runner := NewCommunityRunner(&communityFake{result: youtubejs.CommunityResult{MissingTab: true}}, 10)
-	output, err := runner.Collect(context.Background(), youtubeInput("UC_NONE", "community_collect", contract.KindCommunityPage))
+	output, err := runner.Collect(context.Background(), youtubeInput(t, "UC_NONE", "community_collect", contract.KindCommunityPage))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(output.Observations) != 0 {
-		t.Fatalf("missing tab published %#v", output.Observations)
+	if !output.Output().Empty() {
+		t.Fatalf("missing tab published %#v", output.Output().Observations())
 	}
 }
 
@@ -67,12 +70,13 @@ func TestContentRunnerEmitsVideosAndShortsFromOneJob(t *testing.T) {
 	loadJSON(t, "shorts.json", &shorts)
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{"videos": videos, "shorts": shorts}}
 	runner := NewContentRunner(fake, 10)
-	output, err := runner.Collect(context.Background(), youtubeInput("UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
+	output, err := runner.Collect(context.Background(), youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fake.calls != 2 || len(output.Observations) != 2 {
-		t.Fatalf("calls=%d observations=%d", fake.calls, len(output.Observations))
+	observations := output.Output().Observations()
+	if fake.calls != 2 || len(observations) != 2 {
+		t.Fatalf("calls=%d observations=%d", fake.calls, len(observations))
 	}
 }
 
@@ -85,12 +89,68 @@ func TestContentRunnerOmitsMissingShortsTab(t *testing.T) {
 		"shorts": {MissingTab: true},
 	}}
 	runner := NewContentRunner(fake, 10)
-	output, err := runner.Collect(context.Background(), youtubeInput("UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
+	output, err := runner.Collect(context.Background(), youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(output.Observations) != 1 || output.Observations[0].ObservationKind != contract.KindVideoList {
-		t.Fatalf("observations = %#v", output.Observations)
+	observations := output.Output().Observations()
+	if len(observations) != 1 || observations[0].ObservationKind != contract.KindVideoList {
+		t.Fatalf("observations = %#v", observations)
+	}
+}
+
+func TestContentRunnerReturnsExplicitPartialAfterShortsTimeout(t *testing.T) {
+	t.Parallel()
+	var videos youtubejs.ContentResult
+	loadJSON(t, "videos.json", &videos)
+	fake := &contentFake{
+		results: map[string]youtubejs.ContentResult{"videos": videos},
+		errByKind: map[string]error{
+			"shorts": collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "shorts timeout"),
+		},
+	}
+	result, err := NewContentRunner(fake, 10).Collect(
+		context.Background(),
+		youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial, ok := result.PartialFailure()
+	if result.Kind() != collectutil.CollectPartial || !ok ||
+		len(result.Output().Observations()) != 1 ||
+		len(partial.FailedKinds()) != 1 || partial.FailedKinds()[0] != contract.KindShortsList {
+		t.Fatalf("partial result = %#v failed=%#v", result, partial)
+	}
+}
+
+func TestContentRunnerDoesNotPublishPartialForNonDegradableFailures(t *testing.T) {
+	t.Parallel()
+	var videos youtubejs.ContentResult
+	loadJSON(t, "videos.json", &videos)
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "parser drift", err: collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "shorts parser drift")},
+		{name: "configuration", err: collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "helper configuration")},
+		{name: "internal", err: collecterr.New(collecterr.Internal, collecterr.ClassInternal, "helper invariant")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &contentFake{
+				results:   map[string]youtubejs.ContentResult{"videos": videos},
+				errByKind: map[string]error{"shorts": tt.err},
+			}
+			result, err := NewContentRunner(fake, 10).Collect(
+				context.Background(),
+				youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
+			)
+			if err == nil || !result.IsZero() || collecterr.ClassOf(err) != collecterr.ClassOf(tt.err) {
+				t.Fatalf("result=%#v error=%v", result, err)
+			}
+		})
 	}
 }
 
@@ -99,17 +159,18 @@ func TestContentRunnerFetchesAndEmitsOnlyEnabledKind(t *testing.T) {
 	var videos youtubejs.ContentResult
 	loadJSON(t, "videos.json", &videos)
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{"videos": videos}}
-	input := youtubeInput("UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList)
-	input.EnabledSubjects = map[contract.ObservationKind][]string{
+	input := youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList)
+	input = withEnabled(t, input, map[contract.ObservationKind][]string{
 		contract.KindVideoList:  {"UC_TEST"},
 		contract.KindShortsList: {},
-	}
+	})
 	output, err := NewContentRunner(fake, 10).Collect(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fake.calls != 1 || len(output.Observations) != 1 || output.Observations[0].ObservationKind != contract.KindVideoList {
-		t.Fatalf("calls=%d observations=%#v", fake.calls, output.Observations)
+	observations := output.Output().Observations()
+	if fake.calls != 1 || len(observations) != 1 || observations[0].ObservationKind != contract.KindVideoList {
+		t.Fatalf("calls=%d observations=%#v", fake.calls, observations)
 	}
 }
 
@@ -118,24 +179,26 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 	var result youtubejs.ChannelResult
 	loadJSON(t, "channel.json", &result)
 	fake := &channelFake{result: result}
-	live, err := NewChannelLiveRunner(fake).Collect(context.Background(), youtubeInput(
+	live, err := NewChannelLiveRunner(fake).Collect(context.Background(), youtubeInput(t,
 		"UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot,
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(
+	metadata, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(t,
 		"UC_TEST", "youtubejs_channel_metadata",
 		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(live.Observations) != 1 || live.Observations[0].ObservationKind != contract.KindLiveSnapshot {
-		t.Fatalf("live observations = %#v", live.Observations)
+	liveObservations := live.Output().Observations()
+	metadataObservations := metadata.Output().Observations()
+	if len(liveObservations) != 1 || liveObservations[0].ObservationKind != contract.KindLiveSnapshot {
+		t.Fatalf("live observations = %#v", liveObservations)
 	}
-	if len(metadata.Observations) != 3 {
-		t.Fatalf("metadata observations = %#v", metadata.Observations)
+	if len(metadataObservations) != 3 {
+		t.Fatalf("metadata observations = %#v", metadataObservations)
 	}
 }
 
@@ -145,24 +208,24 @@ func TestChannelRunnersSkipMissingLiveTabButKeepMetadata(t *testing.T) {
 	loadJSON(t, "channel.json", &result)
 	result.MissingTab = true
 	fake := &channelFake{result: result}
-	live, err := NewChannelLiveRunner(fake).Collect(context.Background(), youtubeInput(
+	live, err := NewChannelLiveRunner(fake).Collect(context.Background(), youtubeInput(t,
 		"UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot,
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(
+	metadata, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(t,
 		"UC_TEST", "youtubejs_channel_metadata",
 		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(live.Observations) != 0 {
-		t.Fatalf("missing live tab published %#v", live.Observations)
+	if !live.Output().Empty() {
+		t.Fatalf("missing live tab published %#v", live.Output().Observations())
 	}
-	if len(metadata.Observations) != 3 {
-		t.Fatalf("metadata observations = %#v", metadata.Observations)
+	if len(metadata.Output().Observations()) != 3 {
+		t.Fatalf("metadata observations = %#v", metadata.Output().Observations())
 	}
 }
 
@@ -171,7 +234,7 @@ func TestChannelPhotoDoesNotFetchMediaOrSynthesizeFingerprint(t *testing.T) {
 	var result youtubejs.ChannelResult
 	loadJSON(t, "channel.json", &result)
 	fake := &channelFake{result: result}
-	output, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(
+	output, err := NewChannelMetadataRunner(fake).Collect(context.Background(), youtubeInput(t,
 		"UC_TEST", "youtubejs_channel_metadata",
 		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
@@ -183,11 +246,12 @@ func TestChannelPhotoDoesNotFetchMediaOrSynthesizeFingerprint(t *testing.T) {
 	}
 	var payload contract.ChannelPhotoV1
 	found := false
-	for i := range output.Observations {
-		if output.Observations[i].ObservationKind != contract.KindChannelPhoto {
+	observations := output.Output().Observations()
+	for i := range observations {
+		if observations[i].ObservationKind != contract.KindChannelPhoto {
 			continue
 		}
-		if err := json.Unmarshal(output.Observations[i].Payload, &payload); err != nil {
+		if err := json.Unmarshal(observations[i].Payload, &payload); err != nil {
 			t.Fatal(err)
 		}
 		found = true
@@ -210,28 +274,29 @@ func TestChannelRunnerEmitsOnlyEnabledKinds(t *testing.T) {
 	var result youtubejs.ChannelResult
 	loadJSON(t, "channel.json", &result)
 	fake := &channelFake{result: result}
-	input := youtubeInput(
+	input := youtubeInput(t,
 		"UC_TEST", "youtubejs_channel_metadata",
 		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	)
-	input.EnabledSubjects = map[contract.ObservationKind][]string{
+	input = withEnabled(t, input, map[contract.ObservationKind][]string{
 		contract.KindChannelStats:   {"UC_TEST"},
 		contract.KindChannelProfile: {},
 		contract.KindChannelPhoto:   {},
-	}
+	})
 	output, err := NewChannelMetadataRunner(fake).Collect(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fake.calls != 1 || len(output.Observations) != 1 || output.Observations[0].ObservationKind != contract.KindChannelStats {
-		t.Fatalf("calls=%d observations=%#v", fake.calls, output.Observations)
+	observations := output.Output().Observations()
+	if fake.calls != 1 || len(observations) != 1 || observations[0].ObservationKind != contract.KindChannelStats {
+		t.Fatalf("calls=%d observations=%#v", fake.calls, observations)
 	}
 }
 
 func TestViewerRunnerRejectsChannelSubject(t *testing.T) {
 	t.Parallel()
 	runner := NewViewerRunner(&viewerFake{})
-	_, err := runner.Collect(context.Background(), youtubeInput(
+	_, err := runner.Collect(context.Background(), youtubeInput(t,
 		"UCoperationalchannel0001", "youtubejs_viewer", contract.KindViewerSample,
 	))
 	if err == nil || !strings.Contains(err.Error(), "video id") {
@@ -244,16 +309,76 @@ func TestViewerRunnerKeepsHiddenCountTyped(t *testing.T) {
 	var result youtubejs.ViewerResult
 	loadJSON(t, "viewer_hidden.json", &result)
 	runner := NewViewerRunner(&viewerFake{result: result})
-	output, err := runner.Collect(context.Background(), youtubeInput("vid-1", "youtubejs_viewer", contract.KindViewerSample))
+	output, err := runner.Collect(context.Background(), youtubeInput(t, "vid-1", "youtubejs_viewer", contract.KindViewerSample))
 	if err != nil {
 		t.Fatal(err)
 	}
+	observations := output.Output().Observations()
+	if len(observations) != 1 {
+		t.Fatalf("observations = %#v, want exactly one", observations)
+		return
+	}
 	var payload contract.ViewerSampleV1
-	if err := json.Unmarshal(output.Observations[0].Payload, &payload); err != nil {
+	if err := json.Unmarshal(observations[0].Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if payload.Availability != "HIDDEN" || payload.ViewerCount != nil {
 		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestViewerRunnerRejectsMismatchedResponseIdentity(t *testing.T) {
+	t.Parallel()
+	result := youtubejs.ViewerResult{VideoID: "different-video"}
+	output, err := NewViewerRunner(&viewerFake{result: result}).Collect(
+		context.Background(), youtubeInput(t, "requested-video", "youtubejs_viewer", contract.KindViewerSample),
+	)
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+		t.Fatalf("error=%v output=%#v", err, output)
+	}
+}
+
+func TestContentRunnerRejectsMismatchedResponseIdentity(t *testing.T) {
+	t.Parallel()
+	var videos youtubejs.ContentResult
+	loadJSON(t, "videos.json", &videos)
+	videos.Items[0].ChannelID = "UC_OTHER"
+	fake := &contentFake{results: map[string]youtubejs.ContentResult{"videos": videos}}
+	output, err := NewContentRunner(fake, 10).Collect(
+		context.Background(), youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
+	)
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+		t.Fatalf("error=%v output=%#v", err, output)
+	}
+}
+
+func TestChannelRunnerRejectsMismatchedLiveIdentity(t *testing.T) {
+	t.Parallel()
+	var result youtubejs.ChannelResult
+	loadJSON(t, "channel.json", &result)
+	result.LiveSessions[0].ChannelID = "UC_OTHER"
+	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(
+		context.Background(), youtubeInput(t, "UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot),
+	)
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+		t.Fatalf("error=%v output=%#v", err, output)
+	}
+}
+
+func TestCommunityRunnerRejectsNullRows(t *testing.T) {
+	t.Parallel()
+	result := youtubejs.CommunityResult{
+		Posts: []*parser.CommunityPost{nil},
+		Pagination: youtubejs.Pagination{
+			PageCount: 1, Exhausted: true, Continuity: string(contract.ContinuityContiguous),
+			TerminationReason: youtubejs.TerminationExhausted,
+		},
+	}
+	output, err := NewCommunityRunner(&communityFake{result: result}, 10).Collect(
+		context.Background(), youtubeInput(t, "UC_TEST", "community_collect", contract.KindCommunityPage),
+	)
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
 
@@ -262,7 +387,7 @@ func TestViewerRunnerSameSlotRetryKeepsSampleIdentity(t *testing.T) {
 	var result youtubejs.ViewerResult
 	loadJSON(t, "viewer_hidden.json", &result)
 	runner := NewViewerRunner(&viewerFake{result: result})
-	input := youtubeInput("vid-1", "youtubejs_viewer", contract.KindViewerSample)
+	input := youtubeInput(t, "vid-1", "youtubejs_viewer", contract.KindViewerSample)
 	first, err := runner.Collect(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
@@ -272,31 +397,37 @@ func TestViewerRunnerSameSlotRetryKeepsSampleIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	var payload contract.ViewerSampleV1
-	if err := json.Unmarshal(first.Observations[0].Payload, &payload); err != nil {
+	firstObservations := first.Output().Observations()
+	secondObservations := second.Output().Observations()
+	if len(firstObservations) != 1 || len(secondObservations) != 1 {
+		t.Fatalf("first=%#v second=%#v, want one observation each", firstObservations, secondObservations)
+		return
+	}
+	if err := json.Unmarshal(firstObservations[0].Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if !payload.SampleWindowStart.Equal(input.Lease.ScheduledFor) {
-		t.Fatalf("sample window = %s, want lease %s", payload.SampleWindowStart, input.Lease.ScheduledFor)
+	if !payload.SampleWindowStart.Equal(input.Lease().ScheduledFor) {
+		t.Fatalf("sample window = %s, want lease %s", payload.SampleWindowStart, input.Lease().ScheduledFor)
 	}
-	if first.Observations[0].ObservationKey != second.Observations[0].ObservationKey {
-		t.Fatalf("retry changed observation key %s vs %s", first.Observations[0].ObservationKey, second.Observations[0].ObservationKey)
+	if firstObservations[0].ObservationKey != secondObservations[0].ObservationKey {
+		t.Fatalf("retry changed observation key %s vs %s", firstObservations[0].ObservationKey, secondObservations[0].ObservationKey)
 	}
 }
 
 func TestContentRunnerDoesNotPublishOnParserDrift(t *testing.T) {
 	t.Parallel()
-	runner := NewContentRunner(&contentFake{err: collecterr.New(collecterr.ParserDrift, "content row is missing video id")}, 10)
-	output, err := runner.Collect(context.Background(), youtubeInput("UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
-	if err == nil || collecterr.Code(err) != collecterr.ParserDrift || len(output.Observations) != 0 {
+	runner := NewContentRunner(&contentFake{err: collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "content row is missing video id")}, 10)
+	output, err := runner.Collect(context.Background(), youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
 
 func TestCommunityRunnerDoesNotPublishOnFetchError(t *testing.T) {
 	t.Parallel()
-	runner := NewCommunityRunner(&communityFake{err: collecterr.New(collecterr.Timeout, "helper timeout")}, 10)
-	output, err := runner.Collect(context.Background(), youtubeInput("UC_FAIL", "community_collect", contract.KindCommunityPage))
-	if err == nil || collecterr.Code(err) != collecterr.Timeout || len(output.Observations) != 0 {
+	runner := NewCommunityRunner(&communityFake{err: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "helper timeout")}, 10)
+	output, err := runner.Collect(context.Background(), youtubeInput(t, "UC_FAIL", "community_collect", contract.KindCommunityPage))
+	if err == nil || collecterr.CodeOf(err) != collecterr.Timeout || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
@@ -304,33 +435,79 @@ func TestCommunityRunnerDoesNotPublishOnFetchError(t *testing.T) {
 func mustCollectCommunity(t *testing.T, result *youtubejs.CommunityResult) contract.Envelope {
 	t.Helper()
 	output, err := NewCommunityRunner(&communityFake{result: *result}, 10).Collect(
-		context.Background(), youtubeInput("UC_TEST", "community_collect", contract.KindCommunityPage),
+		context.Background(), youtubeInput(t, "UC_TEST", "community_collect", contract.KindCommunityPage),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return output.Observations[0]
+	observations := output.Output().Observations()
+	if len(observations) != 1 {
+		t.Fatalf("observations = %#v, want exactly one", observations)
+		return contract.Envelope{}
+	}
+	return observations[0]
 }
 
-func youtubeInput(subject, jobKind string, kinds ...contract.ObservationKind) *collectutil.RunInput {
+func youtubeInput(t testing.TB, subject, jobKind string, kinds ...contract.ObservationKind) *collectutil.RunInput {
+	t.Helper()
 	generations := make(map[contract.ObservationKind]int64, len(kinds))
 	for _, kind := range kinds {
 		generations[kind] = 1
 	}
-	return &collectutil.RunInput{
-		Spec: joblease.JobSpec{
-			JobKey: "collector:youtubejs:" + jobKind + ":" + subject, Provider: contract.ProviderYouTubeJS,
-			Class: "SUBJECT", CollectionJobKind: jobKind, SubjectKey: subject, PollInterval: time.Minute,
-		},
-		Lease: contract.LeaseProof{
-			JobKey: "collector:youtubejs:" + jobKind + ":" + subject, CollectionJobKind: jobKind,
-			OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
-			ScheduledFor: time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC),
-		},
-		ContractGenerations: generations,
-		MaxPages:            1,
-		MaxAggregateBytes:   1 << 20,
+	spec := joblease.JobSpec{
+		JobKey: "collector:youtubejs:" + jobKind + ":" + subject, Provider: contract.ProviderYouTubeJS,
+		Class: "SUBJECT", CollectionJobKind: jobKind, SubjectKey: subject, PollInterval: time.Minute,
 	}
+	lease := contract.LeaseProof{
+		JobKey: "collector:youtubejs:" + jobKind + ":" + subject, CollectionJobKind: jobKind,
+		OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
+		ScheduledFor: time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC),
+	}
+	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: sourceobservation.JobKind(jobKind)})
+	snapshot, err := collectutil.NewContractSnapshot(kinds, generations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled := make(map[contract.ObservationKind][]string, len(job.RequestedKinds()))
+	for _, kind := range job.RequestedKinds() {
+		enabled[kind] = []string{subject}
+	}
+	targets := testutil.TargetSnapshot(t, &spec, job, enabled)
+	lease.ProjectionGeneration = targets.Generation()
+	input, err := collectutil.NewRunInput(&spec, &lease, snapshot, targets, 1, 1<<20, job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &input
+}
+
+func withEnabled(t testing.TB, input *collectutil.RunInput, enabled map[contract.ObservationKind][]string) *collectutil.RunInput {
+	t.Helper()
+	job := input.Job()
+	generations := make(map[contract.ObservationKind]int64, len(job.Emissions()))
+	for _, kind := range job.Emissions() {
+		generation, err := input.Generation(kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		generations[kind] = generation
+	}
+	snapshot, err := collectutil.NewContractSnapshot(job.Emissions(), generations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputSpec := input.Spec()
+	targets := testutil.TargetSnapshot(t, &inputSpec, job, enabled)
+	lease := input.Lease()
+	lease.ProjectionGeneration = targets.Generation()
+	result, err := collectutil.NewRunInput(
+		&inputSpec, &lease, snapshot, targets,
+		input.MaxPages(), input.MaxSuccessResponseBytes(), job,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &result
 }
 
 func loadJSON(t *testing.T, name string, dest any) {
@@ -354,15 +531,19 @@ func (f *communityFake) FetchCommunity(context.Context, youtubejs.CommunityReque
 }
 
 type contentFake struct {
-	results map[string]youtubejs.ContentResult
-	calls   int
-	err     error
+	results   map[string]youtubejs.ContentResult
+	errByKind map[string]error
+	calls     int
+	err       error
 }
 
 func (f *contentFake) FetchContent(_ context.Context, request youtubejs.ContentRequest) (youtubejs.ContentResult, error) {
 	f.calls++
 	if f.err != nil {
 		return youtubejs.ContentResult{}, f.err
+	}
+	if err := f.errByKind[request.Kind]; err != nil {
+		return youtubejs.ContentResult{}, err
 	}
 	return f.results[request.Kind], nil
 }

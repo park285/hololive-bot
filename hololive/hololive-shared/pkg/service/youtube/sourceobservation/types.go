@@ -111,6 +111,11 @@ const (
 type PublishedObservation struct {
 	ObservationID int64
 	Outcome       PublishOutcome
+	Ordinal       int
+}
+
+func NewPublishedObservation(observationID int64, outcome PublishOutcome, ordinal int) PublishedObservation {
+	return PublishedObservation{ObservationID: observationID, Outcome: outcome, Ordinal: ordinal}
 }
 
 type PublishBatchResult struct {

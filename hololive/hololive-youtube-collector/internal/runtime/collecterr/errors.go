@@ -4,38 +4,53 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
+	"io"
+	"net"
 	"strings"
-	"time"
+	"syscall"
 	"unicode/utf8"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	sharedlogging "github.com/park285/shared-go/pkg/logging"
 )
 
+type ErrorCode = contract.CollectionErrorCode
+type FailureClass = contract.FailureClass
+
 const (
-	Timeout         = "collection_timeout"
-	Canceled        = "collection_canceled"
-	ParserDrift     = "parser_drift"
-	PaginationGap   = "pagination_gap"
-	Cooldown        = "cooldown"
-	LeaseLost       = "lease_lost"
-	PublishRejected = "publish_rejected"
-	Failed          = "collection_failed"
-	AcquireFailed   = "lease_acquire_failed"
-	NotAcquired     = "lease_not_acquired"
-	DeferFailed     = "lease_defer_failed"
-	CandidateFailed = "candidate_load_failed"
-	UnknownClass    = "unknown_error"
-	MaxDetailBytes  = 2048
+	Timeout                = contract.ErrorCollectionTimeout
+	Canceled               = contract.ErrorCollectionCanceled
+	ParserDrift            = contract.ErrorParserDrift
+	Cooldown               = contract.ErrorCooldown
+	PublishRejected        = contract.ErrorPublishRejected
+	Failed                 = contract.ErrorCollectionFailed
+	ResponseTooLarge       = contract.ErrorResponseTooLarge
+	Configuration          = contract.ErrorConfiguration
+	HelperBusy             = contract.ErrorHelperBusy
+	HelperProtocolMismatch = contract.ErrorHelperProtocolMismatch
+	Internal               = contract.ErrorInternalInvariant
+	TargetRosterTooLarge   = contract.ErrorTargetRosterTooLarge
+
+	ClassTransient     = contract.ClassTransient
+	ClassTimeout       = contract.ClassTimeout
+	ClassCanceled      = contract.ClassCanceled
+	ClassCooldown      = contract.ClassCooldown
+	ClassDataContract  = contract.ClassDataContract
+	ClassResourceLimit = contract.ClassResourceLimit
+	ClassConfiguration = contract.ClassConfiguration
+	ClassProtocol      = contract.ClassProtocol
+	ClassSuperseded    = contract.ClassSuperseded
+	ClassInternal      = contract.ClassInternal
+
+	UnknownClass   = "unknown_error"
+	MaxDetailBytes = 2048
 )
 
-var errorClassPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,63}$`)
-
 type Error struct {
-	Code    string
-	Class   string
-	retryAt time.Time
-	err     error
+	code  ErrorCode
+	class FailureClass
+	retry RetryHint
+	err   error
 }
 
 func (e *Error) Error() string {
@@ -43,7 +58,7 @@ func (e *Error) Error() string {
 		return ""
 	}
 	if e.err == nil {
-		return e.Code
+		return string(e.code)
 	}
 	return e.err.Error()
 }
@@ -55,60 +70,91 @@ func (e *Error) Unwrap() error {
 	return e.err
 }
 
-func Wrap(code string, err error) error {
-	return WrapClass(code, UnknownClass, err)
+func New(code ErrorCode, class FailureClass, message string) error {
+	return newError(code, class, defaultRetryHint(), fmt.Errorf("%s", message))
 }
 
-func WrapClass(code, class string, err error) error {
+func Wrap(code ErrorCode, class FailureClass, err error) error {
 	if err == nil {
 		return nil
 	}
-	return &Error{Code: code, Class: normalizeClass(class), err: err}
+	return newError(code, class, defaultRetryHint(), err)
 }
 
-func New(code, message string) error {
-	return &Error{Code: code, err: fmt.Errorf("%s", message)}
-}
-
-func CooldownUntil(message string, retryAt time.Time) error {
-	return &Error{Code: Cooldown, retryAt: retryAt.UTC(), err: fmt.Errorf("%s", message)}
-}
-
-func RetryAt(err error) (time.Time, bool) {
-	var typed *Error
-	if errors.As(err, &typed) && typed != nil && !typed.retryAt.IsZero() {
-		return typed.retryAt, true
+func WithRetry(err error, hint RetryHint) error {
+	if err == nil {
+		return nil
 	}
-	return time.Time{}, false
+	normalized := Normalize(err)
+	if hint.Validate() != nil {
+		return newError(Internal, ClassInternal, defaultRetryHint(), err)
+	}
+	return &Error{code: normalized.code, class: normalized.class, retry: hint, err: err}
 }
 
-func Code(err error) string {
-	var typed *Error
-	if errors.As(err, &typed) && typed != nil && typed.Code != "" {
-		return typed.Code
+func Normalize(err error) *Error {
+	if err == nil {
+		return nil
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return Timeout
-	}
-	if errors.Is(err, context.Canceled) {
-		return Canceled
-	}
-	return Failed
-}
-
-func Class(err error) string {
 	var typed *Error
 	if errors.As(err, &typed) && typed != nil {
-		return normalizeClass(typed.Class)
+		return typed.normalized()
 	}
-	return UnknownClass
+	if errors.Is(err, context.DeadlineExceeded) {
+		return &Error{code: Timeout, class: ClassTimeout, retry: defaultRetryHint(), err: err}
+	}
+	if errors.Is(err, context.Canceled) {
+		return &Error{code: Canceled, class: ClassCanceled, retry: defaultRetryHint(), err: err}
+	}
+	if recognizedTransientNetwork(err) {
+		return &Error{code: Failed, class: ClassTransient, retry: defaultRetryHint(), err: err}
+	}
+	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: err}
 }
 
-func Detail(err error) string {
-	if err == nil {
-		return ""
+func CodeOf(err error) ErrorCode {
+	if normalized := Normalize(err); normalized != nil {
+		return normalized.code
 	}
-	return SanitizeDetail(err.Error())
+	return Internal
+}
+
+func ClassOf(err error) FailureClass {
+	if normalized := Normalize(err); normalized != nil {
+		return normalized.class
+	}
+	return ClassInternal
+}
+
+func RetryOf(err error) RetryHint {
+	if normalized := Normalize(err); normalized != nil {
+		return normalized.retry
+	}
+	return defaultRetryHint()
+}
+
+func DiagnosticOf(err error) contract.FailureDiagnostic {
+	normalized := Normalize(err)
+	if normalized == nil {
+		diagnostic, diagErr := contract.NewFailureDiagnostic(Internal, ClassInternal, string(Internal))
+		if diagErr != nil {
+			return contract.FailureDiagnostic{}
+		}
+		return diagnostic
+	}
+	detail := SanitizeDetail(normalized.Error())
+	if strings.TrimSpace(detail) == "" {
+		detail = string(normalized.code)
+	}
+	diagnostic, diagErr := contract.NewFailureDiagnostic(normalized.code, normalized.class, detail)
+	if diagErr != nil {
+		fallback, fallbackErr := contract.NewFailureDiagnostic(Internal, ClassInternal, string(Internal))
+		if fallbackErr != nil {
+			return contract.FailureDiagnostic{}
+		}
+		return fallback
+	}
+	return diagnostic
 }
 
 func SanitizeDetail(detail string) string {
@@ -124,22 +170,88 @@ func SanitizeDetail(detail string) string {
 	return detail[:cut]
 }
 
-func normalizeClass(class string) string {
-	if errorClassPattern.MatchString(class) {
-		return class
-	}
-	return UnknownClass
-}
-
 func FromContext(err error) error {
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return Wrap(Timeout, err)
+		return Wrap(Timeout, ClassTimeout, err)
 	}
 	if errors.Is(err, context.Canceled) {
-		return Wrap(Canceled, err)
+		return Wrap(Canceled, ClassCanceled, err)
 	}
-	return Wrap(Failed, err)
+	if recognizedTransientNetwork(err) {
+		return Wrap(Failed, ClassTransient, err)
+	}
+	return Wrap(Internal, ClassInternal, err)
+}
+
+func newError(code ErrorCode, class FailureClass, hint RetryHint, cause error) *Error {
+	typed := &Error{code: code, class: class, retry: hint, err: cause}
+	if hint.Validate() != nil {
+		typed.code = Internal
+		typed.class = ClassInternal
+		typed.retry = defaultRetryHint()
+		return typed
+	}
+	if repaired, ok := repairFailureTuple(code, class); ok {
+		typed.code = repaired.code
+		typed.class = repaired.class
+		return typed
+	}
+	typed.code = Internal
+	typed.class = ClassInternal
+	typed.retry = defaultRetryHint()
+	return typed
+}
+
+func (e *Error) normalized() *Error {
+	if e == nil {
+		return nil
+	}
+	hint := e.retry
+	if hint.Validate() != nil {
+		hint = defaultRetryHint()
+	}
+	if repaired, ok := repairFailureTuple(e.code, e.class); ok {
+		return &Error{code: repaired.code, class: repaired.class, retry: hint, err: e.err}
+	}
+	if errors.Is(e.err, context.DeadlineExceeded) {
+		return &Error{code: Timeout, class: ClassTimeout, retry: defaultRetryHint(), err: e.err}
+	}
+	if errors.Is(e.err, context.Canceled) {
+		return &Error{code: Canceled, class: ClassCanceled, retry: defaultRetryHint(), err: e.err}
+	}
+	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: e.err}
+}
+
+type repairedFailure struct {
+	code  ErrorCode
+	class FailureClass
+}
+
+func repairFailureTuple(code ErrorCode, class FailureClass) (repairedFailure, bool) {
+	if contract.ValidDurableFailureTuple(code, class) {
+		return repairedFailure{code: code, class: class}, true
+	}
+	if repaired, ok := contract.DefaultFailureClass(code); ok {
+		return repairedFailure{code: code, class: repaired}, true
+	}
+	return repairedFailure{}, false
+}
+
+func recognizedTransientNetwork(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var dns *net.DNSError
+	if errors.As(err, &dns) {
+		return true
+	}
+	return errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNABORTED) ||
+		errors.Is(err, syscall.EPIPE)
 }

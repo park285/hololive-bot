@@ -1,10 +1,58 @@
 export type Awaitable<T> = T | Promise<T>;
 
+export type RuntimeState =
+  | "UNCONFIGURED"
+  | "READY"
+  | "DRAINING"
+  | "STOPPED"
+  | "FAULTED";
+
+export interface BootstrapProxy {
+  enabled: boolean;
+  url?: string;
+}
+
+export interface BootstrapLimits {
+  request_body_bytes: number;
+  response_body_bytes: number;
+  max_inflight: number;
+}
+
+export interface BootstrapRequest {
+  protocol_version: number;
+  proxy: BootstrapProxy;
+  limits: BootstrapLimits;
+}
+
+export interface BootstrapResponse {
+  protocol_version: number;
+  state: RuntimeState;
+  proxy_enabled: boolean;
+  request_body_bytes: number;
+  response_body_bytes: number;
+  max_inflight: number;
+}
+
+export interface HealthResponse {
+  protocol_version: number;
+  state: RuntimeState;
+  inflight: number;
+  max_inflight: number;
+  proxy_enabled: boolean;
+}
+
 export type Continuity = "CONTIGUOUS" | "GAP_UNRESOLVED" | "NOT_APPLICABLE";
 export type ViewerAvailability = "AVAILABLE" | "HIDDEN" | "UNAVAILABLE";
 export type LiveStatus = "LIVE" | "UPCOMING" | "ENDED" | "CANCELLED";
 export type PhotoKind = "avatar" | "banner";
 export type ContentKind = "videos" | "shorts";
+export type TerminationReason =
+  | "exhausted"
+  | "max_pages"
+  | "max_results"
+  | "max_success_response_bytes"
+  | "cursor_loop"
+  | "continuation_transient";
 
 export interface Pagination {
   page_count: number;
@@ -12,14 +60,15 @@ export interface Pagination {
   cursor_end?: string;
   exhausted: boolean;
   continuity: Continuity;
+  termination_reason: TerminationReason;
 }
 
 export interface CommunityRequest {
+  protocol_version: number;
   channel_id: string;
   max_results?: number;
   max_pages?: number;
-  max_aggregate_bytes?: number;
-  proxy_url?: string;
+  max_success_response_bytes: number;
 }
 
 export interface ContentRequest extends CommunityRequest {
@@ -27,23 +76,23 @@ export interface ContentRequest extends CommunityRequest {
 }
 
 export interface ChannelRequest {
+  protocol_version: number;
   channel_id: string;
   max_pages?: number;
-  max_aggregate_bytes?: number;
-  proxy_url?: string;
+  max_success_response_bytes: number;
 }
 
 export interface ViewerRequest {
+  protocol_version: number;
   video_id: string;
-  max_aggregate_bytes?: number;
-  proxy_url?: string;
+  max_success_response_bytes: number;
 }
 
 export interface CommunityFetchOptions {
   channelId: string;
   maxResults?: number;
   maxPages?: number;
-  maxAggregateBytes?: number;
+  maxSuccessResponseBytes: number;
 }
 
 export interface ContentFetchOptions extends CommunityFetchOptions {
@@ -53,25 +102,25 @@ export interface ContentFetchOptions extends CommunityFetchOptions {
 export interface ChannelFetchOptions {
   channelId: string;
   maxPages?: number;
-  maxAggregateBytes?: number;
+  maxSuccessResponseBytes: number;
 }
 
 export interface ViewerFetchOptions {
   videoId: string;
-  maxAggregateBytes?: number;
+  maxSuccessResponseBytes: number;
 }
 
-export type CommunityFetcher = (options: CommunityFetchOptions) => Awaitable<CommunityResult>;
-export type ContentFetcher = (options: ContentFetchOptions) => Awaitable<ContentResult>;
-export type ChannelFetcher = (options: ChannelFetchOptions) => Awaitable<ChannelResult>;
-export type ViewerFetcher = (options: ViewerFetchOptions) => Awaitable<ViewerResult>;
-export type ProxyConfigurator = (url: string | undefined) => void;
+export type CommunityFetcher = (options: CommunityFetchOptions) => Awaitable<Omit<CommunityResult, "protocol_version">>;
+export type ContentFetcher = (options: ContentFetchOptions) => Awaitable<Omit<ContentResult, "protocol_version">>;
+export type ChannelFetcher = (options: ChannelFetchOptions) => Awaitable<Omit<ChannelResult, "protocol_version">>;
+export type ViewerFetcher = (options: ViewerFetchOptions) => Awaitable<Omit<ViewerResult, "protocol_version">>;
 
 export interface FetcherSet {
   fetchCommunity: CommunityFetcher;
   fetchContent: ContentFetcher;
   fetchChannel: ChannelFetcher;
   fetchViewer: ViewerFetcher;
+  close?: () => Awaitable<void>;
 }
 
 export type RpcFetchers = FetcherSet;
@@ -79,18 +128,62 @@ export type RpcFetchers = FetcherSet;
 export interface RpcEndpoint<Request, Response> {
   validateRequest: (value: unknown) => Request;
   validateResponse: (value: unknown) => Response;
+  minimumSuccessResponseBytes: number;
 }
 
-export interface HelperErrorBody {
-  error: string;
-  error_code: string;
-  error_class: string;
+export interface ProtocolMeta {
+  protocol_version: number;
+}
+
+export type RPCErrorCode =
+  | "invalid_request"
+  | "request_too_large"
+  | "helper_not_ready"
+  | "helper_busy"
+  | "collection_canceled"
+  | "collection_timeout"
+  | "cooldown"
+  | "parser_drift"
+  | "configuration_error"
+  | "response_too_large"
+  | "helper_protocol_mismatch"
+  | "helper_internal_invariant"
+  | "collection_failed";
+
+export type RPCFailureClass =
+  | "TRANSIENT"
+  | "TIMEOUT"
+  | "CANCELED"
+  | "COOLDOWN"
+  | "DATA_CONTRACT"
+  | "RESOURCE_LIMIT"
+  | "CONFIGURATION"
+  | "PROTOCOL"
+  | "INTERNAL";
+
+export type RPCRetryKind = "default" | "after" | "at";
+
+export interface RPCRetryHint {
+  kind: RPCRetryKind;
+  after_ms?: number;
+  at?: string;
+}
+
+export interface RPCFailure {
+  code: RPCErrorCode;
+  class: RPCFailureClass;
+  retry: RPCRetryHint;
+  message: string;
+}
+
+export interface RPCErrorBody extends ProtocolMeta {
+  error: RPCFailure;
 }
 
 export interface CommunityResult extends Pagination {
+  protocol_version: number;
   posts: CommunityPost[];
   missing_tab?: boolean;
-  error?: string;
 }
 
 export interface Thumbnail {
@@ -123,9 +216,9 @@ export interface ContentItem {
 }
 
 export interface ContentResult extends Pagination {
+  protocol_version: number;
   items: ContentItem[];
   missing_tab?: boolean;
-  error?: string;
 }
 
 export interface LiveSessionItem {
@@ -158,17 +251,17 @@ export interface ChannelPhotoVariant {
 }
 
 export interface ChannelResult extends Pagination {
+  protocol_version: number;
   live_sessions: LiveSessionItem[];
   stats: ChannelStatsItem;
   profile: ChannelProfileItem;
   photo: ChannelPhotoVariant[];
   missing_tab?: boolean;
-  error?: string;
 }
 
 export interface ViewerResult extends Pagination {
+  protocol_version: number;
   video_id: string;
   viewer_count?: number | null;
   availability: ViewerAvailability;
-  error?: string;
 }

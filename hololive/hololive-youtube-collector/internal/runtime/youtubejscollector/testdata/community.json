@@ -23,5 +23,6 @@
   ],
   "page_count": 1,
   "exhausted": true,
-  "continuity": "CONTIGUOUS"
+  "continuity": "CONTIGUOUS",
+  "termination_reason": "exhausted"
 }

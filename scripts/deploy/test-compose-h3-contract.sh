@@ -117,6 +117,13 @@ def check(label, ok):
         print(f"[FAIL] {label}", file=sys.stderr)
 
 
+def check_no_unused_scraper_env(name, env):
+    offenders = sorted(key for key in env if key.startswith("SCRAPER_POLL_") or key == "SCRAPER_FETCHER_ENGINE")
+    check(f"{name} has no SCRAPER_POLL_/SCRAPER_FETCHER_ENGINE", not offenders)
+    for key in offenders:
+        check(f"{name} does not receive {key}", False)
+
+
 def healthcheck_url(svc):
     test = (svc.get("healthcheck") or {}).get("test") or []
     return test[-1] if test else ""
@@ -205,6 +212,7 @@ if collector is not None:
     check("youtube-collector has no compose profile", not (collector.get("profiles") or []))
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
+    check_no_unused_scraper_env("youtube-collector", env)
     for holodex_key in ("HOLODEX_API_KEY", "HOLODEX_API_KEY_1"):
         check(f"youtube-collector receives {holodex_key}", env.get(holodex_key) == "stub")
 
@@ -269,6 +277,7 @@ if pc is not None:
     )
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
+    check_no_unused_scraper_env("youtube-collector", env)
 
 
 def has_bind_target(svc, target):
@@ -305,6 +314,7 @@ for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
     env = svc.get("environment") or {}
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"{name} does not receive {iris_key}", iris_key not in env)
+    check_no_unused_scraper_env(name, env)
     check(f"youtube-collector absent from {name} AP render", "youtube-collector" not in services)
 
 H2C_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")

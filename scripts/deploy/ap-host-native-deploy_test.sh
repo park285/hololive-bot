@@ -7,6 +7,7 @@ REMOTE_APPLY="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-remote-apply.sh"
 ROLLBACK="${ROOT_DIR}/scripts/deploy/ap-host-native-rollback.sh"
 RELEASE_PATH_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-release-path.sh"
 ROLLBACK_CHECK_LIB="${ROOT_DIR}/scripts/deploy/lib/ap-host-native-rollback-check.sh"
+UNIT_TEMPLATE="${ROOT_DIR}/scripts/deploy/lib/hololive-youtube-collector.service"
 
 failures=0
 record_fail() { echo "[FAIL] $*" >&2; failures=$((failures + 1)); }
@@ -16,44 +17,52 @@ pass() { echo "[PASS] $*"; }
 . "${RELEASE_PATH_LIB}"
 # shellcheck source=scripts/deploy/lib/ap-host-native-rollback-check.sh
 . "${ROLLBACK_CHECK_LIB}"
+# shellcheck source=scripts/deploy/ap-host-native-deploy_contract_checks.inc.sh
+. "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy_contract_checks.inc.sh"
 
-if grep -Eq 'HOLOLIVE_H3_ADDR=:%s' "${DEPLOY}"; then
-  record_fail "ap-host-native binds H3 to all interfaces (:port) (8c2e3ef9)"
+write_host_env_fn="$(awk '/^write_host_env\(\) \{/,/^}$/' "${DEPLOY}")"
+cfg008_dir="$(mktemp -d)"
+generated_env="${cfg008_dir}/youtube-collector-host.env"
+if [[ -z "${write_host_env_fn}" ]]; then
+  record_fail "ap-host-native write_host_env function is missing"
+elif (
+  service="youtube-collector-a"
+  port="30005"
+  AP_POSTGRES_HOST="hololive-postgres.tail742dd8.ts.net"
+  AP_POSTGRES_PORT="5433"
+  AP_SSH_HOST="100.100.1.6"
+  eval "${write_host_env_fn}"
+  write_host_env "${generated_env}"
+) && [[ -s "${generated_env}" ]]; then
+  if grep -Eq '^(CACHE_HOST|CACHE_PORT|CACHE_SOCKET_PATH|CACHE_PASSWORD|CACHE_DB)=' "${generated_env}"; then
+    record_fail "generated host env contents still include CACHE lines"
+  elif grep -Eq '^SETTINGS_DIR=' "${generated_env}"; then
+    record_fail "generated host env contents still include SETTINGS_DIR"
+  else
+    pass "generated host env contents have 0 CACHE lines"
+    pass "generated host env contents have 0 SETTINGS_DIR lines"
+  fi
 else
-  pass "ap-host-native H3 not bound to all interfaces"
+  record_fail "ap-host-native write_host_env did not produce generated env contents"
+fi
+rm -rf "${cfg008_dir}"
+
+if grep -Eq 'SETTINGS_DIR=' "${DEPLOY}"; then
+  record_fail "ap-host-native must not emit unused SETTINGS_DIR for youtube-collector"
+else
+  pass "host-native generator source does not emit SETTINGS_DIR"
 fi
 
-if grep -Eq 'HOLOLIVE_H3_ADDR=127\.0\.0\.1:%s' "${DEPLOY}"; then
-  pass "ap-host-native H3 bound to loopback"
+if grep -Fq 'install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-collector/settings' "${REMOTE_APPLY}"; then
+  record_fail "ap-host-native must not create unused collector settings dir"
 else
-  record_fail "ap-host-native H3 bind not narrowed to loopback (8c2e3ef9)"
+  pass "ap-host-native does not create unused collector settings dir"
 fi
 
-if grep -Fq 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true' "${DEPLOY}"; then
-  pass "ap-host-native enables the collector runtime"
+if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${DEPLOY}"; then
+  pass "ap-host-native keeps /var/lib/hololive-bot writable under systemd hardening"
 else
-  record_fail "ap-host-native must set YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true"
-fi
-
-if grep -Fq 'AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-hololive-postgres.tail742dd8.ts.net}"' "${DEPLOY}" &&
-   grep -Fq "printf 'POSTGRES_HOST=%s\\n' \"\$AP_POSTGRES_HOST\"" "${DEPLOY}" &&
-   grep -Fq "printf 'CACHE_HOST=%s\\n' \"\${AP_CACHE_HOST:-\$AP_CENTRAL_HOST}\"" "${DEPLOY}"; then
-  pass "ap-host-native separates stable PostgreSQL from the central cache endpoint"
-else
-  record_fail "ap-host-native must use stable PostgreSQL DNS without changing the cache endpoint"
-fi
-
-if grep -Fq 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-collector/settings' "${DEPLOY}"; then
-  pass "ap-host-native settings dir uses persistent varlib path"
-else
-  record_fail "ap-host-native settings dir must not default to read-only release data"
-fi
-
-if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${DEPLOY}" &&
-   grep -Fq 'install -d -m 0750 -o hololive -g opc /var/lib/hololive-bot/youtube-collector/settings' "${REMOTE_APPLY}"; then
-  pass "ap-host-native settings dir is writable for hololive"
-else
-  record_fail "ap-host-native settings dir must be created and writable under systemd hardening"
+  record_fail "ap-host-native must keep /var/lib/hololive-bot writable"
 fi
 
 if grep -q '^ReadWritePaths=.*stack-secrets' "${DEPLOY}"; then

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/park285/hololive-bot/scripts/ci/hardening-evidence/manifest.schema.json",
+  "title": "YouTube collector hardening evidence manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document",
+    "repository",
+    "baseline_sha",
+    "head_sha",
+    "merge_base_sha",
+    "pr_contract",
+    "facts",
+    "invariants",
+    "test_contract_ids",
+    "changed_symbols",
+    "toolchains",
+    "results",
+    "commands_file",
+    "traceability_file",
+    "rollback_revision",
+    "production_change_performed"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "sha256"],
+      "properties": {
+        "name": { "const": "youtube-collector-code-level-hardening-implementation-contract" },
+        "version": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "repository": { "const": "park285/hololive-bot" },
+    "baseline_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "merge_base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "pr_contract": { "type": "string", "pattern": "^PR-[0-9]{2}$" },
+    "facts": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^FACT-[0-9]{2}$" }
+    },
+    "invariants": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "test_contract_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "changed_symbols": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "toolchains": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "required": ["go", "node", "npm", "postgres", "docker", "compose"],
+      "properties": {
+        "go": { "type": "string" },
+        "node": { "type": "string" },
+        "npm": { "type": "string" },
+        "postgres": { "type": "string" },
+        "docker": { "type": "string" },
+        "compose": { "type": "string" }
+      }
+    },
+    "results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "failed", "unexpected_skipped", "unexecuted"],
+      "properties": {
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "unexpected_skipped": { "type": "integer", "minimum": 0 },
+        "unexecuted": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "commands_file": { "const": "commands.jsonl" },
+    "traceability_file": { "const": "traceability.json" },
+    "rollback_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "production_change_performed": { "const": false }
+  }
+}

@@ -21,36 +21,11 @@ func readWalkedSource(root, path string) ([]byte, error) {
 	return fs.ReadFile(os.DirFS(root), filepath.ToSlash(relative))
 }
 
-func TestCollectionReadyPayloadFailsClosedWhenPendingQueueIsUnknown(t *testing.T) {
-	t.Parallel()
-	snapshot := collectionReady{firstSuccess: true, pendingQueueOK: false}
-	payload := snapshot.payload("collector-a", "postgres_queue")
-	if payload["status"] != "not_ready" || payload["dependency"] != "postgres_queue" || payload["pending_queue"] != nil {
-		t.Fatalf("payload = %#v", payload)
-	}
-}
-
-func TestCollectionReadyRequiresFirstSuccessfulPublish(t *testing.T) {
-	t.Parallel()
-	snapshot := collectionReady{pendingQueueOK: true, dueJobs: 0}
-	if dependency := snapshot.dependency(); dependency != "first_success" {
-		t.Fatalf("dependency() = %q, want first_success", dependency)
-	}
-	snapshot.firstSuccess = true
-	if dependency := snapshot.dependency(); dependency != "observation_handoff" {
-		t.Fatalf("dependency() = %q, want observation_handoff", dependency)
-	}
-	snapshot.handoffComplete = true
-	if dependency := snapshot.dependency(); dependency != "" {
-		t.Fatalf("dependency() = %q, want ready", dependency)
-	}
-}
-
 func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
-	t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "")
-
-	runtime, err := Build(context.Background(), &settings.Config{
-		Ingestion: settings.IngestionConfig{YouTubeEnabled: true},
+	runtime, err := Build(context.Background(), &settings.YouTubeCollectorRuntimeConfig{
+		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{
+			YouTubeIngestionEnabled: true,
+		},
 	}, testLogger())
 	if err == nil || runtime != nil {
 		t.Fatalf("Build() = %#v, %v, want runtime disabled error", runtime, err)
@@ -61,10 +36,11 @@ func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
 }
 
 func TestBuildRequiresYouTubeIngestion(t *testing.T) {
-	t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "true")
-
-	runtime, err := Build(context.Background(), &settings.Config{
-		Ingestion: settings.IngestionConfig{YouTubeEnabled: false},
+	runtime, err := Build(context.Background(), &settings.YouTubeCollectorRuntimeConfig{
+		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{
+			RuntimeAllowed:          true,
+			YouTubeIngestionEnabled: false,
+		},
 	}, testLogger())
 	if err == nil || runtime != nil {
 		t.Fatalf("Build() = %#v, %v, want youtube ingestion error", runtime, err)

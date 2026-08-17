@@ -28,6 +28,17 @@ func (r *PublishRepository) PublishBatch(ctx context.Context, input *PublishBatc
 	return r.inner.PublishBatch(ctx, input)
 }
 
+func (r *PublishRepository) PublishBatchAndDefer(
+	ctx context.Context,
+	input *PublishBatchInput,
+	deferInput DeferCollectionInput,
+) (PublishBatchResult, error) {
+	if r == nil || r.inner == nil {
+		return PublishBatchResult{}, ErrInvalidRepository
+	}
+	return r.inner.PublishBatchAndDefer(ctx, input, deferInput)
+}
+
 type ConsumeRepository struct {
 	inner *Repository
 }

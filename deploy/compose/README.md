@@ -49,15 +49,15 @@ retired address:
 
 ```text
 HOLOLIVE_CENTRAL_POSTGRES_HOST   required
-HOLOLIVE_CENTRAL_CACHE_HOST      required
 HOLOLIVE_CENTRAL_POSTGRES_PORT   default 5433
-HOLOLIVE_CENTRAL_CACHE_PORT      default 6379
 ```
+
+AP collector overlays do not interpolate `HOLOLIVE_CENTRAL_CACHE_HOST`. Collector rendered services have no `CACHE_*` env, no `valkey-cache` depends_on, and no `valkey-cache-socket` mount. Central `docker-compose.prod.yml` still owns `x-cache-env` for `hololive-api` / `hololive-alarm-worker`. `CACHE_PASSWORD` remains required to interpolate the shared `valkey-cache` service definition from the base file.
 
 `ap-compose.env` owns those values. `CLIPROXY_BASE_URL` comes from the same file through
 `docker-compose.prod.yml`; AP overlays must not re-declare it. Host-native APs
-(`youtube-collector-a`/`-d`) get the same endpoint from `AP_CENTRAL_HOST` in
-`scripts/deploy/ap-host-native-deploy.sh`.
+(`youtube-collector-a`/`-d`) get PostgreSQL from `AP_POSTGRES_HOST` in
+`scripts/deploy/ap-host-native-deploy.sh` and do not emit `CACHE_*` lines.
 
 AP overlays use only `youtube-collector.env` for `youtube-collector` instances, so Iris
 egress tokens stay out of AP collector containers. Osaka/Seoul AP hosts also use
@@ -65,6 +65,8 @@ egress tokens stay out of AP collector containers. Osaka/Seoul AP hosts also use
 The central unsuffixed `youtube-collector` (`c`) also uses scoped
 `youtube-collector.env`; it still must not receive Iris egress tokens or the
 monolithic Compose env file as an `env_file`.
+
+Collector compatibility env pairs use `${NEW-${OLD-default}}` / `${OLD-${NEW-default}}` interpolation. This preserves explicit empty values so the collector loader fails closed, while unset, new-only, old-only, equal, and conflicting inputs retain the truth table documented in [`youtube-collector.md`](../../docs/current/runbooks/youtube-collector.md#key-environment-variables).
 
 Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored
 `compose.env` or `ap-compose.env` plus the per-service env files to the target host.

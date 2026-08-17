@@ -23,6 +23,7 @@ collector_readiness_validate() {
   collector_readiness_json_field "$payload" helper '"ok"' || return 1
   collector_readiness_json_field "$payload" first_success true || return 1
   collector_readiness_json_field "$payload" handoff_status '"PROCESSED"' || return 1
+  collector_readiness_json_field "$payload" handoff_processed true || return 1
   collector_readiness_json_field "$payload" pending_queue '(null|-?[0-9]+)' || return 1
 }
 

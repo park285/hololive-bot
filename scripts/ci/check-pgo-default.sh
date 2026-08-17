@@ -112,7 +112,7 @@ if ! docker compose -f "${COMPOSE_FILE}" config --no-interpolate --format json >
   exit 1
 fi
 
-python3 - "${tmp_dir}/compose.json" "${entries_file}" "${COMPOSE_FILE}" <<'PY'
+python3 - "${tmp_dir}/compose.json" "${entries_file}" "${COMPOSE_FILE}" "${ROOT_DIR}" <<'PY'
 import json
 import re
 import sys
@@ -122,6 +122,7 @@ compose = json.loads(Path(sys.argv[1]).read_text())
 services = compose.get("services", {})
 managed_services = set()
 compose_path = Path(sys.argv[3]).resolve()
+repo_root = Path(sys.argv[4]).resolve()
 
 
 def validate_dockerfile(service_name, service):
@@ -140,13 +141,23 @@ def validate_dockerfile(service_name, service):
     if re.search(r"(?m)^\s*ARG\s+GO_PGO_FILE(?:\s*=|\s*$)", source):
         print(f"[pgo-gate] service {service_name} Dockerfile exposes GO_PGO_FILE", file=sys.stderr)
         raise SystemExit(1)
+    uses_shared_script = bool(re.search(r"build-youtube-collector-go\.sh\b", source))
+    if uses_shared_script:
+        script = repo_root / "scripts/build/build-youtube-collector-go.sh"
+        if not script.is_file():
+            print(f"[pgo-gate] service {service_name} shared production build script missing: {script}", file=sys.stderr)
+            raise SystemExit(1)
+        script_text = script.read_text(encoding="utf-8")
+        if not re.search(r"(?:^|\s)-pgo=off(?:\s|$)", script_text):
+            print(f"[pgo-gate] service {service_name} shared production build script must use -pgo=off", file=sys.stderr)
+            raise SystemExit(1)
     logical_source = re.sub(r"\\\r?\n", " ", source)
     commands = []
     for line in logical_source.splitlines():
         if not re.match(r"^\s*RUN\b", line):
             continue
         commands.extend(re.findall(r"\bgo\s+build\b.*?(?=\s*(?:&&|;|\|\||$))", line))
-    if not commands:
+    if not commands and not uses_shared_script:
         print(f"[pgo-gate] service {service_name} Dockerfile has no Go build command", file=sys.stderr)
         raise SystemExit(1)
     for command in commands:

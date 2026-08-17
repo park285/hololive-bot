@@ -373,6 +373,16 @@ func TestLoad_HolodexLiveStatusFallbackEnvOverrides(t *testing.T) {
 	})
 }
 
+func TestLoad_HolodexTimeoutMustBePositive(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("HOLODEX_TIMEOUT_SECONDS", "0")
+
+	_, err := load()
+	if err == nil || !strings.Contains(err.Error(), "HOLODEX_TIMEOUT_SECONDS must be positive") {
+		t.Fatalf("Load() error = %v, want HOLODEX_TIMEOUT_SECONDS must be positive", err)
+	}
+}
+
 func TestLoad_HolodexLiveStatusFallbackValidation(t *testing.T) {
 	tests := []struct {
 		name    string

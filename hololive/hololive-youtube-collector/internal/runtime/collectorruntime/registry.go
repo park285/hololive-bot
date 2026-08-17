@@ -2,7 +2,9 @@ package collectorruntime
 
 import (
 	"fmt"
+	"math"
 	"slices"
+	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
@@ -12,6 +14,122 @@ import (
 type JobRunner = collectutil.JobRunner
 type RunInput = collectutil.RunInput
 type RunOutput = collectutil.RunOutput
+type CollectResult = collectutil.CollectResult
+
+type ExecutionProfile struct {
+	maxUpstreamCalls int
+	requestTimeout   time.Duration
+	rateInterval     time.Duration
+	providerInflight int
+	overhead         time.Duration
+	collectTimeout   time.Duration
+}
+
+func NewExecutionProfile(
+	maxCalls int,
+	requestTimeout time.Duration,
+	rateInterval time.Duration,
+	providerInflight int,
+	overhead time.Duration,
+	configuredCollectTimeout time.Duration,
+) (ExecutionProfile, error) {
+	profile := ExecutionProfile{
+		maxUpstreamCalls: maxCalls, requestTimeout: requestTimeout, rateInterval: rateInterval,
+		providerInflight: providerInflight, overhead: overhead, collectTimeout: configuredCollectTimeout,
+	}
+	if configuredCollectTimeout == 0 {
+		minimum, err := profile.minimum()
+		if err != nil {
+			return ExecutionProfile{}, err
+		}
+		profile.collectTimeout = minimum
+	}
+	if err := profile.Validate(); err != nil {
+		return ExecutionProfile{}, err
+	}
+	return profile, nil
+}
+
+func (p ExecutionProfile) MinimumCollectTimeout() time.Duration {
+	value, err := p.minimum()
+	if err != nil {
+		return 0
+	}
+	return value
+}
+
+func (p ExecutionProfile) CollectTimeout() time.Duration {
+	return p.collectTimeout
+}
+
+func (p ExecutionProfile) Validate() error {
+	minimum, err := p.minimum()
+	if err != nil {
+		return err
+	}
+	if p.collectTimeout < minimum {
+		return fmt.Errorf("validate execution profile: collect timeout is below minimum")
+	}
+	return nil
+}
+
+func (p ExecutionProfile) minimum() (time.Duration, error) {
+	if p.maxUpstreamCalls < 1 || p.providerInflight < 1 || p.requestTimeout <= 0 || p.rateInterval < 0 || p.overhead <= 0 {
+		return 0, fmt.Errorf("validate execution profile: values are outside bounds")
+	}
+	requestBudget, err := checkedMulDuration(p.maxUpstreamCalls, p.requestTimeout)
+	if err != nil {
+		return 0, err
+	}
+	if p.maxUpstreamCalls > math.MaxInt/p.providerInflight {
+		return 0, fmt.Errorf("validate execution profile: reservation count overflows")
+	}
+	reservationCount := p.maxUpstreamCalls*p.providerInflight - 1
+	limiterBudget, err := checkedMulDuration(reservationCount, p.rateInterval)
+	if err != nil {
+		return 0, err
+	}
+	return checkedAddDuration(requestBudget, limiterBudget, p.overhead)
+}
+
+func checkedMulDuration(n int, duration time.Duration) (time.Duration, error) {
+	if n < 0 || duration < 0 || (duration > 0 && int64(n) > math.MaxInt64/int64(duration)) {
+		return 0, fmt.Errorf("validate execution profile: duration multiplication overflows")
+	}
+	return time.Duration(n) * duration, nil
+}
+
+func checkedAddDuration(values ...time.Duration) (time.Duration, error) {
+	var result time.Duration
+	for _, value := range values {
+		if value < 0 || result > time.Duration(math.MaxInt64)-value {
+			return 0, fmt.Errorf("validate execution profile: duration addition overflows")
+		}
+		result += value
+	}
+	return result, nil
+}
+
+type RegisteredRunner struct {
+	runner   JobRunner
+	contract sourceobservation.JobContract
+	profile  ExecutionProfile
+}
+
+func newRegisteredRunner(
+	runner JobRunner,
+	job sourceobservation.JobContract,
+	profile ExecutionProfile,
+) (RegisteredRunner, error) {
+	if runner == nil || runner.JobID() != job.ID() || job.Validate() != nil || profile.Validate() != nil {
+		return RegisteredRunner{}, fmt.Errorf("register collection job runner: registration is invalid")
+	}
+	return RegisteredRunner{runner: runner, contract: job.Clone(), profile: profile}, nil
+}
+
+func (r RegisteredRunner) Runner() JobRunner                       { return r.runner }
+func (r RegisteredRunner) Contract() sourceobservation.JobContract { return r.contract.Clone() }
+func (r RegisteredRunner) Profile() ExecutionProfile               { return r.profile }
 
 type runnerKey struct {
 	provider contract.Provider
@@ -19,19 +137,38 @@ type runnerKey struct {
 }
 
 type Registry struct {
-	runners []JobRunner
-	byKey   map[runnerKey]JobRunner
+	runners []RegisteredRunner
+	byKey   map[runnerKey]RegisteredRunner
 }
 
 func NewRegistry(runners ...JobRunner) (*Registry, error) {
+	profiles := make(map[sourceobservation.JobID]ExecutionProfile, len(runners))
+	for _, runner := range runners {
+		if runner == nil {
+			continue
+		}
+		maxCalls := 1
+		if string(runner.JobID().Kind) == "youtubejs_content" {
+			maxCalls = 2
+		}
+		profile, err := NewExecutionProfile(maxCalls, time.Second, 0, 1, time.Second, 0)
+		if err != nil {
+			return nil, err
+		}
+		profiles[runner.JobID()] = profile
+	}
+	return NewRegistryWithProfiles(profiles, runners...)
+}
+
+func NewRegistryWithProfiles(profiles map[sourceobservation.JobID]ExecutionProfile, runners ...JobRunner) (*Registry, error) {
 	contracts := sourceobservation.InitialJobContracts()
 	registry := &Registry{
-		runners: make([]JobRunner, 0, len(runners)),
-		byKey:   make(map[runnerKey]JobRunner, len(runners)),
+		runners: make([]RegisteredRunner, 0, len(runners)),
+		byKey:   make(map[runnerKey]RegisteredRunner, len(runners)),
 	}
-	seenContracts := make(map[string]struct{}, len(contracts))
+	seenContracts := make(map[sourceobservation.JobID]struct{}, len(contracts))
 	for _, runner := range runners {
-		if err := registerRunner(registry, contracts, seenContracts, runner); err != nil {
+		if err := registerRunner(registry, contracts, seenContracts, profiles, runner); err != nil {
 			return nil, err
 		}
 	}
@@ -44,107 +181,49 @@ func NewRegistry(runners ...JobRunner) (*Registry, error) {
 func registerRunner(
 	registry *Registry,
 	contracts sourceobservation.JobContractSet,
-	seenContracts map[string]struct{},
+	seenContracts map[sourceobservation.JobID]struct{},
+	profiles map[sourceobservation.JobID]ExecutionProfile,
 	runner JobRunner,
 ) error {
 	if runner == nil {
 		return fmt.Errorf("register collection job runner: runner is nil")
 	}
-	key := runnerKey{provider: runner.Provider(), jobKind: runner.JobKind()}
+	id := runner.JobID()
+	key := runnerKey{provider: id.Provider, jobKind: string(id.Kind)}
 	if !key.provider.Valid() || key.jobKind == "" {
 		return fmt.Errorf("register collection job runner: identity is invalid")
 	}
 	if _, exists := registry.byKey[key]; exists {
 		return fmt.Errorf("register collection job runner: duplicate %s/%s", key.provider, key.jobKind)
 	}
-	definition, ok := contracts.Definition(key.jobKind)
+	definition, ok := contracts.Definition(id)
 	if !ok {
 		return fmt.Errorf("register collection job runner: unknown job kind %s", key.jobKind)
 	}
-	if err := matchEmissions(key, definition, runner.Emissions()); err != nil {
-		return err
+	profile, ok := profiles[id]
+	if !ok {
+		return fmt.Errorf("register collection job runner: execution profile is missing for %s", id)
 	}
-	if err := validateTargetKinds(key, runner.Emissions(), runner.TargetKinds()); err != nil {
-		return err
-	}
-	registry.byKey[key] = runner
-	registry.runners = append(registry.runners, runner)
-	seenContracts[key.jobKind] = struct{}{}
-	return nil
-}
-
-func validateTargetKinds(
-	key runnerKey,
-	emissions []contract.ObservationKind,
-	targetKinds []contract.ObservationKind,
-) error {
-	if len(targetKinds) == 0 {
-		return fmt.Errorf("register collection job runner: %s/%s has no target kinds", key.provider, key.jobKind)
-	}
-	targetSet, err := targetKindSet(key, targetKinds)
+	registration, err := newRegisteredRunner(runner, definition, profile)
 	if err != nil {
 		return err
 	}
-	for _, kind := range emissions {
-		if _, ok := targetSet[kind]; !ok {
-			return fmt.Errorf("register collection job runner: %s/%s emission is missing from target kinds", key.provider, key.jobKind)
-		}
-	}
+	registry.byKey[key] = registration
+	registry.runners = append(registry.runners, registration)
+	seenContracts[id] = struct{}{}
 	return nil
 }
 
-func targetKindSet(key runnerKey, targetKinds []contract.ObservationKind) (map[contract.ObservationKind]struct{}, error) {
-	targetSet := make(map[contract.ObservationKind]struct{}, len(targetKinds))
-	for _, kind := range targetKinds {
-		if !kind.Valid() {
-			return nil, fmt.Errorf("register collection job runner: %s/%s target kind is invalid", key.provider, key.jobKind)
-		}
-		if _, exists := targetSet[kind]; exists {
-			return nil, fmt.Errorf("register collection job runner: %s/%s target kind is duplicated", key.provider, key.jobKind)
-		}
-		targetSet[kind] = struct{}{}
-	}
-	return targetSet, nil
-}
-
-func matchEmissions(key runnerKey, definition sourceobservation.JobContract, emissions []contract.ObservationKind) error {
-	expected := make([]contract.ObservationKind, 0, len(definition.Emissions))
-	for _, emission := range definition.Emissions {
-		if emission.Provider == key.provider {
-			expected = append(expected, emission.Kind)
-		}
-	}
-	if len(expected) == 0 {
-		return fmt.Errorf("register collection job runner: %s/%s has no compile-time emissions", key.provider, key.jobKind)
-	}
-	if len(emissions) != len(expected) {
-		return fmt.Errorf("register collection job runner: %s/%s emission count mismatch", key.provider, key.jobKind)
-	}
-	sortKinds(expected)
-	actual := append([]contract.ObservationKind(nil), emissions...)
-	sortKinds(actual)
-	for i := range expected {
-		if actual[i] != expected[i] {
-			return fmt.Errorf("register collection job runner: %s/%s emission mismatch", key.provider, key.jobKind)
-		}
-	}
-	return nil
-}
-
-func sortKinds(kinds []contract.ObservationKind) {
-	slices.Sort(kinds)
-}
-
-func (r *Registry) Runners() []JobRunner {
+func (r *Registry) Runners() []RegisteredRunner {
 	if r == nil {
 		return nil
 	}
-	return r.runners
+	return slices.Clone(r.runners)
 }
 
-func (r *Registry) Lookup(provider contract.Provider, jobKind string) (JobRunner, bool) {
+func (r *Registry) Lookup(provider contract.Provider, jobKind string) (RegisteredRunner, bool) {
 	if r == nil {
-		return nil, false
+		return RegisteredRunner{}, false
 	}
 	runner, ok := r.byKey[runnerKey{provider: provider, jobKind: jobKind}]
 	return runner, ok

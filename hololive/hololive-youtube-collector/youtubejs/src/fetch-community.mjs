@@ -1,5 +1,12 @@
 import { mapPost } from "./map-posts.mjs";
-import { paginate } from "./pagination.mjs";
+import {
+  assertResponseBudget,
+  paginate,
+  paginationEnvelopeReserve,
+  paginationResult,
+} from "./pagination.mjs";
+
+const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, posts: [] });
 
 export function listBackstagePosts(feed, postType) {
   if (feed == null) {
@@ -12,7 +19,9 @@ export function listBackstagePosts(feed, postType) {
     const typed = feed.memo.getType(postType) || [];
     return [...typed];
   }
-  return [];
+  const error = new Error("community page shape is not recognized");
+  error.code = "parser_drift";
+  throw error;
 }
 
 export function isMissingCommunity(err) {
@@ -30,7 +39,7 @@ export async function fetchCommunityFeed({
   channelId,
   maxResults,
   maxPages,
-  maxAggregateBytes,
+  maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
   innertube,
   postType,
 } = {}) {
@@ -41,6 +50,7 @@ export async function fetchCommunityFeed({
   if (innertube == null || typeof innertube.getChannel !== "function") {
     throw new Error("innertube client is required");
   }
+  assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
   let channel;
   try {
     channel = await innertube.getChannel(id);
@@ -67,7 +77,7 @@ export async function fetchCommunityFeed({
     getContinuation: async (current) => {
       if (typeof current.getContinuation !== "function") {
         const err = new Error("community continuation is missing");
-        err.code = "pagination_gap";
+        err.code = "parser_drift";
         throw err;
       }
       return current.getContinuation();
@@ -76,32 +86,32 @@ export async function fetchCommunityFeed({
       const mapped = [];
       for (const post of listBackstagePosts(current, postType)) {
         const item = mapPost(post);
-        if (item != null) {
-          mapped.push(item);
+        if (item == null) {
+          const error = new Error("community post id is missing");
+          error.code = "parser_drift";
+          throw error;
         }
+        mapped.push(item);
       }
-      return mapped;
+      return { recognized_shape: true, items: mapped };
     },
     maxPages,
     maxResults,
-    maxAggregateBytes,
+    maxSuccessResponseBytes,
+    reservedEnvelopeBytes: responseReserveBytes,
+    buildResult: (posts, pagination) => ({ posts, ...pagination }),
   });
-  return {
-    posts: paged.items,
-    page_count: paged.page_count,
-    cursor_start: paged.cursor_start,
-    cursor_end: paged.cursor_end,
-    exhausted: paged.exhausted,
-    continuity: paged.continuity,
-  };
+  return paged;
 }
 
 export function emptyCommunityPage() {
   return {
     posts: [],
-    page_count: 0,
-    exhausted: false,
-    continuity: "GAP_UNRESOLVED",
+    ...paginationResult({
+      pageCount: 1,
+      reason: "exhausted",
+      continuity: "NOT_APPLICABLE",
+    }),
     missing_tab: true,
   };
 }

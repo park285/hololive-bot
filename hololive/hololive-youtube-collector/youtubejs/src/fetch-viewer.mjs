@@ -1,9 +1,27 @@
 import { Utils } from "youtubei.js";
 
 import { textOf } from "./map-posts.mjs";
+import { assertResponseBudget, encodedSize, paginationResult } from "./pagination.mjs";
+
+const pagination = paginationResult({
+  pageCount: 1,
+  reason: "exhausted",
+  continuity: "NOT_APPLICABLE",
+});
+const responseReserveBytes = encodedSize({
+  protocol_version: 1,
+  video_id: "x",
+  viewer_count: null,
+  availability: "UNAVAILABLE",
+  ...pagination,
+});
 
 /** @param {YouTubeJSFetchOptions} [options] */
-export async function fetchViewerFeed({ videoId, innertube } = {}) {
+export async function fetchViewerFeed({
+  videoId,
+  maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
+  innertube,
+} = {}) {
   const id = String(videoId ?? "").trim();
   if (id === "") {
     throw new Error("video id is required");
@@ -11,6 +29,7 @@ export async function fetchViewerFeed({ videoId, innertube } = {}) {
   if (innertube == null || typeof innertube.getInfo !== "function") {
     throw new Error("innertube client is required");
   }
+  assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
   let info;
   try {
     info = await innertube.getInfo(id);
@@ -36,9 +55,7 @@ export function mapViewer(info, videoId) {
       video_id: textOf(basic.id || videoId).trim() || videoId,
       viewer_count: null,
       availability: "UNAVAILABLE",
-      page_count: 1,
-      exhausted: true,
-      continuity: "CONTIGUOUS",
+      ...pagination,
     };
   }
   const raw =
@@ -55,9 +72,7 @@ export function mapViewer(info, videoId) {
       video_id: videoId,
       viewer_count: null,
       availability: hidden ? "HIDDEN" : "UNAVAILABLE",
-      page_count: 1,
-      exhausted: true,
-      continuity: "CONTIGUOUS",
+      ...pagination,
     };
   }
   const count = Number(raw);
@@ -70,8 +85,6 @@ export function mapViewer(info, videoId) {
     video_id: textOf(basic.id || videoId).trim() || videoId,
     viewer_count: Math.trunc(count),
     availability: "AVAILABLE",
-    page_count: 1,
-    exhausted: true,
-    continuity: "CONTIGUOUS",
+    ...pagination,
   };
 }

@@ -7,6 +7,8 @@
 !hololive/hololive-dbtest/go.sum
 !hololive/hololive-youtube-collector/
 !hololive/hololive-youtube-collector/**
+!scripts/build/
+!scripts/build/**
 
 **/*_test.go
 **/*.test.mjs

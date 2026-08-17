@@ -56,24 +56,6 @@ func TestLoadLLMSchedulerStillRequiresIrisTokens(t *testing.T) {
 	}
 }
 
-func TestLoadYouTubeCollectorRuntimeAllowsMissingIrisAndRooms(t *testing.T) {
-	clearIrisAndRoomEnv(t)
-	t.Setenv("API_SECRET_KEY", "dummy-secret")
-	setRuntimeH3ServerEnv(t)
-	t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
-	t.Setenv("POSTGRES_USER", "hololive_scraper")
-	t.Setenv("HOLODEX_API_KEY", "")
-	t.Setenv("HOLODEX_API_KEY_1", "")
-
-	cfg, err := LoadYouTubeCollectorRuntime()
-	if err != nil {
-		t.Fatalf("LoadYouTubeCollectorRuntime() error = %v", err)
-	}
-	if cfg.Postgres.User != "hololive_scraper" {
-		t.Fatalf("Postgres.User = %q, want hololive_scraper", cfg.Postgres.User)
-	}
-}
-
 func TestNonEgressConfigLoadersSkipWorkerProfileFetchWithAccidentalIrisToken(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -87,18 +69,6 @@ func TestNonEgressConfigLoadersSkipWorkerProfileFetchWithAccidentalIrisToken(t *
 				setAdminAPIRuntimeEnv(t)
 			},
 			load: LoadAdminAPIRuntime,
-		},
-		{
-			name: "youtube collector",
-			setup: func(t *testing.T) {
-				t.Helper()
-				clearIrisAndRoomEnv(t)
-				t.Setenv("API_SECRET_KEY", "dummy-secret")
-				setRuntimeH3ServerEnv(t)
-				t.Setenv("YOUTUBE_API_KEY", "dummy-youtube-key")
-				t.Setenv("POSTGRES_USER", "hololive_scraper")
-			},
-			load: LoadYouTubeCollectorRuntime,
 		},
 	}
 

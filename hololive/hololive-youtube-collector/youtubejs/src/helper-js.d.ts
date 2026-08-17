@@ -8,7 +8,7 @@ interface YouTubeJSFetchOptions {
   kind?: string;
   maxResults?: number;
   maxPages?: number;
-  maxAggregateBytes?: number;
+  maxSuccessResponseBytes?: number;
   innertube?: any;
   postType?: any;
   fetchImpl?: any;

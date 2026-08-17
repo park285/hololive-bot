@@ -22,7 +22,6 @@ Member cache V2는 Valkey의 durable epoch를 cross-process freshness authority�
 
 - `hololive-api`: bot, admin, llm plane의 각각 독립된 `member.Cache`
 - `hololive-alarm-worker`: alarm target/member adapter
-- `youtube-collector`: Osaka `a`, Seoul `b`, central `c`, Osaka2 `d`
 
 조회 표면은 `AllMembers`, `GetAllChannelIDs`, `GetByChannelID`, `GetByName`, `FindByAlias`와 이를 감싼 `ServiceAdapter`입니다. Admin plane의 member mutation endpoint만 runtime mutation owner입니다.
 

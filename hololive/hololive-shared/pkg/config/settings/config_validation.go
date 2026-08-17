@@ -89,6 +89,9 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	if config == nil {
 		return nil
 	}
+	if config.Timeout <= 0 {
+		return fmt.Errorf("HOLODEX_TIMEOUT_SECONDS must be positive")
+	}
 	fallback := config.LiveStatusFallback
 	if fallback.MaxPerCycle <= 0 {
 		return fmt.Errorf("HOLODEX_LIVE_STATUS_FALLBACK_MAX_PER_CYCLE must be positive")
@@ -148,31 +151,6 @@ func (c *Config) validateAdminAPIRequiredConfig() error {
 	if strings.TrimSpace(c.Holodex.APIKey) == "" {
 		return fmt.Errorf("HOLODEX_API_KEY is required")
 	}
-	return nil
-}
-
-func (c *Config) ValidateYouTubeCollectorRuntime() error {
-	if c.Scraper.ActiveActive.Enabled {
-		return fmt.Errorf("%s must not enable YOUTUBE_PRODUCER_ACTIVE_ACTIVE_ENABLED", runtimeYouTubeCollector)
-	}
-	if err := c.validateWithRequired(c.validateYouTubeCollectorRequiredConfig); err != nil {
-		return err
-	}
-	if err := validateNoNotificationEgressOwnership(runtimeYouTubeCollector); err != nil {
-		return err
-	}
-	if err := validateYouTubeCollectorPostgresUser(c.Postgres.User); err != nil {
-		return err
-	}
-	collector := c.YouTubeCollector.OrDefault()
-	if err := collector.Validate(c.Holodex.Timeout, c.OfficialSchedule.Timeout); err != nil {
-		return err
-	}
-	c.YouTubeCollector = collector
-	return nil
-}
-
-func (c *Config) validateYouTubeCollectorRequiredConfig() error {
 	return nil
 }
 

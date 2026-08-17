@@ -1,7 +1,4 @@
-x-seoul-ap-env: &seoul-ap-env
-  CACHE_SOCKET_PATH: ""
-  CACHE_HOST: ${HOLOLIVE_CENTRAL_CACHE_HOST:?HOLOLIVE_CENTRAL_CACHE_HOST is required for an AP overlay}
-  CACHE_PORT: ${HOLOLIVE_CENTRAL_CACHE_PORT:-6379}
+x-seoul-ap-db-env: &seoul-ap-db-env
   POSTGRES_SOCKET_PATH: ""
   POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:?HOLOLIVE_CENTRAL_POSTGRES_HOST is required for an AP overlay}
   POSTGRES_PORT: ${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5433}
@@ -35,7 +32,7 @@ services:
     env_file: !override
       - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
     environment:
-      <<: *seoul-ap-env
+      <<: *seoul-ap-db-env
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
     logging: *seoul-ap-logging
     deploy:
@@ -55,7 +52,7 @@ services:
     env_file:
       - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
     environment:
-      <<: *seoul-ap-env
+      <<: *seoul-ap-db-env
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
       POSTGRES_USER: hololive_scraper
       GOMEMLIMIT: "640MiB"
@@ -71,8 +68,6 @@ services:
     volumes: !override
       - ../../data:/app/data
       - ../../logs:/app/logs
-      - ../../runtime-config:/app/runtime-config:ro
-      - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro

@@ -9,50 +9,86 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
-	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
-const defaultHelperTimeout = 30 * time.Second
-const defaultHelperBodyLimit = 1 << 20
-
-type Config struct {
-	NodePath   string
-	ScriptPath string
-	SocketPath string
-	ProxyURL   string
-	ProxyOn    bool
-	Timeout    time.Duration
-	BodyLimit  int64
-	Limiter    *ratelimiter.RateLimiter
-}
-
-type RPC struct {
-	http      *http.Client
-	endpoint  string
-	proxyURL  string
-	proxyOn   atomic.Bool
-	limiter   *ratelimiter.RateLimiter
-	bodyLimit int64
-}
+var (
+	ErrUnsupportedHelperPlatform = errors.New("youtube.js helper requires linux")
+	ErrCleanupTimedOut           = errors.New("CLEANUP_TIMED_OUT")
+)
 
 type Helper struct {
-	cmd        *exec.Cmd
-	socketPath string
-	waited     chan struct{}
-	waitErr    error
-	closeOnce  sync.Once
-	closeErr   error
-	health     *http.Client
-	endpoint   string
+	cmd             *exec.Cmd
+	runtimeDir      string
+	socketPath      string
+	waited          chan struct{}
+	waitErr         error
+	closeOnce       sync.Once
+	closeErr        error
+	shutdownTimeout time.Duration
+	healthTimeout   time.Duration
+	maxInflight     int
+	rpc             *RPC
+	health          *http.Client
+	endpoint        string
+	bootstrap       BootstrapResponse
+	forcedKills     atomic.Int32
+}
+
+func Start(ctx context.Context, config *Config) (*Helper, *RPC, error) {
+	if err := requireHelperPlatform(); err != nil {
+		return nil, nil, err
+	}
+	cfg, err := resolveConfig(config)
+	if err != nil {
+		return nil, nil, err
+	}
+	runtimeDir, socketPath, err := createRuntimeDir(cfg.RuntimeBaseDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	helper := newHelper(runtimeDir, socketPath, &cfg)
+	if err := helper.spawn(&cfg); err != nil {
+		return nil, nil, failStart(ctx, helper, err)
+	}
+	startCtx, cancel := withOptionalTimeout(ctx, cfg.StartupTimeout)
+	defer cancel()
+	if err := helper.waitForSocket(startCtx); err != nil {
+		return nil, nil, failStart(ctx, helper, err)
+	}
+	if err := verifyHelperSocket(socketPath); err != nil {
+		return nil, nil, failStart(ctx, helper, err)
+	}
+	rpc := helper.attachRPC(&cfg)
+	if err := helper.bootstrapReady(startCtx, &cfg); err != nil {
+		return nil, nil, failStart(ctx, helper, err)
+	}
+	if err := helper.Healthy(startCtx); err != nil {
+		return nil, nil, failStart(ctx, helper, err)
+	}
+	return helper, rpc, nil
+}
+
+func newHelper(runtimeDir, socketPath string, cfg *Config) *Helper {
+	return &Helper{
+		runtimeDir:      runtimeDir,
+		socketPath:      socketPath,
+		waited:          make(chan struct{}),
+		shutdownTimeout: cfg.ShutdownTimeout,
+		healthTimeout:   cfg.HealthTimeout,
+		maxInflight:     cfg.MaxInflight,
+	}
+}
+
+func failStart(ctx context.Context, helper *Helper, err error) error {
+	return errors.Join(err, helper.Close(ctx))
 }
 
 func (h *Helper) Done() <-chan struct{} {
@@ -62,6 +98,16 @@ func (h *Helper) Done() <-chan struct{} {
 		return closed
 	}
 	return h.waited
+}
+
+func (h *Helper) ProtocolVersion() int {
+	if h == nil {
+		return 0
+	}
+	if h.bootstrap.ProtocolVersion != 0 {
+		return int(h.bootstrap.ProtocolVersion)
+	}
+	return int(ProtocolVersion)
 }
 
 func (h *Helper) Exited() bool {
@@ -83,161 +129,135 @@ func (h *Helper) ExitError() error {
 	return h.waitErr
 }
 
-func Start(ctx context.Context, config *Config) (*Helper, *RPC, error) {
-	if config == nil {
-		return nil, nil, fmt.Errorf("start youtube.js helper: config is not configured")
+func (h *Helper) ForcedKillCount() int {
+	if h == nil {
+		return 0
 	}
-	cfg := *config
-	if err := resolveConfig(&cfg); err != nil {
-		return nil, nil, err
+	return int(h.forcedKills.Load())
+}
+
+func (h *Helper) spawn(cfg *Config) error {
+	timeoutMS := cfg.RequestTimeout.Milliseconds()
+	if timeoutMS <= 0 {
+		timeoutMS = defaultHelperTimeout.Milliseconds()
 	}
-	if err := os.Remove(cfg.SocketPath); err != nil && !os.IsNotExist(err) {
-		return nil, nil, fmt.Errorf("start youtube.js helper: remove stale socket: %w", err)
-	}
+	args := make([]string, 0, 10+len(cfg.extraArgs))
+	args = append(args,
+		cfg.NodePath,
+		cfg.ScriptPath,
+		"--socket", h.socketPath,
+		"--protocol-version", strconv.Itoa(int(ProtocolVersion)),
+		"--request-read-timeout-ms", strconv.FormatInt(timeoutMS, 10),
+		"--shutdown-timeout-ms", strconv.FormatInt(cfg.ShutdownTimeout.Milliseconds(), 10),
+	)
+	args = append(args, cfg.extraArgs...)
 	cmd := &exec.Cmd{
 		Path:   cfg.NodePath,
-		Args:   []string{cfg.NodePath, cfg.ScriptPath, "--socket", cfg.SocketPath},
+		Args:   args,
 		Stdout: os.Stderr,
 		Stderr: os.Stderr,
 		Env:    helperProcessEnv(os.Environ()),
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, nil, fmt.Errorf("start youtube.js helper: %w", err)
+		return fmt.Errorf("start youtube.js helper: %w", err)
 	}
-	timeout := cfg.Timeout
-	if timeout <= 0 {
-		timeout = defaultHelperTimeout
-	}
-	rpc := NewRPC(unixClient(cfg.SocketPath, timeout), "http://youtubejs", cfg.Limiter)
-	if cfg.BodyLimit > 0 {
-		rpc.bodyLimit = cfg.BodyLimit
-	}
-	rpc.SetProxyURL(cfg.ProxyURL)
-	rpc.SetProxyEnabled(cfg.ProxyOn)
-	helper := &Helper{
-		cmd:        cmd,
-		socketPath: cfg.SocketPath,
-		waited:     make(chan struct{}),
-		health:     rpc.http,
-		endpoint:   rpc.endpoint,
-	}
+	h.cmd = cmd
 	panicguard.Go(nil, "youtubejs-helper-wait", func() {
-		defer close(helper.waited)
-		helper.waitErr = cmd.Wait()
+		defer close(h.waited)
+		h.waitErr = cmd.Wait()
 	})
-	if err := helper.waitReady(ctx); err != nil {
-		return nil, nil, errors.Join(err, helper.Close())
-	}
-	return helper, rpc, nil
-}
-
-func (h *Helper) Close() error {
-	if h == nil {
-		return nil
-	}
-	h.closeOnce.Do(func() {
-		h.closeErr = errors.Join(h.killProcess(), h.waitExit(), h.removeSocket())
-	})
-	return h.closeErr
-}
-
-func (h *Helper) killProcess() error {
-	if h.cmd == nil || h.cmd.Process == nil {
-		return nil
-	}
-	if err := h.cmd.Process.Kill(); err != nil && !isFinished(err) {
-		return fmt.Errorf("stop youtube.js helper: %w", err)
-	}
 	return nil
 }
 
-func (h *Helper) waitExit() error {
-	if h.waited == nil {
-		return nil
+func (h *Helper) attachRPC(cfg *Config) *RPC {
+	rpc := NewRPC(unixClient(h.socketPath, cfg.RequestTimeout), "http://youtubejs", cfg.Limiter)
+	if cfg.ResponseBodyLimit > 0 {
+		rpc.bodyLimit = cfg.ResponseBodyLimit
 	}
-	select {
-	case <-h.waited:
-		return nil
-	case <-time.After(3 * time.Second):
-		return fmt.Errorf("stop youtube.js helper: wait timed out")
-	}
+	h.rpc = rpc
+	h.health = unixClient(h.socketPath, cfg.HealthTimeout)
+	h.endpoint = rpc.endpoint
+	return rpc
 }
 
-func (h *Helper) removeSocket() error {
-	if h.socketPath == "" {
-		return nil
-	}
-	if err := os.Remove(h.socketPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove youtube.js helper socket: %w", err)
-	}
-	return nil
-}
-
-func (h *Helper) waitReady(ctx context.Context) error {
+func (h *Helper) waitForSocket(ctx context.Context) error {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		ready, err := h.waitReadyOnce(ctx, ticker)
-		if err != nil || ready {
+		ready, err := h.waitForSocketEvent(ctx, ticker.C)
+		if err != nil {
 			return err
+		}
+		if ready {
+			return nil
 		}
 	}
 }
 
-func (h *Helper) waitReadyOnce(ctx context.Context, ticker *time.Ticker) (bool, error) {
+func (h *Helper) waitForSocketEvent(ctx context.Context, tick <-chan time.Time) (bool, error) {
 	select {
 	case <-ctx.Done():
 		return false, fmt.Errorf("start youtube.js helper: wait for socket: %w", ctx.Err())
 	case <-h.waited:
 		return false, helperExitedBeforeReady(h.waitErr)
-	case <-ticker.C:
-		return h.probeReady(ctx)
+	case <-tick:
+		return helperSocketReady(h.socketPath)
 	}
 }
 
-func (h *Helper) probeReady(ctx context.Context) (bool, error) {
-	ready, err := h.probeHealth(ctx)
-	if err != nil && helperStarting(err) {
-		return false, nil
-	}
-	return ready, err
-}
-
-func helperStarting(err error) bool {
-	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED)
-}
-
-func helperExitedBeforeReady(waitErr error) error {
-	if waitErr == nil {
-		return fmt.Errorf("start youtube.js helper: process exited before ready")
-	}
-	return fmt.Errorf("start youtube.js helper: process exited before ready: %w", waitErr)
-}
-
-func (h *Helper) Healthy(ctx context.Context) bool {
-	ok, err := h.probeHealth(ctx)
-	return err == nil && ok
-}
-
-func (h *Helper) probeHealth(ctx context.Context) (bool, error) {
-	if h.health == nil {
-		return false, collecterr.New(collecterr.Failed, "youtube.js helper is not configured")
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.endpoint+"/health", http.NoBody)
+func helperSocketReady(socketPath string) (bool, error) {
+	info, err := os.Lstat(socketPath)
 	if err != nil {
-		return false, fmt.Errorf("start youtube.js helper: health request: %w", err)
+		if os.IsNotExist(err) || helperStarting(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("start youtube.js helper: inspect socket: %w", err)
 	}
-	resp, err := h.health.Do(req)
+	if info.Mode().Type() != os.ModeSocket && !info.Mode().IsRegular() {
+		return false, fmt.Errorf("start youtube.js helper: unexpected socket path type")
+	}
+	return true, nil
+}
+
+func createRuntimeDir(base string) (runtimeDir, socketPath string, resultErr error) {
+	dir, err := os.MkdirTemp(base, helperRuntimeDirPrefix)
 	if err != nil {
-		closeErr := closeHTTPResponse(resp)
-		return false, errors.Join(err, closeErr)
+		return "", "", fmt.Errorf("start youtube.js helper: create runtime dir: %w", err)
 	}
-	if resp == nil || resp.Body == nil {
-		return false, collecterr.New(collecterr.Failed, "youtube.js health response is nil")
+	if err := finalizeRuntimeDir(dir); err != nil {
+		return "", "", errors.Join(err, removeRuntimeDir(dir))
 	}
-	drainErr := httpbody.Drain(resp.Body, httpbody.DefaultDrainLimit)
-	closeErr := errors.Join(drainErr, resp.Body.Close())
-	return resp.StatusCode == http.StatusOK && closeErr == nil, closeErr
+	socketPath = filepath.Join(dir, helperSocketName)
+	if _, err := os.Lstat(socketPath); err == nil {
+		return "", "", errors.Join(fmt.Errorf("start youtube.js helper: socket path already exists"), removeRuntimeDir(dir))
+	} else if !os.IsNotExist(err) {
+		return "", "", errors.Join(fmt.Errorf("start youtube.js helper: inspect socket path: %w", err), removeRuntimeDir(dir))
+	}
+	if len(socketPath) > maxUnixSocketPathBytes {
+		return "", "", errors.Join(fmt.Errorf("start youtube.js helper: socket path exceeds %d bytes", maxUnixSocketPathBytes), removeRuntimeDir(dir))
+	}
+	return dir, socketPath, nil
+}
+
+func removeRuntimeDir(dir string) error {
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("remove youtube.js helper runtime: %w", err)
+	}
+	return nil
+}
+
+func finalizeRuntimeDir(dir string) error {
+	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // 비공개 디렉터리 탐색에는 소유자 실행 권한이 필요하다.
+		return fmt.Errorf("start youtube.js helper: chmod runtime dir: %w", err)
+	}
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return fmt.Errorf("start youtube.js helper: resolve runtime dir: %w", err)
+	}
+	if resolved != dir {
+		return fmt.Errorf("start youtube.js helper: runtime dir must not be a symlink")
+	}
+	return nil
 }
 
 func unixClient(socketPath string, timeout time.Duration) *http.Client {
@@ -255,137 +275,25 @@ func unixClient(socketPath string, timeout time.Duration) *http.Client {
 	}
 }
 
-func resolveConfig(cfg *Config) error {
-	resolveHelperPaths(cfg)
-	if cfg.NodePath == "" {
-		return fmt.Errorf("start youtube.js helper: node binary is not configured")
-	}
-	if cfg.ScriptPath == "" {
-		return fmt.Errorf("start youtube.js helper: helper script is not configured")
-	}
-	return absolutizeHelperPaths(cfg)
+func helperStarting(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED)
 }
 
-func resolveHelperPaths(cfg *Config) {
-	if cfg.NodePath == "" {
-		cfg.NodePath = firstExisting(
-			os.Getenv("YOUTUBEJS_NODE"),
-			"/usr/local/bin/node",
-			"/nodejs/bin/node",
-		)
+func helperExitedBeforeReady(waitErr error) error {
+	if waitErr == nil {
+		return fmt.Errorf("start youtube.js helper: process exited before ready")
 	}
-	if cfg.NodePath == "" {
-		if found, err := exec.LookPath("node"); err == nil {
-			cfg.NodePath = found
-		}
-	}
-	if cfg.ScriptPath == "" {
-		cfg.ScriptPath = firstExisting(
-			os.Getenv("YOUTUBEJS_SCRIPT"),
-			"youtubejs/src/server.mjs",
-			"/app/youtubejs/src/server.mjs",
-		)
-	}
-	if cfg.SocketPath == "" {
-		cfg.SocketPath = strings.TrimSpace(os.Getenv("YOUTUBEJS_SOCKET"))
-	}
-	if cfg.SocketPath == "" {
-		cfg.SocketPath = filepath.Join(os.TempDir(), "youtubejs-community.sock")
-	}
+	return fmt.Errorf("start youtube.js helper: process exited before ready: %w", waitErr)
 }
 
-func absolutizeHelperPaths(cfg *Config) error {
-	if !filepath.IsAbs(cfg.NodePath) {
-		abs, err := filepath.Abs(cfg.NodePath)
-		if err != nil {
-			return fmt.Errorf("start youtube.js helper: resolve node path: %w", err)
-		}
-		cfg.NodePath = abs
+func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	if !filepath.IsAbs(cfg.ScriptPath) {
-		abs, err := filepath.Abs(cfg.ScriptPath)
-		if err != nil {
-			return fmt.Errorf("start youtube.js helper: resolve script path: %w", err)
-		}
-		cfg.ScriptPath = abs
+	if timeout <= 0 {
+		return context.WithCancel(ctx)
 	}
-	resolvedNode, err := canonicalHelperFile(cfg.NodePath, "node binary")
-	if err != nil {
-		return err
-	}
-	resolvedScript, err := canonicalHelperFile(cfg.ScriptPath, "helper script")
-	if err != nil {
-		return err
-	}
-	cfg.NodePath = resolvedNode
-	cfg.ScriptPath = resolvedScript
-	return nil
-}
-
-func helperProcessEnv(parent []string) []string {
-	allowed := map[string]struct{}{
-		"HOME":                {},
-		"LANG":                {},
-		"LC_ALL":              {},
-		"LC_CTYPE":            {},
-		"NODE_ENV":            {},
-		"NODE_EXTRA_CA_CERTS": {},
-		"PATH":                {},
-		"SSL_CERT_DIR":        {},
-		"SSL_CERT_FILE":       {},
-		"TMPDIR":              {},
-		"TZ":                  {},
-		"YOUTUBEJS_NODE":      {},
-		"YOUTUBEJS_SCRIPT":    {},
-		"YOUTUBEJS_SOCKET":    {},
-	}
-	filtered := make([]string, 0, len(allowed))
-	for _, entry := range parent {
-		key, _, found := strings.Cut(entry, "=")
-		if !found {
-			continue
-		}
-		if _, ok := allowed[key]; ok {
-			filtered = append(filtered, entry)
-		}
-	}
-	return filtered
-}
-
-func firstExisting(paths ...string) string {
-	for _, candidate := range paths {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" {
-			continue
-		}
-		absolute, err := filepath.Abs(candidate)
-		if err != nil {
-			continue
-		}
-		resolved, err := canonicalHelperFile(absolute, "helper candidate")
-		if err == nil {
-			return resolved
-		}
-	}
-	return ""
-}
-
-func canonicalHelperFile(path, name string) (string, error) {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return "", fmt.Errorf("start youtube.js helper: %s path must be absolute and clean", name)
-	}
-	resolved, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", fmt.Errorf("start youtube.js helper: resolve %s path: %w", name, err)
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", fmt.Errorf("start youtube.js helper: inspect %s path: %w", name, err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("start youtube.js helper: %s path is not a regular file", name)
-	}
-	return resolved, nil
+	return context.WithTimeout(ctx, timeout)
 }
 
 func isFinished(err error) bool {

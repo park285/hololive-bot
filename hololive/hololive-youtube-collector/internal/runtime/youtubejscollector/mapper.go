@@ -8,12 +8,9 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
-func communityPayload(channelID string, posts []*parser.CommunityPost, maxResults int, page youtubejs.Pagination) contract.CommunityPayloadV1 {
+func communityPayload(channelID string, posts []*parser.CommunityPost, maxResults int, page *youtubejs.Pagination) contract.CommunityPayloadV1 {
 	mapped := make([]contract.CommunityPostV1, 0, len(posts))
 	for _, post := range posts {
-		if post == nil {
-			continue
-		}
 		mapped = append(mapped, contract.CommunityPostV1{
 			PostID:         post.PostID,
 			UpstreamPostID: post.UpstreamPostID,
@@ -43,7 +40,7 @@ func communityPayload(channelID string, posts []*parser.CommunityPost, maxResult
 	}
 }
 
-func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResults int, page youtubejs.Pagination, shorts bool) (contract.VideoListV1, contract.ShortsListV1) {
+func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResults int, page *youtubejs.Pagination, shorts bool) (contract.VideoListV1, contract.ShortsListV1) {
 	videos := make([]contract.VideoListItemV1, 0, len(items))
 	for _, item := range items {
 		videos = append(videos, contract.VideoListItemV1{

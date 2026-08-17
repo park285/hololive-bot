@@ -52,16 +52,23 @@ WORKDIR /workspace/hololive-bot
 
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-youtube-collector ./hololive/hololive-youtube-collector
+COPY scripts/build ./scripts/build
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-youtube-collector
 
 RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/youtube-collector ./cmd/runtime/youtube-collector && \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/runtime/healthcheck && \
+    extra=; \
+    if [ "${REVISION}" = "unknown" ]; then extra=--allow-unknown-revision; fi; \
+    sh ../../scripts/build/build-youtube-collector-go.sh \
+      --output-dir /dist \
+      --version "${VERSION}" \
+      --revision "${REVISION}" \
+      --goos "${TARGETOS:-linux}" \
+      --goarch "${TARGETARCH:-$(go env GOARCH)}" \
+      --goamd64 "${GOAMD64}" \
+      $extra && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 

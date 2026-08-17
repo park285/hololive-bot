@@ -10,12 +10,60 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
+type SchedulerState string
+
+const (
+	SchedulerNew      SchedulerState = "NEW"
+	SchedulerRunning  SchedulerState = "RUNNING"
+	SchedulerStopping SchedulerState = "STOPPING"
+	SchedulerStopped  SchedulerState = "STOPPED"
+)
+
+type EnqueueResult string
+
+const (
+	EnqueueAccepted EnqueueResult = "ACCEPTED"
+	EnqueueDeduped  EnqueueResult = "DEDUPED"
+	EnqueueFull     EnqueueResult = "FULL"
+	EnqueueCanceled EnqueueResult = "CANCELED"
+	EnqueueInvalid  EnqueueResult = "INVALID"
+)
+
+type SchedulerSnapshot struct {
+	State                  SchedulerState
+	QueueDepth             int
+	QueueCapacity          int
+	Discovered             int
+	Enqueued               int
+	Deduped                int
+	QueueFull              bool
+	DiscoveryTruncated     bool
+	Projection             int64
+	RotationCursor         int
+	CycleStartedAt         time.Time
+	LastCycleCompletedAt   time.Time
+	LastCycleOperationCode collecterr.OperationCode
+}
+
+type projectionCandidateSource interface {
+	CurrentProjectionGeneration(ctx context.Context) (int64, error)
+	CandidatesForProjection(
+		ctx context.Context,
+		generation int64,
+		job sourceobservation.JobContract,
+		excludedJobKeys []string,
+		limit int,
+	) (joblease.CandidatePage, error)
+}
+
 type leaseScheduler struct {
 	repository *joblease.Repository
+	candidates projectionCandidateSource
 	registry   *Registry
 	publisher  *Publisher
 	metrics    *Metrics
@@ -25,29 +73,44 @@ type leaseScheduler struct {
 	collector  settings.YouTubeCollectorConfig
 	gates      map[contract.Provider]chan struct{}
 
-	mu      sync.Mutex
-	queued  map[string]struct{}
-	queue   chan joblease.JobSpec
-	cancel  context.CancelFunc
-	done    chan struct{}
-	wg      sync.WaitGroup
-	lastDue int
+	mu                     sync.Mutex
+	state                  SchedulerState
+	queued                 map[string]struct{}
+	queue                  chan joblease.JobSpec
+	cancel                 context.CancelFunc
+	done                   chan struct{}
+	fatal                  chan error
+	fatalOnce              sync.Once
+	wg                     sync.WaitGroup
+	readiness              *readinessTracker
+	rotationCursor         int
+	discovered             int
+	enqueued               int
+	deduped                int
+	queueFull              bool
+	discoveryTruncated     bool
+	projection             int64
+	cycleStartedAt         time.Time
+	lastCycleCompletedAt   time.Time
+	lastCycleOperationCode collecterr.OperationCode
 }
 
-func (s *leaseScheduler) Start(ctx context.Context) {
+func (s *leaseScheduler) Start(parent context.Context) error {
 	if s == nil || s.repository == nil || s.registry == nil {
-		return
+		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: scheduler is not configured")
 	}
 	s.mu.Lock()
-	if s.cancel != nil {
+	if s.lifecycleState() != SchedulerNew {
 		s.mu.Unlock()
-		return
+		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: instance is not NEW")
 	}
-	runCtx, cancel := context.WithCancel(ctx)
+	runCtx, cancel := context.WithCancel(parent)
 	done := make(chan struct{})
 	s.cancel = cancel
 	s.done = done
+	s.state = SchedulerRunning
 	s.wg.Add(s.config.WorkerCount + 1)
+	s.mu.Unlock()
 	for i := 0; i < s.config.WorkerCount; i++ {
 		panicguard.Go(s.logger, "youtube-collector-worker", func() {
 			s.worker(runCtx)
@@ -59,21 +122,56 @@ func (s *leaseScheduler) Start(ctx context.Context) {
 	panicguard.Go(s.logger, "youtube-collector-join", func() {
 		s.join(done)
 	})
-	s.mu.Unlock()
+	return nil
 }
 
 func (s *leaseScheduler) Stop(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	s.mu.Lock()
-	cancel := s.cancel
-	done := s.done
-	s.mu.Unlock()
-	if cancel == nil || done == nil {
+	cancel, done, wait, err := s.prepareStop()
+	if err != nil {
+		return err
+	}
+	if cancel != nil {
+		cancel()
+	}
+	if !wait {
 		return nil
 	}
-	cancel()
+	return s.waitDone(ctx, done)
+}
+
+func (s *leaseScheduler) prepareStop() (
+	cancel context.CancelFunc,
+	done chan struct{},
+	wait bool,
+	err error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.lifecycleState()
+	if state == SchedulerNew {
+		s.state = SchedulerStopped
+		return nil, nil, false, nil
+	}
+	if state == SchedulerStopped {
+		return nil, nil, false, nil
+	}
+	if state == SchedulerRunning {
+		s.state = SchedulerStopping
+		return s.cancel, s.done, true, nil
+	}
+	if state == SchedulerStopping {
+		return nil, s.done, true, nil
+	}
+	return nil, nil, false, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "stop lease scheduler: state is invalid")
+}
+
+func (s *leaseScheduler) waitDone(ctx context.Context, done chan struct{}) error {
+	if done == nil {
+		return nil
+	}
 	select {
 	case <-done:
 		return nil
@@ -84,34 +182,45 @@ func (s *leaseScheduler) Stop(ctx context.Context) error {
 
 func (s *leaseScheduler) join(done chan struct{}) {
 	s.wg.Wait()
-	close(done)
+	s.drainQueue()
 	s.mu.Lock()
-	if s.done == done {
-		s.cancel = nil
-		s.done = nil
-	}
+	s.state = SchedulerStopped
 	s.mu.Unlock()
+	close(done)
 }
 
 func (s *leaseScheduler) discover(ctx context.Context) {
 	defer s.wg.Done()
-	ticker := time.NewTicker(s.config.PollCadence)
-	defer ticker.Stop()
-	s.pollGuarded(ctx)
-	for s.waitPoll(ctx, ticker) {
+	if err := panicguard.RunE(s.logger, "youtube-collector-discovery", func() error {
+		ticker := time.NewTicker(s.config.PollCadence)
+		defer ticker.Stop()
 		s.pollGuarded(ctx)
+		for s.waitPoll(ctx, ticker) {
+			s.pollGuarded(ctx)
+		}
+		return nil
+	}); err != nil {
+		s.reportFatal(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
 	}
 }
 
 func (s *leaseScheduler) pollGuarded(ctx context.Context) {
-	panicguard.Run(s.logger, "youtube-collector-poll", func() {
+	if err := panicguard.RunE(s.logger, "youtube-collector-poll", func() error {
 		s.pollOnce(ctx)
-	})
+		return nil
+	}); err != nil {
+		s.reportFatal(collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, err))
+	}
 }
 
 func (s *leaseScheduler) pollOnce(ctx context.Context) {
-	s.syncCandidates(ctx)
-	s.refreshFreshness(time.Now().UTC())
+	if ctx.Err() != nil {
+		return
+	}
+	s.discoverOnce(ctx)
+	if ctx.Err() == nil {
+		s.refreshFreshness(time.Now().UTC())
+	}
 }
 
 func (s *leaseScheduler) waitPoll(ctx context.Context, ticker *time.Ticker) bool {
@@ -128,131 +237,98 @@ func (s *leaseScheduler) refreshFreshness(now time.Time) {
 		return
 	}
 	for _, runner := range s.registry.Runners() {
-		s.metrics.ObserveFreshness(runner.Provider(), runner.JobKind(), now)
+		id := runner.Contract().ID()
+		s.metrics.ObserveFreshness(id.Provider, string(id.Kind), now)
 	}
 }
 
-func (s *leaseScheduler) syncCandidates(ctx context.Context) {
-	globals, subjects := s.loadCandidates(ctx)
-	if !s.enqueueAll(ctx, globals) {
-		return
-	}
-	s.enqueueAll(ctx, subjects)
+type FatalRuntimeError struct {
+	Phase string
+	Err   error
 }
 
-func (s *leaseScheduler) DueJobs() int {
+func (e *FatalRuntimeError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("youtube collector scheduler fatal in %s: %v", e.Phase, e.Err)
+}
+
+func (e *FatalRuntimeError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func (s *leaseScheduler) Fatal() <-chan error {
 	if s == nil {
-		return 0
+		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.lastDue
+	return s.fatal
 }
 
-func (s *leaseScheduler) loadCandidates(ctx context.Context) (globals, subjects []joblease.JobSpec) {
-	due := 0
-	for _, runner := range s.registry.Runners() {
-		candidates, err := s.repository.Candidates(ctx, runner.Provider(), runner.JobKind(), s.config.AcquisitionBatch)
-		if err != nil {
-			s.logCandidateLoad(runner, err)
-			continue
-		}
-		due += len(candidates)
-		globals, subjects = splitCandidates(candidates, globals, subjects)
-	}
-	s.mu.Lock()
-	s.lastDue = due
-	s.mu.Unlock()
-	return globals, subjects
-}
-
-func (s *leaseScheduler) logCandidateLoad(runner JobRunner, err error) {
-	if supersededError(err) {
+func (s *leaseScheduler) reportFatal(err error) {
+	if s == nil || err == nil {
 		return
 	}
-	spec := joblease.JobSpec{
-		Provider: runner.Provider(), CollectionJobKind: runner.JobKind(),
-	}
-	proof := contract.LeaseProof{}
-	s.logFailure("candidate_load", collecterr.CandidateFailed, collecterr.Class(err), collecterr.Detail(err), &spec, &proof)
-}
-
-func splitCandidates(candidates, globals, subjects []joblease.JobSpec) (globalJobs, subjectJobs []joblease.JobSpec) {
-	for i := range candidates {
-		candidate := candidates[i]
-		if candidate.Class == "GLOBAL" {
-			globals = append(globals, candidate)
-			continue
-		}
-		subjects = append(subjects, candidate)
-	}
-	return globals, subjects
-}
-
-func (s *leaseScheduler) enqueueAll(ctx context.Context, candidates []joblease.JobSpec) bool {
-	for i := range candidates {
-		if !s.enqueue(ctx, &candidates[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func (s *leaseScheduler) enqueue(ctx context.Context, candidate *joblease.JobSpec) bool {
-	if !s.markQueued(candidate.JobKey) {
-		return true
-	}
-	select {
-	case s.queue <- *candidate:
-		return true
-	case <-ctx.Done():
-		s.unmarkQueued(candidate.JobKey)
-		return false
-	default:
-		s.unmarkQueued(candidate.JobKey)
-		return true
-	}
-}
-
-func (s *leaseScheduler) worker(ctx context.Context) {
-	defer s.wg.Done()
-	for {
-		spec, ok := s.nextSpec(ctx)
-		if !ok {
-			return
-		}
-		s.runQueued(ctx, &spec)
-	}
-}
-
-func (s *leaseScheduler) runQueued(ctx context.Context, spec *joblease.JobSpec) {
-	defer s.unmarkQueued(spec.JobKey)
-	panicguard.Run(s.logger, "youtube-collector-job", func() {
-		s.runSpec(ctx, spec)
+	s.fatalOnce.Do(func() {
+		s.emitFatal(collecterr.Normalize(err))
 	})
 }
 
-func (s *leaseScheduler) nextSpec(ctx context.Context) (joblease.JobSpec, bool) {
+func (s *leaseScheduler) emitFatal(err error) {
+	s.cancelDiscoveryAndWorkers()
+	if s.fatal == nil {
+		return
+	}
 	select {
-	case <-ctx.Done():
-		return joblease.JobSpec{}, false
-	case spec := <-s.queue:
-		return spec, true
+	case s.fatal <- err:
+	default:
 	}
 }
 
-func (s *leaseScheduler) markQueued(jobKey string) bool {
+func (s *leaseScheduler) cancelDiscoveryAndWorkers() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.queued[jobKey]; exists {
-		return false
+	if s.lifecycleState() == SchedulerRunning {
+		s.state = SchedulerStopping
 	}
-	s.queued[jobKey] = struct{}{}
-	return true
+	if s.cancel != nil {
+		s.cancel()
+	}
 }
 
-func (s *leaseScheduler) unmarkQueued(jobKey string) {
+func (s *leaseScheduler) Snapshot() SchedulerSnapshot {
+	if s == nil {
+		return SchedulerSnapshot{}
+	}
 	s.mu.Lock()
-	delete(s.queued, jobKey)
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	depth := 0
+	if s.queue != nil {
+		depth = len(s.queue)
+	}
+	return SchedulerSnapshot{
+		State:                  s.lifecycleState(),
+		QueueDepth:             depth,
+		QueueCapacity:          s.config.QueueCapacity,
+		Discovered:             s.discovered,
+		Enqueued:               s.enqueued,
+		Deduped:                s.deduped,
+		QueueFull:              s.queueFull,
+		DiscoveryTruncated:     s.discoveryTruncated,
+		Projection:             s.projection,
+		RotationCursor:         s.rotationCursor,
+		CycleStartedAt:         s.cycleStartedAt,
+		LastCycleCompletedAt:   s.lastCycleCompletedAt,
+		LastCycleOperationCode: s.lastCycleOperationCode,
+	}
+}
+
+func (s *leaseScheduler) lifecycleState() SchedulerState {
+	if s.state == "" {
+		return SchedulerNew
+	}
+	return s.state
 }

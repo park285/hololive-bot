@@ -1,0 +1,68 @@
+{
+  "valid": [
+    {
+      "reason": "exhausted",
+      "exhausted": true,
+      "continuity": "CONTIGUOUS",
+      "completeness": "COMPLETE"
+    },
+    {
+      "reason": "exhausted",
+      "exhausted": true,
+      "continuity": "NOT_APPLICABLE",
+      "completeness": "COMPLETE"
+    },
+    {
+      "reason": "max_pages",
+      "exhausted": false,
+      "continuity": "GAP_UNRESOLVED",
+      "completeness": "PARTIAL"
+    },
+    {
+      "reason": "max_results",
+      "exhausted": false,
+      "continuity": "NOT_APPLICABLE",
+      "completeness": "PARTIAL"
+    },
+    {
+      "reason": "max_success_response_bytes",
+      "exhausted": false,
+      "continuity": "GAP_UNRESOLVED",
+      "completeness": "PARTIAL"
+    },
+    {
+      "reason": "cursor_loop",
+      "exhausted": false,
+      "continuity": "GAP_UNRESOLVED",
+      "completeness": "PARTIAL"
+    },
+    {
+      "reason": "continuation_transient",
+      "exhausted": false,
+      "continuity": "GAP_UNRESOLVED",
+      "completeness": "PARTIAL"
+    }
+  ],
+  "invalid": [
+    {
+      "reason": "exhausted",
+      "exhausted": false,
+      "continuity": "CONTIGUOUS"
+    },
+    {
+      "reason": "max_pages",
+      "exhausted": true,
+      "continuity": "CONTIGUOUS"
+    },
+    {
+      "reason": "cursor_loop",
+      "exhausted": false,
+      "continuity": "CONTIGUOUS"
+    },
+    {
+      "reason": "",
+      "exhausted": false,
+      "continuity": "GAP_UNRESOLVED"
+    }
+  ]
+}

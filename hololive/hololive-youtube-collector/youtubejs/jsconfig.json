@@ -15,6 +15,7 @@
   "exclude": [
     "src/**/*.test.mjs",
     "src/server.mjs",
+    "src/helper-runtime.mjs",
     "src/rpc-boundary.mjs",
     "src/rpc-validation.mjs",
     "src/real-fetchers.mjs"

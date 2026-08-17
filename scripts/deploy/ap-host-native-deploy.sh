@@ -5,10 +5,8 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 AP_SWAPFILE_SIZE_MIB="${AP_SWAPFILE_SIZE_MIB:-2048}"
-AP_CENTRAL_HOST="${AP_CENTRAL_HOST:-100.100.1.8}"
 AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-hololive-postgres.tail742dd8.ts.net}"
 AP_POSTGRES_PORT="${AP_POSTGRES_PORT:-5433}"
-AP_CLIPROXY_HOST="${AP_CLIPROXY_HOST:-100.100.1.3}"
 
 case "$MODE" in
   --dry-run|--apply) ;;
@@ -20,6 +18,7 @@ esac
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 . "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
+. "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
 RETIRED_PRODUCER_LIB="$REPO_ROOT/scripts/deploy/lib/retired-producer-cutover.sh"
 REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
@@ -97,10 +96,6 @@ write_host_env() {
     printf 'POSTGRES_POOL_MIN_CONNS=2\n'
     printf 'POSTGRES_POOL_MAX_CONNS=8\n'
     printf 'POSTGRES_SOCKET_PATH=\n'
-    printf 'CACHE_HOST=%s\n' "${AP_CACHE_HOST:-$AP_CENTRAL_HOST}"
-    printf 'CACHE_PORT=6379\n'
-    printf 'CACHE_SOCKET_PATH=\n'
-    printf 'SETTINGS_DIR=/var/lib/hololive-bot/youtube-collector/settings\n'
     printf 'GOMEMLIMIT=384MiB\n'
     printf 'GOGC=100\n'
     printf 'GIN_MODE=release\n'
@@ -128,7 +123,6 @@ Type=simple
 User=hololive
 Group=opc
 WorkingDirectory=/opt/hololive-bot/youtube-collector/current
-EnvironmentFile=/etc/stack-secrets/hololive-bot/ap-compose.env
 EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env
 EnvironmentFile=/etc/hololive-bot/youtube-collector-host.env
 ExecStart=/opt/hololive-bot/youtube-collector/current/bin/youtube-collector-wrapper
@@ -149,19 +143,23 @@ EOF
 }
 
 mkdir -p "$artifact_dir/bin" "$artifact_dir/internal/domain"
+artifact_dir="$(cd "$artifact_dir" && pwd)"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
 
-(
-  cd "$REPO_ROOT/hololive/hololive-youtube-collector"
-  export GOWORK=off
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64="${GOAMD64:-v1}" \
-    go build -tags sonic -trimpath -buildvcs=false \
-      -ldflags="-s -w -buildid= -X main.Version=$version" \
-      -o "$artifact_dir/bin/youtube-collector" ./cmd/runtime/youtube-collector
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64="${GOAMD64:-v1}" \
-    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
-      -o "$artifact_dir/bin/healthcheck" ./cmd/runtime/healthcheck
-)
+native_revision="$(deploy_source_revision "$REPO_ROOT")"
+sh "$REPO_ROOT/scripts/build/build-youtube-collector-go.sh" \
+  --output-dir "$artifact_dir" \
+  --version "$version" \
+  --revision "$native_revision" \
+  --goos linux \
+  --goarch amd64 \
+  --goamd64 "${GOAMD64:-v1}"
+sh "$REPO_ROOT/scripts/build/check-youtube-collector-go-artifact.sh" "$artifact_dir" \
+  --version "$version" \
+  --revision "$native_revision" \
+  --goos linux \
+  --goarch amd64 \
+  --goamd64 "${GOAMD64:-v1}"
 write_wrapper "$artifact_dir/bin/youtube-collector-wrapper"
 rm -rf "$artifact_dir/internal/domain/data"
 cp -R "$REPO_ROOT/hololive/hololive-shared/pkg/domain/internal/model/data" "$artifact_dir/internal/domain/data"

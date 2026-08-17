@@ -6,108 +6,157 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
+	"github.com/kapu/hololive-youtube-collector/internal/runtime/providerhttp"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
 type collectorInfrastructure struct {
-	cache        cache.Client
 	postgres     database.Client
 	youtubejs    *youtubejs.Helper
 	youtubejsRPC *youtubejs.RPC
 	holodex      *holodexcollector.Client
 	official     *officialcollector.Client
-	cleanup      func()
+	cleanupDB    func()
 	closeOnce    sync.Once
 	closeErr     error
 }
 
-func initInfrastructure(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*collectorInfrastructure, error) {
+func initInfrastructure(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfig, logger *slog.Logger) (*collectorInfrastructure, error) {
 	if appConfig == nil {
 		return nil, fmt.Errorf("build collector infra: config is nil")
 	}
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, appConfig.Valkey, logger)
-	if err != nil {
-		return nil, fmt.Errorf("build collector infra: %w", err)
-	}
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
 	if err != nil {
-		cleanupCache()
 		return nil, fmt.Errorf("build collector infra: %w", err)
 	}
-	cleanup := func() {
-		cleanupDB()
-		cleanupCache()
-	}
-	collector := appConfig.YouTubeCollector.OrDefault()
-	helper, rpc, err := startYouTubeJSHelper(ctx, &appConfig.Scraper, &collector, ratelimiter.New(collector.RequestInterval))
+	collector := appConfig.Collector.OrDefault()
+	helper, rpc, err := startYouTubeJSHelper(ctx, &appConfig.Proxy, &collector, ratelimiter.New(collector.RequestInterval))
 	if err != nil {
-		cleanup()
+		cleanupDB()
 		return nil, err
 	}
 	collectorInfra := &collectorInfrastructure{
-		cache:        cacheResources.Service,
 		postgres:     databaseResources.Service,
 		youtubejs:    helper,
 		youtubejsRPC: rpc,
-		cleanup:      cleanup,
+		cleanupDB:    cleanupDB,
 	}
-	maxBody := int64(collector.MaxAggregateBytes)
-	if appConfig.MaxResponseBodyBytes > 0 && appConfig.MaxResponseBodyBytes < maxBody {
-		maxBody = appConfig.MaxResponseBodyBytes
+	if err := collectorInfra.buildProviderClients(appConfig, &collector); err != nil {
+		return nil, errors.Join(err, collectorInfra.Close(ctx))
 	}
-	holodex, err := holodexcollector.NewClient(nil, appConfig.Holodex.BaseURL, appConfig.Holodex.APIKey, appConfig.Holodex.Timeout, maxBody)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("build holodex collector client: %w", err), collectorInfra.Close())
-	}
-	collectorInfra.holodex = holodex
-	official, err := officialcollector.NewClient(nil, appConfig.OfficialSchedule.BaseURL, appConfig.OfficialSchedule.Timeout, maxBody)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("build official schedule collector client: %w", err), collectorInfra.Close())
-	}
-	collectorInfra.official = official
 	return collectorInfra, nil
 }
 
-func (i *collectorInfrastructure) Close() error {
+func (i *collectorInfrastructure) buildProviderClients(
+	appConfig *settings.YouTubeCollectorRuntimeConfig,
+	collector *settings.YouTubeCollectorConfig,
+) error {
+	maxBody := int64(collector.MaxSuccessResponseBytes)
+	holodexHTTP, err := providerhttp.NewProviderHTTPClient(providerTransportConfig(
+		appConfig.Holodex.Transport.Timeout,
+		collector.HolodexMaxInflight,
+	))
+	if err != nil {
+		return fmt.Errorf("build holodex HTTP client: %w", err)
+	}
+	holodex, err := holodexcollector.NewClient(holodexHTTP, appConfig.Holodex.BaseURL, appConfig.Holodex.APIKey, maxBody)
+	if err != nil {
+		return errors.Join(fmt.Errorf("build holodex collector client: %w", err), holodexHTTP.Close())
+	}
+	i.holodex = holodex
+	officialHTTP, err := providerhttp.NewProviderHTTPClient(providerTransportConfig(
+		appConfig.OfficialSchedule.Transport.Timeout,
+		collector.OfficialMaxInflight,
+	))
+	if err != nil {
+		return fmt.Errorf("build official HTTP client: %w", err)
+	}
+	official, err := officialcollector.NewClient(officialHTTP, appConfig.OfficialSchedule.BaseURL, maxBody)
+	if err != nil {
+		return errors.Join(fmt.Errorf("build official schedule collector client: %w", err), officialHTTP.Close())
+	}
+	i.official = official
+	return nil
+}
+
+func providerTransportConfig(requestTimeout time.Duration, maxConns int) providerhttp.ProviderTransportConfig {
+	if maxConns < 1 {
+		maxConns = 1
+	}
+	idle := min(maxConns, 8)
+	headerTimeout := 10 * time.Second
+	if requestTimeout > 0 && requestTimeout < headerTimeout {
+		headerTimeout = requestTimeout
+	}
+	return providerhttp.ProviderTransportConfig{
+		RequestTimeout:        requestTimeout,
+		DialTimeout:           5 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: headerTimeout,
+		IdleConnTimeout:       30 * time.Second,
+		MaxConnsPerHost:       maxConns,
+		MaxIdleConnsPerHost:   idle,
+	}
+}
+
+func (i *collectorInfrastructure) Close(ctx context.Context) error {
 	if i == nil {
 		return nil
 	}
 	i.closeOnce.Do(func() {
-		var helperErr error
-		if i.youtubejs != nil {
-			helperErr = i.youtubejs.Close()
-		}
-		if i.cleanup != nil {
-			i.cleanup()
-		}
-		i.closeErr = helperErr
+		i.closeErr = i.closeResources(ctx)
 	})
 	return i.closeErr
 }
 
+func (i *collectorInfrastructure) closeResources(ctx context.Context) error {
+	var errs []error
+	if i.official != nil {
+		errs = append(errs, i.official.Close())
+	}
+	if i.holodex != nil {
+		errs = append(errs, i.holodex.Close())
+	}
+	if i.youtubejs != nil {
+		errs = append(errs, i.youtubejs.Close(ctx))
+	}
+	if i.cleanupDB != nil {
+		i.cleanupDB()
+	}
+	return errors.Join(errs...)
+}
+
 func startYouTubeJSHelper(
 	ctx context.Context,
-	scraperConfig *settings.ScraperConfig,
+	proxy *settings.CollectorProxyConfig,
 	collector *settings.YouTubeCollectorConfig,
 	limiter *ratelimiter.RateLimiter,
 ) (*youtubejs.Helper, *youtubejs.RPC, error) {
-	if scraperConfig == nil {
-		scraperConfig = &settings.ScraperConfig{}
+	proxyConfig := settings.CollectorProxyConfig{}
+	if proxy != nil {
+		proxyConfig = *proxy
 	}
 	helper, rpc, err := youtubejs.Start(ctx, &youtubejs.Config{
-		ProxyURL:  scraperConfig.ProxyURL,
-		ProxyOn:   scraperConfig.ProxyEnabled,
-		Timeout:   collector.YouTubeJSTimeout,
-		BodyLimit: int64(collector.MaxAggregateBytes),
-		Limiter:   limiter,
+		Proxy: youtubejs.ProxyConfig{
+			Enabled: proxyConfig.Enabled,
+			URL:     proxyConfig.URL,
+		},
+		StartupTimeout:    collector.YouTubeJSStartupTimeout,
+		RequestTimeout:    collector.YouTubeJSRequestTimeout,
+		HealthTimeout:     collector.HelperHealthTimeout,
+		ShutdownTimeout:   collector.YouTubeJSShutdownTimeout,
+		RequestBodyLimit:  youtubejs.DefaultRequestBodyLimit,
+		ResponseBodyLimit: int64(collector.MaxSuccessResponseBytes),
+		MaxInflight:       collector.YouTubeJSMaxInflight,
+		Limiter:           limiter,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("start youtube.js helper: %w", err)

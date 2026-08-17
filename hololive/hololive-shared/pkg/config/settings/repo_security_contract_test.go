@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -92,6 +93,105 @@ func TestRepoComposeProdPreservesExplicitBlankACLValues(t *testing.T) {
 			if env[key] != "" {
 				t.Fatalf("%s %s = %q, want explicit blank preserved", service, key, env[key])
 			}
+		}
+	}
+}
+
+type collectorCompatEnvPair struct {
+	newName, oldName string
+	defaultValue     string
+}
+
+type collectorCompatComposeCase struct {
+	name           string
+	newRaw, oldRaw string
+	setNew, setOld bool
+	wantNew        string
+	wantOld        string
+	wantDefaults   bool
+}
+
+func collectorCompatEnvPairs() []collectorCompatEnvPair {
+	return []collectorCompatEnvPair{
+		{
+			newName:      "YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS",
+			oldName:      "YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS",
+			defaultValue: "5",
+		},
+		{
+			newName:      "YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS",
+			oldName:      "YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS",
+			defaultValue: "5",
+		},
+		{
+			newName:      "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
+			oldName:      "YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
+			defaultValue: "30",
+		},
+		{
+			newName:      "YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES",
+			oldName:      "YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES",
+			defaultValue: "1048576",
+		},
+	}
+}
+
+func TestCFG005RepoComposeCollectorAliasesPreserveTruthTable(t *testing.T) {
+	pairs := collectorCompatEnvPairs()
+	for _, pair := range pairs {
+		unsetEnvForTest(t, pair.newName)
+		unsetEnvForTest(t, pair.oldName)
+	}
+	tests := []collectorCompatComposeCase{
+		{name: "neither", wantDefaults: true},
+		{name: "new only", newRaw: "7", setNew: true, wantNew: "7", wantOld: "7"},
+		{name: "old only", oldRaw: "11", setOld: true, wantNew: "11", wantOld: "11"},
+		{name: "both equal", newRaw: "13", oldRaw: "13", setNew: true, setOld: true, wantNew: "13", wantOld: "13"},
+		{name: "both differ", newRaw: "7", oldRaw: "11", setNew: true, setOld: true, wantNew: "7", wantOld: "11"},
+		{name: "new explicitly empty", setNew: true, wantNew: "", wantOld: ""},
+		{name: "old explicitly empty", setOld: true, wantNew: "", wantOld: ""},
+		{name: "new empty old valid", oldRaw: "11", setNew: true, setOld: true, wantNew: "", wantOld: "11"},
+		{name: "new valid old empty", newRaw: "7", setNew: true, setOld: true, wantNew: "7", wantOld: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setCollectorCompatComposeEnv(t, pairs, &test)
+			cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml")
+			env := composeEnvironment(t, cfg, "youtube-collector")
+			assertCollectorCompatComposeEnv(t, env, pairs, &test)
+		})
+	}
+}
+
+func setCollectorCompatComposeEnv(t *testing.T, pairs []collectorCompatEnvPair, test *collectorCompatComposeCase) {
+	t.Helper()
+	for _, pair := range pairs {
+		if test.setNew {
+			t.Setenv(pair.newName, test.newRaw)
+		}
+		if test.setOld {
+			t.Setenv(pair.oldName, test.oldRaw)
+		}
+	}
+}
+
+func assertCollectorCompatComposeEnv(
+	t *testing.T,
+	env map[string]string,
+	pairs []collectorCompatEnvPair,
+	test *collectorCompatComposeCase,
+) {
+	t.Helper()
+	for _, pair := range pairs {
+		wantNew, wantOld := test.wantNew, test.wantOld
+		if test.wantDefaults {
+			wantNew, wantOld = pair.defaultValue, pair.defaultValue
+		}
+		if got := env[pair.newName]; got != wantNew {
+			t.Fatalf("%s = %q, want %q", pair.newName, got, wantNew)
+		}
+		if got := env[pair.oldName]; got != wantOld {
+			t.Fatalf("%s = %q, want %q", pair.oldName, got, wantOld)
 		}
 	}
 }
@@ -586,6 +686,9 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 
 	assertProdRenderedPostgresIsolation(t, cfg)
 	assertProdRenderedValkeySocketIsolation(t, cfg)
+	assertCollectorRenderedWithoutValkey(t, cfg, "youtube-collector") // CFG-006
+	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, "youtube-collector")
+	assertValkeyConsumersUnchanged(t, cfg) // CFG-009
 	assertProdRenderedNonEgressSecretIsolation(t, cfg)
 	assertProdRenderedEgressRuntimeKeys(t, cfg)
 	assertProdRenderedScopedProducerKeys(t, cfg)
@@ -616,7 +719,6 @@ func assertProdRenderedValkeySocketIsolation(t *testing.T, cfg renderedCompose) 
 		"valkey-cache":          true,
 		"hololive-api":          true,
 		"hololive-alarm-worker": true,
-		"youtube-collector":     true,
 	}
 	for service := range cfg.Services {
 		mountsSocket := false
@@ -632,6 +734,63 @@ func assertProdRenderedValkeySocketIsolation(t *testing.T, cfg renderedCompose) 
 		if hasSharedGroup != mountsSocket {
 			t.Fatalf("%s shared Valkey group = %v, socket mount = %v", service, hasSharedGroup, mountsSocket)
 		}
+	}
+}
+
+func assertCollectorRenderedWithoutValkey(t *testing.T, cfg renderedCompose, service string) {
+	t.Helper()
+
+	env := composeEnvironment(t, cfg, service)
+	for key := range env {
+		if strings.HasPrefix(key, "CACHE_") {
+			t.Fatalf("%s rendered CACHE env %s=%q", service, key, env[key])
+		}
+	}
+	for _, volume := range composeVolumes(t, cfg, service) {
+		if volume.Source == "valkey-cache-socket" || volume.Target == "/var/run/valkey" {
+			t.Fatalf("%s still mounts Valkey socket %+v", service, volume)
+		}
+	}
+	if _, ok := composeDependsOn(t, cfg, service)["valkey-cache"]; ok {
+		t.Fatalf("%s still depends_on valkey-cache", service)
+	}
+}
+
+func assertCollectorRenderedWithoutUnusedScraperEnv(t *testing.T, cfg renderedCompose, service string) {
+	t.Helper()
+
+	env := composeEnvironment(t, cfg, service)
+	for key := range env {
+		if strings.HasPrefix(key, "SCRAPER_POLL_") || key == "SCRAPER_FETCHER_ENGINE" {
+			t.Fatalf("%s rendered unused scraper env %s=%q", service, key, env[key])
+		}
+	}
+}
+
+func assertValkeyConsumersUnchanged(t *testing.T, cfg renderedCompose) {
+	t.Helper()
+
+	for _, service := range []string{"hololive-api", "hololive-alarm-worker"} {
+		env := composeEnvironment(t, cfg, service)
+		if env["CACHE_HOST"] != "valkey-cache" {
+			t.Fatalf("%s CACHE_HOST = %q, want valkey-cache", service, env["CACHE_HOST"])
+		}
+		if _, ok := composeDependsOn(t, cfg, service)["valkey-cache"]; !ok {
+			t.Fatalf("%s missing depends_on valkey-cache", service)
+		}
+		mounted := false
+		for _, volume := range composeVolumes(t, cfg, service) {
+			if volume.Source == "valkey-cache-socket" && volume.Target == "/var/run/valkey" {
+				mounted = true
+			}
+		}
+		if !mounted {
+			t.Fatalf("%s missing valkey-cache-socket mount", service)
+		}
+	}
+	adminEnv := composeEnvironment(t, cfg, "admin-dashboard")
+	if !strings.Contains(adminEnv["VALKEY_URL"], "valkey-cache") {
+		t.Fatalf("admin-dashboard VALKEY_URL = %q, want valkey-cache consumer", adminEnv["VALKEY_URL"])
 	}
 }
 
@@ -795,6 +954,10 @@ func TestRepoComposeAPCertMountsAreMinimized(t *testing.T) {
 			cfg := renderAPComposeConfig(t, "deploy/compose/docker-compose.prod.yml", renderableAPComposeFile(t, tt.file))
 			assertAPComposeCertMountsAreMinimized(t, cfg, tt.file)
 			assertAPComposeDoesNotRequireCentralEgressEnvFiles(t, cfg, tt.file)
+			for _, service := range apComposeServiceNames(t, cfg, tt.file) {
+				assertCollectorRenderedWithoutValkey(t, cfg, service) // CFG-007
+				assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, service)
+			}
 		})
 	}
 }
@@ -807,6 +970,9 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 
 	assertLiveCompatRenderedPortsAndModes(t, cfg)
 	assertLiveCompatRenderedPostgres(t, cfg)
+	assertCollectorRenderedWithoutValkey(t, cfg, "youtube-collector") // CFG-007
+	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, "youtube-collector")
+	assertValkeyConsumersUnchanged(t, cfg) // CFG-009
 	assertLiveCompatRenderedSecrets(t, cfg)
 	assertLiveCompatRenderedRuntimeConfig(t, cfg)
 }
@@ -888,26 +1054,41 @@ func assertLiveCompatRenderedPostgres(t *testing.T, cfg renderedCompose) {
 	}
 
 	for _, service := range []string{"hololive-api", "hololive-alarm-worker", "youtube-collector"} {
-		env := composeEnvironment(t, cfg, service)
-		if env["POSTGRES_HOST"] != "holo-postgres" || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != "verify-full" {
-			t.Fatalf("%s POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
+		assertLiveCompatRenderedPostgresService(t, cfg, service)
+	}
+}
+
+func assertLiveCompatRenderedPostgresService(t *testing.T, cfg renderedCompose, service string) {
+	t.Helper()
+
+	env := composeEnvironment(t, cfg, service)
+	if env["POSTGRES_HOST"] != "holo-postgres" || env["POSTGRES_PORT"] != "5432" || env["POSTGRES_SSLMODE"] != "verify-full" {
+		t.Fatalf("%s POSTGRES env = %q/%q/%q, want holo-postgres/5432/verify-full", service, env["POSTGRES_HOST"], env["POSTGRES_PORT"], env["POSTGRES_SSLMODE"])
+	}
+	if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
+		t.Fatalf("%s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q; verify-full replaced the downgrade path", service, value)
+	}
+	if env["POSTGRES_SSLROOTCERT"] != "/run/hololive-bot/certs/postgres-ca.pem" {
+		t.Fatalf("%s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", service, env["POSTGRES_SSLROOTCERT"])
+	}
+	assertLiveCompatVolumeTargets(t, cfg, service)
+}
+
+func assertLiveCompatVolumeTargets(t *testing.T, cfg renderedCompose, service string) {
+	t.Helper()
+
+	targets := strings.Join(composeVolumeTargets(t, cfg, service), "\n")
+	required := []string{"/app/data", "/app/logs", "/run/hololive-bot/certs"}
+	if service != "youtube-collector" {
+		required = append(required, "/app/runtime-config", "/var/run/valkey")
+	}
+	for _, target := range required {
+		if !strings.Contains(targets, target) {
+			t.Fatalf("%s missing live-compat volume target %s in %q", service, target, targets)
 		}
-		if value, ok := env["POSTGRES_SSLMODE_ALLOW_INSECURE"]; ok {
-			t.Fatalf("%s renders retired POSTGRES_SSLMODE_ALLOW_INSECURE=%q; verify-full replaced the downgrade path", service, value)
-		}
-		if env["POSTGRES_SSLROOTCERT"] != "/run/hololive-bot/certs/postgres-ca.pem" {
-			t.Fatalf("%s POSTGRES_SSLROOTCERT = %q, want /run/hololive-bot/certs/postgres-ca.pem", service, env["POSTGRES_SSLROOTCERT"])
-		}
-		targets := strings.Join(composeVolumeTargets(t, cfg, service), "\n")
-		required := []string{"/app/data", "/app/logs", "/run/hololive-bot/certs", "/var/run/valkey"}
-		if service != "youtube-collector" {
-			required = append(required, "/app/runtime-config")
-		}
-		for _, target := range required {
-			if !strings.Contains(targets, target) {
-				t.Fatalf("%s missing live-compat volume target %s in %q", service, target, targets)
-			}
-		}
+	}
+	if service == "youtube-collector" && strings.Contains(targets, "/var/run/valkey") {
+		t.Fatal("youtube-collector live-compat still mounts Valkey socket")
 	}
 }
 
@@ -1189,6 +1370,38 @@ func TestRepoComposeMainAPLiveCompatOverlayRestoresExtendedProducer(t *testing.T
 
 	assertMainAPLiveCompatRenderedEgressAllowedHosts(t, cfg)
 	assertMainAPLiveCompatRenderedProducer(t, cfg)
+	assertCollectorRenderedWithoutValkey(t, cfg, "youtube-collector") // CFG-007
+	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, "youtube-collector")
+}
+
+func TestCFG010ExactRevisionRollbackDocs(t *testing.T) {
+	t.Parallel()
+	collectorRunbook := readRepoFile(t, "docs/current/runbooks/youtube-collector.md")
+	for _, token := range []string{
+		"collector Go binary/image",
+		"bundled Node helper/package-lock",
+		"Compose base and AP overlays",
+		"host-native env generator/wrapper",
+		"Schema/data rollback is none",
+		"rollback.md",
+	} {
+		if !strings.Contains(collectorRunbook, token) {
+			t.Fatalf("youtube-collector runbook missing CFG-010 rollback unit %q", token)
+		}
+	}
+	if strings.Contains(collectorRunbook, "Valkey") {
+		t.Fatal("youtube-collector runbook must point at rollback.md instead of restating Valkey topology")
+	}
+	rollback := readRepoFile(t, "docs/current/runbooks/rollback.md")
+	for _, token := range []string{
+		"Binary-only Valkey rollback",
+		"exact repository revision",
+		"youtube-collector.md#rollback",
+	} {
+		if !strings.Contains(rollback, token) {
+			t.Fatalf("rollback.md missing CFG-010 Valkey topology unit %q", token)
+		}
+	}
 }
 
 func assertMainAPLiveCompatOverlayText(t *testing.T) {
@@ -1242,10 +1455,13 @@ func assertMainAPLiveCompatRenderedProducer(t *testing.T, cfg renderedCompose) {
 	}
 
 	targets := strings.Join(composeVolumeTargets(t, cfg, "youtube-collector"), "\n")
-	for _, target := range []string{"/app/data", "/app/logs", "/run/hololive-bot/certs", "/var/run/valkey"} {
+	for _, target := range []string{"/app/data", "/app/logs", "/run/hololive-bot/certs"} {
 		if !strings.Contains(targets, target) {
 			t.Fatalf("youtube-collector missing live-compat volume target %s in %q", target, targets)
 		}
+	}
+	if strings.Contains(targets, "/var/run/valkey") {
+		t.Fatal("youtube-collector live-compat still mounts Valkey socket")
 	}
 }
 
@@ -1410,7 +1626,9 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 	repoRoot := repoRootFromConfigTest(t)
 	appEnvFile := writeCentralAppEnvFile(t)
 	cmd.Dir = repoRoot
-	cmd.Env = append(environmentWithoutKeys(os.Environ(), overrides),
+	strip := map[string]string{"HOLOLIVE_RUNTIME_GID": "1002"}
+	maps.Copy(strip, overrides)
+	cmd.Env = append(environmentWithoutKeys(os.Environ(), strip),
 		"COMPOSE_ENV_FILE="+composeEnvFile,
 		"HOLOLIVE_API_ENV_FILE="+appEnvFile,
 		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+appEnvFile,
@@ -1423,6 +1641,7 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 		"ADMIN_PASS_BCRYPT=dummy",
 		"SESSION_SECRET=dummy",
 		"LIVE_LOGS_PATH=/srv/hololive-logs-dummy",
+		"HOLOLIVE_RUNTIME_GID=1002",
 	)
 	for key, value := range overrides {
 		cmd.Env = append(cmd.Env, key+"="+value)
@@ -1500,7 +1719,11 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 	cmd := dockerAPComposeConfigCommand(t, ctx, files)
 	repoRoot := repoRootFromConfigTest(t)
 	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(environmentWithoutKeys(os.Environ(), map[string]string{
+		"HOLOLIVE_RUNTIME_GID":        "1002",
+		"HOLOLIVE_CENTRAL_CACHE_HOST": "omit",
+		"HOLOLIVE_CENTRAL_CACHE_PORT": "omit",
+	}),
 		"COMPOSE_ENV_FILE="+writeAPComposeEnvFile(t),
 		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeAPProducerEnvFile(t),
 		"ADMIN_DASHBOARD_ENV_FILE="+writeAdminDashboardEnvFile(t),
@@ -1508,10 +1731,10 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 		"CACHE_PASSWORD=dummy",
 		"ADMIN_PASS_BCRYPT=dummy",
 		"SESSION_SECRET=dummy",
-		"HOLOLIVE_CENTRAL_CACHE_HOST=stub",
 		"HOLOLIVE_CENTRAL_POSTGRES_HOST=stub",
 		"CLIPROXY_BASE_URL=https://cliproxy.invalid",
 		"SEOUL_METRICS_BIND_IP=100.100.1.5",
+		"HOLOLIVE_RUNTIME_GID=1002",
 	)
 
 	output, err := cmd.CombinedOutput()
@@ -1583,7 +1806,6 @@ func writeAPComposeEnvFile(t *testing.T) string {
 		"ADMIN_PASS_BCRYPT=dummy",
 		"CACHE_PASSWORD=dummy",
 		"DB_PASSWORD=dummy",
-		"HOLOLIVE_CENTRAL_CACHE_HOST=dummy",
 		"HOLOLIVE_CENTRAL_POSTGRES_HOST=dummy",
 		"SESSION_SECRET=dummy",
 	})
@@ -1621,7 +1843,6 @@ func writeAPProducerEnvFile(t *testing.T) string {
 		"HOLODEX_API_KEY_4=dummy",
 		"HOLODEX_API_KEY_5=dummy",
 		"SCRAPER_PROXY_ENABLED=false",
-		"SCRAPER_PROXY_URL=http://proxy.invalid",
 		"YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT=2026-04-10T01:11:12Z",
 		"YOUTUBE_ENABLE_QUOTA_BUILDING=true",
 	})
@@ -1664,31 +1885,34 @@ func assertAPComposeCertMountsAreMinimized(t *testing.T, cfg renderedCompose, co
 func assertAPComposeServiceCertMounts(t *testing.T, cfg renderedCompose, composeFile, service string) {
 	t.Helper()
 
-	hasIrisCA := false
-	hasPostgresCA := false
+	targets := make(map[string]bool)
 	for _, volume := range composeVolumes(t, cfg, service) {
-		source := cleanVolumePath(volume.Source)
-		target := cleanVolumePath(volume.Target)
-		if source == "/etc/stack-secrets/hololive-bot/certs" && target == "/run/hololive-bot/certs" {
-			t.Fatalf("%s %s mounts broad cert directory: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
-		}
-		isH3ServerKey := source == "/etc/stack-secrets/hololive-bot/certs/hololive-h3.key" && target == "/run/hololive-bot/certs/hololive-h3.key"
-		if (strings.HasSuffix(volume.Source, ".key") || strings.HasSuffix(volume.Target, ".key")) && !isH3ServerKey {
-			t.Fatalf("%s %s mounts private key file: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
-		}
-		if target == "/run/hololive-bot/certs/iris-ca.pem" {
-			hasIrisCA = true
-		}
-		if target == "/run/hololive-bot/certs/postgres-ca.pem" {
-			hasPostgresCA = true
-		}
+		targets[assertAPComposeVolumeSafe(t, composeFile, service, volume)] = true
 	}
-	if !hasIrisCA {
-		t.Fatalf("%s %s missing iris-ca.pem mount - producer config load fetches the Iris webhook worker profile over H3 at startup", composeFile, service)
+	if targets["/run/hololive-bot/certs/iris-ca.pem"] {
+		t.Fatalf("%s %s must not mount iris-ca.pem; collector loader does not dial Iris", composeFile, service)
 	}
-	if !hasPostgresCA {
+	if !targets["/run/hololive-bot/certs/postgres-ca.pem"] {
 		t.Fatalf("%s %s missing postgres-ca.pem mount - verify-full needs the CA bundle over the Tailscale Postgres path", composeFile, service)
 	}
+	if !targets["/run/hololive-bot/certs/hololive-h3.crt"] || !targets["/run/hololive-bot/certs/hololive-h3.key"] {
+		t.Fatalf("%s %s missing hololive-h3 cert/key mounts", composeFile, service)
+	}
+}
+
+func assertAPComposeVolumeSafe(t *testing.T, composeFile, service string, volume renderedVolume) string {
+	t.Helper()
+
+	source := cleanVolumePath(volume.Source)
+	target := cleanVolumePath(volume.Target)
+	if source == "/etc/stack-secrets/hololive-bot/certs" && target == "/run/hololive-bot/certs" {
+		t.Fatalf("%s %s mounts broad cert directory: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
+	}
+	isH3ServerKey := source == "/etc/stack-secrets/hololive-bot/certs/hololive-h3.key" && target == "/run/hololive-bot/certs/hololive-h3.key"
+	if (strings.HasSuffix(volume.Source, ".key") || strings.HasSuffix(volume.Target, ".key")) && !isH3ServerKey {
+		t.Fatalf("%s %s mounts private key file: source=%q target=%q", composeFile, service, volume.Source, volume.Target)
+	}
+	return target
 }
 
 func assertAPComposeServiceEnvIsolation(t *testing.T, cfg renderedCompose, composeFile, service string) {
@@ -1900,6 +2124,28 @@ func composeGroupAdd(t *testing.T, cfg renderedCompose, service string) []string
 		groups = append(groups, stringValue(value))
 	}
 	return groups
+}
+
+func composeDependsOn(t *testing.T, cfg renderedCompose, service string) map[string]any {
+	t.Helper()
+
+	raw, ok := composeService(t, cfg, service)["depends_on"]
+	if !ok || raw == nil {
+		return map[string]any{}
+	}
+	switch deps := raw.(type) {
+	case map[string]any:
+		return deps
+	case []any:
+		named := make(map[string]any, len(deps))
+		for _, value := range deps {
+			named[stringValue(value)] = struct{}{}
+		}
+		return named
+	default:
+		t.Fatalf("%s depends_on has unexpected type %T", service, raw)
+		return nil
+	}
 }
 
 func stringValue(value any) string {

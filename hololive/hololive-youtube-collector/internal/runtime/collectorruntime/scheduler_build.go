@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/holodexcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -17,21 +18,14 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
 )
 
-func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig, holodexTimeout, officialTimeout time.Duration) (joblease.Config, error) {
+func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig) (joblease.Config, error) {
 	lease := joblease.Config{
-		LeaseTTL:            cfg.LeaseTTL,
-		RenewInterval:       cfg.RenewInterval,
-		ProviderTimeout:     cfg.MaxProviderTimeout(holodexTimeout, officialTimeout),
-		NormalizationBudget: cfg.NormalizationBudget,
-		PublishBudget:       cfg.PublishBudget,
-		MinRetryDelay:       cfg.RetryMin,
-		MaxRetryDelay:       cfg.RetryMax,
-		MinReleaseJitter:    cfg.ReleaseJitterMin,
-		MaxReleaseJitter:    cfg.ReleaseJitterMax,
-		AcquisitionBatch:    cfg.AcquisitionBatch,
-		WorkerCount:         cfg.TotalWorkers,
-		QueueCapacity:       cfg.QueueCapacity,
-		PollCadence:         cfg.AcquisitionCadence,
+		LeaseTTL: cfg.LeaseTTL, RenewInterval: cfg.RenewInterval,
+		RenewTimeout: cfg.RenewTimeout, DBTimeout: cfg.DBTimeout, CleanupTimeout: cfg.CleanupTimeout,
+		MinRetryDelay: cfg.RetryMin, MaxRetryDelay: cfg.RetryMax,
+		MinReleaseJitter: cfg.ReleaseJitterMin, MaxReleaseJitter: cfg.ReleaseJitterMax,
+		AcquisitionBatch: cfg.AcquisitionBatch, WorkerCount: cfg.TotalWorkers,
+		QueueCapacity: cfg.QueueCapacity, PollCadence: cfg.AcquisitionCadence,
 	}
 	if err := lease.Validate(); err != nil {
 		return joblease.Config{}, err
@@ -40,25 +34,25 @@ func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig, holodexTimeout, offic
 }
 
 func buildScheduler(
-	appConfig *settings.Config,
+	appConfig *settings.YouTubeCollectorRuntimeConfig,
 	infra *collectorInfrastructure,
 	logger *slog.Logger,
 ) (*leaseScheduler, error) {
 	if err := requireSchedulerDeps(appConfig, infra); err != nil {
 		return nil, err
 	}
-	collector := appConfig.YouTubeCollector.OrDefault()
-	if err := collector.Validate(appConfig.Holodex.Timeout, appConfig.OfficialSchedule.Timeout); err != nil {
+	collector := appConfig.Collector.OrDefault()
+	if err := collector.Validate(appConfig.Holodex.Transport.Timeout, appConfig.OfficialSchedule.Transport.Timeout); err != nil {
 		return nil, fmt.Errorf("build youtube collector: %w", err)
 	}
-	leaseConfig, err := leaseConfigFrom(&collector, appConfig.Holodex.Timeout, appConfig.OfficialSchedule.Timeout)
+	leaseConfig, err := leaseConfigFrom(&collector)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector: lease config: %w", err)
 	}
-	return newLeaseScheduler(infra, logger, &collector, &leaseConfig)
+	return newLeaseScheduler(infra, logger, &collector, &leaseConfig, appConfig.Holodex.Transport.Timeout, appConfig.OfficialSchedule.Transport.Timeout)
 }
 
-func requireSchedulerDeps(appConfig *settings.Config, infra *collectorInfrastructure) error {
+func requireSchedulerDeps(appConfig *settings.YouTubeCollectorRuntimeConfig, infra *collectorInfrastructure) error {
 	if appConfig == nil || infra == nil || infra.postgres == nil || infra.postgres.GetPool() == nil {
 		return fmt.Errorf("build youtube collector: postgres pool is required")
 	}
@@ -73,12 +67,14 @@ func newLeaseScheduler(
 	logger *slog.Logger,
 	collector *settings.YouTubeCollectorConfig,
 	leaseConfig *joblease.Config,
+	holodexTimeout time.Duration,
+	officialTimeout time.Duration,
 ) (*leaseScheduler, error) {
 	repository, err := joblease.NewRepository(infra.postgres.GetPool(), leaseConfig)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector: collection lease repository: %w", err)
 	}
-	registry, err := newCollectorRegistry(infra)
+	registry, err := newCollectorRegistry(infra, collector, holodexTimeout, officialTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -88,6 +84,7 @@ func newLeaseScheduler(
 	}
 	return &leaseScheduler{
 		repository: repository,
+		candidates: repository,
 		registry:   registry,
 		publisher:  NewPublisher(infra.postgres.GetPool()),
 		metrics:    NewMetrics(nil),
@@ -96,14 +93,35 @@ func newLeaseScheduler(
 		config:     *leaseConfig,
 		collector:  *collector,
 		gates:      newProviderGates(collector),
+		state:      SchedulerNew,
 		queued:     make(map[string]struct{}),
 		queue:      make(chan joblease.JobSpec, collector.QueueCapacity),
+		fatal:      make(chan error, 1),
+		readiness:  &readinessTracker{},
 	}, nil
 }
 
-func newCollectorRegistry(infra *collectorInfrastructure) (*Registry, error) {
+func newCollectorRegistry(
+	infra *collectorInfrastructure,
+	cfg *settings.YouTubeCollectorConfig,
+	holodexTimeout time.Duration,
+	officialTimeout time.Duration,
+) (*Registry, error) {
+	runners := collectorRunners(infra)
+	profiles, err := collectorExecutionProfiles(runners, cfg, holodexTimeout, officialTimeout)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := NewRegistryWithProfiles(profiles, runners...)
+	if err != nil {
+		return nil, fmt.Errorf("build youtube collector: job registry: %w", err)
+	}
+	return registry, nil
+}
+
+func collectorRunners(infra *collectorInfrastructure) []JobRunner {
 	maxResults := collectutil.DefaultMaxResults()
-	registry, err := NewRegistry(
+	return []JobRunner{
 		youtubejscollector.NewCommunityRunner(infra.youtubejsRPC, maxResults),
 		youtubejscollector.NewContentRunner(infra.youtubejsRPC, maxResults),
 		youtubejscollector.NewChannelLiveRunner(infra.youtubejsRPC),
@@ -113,11 +131,53 @@ func newCollectorRegistry(infra *collectorInfrastructure) (*Registry, error) {
 		holodexcollector.NewMetadataRunner(infra.holodex),
 		holodexcollector.NewScheduleRunner(infra.holodex),
 		officialcollector.NewRunner(infra.official),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build youtube collector: job registry: %w", err)
 	}
-	return registry, nil
+}
+
+func collectorExecutionProfiles(
+	runners []JobRunner,
+	cfg *settings.YouTubeCollectorConfig,
+	holodexTimeout time.Duration,
+	officialTimeout time.Duration,
+) (map[sourceobservation.JobID]ExecutionProfile, error) {
+	profiles := make(map[sourceobservation.JobID]ExecutionProfile, len(runners))
+	for _, runner := range runners {
+		id := runner.JobID()
+		maxCalls, requestTimeout, rateInterval, inflight := executionProfileInputs(id, cfg, holodexTimeout, officialTimeout)
+		profile, profileErr := NewExecutionProfile(maxCalls, requestTimeout, rateInterval, inflight, cfg.CollectionOverhead, 0)
+		if profileErr != nil {
+			return nil, fmt.Errorf("build youtube collector: execution profile %s: %w", id, profileErr)
+		}
+		profiles[id] = profile
+	}
+	return profiles, nil
+}
+
+func executionProfileInputs(
+	id sourceobservation.JobID,
+	cfg *settings.YouTubeCollectorConfig,
+	holodexTimeout time.Duration,
+	officialTimeout time.Duration,
+) (
+	maxCalls int,
+	requestTimeout time.Duration,
+	rateInterval time.Duration,
+	inflight int,
+) {
+	maxCalls = 1
+	if string(id.Kind) == "youtubejs_content" {
+		maxCalls = 2
+	}
+	requestTimeout = cfg.YouTubeJSRequestTimeout
+	rateInterval = cfg.RequestInterval
+	inflight = cfg.YouTubeJSMaxInflight
+	if id.Provider == contract.ProviderHolodex {
+		requestTimeout, rateInterval, inflight = holodexTimeout, 0, cfg.HolodexMaxInflight
+	}
+	if id.Provider == contract.ProviderHololiveOfficial {
+		requestTimeout, rateInterval, inflight = officialTimeout, 0, cfg.OfficialMaxInflight
+	}
+	return maxCalls, requestTimeout, rateInterval, inflight
 }
 
 func newProviderGates(cfg *settings.YouTubeCollectorConfig) map[contract.Provider]chan struct{} {

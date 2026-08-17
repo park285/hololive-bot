@@ -80,12 +80,6 @@ func LoadAdminAPIRuntime() (*Config, error) {
 	})
 }
 
-func LoadYouTubeCollectorRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateYouTubeCollectorRuntime, configLoadOptions{
-		TracingRuntime: tracingRuntimeYouTubeCollector,
-	})
-}
-
 func loadConfigValidated(validate func(*Config) error, options configLoadOptions) (*Config, error) {
 	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("load .env: %w", err)

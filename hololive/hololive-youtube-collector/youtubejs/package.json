@@ -7,7 +7,8 @@
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "scripts": {
-    "test": "node --test src/*.test.mjs",
+    "test": "node --test --test-concurrency=1 src/*.test.mjs",
+    "test:pagination-performance": "node --expose-gc src/pagination-performance.mjs",
     "start": "node src/server.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p jsconfig.json"
   },

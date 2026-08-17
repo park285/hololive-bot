@@ -3,7 +3,6 @@ package collectorruntime
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -14,21 +13,23 @@ import (
 )
 
 func (s *leaseScheduler) runSpec(ctx context.Context, spec *joblease.JobSpec) {
-	runner, ok := s.registry.Lookup(spec.Provider, spec.CollectionJobKind)
+	registration, ok := s.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	if !ok {
 		proof := contract.LeaseProof{}
-		s.logFailure("collect", collecterr.Failed, collecterr.UnknownClass, "", spec, &proof)
+		s.logFailure("collect", string(collecterr.Failed), collecterr.UnknownClass, "", spec, &proof)
 		return
 	}
 	lease, err := s.acquireLease(ctx, spec)
 	if lease == nil {
 		return
 	}
-	s.runAcquired(ctx, runner, spec, lease, err)
+	s.runAcquired(ctx, registration, spec, lease, err)
 }
 
 func (s *leaseScheduler) acquireLease(ctx context.Context, spec *joblease.JobSpec) (joblease.Lease, error) {
-	lease, err := s.repository.Acquire(ctx, spec, s.owner)
+	dbCtx, cancel := context.WithTimeout(ctx, s.collector.DBTimeout)
+	defer cancel()
+	lease, err := s.repository.Acquire(dbCtx, spec, s.owner)
 	if errors.Is(err, joblease.ErrNotAcquired) {
 		s.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultNotAcquired)
 		return nil, nil
@@ -47,21 +48,79 @@ func (s *leaseScheduler) observeAcquireError(spec *joblease.JobSpec, err error) 
 	}
 	s.metrics.ObserveAcquire(spec.Provider, spec.CollectionJobKind, resultError)
 	proof := contract.LeaseProof{}
-	s.logFailure("acquire", collecterr.AcquireFailed, collecterr.Class(err), collecterr.Detail(err), spec, &proof)
+	s.logFailure("acquire", string(collecterr.AcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
 }
 
-func (s *leaseScheduler) runAcquired(ctx context.Context, runner JobRunner, spec *joblease.JobSpec, lease joblease.Lease, _ error) {
+func (s *leaseScheduler) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease, _ error) {
 	proof := lease.Proof()
 	started := time.Now()
-	err := s.repository.Run(ctx, lease, func(runCtx context.Context, leaseProof contract.LeaseProof) error {
-		return s.collectAndPublish(runCtx, runner, spec, lease, &leaseProof)
+	runResult := s.repository.Run(ctx, lease, func(runCtx context.Context, leaseProof contract.LeaseProof) error {
+		return s.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
 	})
+	err := runResult.Err
 	s.metrics.ObserveAttempt(spec.Provider, spec.CollectionJobKind, attemptResult(err), time.Since(started))
+	if s.handleLeaseRunOutcome(runResult, spec) {
+		return
+	}
+	s.handleRunError(ctx, lease, spec, &proof, err)
+}
+
+func (s *leaseScheduler) handleLeaseRunOutcome(runResult joblease.LeaseRunResult, spec *joblease.JobSpec) bool {
+	if leaseRunCompletesWithoutAction(runResult.Outcome) {
+		return true
+	}
+	if runResult.Outcome == joblease.LeaseRunFenceLost {
+		s.observeFenceLost(spec, joblease.ErrFenceLost)
+		return true
+	}
+	if leaseRunIsSupervisionFailure(runResult.Outcome) {
+		s.reportFatal(&FatalRuntimeError{Phase: "lease_supervision", Err: runResult.Err})
+		return true
+	}
+	return false
+}
+
+func leaseRunCompletesWithoutAction(outcome joblease.LeaseRunOutcome) bool {
+	return outcome == joblease.LeaseRunCallbackCompleted || outcome == joblease.LeaseRunReleasedAfterParentCancel
+}
+
+func leaseRunIsSupervisionFailure(outcome joblease.LeaseRunOutcome) bool {
+	return outcome == joblease.LeaseRunReleasedAfterRenewFailure || outcome == joblease.LeaseRunCleanupTimedOut
+}
+
+func (s *leaseScheduler) handleRunError(
+	ctx context.Context,
+	lease joblease.Lease,
+	spec *joblease.JobSpec,
+	proof *contract.LeaseProof,
+	err error,
+) {
+	if supersededError(err) {
+		s.handleSuperseded(ctx, lease)
+		return
+	}
 	if ignoreRunError(err) {
 		s.observeFenceLost(spec, err)
 		return
 	}
-	s.deferFailedRun(ctx, lease, spec, &proof, err)
+	s.deferFailedRun(ctx, lease, spec, proof, err)
+	class := collecterr.ClassOf(err)
+	if class == collecterr.ClassInternal || class == collecterr.ClassProtocol {
+		s.reportFatal(&FatalRuntimeError{Phase: "collection", Err: err})
+	}
+}
+
+func (s *leaseScheduler) handleSuperseded(ctx context.Context, lease joblease.Lease) {
+	releaseErr := s.releaseSuperseded(ctx, lease)
+	if releaseErr != nil && !errors.Is(releaseErr, joblease.ErrFenceLost) {
+		s.reportFatal(&FatalRuntimeError{Phase: "lease_supervision", Err: releaseErr})
+	}
+}
+
+func (s *leaseScheduler) releaseSuperseded(ctx context.Context, lease joblease.Lease) error {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.collector.CleanupTimeout)
+	defer cancel()
+	return lease.Release(cleanupCtx, joblease.ReleaseSuperseded)
 }
 
 func ignoreRunError(err error) bool {
@@ -84,12 +143,15 @@ func (s *leaseScheduler) deferFailedRun(
 	proof *contract.LeaseProof,
 	err error,
 ) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.collector.CleanupTimeout)
+	defer cancel()
 	retryAt := s.retryAt(err)
-	code := collecterr.Code(err)
-	class := collecterr.Class(err)
-	detail := collecterr.Detail(err)
-	if deferErr := lease.Defer(ctx, retryAt, code, class, detail); deferErr != nil && !errors.Is(deferErr, joblease.ErrFenceLost) {
-		s.logFailure("defer", collecterr.DeferFailed, collecterr.Class(deferErr), collecterr.Detail(deferErr), spec, proof)
+	diagnostic := collecterr.DiagnosticOf(err)
+	code := string(diagnostic.Code())
+	class := string(diagnostic.Class())
+	detail := diagnostic.Detail()
+	if deferErr := lease.Defer(cleanupCtx, retryAt, code, class, detail); deferErr != nil && !errors.Is(deferErr, joblease.ErrFenceLost) {
+		s.logFailure("defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 		return
 	}
 	s.logFailure("collect", code, class, detail, spec, proof)
@@ -97,221 +159,127 @@ func (s *leaseScheduler) deferFailedRun(
 
 func (s *leaseScheduler) collectAndPublish(
 	ctx context.Context,
-	runner JobRunner,
+	registration RegisteredRunner,
 	spec *joblease.JobSpec,
 	lease joblease.Lease,
 	proof *contract.LeaseProof,
 ) error {
-	generations, err := s.publisher.LoadContractGenerations(ctx, spec.Provider, runner.Emissions())
+	admissionCtx, admissionCancel := context.WithTimeout(ctx, s.collector.ProviderAdmissionTimeout)
+	err := s.acquireProvider(admissionCtx, spec.Provider)
+	admissionCancel()
 	if err != nil {
-		return err
-	}
-	enabled, err := s.loadEnabledSubjects(ctx, proof.ProjectionGeneration, runner.TargetKinds())
-	if err != nil {
-		return err
-	}
-	output, err := s.collectOutput(ctx, runner, spec, proof, generations, enabled)
-	if err != nil {
-		return err
-	}
-	return s.publishOutput(ctx, spec, lease, proof, output)
-}
-
-func (s *leaseScheduler) collectOutput(
-	ctx context.Context,
-	runner JobRunner,
-	spec *joblease.JobSpec,
-	proof *contract.LeaseProof,
-	generations map[contract.ObservationKind]int64,
-	enabled map[contract.ObservationKind][]string,
-) (collectutil.RunOutput, error) {
-	if err := s.acquireProvider(ctx, spec.Provider); err != nil {
-		return collectutil.RunOutput{}, collecterr.FromContext(err)
+		return collecterr.FromContext(err)
 	}
 	defer s.releaseProvider(spec.Provider)
-	input := &collectutil.RunInput{
-		Spec:                *spec,
-		Lease:               *proof,
-		ContractGenerations: generations,
-		MaxPages:            s.collector.MaxPages,
-		MaxAggregateBytes:   s.collector.MaxAggregateBytes,
-		EnabledSubjects:     enabled,
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	return runner.Collect(ctx, input)
+	dbCtx, dbCancel := context.WithTimeout(ctx, s.collector.DBTimeout)
+	snapshot, err := s.publisher.LoadContractSnapshot(dbCtx, registration)
+	dbCancel()
+	if err != nil {
+		return err
+	}
+	dbCtx, dbCancel = context.WithTimeout(ctx, s.collector.DBTimeout)
+	targets, err := s.repository.LoadTargetSnapshot(
+		dbCtx, proof, spec, registration.Contract(), s.collector.MaxTargetRosterRows,
+	)
+	dbCancel()
+	if err != nil {
+		return err
+	}
+	input, err := collectutil.NewRunInput(
+		spec, proof, snapshot, targets, s.collector.MaxPages,
+		s.collector.MaxSuccessResponseBytes, registration.Contract(),
+	)
+	if err != nil {
+		return err
+	}
+	collectCtx, collectCancel := context.WithTimeout(ctx, registration.Profile().CollectTimeout())
+	result, fatal := registration.Runner().Collect(collectCtx, &input)
+	collectErr := collectCtx.Err()
+	collectCancel()
+	if collectErr != nil {
+		result = collectutil.CollectResult{}
+		fatal = collectErr
+	}
+	if validationErr := ValidateCollectResult(&input, registration, &result, fatal); validationErr != nil {
+		s.deferInvariant(ctx, lease, spec, proof, validationErr)
+		s.reportFatal(&FatalRuntimeError{Phase: "result_validation", Err: validationErr})
+		return nil
+	}
+	if fatal != nil {
+		return fatal
+	}
+	return s.commitCollectResult(ctx, spec, lease, proof, &result)
 }
 
-func (s *leaseScheduler) publishOutput(
+func (s *leaseScheduler) commitCollectResult(
 	ctx context.Context,
 	spec *joblease.JobSpec,
 	lease joblease.Lease,
 	proof *contract.LeaseProof,
-	output collectutil.RunOutput,
+	result *collectutil.CollectResult,
 ) error {
-	if len(output.Observations) == 0 {
+	output := result.Output()
+	if result.Kind() == collectutil.CollectComplete && output.Empty() {
 		s.metrics.ObservePublish(spec.Provider, spec.CollectionJobKind, outcomeEmpty)
-		return lease.Complete(ctx)
+		dbCtx, cancel := context.WithTimeout(ctx, s.collector.DBTimeout)
+		defer cancel()
+		if err := lease.CompleteCurrent(dbCtx); err != nil {
+			return err
+		}
+		s.recordTerminalSuccess(nil)
+		s.metrics.ObserveSuccess(spec.Provider, spec.CollectionJobKind, time.Now().UTC())
+		return nil
 	}
-	publishCtx, cancel := context.WithTimeout(ctx, s.config.PublishBudget)
+	publishCtx, cancel := context.WithTimeout(ctx, s.collector.PublishTimeout)
 	defer cancel()
-	result, err := s.publisher.Publish(publishCtx, proof, output)
+	var published sourceobservation.PublishBatchResult
+	var err error
+	if result.Kind() == collectutil.CollectPartial {
+		retry, retryErr := joblease.NewRetryAt(s.retryAt(resultPartialCause(result)))
+		if retryErr != nil {
+			return retryErr
+		}
+		published, err = s.publisher.PublishPartial(
+			publishCtx, proof, result, retry,
+			sourceobservation.RetryBounds{Minimum: s.config.MinRetryDelay, Maximum: s.config.MaxRetryDelay},
+		)
+	} else {
+		published, err = s.publisher.PublishComplete(publishCtx, proof, output)
+	}
 	if err != nil {
 		s.observePublishError(spec, output, err)
 		return err
 	}
-	s.observePublished(output, result)
+	s.observePublished(output, published)
+	s.recordTerminalSuccess(&published)
 	s.metrics.ObserveSuccess(spec.Provider, spec.CollectionJobKind, time.Now().UTC())
 	return nil
 }
 
-func (s *leaseScheduler) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
-	if supersededError(err) {
-		s.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
-		return
+func resultPartialCause(result *collectutil.CollectResult) error {
+	partial, _ := result.PartialFailure()
+	if partial == nil {
+		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure is missing")
 	}
-	if errors.Is(err, joblease.ErrFenceLost) {
-		s.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phasePublish)
-	}
-	s.observePublishOutcome(spec.Provider, output, outcomeRejected)
+	return partial.Cause()
 }
 
-func (s *leaseScheduler) loadEnabledSubjects(
+func (s *leaseScheduler) deferInvariant(
 	ctx context.Context,
-	generation int64,
-	kinds []contract.ObservationKind,
-) (map[contract.ObservationKind][]string, error) {
-	result := make(map[contract.ObservationKind][]string, len(kinds))
-	for _, kind := range kinds {
-		subjects, err := s.repository.EnabledSubjects(ctx, generation, kind)
-		if err != nil {
-			return nil, err
-		}
-		result[kind] = subjects
+	lease joblease.Lease,
+	spec *joblease.JobSpec,
+	proof *contract.LeaseProof,
+	err error,
+) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.collector.CleanupTimeout)
+	defer cancel()
+	retryAt := time.Now().UTC().Add(s.config.MaxRetryDelay)
+	diagnostic := collecterr.DiagnosticOf(err)
+	if deferErr := lease.Defer(cleanupCtx, retryAt, string(diagnostic.Code()), string(diagnostic.Class()), diagnostic.Detail()); deferErr != nil &&
+		!errors.Is(deferErr, joblease.ErrFenceLost) {
+		s.logFailure("defer", string(collecterr.DeferFailed), string(collecterr.ClassOf(deferErr)), collecterr.DiagnosticOf(deferErr).Detail(), spec, proof)
 	}
-	return result, nil
-}
-
-func (s *leaseScheduler) acquireProvider(ctx context.Context, provider contract.Provider) error {
-	gate := s.gates[provider]
-	if gate == nil {
-		return collecterr.New(collecterr.Failed, "provider gate is not configured")
-	}
-	select {
-	case gate <- struct{}{}:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (s *leaseScheduler) releaseProvider(provider contract.Provider) {
-	gate := s.gates[provider]
-	if gate == nil {
-		return
-	}
-	select {
-	case <-gate:
-	default:
-	}
-}
-
-func (s *leaseScheduler) observePublished(output collectutil.RunOutput, result sourceobservation.PublishBatchResult) {
-	for i := range output.Observations {
-		envelope := &output.Observations[i]
-		outcome := publishedOutcome(result, i)
-		if i < len(result.Results) && outcome != outcomeCollision {
-			s.metrics.ObservePublishedObservation(result.Results[i].ObservationID)
-		}
-		s.metrics.ObservePublish(envelope.Provider, string(envelope.ObservationKind), outcome)
-		s.metrics.ObserveCompleteness(envelope.Provider, string(envelope.ObservationKind), envelope.Completeness, envelope.Continuity)
-	}
-}
-
-func publishedOutcome(result sourceobservation.PublishBatchResult, index int) string {
-	if index >= len(result.Results) {
-		return outcomeInserted
-	}
-	if result.Results[index].Outcome == sourceobservation.PublishDuplicate {
-		return outcomeDuplicate
-	}
-	if result.Results[index].Outcome == sourceobservation.PublishCollision {
-		return outcomeCollision
-	}
-	return outcomeInserted
-}
-
-func (s *leaseScheduler) observePublishOutcome(provider contract.Provider, output collectutil.RunOutput, outcome string) {
-	for i := range output.Observations {
-		envelope := &output.Observations[i]
-		s.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcome)
-	}
-}
-
-func attemptResult(err error) string {
-	if err == nil {
-		return resultSuccess
-	}
-	if supersededError(err) {
-		return resultSuperseded
-	}
-	return attemptFailureResult(collecterr.Code(err))
-}
-
-func supersededError(err error) bool {
-	return errors.Is(err, joblease.ErrProjectionStale) ||
-		errors.Is(err, joblease.ErrTargetDisabled)
-}
-
-func attemptFailureResult(code string) string {
-	if code == collecterr.Timeout {
-		return resultTimeout
-	}
-	if code == collecterr.Canceled {
-		return resultCanceled
-	}
-	if code == collecterr.ParserDrift {
-		return resultParserDrift
-	}
-	if code == collecterr.PaginationGap {
-		return resultPaginationGap
-	}
-	return resultFailed
-}
-
-func (s *leaseScheduler) retryAt(err error) time.Time {
-	now := time.Now().UTC()
-	minAt := now.Add(s.config.MinRetryDelay)
-	maxAt := now.Add(s.config.MaxRetryDelay)
-	if retryAt, ok := collecterr.RetryAt(err); ok {
-		return clampRetryAt(retryAt, minAt, maxAt)
-	}
-	return now.Add(s.config.MinRetryDelay + (s.config.MaxRetryDelay-s.config.MinRetryDelay)/2)
-}
-
-func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
-	if retryAt.Before(minAt) {
-		return minAt
-	}
-	if retryAt.After(maxAt) {
-		return maxAt
-	}
-	return retryAt.UTC()
-}
-
-func (s *leaseScheduler) logFailure(phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
-	if s.logger == nil {
-		return
-	}
-	detail = collecterr.SanitizeDetail(detail)
-	s.logger.Warn("YouTube collection job failed",
-		slog.String("job_key", spec.JobKey),
-		slog.String("provider", string(spec.Provider)),
-		slog.String("job_kind", spec.CollectionJobKind),
-		slog.String("subject_key", spec.SubjectKey),
-		slog.Int64("fence_epoch", proof.FenceEpoch),
-		slog.Int64("projection_generation", proof.ProjectionGeneration),
-		slog.String("error_code", code),
-		slog.String("error_class", class),
-		slog.String("error_detail", detail),
-		slog.String("phase", phase),
-	)
 }

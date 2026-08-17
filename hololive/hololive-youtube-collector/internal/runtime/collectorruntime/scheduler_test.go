@@ -28,12 +28,12 @@ func TestLeaseConfigFromUsesCollectorBudgets(t *testing.T) {
 	cfg.TotalWorkers = 3
 	cfg.QueueCapacity = 12
 	cfg.AcquisitionBatch = 12
-	cfg.YouTubeJSTimeout = 20 * time.Second
-	lease, err := leaseConfigFrom(&cfg, 15*time.Second, 10*time.Second)
+	cfg.YouTubeJSRequestTimeout = 20 * time.Second
+	lease, err := leaseConfigFrom(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lease.WorkerCount != 3 || lease.QueueCapacity != 12 || lease.ProviderTimeout != 20*time.Second {
+	if lease.WorkerCount != 3 || lease.QueueCapacity != 12 || lease.RenewTimeout != cfg.RenewTimeout {
 		t.Fatalf("lease config = %+v", lease)
 	}
 }
@@ -44,7 +44,7 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 	seedRuntimeCommunityTarget(t, pool, "UC_TEST")
 	config := joblease.Config{
 		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
-		ProviderTimeout: 500 * time.Millisecond, NormalizationBudget: 250 * time.Millisecond, PublishBudget: 250 * time.Millisecond,
+		RenewTimeout: 50 * time.Millisecond, DBTimeout: 250 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
 		MinRetryDelay: 100 * time.Millisecond, MaxRetryDelay: time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
 		AcquisitionBatch: 4, WorkerCount: 1, QueueCapacity: 4, PollCadence: 100 * time.Millisecond,
@@ -54,8 +54,8 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 		t.Fatal(err)
 	}
 	failing := stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage)
-	failing.collect = func(context.Context, *collectutil.RunInput) (collectutil.RunOutput, error) {
-		return collectutil.RunOutput{}, errors.New("provider unavailable")
+	failing.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
+		return collectutil.CollectResult{}, errors.New("provider unavailable")
 	}
 	registry, err := NewRegistry(withOverride(failing)...)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 	seedRuntimeCommunityTarget(t, pool, "UC_TEST")
 	config := joblease.Config{
 		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
-		ProviderTimeout: 500 * time.Millisecond, NormalizationBudget: 250 * time.Millisecond, PublishBudget: 250 * time.Millisecond,
+		RenewTimeout: 50 * time.Millisecond, DBTimeout: 250 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
 		MinRetryDelay: 100 * time.Millisecond, MaxRetryDelay: time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
 		AcquisitionBatch: 4, WorkerCount: 1, QueueCapacity: 4, PollCadence: 100 * time.Millisecond,
@@ -103,8 +103,8 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 	}
 	retryAt := time.Now().UTC().Add(200 * time.Millisecond)
 	failing := stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage)
-	failing.collect = func(context.Context, *collectutil.RunInput) (collectutil.RunOutput, error) {
-		return collectutil.RunOutput{}, collecterr.CooldownUntil("limited", retryAt)
+	failing.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
+		return collectutil.CollectResult{}, collecterr.CooldownUntil("limited", retryAt)
 	}
 	registry, err := NewRegistry(withOverride(failing)...)
 	if err != nil {
@@ -174,7 +174,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	})
 	config := joblease.Config{
 		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
-		ProviderTimeout: 500 * time.Millisecond, NormalizationBudget: 250 * time.Millisecond, PublishBudget: 250 * time.Millisecond,
+		RenewTimeout: 50 * time.Millisecond, DBTimeout: 250 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
 		MinRetryDelay: 100 * time.Millisecond, MaxRetryDelay: time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
 		AcquisitionBatch: 4, WorkerCount: 1, QueueCapacity: 4, PollCadence: 100 * time.Millisecond,
@@ -185,9 +185,10 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	}
 	holodex := stubJob(contract.ProviderHolodex, "holodex_live",
 		contract.KindLiveSnapshot, contract.KindViewerSample)
-	holodex.collect = func(_ context.Context, input *collectutil.RunInput) (collectutil.RunOutput, error) {
+	holodex.collect = func(_ context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+		lease := input.Lease()
 		live, err := collectutil.Envelope(
-			contract.ProviderHolodex, contract.KindLiveSnapshot, "UC_TEST", 1, &input.Lease,
+			contract.ProviderHolodex, contract.KindLiveSnapshot, "UC_TEST", 1, &lease,
 			contract.CompletenessPartial, contract.ContinuityNotApplicable,
 			contract.LiveSnapshotV1{
 				Sessions: []contract.LiveSessionV1{{VideoID: "vid-1", ChannelID: "UC_TEST", Status: "LIVE"}},
@@ -198,24 +199,24 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 			},
 		)
 		if err != nil {
-			return collectutil.RunOutput{}, err
+			return collectutil.CollectResult{}, err
 		}
 		viewerCount := int64(9)
 		viewer, err := collectutil.Envelope(
-			contract.ProviderHolodex, contract.KindViewerSample, "vid-1", 1, &input.Lease,
+			contract.ProviderHolodex, contract.KindViewerSample, "vid-1", 1, &lease,
 			contract.CompletenessComplete, contract.ContinuityNotApplicable,
 			contract.ViewerSampleV1{
 				VideoID: "vid-1", ViewerCount: &viewerCount, Availability: "AVAILABLE",
-				SampleWindowStart: input.Lease.ScheduledFor, SampleWindowSeconds: 60,
+				SampleWindowStart: lease.ScheduledFor, SampleWindowSeconds: 60,
 				Coverage: contract.ViewerSampleCoverageV1{
-					VideoID: "vid-1", SampleWindowStart: input.Lease.ScheduledFor, SampleWindowSeconds: 60,
+					VideoID: "vid-1", SampleWindowStart: lease.ScheduledFor, SampleWindowSeconds: 60,
 				},
 			},
 		)
 		if err != nil {
-			return collectutil.RunOutput{}, err
+			return collectutil.CollectResult{}, err
 		}
-		return collectutil.Output([]contract.Envelope{live, viewer}, time.Now())
+		return collectutil.CompleteFromEnvelopes([]contract.Envelope{live, viewer}, time.Now())
 	}
 	registry, err := NewRegistry(withOverride(holodex)...)
 	if err != nil {
@@ -243,28 +244,52 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	}
 }
 
-func TestSyncCandidatesEnqueuesGlobalJobsWhenSubjectQueueIsSaturated(t *testing.T) {
+func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	seedRuntimeTargets(t, pool, []leaseSeed{
-		{"UC_A", contract.KindCommunityPage},
-		{"UC_B", contract.KindCommunityPage},
-		{"UC_C", contract.KindCommunityPage},
-		{"UC_A", contract.KindLiveSnapshot},
-		{"global:hololive-schedule", contract.KindSchedule},
+		{"UC_TEST", contract.KindVideoList},
+		{"UC_TEST", contract.KindShortsList},
 	})
 	config := joblease.Config{
 		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
-		ProviderTimeout: 500 * time.Millisecond, NormalizationBudget: 250 * time.Millisecond, PublishBudget: 250 * time.Millisecond,
+		RenewTimeout: 50 * time.Millisecond, DBTimeout: 250 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
 		MinRetryDelay: 100 * time.Millisecond, MaxRetryDelay: time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
-		AcquisitionBatch: 8, WorkerCount: 1, QueueCapacity: 1, PollCadence: 100 * time.Millisecond,
+		AcquisitionBatch: 4, WorkerCount: 1, QueueCapacity: 4, PollCadence: 100 * time.Millisecond,
 	}
 	repository, err := joblease.NewRepository(pool, &config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := NewRegistry(completeStubRunners()...)
+	content := stubJob(contract.ProviderYouTubeJS, "youtubejs_content", contract.KindVideoList, contract.KindShortsList)
+	content.collect = func(_ context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+		lease := input.Lease()
+		envelope, buildErr := collectutil.Envelope(
+			contract.ProviderYouTubeJS, contract.KindVideoList, input.Spec().SubjectKey, 1, &lease,
+			contract.CompletenessComplete, contract.ContinuityContiguous,
+			contract.VideoListV1{
+				ChannelID: input.Spec().SubjectKey,
+				Videos:    []contract.VideoListItemV1{},
+				Coverage: contract.ChannelListCoverageV1{
+					ChannelID: input.Spec().SubjectKey, MaxResults: 10, Exhausted: true,
+				},
+			},
+		)
+		if buildErr != nil {
+			return collectutil.CollectResult{}, buildErr
+		}
+		output, buildErr := collectutil.OutputFromEnvelopes([]contract.Envelope{envelope}, time.Now())
+		if buildErr != nil {
+			return collectutil.CollectResult{}, buildErr
+		}
+		return collectutil.NewPartialResult(
+			output,
+			collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "shorts timeout"),
+			contract.KindShortsList,
+		)
+	}
+	registry, err := NewRegistry(withOverride(content)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,17 +298,28 @@ func TestSyncCandidatesEnqueuesGlobalJobsWhenSubjectQueueIsSaturated(t *testing.
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   "collector-a", logger: slog.New(slog.NewTextHandler(io.Discard, nil)), config: config,
 		collector: settings.DefaultYouTubeCollectorConfig(),
-		gates:     defaultProviderGates(),
-		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
+		gates:     defaultProviderGates(), queued: make(map[string]struct{}),
+		queue: make(chan joblease.JobSpec, config.QueueCapacity), fatal: make(chan error, 1),
 	}
-	scheduler.syncCandidates(ctx)
-	select {
-	case spec := <-scheduler.queue:
-		if spec.Class != "GLOBAL" {
-			t.Fatalf("queued %s %s, want GLOBAL", spec.Class, spec.JobKey)
-		}
-	default:
-		t.Fatal("expected a global job in the saturated queue")
+	spec := joblease.JobSpec{
+		JobKey: "collector:youtubejs:youtubejs_content:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
+		CollectionJobKind: "youtubejs_content", SubjectKey: "UC_TEST", PollInterval: time.Minute,
+	}
+	scheduler.runSpec(ctx, &spec)
+	var count int
+	var state string
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM source_observations WHERE provider = 'youtubejs' AND observation_kind = 'video_list'
+	`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `
+		SELECT slot_state FROM youtube_collection_job_leases WHERE job_key = $1
+	`, spec.JobKey).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || state != "DEFERRED" {
+		t.Fatalf("partial terminal state count=%d state=%s", count, state)
 	}
 }
 
@@ -292,7 +328,7 @@ func TestLeaseSchedulerStopJoinsWorkers(t *testing.T) {
 	seedRuntimeCommunityTarget(t, pool, "UC_TEST")
 	config := joblease.Config{
 		LeaseTTL: 2 * time.Second, RenewInterval: 100 * time.Millisecond,
-		ProviderTimeout: 500 * time.Millisecond, NormalizationBudget: 250 * time.Millisecond, PublishBudget: 250 * time.Millisecond,
+		RenewTimeout: 50 * time.Millisecond, DBTimeout: 250 * time.Millisecond, CleanupTimeout: 250 * time.Millisecond,
 		MinRetryDelay: 100 * time.Millisecond, MaxRetryDelay: time.Second,
 		MinReleaseJitter: 100 * time.Millisecond, MaxReleaseJitter: 200 * time.Millisecond,
 		AcquisitionBatch: 4, WorkerCount: 1, QueueCapacity: 4, PollCadence: 100 * time.Millisecond,
@@ -306,16 +342,22 @@ func TestLeaseSchedulerStopJoinsWorkers(t *testing.T) {
 		t.Fatal(err)
 	}
 	scheduler := &leaseScheduler{
-		repository: repository, registry: registry, publisher: NewPublisher(pool),
+		repository: repository, candidates: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   "collector-a", logger: slog.New(slog.NewTextHandler(io.Discard, nil)), config: config,
 		collector: settings.DefaultYouTubeCollectorConfig(),
 		gates:     defaultProviderGates(),
-		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
+		state:     SchedulerNew, queued: make(map[string]struct{}),
+		queue: make(chan joblease.JobSpec, config.QueueCapacity), fatal: make(chan error, 1),
 	}
-	scheduler.Start(context.Background())
+	if err := scheduler.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if err := scheduler.Stop(t.Context()); err != nil {
 		t.Fatal(err)
+	}
+	if scheduler.Snapshot().State != SchedulerStopped {
+		t.Fatalf("state = %s, want STOPPED", scheduler.Snapshot().State)
 	}
 }
 
@@ -327,9 +369,12 @@ func TestLeaseSchedulerStopTimeoutKeepsRunStateUntilJoin(t *testing.T) {
 	scheduler := &leaseScheduler{
 		repository: new(joblease.Repository),
 		registry:   new(Registry),
-		config:     joblease.Config{WorkerCount: 1},
+		config:     joblease.Config{WorkerCount: 1, QueueCapacity: 1},
+		state:      SchedulerRunning,
 		cancel:     cancel,
 		done:       done,
+		queued:     make(map[string]struct{}),
+		fatal:      make(chan error, 1),
 	}
 	scheduler.wg.Go(func() {
 		<-release
@@ -341,12 +386,11 @@ func TestLeaseSchedulerStopTimeoutKeepsRunStateUntilJoin(t *testing.T) {
 	if err := scheduler.Stop(stopCtx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Stop() error = %v, want deadline exceeded", err)
 	}
-	scheduler.Start(t.Context())
-	scheduler.mu.Lock()
-	stillRunning := scheduler.done == done && scheduler.cancel != nil
-	scheduler.mu.Unlock()
-	if !stillRunning {
-		t.Fatal("Stop timeout cleared running state or allowed a replacement fleet")
+	if err := scheduler.Start(t.Context()); err == nil {
+		t.Fatal("Start during STOPPING was accepted")
+	}
+	if scheduler.Snapshot().State != SchedulerStopping {
+		t.Fatalf("state = %s, want STOPPING", scheduler.Snapshot().State)
 	}
 
 	close(release)
@@ -355,18 +399,18 @@ func TestLeaseSchedulerStopTimeoutKeepsRunStateUntilJoin(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("scheduler join did not finish after worker release")
 	}
-	scheduler.mu.Lock()
-	joined := scheduler.done == nil && scheduler.cancel == nil
-	scheduler.mu.Unlock()
-	if !joined {
-		t.Fatal("scheduler run state was not cleared after owned join")
+	if scheduler.Snapshot().State != SchedulerStopped {
+		t.Fatal("scheduler was not STOPPED after join")
+	}
+	if err := scheduler.Start(t.Context()); err == nil {
+		t.Fatal("STOPPED scheduler was reused")
 	}
 }
 
 func withOverride(override JobRunner) []JobRunner {
 	runners := completeStubRunners()
 	for i, runner := range runners {
-		if runner.Provider() == override.Provider() && runner.JobKind() == override.JobKind() {
+		if runner.JobID() == override.JobID() {
 			runners[i] = override
 		}
 	}

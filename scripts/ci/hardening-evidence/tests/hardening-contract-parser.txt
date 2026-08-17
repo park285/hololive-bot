@@ -1,0 +1,10 @@
+ok - path glob does not count files outside the glob
+ok - expected count range accepts an exact match
+ok - expected count range rejects a shortfall
+ok - comments do not satisfy a forbidden production rule
+ok - live source text still satisfies a forbidden production rule
+ok - non-allow-listed production path still counts
+ok - fixture allow-list excludes matching testdata
+ok - canonical rule table registers HC-001..HC-015
+ok - HC-015 Valkey phrase globs exclude rollback.md
+ok - 9 hardening-contract parser checks passed

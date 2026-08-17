@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -48,11 +47,11 @@ type parsedLive struct {
 func parseLiveRows(body []byte) ([]parsedLive, error) {
 	trimmed := bytes.TrimSpace(body)
 	if !json.Valid(trimmed) || len(trimmed) == 0 || trimmed[0] != '[' {
-		return nil, collecterr.New(collecterr.ParserDrift, "holodex live response is not a JSON array")
+		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response is not a JSON array")
 	}
 	var rawRows []json.RawMessage
 	if err := json.Unmarshal(trimmed, &rawRows); err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode holodex live: %w", err))
+		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex live: %w", err))
 	}
 	rows := make([]parsedLive, 0, len(rawRows))
 	seen := make(map[string]struct{}, len(rawRows))
@@ -72,7 +71,7 @@ func appendUniqueLiveRow(raw json.RawMessage, seen map[string]struct{}) (parsedL
 		return parsedLive{}, err
 	}
 	if _, exists := seen[row.row.ID]; exists {
-		return parsedLive{}, collecterr.New(collecterr.ParserDrift, "holodex live response has duplicate video id")
+		return parsedLive{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response has duplicate video id")
 	}
 	seen[row.row.ID] = struct{}{}
 	return row, nil
@@ -81,31 +80,20 @@ func appendUniqueLiveRow(raw json.RawMessage, seen map[string]struct{}) (parsedL
 func parseLiveRow(raw json.RawMessage) (parsedLive, error) {
 	var row liveRow
 	if err := json.Unmarshal(raw, &row); err != nil {
-		return parsedLive{}, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode holodex live row: %w", err))
+		return parsedLive{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex live row: %w", err))
 	}
 	if strings.TrimSpace(row.ID) == "" {
-		return parsedLive{}, collecterr.New(collecterr.ParserDrift, "holodex live row id is empty")
+		return parsedLive{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row id is empty")
 	}
 	status, err := mapLiveStatus(row.Status)
 	if err != nil {
 		return parsedLive{}, err
 	}
-	channelID := strings.TrimSpace(row.ChannelID)
-	if channelID == "" {
-		channelID = strings.TrimSpace(row.Channel.ID)
-	}
-	if channelID == "" {
-		return parsedLive{}, collecterr.New(collecterr.ParserDrift, "holodex live row channel id is empty")
-	}
-	scheduled, err := parseOptionalTime(row.StartScheduled)
+	channelID, err := liveChannelID(&row)
 	if err != nil {
 		return parsedLive{}, err
 	}
-	started, err := parseOptionalTime(row.StartActual)
-	if err != nil {
-		return parsedLive{}, err
-	}
-	ended, err := parseOptionalTime(row.EndActual)
+	scheduled, started, ended, err := parseLiveTimes(&row)
 	if err != nil {
 		return parsedLive{}, err
 	}
@@ -113,6 +101,37 @@ func parseLiveRow(raw json.RawMessage) (parsedLive, error) {
 		row: row, channelID: channelID, status: status,
 		scheduled: scheduled, started: started, ended: ended,
 	}, nil
+}
+
+func liveChannelID(row *liveRow) (string, error) {
+	channelID := strings.TrimSpace(row.ChannelID)
+	nestedChannelID := strings.TrimSpace(row.Channel.ID)
+	if channelID != "" && nestedChannelID != "" && channelID != nestedChannelID {
+		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row has conflicting channel identity")
+	}
+	if channelID == "" {
+		channelID = nestedChannelID
+	}
+	if channelID == "" {
+		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row channel id is empty")
+	}
+	return channelID, nil
+}
+
+func parseLiveTimes(row *liveRow) (scheduled, started, ended *time.Time, err error) {
+	scheduled, err = parseOptionalTime(row.StartScheduled)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	started, err = parseOptionalTime(row.StartActual)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	ended, err = parseOptionalTime(row.EndActual)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return scheduled, started, ended, nil
 }
 
 func mapLiveStatus(raw string) (string, error) {
@@ -124,7 +143,7 @@ func mapLiveStatus(raw string) (string, error) {
 	case "past":
 		return "ENDED", nil
 	default:
-		return "", collecterr.New(collecterr.ParserDrift, "holodex live status is unsupported")
+		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live status is unsupported")
 	}
 }
 
@@ -138,7 +157,7 @@ func parseOptionalTime(raw string) (*time.Time, error) {
 		parsed, err = time.Parse(time.RFC3339, value)
 	}
 	if err != nil {
-		return nil, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("parse holodex timestamp: %w", err))
+		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("parse holodex timestamp: %w", err))
 	}
 	utc := parsed.UTC()
 	return &utc, nil
@@ -152,12 +171,8 @@ func requestedSet(ids []string) map[string]struct{} {
 	return result
 }
 
-func subjectAllowed(input *collectutil.RunInput, kind contract.ObservationKind, subject string) bool {
-	subjects, ok := input.EnabledSubjects[kind]
-	if !ok {
-		return true
-	}
-	return slices.Contains(subjects, subject)
+func subjectAllowed(input *collectutil.RunInput, kind contract.ObservationKind, subject string) (bool, error) {
+	return input.Allows(kind, subject)
 }
 
 func viewerPayload(row *parsedLive, windowStart time.Time, windowSeconds int) (contract.ViewerSampleV1, error) {
@@ -189,10 +204,10 @@ func viewerAvailability(row *parsedLive) (availability string, viewerCount *int6
 	}
 	var count int64
 	if err := json.Unmarshal(raw, &count); err != nil {
-		return "", nil, collecterr.Wrap(collecterr.ParserDrift, fmt.Errorf("decode holodex viewer count: %w", err))
+		return "", nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex viewer count: %w", err))
 	}
 	if count < 0 {
-		return "", nil, collecterr.New(collecterr.ParserDrift, "holodex viewer count is negative")
+		return "", nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex viewer count is negative")
 	}
 	return "AVAILABLE", &count, nil
 }
@@ -234,8 +249,19 @@ func livePayload(channelID string, sessions []parsedLive) contract.LiveSnapshotV
 	}
 }
 
-func statsPayload(channelID string, rows []parsedLive) (contract.ChannelStatsV1, bool) {
-	subscriber, videos := firstStatsCounts(rows)
+func statsPayload(channelID string, rows []parsedLive) (contract.ChannelStatsV1, bool, error) {
+	subscriber, err := uniqueStatsCount(rows, "subscriber_count", func(channel *liveChannel) *int64 {
+		return channel.SubscriberCount
+	})
+	if err != nil {
+		return contract.ChannelStatsV1{}, false, err
+	}
+	videos, err := uniqueStatsCount(rows, "video_count", func(channel *liveChannel) *int64 {
+		return channel.VideoCount
+	})
+	if err != nil {
+		return contract.ChannelStatsV1{}, false, err
+	}
 	fields := make([]string, 0, 2)
 	if subscriber != nil {
 		fields = append(fields, "subscriber_count")
@@ -244,7 +270,7 @@ func statsPayload(channelID string, rows []parsedLive) (contract.ChannelStatsV1,
 		fields = append(fields, "video_count")
 	}
 	if len(fields) == 0 {
-		return contract.ChannelStatsV1{}, false
+		return contract.ChannelStatsV1{}, false, nil
 	}
 	return contract.ChannelStatsV1{
 		ChannelID:       channelID,
@@ -254,41 +280,49 @@ func statsPayload(channelID string, rows []parsedLive) (contract.ChannelStatsV1,
 			ChannelID: channelID,
 			Fields:    fields,
 		},
-	}, true
+	}, true, nil
 }
 
-func firstStatsCounts(rows []parsedLive) (subscriberCount, viewCount *int64) {
-	var subscriber *int64
-	var videos *int64
+func uniqueStatsCount(rows []parsedLive, field string, valueOf func(*liveChannel) *int64) (*int64, error) {
+	var selected *int64
 	for i := range rows {
-		row := &rows[i]
-		if subscriber == nil && row.row.Channel.SubscriberCount != nil {
-			subscriber = row.row.Channel.SubscriberCount
+		value := valueOf(&rows[i].row.Channel)
+		if value == nil {
+			continue
 		}
-		if videos == nil && row.row.Channel.VideoCount != nil {
-			videos = row.row.Channel.VideoCount
+		if selected != nil && *selected != *value {
+			return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex channel "+field+" metadata conflicts across rows")
 		}
+		copied := *value
+		selected = &copied
 	}
-	return subscriber, videos
+	return selected, nil
 }
 
-func photoPayload(channelID string, rows []parsedLive) (contract.ChannelPhotoV1, bool) {
+func photoPayload(channelID string, rows []parsedLive) (contract.ChannelPhotoV1, bool, error) {
+	var selected string
 	for i := range rows {
 		row := &rows[i]
 		photoURL, ok := httpsURL(row.row.Channel.Photo)
 		if !ok {
 			continue
 		}
-		return contract.ChannelPhotoV1{
-			ChannelID: channelID,
-			Variants:  []contract.PhotoVariantV1{{Kind: "avatar", URL: photoURL}},
-			Coverage: contract.ChannelPhotoCoverageV1{
-				ChannelID: channelID,
-				Variants:  []string{"avatar"},
-			},
-		}, true
+		if selected != "" && selected != photoURL {
+			return contract.ChannelPhotoV1{}, false, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex channel photo metadata conflicts across rows")
+		}
+		selected = photoURL
 	}
-	return contract.ChannelPhotoV1{}, false
+	if selected == "" {
+		return contract.ChannelPhotoV1{}, false, nil
+	}
+	return contract.ChannelPhotoV1{
+		ChannelID: channelID,
+		Variants:  []contract.PhotoVariantV1{{Kind: "avatar", URL: selected}},
+		Coverage: contract.ChannelPhotoCoverageV1{
+			ChannelID: channelID,
+			Variants:  []string{"avatar"},
+		},
+	}, true, nil
 }
 
 func schedulePayload(rows []parsedLive, allowed map[string]struct{}) contract.ScheduleSnapshotV1 {

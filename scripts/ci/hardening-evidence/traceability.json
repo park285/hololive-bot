@@ -1,0 +1,200 @@
+{
+  "HLP-INV-01": {
+    "facts": ["FACT-01", "FACT-02", "FACT-03"],
+    "owner_pr": "PR-02",
+    "positive_tests": ["HLP-001"],
+    "negative_tests": ["HLP-012"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "HLP-INV-04": {
+    "facts": ["FACT-04", "FACT-05", "FACT-06"],
+    "owner_pr": "PR-03",
+    "positive_tests": ["PXY-001"],
+    "negative_tests": ["PXY-010"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "DATA-INV-03": {
+    "facts": ["FACT-07", "FACT-08", "FACT-38", "FACT-39", "FACT-41", "FACT-42", "FACT-43", "FACT-44", "FACT-45", "FACT-46"],
+    "owner_pr": "PR-01",
+    "positive_tests": ["ERR-001"],
+    "negative_tests": ["ERR-016", "RPC-012"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "OPS-INV-01": {
+    "facts": ["FACT-09", "FACT-10", "FACT-11", "FACT-33"],
+    "owner_pr": "PR-10",
+    "positive_tests": ["RDY-001"],
+    "negative_tests": ["RDY-016"],
+    "commands": ["cmd-0002"],
+    "artifacts": ["tests/collector-go.txt"],
+    "status": "implemented_unverified"
+  },
+  "SCH-INV-01": {
+    "facts": ["FACT-12", "FACT-13", "FACT-14", "FACT-27", "FACT-35", "FACT-36"],
+    "owner_pr": "PR-09",
+    "positive_tests": ["SCH-001"],
+    "negative_tests": ["SCH-013"],
+    "commands": ["cmd-0002"],
+    "artifacts": ["tests/collector-go.txt"],
+    "status": "implemented_unverified"
+  },
+  "DATA-INV-05": {
+    "facts": ["FACT-15", "FACT-16"],
+    "owner_pr": "PR-08",
+    "positive_tests": ["TGT-001", "RUN-001"],
+    "negative_tests": ["TGT-012", "RUN-014"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "OPS-INV-05": {
+    "facts": ["FACT-17", "FACT-18", "FACT-19", "FACT-30", "FACT-45"],
+    "owner_pr": "PR-07",
+    "positive_tests": ["LSE-001", "ERR-009"],
+    "negative_tests": ["PUB-014"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "DATA-INV-07": {
+    "facts": ["FACT-20", "FACT-21", "FACT-25"],
+    "owner_pr": "PR-04",
+    "positive_tests": ["PAG-001"],
+    "negative_tests": ["PAG-014", "RUN-014"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "OPS-INV-02": {
+    "facts": ["FACT-22"],
+    "owner_pr": "PR-11",
+    "positive_tests": ["CFG-001", "CFG-008", "CFG-009"],
+    "negative_tests": ["HC-007", "HC-015"],
+    "commands": ["cmd-0001", "cmd-0003", "cmd-0005"],
+    "artifacts": ["tests/settings-go.txt", "scans/hardening-contract.log", "tests/ap-host-native-deploy.txt", "shim-inventory.md"],
+    "status": "implemented_unverified"
+  },
+  "OPS-INV-03": {
+    "facts": ["FACT-23"],
+    "owner_pr": "PR-00",
+    "positive_tests": ["ART"],
+    "negative_tests": ["HC-009", "HC-010"],
+    "commands": ["cmd-0003"],
+    "artifacts": ["scans/hardening-contract.log"],
+    "status": "implemented_unverified"
+  },
+  "DATA-INV-04": {
+    "facts": ["FACT-24"],
+    "owner_pr": "PR-06",
+    "positive_tests": ["PUB-003"],
+    "negative_tests": ["PUB-005"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "DEPLOY-INV-01": {
+    "facts": ["FACT-26", "FACT-40"],
+    "owner_pr": "PR-10",
+    "positive_tests": ["RDY-016", "HC-012"],
+    "negative_tests": [],
+    "commands": ["cmd-0003"],
+    "artifacts": ["scans/hardening-contract.log"],
+    "status": "implemented_unverified"
+  },
+  "DATA-INV-09": {
+    "facts": ["FACT-28"],
+    "owner_pr": "PR-06",
+    "positive_tests": ["PUB-010"],
+    "negative_tests": ["HC-006"],
+    "commands": ["cmd-0003"],
+    "artifacts": ["scans/hardening-contract.log", "leftover-forbidden-symbols.md"],
+    "status": "implemented_unverified"
+  },
+  "DATA-INV-08": {
+    "facts": ["FACT-29"],
+    "owner_pr": "PR-06",
+    "positive_tests": ["LSE-007"],
+    "negative_tests": ["TGT-010"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "SCH-INV-09": {
+    "facts": ["FACT-31"],
+    "owner_pr": "PR-08",
+    "positive_tests": ["TGT-001", "TGT-011"],
+    "negative_tests": ["TGT-003"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "DATA-INV-01": {
+    "facts": ["FACT-32"],
+    "owner_pr": "PR-06",
+    "positive_tests": ["API-006", "PUB-011"],
+    "negative_tests": [],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "HLP-INV-07": {
+    "facts": ["FACT-34", "FACT-37"],
+    "owner_pr": "PR-05",
+    "positive_tests": ["HTTP-001"],
+    "negative_tests": ["HTTP-016"],
+    "commands": [],
+    "artifacts": [],
+    "status": "implemented_unverified"
+  },
+  "live_explain": {
+    "facts": [],
+    "owner_pr": "PR-08",
+    "positive_tests": [],
+    "negative_tests": [],
+    "commands": [],
+    "artifacts": [],
+    "status": "blocked"
+  },
+  "image_digest": {
+    "facts": ["FACT-23"],
+    "owner_pr": "PR-00",
+    "positive_tests": [],
+    "negative_tests": [],
+    "commands": [],
+    "artifacts": [],
+    "status": "blocked"
+  },
+  "go_race": {
+    "facts": [],
+    "owner_pr": "PR-12",
+    "positive_tests": [],
+    "negative_tests": [],
+    "commands": [],
+    "artifacts": [],
+    "status": "blocked"
+  },
+  "go_sonic": {
+    "facts": ["FACT-23"],
+    "owner_pr": "PR-00",
+    "positive_tests": [],
+    "negative_tests": [],
+    "commands": [],
+    "artifacts": [],
+    "status": "blocked"
+  },
+  "local_ci": {
+    "facts": [],
+    "owner_pr": "PR-12",
+    "positive_tests": [],
+    "negative_tests": [],
+    "commands": [],
+    "artifacts": [],
+    "status": "blocked"
+  }
+}

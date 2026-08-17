@@ -3,6 +3,44 @@ import test from "node:test";
 
 import { fetchContentFeed, mapContentItems } from "./fetch-content.mjs";
 
+test("PAG-001 first page transport failure is fatal", async () => {
+  const expected = new Error("connection reset");
+  expected.code = "ECONNRESET";
+  const innertube = {
+    getChannel: async () => {
+      throw expected;
+    },
+  };
+  await assert.rejects(
+    () => fetchContentFeed({
+      channelId: "UC_TEST",
+      kind: "videos",
+      innertube,
+    }),
+    (error) => error === expected,
+  );
+});
+
+test("PAG-008 rejects an undersized response budget before fetching", async () => {
+  let calls = 0;
+  const innertube = {
+    getChannel: async () => {
+      calls += 1;
+      return {};
+    },
+  };
+  await assert.rejects(
+    () => fetchContentFeed({
+      channelId: "UC_TEST",
+      kind: "videos",
+      maxSuccessResponseBytes: 100,
+      innertube,
+    }),
+    (error) => error.code === "response_too_large",
+  );
+  assert.equal(calls, 0);
+});
+
 test("mapContentItems fail-closes when a row is missing video id", () => {
   assert.throws(
     () =>
@@ -57,7 +95,7 @@ test("fetchContentFeed fail-closes when every row is missing video id", async ()
   );
 });
 
-test("fetchContentFeed returns missing_tab without claiming absence", async () => {
+test("PAG-011 fetchContentFeed keeps missing_tab without claiming absence", async () => {
   const innertube = {
     getChannel: async () => ({}),
   };
@@ -67,7 +105,8 @@ test("fetchContentFeed returns missing_tab without claiming absence", async () =
     innertube,
   });
   assert.equal(result.missing_tab, true);
-  assert.equal(result.exhausted, false);
+  assert.equal(result.continuity, "NOT_APPLICABLE");
+  assert.equal(result.termination_reason, "exhausted");
   assert.deepEqual(result.items, []);
 });
 

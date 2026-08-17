@@ -68,23 +68,6 @@ func TestMetricsFreshnessAdvancesAfterSuccess(t *testing.T) {
 	t.Fatal("freshness gauge was not recorded")
 }
 
-func TestMetricsTracksPublishedObservationForHandoffReadiness(t *testing.T) {
-	t.Parallel()
-	metrics := NewMetrics(prometheus.NewRegistry())
-	if _, _, ok := metrics.PublishedHandoff(); ok {
-		t.Fatal("fresh metrics unexpectedly has a published observation")
-	}
-	metrics.ObservePublishedObservation(40)
-	metrics.ObservePublishedObservation(41)
-	if observationID, complete, ok := metrics.PublishedHandoff(); !ok || complete || observationID != 40 {
-		t.Fatalf("PublishedHandoff() = %d, %v, %v", observationID, complete, ok)
-	}
-	metrics.ObserveHandoffComplete(40)
-	if _, complete, _ := metrics.PublishedHandoff(); !complete {
-		t.Fatal("published handoff did not become complete")
-	}
-}
-
 func assertLabel(t *testing.T, seen map[string][]string, name, want string) {
 	t.Helper()
 	if slices.Contains(seen[name], want) {

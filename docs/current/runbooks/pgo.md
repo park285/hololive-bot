@@ -6,8 +6,11 @@
 `scripts/ci/pgo-off-policy.tsv`는 production PGO 정책의 정본이며 `off` 행만 허용하고
 `scripts/ci/check-pgo-default.sh`는 `on` 행을 즉시 거부합니다.
 
-네 production Dockerfile의 모든 Go build는 `-pgo=off`를
-명시합니다. Compose에는 `GO_PGO_FILE` build arg가 없고 환경 변수 override도 제공하지
+네 production compile은 `-pgo=off`를 사용합니다. `youtube-collector`의
+Docker/host-native compile flags는 `scripts/build/build-youtube-collector-go.sh`가
+소유하며, collector Dockerfile는 inline `go build` 대신 이 script를 호출합니다.
+나머지 production Dockerfile은 `go build -pgo=off`를 직접 명시합니다.
+Compose에는 `GO_PGO_FILE` build arg가 없고 환경 변수 override도 제공하지
 않습니다. 게이트는 Dockerfile과 `docker compose config --no-interpolate --format json`
 결과를 구조적으로 검사하여 다음을
 차단합니다.
@@ -15,7 +18,9 @@
 - `default.pgo`, `.meta.json`, `.hotpaths` artifact가 남거나 새로 추가된 경우
 - 기본 Go build 결과에 `-pgo` stamp가 있는 경우
 - policy에 `on` 또는 알 수 없는 mode가 있는 경우
-- 관리 대상 Dockerfile이 `ARG GO_PGO_FILE`을 노출하거나 Go build에서 `-pgo=off`를 빠뜨린 경우
+- 관리 대상 Dockerfile이 `ARG GO_PGO_FILE`을 노출하거나, inline `go build`에서
+  `-pgo=off`를 빠뜨리거나, collector Dockerfile가 shared script의 `-pgo=off`를
+  우회하는 경우
 - Compose service가 `GO_PGO_FILE` build arg를 갖는 경우
 
 이 정책은 2026-07-10 기준으로 두 서비스에 적용되던 짧고 출처가 불완전한 profile을

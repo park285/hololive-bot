@@ -61,6 +61,9 @@ for endpoint_spec in "a deploy/compose/docker-compose.osaka.yml" "b deploy/compo
     quiet oracle "${endpoint_root}/override.env" "${prod[@]}" -f "${2}"
 done
 render oracle "${endpoint_root}/ap-default.env" "${endpoint_root}/ap-default.json" "${prod[@]}" -f deploy/compose/docker-compose.osaka.yml
+cp "${endpoint_root}/override.env" "${endpoint_root}/ap-nocache.env"
+sed -i '/HOLOLIVE_CENTRAL_CACHE_HOST/d' "${endpoint_root}/ap-nocache.env"
+quiet oracle "${endpoint_root}/ap-nocache.env" "${prod[@]}" -f deploy/compose/docker-compose.osaka.yml
 quiet default "${endpoint_root}/default.env" "${prod[@]}"
 quiet oracle "${endpoint_root}/override.env" "${prod[@]}"
 quiet main-ap "${endpoint_root}/override.env" "${main[@]}"
@@ -82,6 +85,30 @@ def check_dns(services, name, label):
     resolvers = services[name].get("dns") or []
     if not resolvers or resolvers[0] != "100.100.100.100":
         raise SystemExit(f"[FAIL] {label}: got {resolvers}")
+    print(f"[PASS] {label}")
+def check_no_cache(services, name, label):
+    values = env(services, name)
+    cache_keys = sorted(key for key in values if key.startswith("CACHE_"))
+    if cache_keys:
+        raise SystemExit(f"[FAIL] {label}: CACHE env {cache_keys}")
+    depends = services[name].get("depends_on") or {}
+    if "valkey-cache" in depends:
+        raise SystemExit(f"[FAIL] {label}: depends_on valkey-cache")
+    for volume in services[name].get("volumes") or []:
+        if isinstance(volume, dict):
+            source = str(volume.get("source") or "")
+            target = str(volume.get("target") or "")
+        else:
+            source = str(volume)
+            target = str(volume)
+        if source == "valkey-cache-socket" or target == "/var/run/valkey" or "valkey" in source or "valkey" in target:
+            raise SystemExit(f"[FAIL] {label}: Valkey mount {source}->{target}")
+    print(f"[PASS] {label}")
+def check_no_scraper_poll(services, name, label):
+    values = env(services, name)
+    scraper_keys = sorted(key for key in values if key.startswith("SCRAPER_POLL_") or key == "SCRAPER_FETCHER_ENGINE")
+    if scraper_keys:
+        raise SystemExit(f"[FAIL] {label}: scraper env {scraper_keys}")
     print(f"[PASS] {label}")
 default, live_default, main_default, central, live, main, osaka, seoul, osaka2, ap_default = map(load, sys.argv[1:])
 for args in [
@@ -122,6 +149,20 @@ for services, name, label in [
 ]:
     check_dns(services, name, label)
 check(ap_default, "youtube-collector-a", "postgres.service.fixture", "5433", ("POSTGRES_HOST", "POSTGRES_PORT"), "AP port default")
+for services, name, label in [
+    (default, "youtube-collector", "central collector default has no Valkey"),
+    (live_default, "youtube-collector", "live collector default has no Valkey"),
+    (main_default, "youtube-collector", "main collector-c default has no Valkey"),
+    (central, "youtube-collector", "central collector override has no Valkey"),
+    (live, "youtube-collector", "live collector override has no Valkey"),
+    (main, "youtube-collector", "main collector-c override has no Valkey"),
+    (osaka, "youtube-collector-a", "Osaka collector-a has no Valkey"),
+    (seoul, "youtube-collector-b", "Seoul collector-b has no Valkey"),
+    (osaka2, "youtube-collector-d", "Osaka2 collector-d has no Valkey"),
+    (ap_default, "youtube-collector-a", "AP port-default collector-a has no Valkey"),
+]:
+    check_no_cache(services, name, label)
+    check_no_scraper_poll(services, name, label.replace("no Valkey", "has no SCRAPER_POLL_/SCRAPER_FETCHER_ENGINE"))
 postgres = env(central, "holo-postgres")
 healthcheck = str((central["holo-postgres"].get("healthcheck") or {}).get("test") or [])
 if postgres.get("PGPORT") != "5432" or "-p 5432" not in healthcheck:

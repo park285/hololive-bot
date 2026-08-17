@@ -1,0 +1,3 @@
+# Opt-in public YouTube smoke test. Canonical CI does not set YOUTUBEJS_REAL_DATA_CHANNEL_ID.
+# End release: none; remains manual until a dedicated live-data job exists.
+github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs/TestRealYouTubeDataRoundTrip

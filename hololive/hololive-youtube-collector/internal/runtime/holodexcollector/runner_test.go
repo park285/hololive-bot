@@ -10,20 +10,23 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/kapu/hololive-youtube-collector/internal/testutil"
 )
 
 func TestRunnerBuildsOneBatchFromLiveFixture(t *testing.T) {
 	t.Parallel()
 	output := mustCollect(t, testdata(t, "live.json"), []string{"UC_A", "UC_B", "UC_C"})
-	if len(output.Observations) < 4 {
-		t.Fatalf("observations = %d", len(output.Observations))
+	observations := output.Observations()
+	if len(observations) < 4 {
+		t.Fatalf("observations = %d", len(observations))
 	}
 	kinds := map[contract.ObservationKind]int{}
 	subjects := map[string]struct{}{}
-	for _, envelope := range output.Observations {
+	for _, envelope := range observations {
 		kinds[envelope.ObservationKind]++
 		subjects[envelope.SubjectKey+"/"+string(envelope.ObservationKind)] = struct{}{}
 		if envelope.Completeness != contract.CompletenessPartial {
@@ -40,7 +43,7 @@ func TestRunnerBuildsOneBatchFromLiveFixture(t *testing.T) {
 
 func TestRunnerSameSlotRetryKeepsViewerSampleIdentity(t *testing.T) {
 	t.Parallel()
-	input := holodexInput([]string{"UC_A", "UC_B"})
+	input := holodexInput(t, []string{"UC_A", "UC_B"})
 	runner := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")})
 	first, err := runner.Collect(context.Background(), input)
 	if err != nil {
@@ -50,12 +53,14 @@ func TestRunnerSameSlotRetryKeepsViewerSampleIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstKey := viewerKey(t, first, "vidHide03")
-	secondKey := viewerKey(t, second, "vidHide03")
+	firstOutput := first.Output()
+	secondOutput := second.Output()
+	firstKey := viewerKey(t, firstOutput, "vidHide03")
+	secondKey := viewerKey(t, secondOutput, "vidHide03")
 	if firstKey != secondKey {
 		t.Fatalf("retry changed observation key %s vs %s", firstKey, secondKey)
 	}
-	for _, envelope := range first.Observations {
+	for _, envelope := range firstOutput.Observations() {
 		if envelope.ObservationKind != contract.KindViewerSample || envelope.SubjectKey != "vidHide03" {
 			continue
 		}
@@ -63,8 +68,8 @@ func TestRunnerSameSlotRetryKeepsViewerSampleIdentity(t *testing.T) {
 		if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
 			t.Fatal(err)
 		}
-		if !payload.SampleWindowStart.Equal(input.Lease.ScheduledFor) {
-			t.Fatalf("sample window = %s, want lease %s", payload.SampleWindowStart, input.Lease.ScheduledFor)
+		if !payload.SampleWindowStart.Equal(input.Lease().ScheduledFor) {
+			t.Fatalf("sample window = %s, want lease %s", payload.SampleWindowStart, input.Lease().ScheduledFor)
 		}
 		return
 	}
@@ -75,7 +80,7 @@ func TestRunnerKeepsHiddenViewerTyped(t *testing.T) {
 	t.Parallel()
 	output := mustCollect(t, testdata(t, "live.json"), []string{"UC_A", "UC_B"})
 	found := false
-	for _, envelope := range output.Observations {
+	for _, envelope := range output.Observations() {
 		if envelope.ObservationKind != contract.KindViewerSample || envelope.SubjectKey != "vidHide03" {
 			continue
 		}
@@ -115,7 +120,7 @@ func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := holodexInput([]string{"UC_A", "UC_B"})
+	input := holodexInput(t, []string{"UC_A", "UC_B"})
 	runner := NewLiveRunner(&staticFetcher{})
 	first, err := runner.buildBatch(input, parsed)
 	if err != nil {
@@ -125,43 +130,94 @@ func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hashes(t, collectutil.RunOutput{Observations: first}) != hashes(t, collectutil.RunOutput{Observations: second}) {
-		t.Fatalf("ordering changed hashes\n%s\n%s", hashes(t, collectutil.RunOutput{Observations: first}), hashes(t, collectutil.RunOutput{Observations: second}))
+	firstOutput, err := collectutil.OutputFromEnvelopes(first, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondOutput, err := collectutil.OutputFromEnvelopes(second, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hashes(t, firstOutput) != hashes(t, secondOutput) {
+		t.Fatalf("ordering changed hashes\n%s\n%s", hashes(t, firstOutput), hashes(t, secondOutput))
 	}
 }
 
 func TestRunnerDoesNotPublishOnTimeout(t *testing.T) {
 	t.Parallel()
-	output, err := NewLiveRunner(&staticFetcher{err: collecterr.New(collecterr.Timeout, "timeout")}).Collect(
-		context.Background(), holodexInput([]string{"UC_A"}),
+	output, err := NewLiveRunner(&staticFetcher{err: collecterr.New(collecterr.Timeout, collecterr.ClassTimeout, "timeout")}).Collect(
+		context.Background(), holodexInput(t, []string{"UC_A"}),
 	)
-	if err == nil || collecterr.Code(err) != collecterr.Timeout || len(output.Observations) != 0 {
+	if err == nil || collecterr.CodeOf(err) != collecterr.Timeout || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
 
 func TestRunnerRejectsMalformedSchema(t *testing.T) {
 	t.Parallel()
-	_, err := NewLiveRunner(&staticFetcher{body: []byte(`{"id":"x"}`)}).Collect(context.Background(), holodexInput([]string{"UC_A"}))
-	if err == nil || collecterr.Code(err) != collecterr.ParserDrift {
+	_, err := NewLiveRunner(&staticFetcher{body: []byte(`{"id":"x"}`)}).Collect(context.Background(), holodexInput(t, []string{"UC_A"}))
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestRunnerRejectsConflictingChannelIdentity(t *testing.T) {
+	t.Parallel()
+	body := []byte(`[{
+		"id":"video-a","status":"live","channel_id":"UC_A",
+		"channel":{"id":"UC_B"}
+	}]`)
+	output, err := NewLiveRunner(&staticFetcher{body: body}).Collect(
+		context.Background(), holodexInput(t, []string{"UC_A", "UC_B"}),
+	)
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+		t.Fatalf("error=%v output=%#v", err, output)
+	}
+}
+
+func TestMetadataRunnerRejectsConflictingStats(t *testing.T) {
+	t.Parallel()
+	body := []byte(`[
+		{"id":"video-a","status":"live","channel_id":"UC_A","channel":{"subscriber_count":10,"video_count":2}},
+		{"id":"video-b","status":"upcoming","channel_id":"UC_A","channel":{"subscriber_count":11,"video_count":2}}
+	]`)
+	output, err := NewMetadataRunner(&staticFetcher{body: body}).Collect(
+		context.Background(), holodexInputFor(t, "holodex_metadata", []string{"UC_A"}),
+	)
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+		t.Fatalf("error=%v output=%#v", err, output)
+	}
+}
+
+func TestMetadataRunnerRejectsConflictingPhotos(t *testing.T) {
+	t.Parallel()
+	body := []byte(`[
+		{"id":"video-a","status":"live","channel_id":"UC_A","channel":{"photo":"https://img.test/a.jpg"}},
+		{"id":"video-b","status":"upcoming","channel_id":"UC_A","channel":{"photo":"https://img.test/b.jpg"}}
+	]`)
+	output, err := NewMetadataRunner(&staticFetcher{body: body}).Collect(
+		context.Background(), holodexInputFor(t, "holodex_metadata", []string{"UC_A"}),
+	)
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+		t.Fatalf("error=%v output=%#v", err, output)
 	}
 }
 
 func TestRunnerDoesNotEmitViewerForChannelSubjects(t *testing.T) {
 	t.Parallel()
-	input := holodexInput([]string{"UC_A", "UC_B"})
-	input.EnabledSubjects[contract.KindViewerSample] = []string{"UC_A", "UC_B"}
+	input := holodexInput(t, []string{"UC_A", "UC_B"})
+	input = replaceRoster(t, input, contract.KindViewerSample, []string{"UC_A", "UC_B"})
 	output, err := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, envelope := range output.Observations {
+	observations := output.Output().Observations()
+	for _, envelope := range observations {
 		if envelope.ObservationKind == contract.KindViewerSample {
 			t.Fatalf("emitted viewer_sample %q from channel roster", envelope.SubjectKey)
 		}
 	}
-	if len(output.Observations) == 0 {
+	if len(observations) == 0 {
 		t.Fatal("channel-kind observations were dropped with viewers")
 	}
 }
@@ -169,8 +225,8 @@ func TestRunnerDoesNotEmitViewerForChannelSubjects(t *testing.T) {
 func TestRunnerEmitsNothingForEmptyLiveArray(t *testing.T) {
 	t.Parallel()
 	output := mustCollect(t, testdata(t, "empty.json"), []string{"UC_A"})
-	if len(output.Observations) != 0 {
-		t.Fatalf("empty live array published %#v", output.Observations)
+	if !output.Empty() {
+		t.Fatalf("empty live array published %#v", output.Observations())
 	}
 }
 
@@ -199,15 +255,16 @@ func TestRunnersKeepCadenceKindsSeparate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			input := holodexInputFor(tt.jobKind, []string{"UC_A", "UC_B"})
+			input := holodexInputFor(t, tt.jobKind, []string{"UC_A", "UC_B"})
 			output, err := tt.runner.Collect(context.Background(), input)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(output.Observations) == 0 {
+			observations := output.Output().Observations()
+			if len(observations) == 0 {
 				t.Fatal("runner emitted no observations")
 			}
-			for _, envelope := range output.Observations {
+			for _, envelope := range observations {
 				if !tt.wantKinds[envelope.ObservationKind] {
 					t.Fatalf("%s emitted undeclared kind %s", tt.jobKind, envelope.ObservationKind)
 				}
@@ -218,17 +275,18 @@ func TestRunnersKeepCadenceKindsSeparate(t *testing.T) {
 
 func mustCollect(t *testing.T, body []byte, requested []string) collectutil.RunOutput {
 	t.Helper()
-	output, err := NewLiveRunner(&staticFetcher{body: body}).Collect(context.Background(), holodexInput(requested))
+	output, err := NewLiveRunner(&staticFetcher{body: body}).Collect(context.Background(), holodexInput(t, requested))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return output
+	return output.Output()
 }
 
 func viewerKey(t *testing.T, output collectutil.RunOutput, subject string) string {
 	t.Helper()
-	for i := range output.Observations {
-		envelope := &output.Observations[i]
+	observations := output.Observations()
+	for i := range observations {
+		envelope := &observations[i]
 		if envelope.ObservationKind == contract.KindViewerSample && envelope.SubjectKey == subject {
 			return envelope.ObservationKey
 		}
@@ -245,9 +303,10 @@ func hashes(t *testing.T, output collectutil.RunOutput) string {
 		Payload string
 		Scope   string
 	}
-	pairs := make([]pair, 0, len(output.Observations))
-	for i := range output.Observations {
-		envelope := &output.Observations[i]
+	observations := output.Observations()
+	pairs := make([]pair, 0, len(observations))
+	for i := range observations {
+		envelope := &observations[i]
 		pairs = append(pairs, pair{envelope.ObservationKind, envelope.SubjectKey, envelope.PayloadSHA256, envelope.ScopeSHA256})
 	}
 	sort.Slice(pairs, func(i, j int) bool {
@@ -263,11 +322,13 @@ func hashes(t *testing.T, output collectutil.RunOutput) string {
 	return string(encoded)
 }
 
-func holodexInput(requested []string) *collectutil.RunInput {
-	return holodexInputFor("holodex_live", requested)
+func holodexInput(t testing.TB, requested []string) *collectutil.RunInput {
+	t.Helper()
+	return holodexInputFor(t, "holodex_live", requested)
 }
 
-func holodexInputFor(jobKind string, requested []string) *collectutil.RunInput {
+func holodexInputFor(t testing.TB, jobKind string, requested []string) *collectutil.RunInput {
+	t.Helper()
 	enabled := map[contract.ObservationKind][]string{
 		contract.KindLiveSnapshot:   requested,
 		contract.KindChannelStats:   requested,
@@ -276,22 +337,74 @@ func holodexInputFor(jobKind string, requested []string) *collectutil.RunInput {
 		contract.KindSchedule:       {officialScheduleSubject},
 		contract.KindChannelProfile: nil,
 	}
-	return &collectutil.RunInput{
-		Spec: joblease.JobSpec{
-			JobKey: "collector:holodex:" + jobKind + ":global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
-			CollectionJobKind: jobKind, SubjectKey: "global:" + jobKind, PollInterval: time.Minute,
-		},
-		Lease: contract.LeaseProof{
-			JobKey: "collector:holodex:" + jobKind + ":global", CollectionJobKind: jobKind,
-			OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
-			ScheduledFor: time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC),
-		},
-		ContractGenerations: map[contract.ObservationKind]int64{
-			contract.KindLiveSnapshot: 1, contract.KindViewerSample: 1, contract.KindChannelStats: 1,
-			contract.KindChannelProfile: 1, contract.KindChannelPhoto: 1, contract.KindSchedule: 1,
-		},
-		EnabledSubjects: enabled,
+	spec := joblease.JobSpec{
+		JobKey: "collector:holodex:" + jobKind + ":global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
+		CollectionJobKind: jobKind, SubjectKey: "global:" + jobKind, PollInterval: time.Minute,
 	}
+	lease := contract.LeaseProof{
+		JobKey: "collector:holodex:" + jobKind + ":global", CollectionJobKind: jobKind,
+		OwnerInstance: "collector-a", FenceEpoch: 1, ProjectionGeneration: 1,
+		ScheduledFor: time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC),
+	}
+	job, _ := sourceobservation.InitialJobContracts().Definition(sourceobservation.JobID{
+		Provider: contract.ProviderHolodex, Kind: sourceobservation.JobKind(jobKind),
+	})
+	generations := make(map[contract.ObservationKind]int64, len(job.Emissions()))
+	for _, kind := range job.Emissions() {
+		generations[kind] = 1
+	}
+	snapshot, err := collectutil.NewContractSnapshot(job.Emissions(), generations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := testutil.TargetSnapshot(t, &spec, job, enabled)
+	lease.ProjectionGeneration = targets.Generation()
+	input, err := collectutil.NewRunInput(&spec, &lease, snapshot, targets, 1, 1<<20, job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &input
+}
+
+func replaceRoster(t testing.TB, input *collectutil.RunInput, kind contract.ObservationKind, subjects []string) *collectutil.RunInput {
+	t.Helper()
+	job := input.Job()
+	enabled := make(map[contract.ObservationKind][]string)
+	for _, requested := range job.RequestedKinds() {
+		if requested == kind {
+			enabled[requested] = subjects
+			continue
+		}
+		subjectsForKind, err := input.Roster(requested)
+		if err != nil {
+			t.Fatal(err)
+		}
+		enabled[requested] = subjectsForKind
+	}
+	generations := make(map[contract.ObservationKind]int64, len(job.Emissions()))
+	for _, emitted := range job.Emissions() {
+		generation, err := input.Generation(emitted)
+		if err != nil {
+			t.Fatal(err)
+		}
+		generations[emitted] = generation
+	}
+	snapshot, err := collectutil.NewContractSnapshot(job.Emissions(), generations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputSpec := input.Spec()
+	targets := testutil.TargetSnapshot(t, &inputSpec, job, enabled)
+	lease := input.Lease()
+	lease.ProjectionGeneration = targets.Generation()
+	result, err := collectutil.NewRunInput(
+		&inputSpec, &lease, snapshot, targets,
+		input.MaxPages(), input.MaxSuccessResponseBytes(), job,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &result
 }
 
 func testdata(t *testing.T, name string) []byte {
