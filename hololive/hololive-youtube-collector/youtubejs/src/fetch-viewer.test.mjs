@@ -30,6 +30,29 @@ test("mapViewer fail-closes on a negative count", () => {
   );
 });
 
+test("mapViewer keeps an explicit N/A live count unavailable", () => {
+  const result = mapViewer({
+    basic_info: { id: "vid-na", is_live: true, view_count: Number.NaN },
+    primary_info: {
+      view_count: {
+        is_live: false,
+        view_count: { text: "N/A" },
+        short_view_count: { text: "N/A" },
+      },
+    },
+  }, "vid-na");
+  assert.equal(result.video_id, "vid-na");
+  assert.equal(result.viewer_count, null);
+  assert.equal(result.availability, "UNAVAILABLE");
+});
+
+test("mapViewer fail-closes on an unexplained NaN count", () => {
+  assert.throws(
+    () => mapViewer({ basic_info: { is_live: true, view_count: Number.NaN } }, "vid-nan"),
+    (err) => err.code === "parser_drift",
+  );
+});
+
 test("mapViewer does not treat a VOD view count as a live viewer sample", () => {
   const result = mapViewer({ basic_info: { id: "vid-5", is_live: false, view_count: Number.NaN } }, "vid-5");
   assert.equal(result.viewer_count, null);
