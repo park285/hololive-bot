@@ -1167,7 +1167,7 @@ func TestRepoAPDeployScriptsUseSplitRuntimeEnv(t *testing.T) {
 		"scripts/deploy/ap-deploy.sh",
 		"scripts/deploy/ap-completion-check.sh",
 		"scripts/deploy/ap-rollback.sh",
-		"scripts/deploy/ap-iris-h3-trust-preflight.sh",
+		"scripts/deploy/ap-collector-preflight.sh",
 	} {
 		content := readRepoFile(t, file)
 		if strings.Contains(content, "/etc/stack-secrets/hololive-bot/env") {
@@ -1193,7 +1193,7 @@ func TestRepoAPDeployScriptsRequirePersistedQUICUDPBuffers(t *testing.T) {
 	}
 
 	for _, file := range []string{
-		"scripts/deploy/ap-iris-h3-trust-preflight.sh",
+		"scripts/deploy/ap-collector-preflight.sh",
 		"scripts/deploy/ap-completion-check.sh",
 	} {
 		content := readRepoFile(t, file)

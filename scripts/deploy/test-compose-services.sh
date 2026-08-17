@@ -132,14 +132,14 @@ while IFS= read -r compose_dependency; do
         || fail "ap active-active syncs Compose helper ${compose_dependency}"
 done < <(rg -o 'scripts/deploy/lib/[[:alnum:]_.-]+\.sh' "${ROOT_DIR}/scripts/deploy/compose.sh" | sort -u)
 pass "ap active-active syncs every Compose helper"
-grep -qx 'scripts/deploy/ap-iris-h3-trust-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs Iris H3 trust preflight"
-pass "ap active-active syncs Iris H3 trust preflight"
-grep -q 'ap-iris-h3-trust-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs Iris H3 trust preflight"
+grep -qx 'scripts/deploy/ap-collector-preflight.sh' "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs collector preflight"
+pass "ap active-active syncs collector preflight"
+grep -q 'ap-collector-preflight.sh' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap active-active deploy runs collector preflight"
 grep -Fq 'stop_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap collector cutover stops leftover youtube-producer"
 grep -Fq 'restore_retired_producer_runtime' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback restores the recorded youtube-producer state"
 grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" || fail "ap first-cutover rollback stops collector before restoring producer"
 grep -Fq 'stop_named_containers_and_require_inactive' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap failed cutover stops collector before restoring producer"
-pass "ap active-active deploy runs Iris H3 trust preflight"
+pass "ap active-active deploy runs collector preflight"
 
 for compose_entrypoint in build-all.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh; do
   grep -Fq 'export GIT_OPTIONAL_LOCKS=0' "${ROOT_DIR}/${compose_entrypoint}" \
@@ -169,7 +169,7 @@ bash "${ROOT_DIR}/scripts/deploy/lib/retired-producer-cutover_test.sh" \
     || fail "AP cutover restores only the recorded producer runtime state"
 bash "${ROOT_DIR}/scripts/deploy/source-revision-provenance_test.sh" \
     || fail "image builds and cutovers preserve exact source revision provenance"
-for ap_runtime_script in scripts/deploy/ap-iris-h3-trust-preflight.sh scripts/deploy/ap-completion-check.sh; do
+for ap_runtime_script in scripts/deploy/ap-collector-preflight.sh scripts/deploy/ap-completion-check.sh; do
     grep -q 'AP_REQUIRED_UDP_BUFFER_BYTES' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} exposes AP_REQUIRED_UDP_BUFFER_BYTES"
     grep -q 'require-quic-udp-buffer.sh' "${ROOT_DIR}/${ap_runtime_script}" || fail "${ap_runtime_script} delegates QUIC UDP buffer checks to require-quic-udp-buffer.sh"
 done

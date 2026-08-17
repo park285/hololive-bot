@@ -896,7 +896,7 @@ scripts/ci/postgres-capacity-policy.tsv
 scripts/deploy/ap-hosts/osaka.conf
 scripts/deploy/ap-hosts/osaka2.conf
 scripts/deploy/ap-hosts/seoul.conf
-scripts/deploy/ap-iris-h3-trust-preflight.sh
+scripts/deploy/ap-collector-preflight.sh
 scripts/deploy/ap-rsync-files.txt
 scripts/deploy/compose.sh
 scripts/deploy/lib/ap-collector-readiness.sh
