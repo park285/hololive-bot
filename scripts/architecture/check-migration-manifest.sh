@@ -240,10 +240,10 @@ PY
 
 for retired_runner in apply-all.sh bootstrap-and-apply.sh; do
   retired_output="$(
-    PGPASSWORD=unused \
-    POSTGRES_ADMIN_PASSWORD=unused \
-    MIGRATIONS_DIR="${MIGRATIONS_DIR}" \
-    MIGRATION_MANIFEST="${MANIFEST}" \
+    env PGPASSWORD=unused \
+      POSTGRES_ADMIN_PASSWORD=unused \
+      MIGRATIONS_DIR="${MIGRATIONS_DIR}" \
+      MIGRATION_MANIFEST="${MANIFEST}" \
     /bin/sh "${MIGRATIONS_DIR}/${retired_runner}" 2>&1
   )" && {
     echo "FAIL: ${retired_runner} must refuse epoch-2 manifests" >&2

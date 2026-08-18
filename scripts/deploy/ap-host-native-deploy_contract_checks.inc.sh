@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+
 if grep -Eq 'HOLOLIVE_H3_ADDR=:%s' "${DEPLOY}"; then
   record_fail "ap-host-native binds H3 to all interfaces (:port) (8c2e3ef9)"
 else

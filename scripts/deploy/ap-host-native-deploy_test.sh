@@ -26,11 +26,11 @@ generated_env="${cfg008_dir}/youtube-collector-host.env"
 if [[ -z "${write_host_env_fn}" ]]; then
   record_fail "ap-host-native write_host_env function is missing"
 elif (
-  service="youtube-collector-a"
-  port="30005"
-  AP_POSTGRES_HOST="hololive-postgres.tail742dd8.ts.net"
-  AP_POSTGRES_PORT="5433"
-  AP_SSH_HOST="100.100.1.6"
+  export service="youtube-collector-a"
+  export port="30005"
+  export AP_POSTGRES_HOST="hololive-postgres.tail742dd8.ts.net"
+  export AP_POSTGRES_PORT="5433"
+  export AP_SSH_HOST="100.100.1.6"
   eval "${write_host_env_fn}"
   write_host_env "${generated_env}"
 ) && [[ -s "${generated_env}" ]]; then
