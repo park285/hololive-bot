@@ -77,7 +77,7 @@ func TestPopulatedDBEmptyLedgerBaselineStampsThenApplies(t *testing.T) {
 		if err := pool.QueryRow(t.Context(), "SELECT checksum_sha256 FROM schema_migration_checksums WHERE filename = $1", name).Scan(&checksum); err != nil {
 			t.Fatalf("read baseline checksum %s: %v", name, err)
 		}
-		if want := migrationChecksum(fsys[name].Data); checksum != want {
+		if want := migrationChecksum(mustMapFile(t, fsys, name).Data); checksum != want {
 			t.Fatalf("baseline checksum %s = %s, want %s", name, checksum, want)
 		}
 	}
@@ -113,8 +113,9 @@ func TestEpoch2BaselineLateFailureRollsBackAllObjectsLedgerAndPrivileges(t *test
 	}
 
 	failureFS := realManifestThrough(t, epoch2Baseline)
-	baselineSQL := append([]byte(nil), failureFS[epoch2Baseline].Data...)
-	failureFS[epoch2Baseline].Data = injectBeforeFinalCommit(t, baselineSQL,
+	baselineFile := mustMapFile(t, failureFS, epoch2Baseline)
+	baselineSQL := append([]byte(nil), baselineFile.Data...)
+	baselineFile.Data = injectBeforeFinalCommit(t, baselineSQL,
 		"SELECT public.epoch2_injected_late_failure();")
 
 	if _, err := Run(ctx, pool, failureFS, Config{}); err == nil {
@@ -124,7 +125,7 @@ func TestEpoch2BaselineLateFailureRollsBackAllObjectsLedgerAndPrivileges(t *test
 	assertTableAbsent(t, pool, "members")
 	assertMigrationNotRecorded(t, pool, epoch2Baseline)
 
-	failureFS[epoch2Baseline].Data = baselineSQL
+	baselineFile.Data = baselineSQL
 	result, err := Run(ctx, pool, failureFS, Config{})
 	if err != nil {
 		t.Fatalf("rerun baseline after rollback: %v", err)
@@ -603,7 +604,8 @@ func TestRealManifestEditedBaselineFailsChecksum(t *testing.T) {
 	runMigrations(t, pool, migrations.FS, "")
 	entries := manifestEntries(t)
 	editedFS := realManifestThrough(t, entries[len(entries)-1])
-	editedFS[epoch2Baseline].Data = append(editedFS[epoch2Baseline].Data, []byte("\n-- edited after exposure\n")...)
+	editedBaseline := mustMapFile(t, editedFS, epoch2Baseline)
+	editedBaseline.Data = append(editedBaseline.Data, []byte("\n-- edited after exposure\n")...)
 
 	_, err := Run(t.Context(), pool, editedFS, Config{})
 	if err == nil || !strings.Contains(err.Error(), epoch2Baseline+" checksum mismatch") {
@@ -703,7 +705,7 @@ func TestLedgerResidueWithChecksummedEpochBaselineSkipsBaseline(t *testing.T) {
 		t.Context(),
 		mustSQL("record_migration_checksum.sql"),
 		testBaseline,
-		migrationChecksum(epochFS[testBaseline].Data),
+		migrationChecksum(mustMapFile(t, epochFS, testBaseline).Data),
 	); err != nil {
 		t.Fatalf("record epoch baseline checksum: %v", err)
 	}
@@ -736,7 +738,7 @@ func TestEpoch2LegacyContractAllowsCheckpointedLedger(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT checksum_sha256 FROM schema_migration_checksums WHERE filename = $1", epoch2Baseline).Scan(&checksum); err != nil {
 		t.Fatalf("read backfilled baseline checksum: %v", err)
 	}
-	if checksum != migrationChecksum(epochFS[epoch2Baseline].Data) {
+	if checksum != migrationChecksum(mustMapFile(t, epochFS, epoch2Baseline).Data) {
 		t.Fatalf("baseline checksum = %s, want current source checksum", checksum)
 	}
 }
@@ -873,6 +875,16 @@ func realManifestThrough(t *testing.T, last string) fstest.MapFS {
 	}
 	fake[dbmigrate.ManifestName] = &fstest.MapFile{Data: []byte(manifest.String())}
 	return fake
+}
+
+func mustMapFile(t *testing.T, fsys fstest.MapFS, name string) *fstest.MapFile {
+	t.Helper()
+	file, ok := fsys[name]
+	if !ok || file == nil {
+		t.Fatalf("map file %s not found", name)
+		return &fstest.MapFile{}
+	}
+	return file
 }
 
 func prefillLedger(t *testing.T, pool *pgxpool.Pool, entries []string) {
