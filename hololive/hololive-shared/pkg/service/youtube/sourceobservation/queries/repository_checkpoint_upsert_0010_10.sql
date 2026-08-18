@@ -27,3 +27,24 @@ SET contract_generation = EXCLUDED.contract_generation,
     last_error_code = NULL,
     last_error_at = NULL,
     updated_at = NOW()
+WHERE (
+    source_collection_checkpoints.contract_generation,
+    source_collection_checkpoints.last_observation_key,
+    source_collection_checkpoints.last_evidence_sha256,
+    source_collection_checkpoints.last_scheduled_for,
+    source_collection_checkpoints.collection_latency_ms,
+    source_collection_checkpoints.continuity,
+    source_collection_checkpoints.cursor,
+    source_collection_checkpoints.last_error_code,
+    source_collection_checkpoints.last_error_at
+) IS DISTINCT FROM (
+    EXCLUDED.contract_generation,
+    EXCLUDED.last_observation_key,
+    EXCLUDED.last_evidence_sha256,
+    EXCLUDED.last_scheduled_for,
+    EXCLUDED.collection_latency_ms,
+    EXCLUDED.continuity,
+    EXCLUDED.cursor,
+    NULL::text,
+    NULL::timestamptz
+)
