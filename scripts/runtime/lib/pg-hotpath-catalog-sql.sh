@@ -221,7 +221,8 @@ SELECT
     END AS backend_xmin_age,
     wait_event_type,
     wait_event,
-    LEFT(query, 500) AS query
+    backend_type,
+    query_id
 FROM pg_stat_activity
 WHERE datname = current_database()
   AND state IN ('idle in transaction', 'idle in transaction (aborted)')
