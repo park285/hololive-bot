@@ -60,3 +60,8 @@ check_sources \
   065_record_alarm_dispatch_event_collisions.sql \
   118_alarm_dispatch_state_shape_check.sql \
   122_alarm_dispatch_last_error_size_check.sql
+
+check_sources \
+  "epoch-1 observation integration" \
+  "${ROOT_DIR}/hololive/hololive-shared/pkg/service/youtube/tracking/observation/testdata/epoch1_migrations" \
+  070_repoint_youtube_content_alarm_tracking_pk_to_canonical.sql

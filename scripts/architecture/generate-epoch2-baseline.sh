@@ -10,6 +10,7 @@ NORMALIZER="${ROOT}/scripts/architecture/normalize-epoch2-baseline.py"
 REPAIR_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch1_message_contract_repair_sources"
 RECOVERY_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch1_recovery_sources"
 INTEGRATION_SOURCE_DIR="${ROOT}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations"
+OBSERVATION_SOURCE_DIR="${ROOT}/hololive/hololive-shared/pkg/service/youtube/tracking/observation/testdata/epoch1_migrations"
 PG_IMAGE="${PG_IMAGE:-postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}"
 NAME="holobot-epoch2-baseline-$$"
 READINESS_ATTEMPTS=60
@@ -22,6 +23,7 @@ SUFFIX_TMP="${TMP_DIR}/epoch2_suffix_contract.txt"
 REPAIR_TMP="${TMP_DIR}/epoch1_message_contract_repair_sources"
 RECOVERY_TMP="${TMP_DIR}/epoch1_recovery_sources"
 INTEGRATION_TMP="${TMP_DIR}/epoch1_integration_sources"
+OBSERVATION_TMP="${TMP_DIR}/epoch1_observation_sources"
 REPAIR_FILES=(
   074_create_message_strings.sql
   076_seed_new_command_templates.sql
@@ -41,6 +43,9 @@ INTEGRATION_FILES=(
   065_record_alarm_dispatch_event_collisions.sql
   118_alarm_dispatch_state_shape_check.sql
   122_alarm_dispatch_last_error_size_check.sql
+)
+OBSERVATION_FILES=(
+  070_repoint_youtube_content_alarm_tracking_pk_to_canonical.sql
 )
 
 SOURCE_COMMIT="${EPOCH2_SOURCE_COMMIT:-}"
@@ -124,6 +129,10 @@ done
 install -d -m 0755 "${INTEGRATION_TMP}"
 for file in "${INTEGRATION_FILES[@]}"; do
   install -m 0644 "${MIG_DIR}/${file}" "${INTEGRATION_TMP}/${file}"
+done
+install -d -m 0755 "${OBSERVATION_TMP}"
+for file in "${OBSERVATION_FILES[@]}"; do
+  install -m 0644 "${MIG_DIR}/${file}" "${OBSERVATION_TMP}/${file}"
 done
 
 if [[ ! "${PG_IMAGE}" =~ @sha256:[0-9a-f]{64}$ ]]; then
@@ -252,6 +261,10 @@ install -d -m 0755 "${INTEGRATION_SOURCE_DIR}"
 for file in "${INTEGRATION_FILES[@]}"; do
   install -m 0644 "${INTEGRATION_TMP}/${file}" "${INTEGRATION_SOURCE_DIR}/${file}"
 done
+install -d -m 0755 "${OBSERVATION_SOURCE_DIR}"
+for file in "${OBSERVATION_FILES[@]}"; do
+  install -m 0644 "${OBSERVATION_TMP}/${file}" "${OBSERVATION_SOURCE_DIR}/${file}"
+done
 
 echo "generated: ${OUT}"
 echo "generated: ${CONTRACT}"
@@ -259,3 +272,4 @@ echo "generated: ${SUFFIX_CONTRACT}"
 echo "generated: ${REPAIR_SOURCE_DIR}"
 echo "generated: ${RECOVERY_SOURCE_DIR}"
 echo "generated: ${INTEGRATION_SOURCE_DIR}"
+echo "generated: ${OBSERVATION_SOURCE_DIR}"
