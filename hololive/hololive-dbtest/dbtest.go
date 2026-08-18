@@ -46,11 +46,8 @@ const (
 	allowExternalTestDBEnv    = "ALLOW_EXTERNAL_TEST_DB"
 	ownershipSentinelQuery    = "SELECT token FROM ci_ephemeral_sentinel LIMIT 1"
 
-	// primaryImage는 ephemeral PG 기동에 우선 사용할 이미지다(호스트에 postgres:18 존재).
-	primaryImage = "postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
-
-	// fallbackImage는 primaryImage pull 실패 시 사용할 이미지다.
-	fallbackImage = "postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777"
+	// postgresImage는 production migration 기준과 같은 PostgreSQL 18 image다.
+	postgresImage = "postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
 
 	reaperRecoveryAttempts = 2
 )
@@ -172,13 +169,9 @@ func provisionBaseDSN() (_ string, err error) {
 	}
 	defer func() { err = errors.Join(err, unlock()) }()
 
-	container, err := startVerifiedPostgres(ctx, primaryImage)
+	container, err := startVerifiedPostgres(ctx, postgresImage)
 	if err != nil {
-		// primary 이미지 기동 실패 시 fallback 이미지로 재시도.
-		container, err = startVerifiedPostgres(ctx, fallbackImage)
-		if err != nil {
-			return "", fmt.Errorf("start postgres container (%s, %s): %w", primaryImage, fallbackImage, err)
-		}
+		return "", fmt.Errorf("start postgres container %s: %w", postgresImage, err)
 	}
 
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")

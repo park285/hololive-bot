@@ -5,6 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MIGRATIONS_DIR="${ROOT_DIR}/hololive/hololive-api/scripts/migrations"
 MANIFEST="${MIGRATIONS_DIR}/manifest.txt"
+EPOCH2_BASELINE="001_schema_epoch2_baseline.sql"
+EPOCH2_CONTRACT="${ROOT_DIR}/hololive/hololive-api/internal/migrationrunner/epoch2_legacy_contract.sha256"
+EPOCH2_ACL_TAIL="${ROOT_DIR}/scripts/architecture/epoch2_acl_tail.sql"
+EPOCH2_SUFFIX_CONTRACT="${ROOT_DIR}/scripts/architecture/epoch2_suffix_contract.txt"
+EPOCH2_NORMALIZER="${ROOT_DIR}/scripts/architecture/normalize-epoch2-baseline.py"
 
 sql_statement_count() {
   python3 - "$1" <<'PY'
@@ -155,6 +160,98 @@ if [[ "${manifest_file_sorted}" != "${sql_joined}" ]]; then
   LC_ALL=C comm -13 <(printf '%s\n' "${manifest_files[@]}" | LC_ALL=C sort) <(printf '%s\n' "${sql_files[@]}" | LC_ALL=C sort) >&2 || true
   exit 1
 fi
+
+if [[ "${manifest_files[0]}" != "${EPOCH2_BASELINE}" ]]; then
+  echo "FAIL: epoch-2 manifest must begin with ${EPOCH2_BASELINE}" >&2
+  exit 1
+fi
+for required in "${EPOCH2_CONTRACT}" "${EPOCH2_ACL_TAIL}" "${EPOCH2_SUFFIX_CONTRACT}"; do
+  if [[ ! -s "${required}" ]]; then
+    echo "FAIL: epoch-2 contract artifact missing or empty: ${required}" >&2
+    exit 1
+  fi
+done
+
+PYTHONDONTWRITEBYTECODE=1 python3 - "${EPOCH2_CONTRACT}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+lines = Path(sys.argv[1]).read_text().splitlines()
+if len(lines) != 136:
+    raise SystemExit(f"FAIL: epoch-2 legacy contract has {len(lines)} lines, want 136")
+entries = []
+for number, line in enumerate(lines, 1):
+    match = re.fullmatch(r"([0-9a-f]{64})  ([^ /]+\.sql)", line)
+    if match is None:
+        raise SystemExit(f"FAIL: malformed epoch-2 legacy contract line {number}")
+    entries.append(match.group(2))
+if entries[0] != "006-base-runtime-tables.sql" or entries[-1] != "140_epoch2_checkpoint.sql":
+    raise SystemExit("FAIL: epoch-2 legacy contract boundary drift")
+if len(entries) != len(set(entries)):
+    raise SystemExit("FAIL: duplicate filename in epoch-2 legacy contract")
+PY
+
+while read -r _ legacy_file; do
+  if [[ -e "${MIGRATIONS_DIR}/${legacy_file}" ]]; then
+    echo "FAIL: legacy/checkpoint migration remains active: ${legacy_file}" >&2
+    exit 1
+  fi
+done < "${EPOCH2_CONTRACT}"
+
+mapfile -t epoch2_suffix < "${EPOCH2_SUFFIX_CONTRACT}"
+if (( ${#manifest_files[@]} - 1 < ${#epoch2_suffix[@]} )); then
+  echo "FAIL: epoch-2 retained suffix is incomplete" >&2
+  exit 1
+fi
+for index in "${!epoch2_suffix[@]}"; do
+  if [[ "${manifest_files[index + 1]}" != "${epoch2_suffix[index]}" ]]; then
+    echo "FAIL: epoch-2 retained suffix drift at position $((index + 2)): expected ${epoch2_suffix[index]}, got ${manifest_files[index + 1]}" >&2
+    exit 1
+  fi
+done
+
+baseline_path="${MIGRATIONS_DIR}/${EPOCH2_BASELINE}"
+if ! grep -qE '^-- Source commit: [0-9a-f]{40}$' "${baseline_path}" ||
+   ! grep -qxF -- '-- Legacy cutoff: 139_trust_alarm_short_links.sql' "${baseline_path}" ||
+   ! grep -qxF -- '-- Compatibility checkpoint: 140_epoch2_checkpoint.sql' "${baseline_path}"; then
+  echo "FAIL: epoch-2 baseline header contract drift" >&2
+  exit 1
+fi
+
+PYTHONDONTWRITEBYTECODE=1 python3 "${EPOCH2_NORMALIZER}" --check-existing "${baseline_path}"
+
+PYTHONDONTWRITEBYTECODE=1 python3 - "${baseline_path}" "${EPOCH2_ACL_TAIL}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+baseline = Path(sys.argv[1]).read_text()
+acl_tail = Path(sys.argv[2]).read_text().strip()
+if acl_tail not in baseline:
+    raise SystemExit("FAIL: epoch-2 ACL tail is not embedded verbatim in baseline")
+if len(re.findall(r"(?m)^BEGIN;$", baseline)) != 1 or len(re.findall(r"(?m)^COMMIT;$", baseline)) != 1:
+    raise SystemExit("FAIL: epoch-2 baseline must be one top-level transaction")
+if baseline.rstrip().splitlines()[-1] != "COMMIT;":
+    raise SystemExit("FAIL: epoch-2 baseline must end with COMMIT;")
+PY
+
+for retired_runner in apply-all.sh bootstrap-and-apply.sh; do
+  retired_output="$(
+    PGPASSWORD=unused \
+    POSTGRES_ADMIN_PASSWORD=unused \
+    MIGRATIONS_DIR="${MIGRATIONS_DIR}" \
+    MIGRATION_MANIFEST="${MANIFEST}" \
+    /bin/sh "${MIGRATIONS_DIR}/${retired_runner}" 2>&1
+  )" && {
+    echo "FAIL: ${retired_runner} must refuse epoch-2 manifests" >&2
+    exit 1
+  }
+  if [[ "${retired_output}" != *"disabled for epoch-2 manifests"* ]]; then
+    echo "FAIL: ${retired_runner} epoch-2 refusal is missing or ambiguous" >&2
+    exit 1
+  fi
+done
 
 # 과거 브랜치 병행으로 이미 존재하는 번호 충돌(045/051/053)만 예외 — 신규 충돌은 차단한다.
 grandfathered_dup_prefixes="045 051 053"

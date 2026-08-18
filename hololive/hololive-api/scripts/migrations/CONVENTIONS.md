@@ -21,9 +21,9 @@
   빈 DB의 fresh bootstrap은 전체 manifest 재생을 위해 plain drop을 허용한다.
 - 과거에 적용된 파일의 수정은 프로덕션에 영향이 없고(ledger skip) fresh bootstrap/dbtest 경로만 바꾼다.
   프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다.
-- 레거시 수동 경로 `apply-all.sh`(파일 단위 `psql -f`, `-1` 미사용)는 psql 세션이 `BEGIN;/COMMIT;`을
-  그대로 실행하므로 위와 동일 의미론이다. 단, blocking index-drop guard는 Go 러너 소유이므로
-  프로덕션과 복구 적용은 `db-migrate`를 사용한다.
+- 레거시 수동 경로 `apply-all.sh`와 `bootstrap-and-apply.sh`는 epoch-2 manifest에서 fail-closed 한다.
+  checksum, epoch residue, atomic baseline ledger 계약은 Go 러너만 소유하므로 local·production·복구 적용은
+  모두 `db-migrate`를 사용한다.
 
 ## 번호
 

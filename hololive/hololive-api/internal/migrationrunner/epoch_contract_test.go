@@ -1,40 +1,28 @@
 package migrationrunner
 
-import (
-	"io/fs"
-	"strings"
-	"testing"
+import "testing"
 
-	"github.com/kapu/hololive-api/scripts/migrations"
-)
-
-// guardEpochResidue는 manifest 첫 항목을 epoch baseline으로 간주한다(위치 규약).
-// 이 테스트는 그 규약을 checkpoint migration이 ledger에 선기록하는 리터럴과 묶는다:
-// squash 후 manifest 첫 줄이 checkpoint 리터럴과 다르면 checkpoint를 거친 DB가
-// 기동 거부되거나(fail-closed), 레거시 ledger에 이미 있는 이름이 오면 drift DB가
-// 가드를 통과한다(fail-open). 어느 쪽이든 여기서 먼저 실패해야 한다.
-func TestEpochCheckpointBaselineContract(t *testing.T) {
-	const (
-		baseline   = "001_schema_epoch2_baseline.sql"
-		checkpoint = "140_epoch2_checkpoint.sql"
-	)
-
-	raw, err := fs.ReadFile(migrations.FS, checkpoint)
-	if err != nil {
-		t.Fatalf("read checkpoint migration: %v", err)
-	}
-	if !strings.Contains(string(raw), "'"+baseline+"'") {
-		t.Fatalf("checkpoint %s must record epoch baseline %q into schema_migrations", checkpoint, baseline)
-	}
-
+func TestEpoch2ManifestContract(t *testing.T) {
 	entries := manifestEntries(t)
-	if entries[0] == baseline {
-		return
+	if len(entries) == 0 {
+		t.Fatal("empty migration manifest")
 	}
-	if !containsEntry(entries, checkpoint) {
-		t.Fatalf(
-			"manifest first entry %q is not the epoch baseline %q and checkpoint %s is absent — "+
-				"guardEpochResidue's entries[0] anchor no longer matches what the checkpoint recorded",
-			entries[0], baseline, checkpoint)
+	if entries[0] != epoch2Baseline {
+		t.Fatalf("first migration = %q, want %q", entries[0], epoch2Baseline)
+	}
+
+	legacy, err := parseEpoch2LegacyContract(epoch2LegacyContractRaw)
+	if err != nil {
+		t.Fatalf("parse epoch-2 legacy contract: %v", err)
+	}
+	for _, migration := range legacy {
+		if containsEntry(entries, migration.name) {
+			t.Fatalf("legacy migration %q must not remain in epoch-2 manifest", migration.name)
+		}
+	}
+	for _, entry := range entries[1:] {
+		if entry < "141_" {
+			t.Fatalf("post-baseline migration %q is before retained suffix 141", entry)
+		}
 	}
 }

@@ -52,10 +52,8 @@ var sharedTemplates = struct {
 //     고유 데이터베이스(test_<unique>)를 template clone으로 생성한다.
 //   - t.Cleanup에 DROP DATABASE와 pool close를 등록한다.
 //
-// manifest 전체가 빈 DB에서 재생되는 이유: 006-base-runtime-tables.sql이 레거시
-// 초기 DB 생성 경로의 base 테이블(members, alarms 등)을 manifest 최초 단계에서
-// 멱등 복원한다. 따라서 과거의 base-schema gap이 사라졌고 manifest 전체 chain을
-// 그대로 적용한다.
+// manifest 전체가 빈 DB에서 재생되는 이유: epoch baseline이 base 테이블과 cutoff
+// 상태를 복원하고 이후 suffix migration이 현재 상태까지 전진시키기 때문이다.
 //
 // per-schema가 아닌 per-database 격리를 쓰는 이유: prod migration 다수가 idempotent guard로
 // information_schema를 table_schema 한정 없이 조회한다(예: 037이 acl_rooms.list_type 존재 여부를

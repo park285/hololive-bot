@@ -40,9 +40,8 @@ const (
 	schemaRegenCmd   = "SCHEMA_SNAPSHOT_UPDATE=1 go test -run TestSchemaSnapshotGolden ./hololive/hololive-dbtest"
 )
 
-// pg_dump가 아닌 catalog 직렬화를 쓰는 이유: 골든이 primary(pg18)/fallback(pg16) 두 이미지에서
-// 동일해야 하는데 pg_dump 출력은 버전별 헤더·구문 차이가 커 결정성을 깬다. catalog 직렬화는
-// 버전 무관하게 안정적이고 TEST_DATABASE_URL 외부 DB 경로에서도 Exec 없이 동일하게 동작한다.
+// pg_dump가 아닌 catalog 직렬화를 쓰는 이유: pg_dump text는 patch/tool version별 헤더·구문
+// 차이가 커 결정성을 깬다. catalog 직렬화는 PG18과 검증된 외부 test DB에서 안정적으로 동작한다.
 func TestSchemaSnapshotGolden(t *testing.T) {
 	pool := NewReplayPool(t)
 	ctx := context.Background()
@@ -388,7 +387,7 @@ func queryConstraints(ctx context.Context, pool *pgxpool.Pool) (map[string][]str
 		JOIN pg_namespace n ON n.oid = rel.relnamespace
 		WHERE n.nspname = current_schema()
 		  AND con.conrelid <> 0
-		  -- contype 'n'은 PG18이 NOT NULL을 catalog에 기록한 것으로 PG16엔 없다. 제외해야 두 이미지 골든이 일치하고, NOT NULL은 COLUMN 라인에 이미 있다.
+		  -- contype 'n'은 PG18의 NOT NULL catalog 표현이며 COLUMN 라인에 이미 있으므로 중복을 제외한다.
 		  AND con.contype <> 'n'
 		ORDER BY rel.relname, con.contype, con.conname`)
 	if err != nil {

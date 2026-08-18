@@ -25,6 +25,18 @@ PGHOST="${PGHOST:-postgres}"
 PGPORT="${PGPORT:-5432}"
 PGDATABASE="${PGDATABASE:-hololive}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
+MIGRATION_MANIFEST="${MIGRATION_MANIFEST:-${MIGRATIONS_DIR}/manifest.txt}"
+
+if [ ! -f "${MIGRATION_MANIFEST}" ]; then
+  echo "migration manifest not found: ${MIGRATION_MANIFEST}" >&2
+  exit 1
+fi
+
+first_migration="$(awk '/^[[:space:]]*#/ || NF == 0 { next } { print $NF; exit }' "${MIGRATION_MANIFEST}")"
+if [ "${first_migration}" = "001_schema_epoch2_baseline.sql" ]; then
+  echo "bootstrap-and-apply.sh is disabled for epoch-2 manifests; use the db-migrate binary before any role or migration side effect" >&2
+  exit 1
+fi
 
 POSTGRES_ADMIN_USER="${POSTGRES_ADMIN_USER:-postgres_admin}"
 POSTGRES_ADMIN_PASSWORD="${POSTGRES_ADMIN_PASSWORD:-${PGPASSWORD:-}}"
