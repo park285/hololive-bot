@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 func (r *durableRuntime) runMaintenance(ctx context.Context) {

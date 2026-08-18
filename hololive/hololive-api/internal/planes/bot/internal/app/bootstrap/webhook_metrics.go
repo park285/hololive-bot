@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -51,9 +51,6 @@ func NewWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
 		queueDepth:      prometheus.NewGauge(prometheus.GaugeOpts{Name: webhookMetricPrefix + "queue_depth", Help: "Current bot webhook queue depth."}),
 		handlerDuration: prometheus.NewHistogram(prometheus.HistogramOpts{Name: webhookMetricPrefix + "handler_duration_seconds", Help: "Bot webhook message handler duration in seconds.", Buckets: prometheus.DefBuckets}),
 	}
-	signatureV2Validated := prometheus.NewCounterFunc(prometheus.CounterOpts{Name: webhookMetricPrefix + "signature_v2_validated_total", Help: "Total webhook signature v2 requests whose HMAC comparison succeeded."}, func() float64 {
-		return float64(metrics.signatureVersionDiagnostics().V2Validated)
-	})
 	signatureV3Validated := prometheus.NewCounterFunc(prometheus.CounterOpts{Name: webhookMetricPrefix + "signature_v3_validated_total", Help: "Total webhook signature v3 requests whose HMAC comparison succeeded."}, func() float64 {
 		return float64(metrics.signatureVersionDiagnostics().V3Validated)
 	})
@@ -67,7 +64,7 @@ func NewWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
 		metrics.requests, metrics.unauthorized, metrics.badRequests, metrics.duplicates,
 		metrics.enqueueFailures, metrics.accepted, metrics.decodeLatency, metrics.dedupLatency,
 		metrics.enqueueWait, metrics.queueDepth, metrics.handlerDuration,
-		signatureV2Validated, signatureV3Validated, signatureUnknownRejected, signatureMalformedRejected,
+		signatureV3Validated, signatureUnknownRejected, signatureMalformedRejected,
 	)
 	return metrics
 }

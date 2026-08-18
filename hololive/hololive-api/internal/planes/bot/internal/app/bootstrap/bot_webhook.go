@@ -5,9 +5,9 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/iris-client-go/valkeydedup"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v2/valkeydedup"
+	"github.com/park285/iris-client-go/v2/webhook"
 )
 
 func BuildDurableBotWebhookHandler(
@@ -16,14 +16,13 @@ func BuildDurableBotWebhookHandler(
 	deps BotWebhookRuntimeDependencies,
 	logger *slog.Logger,
 ) (*webhook.Handler, error) {
-	deduplicator := valkeydedup.New(deps.Cache.GetClient())
+	nonceStore := valkeydedup.NewNonceStore(deps.Cache.GetClient())
 	metrics := defaultWebhookMetrics()
 	handler, err := iris.NewDurableWebhookHandler(admitter,
 		webhook.WithWebhookToken(appConfig.Iris.WebhookToken),
 		webhook.WithWebhookLogger(logger),
 		webhook.WithMetrics(metrics),
-		webhook.WithDeduplicator(deduplicator),
-		webhook.WithNonceCache(deduplicator),
+		webhook.WithNonceStore(nonceStore),
 		webhook.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
 		webhook.WithDedupTTL(appConfig.Webhook.DedupTTL),
 		webhook.WithDedupTimeout(appConfig.Webhook.DedupTimeout),

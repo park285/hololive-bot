@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/webhook"
 	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	"github.com/quic-go/quic-go/http3"
 

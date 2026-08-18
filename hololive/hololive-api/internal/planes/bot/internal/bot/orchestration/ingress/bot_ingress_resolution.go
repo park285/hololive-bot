@@ -24,7 +24,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )

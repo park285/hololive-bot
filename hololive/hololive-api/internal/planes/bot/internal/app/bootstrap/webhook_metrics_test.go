@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
@@ -78,14 +78,12 @@ func TestWebhookMetricsExposeSignatureVersionDiagnostics(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	metrics := NewWebhookMetrics(registry)
 	metrics.BindSignatureDiagnostics(fixedWebhookSignatureDiagnostics{value: webhook.SignatureVersionDiagnostics{
-		V2Validated:       2,
 		V3Validated:       3,
 		UnknownRejected:   4,
 		MalformedRejected: 5,
 	}})
 
 	want := map[string]float64{
-		"hololive_bot_webhook_signature_v2_validated_total":       2,
 		"hololive_bot_webhook_signature_v3_validated_total":       3,
 		"hololive_bot_webhook_signature_unknown_rejected_total":   4,
 		"hololive_bot_webhook_signature_malformed_rejected_total": 5,

@@ -33,8 +33,8 @@ import (
 
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
-	"github.com/park285/iris-client-go/webhook"
-	"github.com/park285/iris-client-go/webhooksign"
+	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v2/webhooksign"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -191,7 +191,7 @@ func newBotWebhookTestRequest(ctx context.Context, token, messageID, body string
 func newSignedBotWebhookTestRequest(t *testing.T, ctx context.Context, token, messageID, body string) *http.Request {
 	t.Helper()
 	request := newBotWebhookTestRequest(ctx, token, messageID, body)
-	require.NoError(t, webhooksign.SignRequestV3(request, token, []byte(body)))
+	require.NoError(t, webhooksign.SignRequest(request, token, []byte(body)))
 
 	return request
 }

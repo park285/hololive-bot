@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 func TestClassifyErrorCode(t *testing.T) {

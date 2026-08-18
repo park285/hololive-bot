@@ -59,7 +59,7 @@ for module in "${module_dirs[@]}"; do
     exit 1
   fi
 
-  for dependency in github.com/park285/shared-go github.com/park285/iris-client-go; do
+  for dependency in github.com/park285/shared-go github.com/park285/iris-client-go/v2; do
     version="$(awk -v dependency="${dependency}" '$1 == dependency { print $2; exit }' "${gomod}")"
     [[ -z "${version}" ]] && continue
     if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

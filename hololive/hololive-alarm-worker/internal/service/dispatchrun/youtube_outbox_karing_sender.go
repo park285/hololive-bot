@@ -6,7 +6,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 type YouTubeOutboxKaringInnerSender interface {

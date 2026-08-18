@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {

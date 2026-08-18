@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
