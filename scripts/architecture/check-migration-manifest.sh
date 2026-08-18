@@ -10,6 +10,17 @@ EPOCH2_CONTRACT="${ROOT_DIR}/hololive/hololive-api/internal/migrationrunner/epoc
 EPOCH2_ACL_TAIL="${ROOT_DIR}/scripts/architecture/epoch2_acl_tail.sql"
 EPOCH2_SUFFIX_CONTRACT="${ROOT_DIR}/scripts/architecture/epoch2_suffix_contract.txt"
 EPOCH2_NORMALIZER="${ROOT_DIR}/scripts/architecture/normalize-epoch2-baseline.py"
+EPOCH2_REPAIR_SOURCE_DIR="${MIGRATIONS_DIR}/manual/epoch1_message_contract_repair_sources"
+EPOCH2_REPAIR_FILES=(
+  074_create_message_strings.sql
+  076_seed_new_command_templates.sql
+  077_seed_notification_celebration_templates.sql
+  078_unify_outbox_header_body_templates.sql
+  079_seed_error_strings.sql
+  080_refresh_help_and_ambiguous.sql
+  081_seed_canonical_alarm_templates.sql
+  082_seed_calendar_image_strings.sql
+)
 
 sql_statement_count() {
   python3 - "$1" <<'PY'
@@ -198,6 +209,26 @@ while read -r _ legacy_file; do
     exit 1
   fi
 done < "${EPOCH2_CONTRACT}"
+
+if [[ ! -d "${EPOCH2_REPAIR_SOURCE_DIR}" ]]; then
+  echo "FAIL: epoch-1 message-contract repair source directory is missing" >&2
+  exit 1
+fi
+mapfile -t epoch2_repair_sources < <(
+  find "${EPOCH2_REPAIR_SOURCE_DIR}" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort
+)
+if [[ "${epoch2_repair_sources[*]}" != "${EPOCH2_REPAIR_FILES[*]}" ]]; then
+  echo "FAIL: epoch-1 message-contract repair source set drift" >&2
+  exit 1
+fi
+for file in "${EPOCH2_REPAIR_FILES[@]}"; do
+  expected_checksum="$(awk -v file="${file}" '$2 == file { print $1 }' "${EPOCH2_CONTRACT}")"
+  actual_checksum="$(sha256sum "${EPOCH2_REPAIR_SOURCE_DIR}/${file}" | awk '{print $1}')"
+  if [[ -z "${expected_checksum}" || "${actual_checksum}" != "${expected_checksum}" ]]; then
+    echo "FAIL: epoch-1 message-contract repair source checksum drift: ${file}" >&2
+    exit 1
+  fi
+done
 
 mapfile -t epoch2_suffix < "${EPOCH2_SUFFIX_CONTRACT}"
 if (( ${#manifest_files[@]} - 1 < ${#epoch2_suffix[@]} )); then

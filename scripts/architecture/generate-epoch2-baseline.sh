@@ -7,6 +7,7 @@ CONTRACT="${ROOT}/hololive/hololive-api/internal/migrationrunner/epoch2_legacy_c
 SUFFIX_CONTRACT="${ROOT}/scripts/architecture/epoch2_suffix_contract.txt"
 ACL_TAIL="${ROOT}/scripts/architecture/epoch2_acl_tail.sql"
 NORMALIZER="${ROOT}/scripts/architecture/normalize-epoch2-baseline.py"
+REPAIR_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch1_message_contract_repair_sources"
 PG_IMAGE="${PG_IMAGE:-postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}"
 NAME="holobot-epoch2-baseline-$$"
 READINESS_ATTEMPTS=60
@@ -16,6 +17,17 @@ DUMP="${TMP_DIR}/epoch2.sql"
 BASELINE_TMP="${TMP_DIR}/001_schema_epoch2_baseline.sql"
 CONTRACT_TMP="${TMP_DIR}/epoch2_legacy_contract.sha256"
 SUFFIX_TMP="${TMP_DIR}/epoch2_suffix_contract.txt"
+REPAIR_TMP="${TMP_DIR}/epoch1_message_contract_repair_sources"
+REPAIR_FILES=(
+  074_create_message_strings.sql
+  076_seed_new_command_templates.sql
+  077_seed_notification_celebration_templates.sql
+  078_unify_outbox_header_body_templates.sql
+  079_seed_error_strings.sql
+  080_refresh_help_and_ambiguous.sql
+  081_seed_canonical_alarm_templates.sql
+  082_seed_calendar_image_strings.sql
+)
 
 SOURCE_COMMIT="${EPOCH2_SOURCE_COMMIT:-}"
 if [[ -z "${SOURCE_COMMIT}" && -f "${OUT}" ]]; then
@@ -87,6 +99,10 @@ for file in "${CONTRACT_FILES[@]}"; do
   printf '%s  %s\n' "${checksum}" "${file}" >> "${CONTRACT_TMP}"
 done
 printf '%s\n' "${SUFFIX[@]}" > "${SUFFIX_TMP}"
+install -d -m 0755 "${REPAIR_TMP}"
+for file in "${REPAIR_FILES[@]}"; do
+  install -m 0644 "${MIG_DIR}/${file}" "${REPAIR_TMP}/${file}"
+done
 
 if [[ ! "${PG_IMAGE}" =~ @sha256:[0-9a-f]{64}$ ]]; then
   echo "PG_IMAGE must be pinned by sha256 digest: ${PG_IMAGE}" >&2
@@ -101,7 +117,8 @@ docker run -d --rm --name "${NAME}" \
 
 ready=false
 for ((attempt = 1; attempt <= READINESS_ATTEMPTS; attempt++)); do
-  if docker exec "${NAME}" pg_isready -U hololive -d hololive >/dev/null 2>&1; then
+  if ready_output="$(docker exec "${NAME}" psql -X -At -U hololive -d hololive -c 'SELECT 1' 2>/dev/null)" &&
+     [[ "${ready_output}" == "1" ]]; then
     ready=true
     break
   fi
@@ -146,6 +163,41 @@ for file in "${LEGACY[@]}"; do
     < "${MIG_DIR}/${file}"
 done
 
+docker exec -i "${NAME}" psql -X -v ON_ERROR_STOP=1 -U hololive -d hololive >/dev/null <<'SQL'
+SET session_replication_role = replica;
+DO $normalize_migration_time$
+DECLARE
+  target record;
+BEGIN
+  FOR target IN
+    SELECT n.nspname,
+           c.relname,
+           string_agg(
+             format(
+               '%1$I = CASE WHEN %1$I IS NULL THEN NULL ELSE %2$L::%3$s END',
+               a.attname,
+               '2000-01-01 00:00:00+00',
+               CASE WHEN a.atttypid = 'timestamptz'::regtype THEN 'timestamptz' ELSE 'timestamp' END
+             ),
+             ', ' ORDER BY a.attname
+           ) AS assignments
+    FROM pg_attribute a
+    JOIN pg_class c ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('r', 'p')
+      AND a.atttypid IN ('timestamp'::regtype, 'timestamptz'::regtype)
+      AND pg_get_expr(d.adbin, d.adrelid) ~* '(now\(\)|CURRENT_TIMESTAMP|clock_timestamp\(\))'
+    GROUP BY n.nspname, c.relname
+  LOOP
+    EXECUTE format('UPDATE %I.%I SET %s', target.nspname, target.relname, target.assignments);
+  END LOOP;
+END
+$normalize_migration_time$;
+SET session_replication_role = origin;
+SQL
+
 docker exec "${NAME}" pg_dump \
   -U hololive -d hololive \
   --format=plain \
@@ -166,7 +218,12 @@ python3 "${NORMALIZER}" \
 install -m 0644 "${BASELINE_TMP}" "${OUT}"
 install -m 0644 "${CONTRACT_TMP}" "${CONTRACT}"
 install -m 0644 "${SUFFIX_TMP}" "${SUFFIX_CONTRACT}"
+install -d -m 0755 "${REPAIR_SOURCE_DIR}"
+for file in "${REPAIR_FILES[@]}"; do
+  install -m 0644 "${REPAIR_TMP}/${file}" "${REPAIR_SOURCE_DIR}/${file}"
+done
 
 echo "generated: ${OUT}"
 echo "generated: ${CONTRACT}"
 echo "generated: ${SUFFIX_CONTRACT}"
+echo "generated: ${REPAIR_SOURCE_DIR}"

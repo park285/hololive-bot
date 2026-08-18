@@ -1789,133 +1789,133 @@ INSERT INTO public.members (id, slug, channel_id, english_name, japanese_name, k
 -- Data for Name: message_strings; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (1, 'org', 'Hololive', 'Holo', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (2, 'org', 'Nijisanji', '니지산지', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (3, 'org', 'Independents', '개인세', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (4, 'org', 'Stellive', '스텔라이브', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (5, 'alarmtype', 'LIVE', '방송', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (6, 'alarmtype', 'COMMUNITY', '커뮤니티', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (7, 'alarmtype', 'SHORTS', '쇼츠', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (8, 'alarmtype', 'BIRTHDAY', '생일', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (9, 'alarmtype', 'ANNIVERSARY', '주년', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (10, 'alarmtype', 'ALL', '전체', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (11, 'newscat', 'birthday_live', '생일 라이브', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (12, 'newscat', 'solo_live', '솔로 라이브', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (13, 'newscat', 'collab', '콜라보', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (14, 'newscat', 'event', '이벤트', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (15, 'newscat', 'goods', '굿즈', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (16, 'newscat', 'other', '기타', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (17, 'social', '歌の再生リスト', '음악 플레이리스트', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (18, 'social', '公式グッズ', '공식 굿즈', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (19, 'social', 'オフィシャルグッズ', '공식 굿즈', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (20, 'misc', 'vtuber_fallback', 'VTuber', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (21, 'misc', 'chzzk_title', '치지직 라이브', '2026-08-18 01:44:34.481974+00', '2026-08-18 01:44:34.481974+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (22, 'error', 'no_member_info_found', '❌ 등록된 멤버 정보를 찾을 수 없습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (67, 'misc', 'time_unknown', '시간 미정', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:34.663965+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (68, 'misc', 'alarm_unknown_member', '알 수 없는 멤버', '2026-08-18 01:44:34.754051+00', '2026-08-18 01:44:34.754051+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (69, 'misc', 'alarm_no_title', '제목 없음', '2026-08-18 01:44:34.754051+00', '2026-08-18 01:44:34.754051+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (70, 'misc', 'alarm_no_stream', '방송 정보 없음', '2026-08-18 01:44:34.754051+00', '2026-08-18 01:44:34.754051+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (71, 'calendar', 'header_month', '%d년 %d월 기념일', '2026-08-18 01:44:34.799771+00', '2026-08-18 01:44:34.799771+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (72, 'calendar', 'summary', '총 %d건 · 생일 %d · 데뷔주년 %d', '2026-08-18 01:44:34.799771+00', '2026-08-18 01:44:34.799771+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (73, 'calendar', 'empty', '등록된 기념일이 없습니다.', '2026-08-18 01:44:34.799771+00', '2026-08-18 01:44:34.799771+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (74, 'calendar', 'day', '%d월 %d일', '2026-08-18 01:44:34.799771+00', '2026-08-18 01:44:34.799771+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (75, 'calendar', 'badge_birthday', '생일', '2026-08-18 01:44:34.799771+00', '2026-08-18 01:44:34.799771+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (76, 'calendar', 'badge_anniversary', '데뷔 %d주년', '2026-08-18 01:44:34.799771+00', '2026-08-18 01:44:34.799771+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (77, 'calendar', 'unknown', '알 수 없음', '2026-08-18 01:44:34.799771+00', '2026-08-18 01:44:34.799771+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (23, 'error', 'cannot_display_member_info', '❌ 멤버 정보를 표시할 수 없습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (24, 'error', 'member_profile_load_failed', '❌ 프로필을 불러오는 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (25, 'error', 'member_profile_build_failed', '❌ 프로필을 구성하지 못했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (26, 'error', 'graduated_member_blocked', '⚠️ 졸업한 멤버입니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (27, 'error', 'alarm_service_not_initialized', '❌ 알람 서비스가 초기화되지 않았습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (28, 'error', 'alarm_add_failed', '❌ 알람 설정 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (29, 'error', 'alarm_remove_failed', '❌ 알람 제거 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (30, 'error', 'alarm_list_failed', '❌ 알람 목록 조회 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (31, 'error', 'alarm_clear_failed', '❌ 알람 초기화 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (1, 'org', 'Hololive', 'Holo', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (2, 'org', 'Nijisanji', '니지산지', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (3, 'org', 'Independents', '개인세', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (4, 'org', 'Stellive', '스텔라이브', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (5, 'alarmtype', 'LIVE', '방송', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (6, 'alarmtype', 'COMMUNITY', '커뮤니티', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (7, 'alarmtype', 'SHORTS', '쇼츠', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (8, 'alarmtype', 'BIRTHDAY', '생일', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (9, 'alarmtype', 'ANNIVERSARY', '주년', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (10, 'alarmtype', 'ALL', '전체', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (11, 'newscat', 'birthday_live', '생일 라이브', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (12, 'newscat', 'solo_live', '솔로 라이브', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (13, 'newscat', 'collab', '콜라보', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (14, 'newscat', 'event', '이벤트', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (15, 'newscat', 'goods', '굿즈', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (16, 'newscat', 'other', '기타', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (17, 'social', '歌の再生リスト', '음악 플레이리스트', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (18, 'social', '公式グッズ', '공식 굿즈', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (19, 'social', 'オフィシャルグッズ', '공식 굿즈', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (20, 'misc', 'vtuber_fallback', 'VTuber', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (21, 'misc', 'chzzk_title', '치지직 라이브', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (22, 'error', 'no_member_info_found', '❌ 등록된 멤버 정보를 찾을 수 없습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (67, 'misc', 'time_unknown', '시간 미정', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (68, 'misc', 'alarm_unknown_member', '알 수 없는 멤버', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (69, 'misc', 'alarm_no_title', '제목 없음', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (70, 'misc', 'alarm_no_stream', '방송 정보 없음', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (74, 'calendar', 'day', '%d월 %d일', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (71, 'calendar', 'header_month', '%d년 %d월 기념일', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (72, 'calendar', 'summary', '총 %d건 · 생일 %d · 데뷔주년 %d', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (73, 'calendar', 'empty', '등록된 기념일이 없습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (75, 'calendar', 'badge_birthday', '생일', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (76, 'calendar', 'badge_anniversary', '데뷔 %d주년', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (77, 'calendar', 'unknown', '알 수 없음', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (23, 'error', 'cannot_display_member_info', '❌ 멤버 정보를 표시할 수 없습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (24, 'error', 'member_profile_load_failed', '❌ 프로필을 불러오는 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (25, 'error', 'member_profile_build_failed', '❌ 프로필을 구성하지 못했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (26, 'error', 'graduated_member_blocked', '⚠️ 졸업한 멤버입니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (27, 'error', 'alarm_service_not_initialized', '❌ 알람 서비스가 초기화되지 않았습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (28, 'error', 'alarm_add_failed', '❌ 알람 설정 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (29, 'error', 'alarm_remove_failed', '❌ 알람 제거 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (30, 'error', 'alarm_list_failed', '❌ 알람 목록 조회 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (31, 'error', 'alarm_clear_failed', '❌ 알람 초기화 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (32, 'error', 'alarm_need_member_name_add', '❌ 멤버 이름을 입력해주세요.
-예) !알람 추가 페코라', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+예) !알람 추가 페코라', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (33, 'error', 'alarm_need_member_name_remove', '❌ 멤버 이름을 입력해주세요.
-예) !알람 제거 페코라', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+예) !알람 제거 페코라', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (34, 'error', 'invalid_alarm_usage', '❌ 지원하지 않는 알람 명령입니다.
-예) !알람 추가 페코라', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (35, 'error', 'live_stream_query_failed', '❌ 라이브 조회 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (36, 'error', 'upcoming_stream_query_failed', '❌ 예정 방송 조회 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (37, 'error', 'schedule_query_failed', '❌ 일정 조회 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+예) !알람 추가 페코라', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (35, 'error', 'live_stream_query_failed', '❌ 라이브 조회 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (36, 'error', 'upcoming_stream_query_failed', '❌ 예정 방송 조회 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (37, 'error', 'schedule_query_failed', '❌ 일정 조회 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (38, 'error', 'schedule_need_member_name', '❌ 멤버 이름을 입력해주세요.
-예) !일정 페코라', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (39, 'error', 'unknown_stats_period', '❌ 알 수 없는 통계 유형입니다. !도움말을 참고해주세요.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (40, 'error', 'stats_query_failed', '❌ 구독자 순위 조회 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (41, 'error', 'no_stats_data', '❌ 해당 기간의 통계 데이터가 없습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+예) !일정 페코라', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (39, 'error', 'unknown_stats_period', '❌ 알 수 없는 통계 유형입니다. !도움말을 참고해주세요.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (40, 'error', 'stats_query_failed', '❌ 구독자 순위 조회 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (41, 'error', 'no_stats_data', '❌ 해당 기간의 통계 데이터가 없습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (42, 'error', 'subscriber_need_member_name', '❌ 멤버 이름을 입력해주세요.
-예) !구독자 페코라', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (43, 'error', 'subscriber_query_failed', '❌ 구독자 정보 조회 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (44, 'error', 'no_subscriber_data', '❌ 해당 멤버의 구독자 정보가 없습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (45, 'error', 'calendar_query_failed', '❌ 기념일 조회 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (46, 'error', 'major_event_service_not_initialized', '❌ 행사 알림 서비스가 초기화되지 않았습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (47, 'error', 'major_event_status_check_failed', '❌ 행사 알림 상태 확인 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (48, 'error', 'major_event_subscribe_failed', '❌ 행사 알림 설정 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (49, 'error', 'major_event_unsubscribe_failed', '❌ 행사 알림 해제 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (50, 'error', 'member_news_service_not_initialized', '❌ 뉴스 서비스가 초기화되지 않았습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (51, 'error', 'member_news_query_failed', '❌ 뉴스 조회 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (52, 'error', 'member_news_subscription_failed', '❌ 뉴스 알림 설정 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+예) !구독자 페코라', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (43, 'error', 'subscriber_query_failed', '❌ 구독자 정보 조회 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (44, 'error', 'no_subscriber_data', '❌ 해당 멤버의 구독자 정보가 없습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (45, 'error', 'calendar_query_failed', '❌ 기념일 조회 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (46, 'error', 'major_event_service_not_initialized', '❌ 행사 알림 서비스가 초기화되지 않았습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (47, 'error', 'major_event_status_check_failed', '❌ 행사 알림 상태 확인 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (48, 'error', 'major_event_subscribe_failed', '❌ 행사 알림 설정 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (49, 'error', 'major_event_unsubscribe_failed', '❌ 행사 알림 해제 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (50, 'error', 'member_news_service_not_initialized', '❌ 뉴스 서비스가 초기화되지 않았습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (51, 'error', 'member_news_query_failed', '❌ 뉴스 조회 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (52, 'error', 'member_news_subscription_failed', '❌ 뉴스 알림 설정 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (53, 'error', 'unknown_command', '❌ 알 수 없는 명령입니다.
-!도움말에서 사용 가능한 명령을 확인할 수 있습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (54, 'error', 'external_api_call_failed', '❌ 외부 데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (55, 'error', 'cache_connection_failed', '❌ 일시적인 문제로 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (56, 'error', 'iris_connection_failed', '❌ 서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (57, 'error', 'command_processing_failed', '❌ 명령 처리 중 오류가 발생했습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (58, 'error', 'async_command_backpressure', '❌ 요청이 많아 잠시 후 다시 시도해주세요.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+!도움말에서 사용 가능한 명령을 확인할 수 있습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (54, 'error', 'external_api_call_failed', '❌ 외부 데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (55, 'error', 'cache_connection_failed', '❌ 일시적인 문제로 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (56, 'error', 'iris_connection_failed', '❌ 서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (57, 'error', 'command_processing_failed', '❌ 명령 처리 중 오류가 발생했습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (58, 'error', 'async_command_backpressure', '❌ 요청이 많아 잠시 후 다시 시도해주세요.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (59, 'notify', 'member_news_no_members', '📰 뉴스 대상 멤버가 없습니다.
-예) !알람 추가 페코라', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+예) !알람 추가 페코라', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (60, 'notify', 'member_news_subscribed', '✅ 뉴스 알림을 켰습니다.
-매주 월요일 09:00 KST에 발송됩니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (61, 'notify', 'member_news_already_subscribed', 'ℹ️ 뉴스 알림이 이미 켜져 있습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (62, 'notify', 'member_news_unsubscribed', '✅ 뉴스 알림을 껐습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (63, 'notify', 'member_news_not_subscribed', 'ℹ️ 뉴스 알림이 이미 꺼져 있습니다.', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+매주 월요일 09:00 KST에 발송됩니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (61, 'notify', 'member_news_already_subscribed', 'ℹ️ 뉴스 알림이 이미 켜져 있습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (62, 'notify', 'member_news_unsubscribed', '✅ 뉴스 알림을 껐습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (63, 'notify', 'member_news_not_subscribed', 'ℹ️ 뉴스 알림이 이미 꺼져 있습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (64, 'notify', 'member_news_status_on', '🔔 뉴스 알림: 켜짐
 - 발송: 매주 월요일 09:00 KST
-- 해제: !뉴스알림 끄기', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+- 해제: !뉴스알림 끄기', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (65, 'notify', 'member_news_status_off', '🔕 뉴스 알림: 꺼짐
-- 설정: !뉴스알림 켜기', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
+- 설정: !뉴스알림 켜기', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (66, 'notify', 'graduated_member_warning', '⚠️ 졸업한 멤버입니다.
 
-', '2026-08-18 01:44:34.663965+00', '2026-08-18 01:44:35.127082+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (123, 'timefmt', 'stream_time_days', '%s (%d일 후)', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (124, 'timefmt', 'stream_time_hours_minutes', '%s (%d시간 %d분 후)', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (125, 'timefmt', 'stream_time_minutes', '%s (%d분 후)', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (126, 'timefmt', 'relative_days', '%d일 후', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (127, 'timefmt', 'relative_hours_minutes', '%d시간 %d분 후', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (128, 'timefmt', 'relative_minutes', '%d분 후', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (129, 'karing', 'alarm_title_prelive', '방송 %d분 전 알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (130, 'karing', 'alarm_title_live', '라이브 시작', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (131, 'karing', 'time_left_prelive', '%d분 후 시작', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (132, 'karing', 'time_left_live', '지금 시작', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (133, 'karing', 'outbox_title_community', '커뮤니티 알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (134, 'karing', 'outbox_time_community', '새 커뮤니티', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (135, 'karing', 'outbox_title_shorts', '쇼츠 알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (136, 'karing', 'outbox_time_shorts', '새 쇼츠', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (137, 'karing', 'outbox_title_video', '새 영상', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (138, 'karing', 'outbox_time_video', '새 영상', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (139, 'karing', 'outbox_title_live', '방송 알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (140, 'karing', 'outbox_time_live', '방송 알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (141, 'karing', 'title_fallback', '알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (142, 'karing', 'time_fallback', '새 알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (143, 'karing', 'count_suffix', '%s · %d건', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (144, 'karing', 'item_title_community_fallback', '커뮤니티 알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (145, 'karing', 'status_community', '커뮤니티', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (146, 'karing', 'status_shorts', '쇼츠', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (147, 'karing', 'status_video', '새 영상', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (148, 'karing', 'status_fallback', '알림', '2026-08-18 01:44:35.171759+00', '2026-08-18 01:44:35.171759+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (149, 'calendar', 'overflow_footer', '외 %d건 생략', '2026-08-18 01:44:35.216468+00', '2026-08-18 01:44:35.216468+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (150, 'livecard', 'header', '현재 라이브', '2026-08-18 01:44:35.260516+00', '2026-08-18 01:44:35.260516+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (151, 'livecard', 'summary', '총 %d건', '2026-08-18 01:44:35.260516+00', '2026-08-18 01:44:35.260516+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (152, 'livecard', 'badge_chzzk', '치지직', '2026-08-18 01:44:35.260516+00', '2026-08-18 01:44:35.260516+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (153, 'livecard', 'overflow_footer', '외 %d건 생략', '2026-08-18 01:44:35.260516+00', '2026-08-18 01:44:35.260516+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (154, 'profilecard', 'badge_graduated', '졸업', '2026-08-18 01:44:35.303852+00', '2026-08-18 01:44:35.303852+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (155, 'rankcard', 'header', '구독자 증가 순위', '2026-08-18 01:44:35.347438+00', '2026-08-18 01:44:35.347438+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (156, 'rankcard', 'summary', '%s · 상위 %d', '2026-08-18 01:44:35.347438+00', '2026-08-18 01:44:35.347438+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (157, 'rankcard', 'total', '구독자 %s', '2026-08-18 01:44:35.347438+00', '2026-08-18 01:44:35.347438+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (158, 'karing', 'alarm_title_prelive_premiere', '선행공개 %d분 전 알림', '2026-08-18 01:44:37.703716+00', '2026-08-18 01:44:37.703716+00');
-INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (159, 'karing', 'alarm_title_live_premiere', '선행공개 시작', '2026-08-18 01:44:37.703716+00', '2026-08-18 01:44:37.703716+00');
+', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (123, 'timefmt', 'stream_time_days', '%s (%d일 후)', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (124, 'timefmt', 'stream_time_hours_minutes', '%s (%d시간 %d분 후)', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (125, 'timefmt', 'stream_time_minutes', '%s (%d분 후)', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (126, 'timefmt', 'relative_days', '%d일 후', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (127, 'timefmt', 'relative_hours_minutes', '%d시간 %d분 후', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (128, 'timefmt', 'relative_minutes', '%d분 후', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (129, 'karing', 'alarm_title_prelive', '방송 %d분 전 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (130, 'karing', 'alarm_title_live', '라이브 시작', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (131, 'karing', 'time_left_prelive', '%d분 후 시작', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (132, 'karing', 'time_left_live', '지금 시작', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (133, 'karing', 'outbox_title_community', '커뮤니티 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (134, 'karing', 'outbox_time_community', '새 커뮤니티', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (135, 'karing', 'outbox_title_shorts', '쇼츠 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (136, 'karing', 'outbox_time_shorts', '새 쇼츠', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (137, 'karing', 'outbox_title_video', '새 영상', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (138, 'karing', 'outbox_time_video', '새 영상', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (139, 'karing', 'outbox_title_live', '방송 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (140, 'karing', 'outbox_time_live', '방송 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (141, 'karing', 'title_fallback', '알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (142, 'karing', 'time_fallback', '새 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (143, 'karing', 'count_suffix', '%s · %d건', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (144, 'karing', 'item_title_community_fallback', '커뮤니티 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (145, 'karing', 'status_community', '커뮤니티', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (146, 'karing', 'status_shorts', '쇼츠', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (147, 'karing', 'status_video', '새 영상', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (148, 'karing', 'status_fallback', '알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (149, 'calendar', 'overflow_footer', '외 %d건 생략', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (150, 'livecard', 'header', '현재 라이브', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (151, 'livecard', 'summary', '총 %d건', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (152, 'livecard', 'badge_chzzk', '치지직', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (153, 'livecard', 'overflow_footer', '외 %d건 생략', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (154, 'profilecard', 'badge_graduated', '졸업', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (155, 'rankcard', 'header', '구독자 증가 순위', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (156, 'rankcard', 'summary', '%s · 상위 %d', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (157, 'rankcard', 'total', '구독자 %s', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (158, 'karing', 'alarm_title_prelive_premiere', '선행공개 %d분 전 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (159, 'karing', 'alarm_title_live_premiere', '선행공개 시작', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 
 
 --
@@ -1934,13 +1934,25 @@ INSERT INTO public.message_strings (id, namespace, key, value, created_at, updat
 -- Data for Name: notification_templates; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (20, 'CMD_MILESTONE_APPROACHING', NULL, '📊 **{{mdsafe .MemberName}}** 구독자 {{.Milestone}}명까지 {{.Remaining}}명 남았습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (103, 'CELEBRATION_BIRTHDAY_STREAM', NULL, '🎂 **{{mdsafe .MemberName}}** 생일 방송 일정이 잡혔습니다!
+{{- if and .StreamTitle .StreamURL}}
+- [{{mdsafe .StreamTitle}}]({{.StreamURL}})
+{{- else if .StreamTitle}}
+- {{mdsafe .StreamTitle}}
+{{- else if .StreamURL}}
+- {{.StreamURL}}
+{{- end}}
+{{- if .ScheduledStartKST}}
+- ⏰ {{.ScheduledStartKST}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (6, 'OUTBOX_COMMUNITY', NULL, '🔔 **{{mdsafe .MemberName}}** 커뮤니티 글
 {{- if .ContentText}}
 {{mdsafe (truncate 100 .ContentText)}}
 {{- end}}
 {{- if .URL}}
 [커뮤니티 글 보기]({{.URL}})
-{{- end}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.67005+00');
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (7, 'OUTBOX_VIDEO', NULL, '{{if eq .Kind "LIVE_STREAM"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}
 {{- if and .Title .URL}}
 [{{mdsafe (truncate 50 .Title)}}]({{.URL}})
@@ -1948,7 +1960,7 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 {{mdsafe (truncate 50 .Title)}}
 {{- else if .URL}}
 {{.URL}}
-{{- end}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.62461+00');
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (5, 'OUTBOX_SHORTS', NULL, '🔔 **{{mdsafe .MemberName}}** 새 쇼츠
 {{- if and .Title .URL}}
 [{{mdsafe (truncate 50 .Title)}}]({{.URL}})
@@ -1956,134 +1968,14 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 {{mdsafe (truncate 50 .Title)}}
 {{- else if .URL}}
 {{.URL}}
-{{- end}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (8, 'OUTBOX_MILESTONE', NULL, '🎉 **{{mdsafe .MemberName}}** {{mdsafe .Milestone}} 달성', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (21, 'OUTBOX_VIDEO_GROUP', NULL, '## {{if eq .Kind "LIVE_STREAM"}}🔴 {{mdsafe .MemberName}} 방송 시작 ({{.Count}}){{else if eq .Kind "NEW_VIDEO"}}🔔 {{mdsafe .MemberName}} 새 영상 ({{.Count}}){{else}}🔔 {{mdsafe .MemberName}} 알림 ({{.Count}}){{end}}
-{{- $n := 0}}
-{{- range $item := .Items}}
-{{- if and $item.Title $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
-{{- else if $item.Title}}
-{{- $n = add $n 1}}
-{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
-{{- else if $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. {{$item.URL}}
-{{- end}}
-{{- end}}', '2026-08-18 01:44:31.238631+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (22, 'OUTBOX_SHORTS_GROUP', NULL, '## 🔔 {{mdsafe .MemberName}} 새 쇼츠 ({{.Count}})
-{{- $n := 0}}
-{{- range $item := .Items}}
-{{- if and $item.Title $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
-{{- else if $item.Title}}
-{{- $n = add $n 1}}
-{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
-{{- else if $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. {{$item.URL}}
-{{- end}}
-{{- end}}', '2026-08-18 01:44:31.238631+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (23, 'OUTBOX_COMMUNITY_GROUP', NULL, '## 🔔 {{mdsafe .MemberName}} 커뮤니티 글 ({{.Count}})
-{{- $n := 0}}
-{{- range $item := .Items}}
-{{- if $item.ContentText}}
-{{- $n = add $n 1}}
-{{$n}}. {{mdsafe (truncate 40 $item.ContentText)}}
-{{- if $item.URL}}
-   [커뮤니티 글 보기]({{$item.URL}})
-{{- end}}
-{{- else if $item.URL}}
-{{- $n = add $n 1}}
-{{$n}}. [커뮤니티 글 보기]({{$item.URL}})
-{{- end}}
-{{- end}}', '2026-08-18 01:44:31.238631+00', '2026-08-18 01:44:36.67005+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (11, 'CMD_LIVE_STREAMS', NULL, '{{- if eq .Count 0 -}}
-🔴 방송 중인 스트림이 없습니다.
-{{- else -}}
-## 🔴 라이브 ({{.Count}})
-{{range .Streams}}
-- **{{mdsafe .ChannelName}}**{{if gt .ViewerCount 0}} ({{formatNumberKR .ViewerCount}}명){{end}}
-{{- if and .Title .URL}}
-  [{{mdsafe .Title}}]({{.URL}})
-{{- else if .Title}}
-  {{mdsafe .Title}}
-{{- else if .URL}}
-  {{.URL}}
-{{- end}}
-{{- end -}}
-{{- end -}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (12, 'CMD_UPCOMING_STREAMS', NULL, '{{- if eq .Count 0 -}}
-📅 {{.Hours}}시간 이내 예정된 방송이 없습니다.
-{{- else -}}
-## 📅 예정 방송 ({{.Hours}}시간 이내, {{.Count}})
-{{range .Streams}}
-- **{{mdsafe .ChannelName}}**
-  ⏰ {{.TimeInfo}}
-{{- if and .Title .URL}}
-  [{{mdsafe .Title}}]({{.URL}})
-{{- else if .Title}}
-  {{mdsafe .Title}}
-{{- else if .URL}}
-  {{.URL}}
-{{- end}}
-{{- end -}}
-{{- end -}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.577033+00');
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (8, 'OUTBOX_MILESTONE', NULL, '🎉 **{{mdsafe .MemberName}}** {{mdsafe .Milestone}} 달성', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (17, 'CMD_ALARM_REMOVED', NULL, '{{- if .Removed -}}
 ✅ **{{mdsafe .MemberName}}** 알람을 해제했습니다.
 {{- else -}}
 ℹ️ **{{mdsafe .MemberName}}** 알람이 설정되어 있지 않습니다.
-{{- end -}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (41, 'CMD_STATS_COUNT', NULL, '📊 **{{mdsafe .MemberName}}** 구독자 {{.Subscribers}}명', '2026-08-18 01:44:34.527149+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (42, 'CMD_STATS_GAINERS', NULL, '## 📊 구독자 증가 순위{{if .Period}} ({{.Period}}){{end}}
-{{range .Gainers}}
-{{.Rank}}. **{{mdsafe .MemberName}}** +{{.Delta}}명{{if .Current}} (현재 {{.Current}}명){{end}}
-{{- end}}', '2026-08-18 01:44:34.527577+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (43, 'CMD_CALENDAR', NULL, '{{- if eq .Count 0 -}}
-📅 {{.Year}}년 {{.Month}}월 등록된 기념일이 없습니다.
-{{- else -}}
-## 📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}})
-{{- range .Days}}
-
-**{{printf "%02d/%02d" .Month .Day}}**
-{{- range .Entries}}
-{{- if .IsBirthday}}
-- 🎂 {{mdsafe .Name}} 생일
-{{- else}}
-- 🎉 {{mdsafe .Name}} 데뷔 {{.Years}}주년
-{{- end}}
-{{- end}}
-{{- end}}
-{{- end -}}', '2026-08-18 01:44:34.528047+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (44, 'CMD_MEMBER_NOT_LIVE', NULL, '{{mdsafe .MemberName}}은(는) 현재 방송 중이 아닙니다.', '2026-08-18 01:44:34.528465+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (45, 'CMD_MEMBER_NO_UPCOMING', NULL, '{{mdsafe .MemberName}}은(는) {{.Hours}}시간 이내 예정된 방송이 없습니다.', '2026-08-18 01:44:34.528867+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (46, 'CMD_MEMBER_NOT_FOUND', NULL, '❌ ''{{mdsafe .MemberName}}'' 멤버를 찾을 수 없습니다.', '2026-08-18 01:44:34.529275+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (50, 'CMD_AMBIGUOUS_MEMBER', NULL, '동일한 이름의 멤버가 여러 명 있습니다.
-{{range .Candidates}}{{.Index}}. {{mdsafe .Name}}
-{{end}}
-예) `{{.Prefix}}{{.CommandExample}}` {{mdsafe .FirstName}}', '2026-08-18 01:44:34.708323+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (24, 'CMD_MAJOR_EVENT_WEEKLY_SUMMARY', NULL, '## 📅 이번 주 행사 ({{.Count}})
-{{- if .LLMSummary}}
-
-{{.LLMSummary}}
-{{- end}}
-{{range $index, $event := .Events}}
-{{- if and $event.Title $event.Link}}
-{{add $index 1}}. [{{mdsafe $event.Title}}]({{$event.Link}})
-{{- else if $event.Title}}
-{{add $index 1}}. {{mdsafe $event.Title}}
-{{- else}}
-{{add $index 1}}. {{$event.Link}}
-{{- end}}
-{{- if $event.DateStr}}
-   ⏰ {{$event.DateStr}}
-{{- end}}
-{{- if $event.Members}}
-   {{mdsafe $event.Members}}
-{{- end}}
-{{- end}}', '2026-08-18 01:44:31.891572+00', '2026-08-18 01:44:36.577033+00');
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (41, 'CMD_STATS_COUNT', NULL, '📊 **{{mdsafe .MemberName}}** 구독자 {{.Subscribers}}명', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (40, 'CMD_PROFILE', NULL, '{{- if eq (len .Names) 0 -}}
 ## 👤 멤버 정보
 {{- else -}}
@@ -2124,11 +2016,11 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 {{- if .OfficialURL}}
 
 [공식 프로필]({{.OfficialURL}})
-{{- end -}}', '2026-08-18 01:44:34.525177+00', '2026-08-18 01:44:36.67005+00');
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (48, 'CELEBRATION_BIRTHDAY', NULL, '🎂 **{{mdsafe .MemberName}}**{{if gt .Ordinal 0}} {{.Ordinal}}번째{{end}} 생일 축하합니다!{{if .ChannelID}}
-[YouTube 채널 보기](https://youtube.com/channel/{{.ChannelID}}){{end}}', '2026-08-18 01:44:34.574156+00', '2026-08-18 01:44:36.67005+00');
+[YouTube 채널 보기](https://youtube.com/channel/{{.ChannelID}}){{end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (49, 'CELEBRATION_ANNIVERSARY', NULL, '🎉 **{{mdsafe .MemberName}}** 데뷔 {{.Years}}주년 축하합니다!{{if .ChannelID}}
-[YouTube 채널 보기](https://youtube.com/channel/{{.ChannelID}}){{end}}', '2026-08-18 01:44:34.574571+00', '2026-08-18 01:44:36.67005+00');
+[YouTube 채널 보기](https://youtube.com/channel/{{.ChannelID}}){{end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (15, 'CMD_CHANNEL_SCHEDULE', NULL, '{{- if not .ChannelName -}}
 ❌ 채널 정보를 찾을 수 없습니다.
 {{- else if eq .Count 0 -}}
@@ -2150,28 +2042,7 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
   {{.URL}}
 {{- end}}
 {{- end -}}
-{{- end -}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (51, 'ALARM_DISPATCH_NOTIFICATION', NULL, '## {{if .IsStarting}}🔴 **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 시작{{else if .IsScheduled}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 예정{{else}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}
-{{- $url := .URL}}
-{{- $parts := split $url " | "}}
-{{- $shortLinkURL := hasPrefix $url "https://short.holoshi.com/l/"}}
-{{- $youtubeURL := or $shortLinkURL (hasPrefix $url "https://www.youtube.com/watch?") (hasPrefix $url "https://youtube.com/watch?") (hasPrefix $url "https://m.youtube.com/watch?") (hasPrefix $url "https://www.youtube.com/live/") (hasPrefix $url "https://youtube.com/live/") (hasPrefix $url "https://youtu.be/")}}
-{{- $trustedURL := or $youtubeURL (hasPrefix $url "https://www.twitch.tv/") (hasPrefix $url "https://twitch.tv/") (hasPrefix $url "https://chzzk.naver.com/live/")}}
-{{- $delimiterSafe := and (not (contains $url "\t")) (not (contains $url "\n")) (not (contains $url "\r")) (not (contains $url "(")) (not (contains $url ")")) (not (contains $url "[")) (not (contains $url "]")) (not (contains $url "<")) (not (contains $url ">")) (not (contains $url "\\"))}}
-{{- $safeURL := and $url $trustedURL $delimiterSafe (not (contains $url " ")) (not (contains $url "|"))}}
-{{- $composite := and (eq (len $parts) 2) $youtubeURL (hasPrefix (index $parts 1) "https://chzzk.naver.com/live/") $delimiterSafe (not (contains (index $parts 0) " ")) (not (contains (index $parts 1) " "))}}
-{{- $linkable := and .Title $safeURL}}
-{{- if $linkable}}
-[{{mdsafe .Title}}]({{.URL}})
-{{- else if .Title}}
-{{printf "\u200b"}}{{mdsafe .Title}}
-{{- end}}
-{{- if .ScheduleMessage}}
-{{printf "\u200b"}}{{mdsafe .ScheduleMessage}}
-{{- end}}
-{{- if and .URL (not $linkable)}}
-{{if or $safeURL $composite}}{{.URL}}{{else}}{{printf "\u200b"}}{{mdsafe (replace (replace .URL "\n" " ") "\r" " ")}}{{end}}
-{{- end}}', '2026-08-18 01:44:34.754051+00', '2026-08-18 01:44:37.749244+00');
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (14, 'CMD_MEMBER_DIRECTORY', NULL, '{{- if eq (len .Groups) 0 -}}
 👤 등록된 멤버가 없습니다.
 {{- else -}}
@@ -2189,87 +2060,13 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 {{- end}}
 {{- end}}
 {{- end}}
-{{- end -}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (9, 'CMD_ALARM_LIST', NULL, '{{- if eq .Count 0 -}}
-🔔 설정된 알람이 없습니다.
-예) `{{.Prefix}}알람 추가 페코라`
-{{- else -}}
-## 🔔 알람 ({{.Count}})
-{{range $index, $alarm := .Alarms}}
-{{add $index 1}}. **{{mdsafe $alarm.MemberName}}**{{if $alarm.TypesLabel}} ({{mdsafe $alarm.TypesLabel}}){{end}}
-{{- if $alarm.NextStream}}
-{{- if eq $alarm.NextStream.Status "live"}}
-   🔴 방송 중
-{{- if and $alarm.NextStream.Title $alarm.NextStream.URL}}
-   [{{mdsafe $alarm.NextStream.Title}}]({{$alarm.NextStream.URL}})
-{{- else if $alarm.NextStream.Title}}
-   {{mdsafe $alarm.NextStream.Title}}
-{{- else if $alarm.NextStream.URL}}
-   {{$alarm.NextStream.URL}}
-{{- end}}
-{{- else if eq $alarm.NextStream.Status "upcoming"}}
-   ⏰ {{if $alarm.NextStream.StartingSoon}}곧 시작{{else}}{{$alarm.NextStream.ScheduledKST}}{{if $alarm.NextStream.TimeDetail}} ({{$alarm.NextStream.TimeDetail}}){{end}}{{end}}
-{{- if and $alarm.NextStream.Title $alarm.NextStream.URL}}
-   [{{mdsafe $alarm.NextStream.Title}}]({{$alarm.NextStream.URL}})
-{{- else if $alarm.NextStream.Title}}
-   {{mdsafe $alarm.NextStream.Title}}
-{{- else if $alarm.NextStream.URL}}
-   {{$alarm.NextStream.URL}}
-{{- end}}
-{{- end}}
-{{- end}}
-{{- end}}
-{{- end -}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (10, 'CMD_ALARM_NOTIFICATION', NULL, '⏰ **{{mdsafe .ChannelName}}** 방송 예정
-{{- if .ScheduledTimeKST}}
-- {{.ScheduledTimeKST}} 시작
-{{- else}}
-- 곧 시작
-{{- end}}
-{{- if .ScheduleMessage}}
-- {{mdsafe .ScheduleMessage}}
-{{- end}}
-{{- if .Title}}
-- {{mdsafe .Title}}
-{{- end}}
-{{- if .URL}}
-
-{{.URL}}
-{{- end}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (32, 'CMD_ALARM_LIVE_STARTED', NULL, '🔴 **{{mdsafe .ChannelName}}** 방송 시작
-{{- if .ScheduledTimeKST}}
-- {{.ScheduledTimeKST}} 시작
-{{- end}}
-{{- if .Title}}
-- {{mdsafe .Title}}
-{{- end}}
-{{- if .URL}}
-
-{{.URL}}
-{{- end}}', '2026-08-18 01:44:32.042251+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (47, 'CMD_ALARM_NOTIFICATION_GROUP', NULL, '## 🔔 방송 알림 ({{.Count}})
-{{if le .MinutesUntil 0}}방송이 시작되었습니다.{{else if eq (len .ScheduledTimes) 0}}곧 시작합니다.{{else if eq (len .ScheduledTimes) 1}}⏰ {{index .ScheduledTimes 0}}{{else}}⏰ {{join .ScheduledTimes ", "}}{{end}}
-{{- range .Entries}}
-{{.Index}}. **{{mdsafe (default "알 수 없는 채널" .ChannelName)}}**{{if .ScheduledKST}} ({{.ScheduledKST}}){{end}}
-{{- if and .Title .URL}}
-   [{{mdsafe .Title}}]({{.URL}})
-{{- else if .Title}}
-   {{mdsafe .Title}}
-{{- else if .URL}}
-   {{.URL}}
-{{- end}}
-{{- end}}', '2026-08-18 01:44:34.572157+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (19, 'CMD_MILESTONE_ACHIEVED', NULL, '🎉 **{{mdsafe .MemberName}}** 구독자 {{.Milestone}}명 달성!', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (18, 'CMD_ALARM_CLEARED', NULL, '{{- if eq .Count 0 -}}
-🔔 설정된 알람이 없습니다.
-{{- else -}}
-✅ 알람 **{{.Count}}개**를 모두 해제했습니다.
-{{- end -}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.67005+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (26, 'CMD_MAJOR_EVENT_UNSUBSCRIBED', NULL, '✅ 행사 알림을 껐습니다.', '2026-08-18 01:44:31.891572+00', '2026-08-18 01:44:35.032981+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (27, 'CMD_MAJOR_EVENT_ALREADY_SUB', NULL, 'ℹ️ 행사 알림이 이미 켜져 있습니다.', '2026-08-18 01:44:31.891572+00', '2026-08-18 01:44:35.032981+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (36, 'CMD_MEMBER_NEWS_UNSUBSCRIBED', NULL, '✅ 뉴스 알림을 껐습니다.', '2026-08-18 01:44:32.135892+00', '2026-08-18 01:44:35.032981+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (37, 'CMD_MEMBER_NEWS_ALREADY_SUB', NULL, 'ℹ️ 뉴스 알림이 이미 켜져 있습니다.', '2026-08-18 01:44:32.135892+00', '2026-08-18 01:44:35.032981+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (38, 'CMD_MEMBER_NEWS_NOT_SUB', NULL, 'ℹ️ 뉴스 알림이 이미 꺼져 있습니다.', '2026-08-18 01:44:32.135892+00', '2026-08-18 01:44:35.032981+00');
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (19, 'CMD_MILESTONE_ACHIEVED', NULL, '🎉 **{{mdsafe .MemberName}}** 구독자 {{.Milestone}}명 달성!', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (26, 'CMD_MAJOR_EVENT_UNSUBSCRIBED', NULL, '✅ 행사 알림을 껐습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (27, 'CMD_MAJOR_EVENT_ALREADY_SUB', NULL, 'ℹ️ 행사 알림이 이미 켜져 있습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (36, 'CMD_MEMBER_NEWS_UNSUBSCRIBED', NULL, '✅ 뉴스 알림을 껐습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (37, 'CMD_MEMBER_NEWS_ALREADY_SUB', NULL, 'ℹ️ 뉴스 알림이 이미 켜져 있습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (38, 'CMD_MEMBER_NEWS_NOT_SUB', NULL, 'ℹ️ 뉴스 알림이 이미 꺼져 있습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (13, 'CMD_HELP', NULL, '홀로라이브 봇 명령어
 
 [방송]
@@ -2309,7 +2106,7 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 
 [기타]
   {{.Prefix}}구독자 [멤버명] - 구독자 수
-  {{.Prefix}}도움말 - 도움말', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.083258+00');
+  {{.Prefix}}도움말 - 도움말', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (16, 'CMD_ALARM_ADDED', NULL, '{{- if .Added -}}
 ✅ **{{mdsafe .MemberName}}** 알람을 설정했습니다. 방송 시작 5분 전에 알립니다.
 {{- if .NextStream}}
@@ -2335,23 +2132,7 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 {{- end}}
 {{- else -}}
 ℹ️ **{{mdsafe .MemberName}}** 알람이 이미 설정되어 있습니다.
-{{- end -}}', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.577033+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (20, 'CMD_MILESTONE_APPROACHING', NULL, '📊 **{{mdsafe .MemberName}}** 구독자 {{.Milestone}}명까지 {{.Remaining}}명 남았습니다.', '2026-08-18 01:44:31.125195+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (103, 'CELEBRATION_BIRTHDAY_STREAM', NULL, '🎂 **{{mdsafe .MemberName}}** 생일 방송 일정이 잡혔습니다!
-{{- if and .StreamTitle .StreamURL}}
-- [{{mdsafe .StreamTitle}}]({{.StreamURL}})
-{{- else if .StreamTitle}}
-- {{mdsafe .StreamTitle}}
-{{- else if .StreamURL}}
-- {{.StreamURL}}
-{{- end}}
-{{- if .ScheduledStartKST}}
-- ⏰ {{.ScheduledStartKST}}
-{{- end}}', '2026-08-18 01:44:36.175881+00', '2026-08-18 01:44:36.62461+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (35, 'CMD_MEMBER_NEWS_SUBSCRIBED', NULL, '✅ 뉴스 알림을 켰습니다.
-- 발송: **매주 월요일 09:00 KST**', '2026-08-18 01:44:32.135892+00', '2026-08-18 01:44:36.67005+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (25, 'CMD_MAJOR_EVENT_SUBSCRIBED', NULL, '✅ 행사 알림을 켰습니다.
-- 발송: **매주 행사 요약**', '2026-08-18 01:44:31.891572+00', '2026-08-18 01:44:36.67005+00');
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (31, 'CMD_MAJOR_EVENT_MONTHLY_SUMMARY', NULL, '## 📅 이번 달 행사 ({{.Count}})
 {{- if .LLMSummary}}
 
@@ -2371,17 +2152,17 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 {{- if $event.Members}}
    {{mdsafe $event.Members}}
 {{- end}}
-{{- end}}', '2026-08-18 01:44:31.993637+00', '2026-08-18 01:44:36.577033+00');
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (28, 'CMD_MAJOR_EVENT_NOT_SUB', NULL, 'ℹ️ 행사 알림이 꺼져 있습니다.
-- 설정: `{{.Prefix}}행사 켜기`', '2026-08-18 01:44:31.891572+00', '2026-08-18 01:44:36.577033+00');
+- 설정: `{{.Prefix}}행사 켜기`', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (29, 'CMD_MAJOR_EVENT_STATUS', NULL, '{{if .IsSubscribed}}🔔{{else}}🔕{{end}} 행사 알림: **{{if .IsSubscribed}}켜짐{{else}}꺼짐{{end}}**
 {{- if .IsSubscribed}}
 - 해제: `{{.Prefix}}행사 끄기`
 {{- else}}
 - 설정: `{{.Prefix}}행사 켜기`
-{{- end}}', '2026-08-18 01:44:31.891572+00', '2026-08-18 01:44:36.577033+00');
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (30, 'CMD_MAJOR_EVENT_USAGE', NULL, '🔔 행사 알림 명령어
-- `{{.Prefix}}행사 켜기 / 끄기 / 상태`', '2026-08-18 01:44:31.891572+00', '2026-08-18 01:44:36.577033+00');
+- `{{.Prefix}}행사 켜기 / 끄기 / 상태`', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (33, 'CMD_MEMBER_NEWS_DIGEST', NULL, '{{- if .Headline -}}
 ## {{mdsafe .Headline}}
 {{- else -}}
@@ -2407,16 +2188,16 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 
 {{mdsafe .MoreSummary}}
 {{- end }}
-{{- end }}', '2026-08-18 01:44:32.135892+00', '2026-08-18 01:44:36.577033+00');
+{{- end }}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (34, 'CMD_MEMBER_NEWS_NO_MEMBERS', NULL, '📰 뉴스 대상 멤버가 없습니다.
-예) `{{.Prefix}}알람 추가 페코라`', '2026-08-18 01:44:32.135892+00', '2026-08-18 01:44:36.577033+00');
+예) `{{.Prefix}}알람 추가 페코라`', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (39, 'CMD_MEMBER_NEWS_STATUS', NULL, '{{if .IsSubscribed}}🔔{{else}}🔕{{end}} 뉴스 알림: **{{if .IsSubscribed}}켜짐{{else}}꺼짐{{end}}**
 {{- if .IsSubscribed}}
 - 발송: 매주 월요일 09:00 KST
 - 해제: `{{.Prefix}}뉴스알림 끄기`
 {{- else}}
 - 설정: `{{.Prefix}}뉴스알림 켜기`
-{{- end}}', '2026-08-18 01:44:32.135892+00', '2026-08-18 01:44:36.577033+00');
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (52, 'ALARM_DISPATCH_NOTIFICATION_GROUP', NULL, '## {{if .IsStarting}}🔴 {{if .AllPremiere}}선행공개{{else}}방송{{end}} 시작{{else}}⏰ {{if .AllPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}
 {{- range .Entries}}
 
@@ -2441,7 +2222,226 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 {{- if and .URL (not $linkable)}}
 {{if or $safeURL $composite}}{{.URL}}{{else}}{{printf "\u200b"}}{{mdsafe (replace (replace .URL "\n" " ") "\r" " ")}}{{end}}
 {{- end}}
-{{- end}}', '2026-08-18 01:44:34.754051+00', '2026-08-18 01:44:37.749244+00');
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (21, 'OUTBOX_VIDEO_GROUP', NULL, '## {{if eq .Kind "LIVE_STREAM"}}🔴 {{mdsafe .MemberName}} 방송 시작 ({{.Count}}){{else if eq .Kind "NEW_VIDEO"}}🔔 {{mdsafe .MemberName}} 새 영상 ({{.Count}}){{else}}🔔 {{mdsafe .MemberName}} 알림 ({{.Count}}){{end}}
+{{- $n := 0}}
+{{- range $item := .Items}}
+{{- if and $item.Title $item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
+{{- else if $item.Title}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
+{{- else if $item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. {{$item.URL}}
+{{- end}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (22, 'OUTBOX_SHORTS_GROUP', NULL, '## 🔔 {{mdsafe .MemberName}} 새 쇼츠 ({{.Count}})
+{{- $n := 0}}
+{{- range $item := .Items}}
+{{- if and $item.Title $item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})
+{{- else if $item.Title}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.Title)}}
+{{- else if $item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. {{$item.URL}}
+{{- end}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (23, 'OUTBOX_COMMUNITY_GROUP', NULL, '## 🔔 {{mdsafe .MemberName}} 커뮤니티 글 ({{.Count}})
+{{- $n := 0}}
+{{- range $item := .Items}}
+{{- if $item.ContentText}}
+{{- $n = add $n 1}}
+{{$n}}. {{mdsafe (truncate 40 $item.ContentText)}}
+{{- if $item.URL}}
+   [커뮤니티 글 보기]({{$item.URL}})
+{{- end}}
+{{- else if $item.URL}}
+{{- $n = add $n 1}}
+{{$n}}. [커뮤니티 글 보기]({{$item.URL}})
+{{- end}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (11, 'CMD_LIVE_STREAMS', NULL, '{{- if eq .Count 0 -}}
+🔴 방송 중인 스트림이 없습니다.
+{{- else -}}
+## 🔴 라이브 ({{.Count}})
+{{range .Streams}}
+- **{{mdsafe .ChannelName}}**{{if gt .ViewerCount 0}} ({{formatNumberKR .ViewerCount}}명){{end}}
+{{- if and .Title .URL}}
+  [{{mdsafe .Title}}]({{.URL}})
+{{- else if .Title}}
+  {{mdsafe .Title}}
+{{- else if .URL}}
+  {{.URL}}
+{{- end}}
+{{- end -}}
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (12, 'CMD_UPCOMING_STREAMS', NULL, '{{- if eq .Count 0 -}}
+📅 {{.Hours}}시간 이내 예정된 방송이 없습니다.
+{{- else -}}
+## 📅 예정 방송 ({{.Hours}}시간 이내, {{.Count}})
+{{range .Streams}}
+- **{{mdsafe .ChannelName}}**
+  ⏰ {{.TimeInfo}}
+{{- if and .Title .URL}}
+  [{{mdsafe .Title}}]({{.URL}})
+{{- else if .Title}}
+  {{mdsafe .Title}}
+{{- else if .URL}}
+  {{.URL}}
+{{- end}}
+{{- end -}}
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (42, 'CMD_STATS_GAINERS', NULL, '## 📊 구독자 증가 순위{{if .Period}} ({{.Period}}){{end}}
+{{range .Gainers}}
+{{.Rank}}. **{{mdsafe .MemberName}}** +{{.Delta}}명{{if .Current}} (현재 {{.Current}}명){{end}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (43, 'CMD_CALENDAR', NULL, '{{- if eq .Count 0 -}}
+📅 {{.Year}}년 {{.Month}}월 등록된 기념일이 없습니다.
+{{- else -}}
+## 📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}})
+{{- range .Days}}
+
+**{{printf "%02d/%02d" .Month .Day}}**
+{{- range .Entries}}
+{{- if .IsBirthday}}
+- 🎂 {{mdsafe .Name}} 생일
+{{- else}}
+- 🎉 {{mdsafe .Name}} 데뷔 {{.Years}}주년
+{{- end}}
+{{- end}}
+{{- end}}
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (44, 'CMD_MEMBER_NOT_LIVE', NULL, '{{mdsafe .MemberName}}은(는) 현재 방송 중이 아닙니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (45, 'CMD_MEMBER_NO_UPCOMING', NULL, '{{mdsafe .MemberName}}은(는) {{.Hours}}시간 이내 예정된 방송이 없습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (46, 'CMD_MEMBER_NOT_FOUND', NULL, '❌ ''{{mdsafe .MemberName}}'' 멤버를 찾을 수 없습니다.', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (50, 'CMD_AMBIGUOUS_MEMBER', NULL, '동일한 이름의 멤버가 여러 명 있습니다.
+{{range .Candidates}}{{.Index}}. {{mdsafe .Name}}
+{{end}}
+예) `{{.Prefix}}{{.CommandExample}}` {{mdsafe .FirstName}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (24, 'CMD_MAJOR_EVENT_WEEKLY_SUMMARY', NULL, '## 📅 이번 주 행사 ({{.Count}})
+{{- if .LLMSummary}}
+
+{{.LLMSummary}}
+{{- end}}
+{{range $index, $event := .Events}}
+{{- if and $event.Title $event.Link}}
+{{add $index 1}}. [{{mdsafe $event.Title}}]({{$event.Link}})
+{{- else if $event.Title}}
+{{add $index 1}}. {{mdsafe $event.Title}}
+{{- else}}
+{{add $index 1}}. {{$event.Link}}
+{{- end}}
+{{- if $event.DateStr}}
+   ⏰ {{$event.DateStr}}
+{{- end}}
+{{- if $event.Members}}
+   {{mdsafe $event.Members}}
+{{- end}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (51, 'ALARM_DISPATCH_NOTIFICATION', NULL, '## {{if .IsStarting}}🔴 **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 시작{{else if .IsScheduled}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 예정{{else}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}
+{{- $url := .URL}}
+{{- $parts := split $url " | "}}
+{{- $shortLinkURL := hasPrefix $url "https://short.holoshi.com/l/"}}
+{{- $youtubeURL := or $shortLinkURL (hasPrefix $url "https://www.youtube.com/watch?") (hasPrefix $url "https://youtube.com/watch?") (hasPrefix $url "https://m.youtube.com/watch?") (hasPrefix $url "https://www.youtube.com/live/") (hasPrefix $url "https://youtube.com/live/") (hasPrefix $url "https://youtu.be/")}}
+{{- $trustedURL := or $youtubeURL (hasPrefix $url "https://www.twitch.tv/") (hasPrefix $url "https://twitch.tv/") (hasPrefix $url "https://chzzk.naver.com/live/")}}
+{{- $delimiterSafe := and (not (contains $url "\t")) (not (contains $url "\n")) (not (contains $url "\r")) (not (contains $url "(")) (not (contains $url ")")) (not (contains $url "[")) (not (contains $url "]")) (not (contains $url "<")) (not (contains $url ">")) (not (contains $url "\\"))}}
+{{- $safeURL := and $url $trustedURL $delimiterSafe (not (contains $url " ")) (not (contains $url "|"))}}
+{{- $composite := and (eq (len $parts) 2) $youtubeURL (hasPrefix (index $parts 1) "https://chzzk.naver.com/live/") $delimiterSafe (not (contains (index $parts 0) " ")) (not (contains (index $parts 1) " "))}}
+{{- $linkable := and .Title $safeURL}}
+{{- if $linkable}}
+[{{mdsafe .Title}}]({{.URL}})
+{{- else if .Title}}
+{{printf "\u200b"}}{{mdsafe .Title}}
+{{- end}}
+{{- if .ScheduleMessage}}
+{{printf "\u200b"}}{{mdsafe .ScheduleMessage}}
+{{- end}}
+{{- if and .URL (not $linkable)}}
+{{if or $safeURL $composite}}{{.URL}}{{else}}{{printf "\u200b"}}{{mdsafe (replace (replace .URL "\n" " ") "\r" " ")}}{{end}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (9, 'CMD_ALARM_LIST', NULL, '{{- if eq .Count 0 -}}
+🔔 설정된 알람이 없습니다.
+예) `{{.Prefix}}알람 추가 페코라`
+{{- else -}}
+## 🔔 알람 ({{.Count}})
+{{range $index, $alarm := .Alarms}}
+{{add $index 1}}. **{{mdsafe $alarm.MemberName}}**{{if $alarm.TypesLabel}} ({{mdsafe $alarm.TypesLabel}}){{end}}
+{{- if $alarm.NextStream}}
+{{- if eq $alarm.NextStream.Status "live"}}
+   🔴 방송 중
+{{- if and $alarm.NextStream.Title $alarm.NextStream.URL}}
+   [{{mdsafe $alarm.NextStream.Title}}]({{$alarm.NextStream.URL}})
+{{- else if $alarm.NextStream.Title}}
+   {{mdsafe $alarm.NextStream.Title}}
+{{- else if $alarm.NextStream.URL}}
+   {{$alarm.NextStream.URL}}
+{{- end}}
+{{- else if eq $alarm.NextStream.Status "upcoming"}}
+   ⏰ {{if $alarm.NextStream.StartingSoon}}곧 시작{{else}}{{$alarm.NextStream.ScheduledKST}}{{if $alarm.NextStream.TimeDetail}} ({{$alarm.NextStream.TimeDetail}}){{end}}{{end}}
+{{- if and $alarm.NextStream.Title $alarm.NextStream.URL}}
+   [{{mdsafe $alarm.NextStream.Title}}]({{$alarm.NextStream.URL}})
+{{- else if $alarm.NextStream.Title}}
+   {{mdsafe $alarm.NextStream.Title}}
+{{- else if $alarm.NextStream.URL}}
+   {{$alarm.NextStream.URL}}
+{{- end}}
+{{- end}}
+{{- end}}
+{{- end}}
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (10, 'CMD_ALARM_NOTIFICATION', NULL, '⏰ **{{mdsafe .ChannelName}}** 방송 예정
+{{- if .ScheduledTimeKST}}
+- {{.ScheduledTimeKST}} 시작
+{{- else}}
+- 곧 시작
+{{- end}}
+{{- if .ScheduleMessage}}
+- {{mdsafe .ScheduleMessage}}
+{{- end}}
+{{- if .Title}}
+- {{mdsafe .Title}}
+{{- end}}
+{{- if .URL}}
+
+{{.URL}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (32, 'CMD_ALARM_LIVE_STARTED', NULL, '🔴 **{{mdsafe .ChannelName}}** 방송 시작
+{{- if .ScheduledTimeKST}}
+- {{.ScheduledTimeKST}} 시작
+{{- end}}
+{{- if .Title}}
+- {{mdsafe .Title}}
+{{- end}}
+{{- if .URL}}
+
+{{.URL}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (47, 'CMD_ALARM_NOTIFICATION_GROUP', NULL, '## 🔔 방송 알림 ({{.Count}})
+{{if le .MinutesUntil 0}}방송이 시작되었습니다.{{else if eq (len .ScheduledTimes) 0}}곧 시작합니다.{{else if eq (len .ScheduledTimes) 1}}⏰ {{index .ScheduledTimes 0}}{{else}}⏰ {{join .ScheduledTimes ", "}}{{end}}
+{{- range .Entries}}
+{{.Index}}. **{{mdsafe (default "알 수 없는 채널" .ChannelName)}}**{{if .ScheduledKST}} ({{.ScheduledKST}}){{end}}
+{{- if and .Title .URL}}
+   [{{mdsafe .Title}}]({{.URL}})
+{{- else if .Title}}
+   {{mdsafe .Title}}
+{{- else if .URL}}
+   {{.URL}}
+{{- end}}
+{{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (18, 'CMD_ALARM_CLEARED', NULL, '{{- if eq .Count 0 -}}
+🔔 설정된 알람이 없습니다.
+{{- else -}}
+✅ 알람 **{{.Count}}개**를 모두 해제했습니다.
+{{- end -}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (35, 'CMD_MEMBER_NEWS_SUBSCRIBED', NULL, '✅ 뉴스 알림을 켰습니다.
+- 발송: **매주 월요일 09:00 KST**', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (25, 'CMD_MAJOR_EVENT_SUBSCRIBED', NULL, '✅ 행사 알림을 켰습니다.
+- 발송: **매주 행사 요약**', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 
 
 --

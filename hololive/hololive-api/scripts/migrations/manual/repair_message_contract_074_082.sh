@@ -30,8 +30,8 @@ PGPASSWORD="${PGPASSWORD:-}"
 PGDATABASE="${PGDATABASE:-hololive}"
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
-MIGRATIONS_DIR="${MIGRATIONS_DIR:-$(CDPATH='' cd -- "${SCRIPT_DIR}/.." && pwd)}"
 AUDIT_SQL="${SCRIPT_DIR}/audit_message_contract_074_082.sql"
+REPAIR_SOURCES_DIR="${MIGRATION_REPAIR_SOURCES_DIR:-${SCRIPT_DIR}/epoch1_message_contract_repair_sources}"
 
 APPLY="${MIGRATION_REPAIR_APPLY:-0}"
 ACK_BACKUP="${MIGRATION_REPAIR_ACK_BACKUP:-0}"
@@ -88,7 +88,7 @@ for m in ${ORDER}; do
 
   case "${verdict}" in
     DAMAGED)
-      file="${MIGRATIONS_DIR}/${m}"
+      file="${REPAIR_SOURCES_DIR}/${m}"
       if [ ! -f "${file}" ]; then
         echo "ERROR: canonical migration file missing: ${file}" >&2
         exit 1
