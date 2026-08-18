@@ -160,14 +160,13 @@ func applyManifestMigration(ctx context.Context, pool *pgxpool.Pool, dir, filena
 	return nil
 }
 
-func dbtestMigrationChecksum(ctx context.Context, pool *pgxpool.Pool, filename string) (string, bool, error) {
-	var checksum string
-	err := pool.QueryRow(ctx, `SELECT checksum_sha256::text FROM `+dbtestLedgerSchema+`.schema_migrations WHERE filename = $1`, filename).Scan(&checksum)
-	if errors.Is(err, pgx.ErrNoRows) {
+func dbtestMigrationChecksum(ctx context.Context, pool *pgxpool.Pool, filename string) (checksum string, applied bool, resultErr error) {
+	queryErr := pool.QueryRow(ctx, `SELECT checksum_sha256::text FROM `+dbtestLedgerSchema+`.schema_migrations WHERE filename = $1`, filename).Scan(&checksum)
+	if errors.Is(queryErr, pgx.ErrNoRows) {
 		return "", false, nil
 	}
-	if err != nil {
-		return "", false, fmt.Errorf("apply migrations: query dbtest ledger %s: %w", filename, err)
+	if queryErr != nil {
+		return "", false, fmt.Errorf("apply migrations: query dbtest ledger %s: %w", filename, queryErr)
 	}
 	return checksum, true, nil
 }

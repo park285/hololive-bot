@@ -185,84 +185,110 @@ func serializeEpoch2Schema(ctx context.Context, pool *pgxpool.Pool) (string, err
 }
 
 func serializeEpoch2Data(ctx context.Context, pool *pgxpool.Pool) (string, error) {
-	tables, err := queryTables(ctx, pool)
+	tables, volatileColumns, err := snapshotEpoch2Tables(ctx, pool)
+	if err != nil {
+		return "", err
+	}
+	sequences, err := snapshotEpoch2Sequences(ctx, pool)
 	if err != nil {
 		return "", err
 	}
 	snapshot := epoch2DataSnapshot{
-		Tables:                   make(map[string][]json.RawMessage, len(tables)),
-		Sequences:                make(map[string]epoch2Sequence),
-		VolatileTimestampColumns: make(map[string][]string),
+		Tables:                   tables,
+		Sequences:                sequences,
+		VolatileTimestampColumns: volatileColumns,
 	}
-	volatileColumns, err := queryEpoch2VolatileTimestampColumns(ctx, pool)
+	raw, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal epoch-2 data: %w", err)
 	}
-	snapshot.VolatileTimestampColumns = volatileColumns
-	for _, table := range tables {
-		rows, err := pool.Query(ctx, "SELECT to_jsonb(t)::text FROM "+pgx.Identifier{"public", table}.Sanitize()+" AS t")
-		if err != nil {
-			return "", fmt.Errorf("query data table %s: %w", table, err)
-		}
-		values := make([]json.RawMessage, 0)
-		for rows.Next() {
-			var value string
-			if err := rows.Scan(&value); err != nil {
-				rows.Close()
-				return "", fmt.Errorf("scan data table %s: %w", table, err)
-			}
-			normalized, err := normalizeEpoch2DataRow(value, volatileColumns[table])
-			if err != nil {
-				rows.Close()
-				return "", fmt.Errorf("normalize data table %s: %w", table, err)
-			}
-			values = append(values, normalized)
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return "", fmt.Errorf("iterate data table %s: %w", table, err)
-		}
-		rows.Close()
-		sort.Slice(values, func(i, j int) bool { return string(values[i]) < string(values[j]) })
-		snapshot.Tables[table] = values
-	}
+	return string(raw) + "\n", nil
+}
 
-	sequenceRows, err := pool.Query(ctx, `
+func snapshotEpoch2Tables(ctx context.Context, pool *pgxpool.Pool) (tables map[string][]json.RawMessage, volatileColumns map[string][]string, resultErr error) {
+	tableNames, err := queryTables(ctx, pool)
+	if err != nil {
+		return nil, nil, err
+	}
+	volatileColumns, err = queryEpoch2VolatileTimestampColumns(ctx, pool)
+	if err != nil {
+		return nil, nil, err
+	}
+	tables = make(map[string][]json.RawMessage, len(tableNames))
+	for _, table := range tableNames {
+		values, err := queryEpoch2TableRows(ctx, pool, table, volatileColumns[table])
+		if err != nil {
+			return nil, nil, err
+		}
+		tables[table] = values
+	}
+	return tables, volatileColumns, nil
+}
+
+func queryEpoch2TableRows(ctx context.Context, pool *pgxpool.Pool, table string, volatileColumns []string) ([]json.RawMessage, error) {
+	rows, err := pool.Query(ctx, "SELECT to_jsonb(t)::text FROM "+pgx.Identifier{"public", table}.Sanitize()+" AS t")
+	if err != nil {
+		return nil, fmt.Errorf("query data table %s: %w", table, err)
+	}
+	defer rows.Close()
+	values := make([]json.RawMessage, 0)
+	for rows.Next() {
+		var value string
+		if err := rows.Scan(&value); err != nil {
+			return nil, fmt.Errorf("scan data table %s: %w", table, err)
+		}
+		normalized, err := normalizeEpoch2DataRow(value, volatileColumns)
+		if err != nil {
+			return nil, fmt.Errorf("normalize data table %s: %w", table, err)
+		}
+		values = append(values, normalized)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate data table %s: %w", table, err)
+	}
+	sort.Slice(values, func(i, j int) bool { return string(values[i]) < string(values[j]) })
+	return values, nil
+}
+
+func snapshotEpoch2Sequences(ctx context.Context, pool *pgxpool.Pool) (map[string]epoch2Sequence, error) {
+	names, err := queryEpoch2SequenceNames(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	sequences := make(map[string]epoch2Sequence, len(names))
+	for _, name := range names {
+		var state epoch2Sequence
+		if err := pool.QueryRow(ctx, "SELECT last_value::text, is_called FROM "+pgx.Identifier{"public", name}.Sanitize()).Scan(&state.LastValue, &state.IsCalled); err != nil {
+			return nil, fmt.Errorf("query data sequence %s: %w", name, err)
+		}
+		sequences[name] = state
+	}
+	return sequences, nil
+}
+
+func queryEpoch2SequenceNames(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx, `
 		SELECT c.relname
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = current_schema() AND c.relkind = 'S'
 		ORDER BY c.relname`)
 	if err != nil {
-		return "", fmt.Errorf("query data sequences: %w", err)
+		return nil, fmt.Errorf("query data sequences: %w", err)
 	}
-	var sequences []string
-	for sequenceRows.Next() {
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
 		var name string
-		if err := sequenceRows.Scan(&name); err != nil {
-			sequenceRows.Close()
-			return "", fmt.Errorf("scan data sequence: %w", err)
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan data sequence: %w", err)
 		}
-		sequences = append(sequences, name)
+		names = append(names, name)
 	}
-	if err := sequenceRows.Err(); err != nil {
-		sequenceRows.Close()
-		return "", fmt.Errorf("iterate data sequences: %w", err)
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate data sequences: %w", err)
 	}
-	sequenceRows.Close()
-	for _, name := range sequences {
-		var state epoch2Sequence
-		if err := pool.QueryRow(ctx, "SELECT last_value::text, is_called FROM "+pgx.Identifier{"public", name}.Sanitize()).Scan(&state.LastValue, &state.IsCalled); err != nil {
-			return "", fmt.Errorf("query data sequence %s: %w", name, err)
-		}
-		snapshot.Sequences[name] = state
-	}
-
-	raw, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("marshal epoch-2 data: %w", err)
-	}
-	return string(raw) + "\n", nil
+	return names, nil
 }
 
 func queryEpoch2VolatileTimestampColumns(ctx context.Context, pool *pgxpool.Pool) (map[string][]string, error) {

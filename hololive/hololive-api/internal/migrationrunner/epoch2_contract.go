@@ -87,9 +87,9 @@ func verifyEpoch2LegacyContract(ctx context.Context, conn *pgxpool.Conn) error {
 	return verifyEpoch2LegacyRows(rows)
 }
 
-func epoch2LegacyColumns(contract []epoch2LegacyMigration) ([]string, []string) {
-	names := make([]string, len(contract))
-	checksums := make([]string, len(contract))
+func epoch2LegacyColumns(contract []epoch2LegacyMigration) (names, checksums []string) {
+	names = make([]string, len(contract))
+	checksums = make([]string, len(contract))
 	for index, migration := range contract {
 		names[index] = migration.name
 		checksums[index] = migration.checksum
