@@ -9,12 +9,12 @@ import (
 	"testing"
 )
 
-func TestACLMigrationDoesNotSeedRuntimeBehavior(t *testing.T) {
-	sql := readMigrationSQL(t, "scripts/migrations/037_acl_blacklist_mode.sql")
+func TestEpoch2BaselineDoesNotSeedRuntimeACLBehavior(t *testing.T) {
+	sql := readMigrationSQL(t, "scripts/migrations/001_schema_epoch2_baseline.sql")
 
 	required := []string{
-		"ALTER TABLE acl_rooms ADD COLUMN list_type VARCHAR(16) NOT NULL DEFAULT 'whitelist';",
-		"CREATE UNIQUE INDEX IF NOT EXISTS idx_room_list ON acl_rooms (room_id, list_type);",
+		"list_type character varying(16) DEFAULT 'whitelist'::character varying NOT NULL,",
+		"CREATE UNIQUE INDEX idx_room_list ON public.acl_rooms USING btree (room_id, list_type);",
 	}
 
 	for _, snippet := range required {
@@ -24,8 +24,8 @@ func TestACLMigrationDoesNotSeedRuntimeBehavior(t *testing.T) {
 	}
 
 	forbidden := []string{
-		"INSERT INTO acl_settings",
-		"INSERT INTO acl_rooms",
+		"INSERT INTO public.acl_settings",
+		"INSERT INTO public.acl_rooms",
 	}
 
 	for _, snippet := range forbidden {

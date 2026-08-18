@@ -95,7 +95,7 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 - 기존 마이그레이션 수정 금지. 신규 마이그레이션에 upsert로 재시드한다:
   - 템플릿: `INSERT ... ON CONFLICT (template_key) WHERE channel_id IS NULL DO UPDATE SET body = EXCLUDED.body, updated_at = now()`
   - 문자열: `INSERT ... ON CONFLICT (namespace, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`
-  - `DELETE` 금지. `manifest.txt`에 gapless order로 등록(`apply-all.sh`가 order 연속성·파일 parity를 강제).
+  - `DELETE` 금지. `manifest.txt`에 gapless order로 등록(`check-migration-manifest.sh`가 order 연속성·파일 parity를 강제).
 - 테스트 영향은 두 부류로 갈린다 — 반드시 같은 커밋에서 처리한다:
   - **REAL-SEED**(시드 본문을 실제 렌더/조회 — 바꾸면 깨짐): alarm_dispatch 골든, celebration 골든, `store_test.go` 값 핀, `messages_seed_parity_test.go`(키셋·글리프), 라벨 lookup 테스트.
   - **INLINE-TEMPLATE**(테스트 로컬 본문 주입 — 안 깨지지만 미러가 낡음): formatter/llm/outbox 골든의 로컬 본문 상수는 시드의 의도적 미러이므로 lockstep으로 갱신한다.

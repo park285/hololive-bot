@@ -63,11 +63,11 @@ func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool
 		t.Fatalf("create alarm_type: %v", err)
 	}
 	for _, migration := range []string{
-		"hololive/hololive-api/scripts/migrations/058_create_alarm_dispatch_outbox.sql",
-		"hololive/hololive-api/scripts/migrations/059_harden_alarm_dispatch_outbox.sql",
-		"hololive/hololive-api/scripts/migrations/065_record_alarm_dispatch_event_collisions.sql",
-		"hololive/hololive-api/scripts/migrations/118_alarm_dispatch_state_shape_check.sql",
-		"hololive/hololive-api/scripts/migrations/122_alarm_dispatch_last_error_size_check.sql",
+		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/058_create_alarm_dispatch_outbox.sql",
+		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/059_harden_alarm_dispatch_outbox.sql",
+		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/065_record_alarm_dispatch_event_collisions.sql",
+		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/118_alarm_dispatch_state_shape_check.sql",
+		"hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations/122_alarm_dispatch_last_error_size_check.sql",
 		"hololive/hololive-api/scripts/migrations/141_alarm_dispatch_send_units.sql",
 		"hololive/hololive-api/scripts/migrations/142_alarm_dispatch_send_unit_due_index.sql",
 		"hololive/hololive-api/scripts/migrations/143_alarm_dispatch_send_unit_index.sql",

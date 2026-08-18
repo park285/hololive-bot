@@ -46,35 +46,6 @@ func TestTelemetryHotTableAutovacuumTuned(t *testing.T) {
 	}
 }
 
-func TestMigration014OutboxGroupTemplatesSeedIsReapplySafe(t *testing.T) {
-	pool := NewPool(t)
-	ctx := context.Background()
-
-	dir, err := resolveMigrationsDir()
-	if err != nil {
-		t.Fatalf("resolve migrations dir: %v", err)
-	}
-	// #nosec G304 -- 리포 내 마이그레이션 SSOT 디렉터리의 고정 파일명만 읽는다(사용자 입력 아님).
-	raw, err := os.ReadFile(filepath.Join(dir, "014-add-outbox-group-templates.sql"))
-	if err != nil {
-		t.Fatalf("read 014 seed: %v", err)
-	}
-
-	if _, err := pool.Exec(ctx, string(raw)); err != nil {
-		t.Fatalf("파일 중간 crash 후 재실행 시 014 전체가 재적용되므로 seed는 재실행-안전해야 한다: %v", err)
-	}
-
-	var count int
-	if err := pool.QueryRow(ctx,
-		"SELECT count(*) FROM notification_templates WHERE template_key IN ('OUTBOX_VIDEO_GROUP','OUTBOX_SHORTS_GROUP','OUTBOX_COMMUNITY_GROUP') AND channel_id IS NULL",
-	).Scan(&count); err != nil {
-		t.Fatalf("count seeded templates: %v", err)
-	}
-	if count != 3 {
-		t.Fatalf("seeded default templates = %d, want 3 (no duplicates after re-apply)", count)
-	}
-}
-
 func TestSourceObservationMigrationReplaysWithoutRegressingContracts(t *testing.T) {
 	pool := NewPool(t)
 	ctx := context.Background()

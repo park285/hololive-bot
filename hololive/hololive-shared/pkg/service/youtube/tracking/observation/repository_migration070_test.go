@@ -21,7 +21,11 @@ func readMigration070SQL(t *testing.T) string {
 	require.NoError(t, err)
 	for {
 		if _, statErr := os.Stat(filepath.Join(dir, "build-all.sh")); statErr == nil {
-			migrationsDir := filepath.Join(dir, "hololive", "hololive-api", "scripts", "migrations")
+			migrationsDir := filepath.Join(
+				dir,
+				"hololive", "hololive-shared", "pkg", "service", "youtube", "tracking", "observation",
+				"testdata", "epoch1_migrations",
+			)
 			data, readErr := fs.ReadFile(os.DirFS(migrationsDir), migration070Filename)
 			require.NoError(t, readErr)
 			return string(data)

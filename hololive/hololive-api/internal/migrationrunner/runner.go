@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"slices"
 	"strings"
 	"time"
 
@@ -95,17 +94,18 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 		return Result{}, fmt.Errorf("dbmigrate: %w", err)
 	}
 
-	if err := reconcileBaseline(ctx, conn, fsys, exec, ledger, entries, cfg); err != nil {
+	if err := reconcileBaseline(ctx, conn, fsys, ledger, entries, cfg); err != nil {
 		return Result{}, err
 	}
-	if err := guardEpochResidue(ctx, conn, ledger, entries); err != nil {
+	allowBaselineChecksumBackfill, err := guardEpochResidue(ctx, conn, ledger, entries)
+	if err != nil {
 		return Result{}, err
 	}
 	if err := configureBlockingIndexDropPolicy(ctx, conn, exec, cfg); err != nil {
 		return Result{}, err
 	}
 
-	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
+	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, allowBaselineChecksumBackfill, cfg)
 	if err != nil {
 		return Result{}, err
 	}
@@ -114,93 +114,6 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 		return Result{}, err
 	}
 	return result, nil
-}
-
-// reconcileBaseline은 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
-// 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직
-// 미적용인 마이그레이션이 조용히 skip되는 사고(073 DB에 074-082 유실)가 나므로 거부한다.
-func reconcileBaseline(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) error {
-	count, err := ledgerCount(ctx, conn)
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-
-	baseSchema, err := baseSchemaPresent(ctx, conn)
-	if err != nil {
-		return err
-	}
-	if !baseSchema {
-		return nil
-	}
-
-	through := strings.TrimSpace(cfg.BaselineThrough)
-	if through == "" {
-		return errors.New(
-			"existing schema detected with an empty schema_migrations ledger; " +
-				"refusing to stamp the whole manifest as applied (that would silently skip genuinely-pending migrations). " +
-				"set MIGRATION_BASELINE_THROUGH to the last manifest migration already applied to this database, then rerun")
-	}
-	if !containsEntry(entries, through) {
-		return fmt.Errorf("MIGRATION_BASELINE_THROUGH=%q is not a manifest migration filename", through)
-	}
-
-	cfg.logf("existing schema with empty ledger; baselining through %s (no SQL re-run), applying the remainder", through)
-	if err := dbmigrate.Baseline(ctx, fsys, exec.Exec, through, ledger); err != nil {
-		return fmt.Errorf("baseline migrations: %w", err)
-	}
-	return nil
-}
-
-// manifest 밖 ledger 항목(이전 epoch 잔재)이 있는 DB는 checkpoint를 거친 경우에만
-// 진행한다. 멱등 규약 때문에 baseline이 drift 위에서 조용히 no-op 성공하는 사고를 막는
-// 유일한 방어선이다 — reconcileBaseline은 빈 ledger만 다룬다.
-func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate.Ledger, entries []string) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	var residue bool
-	if err := conn.QueryRow(ctx, mustSQL("legacy_residue_present.sql"), entries).Scan(&residue); err != nil {
-		return fmt.Errorf("detect legacy ledger residue: %w", err)
-	}
-	if !residue {
-		return nil
-	}
-	baseline := entries[0]
-	applied, err := ledger.Applied(ctx, pgxRowQuerier{conn: conn}, baseline)
-	if err != nil {
-		return err
-	}
-	if !applied {
-		return fmt.Errorf(
-			"schema_migrations has entries outside the current manifest but epoch baseline %s is not recorded; "+
-				"this database predates the epoch squash without the checkpoint migration — deploy the checkpoint release first",
-			baseline)
-	}
-	return nil
-}
-
-func containsEntry(entries []string, target string) bool {
-	return slices.Contains(entries, target)
-}
-
-func ledgerCount(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
-	var count int64
-	if err := conn.QueryRow(ctx, mustSQL("ledger_count.sql")).Scan(&count); err != nil {
-		return 0, fmt.Errorf("count schema_migrations: %w", err)
-	}
-	return count, nil
-}
-
-func baseSchemaPresent(ctx context.Context, conn *pgxpool.Conn) (bool, error) {
-	var present bool
-	query := mustSQL("base_schema_present.sql")
-	if err := conn.QueryRow(ctx, query).Scan(&present); err != nil {
-		return false, fmt.Errorf("detect base schema: %w", err)
-	}
-	return present, nil
 }
 
 func lockKey(cfg Config) int64 {

@@ -192,7 +192,7 @@ Migration 133은 runtime cutover 전에 terminal payload scrub trigger를 먼저
 
 Migration 125 이후 runtime은 `bot_webhook_heads`와 `ordering_key` advisory lock을 함께 사용합니다. Schema rollback은 이전 runtime으로 먼저 전환해 writer를 quiesce한 뒤에만 `bot_webhook_heads`/`available_at`을 제거해야 하며, 현재 runtime이 쓰는 동안 migration 125~136을 되돌리면 안 됩니다.
 
-Migration `114_drop_unused_indexes.sql` 적용 전에는 read-only preflight로 rollback artifact를 먼저 생성해야 합니다.
+Epoch-1/R1 artifact로 rollback한 뒤 migration `114_drop_unused_indexes.sql`을 다시 적용해야 하는 경우에는 read-only preflight로 rollback artifact를 먼저 생성해야 합니다. 인덱스 목록은 checksum으로 고정된 `manual/epoch1_recovery_sources/114_drop_unused_indexes.sql`을 사용합니다.
 
 libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regular file이어야 하고 symlink는 금지합니다. `PGPASSWORD`와 connection URI command argument는 허용하지 않으며 `psql -w`로 interactive password fallback도 차단합니다.
 

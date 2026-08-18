@@ -29,6 +29,18 @@ PGDATABASE="${PGDATABASE:-hololive}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
 MIGRATION_GLOB="${MIGRATION_GLOB:-[0-9]*.sql}"
 MIGRATION_MANIFEST="${MIGRATION_MANIFEST:-${MIGRATIONS_DIR}/manifest.txt}"
+
+if [ ! -f "${MIGRATION_MANIFEST}" ]; then
+  echo "migration manifest not found: ${MIGRATION_MANIFEST}" >&2
+  exit 1
+fi
+
+first_migration="$(awk '/^[[:space:]]*#/ || NF == 0 { next } { print $NF; exit }' "${MIGRATION_MANIFEST}")"
+if [ "${first_migration}" = "001_schema_epoch2_baseline.sql" ]; then
+  echo "apply-all.sh is disabled for epoch-2 manifests; use the db-migrate binary so checksum and epoch guards remain enforced" >&2
+  exit 1
+fi
+
 MANIFEST_ALL_ORDERED="$(mktemp)"
 MANIFEST_ALL_SORTED="$(mktemp)"
 MANIFEST_SELECTED_ORDERED="$(mktemp)"
@@ -56,11 +68,6 @@ list_invalid_indexes() {
 
 if [ -z "${PGPASSWORD}" ]; then
   echo "PGPASSWORD is required" >&2
-  exit 1
-fi
-
-if [ ! -f "${MIGRATION_MANIFEST}" ]; then
-  echo "migration manifest not found: ${MIGRATION_MANIFEST}" >&2
   exit 1
 fi
 

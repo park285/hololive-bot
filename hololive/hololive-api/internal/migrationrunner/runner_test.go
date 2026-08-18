@@ -72,6 +72,15 @@ func TestPopulatedDBEmptyLedgerBaselineStampsThenApplies(t *testing.T) {
 	assertTableAbsent(t, pool, "baseline_first_ran")
 	assertTableAbsent(t, pool, "baseline_second_ran")
 	assertTablePresent(t, pool, "baseline_tail_ran")
+	for _, name := range []string{"first.sql", "second.sql"} {
+		var checksum string
+		if err := pool.QueryRow(t.Context(), "SELECT checksum_sha256 FROM schema_migration_checksums WHERE filename = $1", name).Scan(&checksum); err != nil {
+			t.Fatalf("read baseline checksum %s: %v", name, err)
+		}
+		if want := migrationChecksum(mustMapFile(t, fsys, name).Data); checksum != want {
+			t.Fatalf("baseline checksum %s = %s, want %s", name, checksum, want)
+		}
+	}
 }
 
 func TestBeginWrappedFileFailureRollsBackWholeTxBlock(t *testing.T) {
@@ -88,14 +97,10 @@ func TestBeginWrappedFileFailureRollsBackWholeTxBlock(t *testing.T) {
 	assertTableAbsent(t, pool, "tx_atomic_probe")
 }
 
-func TestMigration136LateFailureRollsBackObjectsLedgerAndPrivileges(t *testing.T) {
+func TestEpoch2BaselineLateFailureRollsBackAllObjectsLedgerAndPrivileges(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	ctx := t.Context()
-	const (
-		migrationName = "136_reply_outbox_manual_replay_audit.sql"
-		replayName    = "136_reply_outbox_manual_replay_audit_replay.sql"
-		runtimeRole   = "pg_monitor"
-	)
+	const runtimeRole = "pg_monitor"
 
 	for _, statement := range []string{
 		"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO " + runtimeRole,
@@ -107,73 +112,28 @@ func TestMigration136LateFailureRollsBackObjectsLedgerAndPrivileges(t *testing.T
 		}
 	}
 
-	entries := manifestEntries(t)
-	manifestSQL, err := fs.ReadFile(migrations.FS, dbmigrate.ManifestName)
-	if err != nil {
-		t.Fatalf("read real migration manifest: %v", err)
-	}
-	failureFS := fstest.MapFS{
-		dbmigrate.ManifestName: {Data: manifestSQL},
-	}
-	var migrationSQL []byte
-	migrationIndex := -1
-	for i, name := range entries {
-		raw, readErr := fs.ReadFile(migrations.FS, name)
-		if readErr != nil {
-			t.Fatalf("read embedded migration %s: %v", name, readErr)
-		}
-		if name == migrationName {
-			migrationIndex = i
-			migrationSQL = raw
-			raw = injectBeforeFinalCommit(t, raw,
-				"SELECT public.migration_136_injected_late_failure();")
-		}
-		failureFS[name] = &fstest.MapFile{Data: raw}
-	}
-	if len(migrationSQL) == 0 {
-		t.Fatalf("%s missing from real manifest", migrationName)
-	}
+	failureFS := realManifestThrough(t, epoch2Baseline)
+	baselineFile := mustMapFile(t, failureFS, epoch2Baseline)
+	baselineSQL := append([]byte(nil), baselineFile.Data...)
+	baselineFile.Data = injectBeforeFinalCommit(t, baselineSQL,
+		"SELECT public.epoch2_injected_late_failure();")
 
 	if _, err := Run(ctx, pool, failureFS, Config{}); err == nil {
-		t.Fatal("late-failure migration Run() error = nil")
+		t.Fatal("late-failure baseline Run() error = nil")
 	}
-	assertMigration136Absent(t, pool, runtimeRole)
-	assertMigrationNotRecorded(t, pool, migrationName)
+	assertReplayAuditAbsent(t, pool, runtimeRole)
+	assertTableAbsent(t, pool, "members")
+	assertMigrationNotRecorded(t, pool, epoch2Baseline)
 
-	failureFS[migrationName] = &fstest.MapFile{Data: migrationSQL}
+	baselineFile.Data = baselineSQL
 	result, err := Run(ctx, pool, failureFS, Config{})
 	if err != nil {
-		t.Fatalf("rerun migration 136 after rollback: %v", err)
+		t.Fatalf("rerun baseline after rollback: %v", err)
 	}
-	wantApplied := len(entries) - migrationIndex
-	if result.Applied != wantApplied || result.Skipped != migrationIndex || result.Total != len(entries) {
-		t.Fatalf("rerun result = %+v, want applied=%d skipped=%d total=%d",
-			result, wantApplied, migrationIndex, len(entries))
+	if result.Applied != 1 || result.Skipped != 0 || result.Total != 1 {
+		t.Fatalf("rerun result = %+v, want applied=1 skipped=0 total=1", result)
 	}
-	assertMigration136Sealed(t, pool, runtimeRole)
-
-	replayManifest := append([]byte(nil), manifestSQL...)
-	if len(replayManifest) > 0 && replayManifest[len(replayManifest)-1] != '\n' {
-		replayManifest = append(replayManifest, '\n')
-	}
-	manifestLines := strings.Split(strings.TrimSpace(string(manifestSQL)), "\n")
-	var lastOrder int
-	var lastName string
-	if _, err := fmt.Sscanf(manifestLines[len(manifestLines)-1], "%d %s", &lastOrder, &lastName); err != nil {
-		t.Fatalf("parse last manifest line %q: %v", manifestLines[len(manifestLines)-1], err)
-	}
-	replayManifest = fmt.Appendf(replayManifest, "%03d %s\n", lastOrder+1, replayName)
-	failureFS[dbmigrate.ManifestName] = &fstest.MapFile{Data: replayManifest}
-	failureFS[replayName] = &fstest.MapFile{Data: migrationSQL}
-	result, err = Run(ctx, pool, failureFS, Config{})
-	if err != nil {
-		t.Fatalf("idempotent migration 136 replay: %v", err)
-	}
-	if result.Applied != 1 || result.Skipped != len(entries) || result.Total != len(entries)+1 {
-		t.Fatalf("idempotent replay result = %+v, want applied=1 skipped=%d total=%d",
-			result, len(entries), len(entries)+1)
-	}
-	assertMigration136Sealed(t, pool, runtimeRole)
+	assertReplayAuditSealed(t, pool, runtimeRole)
 }
 
 func injectBeforeFinalCommit(t *testing.T, migrationSQL []byte, statement string) []byte {
@@ -181,7 +141,7 @@ func injectBeforeFinalCommit(t *testing.T, migrationSQL []byte, statement string
 	const finalCommit = "\nCOMMIT;"
 	index := strings.LastIndex(string(migrationSQL), finalCommit)
 	if index < 0 {
-		t.Fatal("migration 136 is not wrapped by a final COMMIT")
+		t.Fatal("migration is not wrapped by a final COMMIT")
 	}
 	injected := append([]byte(nil), migrationSQL[:index]...)
 	injected = append(injected, []byte("\n"+statement+"\nCOMMIT;")...)
@@ -189,7 +149,7 @@ func injectBeforeFinalCommit(t *testing.T, migrationSQL []byte, statement string
 	return injected
 }
 
-func assertMigration136Absent(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
+func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
 	t.Helper()
 	ctx := t.Context()
 	var tablePresent, grantFunctionPresent, claimFunctionPresent, mutationFunctionPresent bool
@@ -247,7 +207,7 @@ func assertMigrationNotRecorded(t *testing.T, pool *pgxpool.Pool, migrationName 
 	}
 }
 
-func assertMigration136Sealed(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
+func assertReplayAuditSealed(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
 	t.Helper()
 	ctx := t.Context()
 	var tablePresent, grantFunctionPresent bool
@@ -393,7 +353,7 @@ func TestFailedMigrationDoesNotPinBadChecksum(t *testing.T) {
 	assertTablePresent(t, pool, "repaired_after_failure")
 }
 
-func TestAppliedLedgerEntryBackfillsMissingChecksum(t *testing.T) {
+func TestAppliedLedgerEntryMissingChecksumFailsClosed(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx, `
@@ -411,20 +371,17 @@ func TestAppliedLedgerEntryBackfillsMissingChecksum(t *testing.T) {
 		dbmigrate.ManifestName: {Data: []byte("001 legacy.sql\n")},
 		"legacy.sql":           {Data: content},
 	}
-	result, err := Run(ctx, pool, fsys, Config{})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if result.Skipped != 1 {
-		t.Fatalf("result = %+v, want one skipped migration", result)
+	_, err := Run(ctx, pool, fsys, Config{})
+	if err == nil || !strings.Contains(err.Error(), "checksum is missing") {
+		t.Fatalf("Run() error = %v, want missing-checksum refusal", err)
 	}
 
-	var checksum string
-	if err := pool.QueryRow(ctx, "SELECT checksum_sha256 FROM schema_migration_checksums WHERE filename = 'legacy.sql'").Scan(&checksum); err != nil {
-		t.Fatalf("load backfilled checksum: %v", err)
+	var checksumPresent bool
+	if err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM schema_migration_checksums WHERE filename = 'legacy.sql')").Scan(&checksumPresent); err != nil {
+		t.Fatalf("inspect missing checksum: %v", err)
 	}
-	if want := migrationChecksum(content); checksum != want {
-		t.Fatalf("checksum = %q, want %q", checksum, want)
+	if checksumPresent {
+		t.Fatal("missing checksum was silently backfilled")
 	}
 }
 
@@ -476,64 +433,13 @@ func TestBeginWrappedFileTrailingAutocommitFailureCanBeRerun(t *testing.T) {
 	assertLedger(t, pool, []string{"tx.sql"})
 }
 
-func TestMigration133SupportsPopulatedPreviousSchemaAndLegacyWriter(t *testing.T) {
+func TestCurrentSchemaSupportsLegacyTerminalWriter(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
-
-	const previousMigrationName = "123_create_bot_durable_admission_tables.sql"
-	const migrationName = "133_webhook_inbox_terminal_payload_check.sql"
-	previousMigrationSQL, err := fs.ReadFile(migrations.FS, previousMigrationName)
-	if err != nil {
-		t.Fatalf("read embedded migration %s: %v", previousMigrationName, err)
-	}
-	migrationSQL, err := fs.ReadFile(migrations.FS, migrationName)
-	if err != nil {
-		t.Fatalf("read embedded migration %s: %v", migrationName, err)
-	}
-	previousFS := fstest.MapFS{
-		dbmigrate.ManifestName: {Data: []byte("119 " + previousMigrationName + "\n")},
-		previousMigrationName:  {Data: previousMigrationSQL},
-	}
-	result, err := Run(t.Context(), pool, previousFS, Config{})
-	if err != nil {
-		t.Fatalf("apply previous schema: %v", err)
-	}
-	if result.Applied != 1 || result.Skipped != 0 || result.Total != 1 {
-		t.Fatalf("previous schema result = %+v, want applied=1 skipped=0 total=1", result)
-	}
-	if _, err := pool.Exec(t.Context(), `
-		INSERT INTO bot_webhook_inbox(message_id, room_id, ordering_key, payload, status)
-		VALUES ('existing-terminal', 'room', 'room', '{"message":"retained"}'::jsonb, 'succeeded')`); err != nil {
-		t.Fatalf("seed previous-schema terminal row: %v", err)
-	}
-
-	fsys := fstest.MapFS{
-		dbmigrate.ManifestName: {Data: []byte("119 " + previousMigrationName + "\n129 " + migrationName + "\n")},
-		previousMigrationName:  {Data: previousMigrationSQL},
-		migrationName:          {Data: migrationSQL},
-	}
-
-	result, err = Run(t.Context(), pool, fsys, Config{})
-	if err != nil {
-		t.Fatalf("apply migration 133: %v", err)
-	}
-	if result.Applied != 1 || result.Skipped != 1 || result.Total != 2 {
-		t.Fatalf("migration 133 result = %+v, want applied=1 skipped=1 total=2", result)
-	}
+	runMigrations(t, pool, migrations.FS, "")
 	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
 	assertTerminalPayloadScrubTrigger(t, pool)
-	assertInboxPayload(t, pool, "existing-terminal", "{}")
-	assertLedger(t, pool, []string{previousMigrationName, migrationName})
-
 	assertLegacyTerminalWriterCompatible(t, pool, "legacy-succeeded", "succeeded")
 	assertLegacyTerminalWriterCompatible(t, pool, "legacy-dead", "dead")
-
-	result, err = Run(t.Context(), pool, fsys, Config{})
-	if err != nil {
-		t.Fatalf("rerun migration 133: %v", err)
-	}
-	if result.Applied != 0 || result.Skipped != 2 || result.Total != 2 {
-		t.Fatalf("rerun result = %+v, want applied=0 skipped=2 total=2", result)
-	}
 }
 
 func TestBeginWrappedFileWithConcurrentlyIsRejected(t *testing.T) {
@@ -626,23 +532,126 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	assertTablePresent(t, pool, "alarms")
 	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
 	assertTerminalPayloadScrubTrigger(t, pool)
+
+	result, err = Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if err != nil {
+		t.Fatalf("second Run() error = %v", err)
+	}
+	if result.Applied != 0 || result.Skipped != len(entries) || result.Total != len(entries) {
+		t.Fatalf("second result = %+v, want applied=0 skipped=%d total=%d", result, len(entries), len(entries))
+	}
 }
 
-func TestRealManifestPrefilledLedgerSkipsAll(t *testing.T) {
+func TestRealManifestCheckpointedAt140SkipsBaselineAndAppliesSuffix(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
+	baselineFS := realManifestThrough(t, epoch2Baseline)
+	runMigrations(t, pool, baselineFS, "")
+	if _, err := pool.Exec(t.Context(), "DELETE FROM schema_migration_checksums WHERE filename = $1", epoch2Baseline); err != nil {
+		t.Fatalf("remove pre-R2 baseline checksum fixture: %v", err)
+	}
+	prefillEpoch2LegacyContract(t, pool)
 
 	entries := manifestEntries(t)
-	prefillLedger(t, pool, entries)
+	result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Applied != len(entries)-1 || result.Skipped != 1 || result.Total != len(entries) {
+		t.Fatalf("result = %+v, want applied=%d skipped=1 total=%d", result, len(entries)-1, len(entries))
+	}
+	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", true)
+}
+
+func TestRealManifestPartialAt160AppliesOnlyRemainingSuffix(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	const partialTip = "160_youtube_live_reconciliation_candidate_fk_index.sql"
+	partialFS := realManifestThrough(t, partialTip)
+	partialEntries, err := dbmigrate.Manifest(partialFS)
+	if err != nil {
+		t.Fatalf("read partial manifest: %v", err)
+	}
+	runMigrations(t, pool, partialFS, "")
+	prefillEpoch2LegacyContract(t, pool)
+
+	entries := manifestEntries(t)
+	result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Applied != len(entries)-len(partialEntries) || result.Skipped != len(partialEntries) || result.Total != len(entries) {
+		t.Fatalf("result = %+v, want applied=%d skipped=%d total=%d", result, len(entries)-len(partialEntries), len(partialEntries), len(entries))
+	}
+	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", true)
+}
+
+func TestRealManifestFullyCurrentWithLegacyResidueSkipsAll(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	entries := manifestEntries(t)
+	runMigrations(t, pool, migrations.FS, "")
+	prefillEpoch2LegacyContract(t, pool)
 
 	result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	t.Logf("prefilled ledger result: %d applied / %d skipped (total %d)", result.Applied, result.Skipped, result.Total)
-
 	if result.Applied != 0 || result.Skipped != len(entries) || result.Total != len(entries) {
 		t.Fatalf("result = %+v, want applied=0 skipped=%d total=%d", result, len(entries), len(entries))
 	}
+}
+
+func TestRealManifestEditedBaselineFailsChecksum(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	runMigrations(t, pool, migrations.FS, "")
+	entries := manifestEntries(t)
+	editedFS := realManifestThrough(t, entries[len(entries)-1])
+	editedBaseline := mustMapFile(t, editedFS, epoch2Baseline)
+	editedBaseline.Data = append(editedBaseline.Data, []byte("\n-- edited after exposure\n")...)
+
+	_, err := Run(t.Context(), pool, editedFS, Config{})
+	if err == nil || !strings.Contains(err.Error(), epoch2Baseline+" checksum mismatch") {
+		t.Fatalf("Run() error = %v, want immutable baseline checksum mismatch", err)
+	}
+}
+
+func TestR1RollbackIgnoresR2LedgerResidue(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	legacyFS := fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 legacy.sql\n002 checkpoint.sql\n")},
+		"legacy.sql":           {Data: []byte("CREATE TABLE rollback_legacy_state(id integer)")},
+		"checkpoint.sql":       {Data: []byte("SELECT 1")},
+	}
+	runMigrations(t, pool, legacyFS, "")
+	prefillLedger(t, pool, []string{epoch2Baseline, "141_suffix.sql"})
+	if _, err := pool.Exec(t.Context(), mustSQL("ensure_migration_checksums.sql")); err != nil {
+		t.Fatalf("ensure checksum ledger: %v", err)
+	}
+	for _, name := range []string{epoch2Baseline, "141_suffix.sql"} {
+		if _, err := pool.Exec(t.Context(), mustSQL("record_migration_checksum.sql"), name, strings.Repeat("a", 64)); err != nil {
+			t.Fatalf("record R2 residue checksum %s: %v", name, err)
+		}
+	}
+
+	result, err := Run(t.Context(), pool, legacyFS, Config{})
+	if err != nil {
+		t.Fatalf("R1 rollback Run() error = %v", err)
+	}
+	if result.Applied != 0 || result.Skipped != 2 || result.Total != 2 {
+		t.Fatalf("rollback result = %+v, want applied=0 skipped=2 total=2", result)
+	}
+	assertTablePresent(t, pool, "rollback_legacy_state")
+}
+
+func TestRealManifestPrefilledLedgerWithoutChecksumsRefuses(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+
+	entries := manifestEntries(t)
+	prefillLedger(t, pool, entries)
+
+	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if err == nil || !strings.Contains(err.Error(), "recorded without its checksum") {
+		t.Fatalf("Run() error = %v, want unproven epoch marker refusal", err)
+	}
+	assertTableAbsent(t, pool, "members")
 }
 
 func TestLedgerResidueWithoutEpochBaselineRefuses(t *testing.T) {
@@ -656,7 +665,7 @@ func TestLedgerResidueWithoutEpochBaselineRefuses(t *testing.T) {
 
 	epochFS := fstest.MapFS{
 		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n")},
-		"001_schema_epoch2_baseline.sql": {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+		"001_schema_epoch2_baseline.sql": {Data: []byte("BEGIN;\nCREATE TABLE epoch2_baseline_ran(id integer);\nCOMMIT;\n")},
 	}
 	_, err := Run(t.Context(), pool, epochFS, Config{})
 	if err == nil {
@@ -674,19 +683,31 @@ func TestLedgerResidueWithoutEpochBaselineRefuses(t *testing.T) {
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 }
 
-func TestLedgerResidueWithEpochBaselineSkipsBaseline(t *testing.T) {
+func TestLedgerResidueWithChecksummedEpochBaselineSkipsBaseline(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
+	const testBaseline = "001_schema_test_baseline.sql"
 
 	legacyFS := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 legacy.sql\n002 checkpoint.sql\n")},
 		"legacy.sql":           {Data: []byte("CREATE TABLE legacy_epoch_ran(id integer)")},
-		"checkpoint.sql":       {Data: []byte("INSERT INTO schema_migrations (filename) VALUES ('001_schema_epoch2_baseline.sql') ON CONFLICT (filename) DO NOTHING")},
+		"checkpoint.sql":       {Data: []byte("INSERT INTO schema_migrations (filename) VALUES ('" + testBaseline + "') ON CONFLICT (filename) DO NOTHING")},
 	}
 	runMigrations(t, pool, legacyFS, "")
 
 	epochFS := fstest.MapFS{
-		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n")},
-		"001_schema_epoch2_baseline.sql": {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+		dbmigrate.ManifestName: {Data: []byte("001 " + testBaseline + "\n")},
+		testBaseline:           {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+	}
+	if _, err := pool.Exec(t.Context(), mustSQL("ensure_migration_checksums.sql")); err != nil {
+		t.Fatalf("ensure checksum ledger: %v", err)
+	}
+	if _, err := pool.Exec(
+		t.Context(),
+		mustSQL("record_migration_checksum.sql"),
+		testBaseline,
+		migrationChecksum(mustMapFile(t, epochFS, testBaseline).Data),
+	); err != nil {
+		t.Fatalf("record epoch baseline checksum: %v", err)
 	}
 	result, err := Run(t.Context(), pool, epochFS, Config{})
 	if err != nil {
@@ -698,18 +719,117 @@ func TestLedgerResidueWithEpochBaselineSkipsBaseline(t *testing.T) {
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 }
 
+func TestEpoch2LegacyContractAllowsCheckpointedLedger(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	prefillEpoch2LegacyContract(t, pool)
+	prefillLedger(t, pool, []string{epoch2Baseline})
+
+	epochFS := epoch2BaselineProbeFS()
+	result, err := Run(t.Context(), pool, epochFS, Config{})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want checkpointed contract to pass", err)
+	}
+	if result.Applied != 0 || result.Skipped != 1 || result.Total != 1 {
+		t.Fatalf("result = %+v, want applied=0 skipped=1 total=1", result)
+	}
+	assertTableAbsent(t, pool, "epoch2_baseline_ran")
+
+	var checksum string
+	if err := pool.QueryRow(t.Context(), "SELECT checksum_sha256 FROM schema_migration_checksums WHERE filename = $1", epoch2Baseline).Scan(&checksum); err != nil {
+		t.Fatalf("read backfilled baseline checksum: %v", err)
+	}
+	if checksum != migrationChecksum(mustMapFile(t, epochFS, epoch2Baseline).Data) {
+		t.Fatalf("baseline checksum = %s, want current source checksum", checksum)
+	}
+}
+
+func TestEpoch2LegacyContractRejectsMissingLedger(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	prefillEpoch2LegacyContract(t, pool)
+	prefillLedger(t, pool, []string{epoch2Baseline})
+	missing := mustEpoch2LegacyContract(t)[0].name
+	if _, err := pool.Exec(t.Context(), "DELETE FROM schema_migrations WHERE filename = $1", missing); err != nil {
+		t.Fatalf("remove legacy ledger fixture: %v", err)
+	}
+	assertEpoch2ContractRefusal(t, pool, missing+" is missing from schema_migrations")
+}
+
+func TestEpoch2LegacyContractRejectsMissingChecksum(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	prefillEpoch2LegacyContract(t, pool)
+	prefillLedger(t, pool, []string{epoch2Baseline})
+	missing := mustEpoch2LegacyContract(t)[0].name
+	if _, err := pool.Exec(t.Context(), "DELETE FROM schema_migration_checksums WHERE filename = $1", missing); err != nil {
+		t.Fatalf("remove legacy checksum fixture: %v", err)
+	}
+	assertEpoch2ContractRefusal(t, pool, missing+" checksum is missing")
+}
+
+func TestEpoch2LegacyContractRejectsChecksumMismatch(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	prefillEpoch2LegacyContract(t, pool)
+	prefillLedger(t, pool, []string{epoch2Baseline})
+	mismatch := mustEpoch2LegacyContract(t)[0].name
+	if _, err := pool.Exec(t.Context(), "UPDATE schema_migration_checksums SET checksum_sha256 = repeat('0', 64) WHERE filename = $1", mismatch); err != nil {
+		t.Fatalf("mutate legacy checksum fixture: %v", err)
+	}
+	assertEpoch2ContractRefusal(t, pool, mismatch+" checksum mismatch")
+}
+
+func epoch2BaselineProbeFS() fstest.MapFS {
+	return fstest.MapFS{
+		dbmigrate.ManifestName: {Data: []byte("001 " + epoch2Baseline + "\n")},
+		epoch2Baseline:         {Data: []byte("BEGIN;\nCREATE TABLE epoch2_baseline_ran(id integer);\nCOMMIT;\n")},
+	}
+}
+
+func mustEpoch2LegacyContract(t *testing.T) []epoch2LegacyMigration {
+	t.Helper()
+	contract, err := parseEpoch2LegacyContract(epoch2LegacyContractRaw)
+	if err != nil {
+		t.Fatalf("parse epoch-2 contract: %v", err)
+	}
+	return contract
+}
+
+func prefillEpoch2LegacyContract(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := t.Context()
+	if _, err := pool.Exec(ctx, mustSQL("ensure_migration_checksums.sql")); err != nil {
+		t.Fatalf("create checksum ledger fixture: %v", err)
+	}
+	contract := mustEpoch2LegacyContract(t)
+	names := make([]string, len(contract))
+	for index, migration := range contract {
+		names[index] = migration.name
+		if _, err := pool.Exec(ctx, mustSQL("record_migration_checksum.sql"), migration.name, migration.checksum); err != nil {
+			t.Fatalf("prefill legacy checksum %s: %v", migration.name, err)
+		}
+	}
+	prefillLedger(t, pool, names)
+}
+
+func assertEpoch2ContractRefusal(t *testing.T, pool *pgxpool.Pool, want string) {
+	t.Helper()
+	_, err := Run(t.Context(), pool, epoch2BaselineProbeFS(), Config{})
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("Run() error = %v, want %q", err, want)
+	}
+	assertTableAbsent(t, pool, "epoch2_baseline_ran")
+}
+
 func TestEpochLedgerWithoutResidueProceeds(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 
 	epochFS := fstest.MapFS{
 		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n")},
-		"001_schema_epoch2_baseline.sql": {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+		"001_schema_epoch2_baseline.sql": {Data: []byte("BEGIN;\nCREATE TABLE epoch2_baseline_ran(id integer);\nCOMMIT;\n")},
 	}
 	runMigrations(t, pool, epochFS, "")
 
 	nextFS := fstest.MapFS{
 		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n002 002_next.sql\n")},
-		"001_schema_epoch2_baseline.sql": {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
+		"001_schema_epoch2_baseline.sql": {Data: []byte("BEGIN;\nCREATE TABLE epoch2_baseline_ran(id integer);\nCOMMIT;\n")},
 		"002_next.sql":                   {Data: []byte("CREATE TABLE epoch2_next_ran(id integer)")},
 	}
 	result, err := Run(t.Context(), pool, nextFS, Config{})
@@ -730,6 +850,41 @@ func manifestEntries(t *testing.T) []string {
 		t.Fatalf("read embedded manifest: %v", err)
 	}
 	return entries
+}
+
+func realManifestThrough(t *testing.T, last string) fstest.MapFS {
+	t.Helper()
+	entries := manifestEntries(t)
+	fake := make(fstest.MapFS)
+	var manifest strings.Builder
+	found := false
+	for index, name := range entries {
+		raw, err := fs.ReadFile(migrations.FS, name)
+		if err != nil {
+			t.Fatalf("read real migration %s: %v", name, err)
+		}
+		fake[name] = &fstest.MapFile{Data: raw}
+		fmt.Fprintf(&manifest, "%03d %s\n", index+1, name)
+		if name == last {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("real migration %s not found", last)
+	}
+	fake[dbmigrate.ManifestName] = &fstest.MapFile{Data: []byte(manifest.String())}
+	return fake
+}
+
+func mustMapFile(t *testing.T, fsys fstest.MapFS, name string) *fstest.MapFile {
+	t.Helper()
+	file, ok := fsys[name]
+	if !ok || file == nil {
+		t.Fatalf("map file %s not found", name)
+		return &fstest.MapFile{}
+	}
+	return file
 }
 
 func prefillLedger(t *testing.T, pool *pgxpool.Pool, entries []string) {

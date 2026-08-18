@@ -83,6 +83,9 @@ const (
 
 	// migrationsDirEnv는 자동 탐색을 우회하는 override env다.
 	migrationsDirEnv = "HOLOLIVE_MIGRATIONS_DIR"
+
+	epoch2BaselineMigration = "001_schema_epoch2_baseline.sql"
+	dbtestLedgerSchema      = "hololive_dbtest_internal"
 )
 
 // ApplyMigrations는 manifest.txt 순서대로 prod migration SQL을 pool이 가리키는
@@ -100,13 +103,100 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return fmt.Errorf("apply migrations: read manifest: %w", err)
 	}
+	if err := ensureDBTestMigrationLedger(ctx, pool); err != nil {
+		return err
+	}
 
 	for _, filename := range entries {
-		if err := applyMigrationFile(ctx, pool, dir, filename); err != nil {
+		if err := applyManifestMigration(ctx, pool, dir, filename); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+func ensureDBTestMigrationLedger(ctx context.Context, pool *pgxpool.Pool) error {
+	if _, err := pool.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+dbtestLedgerSchema); err != nil {
+		return fmt.Errorf("apply migrations: create dbtest ledger schema: %w", err)
+	}
+	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS `+dbtestLedgerSchema+`.schema_migrations (
+		filename text PRIMARY KEY,
+		checksum_sha256 char(64) NOT NULL CHECK (checksum_sha256 ~ '^[0-9a-f]{64}$'),
+		applied_at timestamptz NOT NULL DEFAULT now()
+	)`); err != nil {
+		return fmt.Errorf("apply migrations: create dbtest ledger: %w", err)
+	}
+	return nil
+}
+
+func applyManifestMigration(ctx context.Context, pool *pgxpool.Pool, dir, filename string) error {
+	raw, err := fs.ReadFile(os.DirFS(dir), filename)
+	if err != nil {
+		return fmt.Errorf("apply migrations: read %s: %w", filename, err)
+	}
+	digest := sha256.Sum256(raw)
+	checksum := hex.EncodeToString(digest[:])
+	stored, applied, err := dbtestMigrationChecksum(ctx, pool, filename)
+	if err != nil {
+		return err
+	}
+	if applied {
+		if stored != checksum {
+			return fmt.Errorf("apply migrations: %s checksum mismatch: ledger=%s source=%s", filename, stored, checksum)
+		}
+		return nil
+	}
+
+	if filename == epoch2BaselineMigration {
+		return applyAtomicBaseline(ctx, pool, filename, string(raw), checksum)
+	}
+	if err := applyMigrationContent(ctx, pool, filename, string(raw)); err != nil {
+		return err
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO `+dbtestLedgerSchema+`.schema_migrations (filename, checksum_sha256) VALUES ($1, $2)`, filename, checksum); err != nil {
+		return fmt.Errorf("apply migrations: record %s: %w", filename, err)
+	}
+	return nil
+}
+
+func dbtestMigrationChecksum(ctx context.Context, pool *pgxpool.Pool, filename string) (checksum string, applied bool, resultErr error) {
+	queryErr := pool.QueryRow(ctx, `SELECT checksum_sha256::text FROM `+dbtestLedgerSchema+`.schema_migrations WHERE filename = $1`, filename).Scan(&checksum)
+	if errors.Is(queryErr, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if queryErr != nil {
+		return "", false, fmt.Errorf("apply migrations: query dbtest ledger %s: %w", filename, queryErr)
+	}
+	return checksum, true, nil
+}
+
+func applyAtomicBaseline(ctx context.Context, pool *pgxpool.Pool, filename, content, checksum string) error {
+	segments, err := sqlsplit.Segments(content)
+	if err != nil {
+		return fmt.Errorf("apply migrations: split %s: %w", filename, err)
+	}
+	if len(segments) != 1 || !segments[0].Transactional {
+		return fmt.Errorf("apply migrations: %s must be one top-level transaction", filename)
+	}
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("apply migrations: acquire tx connection for %s: %w", filename, err)
+	}
+	defer conn.Release()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("apply migrations: begin %s: %w", filename, err)
+	}
+	if err := applyTxStatements(ctx, tx, filename, segments[0].Statements); err != nil {
+		return rollbackMigrationTxOnError(ctx, tx, err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO `+dbtestLedgerSchema+`.schema_migrations (filename, checksum_sha256) VALUES ($1, $2)`, filename, checksum); err != nil {
+		return rollbackMigrationTxOnError(ctx, tx, fmt.Errorf("apply migrations: record %s: %w", filename, err))
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("apply migrations: commit %s: %w", filename, err)
+	}
 	return nil
 }
 
@@ -125,7 +215,11 @@ func applyMigrationFile(ctx context.Context, pool *pgxpool.Pool, dir, filename s
 		return fmt.Errorf("apply migrations: read %s: %w", filename, readErr)
 	}
 
-	segments, splitErr := sqlsplit.Segments(string(sql))
+	return applyMigrationContent(ctx, pool, filename, string(sql))
+}
+
+func applyMigrationContent(ctx context.Context, pool *pgxpool.Pool, filename, content string) error {
+	segments, splitErr := sqlsplit.Segments(content)
 	if splitErr != nil {
 		return fmt.Errorf("apply migrations: split %s: %w", filename, splitErr)
 	}

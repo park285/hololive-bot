@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/dbmigrate"
+
+	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )
 
 type migrationSource struct {
@@ -18,7 +20,16 @@ type migrationSource struct {
 	checksumPresent bool
 }
 
-func applyManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, ledger dbmigrate.Ledger, entries []string, cfg Config) (Result, error) {
+func applyManifest(
+	ctx context.Context,
+	conn *pgxpool.Conn,
+	fsys fs.FS,
+	exec *guardedExecer,
+	ledger dbmigrate.Ledger,
+	entries []string,
+	allowBaselineChecksumBackfill bool,
+	cfg Config,
+) (Result, error) {
 	querier := pgxRowQuerier{conn: conn}
 	result := Result{Total: len(entries)}
 	for _, name := range entries {
@@ -26,7 +37,7 @@ func applyManifest(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *gu
 		if err != nil {
 			return Result{}, err
 		}
-		applied, err := applyMigrationSource(ctx, exec, ledger, querier, source, cfg)
+		applied, err := applyMigrationSource(ctx, exec, ledger, querier, source, allowBaselineChecksumBackfill, cfg)
 		if err != nil {
 			return Result{}, err
 		}
@@ -55,13 +66,21 @@ func loadMigrationSource(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, na
 	return migrationSource{name: name, content: string(content), checksum: checksum, checksumPresent: present}, nil
 }
 
-func applyMigrationSource(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, querier dbmigrate.RowQuerier, source migrationSource, cfg Config) (bool, error) {
+func applyMigrationSource(
+	ctx context.Context,
+	exec *guardedExecer,
+	ledger dbmigrate.Ledger,
+	querier dbmigrate.RowQuerier,
+	source migrationSource,
+	allowBaselineChecksumBackfill bool,
+	cfg Config,
+) (bool, error) {
 	alreadyApplied, err := ledger.Applied(ctx, querier, source.name)
 	if err != nil {
 		return false, err
 	}
 	if alreadyApplied {
-		return false, skipAppliedMigration(ctx, exec, source, cfg)
+		return false, skipAppliedMigration(ctx, exec, source, allowBaselineChecksumBackfill, cfg)
 	}
 	cfg.logf("apply %s", source.name)
 	if err := applyEntry(ctx, exec, ledger, source); err != nil {
@@ -70,8 +89,19 @@ func applyMigrationSource(ctx context.Context, exec *guardedExecer, ledger dbmig
 	return true, nil
 }
 
-func skipAppliedMigration(ctx context.Context, exec *guardedExecer, source migrationSource, cfg Config) error {
+func skipAppliedMigration(
+	ctx context.Context,
+	exec *guardedExecer,
+	source migrationSource,
+	allowBaselineChecksumBackfill bool,
+	cfg Config,
+) error {
 	if !source.checksumPresent {
+		if source.name != epoch2Baseline || !allowBaselineChecksumBackfill {
+			return fmt.Errorf(
+				"migration %s is recorded in schema_migrations but its checksum is missing; refusing to trust the current source without an explicit epoch contract",
+				source.name)
+		}
 		if err := recordMigrationChecksum(ctx, exec.Exec, source.name, source.checksum); err != nil {
 			return err
 		}
@@ -84,6 +114,9 @@ func applyEntry(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledge
 	if err := exec.validateMigrationSource(source.name, source.content); err != nil {
 		return err
 	}
+	if source.name == epoch2Baseline {
+		return applyEpoch2Baseline(ctx, exec, ledger, source)
+	}
 	if err := exec.execFile(ctx, source.name, source.content); err != nil {
 		return err
 	}
@@ -91,6 +124,37 @@ func applyEntry(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledge
 		return err
 	}
 	return ledger.Record(ctx, exec.Exec, source.name)
+}
+
+func applyEpoch2Baseline(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, source migrationSource) error {
+	segments, err := sqlsplit.Segments(source.content)
+	if err != nil {
+		return fmt.Errorf("exec %s: %w", source.name, err)
+	}
+	if len(segments) != 1 || !segments[0].Transactional {
+		return fmt.Errorf("exec %s: epoch-2 baseline must be one top-level transaction", source.name)
+	}
+	tx, err := exec.conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("exec %s: begin: %w", source.name, err)
+	}
+	if err := execTxStatements(ctx, tx, source.name, segments[0].Statements); err != nil {
+		return rollbackTxSegmentOnError(ctx, tx, err)
+	}
+	txExec := func(ctx context.Context, query string, args ...any) error {
+		_, err := tx.Exec(ctx, query, args...)
+		return err
+	}
+	if err := recordMigrationChecksum(ctx, txExec, source.name, source.checksum); err != nil {
+		return rollbackTxSegmentOnError(ctx, tx, err)
+	}
+	if err := ledger.Record(ctx, txExec, source.name); err != nil {
+		return rollbackTxSegmentOnError(ctx, tx, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("exec %s: commit: %w", source.name, err)
+	}
+	return nil
 }
 
 func migrationChecksum(content []byte) string {

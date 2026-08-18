@@ -12,7 +12,8 @@ artifact="$1"
 tmp="$(mktemp)"
 trap 'rm -f "${tmp}"' EXIT
 
-mapfile -t indexes < <(sed -n 's/^DROP INDEX IF EXISTS \([^;]*\);/\1/p' "${root}/114_drop_unused_indexes.sql")
+epoch1_source="${root}/manual/epoch1_recovery_sources/114_drop_unused_indexes.sql"
+mapfile -t indexes < <(sed -n 's/^DROP INDEX IF EXISTS \([^;]*\);/\1/p' "${epoch1_source}")
 (( ${#indexes[@]} > 0 )) || { echo "migration 114 index inventory is empty" >&2; exit 1; }
 
 array="$(printf "'%s'," "${indexes[@]}")"
