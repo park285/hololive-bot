@@ -108,24 +108,124 @@ ORDER BY index_name;
 SQL
 }
 
+mvcc_database_state_sql() {
+  cat <<'SQL'
+SELECT
+    database_catalog.datname AS database_name,
+    current_user AS session_user,
+    current_setting('idle_in_transaction_session_timeout') AS idle_in_transaction_session_timeout,
+    current_setting('transaction_timeout') AS transaction_timeout,
+    current_setting('statement_timeout') AS statement_timeout,
+    age(database_catalog.datfrozenxid) AS frozen_xid_age,
+    mxid_age(database_catalog.datminmxid) AS frozen_multixact_age,
+    current_setting('autovacuum_freeze_max_age')::bigint AS autovacuum_freeze_max_age,
+    database_stats.stats_reset
+FROM pg_database AS database_catalog
+JOIN pg_stat_database AS database_stats
+  ON database_stats.datid = database_catalog.oid
+WHERE database_catalog.datname = current_database();
+SQL
+}
+
 dead_tuples_sql() {
   cat <<'SQL'
 SELECT
     relname,
+    pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
     n_live_tup,
     n_dead_tup,
+    ROUND(
+        100.0 * n_dead_tup::numeric
+        / NULLIF(n_live_tup + n_dead_tup, 0),
+        2
+    ) AS dead_tuple_pct,
+    n_tup_ins,
+    n_tup_upd,
+    n_tup_hot_upd,
+    ROUND(
+        100.0 * n_tup_hot_upd::numeric
+        / NULLIF(n_tup_upd, 0),
+        2
+    ) AS hot_update_pct,
+    n_tup_del,
+    vacuum_count,
     autovacuum_count,
+    analyze_count,
     autoanalyze_count,
+    last_vacuum,
     last_autovacuum,
+    last_analyze,
     last_autoanalyze
 FROM pg_stat_user_tables
 WHERE relname IN (
     'alarm_dispatch_deliveries',
     'alarm_dispatch_send_units',
+    'notification_delivery_outbox',
     'youtube_notification_outbox',
-    'youtube_notification_delivery'
+    'youtube_notification_delivery',
+    'youtube_notification_delivery_telemetry',
+    'youtube_community_shorts_alarm_states',
+    'source_observation_queue',
+    'source_collection_checkpoints',
+    'youtube_collection_job_leases',
+    'source_observations'
 )
-ORDER BY n_dead_tup DESC, relname;
+ORDER BY dead_tuple_pct DESC NULLS LAST, n_dead_tup DESC, relname;
+SQL
+}
+
+mvcc_index_activity_sql() {
+  cat <<'SQL'
+WITH database_stats AS (
+    SELECT stats_reset
+    FROM pg_stat_database
+    WHERE datname = current_database()
+)
+SELECT
+    clock_timestamp() AS captured_at,
+    database_stats.stats_reset,
+    index_stats.relname AS table_name,
+    index_stats.indexrelname AS index_name,
+    pg_size_pretty(pg_relation_size(index_stats.indexrelid)) AS index_size,
+    index_stats.idx_scan,
+    index_stats.idx_tup_read,
+    index_stats.idx_tup_fetch
+FROM pg_stat_user_indexes AS index_stats
+CROSS JOIN database_stats
+WHERE index_stats.relname IN (
+    'source_observation_queue',
+    'source_collection_checkpoints',
+    'youtube_collection_job_leases',
+    'source_observations'
+)
+ORDER BY index_stats.relname, index_stats.idx_scan, index_stats.indexrelname;
+SQL
+}
+
+idle_transactions_sql() {
+  cat <<'SQL'
+SELECT
+    pid,
+    usename,
+    application_name,
+    client_addr,
+    state,
+    xact_start,
+    state_change,
+    clock_timestamp() - xact_start AS transaction_age,
+    clock_timestamp() - state_change AS idle_age,
+    backend_xmin::text AS backend_xmin,
+    CASE
+        WHEN backend_xmin IS NULL THEN NULL
+        ELSE age(backend_xmin)
+    END AS backend_xmin_age,
+    wait_event_type,
+    wait_event,
+    LEFT(query, 500) AS query
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND state IN ('idle in transaction', 'idle in transaction (aborted)')
+ORDER BY xact_start, pid;
 SQL
 }
 
