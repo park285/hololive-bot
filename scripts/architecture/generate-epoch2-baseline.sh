@@ -9,6 +9,7 @@ ACL_TAIL="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch2_acl_tai
 NORMALIZER="${ROOT}/scripts/architecture/normalize-epoch2-baseline.py"
 REPAIR_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch1_message_contract_repair_sources"
 RECOVERY_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch1_recovery_sources"
+INTEGRATION_SOURCE_DIR="${ROOT}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations"
 PG_IMAGE="${PG_IMAGE:-postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}"
 NAME="holobot-epoch2-baseline-$$"
 READINESS_ATTEMPTS=60
@@ -20,6 +21,7 @@ CONTRACT_TMP="${TMP_DIR}/epoch2_legacy_contract.sha256"
 SUFFIX_TMP="${TMP_DIR}/epoch2_suffix_contract.txt"
 REPAIR_TMP="${TMP_DIR}/epoch1_message_contract_repair_sources"
 RECOVERY_TMP="${TMP_DIR}/epoch1_recovery_sources"
+INTEGRATION_TMP="${TMP_DIR}/epoch1_integration_sources"
 REPAIR_FILES=(
   074_create_message_strings.sql
   076_seed_new_command_templates.sql
@@ -32,6 +34,13 @@ REPAIR_FILES=(
 )
 RECOVERY_FILES=(
   114_drop_unused_indexes.sql
+)
+INTEGRATION_FILES=(
+  058_create_alarm_dispatch_outbox.sql
+  059_harden_alarm_dispatch_outbox.sql
+  065_record_alarm_dispatch_event_collisions.sql
+  118_alarm_dispatch_state_shape_check.sql
+  122_alarm_dispatch_last_error_size_check.sql
 )
 
 SOURCE_COMMIT="${EPOCH2_SOURCE_COMMIT:-}"
@@ -111,6 +120,10 @@ done
 install -d -m 0755 "${RECOVERY_TMP}"
 for file in "${RECOVERY_FILES[@]}"; do
   install -m 0644 "${MIG_DIR}/${file}" "${RECOVERY_TMP}/${file}"
+done
+install -d -m 0755 "${INTEGRATION_TMP}"
+for file in "${INTEGRATION_FILES[@]}"; do
+  install -m 0644 "${MIG_DIR}/${file}" "${INTEGRATION_TMP}/${file}"
 done
 
 if [[ ! "${PG_IMAGE}" =~ @sha256:[0-9a-f]{64}$ ]]; then
@@ -235,9 +248,14 @@ install -d -m 0755 "${RECOVERY_SOURCE_DIR}"
 for file in "${RECOVERY_FILES[@]}"; do
   install -m 0644 "${RECOVERY_TMP}/${file}" "${RECOVERY_SOURCE_DIR}/${file}"
 done
+install -d -m 0755 "${INTEGRATION_SOURCE_DIR}"
+for file in "${INTEGRATION_FILES[@]}"; do
+  install -m 0644 "${INTEGRATION_TMP}/${file}" "${INTEGRATION_SOURCE_DIR}/${file}"
+done
 
 echo "generated: ${OUT}"
 echo "generated: ${CONTRACT}"
 echo "generated: ${SUFFIX_CONTRACT}"
 echo "generated: ${REPAIR_SOURCE_DIR}"
 echo "generated: ${RECOVERY_SOURCE_DIR}"
+echo "generated: ${INTEGRATION_SOURCE_DIR}"
