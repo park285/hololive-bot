@@ -170,6 +170,21 @@ sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-a
 
 Replay cutoff는 row의 `created_at`부터 144시간입니다. Iris admission retention 168시간보다 24시간 짧게 닫아 operator 판단 뒤 실제 dispatch와 sweep이 지연되더라도 dedup retention 경계를 넘지 않게 합니다. 144시간 경계와 그 이후에는 fail-closed합니다. `cutoff_expired`이면 재발송하지 않습니다. `bot_reply_outbox_replay_audit`에는 grant 시점의 `granted`, 실제 claim 시점의 `replayed` event가 같은 actor/reason과 별도 `recorded_at`으로 append되므로 이후 outbox `updated_at` 변경과 분리해 조사합니다. `invalid_operator_metadata`, `not_manual_review`, `not_found`도 상태를 임의로 고치지 말고 현재 행과 운영 이력을 다시 확인합니다.
 
+Iris `/reply-status/{requestId}`가 `outcome_unknown`처럼 handoff 결과를 증명하지 못하고 operator가 중복 방지를 위해 재발송하지 않기로 결정한 경우에는 직접 `UPDATE`하지 않습니다. 아래 artifact는 대상이 아직 `manual_review`인지 row lock으로 재검증하고, 관측한 Iris 상태와 actor/reason을 immutable audit에 기록한 뒤 `discarded` terminal 상태로 전이하면서 payload를 제거합니다. 출력은 `discarded`, `invalid_operator_metadata`, `invalid_iris_state`, `not_manual_review`, `not_found` 중 하나입니다.
+
+```bash
+sudo -n env MIGRATIONS_DIR=/opt/hololive-bot/compose/current/hololive/hololive-api/internal/planes/bot/internal/durability/queries \
+  ./scripts/runtime/db-maintenance-exec.sh \
+  psql -w -X -v ON_ERROR_STOP=1 \
+  -v outbox_id='<bot_reply_outbox.id>' \
+  -v operator_actor='<operator-handle>' \
+  -v operator_reason='<ticket-or-incident-reason>' \
+  -v observed_iris_state='<reply-status-state-or-not_found>' \
+  -f /migrations/reply_outbox_discard_manual_review.sql
+```
+
+`discarded`는 재발송 권한을 만들지 않고 terminal retention을 따릅니다. 실행 전에는 반드시 같은 `iris_request_id`의 최신 `/reply-status`를 조회하고, `queued`/`preparing`/`prepared`/`sending`이면 진행 중인 handoff가 끝날 때까지 보류합니다. `failed`에서 재발송이 필요하다고 판단한 경우에는 discard가 아니라 위 replay artifact와 144시간 cutoff를 사용합니다.
+
 Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다. 실행 순서의 SSOT는 filename 정렬이 아니라 `hololive/hololive-api/scripts/migrations/manifest.txt`이며, replacement due index를 먼저 만드는 127이 기존 index를 제거하는 126보다 앞섭니다. Outbox는 같은 room의 active 선행 행을 직렬화하지만 `manual_review`는 operator 보류 상태이므로 후속 room reply를 막지 않습니다. Migration 133/134 trigger와 terminal writer가 inbox payload와 command 진단을 terminal 전이에서 즉시 scrub합니다. 주기 maintenance는 scrub scan을 반복하지 않고 retention 대상만 찾으며, terminal ledger는 Iris admission retention(7일)보다 긴 8일 뒤 batch 삭제합니다. `manual_review`와 그 replay audit은 판단·처리 이력을 위해 해당 outbox row의 retention 동안 함께 보존합니다.
 
 Migration 133은 runtime cutover 전에 terminal payload scrub trigger를 먼저 설치하고 기존 `dead`/`succeeded` row를 backfill한 뒤 CHECK를 validate합니다. 따라서 이전 runtime의 `inbox_complete` writer가 migration 적용 중이나 cutover 전에 `status`만 `succeeded`로 변경해도 trigger가 `payload`를 `{}`로 scrub하며 CHECK에 거부되지 않습니다.

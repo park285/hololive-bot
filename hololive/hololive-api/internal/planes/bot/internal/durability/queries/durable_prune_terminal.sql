@@ -28,7 +28,7 @@ WITH inbox_candidate AS MATERIALIZED (
     SELECT id
     FROM bot_reply_outbox
     WHERE (
-        status IN ('handoff_completed', 'dead', 'permanent_conflict')
+        status IN ('handoff_completed', 'dead', 'permanent_conflict', 'discarded')
         AND updated_at < clock_timestamp() - ($1::bigint * INTERVAL '1 millisecond')
     ) OR (
         status = 'manual_review'
