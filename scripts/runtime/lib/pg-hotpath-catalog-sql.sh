@@ -156,7 +156,8 @@ SELECT
     relation.reloptions
 FROM pg_stat_user_tables AS stats
 JOIN pg_class AS relation ON relation.oid = stats.relid
-WHERE stats.relname IN (
+WHERE stats.schemaname = 'public'
+  AND stats.relname IN (
     'alarm_dispatch_deliveries',
     'alarm_dispatch_send_units',
     'youtube_notification_outbox',
@@ -179,7 +180,8 @@ SELECT
     indexes.idx_tup_fetch,
     pg_size_pretty(pg_relation_size(indexes.indexrelid)) AS index_size
 FROM pg_stat_user_indexes AS indexes
-WHERE indexes.relname IN (
+WHERE indexes.schemaname = 'public'
+  AND indexes.relname IN (
     'alarm_dispatch_deliveries',
     'alarm_dispatch_send_units',
     'youtube_notification_outbox',
@@ -209,8 +211,8 @@ SELECT
 FROM pg_stat_activity
 WHERE datname = current_database()
   AND pid <> pg_backend_pid()
-  AND xact_start IS NOT NULL
-ORDER BY xact_start, pid
+  AND (xact_start IS NOT NULL OR backend_xmin IS NOT NULL)
+ORDER BY xact_start NULLS LAST, pid
 LIMIT 20;
 SQL
 }
