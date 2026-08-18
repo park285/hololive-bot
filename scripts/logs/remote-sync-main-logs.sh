@@ -7,6 +7,12 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 LOG_ROOT="${LOG_ROOT:-${REPO_ROOT}/logs}"
 REMOTE_MIRROR_ROOT="${REMOTE_MIRROR_ROOT:-${LOG_ROOT}/remote}"
 FORCE_MAIN_LOG_LINKS="${FORCE_MAIN_LOG_LINKS:-0}"
+CENTRAL_USER_HOST="${HOL_LOG_CENTRAL_USER_HOST:-ubuntu@100.100.1.8}"
+CENTRAL_SSH_KEY="${HOL_LOG_CENTRAL_SSH_KEY:-${REPO_ROOT}/KR.key}"
+CENTRAL_HOST_KEY_ALIAS="${HOL_LOG_CENTRAL_HOST_KEY_ALIAS:-100.100.1.8}"
+CENTRAL_REMOTE_LOG_DIR="${HOL_LOG_CENTRAL_LOG_DIR:-/var/log/hololive-bot}"
+CENTRAL_SERVICES="${HOL_LOG_CENTRAL_SERVICES:-hololive-api alarm-worker youtube-collector-c}"
+CENTRAL_DOCKER_SERVICES=""
 OSAKA_USER_HOST="${HOL_LOG_OSAKA_USER_HOST:-ubuntu@100.100.1.6}"
 OSAKA_SSH_KEY="${HOL_LOG_OSAKA_SSH_KEY:-${REPO_ROOT}/KR.key}"
 OSAKA_HOST_KEY_ALIAS="${HOL_LOG_OSAKA_HOST_KEY_ALIAS:-100.100.1.6}"
@@ -28,16 +34,22 @@ SEOUL_DOCKER_SERVICES="${HOL_LOG_SEOUL_DOCKER_SERVICES:-youtube-collector-b}"
 usage() {
   cat <<'USAGE'
 Usage:
+  remote-sync-main-logs.sh once central
   remote-sync-main-logs.sh once osaka
   remote-sync-main-logs.sh once osaka2
   remote-sync-main-logs.sh once seoul
-  remote-sync-main-logs.sh daemon <osaka|osaka2|seoul> [--interval 30]
-  remote-sync-main-logs.sh status <osaka|osaka2|seoul>
-  remote-sync-main-logs.sh query <osaka|osaka2|seoul> <service> [--tail 500] [--grep pattern]
-  remote-sync-main-logs.sh tail <osaka|osaka2|seoul> <service>
+  remote-sync-main-logs.sh daemon <central|osaka|osaka2|seoul> [--interval 30]
+  remote-sync-main-logs.sh status <central|osaka|osaka2|seoul>
+  remote-sync-main-logs.sh query <central|osaka|osaka2|seoul> <service> [--tail 500] [--grep pattern]
+  remote-sync-main-logs.sh tail <central|osaka|osaka2|seoul> <service>
   remote-sync-main-logs.sh docker-tail <osaka|osaka2|seoul> <service> [--since 15m] [--tail 200]
 Environment:
   LOG_ROOT=<repo>/logs
+  HOL_LOG_CENTRAL_USER_HOST=ubuntu@100.100.1.8
+  HOL_LOG_CENTRAL_SSH_KEY=<repo>/KR.key
+  HOL_LOG_CENTRAL_HOST_KEY_ALIAS=100.100.1.8
+  HOL_LOG_CENTRAL_LOG_DIR=/var/log/hololive-bot
+  HOL_LOG_CENTRAL_SERVICES="hololive-api alarm-worker youtube-collector-c"
   HOL_LOG_OSAKA_USER_HOST=ubuntu@100.100.1.6
   HOL_LOG_OSAKA_SSH_KEY=<repo>/KR.key
   HOL_LOG_OSAKA_HOST_KEY_ALIAS=100.100.1.6
@@ -63,6 +75,7 @@ target_dir() {
 target_services() {
 	local target="$1"
 	case "${target}" in
+	    central) printf '%s\n' "${CENTRAL_SERVICES}" ;;
 	    osaka) printf '%s\n' "${OSAKA_SERVICES}" ;;
 	    osaka2) printf '%s\n' "${OSAKA2_SERVICES}" ;;
 	    seoul) printf '%s\n' "${SEOUL_SERVICES}" ;;
@@ -74,7 +87,7 @@ target_value() {
   local suffix="$2"
   local name
   case "${target}" in
-    osaka|osaka2|seoul) ;;
+    central|osaka|osaka2|seoul) ;;
     *) echo "ERROR: unknown target: ${target}" >&2; exit 1 ;;
   esac
   name="${target^^}_${suffix}"
