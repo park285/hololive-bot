@@ -8,6 +8,7 @@ SUFFIX_CONTRACT="${ROOT}/scripts/architecture/epoch2_suffix_contract.txt"
 ACL_TAIL="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch2_acl_tail.sql"
 NORMALIZER="${ROOT}/scripts/architecture/normalize-epoch2-baseline.py"
 REPAIR_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch1_message_contract_repair_sources"
+RECOVERY_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch1_recovery_sources"
 PG_IMAGE="${PG_IMAGE:-postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}"
 NAME="holobot-epoch2-baseline-$$"
 READINESS_ATTEMPTS=60
@@ -18,6 +19,7 @@ BASELINE_TMP="${TMP_DIR}/001_schema_epoch2_baseline.sql"
 CONTRACT_TMP="${TMP_DIR}/epoch2_legacy_contract.sha256"
 SUFFIX_TMP="${TMP_DIR}/epoch2_suffix_contract.txt"
 REPAIR_TMP="${TMP_DIR}/epoch1_message_contract_repair_sources"
+RECOVERY_TMP="${TMP_DIR}/epoch1_recovery_sources"
 REPAIR_FILES=(
   074_create_message_strings.sql
   076_seed_new_command_templates.sql
@@ -27,6 +29,9 @@ REPAIR_FILES=(
   080_refresh_help_and_ambiguous.sql
   081_seed_canonical_alarm_templates.sql
   082_seed_calendar_image_strings.sql
+)
+RECOVERY_FILES=(
+  114_drop_unused_indexes.sql
 )
 
 SOURCE_COMMIT="${EPOCH2_SOURCE_COMMIT:-}"
@@ -102,6 +107,10 @@ printf '%s\n' "${SUFFIX[@]}" > "${SUFFIX_TMP}"
 install -d -m 0755 "${REPAIR_TMP}"
 for file in "${REPAIR_FILES[@]}"; do
   install -m 0644 "${MIG_DIR}/${file}" "${REPAIR_TMP}/${file}"
+done
+install -d -m 0755 "${RECOVERY_TMP}"
+for file in "${RECOVERY_FILES[@]}"; do
+  install -m 0644 "${MIG_DIR}/${file}" "${RECOVERY_TMP}/${file}"
 done
 
 if [[ ! "${PG_IMAGE}" =~ @sha256:[0-9a-f]{64}$ ]]; then
@@ -222,8 +231,13 @@ install -d -m 0755 "${REPAIR_SOURCE_DIR}"
 for file in "${REPAIR_FILES[@]}"; do
   install -m 0644 "${REPAIR_TMP}/${file}" "${REPAIR_SOURCE_DIR}/${file}"
 done
+install -d -m 0755 "${RECOVERY_SOURCE_DIR}"
+for file in "${RECOVERY_FILES[@]}"; do
+  install -m 0644 "${RECOVERY_TMP}/${file}" "${RECOVERY_SOURCE_DIR}/${file}"
+done
 
 echo "generated: ${OUT}"
 echo "generated: ${CONTRACT}"
 echo "generated: ${SUFFIX_CONTRACT}"
 echo "generated: ${REPAIR_SOURCE_DIR}"
+echo "generated: ${RECOVERY_SOURCE_DIR}"

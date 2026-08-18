@@ -4,8 +4,9 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-drop_count="$(sed -n 's/^DROP INDEX IF EXISTS \([^;]*\);/\1/p' "${root}/114_drop_unused_indexes.sql" | sort -u | wc -l)"
-inventory_count="$(sed -n '/mapfile -t indexes/,/(( .*indexes/p' "${root}/preflight-114-restore.sh" | grep -c '114_drop_unused_indexes.sql')"
+epoch1_source="${root}/manual/epoch1_recovery_sources/114_drop_unused_indexes.sql"
+drop_count="$(sed -n 's/^DROP INDEX IF EXISTS \([^;]*\);/\1/p' "${epoch1_source}" | sort -u | wc -l)"
+inventory_count="$(sed -n '/epoch1_source=/,/(( .*indexes/p' "${root}/preflight-114-restore.sh" | grep -c 'epoch1_recovery_sources/114_drop_unused_indexes.sql')"
 
 [[ "${drop_count}" -gt 0 ]] || { echo "migration 114 drop inventory is empty" >&2; exit 1; }
 [[ "${inventory_count}" -eq 1 ]] || { echo "preflight must derive its inventory from migration 114" >&2; exit 1; }

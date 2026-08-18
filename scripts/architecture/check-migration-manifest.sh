@@ -11,6 +11,7 @@ EPOCH2_ACL_TAIL="${MIGRATIONS_DIR}/manual/epoch2_acl_tail.sql"
 EPOCH2_SUFFIX_CONTRACT="${ROOT_DIR}/scripts/architecture/epoch2_suffix_contract.txt"
 EPOCH2_NORMALIZER="${ROOT_DIR}/scripts/architecture/normalize-epoch2-baseline.py"
 EPOCH2_REPAIR_SOURCE_DIR="${MIGRATIONS_DIR}/manual/epoch1_message_contract_repair_sources"
+EPOCH2_RECOVERY_SOURCE_DIR="${MIGRATIONS_DIR}/manual/epoch1_recovery_sources"
 EPOCH2_REPAIR_FILES=(
   074_create_message_strings.sql
   076_seed_new_command_templates.sql
@@ -20,6 +21,9 @@ EPOCH2_REPAIR_FILES=(
   080_refresh_help_and_ambiguous.sql
   081_seed_canonical_alarm_templates.sql
   082_seed_calendar_image_strings.sql
+)
+EPOCH2_RECOVERY_FILES=(
+  114_drop_unused_indexes.sql
 )
 
 sql_statement_count() {
@@ -226,6 +230,26 @@ for file in "${EPOCH2_REPAIR_FILES[@]}"; do
   actual_checksum="$(sha256sum "${EPOCH2_REPAIR_SOURCE_DIR}/${file}" | awk '{print $1}')"
   if [[ -z "${expected_checksum}" || "${actual_checksum}" != "${expected_checksum}" ]]; then
     echo "FAIL: epoch-1 message-contract repair source checksum drift: ${file}" >&2
+    exit 1
+  fi
+done
+
+if [[ ! -d "${EPOCH2_RECOVERY_SOURCE_DIR}" ]]; then
+  echo "FAIL: epoch-1 recovery source directory is missing" >&2
+  exit 1
+fi
+mapfile -t epoch2_recovery_sources < <(
+  find "${EPOCH2_RECOVERY_SOURCE_DIR}" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort
+)
+if [[ "${epoch2_recovery_sources[*]}" != "${EPOCH2_RECOVERY_FILES[*]}" ]]; then
+  echo "FAIL: epoch-1 recovery source set drift" >&2
+  exit 1
+fi
+for file in "${EPOCH2_RECOVERY_FILES[@]}"; do
+  expected_checksum="$(awk -v file="${file}" '$2 == file { print $1 }' "${EPOCH2_CONTRACT}")"
+  actual_checksum="$(sha256sum "${EPOCH2_RECOVERY_SOURCE_DIR}/${file}" | awk '{print $1}')"
+  if [[ -z "${expected_checksum}" || "${actual_checksum}" != "${expected_checksum}" ]]; then
+    echo "FAIL: epoch-1 recovery source checksum drift: ${file}" >&2
     exit 1
   fi
 done
