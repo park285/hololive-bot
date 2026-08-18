@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/park285/iris-client-go/webhook"
@@ -11,6 +12,8 @@ import (
 const webhookMetricPrefix = "hololive_bot_webhook_"
 
 type webhookMetrics struct {
+	signatureDiagnostics atomic.Value
+
 	requests        prometheus.Counter
 	unauthorized    prometheus.Counter
 	badRequests     prometheus.Counter
@@ -48,19 +51,52 @@ func NewWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
 		queueDepth:      prometheus.NewGauge(prometheus.GaugeOpts{Name: webhookMetricPrefix + "queue_depth", Help: "Current bot webhook queue depth."}),
 		handlerDuration: prometheus.NewHistogram(prometheus.HistogramOpts{Name: webhookMetricPrefix + "handler_duration_seconds", Help: "Bot webhook message handler duration in seconds.", Buckets: prometheus.DefBuckets}),
 	}
+	signatureV2Validated := prometheus.NewCounterFunc(prometheus.CounterOpts{Name: webhookMetricPrefix + "signature_v2_validated_total", Help: "Total webhook signature v2 requests whose HMAC comparison succeeded."}, func() float64 {
+		return float64(metrics.signatureVersionDiagnostics().V2Validated)
+	})
+	signatureV3Validated := prometheus.NewCounterFunc(prometheus.CounterOpts{Name: webhookMetricPrefix + "signature_v3_validated_total", Help: "Total webhook signature v3 requests whose HMAC comparison succeeded."}, func() float64 {
+		return float64(metrics.signatureVersionDiagnostics().V3Validated)
+	})
+	signatureUnknownRejected := prometheus.NewCounterFunc(prometheus.CounterOpts{Name: webhookMetricPrefix + "signature_unknown_rejected_total", Help: "Total webhook requests rejected for an unknown signature version."}, func() float64 {
+		return float64(metrics.signatureVersionDiagnostics().UnknownRejected)
+	})
+	signatureMalformedRejected := prometheus.NewCounterFunc(prometheus.CounterOpts{Name: webhookMetricPrefix + "signature_malformed_rejected_total", Help: "Total webhook requests rejected for a malformed signature version."}, func() float64 {
+		return float64(metrics.signatureVersionDiagnostics().MalformedRejected)
+	})
 	registerer.MustRegister(
 		metrics.requests, metrics.unauthorized, metrics.badRequests, metrics.duplicates,
 		metrics.enqueueFailures, metrics.accepted, metrics.decodeLatency, metrics.dedupLatency,
 		metrics.enqueueWait, metrics.queueDepth, metrics.handlerDuration,
+		signatureV2Validated, signatureV3Validated, signatureUnknownRejected, signatureMalformedRejected,
 	)
 	return metrics
 }
 
-func defaultWebhookMetrics() webhook.Metrics {
+func defaultWebhookMetrics() *webhookMetrics {
 	defaultWebhookMetricsOnce.Do(func() {
 		defaultWebhookMetricsValue = NewWebhookMetrics(prometheus.DefaultRegisterer)
 	})
 	return defaultWebhookMetricsValue
+}
+
+type signatureDiagnosticsSource interface {
+	SignatureVersionDiagnostics() webhook.SignatureVersionDiagnostics
+}
+
+func (m *webhookMetrics) BindSignatureDiagnostics(source signatureDiagnosticsSource) {
+	if m != nil && source != nil {
+		m.signatureDiagnostics.Store(source)
+	}
+}
+
+func (m *webhookMetrics) signatureVersionDiagnostics() webhook.SignatureVersionDiagnostics {
+	if m == nil {
+		return webhook.SignatureVersionDiagnostics{}
+	}
+	if source, ok := m.signatureDiagnostics.Load().(signatureDiagnosticsSource); ok {
+		return source.SignatureVersionDiagnostics()
+	}
+	return webhook.SignatureVersionDiagnostics{}
 }
 
 func (m *webhookMetrics) ObserveRequest()                      { m.requests.Inc() }

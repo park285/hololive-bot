@@ -10,6 +10,8 @@
 
 ### 추가
 
+- `iris-client-go v1.10.1`을 pin하고 bot webhook receiver의 v2/v3 HMAC 검증 성공과
+  unknown/malformed version 거절 누적값을 고정 cardinality Prometheus counter로 노출합니다.
 - YouTube collector의 provider 실패 class와 lease 실패 진단을 durable schema에 보존합니다.
   기존 deferred 실패를 backfill하고 acquire 경합 및 migration 중에도 진단이 유실되지 않도록
   trigger와 constraint 설치·검증 순서를 고정했습니다.

@@ -17,14 +17,20 @@ func BuildDurableBotWebhookHandler(
 	logger *slog.Logger,
 ) (*webhook.Handler, error) {
 	deduplicator := valkeydedup.New(deps.Cache.GetClient())
-	return iris.NewDurableWebhookHandler(admitter,
+	metrics := defaultWebhookMetrics()
+	handler, err := iris.NewDurableWebhookHandler(admitter,
 		webhook.WithWebhookToken(appConfig.Iris.WebhookToken),
 		webhook.WithWebhookLogger(logger),
-		webhook.WithMetrics(defaultWebhookMetrics()),
+		webhook.WithMetrics(metrics),
 		webhook.WithDeduplicator(deduplicator),
 		webhook.WithNonceCache(deduplicator),
 		webhook.WithMaxBodyBytes(appConfig.Webhook.MaxBodyBytes),
 		webhook.WithDedupTTL(appConfig.Webhook.DedupTTL),
 		webhook.WithDedupTimeout(appConfig.Webhook.DedupTimeout),
 	)
+	if err != nil {
+		return nil, err
+	}
+	metrics.BindSignatureDiagnostics(handler)
+	return handler, nil
 }
