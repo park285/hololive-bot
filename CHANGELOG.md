@@ -22,8 +22,8 @@
 - YouTube.js 18과 current response shape를 채택하고 Official Schedule, Community와 YouTube.js
   관측의 ownership을 collector plane으로 모았습니다. Kakao room catalog의 DB 오류를 not-found나
   빈 관측으로 바꾸지 않으며 retention과 projection 권한을 최소 privilege로 제한합니다.
-- Go toolchain과 builder 기준을 `1.26.6`으로, `shared-go`를 `v1.51.0`으로 갱신하고 일반챗
-  plaintext/open-chat 판별을 공용 `kakaoformat` 정본으로 수렴했습니다.
+- Go toolchain과 builder 기준을 `1.26.6`으로, `shared-go`를 `v1.51.0`으로, `iris-client-go`를
+  `v1.10.1`로 갱신하고 일반챗 plaintext/open-chat 판별을 공용 `kakaoformat` 정본으로 수렴했습니다.
 - **service 로그 인코딩이 text에서 JSON으로 바뀝니다.** shared-go 로깅이 text
   인코더를 제거하고 빈 `Format` 기본값이 JSON이 되면서, `hololive-api`,
   `hololive-alarm-worker`, `hololive-youtube-collector`, admin-dashboard backend의

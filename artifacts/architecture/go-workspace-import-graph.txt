@@ -429,6 +429,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> githu
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/iris-client-go/iris
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/iris-client-go/valkeydedup
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/iris-client-go/webhook
+github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/iris-client-go/webhooksign
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/shared-go/pkg/h3
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/park285/shared-go/pkg/httputil
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/http -> github.com/kapu/hololive-api/internal/readiness
