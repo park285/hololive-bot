@@ -397,8 +397,11 @@ idle_in_transaction_session_timeout = 5min
 - idle 시작 시각
 - transaction/idle age
 - `backend_xmin` 및 age
-- wait event
-- 최대 500자의 query
+- wait event와 backend type
+- `query_id`
+
+raw query text는 SQL literal이나 사용자 데이터를 포함할 수 있어 수집하지 않습니다. `query_id`로 동일 패턴을
+식별하고, 필요한 경우 권한이 통제된 운영 세션에서 별도로 조사합니다.
 
 artifact가 비어 있으면 해당 snapshot 시점에는 idle transaction이 없다는 뜻입니다.
 출력이 있다고 즉시 프로세스를 종료하는 자동 gate로 만들지는 않았습니다. 배치/운영 세션의 의도를
