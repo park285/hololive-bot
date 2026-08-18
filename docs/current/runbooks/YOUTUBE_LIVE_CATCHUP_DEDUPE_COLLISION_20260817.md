@@ -21,7 +21,8 @@
 | 오해 | 실제 |
 |---|---|
 | live catchup 키와 영상등록(`NEW_VIDEO`) 키가 충돌했다 | `youtube_notification_outbox`에 해당 `video_id`의 `NEW_VIDEO`/`LIVE_STREAM` 행이 없다 |
-| 종료된 방송이 VOD로 등록되면서 `새 영상`이 나갔다 | 늦은 메시지는 alarm-worker LIVE 이벤트이고 문구는 `방송 시작`이다 |
+| 방송 종료 후 아카이브가 `youtube_videos`에 새로 들어가 LIVE로 재등록됐다 | 두 ID 모두 `youtube_videos` 행이 없다. 같은 채널 구간 알람도 원래 `stream_id` 두 개뿐이다 |
+| 종료된 방송이 VOD로 등록되면서 `새 영상`이 나갔다 | 늦은 메시지는 alarm-worker LIVE 이벤트이고 문구는 `방송 시작`이다. 종료 직후라는 타이밍만 그 증상과 닮았다 |
 | collector가 LIVE를 늦게 봤다 | `youtube_live_sessions.live_first_seen_at`는 실제 시작과 수십 초 이내다 |
 | 멤버십 방송이라 LIVE 감지가 실패했다 | 이로하도 `00:31` KST에 LIVE로 persist됐다. 멤버십 결제 링크 부재는 별 제품 공백이다 |
 
