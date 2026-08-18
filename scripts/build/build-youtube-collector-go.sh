@@ -116,8 +116,8 @@ case "${goamd64}" in
     ;;
 esac
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root_dir=$(CDPATH= cd -- "${script_dir}/../.." && pwd)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+root_dir=$(CDPATH='' cd -- "${script_dir}/../.." && pwd)
 collector_dir="${root_dir}/hololive/hololive-youtube-collector"
 [ -f "${collector_dir}/go.mod" ] || {
   echo "collector module is missing: ${collector_dir}" >&2
