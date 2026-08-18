@@ -111,21 +111,107 @@ SQL
 dead_tuples_sql() {
   cat <<'SQL'
 SELECT
-    relname,
-    n_live_tup,
-    n_dead_tup,
-    autovacuum_count,
-    autoanalyze_count,
-    last_autovacuum,
-    last_autoanalyze
-FROM pg_stat_user_tables
-WHERE relname IN (
+    'table' AS section,
+    stats.schemaname,
+    stats.relname,
+    stats.n_live_tup,
+    stats.n_dead_tup,
+    stats.n_tup_ins,
+    stats.n_tup_upd,
+    stats.n_tup_hot_upd,
+    stats.n_tup_newpage_upd,
+    stats.n_tup_del,
+    stats.n_mod_since_analyze,
+    stats.n_ins_since_vacuum,
+    COALESCE(
+        ROUND(
+            100.0 * stats.n_dead_tup
+            / NULLIF(stats.n_live_tup + stats.n_dead_tup, 0),
+            2
+        ),
+        0
+    ) AS dead_tuple_pct,
+    COALESCE(
+        ROUND(
+            100.0 * stats.n_tup_hot_upd / NULLIF(stats.n_tup_upd, 0),
+            2
+        ),
+        0
+    ) AS hot_update_pct,
+    COALESCE(
+        ROUND(
+            100.0 * stats.n_tup_newpage_upd / NULLIF(stats.n_tup_upd, 0),
+            2
+        ),
+        0
+    ) AS newpage_update_pct,
+    stats.vacuum_count,
+    stats.autovacuum_count,
+    stats.analyze_count,
+    stats.autoanalyze_count,
+    stats.last_vacuum,
+    stats.last_autovacuum,
+    stats.last_analyze,
+    stats.last_autoanalyze,
+    relation.reloptions
+FROM pg_stat_user_tables AS stats
+JOIN pg_class AS relation ON relation.oid = stats.relid
+WHERE stats.relname IN (
     'alarm_dispatch_deliveries',
     'alarm_dispatch_send_units',
     'youtube_notification_outbox',
-    'youtube_notification_delivery'
+    'youtube_notification_delivery',
+    'source_collection_checkpoints',
+    'source_observation_queue',
+    'source_observations',
+    'youtube_collection_job_leases'
 )
-ORDER BY n_dead_tup DESC, relname;
+ORDER BY stats.n_dead_tup DESC, stats.n_tup_upd DESC, stats.relname;
+
+SELECT
+    'index' AS section,
+    indexes.schemaname,
+    indexes.relname,
+    indexes.indexrelname,
+    indexes.idx_scan,
+    indexes.last_idx_scan,
+    indexes.idx_tup_read,
+    indexes.idx_tup_fetch,
+    pg_size_pretty(pg_relation_size(indexes.indexrelid)) AS index_size
+FROM pg_stat_user_indexes AS indexes
+WHERE indexes.relname IN (
+    'alarm_dispatch_deliveries',
+    'alarm_dispatch_send_units',
+    'youtube_notification_outbox',
+    'youtube_notification_delivery',
+    'source_collection_checkpoints',
+    'source_observation_queue',
+    'source_observations',
+    'youtube_collection_job_leases'
+)
+ORDER BY indexes.relname, indexes.idx_scan, indexes.indexrelname;
+
+-- Old transactions and xmin holders can delay dead-tuple reclamation.
+SELECT
+    'transaction' AS section,
+    pid,
+    usename,
+    application_name,
+    backend_type,
+    state,
+    clock_timestamp() - xact_start AS transaction_age,
+    clock_timestamp() - state_change AS state_age,
+    backend_xid,
+    backend_xmin,
+    age(backend_xmin) AS xmin_age,
+    wait_event_type,
+    wait_event
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND pid <> pg_backend_pid()
+  AND xact_start IS NOT NULL
+ORDER BY xact_start, pid
+LIMIT 20;
 SQL
 }
 
