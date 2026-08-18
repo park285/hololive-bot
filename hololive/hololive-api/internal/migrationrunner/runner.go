@@ -171,25 +171,43 @@ func recordBaselineThrough(
 		_, err := tx.Exec(ctx, query, args...)
 		return err
 	}
-	for _, name := range entries {
-		content, err := fs.ReadFile(fsys, name)
-		if err != nil {
-			return rollbackTxSegmentOnError(ctx, tx, fmt.Errorf("read %s: %w", name, err))
-		}
-		if err := recordMigrationChecksum(ctx, txExec, name, migrationChecksum(content)); err != nil {
-			return rollbackTxSegmentOnError(ctx, tx, err)
-		}
-		if err := ledger.Record(ctx, txExec, name); err != nil {
-			return rollbackTxSegmentOnError(ctx, tx, err)
-		}
-		if name == through {
-			break
-		}
+	if err := recordBaselineEntries(ctx, fsys, ledger, txExec, entries, through); err != nil {
+		return rollbackTxSegmentOnError(ctx, tx, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
 	return nil
+}
+
+func recordBaselineEntries(
+	ctx context.Context,
+	fsys fs.FS,
+	ledger dbmigrate.Ledger,
+	exec dbmigrate.Execer,
+	entries []string,
+	through string,
+) error {
+	for _, name := range entries {
+		if err := recordBaselineEntry(ctx, fsys, ledger, exec, name); err != nil {
+			return err
+		}
+		if name == through {
+			return nil
+		}
+	}
+	return fmt.Errorf("baseline target %s was not reached", through)
+}
+
+func recordBaselineEntry(ctx context.Context, fsys fs.FS, ledger dbmigrate.Ledger, exec dbmigrate.Execer, name string) error {
+	content, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", name, err)
+	}
+	if err := recordMigrationChecksum(ctx, exec, name, migrationChecksum(content)); err != nil {
+		return err
+	}
+	return ledger.Record(ctx, exec, name)
 }
 
 // manifest 밖 ledger 항목(이전 epoch 잔재)이 있는 DB는 checkpoint를 거친 경우에만
@@ -199,48 +217,61 @@ func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate
 	if len(entries) == 0 {
 		return false, nil
 	}
-	var residue bool
-	if err := conn.QueryRow(ctx, mustSQL("legacy_residue_present.sql"), entries).Scan(&residue); err != nil {
-		return false, fmt.Errorf("detect legacy ledger residue: %w", err)
-	}
 	baseline := entries[0]
+	residue, err := hasLegacyResidue(ctx, conn, entries)
+	if err != nil {
+		return false, err
+	}
 	applied, err := ledger.Applied(ctx, pgxRowQuerier{conn: conn}, baseline)
 	if err != nil {
 		return false, err
 	}
-	if !residue {
-		if baseline != epoch2Baseline || !applied {
-			return false, nil
-		}
-		_, checksumPresent, err := loadMigrationChecksum(ctx, conn, baseline)
-		if err != nil {
-			return false, err
-		}
-		if !checksumPresent {
-			return false, fmt.Errorf(
-				"epoch baseline %s is recorded without its checksum and no legacy ledger residue remains; "+
-					"refusing to trust a marker that cannot be proven by either the R1 legacy contract or a completed R2 application",
-				baseline)
-		}
-		return false, nil
+	if residue {
+		return validateLegacyResidue(ctx, conn, baseline, applied)
 	}
+	return validateCurrentEpochBaseline(ctx, conn, baseline, applied)
+}
+
+func hasLegacyResidue(ctx context.Context, conn *pgxpool.Conn, entries []string) (bool, error) {
+	var residue bool
+	if err := conn.QueryRow(ctx, mustSQL("legacy_residue_present.sql"), entries).Scan(&residue); err != nil {
+		return false, fmt.Errorf("detect legacy ledger residue: %w", err)
+	}
+	return residue, nil
+}
+
+func validateLegacyResidue(ctx context.Context, conn *pgxpool.Conn, baseline string, applied bool) (bool, error) {
 	if !applied {
 		return false, fmt.Errorf(
 			"schema_migrations has entries outside the current manifest but epoch baseline %s is not recorded; "+
 				"this database predates the epoch squash without the checkpoint migration — deploy the checkpoint release first",
 			baseline)
 	}
-	if baseline == epoch2Baseline {
-		if err := verifyEpoch2LegacyContract(ctx, conn); err != nil {
-			return false, fmt.Errorf("epoch-2 legacy contract: %w", err)
-		}
-		_, checksumPresent, err := loadMigrationChecksum(ctx, conn, baseline)
-		if err != nil {
-			return false, err
-		}
-		return !checksumPresent, nil
+	if baseline != epoch2Baseline {
+		return false, nil
 	}
-	return false, nil
+	if err := verifyEpoch2LegacyContract(ctx, conn); err != nil {
+		return false, fmt.Errorf("epoch-2 legacy contract: %w", err)
+	}
+	_, checksumPresent, err := loadMigrationChecksum(ctx, conn, baseline)
+	return !checksumPresent, err
+}
+
+func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, baseline string, applied bool) (bool, error) {
+	if baseline != epoch2Baseline || !applied {
+		return false, nil
+	}
+	_, checksumPresent, err := loadMigrationChecksum(ctx, conn, baseline)
+	if err != nil {
+		return false, err
+	}
+	if checksumPresent {
+		return false, nil
+	}
+	return false, fmt.Errorf(
+		"epoch baseline %s is recorded without its checksum and no legacy ledger residue remains; "+
+			"refusing to trust a marker that cannot be proven by either the R1 legacy contract or a completed R2 application",
+		baseline)
 }
 
 func containsEntry(entries []string, target string) bool {
