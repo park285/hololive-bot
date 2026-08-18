@@ -55,7 +55,7 @@ func TestPublishBatchDuplicateDoesNotRewriteCheckpointTuple(t *testing.T) {
 	}
 }
 
-func TestCheckpointUpsertNoopDoesNotRewriteTuple(t *testing.T) {
+func TestPublishBatchDuplicateUpdatesChangedCheckpointMetadata(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.NewPool(t)
 	proof := seedPublishLease(
@@ -69,36 +69,103 @@ func TestCheckpointUpsertNoopDoesNotRewriteTuple(t *testing.T) {
 	)
 	envelope := communityEnvelope(t, &proof, "post-1")
 	input := publishInput(envelope)
-	if _, err := NewRepository(pool).PublishBatch(ctx, input); err != nil {
+	repo := NewRepository(pool)
+	first, err := repo.PublishBatch(ctx, input)
+	if err != nil {
 		t.Fatalf("publish checkpoint seed: %v", err)
 	}
 	before := loadCheckpointTupleVersion(t, ctx, pool, envelope)
 
-	checkpoint := input.Checkpoint.Entries[0]
-	var cursor any
-	if len(checkpoint.Cursor) != 0 {
-		cursor = string(checkpoint.Cursor)
+	input.Checkpoint.CollectionLatency += time.Millisecond
+	reactivateLease(t, pool, &proof)
+	second, err := repo.PublishBatch(ctx, input)
+	if err != nil {
+		t.Fatalf("publish changed checkpoint: %v", err)
 	}
-	if _, err := pool.Exec(
-		ctx,
-		mustSQL("repository_checkpoint_upsert_0010_10.sql"),
-		checkpoint.Provider,
-		checkpoint.ObservationKind,
-		checkpoint.SubjectKey,
-		checkpoint.ScopeSHA256,
-		checkpoint.ContractGeneration,
-		checkpoint.LastObservationKey,
-		checkpoint.LastEvidenceSHA256,
-		checkpoint.LastScheduledFor,
-		input.Checkpoint.CollectionLatency.Milliseconds(),
-		checkpoint.Continuity,
-		cursor,
-	); err != nil {
-		t.Fatalf("repeat exact checkpoint upsert: %v", err)
+	if second.Results[0].Outcome != PublishDuplicate || second.Results[0].ObservationID != first.Results[0].ObservationID {
+		t.Fatalf("changed checkpoint duplicate result = %#v", second.Results[0])
 	}
 	after := loadCheckpointTupleVersion(t, ctx, pool, envelope)
-	if after != before {
-		t.Fatalf("exact checkpoint upsert rewrote tuple: before=%+v after=%+v", before, after)
+	if after == before {
+		t.Fatalf("changed checkpoint did not rewrite tuple: before=%+v after=%+v", before, after)
+	}
+
+	var latency int64
+	if err := pool.QueryRow(ctx, `
+		SELECT collection_latency_ms
+		FROM source_collection_checkpoints
+		WHERE provider = $1
+		  AND observation_kind = $2
+		  AND subject_key = $3
+		  AND scope_sha256 = $4
+	`, envelope.Provider, envelope.ObservationKind, envelope.SubjectKey, envelope.ScopeSHA256).Scan(&latency); err != nil {
+		t.Fatalf("load checkpoint latency: %v", err)
+	}
+	if latency != input.Checkpoint.CollectionLatency.Milliseconds() {
+		t.Fatalf("collection_latency_ms = %d, want %d", latency, input.Checkpoint.CollectionLatency.Milliseconds())
+	}
+}
+
+func TestPublishBatchDuplicateClearsCheckpointErrorState(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	proof := seedPublishLease(
+		t,
+		ctx,
+		pool,
+		contract.ProviderYouTubeJS,
+		contract.KindCommunityPage,
+		"UC_TEST",
+		"community_collect",
+	)
+	envelope := communityEnvelope(t, &proof, "post-1")
+	input := publishInput(envelope)
+	repo := NewRepository(pool)
+	first, err := repo.PublishBatch(ctx, input)
+	if err != nil {
+		t.Fatalf("publish checkpoint seed: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE source_collection_checkpoints
+		SET last_error_code = 'timeout', last_error_at = NOW()
+		WHERE provider = $1
+		  AND observation_kind = $2
+		  AND subject_key = $3
+		  AND scope_sha256 = $4
+	`, envelope.Provider, envelope.ObservationKind, envelope.SubjectKey, envelope.ScopeSHA256); err != nil {
+		t.Fatalf("seed checkpoint error state: %v", err)
+	}
+	before := loadCheckpointTupleVersion(t, ctx, pool, envelope)
+
+	reactivateLease(t, pool, &proof)
+	second, err := repo.PublishBatch(ctx, input)
+	if err != nil {
+		t.Fatalf("publish checkpoint recovery: %v", err)
+	}
+	if second.Results[0].Outcome != PublishDuplicate || second.Results[0].ObservationID != first.Results[0].ObservationID {
+		t.Fatalf("checkpoint recovery duplicate result = %#v", second.Results[0])
+	}
+	after := loadCheckpointTupleVersion(t, ctx, pool, envelope)
+	if after == before {
+		t.Fatalf("checkpoint recovery did not rewrite tuple: before=%+v after=%+v", before, after)
+	}
+
+	var errorCodeCleared, errorAtCleared bool
+	if err := pool.QueryRow(ctx, `
+		SELECT last_error_code IS NULL, last_error_at IS NULL
+		FROM source_collection_checkpoints
+		WHERE provider = $1
+		  AND observation_kind = $2
+		  AND subject_key = $3
+		  AND scope_sha256 = $4
+	`, envelope.Provider, envelope.ObservationKind, envelope.SubjectKey, envelope.ScopeSHA256).Scan(
+		&errorCodeCleared,
+		&errorAtCleared,
+	); err != nil {
+		t.Fatalf("load checkpoint error state: %v", err)
+	}
+	if !errorCodeCleared || !errorAtCleared {
+		t.Fatalf("checkpoint error state not cleared: code=%t at=%t", errorCodeCleared, errorAtCleared)
 	}
 }
 
