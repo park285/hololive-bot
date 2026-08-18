@@ -86,6 +86,7 @@ const (
 	ReplyOutboxDead                 = "dead"
 	ReplyOutboxPermanentConflict    = "permanent_conflict"
 	ReplyOutboxManualReview         = "manual_review"
+	ReplyOutboxDiscarded            = "discarded"
 )
 
 // accepted는 Iris가 이미 수리한 뒤라 그 행을 claim 큐로 되돌리면 admission idempotency TTL이 지난

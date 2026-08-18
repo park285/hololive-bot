@@ -173,3 +173,5 @@
 173 177_youtube_job_lease_failure_diagnostics.sql
 174 178_youtube_schedule_collabo_talent_names.sql
 175 179_alarm_dispatch_collab_members.sql
+176 180_reply_outbox_manual_review_discard.sql
+177 181_reply_outbox_discarded_retention_index.sql

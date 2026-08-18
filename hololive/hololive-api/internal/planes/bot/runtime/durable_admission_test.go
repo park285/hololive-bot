@@ -101,7 +101,7 @@ func TestAcceptedLeaseReclaimEmitsActionableCounterAndLog(t *testing.T) {
 
 func TestManualReviewBacklogMetricsExposeCountAndOldestAge(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	_, err := pool.Exec(t.Context(), "TRUNCATE bot_reply_outbox_replay_audit, bot_reply_outbox RESTART IDENTITY")
+	_, err := pool.Exec(t.Context(), "TRUNCATE bot_reply_outbox_resolution_audit, bot_reply_outbox_replay_audit, bot_reply_outbox RESTART IDENTITY")
 	if err != nil {
 		t.Fatal(err)
 	}

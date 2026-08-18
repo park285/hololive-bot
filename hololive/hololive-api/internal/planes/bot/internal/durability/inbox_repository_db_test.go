@@ -44,7 +44,7 @@ func truncateDurabilityTables(ctx context.Context, t *testing.T, pool *pgxpool.P
 	t.Helper()
 
 	_, err := pool.Exec(ctx,
-		"TRUNCATE bot_reply_outbox_replay_audit, bot_webhook_heads, bot_webhook_inbox, bot_command_executions, bot_reply_outbox RESTART IDENTITY")
+		"TRUNCATE bot_reply_outbox_resolution_audit, bot_reply_outbox_replay_audit, bot_webhook_heads, bot_webhook_inbox, bot_command_executions, bot_reply_outbox RESTART IDENTITY")
 	require.NoError(t, err)
 }
 
