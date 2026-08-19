@@ -19,6 +19,8 @@
 
 - `shared-go v1.53.0`으로 갱신하고 제거된 `workerconfig` package를 허용 목록에서도
   삭제했습니다. worker profile과 metrics는 strict `workercontract.Registry`만 소유합니다.
+- 함께 재빌드하는 `hololive-api`와 `hololive-alarm-worker` artifact version을 repository
+  release `v3.0.3`과 일치시켰습니다.
 
 ## v3.0.2 - 2026-08-20
 
