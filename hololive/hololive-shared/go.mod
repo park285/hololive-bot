@@ -28,7 +28,6 @@ replace github.com/kapu/hololive-dbtest => ../hololive-dbtest
 require (
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v1.9.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/quic-go/quic-go v0.61.0
 	go.opentelemetry.io/otel v1.45.0
@@ -97,6 +96,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/park285/iris-client-go/v2 v2.0.0
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 func TestProvideIrisClient_UsesRuntimeBaseURLFile(t *testing.T) {
