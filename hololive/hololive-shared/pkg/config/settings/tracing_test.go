@@ -38,7 +38,9 @@ var tracingEnabledEnvKeys = []string{
 func clearTracingEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range append([]string{
-		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		otlpEndpointEnv,
+		otlpTracesEndpointEnv,
+		"HOLOLIVE_OTLP_GRPC_ENDPOINT",
 		"OTEL_EXPORTER_OTLP_INSECURE",
 		"OTEL_SAMPLE_RATE",
 		"OTEL_ENABLED",
@@ -46,6 +48,24 @@ func clearTracingEnv(t *testing.T) {
 		"OTEL_SERVICE_VERSION",
 	}, tracingEnabledEnvKeys...) {
 		t.Setenv(key, "")
+	}
+}
+
+func TestLoadTracingConfigRejectsRetiredStandardEndpoint(t *testing.T) {
+	for _, retiredEnv := range []string{otlpEndpointEnv, otlpTracesEndpointEnv} {
+		for _, includeCanonical := range []bool{false, true} {
+			clearTracingEnv(t)
+			t.Setenv(tracingHololiveAPIEnabledEnv, "true")
+			t.Setenv(retiredEnv, "otel-collector:4317")
+			if includeCanonical {
+				t.Setenv(hololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
+			}
+
+			_, err := loadTracingConfig(tracingRuntimeHololiveAPI, "")
+			if err == nil || !strings.Contains(err.Error(), retiredEnv+" is no longer supported") {
+				t.Fatalf("loadTracingConfig() error = %v, want retired standard endpoint rejection", err)
+			}
+		}
 	}
 }
 
@@ -94,7 +114,7 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 			}
 			t.Setenv(tt.selectedEnv, "true")
 			t.Setenv("OTEL_ENABLED", "true")
-			t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", " otel-collector:4317 ")
+			t.Setenv(hololiveOTLPGRPCEndpointEnv, " otel-collector:4317 ")
 
 			config, err := loadTracingConfig(tt.runtime, tt.collectorInstanceID)
 			if err != nil {
@@ -206,7 +226,7 @@ func TestLoadTracingConfigRejectsInvalidValues(t *testing.T) {
 			setup: func(t *testing.T) {
 				t.Setenv(tracingHololiveAPIEnabledEnv, "true")
 			},
-			wantErr: "OTEL_EXPORTER_OTLP_ENDPOINT is required",
+			wantErr: "HOLOLIVE_OTLP_GRPC_ENDPOINT is required",
 		},
 	}
 
@@ -229,7 +249,7 @@ func TestLoadHololiveAPIRuntimeSelectsHololiveAPIToggle(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("ALARM_INTERNAL_URL", "http://127.0.0.1:30007")
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
+	t.Setenv(hololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 	t.Setenv(tracingHololiveAPIEnabledEnv, "true")
 	t.Setenv(tracingAlarmWorkerEnabledEnv, "not-a-bool")
 	for _, key := range tracingEnabledEnvKeys[2:] {
@@ -250,7 +270,7 @@ func TestLoadAlarmWorkerRuntimeSelectsAlarmWorkerToggle(t *testing.T) {
 	clearTracingEnv(t)
 	setRequiredLoadEnv(t)
 	t.Setenv("APP_ENV", "development")
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
+	t.Setenv(hololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 	t.Setenv(tracingHololiveAPIEnabledEnv, "not-a-bool")
 	t.Setenv(tracingAlarmWorkerEnabledEnv, "true")
 	for _, key := range tracingEnabledEnvKeys[2:] {
@@ -289,7 +309,7 @@ func TestLoadYouTubeCollectorRuntimeSelectsInstanceToggle(t *testing.T) {
 			t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "true")
 			t.Setenv("PHOTO_SYNC_ENABLED", "false")
 			t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
-			t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
+			t.Setenv(hololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 			t.Setenv(tracingHololiveAPIEnabledEnv, "not-a-bool")
 			t.Setenv(tracingAlarmWorkerEnabledEnv, "not-a-bool")
 			for _, key := range tracingEnabledEnvKeys[2:] {
