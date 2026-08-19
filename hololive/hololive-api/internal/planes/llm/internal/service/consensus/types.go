@@ -21,6 +21,7 @@
 package consensus
 
 import (
+	"context"
 	"strings"
 	"time"
 )
@@ -46,6 +47,26 @@ type Config struct {
 
 type FinalOutputReviewResponse struct {
 	Summary string `json:"summary"`
+}
+
+func StageContext(parent context.Context, requested time.Duration) (context.Context, context.CancelFunc, bool) {
+	const reserve = 250 * time.Millisecond
+	if requested <= 0 {
+		requested = time.Second
+	}
+
+	if deadline, ok := parent.Deadline(); ok {
+		remaining := time.Until(deadline) - reserve
+		if remaining <= 0 {
+			return nil, nil, false
+		}
+		if remaining < requested {
+			requested = remaining
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(parent, requested)
+	return ctx, cancel, true
 }
 
 func NormalizeSeverity(s string) string {
