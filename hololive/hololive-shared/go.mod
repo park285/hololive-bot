@@ -17,7 +17,7 @@ require (
 	github.com/tidwall/gjson v1.19.0
 	github.com/valkey-io/valkey-go v1.0.77
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/net v0.58.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/time v0.15.0
