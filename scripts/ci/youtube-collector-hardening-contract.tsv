@@ -25,7 +25,7 @@ HC-010	true	PR-00	hololive/hololive-youtube-collector/Makefile	required	-tags\s+
 HC-010	true	PR-00	scripts/build/build-youtube-collector-go.sh	forbidden	go_json	0	0	-
 HC-010	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	forbidden	go_json	0	0	-
 HC-010	true	PR-00	scripts/deploy/ap-host-native-deploy.sh	forbidden	go_json	0	0	-
-HC-011	true	PR-10	hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go	required	handoff_processed	1	1	-
+HC-011	true	PR-10	hololive/hololive-youtube-collector/internal/runtime/collectorruntime/readiness_handler.go	required	handoff_processed	1	1	-
 HC-011	true	PR-10	scripts/deploy/lib/ap-collector-readiness.sh	required	handoff_processed	1	1	-
 HC-012	true	PR-10	scripts/deploy/ap-deploy-version_test.sh	required	same remote block that validates readiness	1	1	-
 HC-012	true	PR-10	scripts/deploy/ap-deploy.sh	required	\. scripts/deploy/lib/ap-collector-readiness\.sh	1	1	-
