@@ -31,6 +31,12 @@ import (
 const defaultOTELSampleRate = 0.1
 
 const (
+	hololiveOTLPGRPCEndpointEnv = "HOLOLIVE_OTLP_GRPC_ENDPOINT"
+	otlpEndpointEnv             = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	otlpTracesEndpointEnv       = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+)
+
+const (
 	tracingHololiveAPIEnabledEnv       = "OTEL_HOLOLIVE_API_ENABLED"
 	tracingAlarmWorkerEnabledEnv       = "OTEL_HOLOLIVE_ALARM_WORKER_ENABLED"
 	tracingYouTubeCollectorAEnabledEnv = "OTEL_YOUTUBE_COLLECTOR_A_ENABLED"
@@ -56,6 +62,10 @@ type TracingConfig struct {
 }
 
 func loadTracingConfig(runtime tracingRuntime, collectorInstanceID string) (TracingConfig, error) {
+	if err := rejectRetiredOTLPEndpointEnv(); err != nil {
+		return TracingConfig{}, err
+	}
+
 	enabledEnv, err := tracingEnabledEnv(runtime, collectorInstanceID)
 	if err != nil {
 		return TracingConfig{}, err
@@ -79,7 +89,7 @@ func loadTracingConfig(runtime tracingRuntime, collectorInstanceID string) (Trac
 
 	config := TracingConfig{
 		Enabled:    enabled,
-		Endpoint:   strings.TrimSpace(sharedenv.String("OTEL_EXPORTER_OTLP_ENDPOINT", "")),
+		Endpoint:   strings.TrimSpace(sharedenv.String(hololiveOTLPGRPCEndpointEnv, "")),
 		Insecure:   insecure,
 		SampleRate: sampleRate,
 	}
@@ -87,6 +97,15 @@ func loadTracingConfig(runtime tracingRuntime, collectorInstanceID string) (Trac
 		return TracingConfig{}, err
 	}
 	return config, nil
+}
+
+func rejectRetiredOTLPEndpointEnv() error {
+	for _, retiredEnv := range []string{otlpEndpointEnv, otlpTracesEndpointEnv} {
+		if strings.TrimSpace(sharedenv.String(retiredEnv, "")) != "" {
+			return fmt.Errorf("%s is no longer supported; use %s", retiredEnv, hololiveOTLPGRPCEndpointEnv)
+		}
+	}
+	return nil
 }
 
 func tracingEnabledEnv(runtime tracingRuntime, collectorInstanceID string) (string, error) {
@@ -158,7 +177,7 @@ func validateTracingConfig(config TracingConfig) error {
 		return fmt.Errorf("OTEL_SAMPLE_RATE must be between 0 and 1")
 	}
 	if config.Enabled && strings.TrimSpace(config.Endpoint) == "" {
-		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT is required when tracing is enabled")
+		return fmt.Errorf("%s is required when tracing is enabled", hololiveOTLPGRPCEndpointEnv)
 	}
 	return nil
 }

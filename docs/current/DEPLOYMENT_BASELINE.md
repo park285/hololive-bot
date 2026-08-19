@@ -21,7 +21,7 @@
 
 `<build-control-host>`는 두 가지를 추가로 소유합니다. 첫째, CLIProxy와 observability
 스택(Jaeger/OTLP, Prometheus, Loki, Grafana, exporter)이 중앙 데이터 평면 이전 때
-의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `OTEL_EXPORTER_OTLP_ENDPOINT`가
+의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `HOLOLIVE_OTLP_GRPC_ENDPOINT`가
 `<build-control-host>`를 가리키는 것은 이전 누락이 아니라 named exception입니다.
 둘째, 같은 호스트의 `holo-postgres`/`valkey-cache`는 **백업 사본**입니다(HA standby가
 아닙니다 — 그 역할은 `<tailnet-seoul-ap>`가 맡습니다). `hololive-db-backup.timer` user

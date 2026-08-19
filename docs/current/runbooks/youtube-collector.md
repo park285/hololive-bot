@@ -52,10 +52,14 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 |---|---|---|
 | `SERVER_PORT` | per-host H3 port | yes |
 | `API_SECRET_KEY` | H3 internal routes and non-loopback `/metrics` authentication | production yes |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | collector trace export endpoint | production yes |
+| `HOLOLIVE_OTLP_GRPC_ENDPOINT` | collector trace export endpoint (`host:port`, gRPC) | production yes |
 | `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true` | per-slot trace enablement (`A`/`B`/`C`/`D`) | production yes |
 | `YOUTUBE_INGESTION_ENABLED=true` | collector enablement | yes |
 | `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true` | must be true only on collector hosts | yes |
+
+`OTEL_EXPORTER_OTLP_ENDPOINT`와 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`는 URL 문법을
+자동 적용하므로 Hololive runtime에서는 지원하지 않습니다. 둘 중 하나가 non-empty이면
+`HOLOLIVE_OTLP_GRPC_ENDPOINT` 존재 여부와 무관하게 startup validation이 실패합니다.
 | `YOUTUBE_COLLECTOR_INSTANCE_ID` | fleet identity `youtube-collector-a/b/c/d` | yes |
 | `PHOTO_SYNC_ENABLED=false` | photo product path stays on hololive-api admin | yes |
 | `POSTGRES_USER=hololive_scraper` | lease/observation insert only | yes |
