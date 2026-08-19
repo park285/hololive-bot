@@ -61,10 +61,15 @@ func (c *Config) ValidateAlarmWorkerRuntime() error {
 		return err
 	}
 	if isProductionEnvironment(c.Environment) {
-		for workerID, worker := range c.AlarmWorkerProfile.Loaded.Profile.Workers {
-			if !worker.Executor.Enabled {
-				return fmt.Errorf("alarm-worker production requires %s executor.enabled=true", workerID)
-			}
+		return validateProductionAlarmExecutors(c.AlarmWorkerProfile)
+	}
+	return nil
+}
+
+func validateProductionAlarmExecutors(profile *AlarmWorkerProfile) error {
+	for workerID, worker := range profile.Loaded.Profile.Workers {
+		if !worker.Executor.Enabled {
+			return fmt.Errorf("alarm-worker production requires %s executor.enabled=true", workerID)
 		}
 	}
 	return nil

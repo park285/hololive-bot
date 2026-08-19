@@ -63,7 +63,6 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		return nil, fmt.Errorf("build bot runtime: infra is nil")
 	}
 	runtimeViews := buildBotRuntimeDependencyViews(infra)
-
 	botBot, err := orchestration.NewBot(runtimeViews.botDeps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)

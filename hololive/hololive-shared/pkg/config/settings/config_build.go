@@ -50,23 +50,31 @@ func loadRoleWorkerProfile(config *Config, role string) error {
 	case "":
 		return nil
 	case "api":
-		profile, err := LoadAPIWorkerProfile()
-		if err != nil {
-			return err
-		}
-		config.APIWorkerProfile = profile
-		applyAPIWorkerProfile(config, profile)
-		return nil
+		return loadAPIWorkerProfile(config)
 	case "alarm-worker":
-		profile, err := LoadAlarmWorkerProfile()
-		if err != nil {
-			return err
-		}
-		config.AlarmWorkerProfile = profile
-		return nil
+		return loadAlarmWorkerProfile(config)
 	default:
 		return fmt.Errorf("unsupported worker profile role %q", role)
 	}
+}
+
+func loadAPIWorkerProfile(config *Config) error {
+	profile, err := LoadAPIWorkerProfile()
+	if err != nil {
+		return err
+	}
+	config.APIWorkerProfile = profile
+	applyAPIWorkerProfile(config, profile)
+	return nil
+}
+
+func loadAlarmWorkerProfile(config *Config) error {
+	profile, err := LoadAlarmWorkerProfile()
+	if err != nil {
+		return err
+	}
+	config.AlarmWorkerProfile = profile
+	return nil
 }
 
 func applyAPIWorkerProfile(config *Config, profile *APIWorkerProfile) {

@@ -309,11 +309,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 	}
 
 	if err := d.sendMessage(ctx, item, p.Message); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			outcome = workercontract.AttemptTimeout
-		} else if errors.Is(err, context.Canceled) {
-			outcome = workercontract.AttemptCanceled
-		}
+		outcome = deliveryAttemptFailure(err)
 		d.logger.Error("Failed to send outbox message",
 			slog.Int64("id", item.ID),
 			privacylog.RoomIDAttr(item.RoomID),
@@ -325,6 +321,16 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 	if d.markItemSent(ctx, item.ID, item.LockedAt.Time) {
 		outcome = workercontract.AttemptSuccess
 	}
+}
+
+func deliveryAttemptFailure(err error) workercontract.AttemptOutcome {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return workercontract.AttemptTimeout
+	}
+	if errors.Is(err, context.Canceled) {
+		return workercontract.AttemptCanceled
+	}
+	return workercontract.AttemptFailed
 }
 
 func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {

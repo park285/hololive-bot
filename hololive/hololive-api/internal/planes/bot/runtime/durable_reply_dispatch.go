@@ -86,18 +86,13 @@ func (r *durableRuntime) finishOutboxSettlement(claim *durability.ReplyOutboxCla
 }
 
 func outboxAttemptOutcome(status string, err error) workercontract.AttemptOutcome {
-	switch {
-	case status == durability.ReplyOutboxHandoffCompleted:
+	if status == durability.ReplyOutboxHandoffCompleted {
 		return workercontract.AttemptSuccess
-	case status == durability.ReplyOutboxOutcomeUnknown || status == durability.ReplyOutboxManualReview:
-		return workercontract.AttemptOutcomeUnknown
-	case errors.Is(err, context.DeadlineExceeded):
-		return workercontract.AttemptTimeout
-	case errors.Is(err, context.Canceled):
-		return workercontract.AttemptCanceled
-	default:
-		return workercontract.AttemptFailed
 	}
+	if status == durability.ReplyOutboxOutcomeUnknown || status == durability.ReplyOutboxManualReview {
+		return workercontract.AttemptOutcomeUnknown
+	}
+	return failureAttemptOutcome(err)
 }
 
 func (r *durableRuntime) observeOutboxSettlement(claim *durability.ReplyOutboxClaim, status string) {

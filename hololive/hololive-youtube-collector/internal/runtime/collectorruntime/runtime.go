@@ -177,17 +177,7 @@ func (r *collectorReadiness) configure(opts *sharedserver.RuntimeRouterOptions) 
 
 func (r *collectorReadiness) respond(c *gin.Context) {
 	if r.disabled {
-		capacity := 0
-		if r.appConfig != nil && r.appConfig.WorkerProfile != nil {
-			worker := r.appConfig.WorkerProfile.Loaded.Profile.Workers["collection"]
-			if worker.Queue.Capacity.Items != nil {
-				capacity = int(*worker.Queue.Capacity.Items)
-			}
-		}
-		c.JSON(200, readinessResponse{
-			Status: "ready", Runtime: runtimeName, InstanceID: collectorInstanceID(r.appConfig), State: ReadyReady,
-			Helper: "disabled", HandoffStatus: HandoffNone, DueJobsExact: true, QueueCapacity: capacity,
-		})
+		r.respondDisabled(c)
 		return
 	}
 	cfg := settings.YouTubeCollectorConfig{}
@@ -206,6 +196,20 @@ func (r *collectorReadiness) respond(c *gin.Context) {
 		return
 	}
 	c.Data(readinessHTTPStatus(&body), gin.MIMEJSON, payload)
+}
+
+func (r *collectorReadiness) respondDisabled(c *gin.Context) {
+	capacity := 0
+	if r.appConfig != nil && r.appConfig.WorkerProfile != nil {
+		worker := r.appConfig.WorkerProfile.Loaded.Profile.Workers["collection"]
+		if worker.Queue.Capacity.Items != nil {
+			capacity = int(*worker.Queue.Capacity.Items)
+		}
+	}
+	c.JSON(200, readinessResponse{
+		Status: "ready", Runtime: runtimeName, InstanceID: collectorInstanceID(r.appConfig), State: ReadyReady,
+		Helper: "disabled", HandoffStatus: HandoffNone, DueJobsExact: true, QueueCapacity: capacity,
+	})
 }
 
 func (r *collectorReadiness) deps(cfg *settings.YouTubeCollectorConfig) readinessDeps {

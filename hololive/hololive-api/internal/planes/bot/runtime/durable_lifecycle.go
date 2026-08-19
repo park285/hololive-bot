@@ -58,15 +58,19 @@ func (r *durableRuntime) Stop(ctx context.Context) error {
 	panicguard.Go(r.logger, "durable-stop-wait", func() { r.wg.Wait(); close(done) })
 	select {
 	case <-done:
-		if r.inboxEnabled {
-			r.inboxTracker.StopWorkers(r.inboxWorkers)
-		}
-		if r.outboxEnabled {
-			r.outboxTracker.StopWorkers(r.outboxWorkers)
-		}
+		r.stopWorkerTrackers()
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+func (r *durableRuntime) stopWorkerTrackers() {
+	if r.inboxEnabled {
+		r.inboxTracker.StopWorkers(r.inboxWorkers)
+	}
+	if r.outboxEnabled {
+		r.outboxTracker.StopWorkers(r.outboxWorkers)
 	}
 }
 

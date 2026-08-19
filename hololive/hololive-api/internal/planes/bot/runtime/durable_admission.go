@@ -376,18 +376,23 @@ func (r *durableRuntime) completeCommandAndInbox(ctx context.Context, messageID,
 }
 
 func workerAttemptOutcome(err error) workercontract.AttemptOutcome {
-	switch {
-	case err == nil:
+	if err == nil {
 		return workercontract.AttemptSuccess
-	case errors.Is(err, context.DeadlineExceeded):
-		return workercontract.AttemptTimeout
-	case errors.Is(err, context.Canceled):
-		return workercontract.AttemptCanceled
-	case orchestration.IsCommandOutcomeUnknown(err):
-		return workercontract.AttemptOutcomeUnknown
-	default:
-		return workercontract.AttemptFailed
 	}
+	if orchestration.IsCommandOutcomeUnknown(err) {
+		return workercontract.AttemptOutcomeUnknown
+	}
+	return failureAttemptOutcome(err)
+}
+
+func failureAttemptOutcome(err error) workercontract.AttemptOutcome {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return workercontract.AttemptTimeout
+	}
+	if errors.Is(err, context.Canceled) {
+		return workercontract.AttemptCanceled
+	}
+	return workercontract.AttemptFailed
 }
 
 func commandExecutionStatus(commandErr error) string {

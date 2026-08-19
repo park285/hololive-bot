@@ -25,38 +25,50 @@ func (c *collector) Describe(chan<- *prometheus.Desc) {}
 
 func (c *collector) Collect(metrics chan<- prometheus.Metric) {
 	if c == nil || c.registry == nil {
-		metrics <- prometheus.NewInvalidMetric(prometheus.NewDesc("iris_stack_worker_collection_error", "Stack worker collection error.", nil, nil), fmt.Errorf("worker registry is nil"))
+		metrics <- invalidCollectionMetric(fmt.Errorf("worker registry is nil"))
 		return
 	}
 	families, err := c.registry.Metrics(time.Now())
 	if err != nil {
-		metrics <- prometheus.NewInvalidMetric(prometheus.NewDesc("iris_stack_worker_collection_error", "Stack worker collection error.", nil, nil), err)
+		metrics <- invalidCollectionMetric(err)
 		return
 	}
 	for _, family := range families {
-		valueType := prometheus.GaugeValue
-		if family.Type == workercontract.MetricCounter {
-			valueType = prometheus.CounterValue
-		}
-		for _, sample := range family.Samples {
-			labelNames := make([]string, 0, len(sample.Labels))
-			for name := range sample.Labels {
-				labelNames = append(labelNames, name)
-			}
-			sort.Strings(labelNames)
-			labelValues := make([]string, len(labelNames))
-			for index, name := range labelNames {
-				labelValues[index] = sample.Labels[name]
-			}
-			descriptor := prometheus.NewDesc(family.Name, family.Help, labelNames, nil)
-			metric, metricErr := prometheus.NewConstMetric(descriptor, valueType, sample.Value, labelValues...)
-			if metricErr != nil {
-				metrics <- prometheus.NewInvalidMetric(descriptor, metricErr)
-				continue
-			}
-			metrics <- metric
-		}
+		collectFamily(metrics, family)
 	}
+}
+
+func invalidCollectionMetric(err error) prometheus.Metric {
+	descriptor := prometheus.NewDesc("iris_stack_worker_collection_error", "Stack worker collection error.", nil, nil)
+	return prometheus.NewInvalidMetric(descriptor, err)
+}
+
+func collectFamily(metrics chan<- prometheus.Metric, family workercontract.MetricFamily) {
+	valueType := prometheus.GaugeValue
+	if family.Type == workercontract.MetricCounter {
+		valueType = prometheus.CounterValue
+	}
+	for _, sample := range family.Samples {
+		metrics <- metricFromSample(family, sample, valueType)
+	}
+}
+
+func metricFromSample(family workercontract.MetricFamily, sample workercontract.MetricSample, valueType prometheus.ValueType) prometheus.Metric {
+	labelNames := make([]string, 0, len(sample.Labels))
+	for name := range sample.Labels {
+		labelNames = append(labelNames, name)
+	}
+	sort.Strings(labelNames)
+	labelValues := make([]string, len(labelNames))
+	for index, name := range labelNames {
+		labelValues[index] = sample.Labels[name]
+	}
+	descriptor := prometheus.NewDesc(family.Name, family.Help, labelNames, nil)
+	metric, err := prometheus.NewConstMetric(descriptor, valueType, sample.Value, labelValues...)
+	if err != nil {
+		return prometheus.NewInvalidMetric(descriptor, err)
+	}
+	return metric
 }
 
 func DiagnosticsHandler(registry *workercontract.Registry) http.Handler {

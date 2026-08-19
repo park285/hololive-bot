@@ -300,8 +300,18 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 		"source_observation.shutdown_timeout_ms":       profile.SourceObservation.ShutdownTimeoutMS,
 	}
 	problems = append(problems, positiveValueProblems(positive)...)
-	if profile.BotWebhookInbox.MaxAttempts < 1 || profile.BotReplyOutbox.MaxAttempts < 1 ||
-		profile.SourceObservation.DBOperationConcurrency < 1 || profile.SourceObservation.ClaimBatchSize < 1 {
+	problems = append(problems, apiWorkerRelationshipProblems(profile, workers)...)
+	return joinWorkerProfileProblems("API", problems)
+}
+
+func apiWorkerRelationshipProblems(profile *APIWorkerProfile, workers map[string]workercontract.WorkerProfile) []string {
+	problems := make([]string, 0)
+	if !allPositiveInts(
+		profile.BotWebhookInbox.MaxAttempts,
+		profile.BotReplyOutbox.MaxAttempts,
+		profile.SourceObservation.DBOperationConcurrency,
+		profile.SourceObservation.ClaimBatchSize,
+	) {
 		problems = append(problems, "worker integer settings must be positive")
 	}
 	if profile.BotWebhookInbox.HeartbeatIntervalMS+profile.BotWebhookInbox.OwnershipSafetyMarginMS >= profile.BotWebhookInbox.ClaimLeaseMS {
@@ -317,7 +327,7 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 		profile.SourceObservation.DBOperationConcurrency < workers["source_observation"].Executor.ConfiguredWorkers {
 		problems = append(problems, "source_observation batch and DB concurrency must cover workers")
 	}
-	return joinWorkerProfileProblems("API", problems)
+	return problems
 }
 
 func validateAlarmWorkerProfile(profile *AlarmWorkerProfile) error {
@@ -330,7 +340,14 @@ func validateAlarmWorkerProfile(profile *AlarmWorkerProfile) error {
 		"notification_delivery": {workercontract.DurationModeFixed, workercontract.CapacityModeUnbounded, workercontract.DurationModeFixed},
 		"youtube_delivery":      {workercontract.DurationModeFixed, workercontract.CapacityModeUnbounded, workercontract.DurationModeFixed},
 	})
-	positive := map[string]int64{
+	problems = append(problems, alarmPositiveValueProblems(profile)...)
+	problems = append(problems, alarmPositiveIntProblems(profile)...)
+	problems = append(problems, alarmRelationshipProblems(profile, workers)...)
+	return joinWorkerProfileProblems("alarm-worker", problems)
+}
+
+func alarmPositiveValueProblems(profile *AlarmWorkerProfile) []string {
+	return positiveValueProblems(map[string]int64{
 		"alarm_dispatch.lease_ms":                               profile.AlarmDispatch.LeaseMS,
 		"alarm_dispatch.quarantine_threshold_ms":                profile.AlarmDispatch.QuarantineThresholdMS,
 		"alarm_dispatch.recovery_interval_ms":                   profile.AlarmDispatch.RecoveryIntervalMS,
@@ -356,9 +373,11 @@ func validateAlarmWorkerProfile(profile *AlarmWorkerProfile) error {
 		"youtube_delivery.telemetry_poll_interval_ms":           profile.YouTubeDelivery.TelemetryPollIntervalMS,
 		"youtube_delivery.telemetry_retry_backoff_ms":           profile.YouTubeDelivery.TelemetryRetryBackoffMS,
 		"youtube_delivery.telemetry_retention_ms":               profile.YouTubeDelivery.TelemetryRetentionMS,
-	}
-	problems = append(problems, positiveValueProblems(positive)...)
-	positiveInts := map[string]int{
+	})
+}
+
+func alarmPositiveIntProblems(profile *AlarmWorkerProfile) []string {
+	return positiveIntProblems(map[string]int{
 		"alarm_dispatch.recovery_batch_size":              profile.AlarmDispatch.RecoveryBatchSize,
 		"alarm_dispatch.max_batch":                        profile.AlarmDispatch.MaxBatch,
 		"alarm_dispatch.max_batches_per_wake":             profile.AlarmDispatch.MaxBatchesPerWake,
@@ -370,24 +389,22 @@ func validateAlarmWorkerProfile(profile *AlarmWorkerProfile) error {
 		"youtube_delivery.subscriber_lookup_parallelism":  profile.YouTubeDelivery.SubscriberLookupParallelism,
 		"youtube_delivery.telemetry_backfill_batch":       profile.YouTubeDelivery.TelemetryBackfillBatch,
 		"youtube_delivery.telemetry_flush_batch":          profile.YouTubeDelivery.TelemetryFlushBatch,
-	}
-	for name, value := range positiveInts {
-		if value < 1 {
-			problems = append(problems, name+" must be positive")
-		}
-	}
+	})
+}
+
+func alarmRelationshipProblems(profile *AlarmWorkerProfile, workers map[string]workercontract.WorkerProfile) []string {
+	problems := make([]string, 0)
 	if profile.AlarmDispatch.IdleBackoffMaxMS < profile.AlarmDispatch.IdleBackoffMinMS {
 		problems = append(problems, "alarm_dispatch idle backoff range is invalid")
 	}
 	if profile.YouTubeDelivery.ClaimFreshnessWindowMS < profile.YouTubeDelivery.ReviveFreshnessWindowMS+profile.YouTubeDelivery.ReviveIntervalMS {
 		problems = append(problems, "youtube_delivery claim freshness window is invalid")
 	}
-	for workerID, worker := range workers {
-		if worker.Executor.Enabled && worker.Executor.ConfiguredWorkers != 1 && workerID == "alarm_dispatch" {
-			problems = append(problems, "alarm_dispatch currently requires exactly one scheduler worker")
-		}
+	alarm := workers["alarm_dispatch"]
+	if alarm.Executor.Enabled && alarm.Executor.ConfiguredWorkers != 1 {
+		problems = append(problems, "alarm_dispatch currently requires exactly one scheduler worker")
 	}
-	return joinWorkerProfileProblems("alarm-worker", problems)
+	return problems
 }
 
 func validateCollectorWorkerProfile(profile *YouTubeCollectorWorkerProfile) error {
@@ -415,13 +432,25 @@ func validateCollectorWorkerProfile(profile *YouTubeCollectorWorkerProfile) erro
 	}
 	problems = append(problems, positiveValueProblems(positive)...)
 	worker := workers["collection"]
+	problems = append(problems, collectorCapacityProblems(profile, worker)...)
+	problems = append(problems, collectorConcurrencyProblems(profile, worker)...)
+	problems = append(problems, collectorTimingProblems(profile)...)
+	return joinWorkerProfileProblems("youtube-collector", problems)
+}
+
+func collectorCapacityProblems(profile *YouTubeCollectorWorkerProfile, worker workercontract.WorkerProfile) []string {
 	capacity := int64(0)
 	if worker.Queue.Capacity.Items != nil {
 		capacity = *worker.Queue.Capacity.Items
 	}
 	if profile.Collection.AcquisitionBatch < 1 || int64(profile.Collection.AcquisitionBatch) > capacity {
-		problems = append(problems, "collection acquisition batch must fit queue capacity")
+		return []string{"collection acquisition batch must fit queue capacity"}
 	}
+	return nil
+}
+
+func collectorConcurrencyProblems(profile *YouTubeCollectorWorkerProfile, worker workercontract.WorkerProfile) []string {
+	problems := make([]string, 0)
 	for name, value := range map[string]int{
 		"holodex_max_inflight":   profile.Collection.HolodexMaxInflight,
 		"official_max_inflight":  profile.Collection.OfficialMaxInflight,
@@ -431,13 +460,18 @@ func validateCollectorWorkerProfile(profile *YouTubeCollectorWorkerProfile) erro
 			problems = append(problems, "collection "+name+" must be within configured workers")
 		}
 	}
+	return problems
+}
+
+func collectorTimingProblems(profile *YouTubeCollectorWorkerProfile) []string {
+	problems := make([]string, 0)
 	if profile.Collection.RenewIntervalMS+profile.Collection.RenewTimeoutMS+1000 >= profile.Collection.LeaseTTLMS {
 		problems = append(problems, "collection renewal budget must fit lease TTL")
 	}
 	if profile.Collection.RetryMaxMS < profile.Collection.RetryMinMS || profile.Collection.ReleaseJitterMaxMS < profile.Collection.ReleaseJitterMinMS {
 		problems = append(problems, "collection retry or jitter range is invalid")
 	}
-	return joinWorkerProfileProblems("youtube-collector", problems)
+	return problems
 }
 
 func validateWorkerShapes(workers map[string]workercontract.WorkerProfile, shapes map[string]workerShape) []string {
@@ -465,6 +499,25 @@ func positiveValueProblems(values map[string]int64) []string {
 		}
 	}
 	return problems
+}
+
+func positiveIntProblems(values map[string]int) []string {
+	problems := make([]string, 0)
+	for name, value := range values {
+		if value < 1 {
+			problems = append(problems, name+" must be positive")
+		}
+	}
+	return problems
+}
+
+func allPositiveInts(values ...int) bool {
+	for _, value := range values {
+		if value < 1 {
+			return false
+		}
+	}
+	return true
 }
 
 func joinWorkerProfileProblems(role string, problems []string) error {
