@@ -118,8 +118,9 @@ hololive/hololive-shared/pkg/config/settings/logging.go
 hololive/hololive-shared/pkg/config/settings/runtime_inputs.go
 hololive/hololive-shared/pkg/config/settings/runtime_role_validation.go
 hololive/hololive-shared/pkg/config/settings/server_transport.go
+hololive/hololive-shared/pkg/config/settings/stack_worker_profile.go
 hololive/hololive-shared/pkg/config/settings/tracing.go
-hololive/hololive-shared/pkg/config/settings/worker_profile.go
+hololive/hololive-shared/pkg/workerobservability/prometheus.go
 hololive/hololive-shared/pkg/constants/alarm_tier.go
 hololive/hololive-shared/pkg/constants/api.go
 hololive/hololive-shared/pkg/constants/cache.go
@@ -835,6 +836,7 @@ hololive/hololive-youtube-collector/internal/runtime/collectorruntime/readiness_
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/registry.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/result_validation.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go
+hololive/hololive-youtube-collector/internal/runtime/collectorruntime/worker_registry.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_build.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_discovery.go
