@@ -7,6 +7,7 @@ CATALOG_SQL_LIB="${ROOT_DIR}/scripts/runtime/lib/pg-hotpath-catalog-sql.sh"
 CLAIM_WINDOW_LIB="${ROOT_DIR}/scripts/runtime/lib/pg-hotpath-claim-window.sh"
 
 sql="$("${SCRIPT}" --print-sql)"
+bash "${ROOT_DIR}/scripts/runtime/pg-hotpath-catalog-sql_test.sh"
 
 require() {
   local token="$1"
