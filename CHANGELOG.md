@@ -8,6 +8,18 @@
 
 ## 미출시
 
+## v3.0.3 - 2026-08-20
+
+### 수정
+
+- YouTube collector의 별도 metrics server에도 role-owned worker registry를 연결해
+  `iris_stack_worker_*`가 실제 scrape endpoint에 노출되도록 수정했습니다.
+
+### 변경
+
+- `shared-go v1.53.0`으로 갱신하고 제거된 `workerconfig` package를 허용 목록에서도
+  삭제했습니다. worker profile과 metrics는 strict `workercontract.Registry`만 소유합니다.
+
 ## v3.0.2 - 2026-08-20
 
 ### 수정

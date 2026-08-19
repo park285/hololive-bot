@@ -127,7 +127,7 @@ func TestNewRuntimeHTTPServersPprofGate(t *testing.T) {
 		H3CertFile:     certFile,
 		H3KeyFile:      keyFile,
 		PprofAddr:      "127.0.0.1:0",
-	}, http.NotFoundHandler(), "test.http")
+	}, http.NotFoundHandler(), "test.http", nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeHTTPServers() error = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestNewRuntimeHTTPServersPprofGate(t *testing.T) {
 		H3Addr:         "127.0.0.1:0",
 		H3CertFile:     certFile,
 		H3KeyFile:      keyFile,
-	}, http.NotFoundHandler(), "test.http")
+	}, http.NotFoundHandler(), "test.http", nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeHTTPServers() error = %v", err)
 	}
