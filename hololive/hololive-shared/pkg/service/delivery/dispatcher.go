@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"strconv"
 	"sync"
@@ -36,6 +37,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 type MessageSender interface {
@@ -98,6 +100,16 @@ type Dispatcher struct {
 	workerID                string
 	lastCleanupAt           time.Time
 	lastStaleSendingSweepAt time.Time
+	workerTracker           *workercontract.ExecutorTracker
+	workerTotals            *workercontract.Counters
+}
+
+func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTracker, totals *workercontract.Counters) {
+	if d == nil {
+		return
+	}
+	d.workerTracker = tracker
+	d.workerTotals = totals
 }
 
 func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config *DispatcherConfig) *Dispatcher {
@@ -277,6 +289,12 @@ func (d *Dispatcher) processBatchItemAsync(ctx context.Context, item *domain.Not
 }
 
 func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationDeliveryOutbox) {
+	attemptID := d.workerTracker.BeginAttempt(time.Now())
+	outcome := workercontract.AttemptFailed
+	defer func() {
+		d.workerTracker.EndAttempt(attemptID)
+		d.workerTotals.RecordAttempt(outcome)
+	}()
 	var p outboxPayload
 	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
 		d.logger.Error("Failed to unmarshal outbox payload",
@@ -291,6 +309,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 	}
 
 	if err := d.sendMessage(ctx, item, p.Message); err != nil {
+		outcome = deliveryAttemptFailure(err)
 		d.logger.Error("Failed to send outbox message",
 			slog.Int64("id", item.ID),
 			privacylog.RoomIDAttr(item.RoomID),
@@ -299,7 +318,19 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		return
 	}
 
-	d.markItemSent(ctx, item.ID, item.LockedAt.Time)
+	if d.markItemSent(ctx, item.ID, item.LockedAt.Time) {
+		outcome = workercontract.AttemptSuccess
+	}
+}
+
+func deliveryAttemptFailure(err error) workercontract.AttemptOutcome {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return workercontract.AttemptTimeout
+	}
+	if errors.Is(err, context.Canceled) {
+		return workercontract.AttemptCanceled
+	}
+	return workercontract.AttemptFailed
 }
 
 func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
@@ -315,15 +346,17 @@ func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
 	return true
 }
 
-func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.Time) {
+func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.Time) bool {
 	fenced, err := d.repository.MarkSent(ctx, id, d.workerID, lockedAt)
 	if err != nil {
 		d.logger.Error("Failed to mark outbox item as sent", slog.Int64("id", id), slog.String("error", err.Error()))
-		return
+		return false
 	}
 	if !fenced {
 		d.logger.Warn("Outbox item re-claimed before mark sent; fence skipped transition", slog.Int64("id", id))
+		return false
 	}
+	return true
 }
 
 func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, lockedAt time.Time, reason string) {

@@ -17,9 +17,8 @@ func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 	t.Setenv("POSTGRES_USER", postgresScraperRoleUser)
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "youtube-collector-c")
 	t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "true")
-	t.Setenv("YOUTUBE_INGESTION_ENABLED", "true")
 	t.Setenv("PHOTO_SYNC_ENABLED", "false")
-	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "false")
+	useStackWorkerProfileFixture(t, "stack-worker-profile-youtube-collector.json")
 	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
 	t.Setenv("LLM_MODEL", "")
 	t.Setenv("CLIPROXY_API_KEY", "")
@@ -82,13 +81,12 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *YouTubeCollectorRuntimeCo
 			SSLRootCert: cert,
 		},
 		RuntimeOwnership: CollectorRuntimeOwnershipConfig{
-			RuntimeAllowed:          true,
-			YouTubeIngestionEnabled: true,
-			PhotoSyncEnabled:        false,
-			NotificationEgressRole:  notificationEgressRoleOff,
-			YouTubeOutboxEnabled:    false,
+			RuntimeAllowed:         true,
+			PhotoSyncEnabled:       false,
+			NotificationEgressRole: notificationEgressRoleOff,
 		},
-		Collector: collector,
+		WorkerProfile: mustLoadCollectorWorkerProfile(t),
+		Collector:     collector,
 		Holodex: CollectorHolodexConfig{
 			BaseURL:   DefaultHolodexOperationalConfig().BaseURL,
 			APIKey:    "x",
@@ -165,8 +163,8 @@ func TestCFG002CollectorLoaderAllowsMissingIrisKakaoAndLLM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadYouTubeCollectorRuntime() error = %v", err)
 	}
-	if cfg.RuntimeOwnership.YouTubeIngestionEnabled != true {
-		t.Fatal("YouTubeIngestionEnabled = false, want true")
+	if cfg.WorkerProfile == nil || !cfg.WorkerProfile.Loaded.Profile.Workers["collection"].Executor.Enabled {
+		t.Fatal("collection executor.enabled = false, want true")
 	}
 }
 
@@ -192,11 +190,6 @@ func TestCFG003ProductionValidationExact(t *testing.T) {
 			wantSub: "YOUTUBE_COLLECTOR_RUNTIME_ALLOWED",
 		},
 		{
-			name:    "ingestion disabled",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.RuntimeOwnership.YouTubeIngestionEnabled = false },
-			wantSub: "YOUTUBE_INGESTION_ENABLED",
-		},
-		{
 			name:    "photo sync enabled",
 			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.RuntimeOwnership.PhotoSyncEnabled = true },
 			wantSub: "PHOTO_SYNC_ENABLED",
@@ -205,11 +198,6 @@ func TestCFG003ProductionValidationExact(t *testing.T) {
 			name:    "notification egress not off",
 			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.RuntimeOwnership.NotificationEgressRole = "" },
 			wantSub: "NOTIFICATION_EGRESS_ROLE",
-		},
-		{
-			name:    "outbox enabled",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.RuntimeOwnership.YouTubeOutboxEnabled = true },
-			wantSub: youTubeOutboxDispatcherEnabledEnv,
 		},
 		{
 			name:    "empty instance id",
@@ -370,7 +358,7 @@ func TestCFG004ProxyTruthTableAndUserinfoRedaction(t *testing.T) {
 	}
 }
 
-func TestValidateYouTubeCollectorRuntimeAppliesCollectorConfig(t *testing.T) {
+func TestValidateYouTubeCollectorRuntimeDoesNotDefaultCollectorConfig(t *testing.T) {
 	clearRuntimeRoleEnv(t)
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 	cfg.Collector.TotalWorkers = 8
@@ -379,15 +367,12 @@ func TestValidateYouTubeCollectorRuntimeAppliesCollectorConfig(t *testing.T) {
 	cfg.Collector.HolodexMaxInflight = 0
 	cfg.Collector.OfficialMaxInflight = 0
 	cfg.Collector.YouTubeJSMaxInflight = 0
-	cfg.Collector.YouTubeJSRequestTimeout = 40 * time.Second
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() error = nil, want zero worker settings rejection")
 	}
-	if cfg.Collector.TotalWorkers != 8 || cfg.Collector.QueueCapacity != 32 {
-		t.Fatalf("applied collector config = %#v", cfg.Collector)
-	}
-	if cfg.Collector.HolodexMaxInflight != 8 || cfg.Collector.YouTubeJSRequestTimeout != 40*time.Second {
-		t.Fatalf("applied inflight/timeout = %d %s", cfg.Collector.HolodexMaxInflight, cfg.Collector.YouTubeJSRequestTimeout)
+	if cfg.Collector.QueueCapacity != 0 || cfg.Collector.AcquisitionBatch != 0 || cfg.Collector.HolodexMaxInflight != 0 {
+		t.Fatalf("collector settings were defaulted: %#v", cfg.Collector)
 	}
 }
 
@@ -398,17 +383,6 @@ func TestValidateYouTubeCollectorRuntimeRejectsInvalidCollectorBudget(t *testing
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "renew timing") {
 		t.Fatalf("Validate() error = %v, want renew timing rejection", err)
-	}
-}
-
-func TestValidateYouTubeCollectorRuntimeRejectsYouTubeOutboxDispatcher(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
-	cfg := validYouTubeCollectorRuntimeConfig(t)
-	cfg.RuntimeOwnership.YouTubeOutboxEnabled = true
-	err := cfg.Validate()
-	if err == nil || !strings.Contains(err.Error(), youTubeOutboxDispatcherEnabledEnv) {
-		t.Fatalf("Validate() error = %v, want YouTube outbox dispatcher rejection", err)
 	}
 }
 

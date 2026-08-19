@@ -41,9 +41,8 @@
 | `LLM_SCHEDULER_INTERNAL_URL` | internal scheduler/trigger API base | partial |
 | `CLIPROXY_*` | LLM proxy | partial |
 | `MAJOREVENT_*` | major event scrape/schedule config | partial |
-| `DELIVERY_DISPATCHER_ENABLED=false` | egress boundary (egress owned by `alarm-worker`) | yes |
+| `STACK_WORKER_PROFILE_FILE` | strict `hololive/api` profile for `bot_webhook_inbox`, `bot_reply_outbox`, `source_observation` | yes |
 | `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
-| `YOUTUBE_PLANE_ENABLED=true` | YouTube observation consume plane | yes |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 
 ## Logs

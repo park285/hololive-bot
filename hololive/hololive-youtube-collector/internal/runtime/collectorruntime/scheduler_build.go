@@ -16,6 +16,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig) (joblease.Config, error) {
@@ -41,7 +42,7 @@ func buildScheduler(
 	if err := requireSchedulerDeps(appConfig, infra); err != nil {
 		return nil, err
 	}
-	collector := appConfig.Collector.OrDefault()
+	collector := appConfig.Collector
 	if err := collector.Validate(appConfig.Holodex.Transport.Timeout, appConfig.OfficialSchedule.Transport.Timeout); err != nil {
 		return nil, fmt.Errorf("build youtube collector: %w", err)
 	}
@@ -83,21 +84,24 @@ func newLeaseScheduler(
 		return nil, err
 	}
 	return &leaseScheduler{
-		repository: repository,
-		candidates: repository,
-		registry:   registry,
-		publisher:  NewPublisher(infra.postgres.GetPool()),
-		metrics:    NewMetrics(nil),
-		owner:      owner,
-		logger:     logger,
-		config:     *leaseConfig,
-		collector:  *collector,
-		gates:      newProviderGates(collector),
-		state:      SchedulerNew,
-		queued:     make(map[string]struct{}),
-		queue:      make(chan joblease.JobSpec, collector.QueueCapacity),
-		fatal:      make(chan error, 1),
-		readiness:  &readinessTracker{},
+		repository:    repository,
+		candidates:    repository,
+		registry:      registry,
+		publisher:     NewPublisher(infra.postgres.GetPool()),
+		metrics:       NewMetrics(nil),
+		owner:         owner,
+		logger:        logger,
+		config:        *leaseConfig,
+		collector:     *collector,
+		gates:         newProviderGates(collector),
+		state:         SchedulerNew,
+		queued:        make(map[string]struct{}),
+		queuedAt:      make(map[string]time.Time),
+		queue:         make(chan joblease.JobSpec, collector.QueueCapacity),
+		fatal:         make(chan error, 1),
+		readiness:     &readinessTracker{},
+		workerTracker: workercontract.NewExecutorTracker(),
+		workerTotals:  &workercontract.Counters{},
 	}, nil
 }
 

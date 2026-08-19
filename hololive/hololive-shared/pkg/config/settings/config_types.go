@@ -93,11 +93,6 @@ type WorkerPoolConfig struct {
 	QueueSize int
 }
 
-type WorkerProfileConfig struct {
-	Version int
-	Hash    string
-}
-
 type AlarmDispatchRetentionConfig struct {
 	Enabled         bool
 	Interval        time.Duration

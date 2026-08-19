@@ -30,6 +30,9 @@ unit이 매시 중앙 primary에서 논리 덤프를 받아 전체를 덮어쓰�
 `<build-control-host>`가 `x86_64`라 물리 복제 대상이 될 수 없어 논리 덤프를 씁니다.
 이 호스트의 `hololive-compose.service`는 `disabled`로 두어 재부팅이 두 번째 alarm
 dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결정을 요구합니다.
+표준 `compose.sh`와 `compose-redeploy-service.sh`도 hostname이 `kapu`이면
+`hololive-alarm-worker`의 직접·전체·dependency 경유 기동을 거부합니다. 승인된 롤백에서만
+해당 명령에 `HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1`을 일시 지정합니다.
 
 Hot standby(`<tailnet-seoul-ap>`)는 primary와 같은 `aarch64`라 물리 스트리밍 복제가
 가능합니다. 정상 상태와 승격 뒤 restart posture는

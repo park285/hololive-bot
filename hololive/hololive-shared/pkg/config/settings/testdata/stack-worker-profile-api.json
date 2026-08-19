@@ -1,0 +1,73 @@
+{
+  "contract_version": 1,
+  "service": "hololive",
+  "role": "api",
+  "profile_id": "hololive-api-test",
+  "workers": {
+    "bot_webhook_inbox": {
+      "executor": {
+        "enabled": true,
+        "configured_workers": 16,
+        "attempt_timeout": {"mode": "fixed", "milliseconds": 30000}
+      },
+      "queue": {
+        "capacity": {"mode": "unbounded", "items": null},
+        "max_age": {"mode": "fixed", "milliseconds": 300000}
+      },
+      "settings": {
+        "max_body_bytes": 65536,
+        "dedup_ttl_ms": 960000,
+        "dedup_timeout_ms": 200,
+        "poll_interval_ms": 100,
+        "claim_lease_ms": 120000,
+        "heartbeat_interval_ms": 20000,
+        "ownership_safety_margin_ms": 15000,
+        "retry_after_ms": 1000,
+        "max_attempts": 5,
+        "maintenance_interval_ms": 15000,
+        "settlement_timeout_ms": 3000,
+        "terminal_retention_ms": 691200000
+      }
+    },
+    "bot_reply_outbox": {
+      "executor": {
+        "enabled": true,
+        "configured_workers": 16,
+        "attempt_timeout": {"mode": "fixed", "milliseconds": 105000}
+      },
+      "queue": {
+        "capacity": {"mode": "unbounded", "items": null},
+        "max_age": {"mode": "fixed", "milliseconds": 86400000}
+      },
+      "settings": {
+        "poll_interval_ms": 100,
+        "claim_lease_ms": 120000,
+        "dispatch_budget_ms": 105000,
+        "retry_after_ms": 1000,
+        "max_attempts": 5,
+        "maintenance_interval_ms": 15000,
+        "manual_review_retention_ms": 2592000000,
+        "automatic_replay_horizon_ms": 518400000
+      }
+    },
+    "source_observation": {
+      "executor": {
+        "enabled": true,
+        "configured_workers": 2,
+        "attempt_timeout": {"mode": "fixed", "milliseconds": 10000}
+      },
+      "queue": {
+        "capacity": {"mode": "unbounded", "items": null},
+        "max_age": {"mode": "fixed", "milliseconds": 86400000}
+      },
+      "settings": {
+        "db_operation_concurrency": 3,
+        "claim_batch_size": 4,
+        "claim_interval_ms": 2000,
+        "claim_lease_ms": 60000,
+        "transaction_timeout_ms": 10000,
+        "shutdown_timeout_ms": 30000
+      }
+    }
+  }
+}

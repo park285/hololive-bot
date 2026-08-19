@@ -53,7 +53,8 @@ type Config struct {
 	YouTubeCollector       YouTubeCollectorConfig
 	Webhook                WebhookConfig
 	WorkerPool             WorkerPoolConfig
-	WorkerProfile          WorkerProfileConfig
+	APIWorkerProfile       *APIWorkerProfile
+	AlarmWorkerProfile     *AlarmWorkerProfile
 	CORS                   CORSConfig
 	Cliproxy               CliproxyConfig
 	LLM                    LLMConfig
@@ -68,9 +69,9 @@ type Config struct {
 }
 
 type configLoadOptions struct {
-	FetchIrisWorkerProfile bool
-	CORSDefaultEnforce     bool
-	TracingRuntime         tracingRuntime
+	WorkerProfileRole  string
+	CORSDefaultEnforce bool
+	TracingRuntime     tracingRuntime
 }
 
 func LoadAdminAPIRuntime() (*Config, error) {
@@ -104,7 +105,6 @@ func newKakaoConfig(rooms []string, enabled bool, mode string) KakaoConfig {
 
 func loadIngestionConfig(communityShortsBigBangCutoverAt time.Time) IngestionConfig {
 	return IngestionConfig{
-		YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
 		PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
 		CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
 	}

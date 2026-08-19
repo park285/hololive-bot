@@ -42,6 +42,9 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 	}
 
 	r.beginAlarmScheduler()
+	if r.WorkerObservability != nil {
+		r.WorkerObservability.Start(ctx)
+	}
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:     r.Logger,
 		ServerAddr: r.ServerAddr,

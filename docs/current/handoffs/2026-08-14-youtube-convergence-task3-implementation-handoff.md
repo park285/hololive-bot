@@ -230,24 +230,25 @@ type RunOutput struct {
 
 `settings.Config.YouTubeCollector`와 전용 config file을 추가하고 Task 2 local constants를 이동합니다. 기존 default behavior는 보존하되 non-default override가 runtime에 실제 도달하는 test를 작성합니다. `ScraperConfig`나 `YouTubeProducerGlobalBudgetConfig`를 collector config owner로 계속 사용하지 마십시오.
 
-필수 config surface:
+Worker-owned 값의 현재 authority는 `hololive/youtube-collector` Stack Worker Profile의
+`collection.settings`입니다. 필수 settings surface:
 
 ```text
-YOUTUBE_COLLECTOR_TOTAL_WORKERS
-YOUTUBE_COLLECTOR_QUEUE_CAPACITY
-YOUTUBE_COLLECTOR_ACQUISITION_BATCH
-YOUTUBE_COLLECTOR_ACQUISITION_CADENCE_MS
-YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS
-YOUTUBE_COLLECTOR_RENEW_INTERVAL_SECONDS
-YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS
-YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS
-YOUTUBE_COLLECTOR_RETRY_MIN_SECONDS
-YOUTUBE_COLLECTOR_RETRY_MAX_SECONDS
-YOUTUBE_COLLECTOR_RELEASE_JITTER_MIN_MS
-YOUTUBE_COLLECTOR_RELEASE_JITTER_MAX_MS
-YOUTUBE_COLLECTOR_HOLODEX_MAX_INFLIGHT
-YOUTUBE_COLLECTOR_OFFICIAL_MAX_INFLIGHT
-YOUTUBE_COLLECTOR_YOUTUBEJS_MAX_INFLIGHT
+executor.configured_workers
+queue.capacity
+acquisition_batch
+acquisition_cadence_ms
+lease_ttl_ms
+renew_interval_ms
+collection_overhead_ms
+publish_timeout_ms
+retry_min_ms
+retry_max_ms
+release_jitter_min_ms
+release_jitter_max_ms
+holodex_max_inflight
+official_max_inflight
+youtubejs_max_inflight
 YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS
 YOUTUBE_COLLECTOR_MAX_PAGES
 YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES

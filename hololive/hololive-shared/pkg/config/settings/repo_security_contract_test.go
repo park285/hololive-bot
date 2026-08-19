@@ -114,16 +114,6 @@ type collectorCompatComposeCase struct {
 func collectorCompatEnvPairs() []collectorCompatEnvPair {
 	return []collectorCompatEnvPair{
 		{
-			newName:      "YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS",
-			oldName:      "YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS",
-			defaultValue: "5",
-		},
-		{
-			newName:      "YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS",
-			oldName:      "YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS",
-			defaultValue: "5",
-		},
-		{
 			newName:      "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
 			oldName:      "YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
 			defaultValue: "30",

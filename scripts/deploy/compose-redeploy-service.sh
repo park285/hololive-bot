@@ -9,6 +9,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/source-revision.sh"
 
@@ -176,6 +177,15 @@ if contains_ap_compose_file && [[ -z "${TARGET}" ]]; then
     exit 1
 fi
 
+if [[ -n "${TARGET}" ]]; then
+    fence_compose_args=(up --no-deps "${TARGET}")
+else
+    fence_compose_args=(up)
+fi
+if ! assert_kapu_alarm_worker_start_allowed "$(hostname -s)" 0 "${fence_compose_args[@]}"; then
+    exit 1
+fi
+
 SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
     "${SHARED_GO_WORKSPACE_PATH:-}" \
     "${ROOT_DIR}/../shared-go" \
@@ -304,7 +314,7 @@ fi
 if [[ -n "${TARGET}" ]]; then
     cutover_capture_restart_baseline "${TARGET}"
     echo "[UP] ${TARGET}"
-    up_args=(up -d)
+    up_args=(up -d --no-deps)
     if [[ "${build_target}" == true ]]; then
         up_args+=(--no-build)
     fi

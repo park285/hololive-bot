@@ -77,6 +77,15 @@ func buildAPIPlanes(ctx context.Context, appConfig *settings.HololiveAPIConfig, 
 		llm.Close()
 		return apiPlanes{}, err
 	}
+	if err := installAPIWorkerRegistry(ctx, appConfig, bot, youtube); err != nil {
+		if youtube != nil {
+			youtube.Close()
+		}
+		bot.Close()
+		admin.Close()
+		llm.Close()
+		return apiPlanes{}, fmt.Errorf("build worker registry: %w", err)
+	}
 	return apiPlanes{bot: bot, admin: admin, llm: llm, youtube: youtube}, nil
 }
 

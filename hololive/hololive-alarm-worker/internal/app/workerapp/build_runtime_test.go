@@ -53,10 +53,11 @@ func TestRuntimeAllowsAlarmScheduler(t *testing.T) {
 }
 
 func TestLoadAlarmDispatchPublishConfigDefaults(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_WAKEUP_ENABLED", "")
 	t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", "")
 
-	appConfig := loadAlarmDispatchPublishConfig()
+	appConfig := loadAlarmDispatchPublishConfig(&settings.AlarmWorkerProfile{
+		AlarmDispatch: settings.AlarmDispatchWorkerSettings{WakeupEnabled: true},
+	})
 	assert.True(t, appConfig.WakeupEnabled)
 	assert.Equal(t, 1000, appConfig.MaxDeliveriesPerBatch)
 }

@@ -90,9 +90,6 @@ func applyConfigDefaults(cfg *Config) {
 	if cfg.ResponseBodyLimit <= 0 {
 		cfg.ResponseBodyLimit = DefaultResponseBodyLimit
 	}
-	if cfg.MaxInflight <= 0 {
-		cfg.MaxInflight = DefaultMaxInflight
-	}
 	cfg.Proxy.URL = strings.TrimSpace(cfg.Proxy.URL)
 }
 

@@ -12,164 +12,21 @@ import (
 
 func loadYouTubeCollectorConfig() (YouTubeCollectorConfig, error) {
 	defaults := DefaultYouTubeCollectorConfig()
-	workers, err := requiredPositiveIntEnv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", defaults.TotalWorkers)
-	if err != nil {
+	cfg := YouTubeCollectorConfig{InstanceID: strings.TrimSpace(sharedenv.String("YOUTUBE_COLLECTOR_INSTANCE_ID", ""))}
+	var err error
+	if cfg.ReadinessTimeout, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", defaults.ReadinessTimeout); err != nil {
 		return YouTubeCollectorConfig{}, err
 	}
-	queueDefault := min(workers*4, youtubeCollectorMaxQueueCapacity)
-	queueCapacity, err := requiredPositiveIntEnv("YOUTUBE_COLLECTOR_QUEUE_CAPACITY", queueDefault)
-	if err != nil {
+	if cfg.HelperHealthTimeout, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS", defaults.HelperHealthTimeout); err != nil {
 		return YouTubeCollectorConfig{}, err
 	}
-	batchDefault := min(queueCapacity, youtubeCollectorMaxAcquisitionBatch)
-	return loadYouTubeCollectorFields(&defaults, workers, queueCapacity, batchDefault)
-}
-
-func loadYouTubeCollectorFields(
-	defaults *YouTubeCollectorConfig,
-	workers, queueCapacity, batchDefault int,
-) (YouTubeCollectorConfig, error) {
-	batch, err := requiredPositiveIntEnv("YOUTUBE_COLLECTOR_ACQUISITION_BATCH", batchDefault)
-	if err != nil {
+	if err := loadCollectorYouTubeJSLimits(&cfg, &defaults); err != nil {
 		return YouTubeCollectorConfig{}, err
 	}
-	cadence, err := requiredDurationUnitEnv("YOUTUBE_COLLECTOR_ACQUISITION_CADENCE_MS", defaults.AcquisitionCadence, time.Millisecond)
-	if err != nil {
-		return YouTubeCollectorConfig{}, err
-	}
-	leaseTTL, err := requiredDurationUnitEnv("YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS", defaults.LeaseTTL, time.Second)
-	if err != nil {
-		return YouTubeCollectorConfig{}, err
-	}
-	cfg := YouTubeCollectorConfig{
-		InstanceID:         strings.TrimSpace(sharedenv.String("YOUTUBE_COLLECTOR_INSTANCE_ID", "")),
-		TotalWorkers:       workers,
-		QueueCapacity:      queueCapacity,
-		AcquisitionBatch:   batch,
-		AcquisitionCadence: cadence,
-		LeaseTTL:           leaseTTL,
-	}
-	if err := loadYouTubeCollectorBudgets(&cfg, defaults); err != nil {
-		return YouTubeCollectorConfig{}, err
-	}
-	if err := loadYouTubeCollectorLimits(&cfg, defaults, workers); err != nil {
+	if err := loadCollectorPaginationLimits(&cfg, &defaults); err != nil {
 		return YouTubeCollectorConfig{}, err
 	}
 	return cfg, nil
-}
-
-func loadYouTubeCollectorBudgets(cfg, defaults *YouTubeCollectorConfig) error {
-	if err := loadCollectorLeaseBudgets(cfg, defaults); err != nil {
-		return err
-	}
-	if err := loadCollectorPhaseBudgets(cfg, defaults); err != nil {
-		return err
-	}
-	if err := loadCollectorPublishBudgets(cfg, defaults); err != nil {
-		return err
-	}
-	return loadCollectorRetryBudgets(cfg, defaults)
-}
-
-func loadCollectorLeaseBudgets(cfg, defaults *YouTubeCollectorConfig) error {
-	var err error
-	if cfg.RenewInterval, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_RENEW_INTERVAL_SECONDS", defaults.RenewInterval, time.Second); err != nil {
-		return err
-	}
-	if cfg.RenewTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_RENEW_TIMEOUT_SECONDS", defaults.RenewTimeout, time.Second); err != nil {
-		return err
-	}
-	return nil
-}
-
-func loadCollectorPhaseBudgets(cfg, defaults *YouTubeCollectorConfig) error {
-	var err error
-	if cfg.DBTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_DB_TIMEOUT_SECONDS", defaults.DBTimeout, time.Second); err != nil {
-		return err
-	}
-	if cfg.CleanupTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_CLEANUP_TIMEOUT_SECONDS", defaults.CleanupTimeout, time.Second); err != nil {
-		return err
-	}
-	if cfg.ProviderAdmissionTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_PROVIDER_ADMISSION_TIMEOUT_SECONDS", defaults.ProviderAdmissionTimeout, time.Second); err != nil {
-		return err
-	}
-	if cfg.CollectionOverhead, err = loadCompatDurationUnitEnv(
-		"YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS",
-		"YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS",
-		defaults.CollectionOverhead,
-		time.Second,
-	); err != nil {
-		return err
-	}
-	return nil
-}
-
-func loadCollectorPublishBudgets(cfg, defaults *YouTubeCollectorConfig) error {
-	var err error
-	if cfg.PublishTimeout, err = loadCompatDurationUnitEnv(
-		"YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS",
-		"YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS",
-		defaults.PublishTimeout,
-		time.Second,
-	); err != nil {
-		return err
-	}
-	if cfg.ReadinessTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", defaults.ReadinessTimeout, time.Second); err != nil {
-		return err
-	}
-	if cfg.HelperHealthTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS", defaults.HelperHealthTimeout, time.Second); err != nil {
-		return err
-	}
-	return nil
-}
-
-func loadCollectorRetryBudgets(cfg, defaults *YouTubeCollectorConfig) error {
-	var err error
-	if cfg.RetryMin, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_RETRY_MIN_SECONDS", defaults.RetryMin, time.Second); err != nil {
-		return err
-	}
-	if cfg.RetryMax, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_RETRY_MAX_SECONDS", defaults.RetryMax, time.Second); err != nil {
-		return err
-	}
-	return nil
-}
-
-func loadYouTubeCollectorLimits(cfg, defaults *YouTubeCollectorConfig, workers int) error {
-	if err := loadCollectorJitterLimits(cfg, defaults); err != nil {
-		return err
-	}
-	if err := loadCollectorInflightLimits(cfg, workers); err != nil {
-		return err
-	}
-	if err := loadCollectorYouTubeJSLimits(cfg, defaults); err != nil {
-		return err
-	}
-	return loadCollectorPaginationLimits(cfg, defaults)
-}
-
-func loadCollectorJitterLimits(cfg, defaults *YouTubeCollectorConfig) error {
-	var err error
-	if cfg.ReleaseJitterMin, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_RELEASE_JITTER_MIN_MS", defaults.ReleaseJitterMin, time.Millisecond); err != nil {
-		return err
-	}
-	if cfg.ReleaseJitterMax, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_RELEASE_JITTER_MAX_MS", defaults.ReleaseJitterMax, time.Millisecond); err != nil {
-		return err
-	}
-	return nil
-}
-
-func loadCollectorInflightLimits(cfg *YouTubeCollectorConfig, workers int) error {
-	var err error
-	if cfg.HolodexMaxInflight, err = requiredPositiveIntEnv("YOUTUBE_COLLECTOR_HOLODEX_MAX_INFLIGHT", workers); err != nil {
-		return err
-	}
-	if cfg.OfficialMaxInflight, err = requiredPositiveIntEnv("YOUTUBE_COLLECTOR_OFFICIAL_MAX_INFLIGHT", workers); err != nil {
-		return err
-	}
-	if cfg.YouTubeJSMaxInflight, err = requiredPositiveIntEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_MAX_INFLIGHT", workers); err != nil {
-		return err
-	}
-	return nil
 }
 
 func loadCollectorYouTubeJSLimits(cfg, defaults *YouTubeCollectorConfig) error {
@@ -182,10 +39,10 @@ func loadCollectorYouTubeJSLimits(cfg, defaults *YouTubeCollectorConfig) error {
 	); err != nil {
 		return err
 	}
-	if cfg.YouTubeJSStartupTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS", defaults.YouTubeJSStartupTimeout, time.Second); err != nil {
+	if cfg.YouTubeJSStartupTimeout, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS", defaults.YouTubeJSStartupTimeout); err != nil {
 		return err
 	}
-	if cfg.YouTubeJSShutdownTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS", defaults.YouTubeJSShutdownTimeout, time.Second); err != nil {
+	if cfg.YouTubeJSShutdownTimeout, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS", defaults.YouTubeJSShutdownTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -202,7 +59,7 @@ func loadCollectorPaginationLimits(cfg, defaults *YouTubeCollectorConfig) error 
 	if cfg.MaxTargetRosterRows, err = requiredPositiveIntEnv("YOUTUBE_COLLECTOR_MAX_TARGET_ROSTER_ROWS", defaults.MaxTargetRosterRows); err != nil {
 		return err
 	}
-	cfg.RequestInterval, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS", defaults.RequestInterval, time.Second)
+	cfg.RequestInterval, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS", defaults.RequestInterval)
 	return err
 }
 

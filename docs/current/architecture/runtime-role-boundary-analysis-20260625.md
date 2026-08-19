@@ -34,15 +34,17 @@ The system is intentionally split into producers, control-plane services, and on
 
 ## Critical finding
 
-The documentation already states the split, and Compose expresses it through environment variables such as `NOTIFICATION_EGRESS_ROLE`, `NOTIFICATION_SCHEDULER_ROLE`, `DELIVERY_DISPATCHER_ENABLED`, `YOUTUBE_OUTBOX_DISPATCHER_ENABLED`, and `ALARM_WORKER_EGRESS_LEASE_ENABLED`.
+The documentation already states the split. Compose expresses host ownership through
+`NOTIFICATION_EGRESS_ROLE`, `NOTIFICATION_SCHEDULER_ROLE`, and
+`ALARM_WORKER_EGRESS_LEASE_ENABLED`; the strict `hololive/alarm-worker` Stack Worker
+Profile owns executor enablement for the three delivery workers.
 
 The weak point was that `bot` and `alarm-worker` both used the same generic `config.Load` path, while `admin-api`, `llm-scheduler`, and `youtube-producer` had separate runtime loaders. That made it too easy for environment drift to express the wrong ownership at startup without an explicit role validator catching it.
 
 The highest-risk drift examples are:
 
 - `bot` accidentally receiving `NOTIFICATION_EGRESS_ROLE=owner`.
-- `admin-api`, `llm-scheduler`, or `youtube-producer` receiving `DELIVERY_DISPATCHER_ENABLED=true`.
-- `youtube-producer` receiving `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`, which would collapse the intended producer/egress boundary.
+- a non-egress runtime loading the `hololive/alarm-worker` worker profile;
 - `alarm-worker` starting in production without `NOTIFICATION_EGRESS_ROLE=owner` or without `NOTIFICATION_SCHEDULER_ROLE=worker`.
 - `alarm-worker` starting in production with `ALARM_WORKER_EGRESS_LEASE_ENABLED=false`, which removes the single-owner lease safety boundary for proactive egress.
 
@@ -66,13 +68,10 @@ The following runtimes reject proactive egress ownership or dispatcher activatio
 - `llm-scheduler`
 - `youtube-producer`
 
-Rejected settings include:
+Rejected ownership settings include:
 
 - `NOTIFICATION_EGRESS_ROLE=owner`
 - `NOTIFICATION_SCHEDULER_ROLE=worker`
-- `DELIVERY_DISPATCHER_ENABLED=true`
-- `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`
-- `ALARM_DISPATCH_CONSUMER_ENABLED=true`
 - `ALARM_WORKER_EGRESS_LEASE_ENABLED=true`
 
 `NOTIFICATION_EGRESS_ROLE=producer` remains allowed for producer runtimes because it is used to describe notification intent production, not final egress ownership.
@@ -83,6 +82,8 @@ In production, `alarm-worker` now requires:
 
 - `NOTIFICATION_EGRESS_ROLE=owner`
 - `NOTIFICATION_SCHEDULER_ROLE=worker`
+- exact `hololive/alarm-worker` profile ownership with `alarm_dispatch`,
+  `notification_delivery`, and `youtube_delivery` executors enabled
 - `ALARM_WORKER_EGRESS_LEASE_ENABLED` must not be explicitly `false`
 
 The lease check intentionally fails only on explicit `false`; an unset value can still use the Compose default path.

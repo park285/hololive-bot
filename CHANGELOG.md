@@ -8,9 +8,14 @@
 
 ## 미출시
 
+## v3.0.0 - 2026-08-20
+
 ### 추가
 
-- `iris-client-go/v2 v2.0.0`을 pin하고 bot webhook receiver를 HMAC v3-only 계약으로
+- central API·alarm-worker와 collector a/b/c/d에 role별 strict Stack Worker Contract v1
+  profile을 도입했습니다. 실제 PostgreSQL/process queue와 executor를 `/diagnostics/workers` 및
+  `iris_stack_worker_*`로 노출하고 worker enablement·capacity·timeout의 env 이중 소유를 제거했습니다.
+- `iris-client-go/v2 v2.1.1`을 pin하고 bot webhook receiver를 HMAC v3-only 계약으로
   전환했습니다. nonce replay 방지는 명시적 Valkey store를 사용하며 v2 성공 metric을
   제거했습니다.
 - YouTube collector의 provider 실패 class와 lease 실패 진단을 durable schema에 보존합니다.
@@ -30,8 +35,8 @@
 - YouTube.js 18과 current response shape를 채택하고 Official Schedule, Community와 YouTube.js
   관측의 ownership을 collector plane으로 모았습니다. Kakao room catalog의 DB 오류를 not-found나
   빈 관측으로 바꾸지 않으며 retention과 projection 권한을 최소 privilege로 제한합니다.
-- Go toolchain과 builder 기준을 `1.26.6`으로, `shared-go`를 `v1.51.0`으로,
-  `iris-client-go/v2`를 `v2.0.0`으로 갱신하고 일반챗 plaintext/open-chat 판별을 공용
+- Go toolchain과 builder 기준을 `1.26.6`으로, `shared-go`를 `v1.52.3`으로,
+  `iris-client-go/v2`를 `v2.1.1`로 갱신하고 일반챗 plaintext/open-chat 판별을 공용
   `kakaoformat` 정본으로 수렴했습니다.
 - **service 로그 인코딩이 text에서 JSON으로 바뀝니다.** shared-go 로깅이 text
   인코더를 제거하고 빈 `Format` 기본값이 JSON이 되면서, `hololive-api`,

@@ -22,6 +22,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 
@@ -41,6 +43,12 @@ import (
 var Version = "dev"
 
 func main() {
+	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
+		_, err := settings.LoadAlarmWorkerProfile()
+		return err
+	}); handled {
+		os.Exit(exitCode)
+	}
 	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime]]{
 		Version: Version,
 		Initialize: func(version string) {
@@ -81,6 +89,22 @@ func main() {
 		},
 		BuildErrorMessage: "Failed to assemble alarm worker runtime",
 	}))
+}
+
+func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
+	if len(args) != 1 || args[0] != "--check-worker-profile" {
+		return false, 0
+	}
+	if err := load(); err != nil {
+		if _, writeErr := fmt.Fprintf(stderr, "Failed to load alarm-worker worker profile: %v\n", err); writeErr != nil {
+			return true, 1
+		}
+		return true, 1
+	}
+	if _, err := fmt.Fprintln(stderr, "alarm-worker worker profile valid"); err != nil {
+		return true, 1
+	}
+	return true, 0
 }
 
 func alarmWorkerTelemetryConfig(appConfig *settings.Config, version string) telemetry.Config {

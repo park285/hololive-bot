@@ -26,7 +26,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
@@ -64,13 +63,12 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		return nil, fmt.Errorf("build bot runtime: infra is nil")
 	}
 	runtimeViews := buildBotRuntimeDependencyViews(infra)
-
 	botBot, err := orchestration.NewBot(runtimeViews.botDeps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
-	durable, err := buildDurableRuntime(infra, botBot, appConfig.Webhook.WorkerCount, appConfig.Webhook.HandlerTimeout, logger)
+	durable, err := buildDurableRuntime(infra, botBot, appConfig.APIWorkerProfile, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +78,7 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		inbox:  durable.inbox,
 		wake:   func() { notifyDurable(durable.inboxWake) },
 		logger: logger,
+		totals: durable.inboxTotals,
 	}, runtimeViews.webhook, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
@@ -122,12 +121,13 @@ func configureDurableReplyWriter(bot *orchestration.Bot, durable *durableRuntime
 		outbox: durable.outbox,
 		logger: logger,
 		wake:   func() { notifyDurable(durable.outboxWake) },
+		totals: durable.outboxTotals,
 	})
 }
 
-func buildDurableRuntime(infra *appbootstrap.BotInfrastructure, bot *orchestration.Bot, workers int, handlerTimeout time.Duration, logger *slog.Logger) (*durableRuntime, error) {
+func buildDurableRuntime(infra *appbootstrap.BotInfrastructure, bot *orchestration.Bot, profile *settings.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
 	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
 		return nil, fmt.Errorf("build bot runtime: durable postgres pool is nil")
 	}
-	return newDurableRuntime(bot, infra.Deps.Client, infra.Postgres.GetPool(), workers, handlerTimeout, logger), nil
+	return newDurableRuntime(bot, infra.Deps.Client, infra.Postgres.GetPool(), profile, logger)
 }

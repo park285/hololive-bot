@@ -10,9 +10,9 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | Check | Expected |
 |---|---|
 | Health | `https://127.0.0.1:30007/health` returns success over H3 |
-| Ready | `https://127.0.0.1:30007/ready` returns `status=ready`; `https://127.0.0.1:30007/internal/ready` with `X-API-Key` includes dependency and egress flag readiness |
+| Ready | `https://127.0.0.1:30007/ready` returns `status=ready`; authenticated `/diagnostics/workers` reports the exact three-worker registry |
 | Logs | scheduler/checker loops run without repeated DB/cache errors |
-| Queue | publishes to and consumes from `alarm:dispatch:queue` when alarm events are due |
+| Queue | publishes to and consumes due rows from `alarm_dispatch_deliveries`; Valkey wakeup tokens are only a polling optimization |
 | Delivery outbox | consumes `notification_delivery_outbox` rows for major event/member news proactive sends |
 | Egress instance | exactly one `hololive-alarm-worker` container is running; `NOTIFICATION_EGRESS_ROLE=owner` and `NOTIFICATION_SCHEDULER_ROLE=worker` |
 
@@ -30,11 +30,9 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 |---|---|---|
 | `SERVER_PORT` | HTTP health port | yes |
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
-| `YOUTUBE_OUTBOX_DISPATCHER_ENABLED` | YouTube outbox egress enablement | production yes |
+| `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery` | yes |
 | `YOUTUBE_OUTBOX_KARING_ENABLED` | YouTube outbox egress uses Karing content-list templates instead of text sends for supported kinds | no |
 | `YOUTUBE_OUTBOX_V3_HANDOFF_MODE` | `off`, `shadow`, `cutover`; v1 delivery rows를 v3 ledger로 넘기는 모드 | no; default `off` |
-| `DELIVERY_DISPATCHER_ENABLED` | generic notification delivery outbox egress enablement | production yes |
-| `ALARM_DISPATCH_CONSUMER_ENABLED` | alarm dispatch outbox egress enablement | production yes |
 | `ALARM_DISPATCH_KARING_ENABLED` | alarm dispatch queue egress uses Karing content-list templates instead of text sends | no |
 | `ALARM_SHORT_LINK_BASE_URL` | `https://short.holoshi.com` for thumbnail-free grouped alarm links; blank disables | no |
 | `BIRTHDAY_STREAM_RUNNER_ENABLED` | matching birthday greeting이 sent인 방에만 birthday stream event를 생산 | production policy |
@@ -77,7 +75,7 @@ ALARM_DISPATCH_KARING_ENABLED=false
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30007/internal/ready
 ```
 
-`/ready` fails closed when PostgreSQL, Valkey, or required production egress flags are unavailable. `/internal/ready` reports `dependencies.postgres`, `dependencies.valkey`, and `egress_flags.*` booleans for diagnosis.
+`/ready` fails closed when PostgreSQL or Valkey is unavailable. Worker enablement and effective executor/queue state are reported by authenticated `/diagnostics/workers`; production requires all three profile executors enabled.
 
 ## Metrics
 
@@ -90,10 +88,10 @@ ALARM_DISPATCH_KARING_ENABLED=false
 
 운영 전환은 다음 조건을 모두 확인한 뒤 별도 승인으로 진행합니다.
 
-1. migration 141~143이 적용되고 `ALARM_DISPATCH_CONSUMER_ENABLED=true`입니다.
+1. migration 141~143이 적용되고 `alarm_dispatch.executor.enabled=true`인 profile이 배포되어 있습니다.
 2. `shadow` 기간 동안 handoff failure가 0이고 legacy 대상 수와 v3 `shadowed` 대상 수가 일치합니다.
-3. v1은 `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`를 유지한 채 `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=cutover`로 바꿉니다. 이 dispatcher가 claim과 handoff를 함께 소유하므로 끄면 안 됩니다.
-4. v2는 producer인 hololive-api에서 `DELIVERY_OUTBOX_V3_HANDOFF_MODE=cutover`를 설정하고, 기존 `notification_delivery_outbox` backlog가 0이 된 뒤에만 alarm-worker의 `DELIVERY_DISPATCHER_ENABLED=false`를 적용합니다.
+3. v1은 `youtube_delivery.executor.enabled=true`를 유지한 채 `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=cutover`로 바꿉니다. 이 executor가 claim과 handoff를 함께 소유합니다.
+4. v2는 producer인 hololive-api에서 `DELIVERY_OUTBOX_V3_HANDOFF_MODE=cutover`를 설정하고, 기존 `notification_delivery_outbox` backlog가 0이 된 뒤 승인된 새 profile에서만 `notification_delivery.executor.enabled=false`로 전환합니다.
 
 Rollback 시 새 producer handoff mode를 먼저 `off`로 되돌립니다. 이미 v3 `pending`/`sending`인 delivery가 있으면 legacy direct egress를 다시 켜기 전에 drain 또는 명시적 quarantine 여부를 판단해야 중복 발송을 피할 수 있습니다.
 
@@ -108,7 +106,7 @@ Symptoms:
 Diagnosis:
 ```bash
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:queue
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --api-key-env API_SECRET_KEY --body https://127.0.0.1:30007/diagnostics/workers
 ```
 
 Mitigation:
@@ -219,19 +217,11 @@ Rollback:
 ## Rollback
 
 - Use `docs/current/runbooks/rollback.md`.
-- 이전 image는 persisted send-unit과 `client_request_id`를 읽지 못하므로 바로 재배포하지
-  않습니다. `rollback.md`의 alarm-worker drain overlay 절차로 `hololive-api`와 모든
-  send-unit producer를 실제로 중지하고 current egress consumer만 유지합니다.
-- 중앙 runtime host에서 runtime/DB preflight가 통과한 직후 같은 drain overlay를 유지한
-  채 이전 `hololive-alarm-worker` image로 전환합니다. 실패하면 이전 image rollback을
-  중단하고 current consumer로 fix-forward합니다.
-
-```bash
-sudo -n ./scripts/runtime/preflight-alarm-worker-rollback.sh
-```
-
-- 이전 image가 healthy이고 active send-unit이 다시 생기지 않는 것을 확인한 뒤에만
-  alarm scheduler를 재개하고, `DELIVERY_OUTBOX_V3_HANDOFF_MODE=off`로 API를 재기동합니다.
+- Stack Worker Contract v1 이전 image는 현재 profile/config와 호환되지 않습니다. 승인된
+  backup에 기록된 release/profile/config 전체를 한 쌍으로 복원해야 하며, current tree의
+  설정을 유지한 채 이전 image만 재기동하는 rollback은 지원하지 않습니다.
+- paired rollback이 준비되지 않았거나 send-unit schema 호환성이 확인되지 않으면 이전
+  image로 전환하지 않고 current revision을 fix-forward합니다.
 - Preserve and inspect `alarm:dispatch:*` queues before replaying or deleting queue data.
 
 ## Related contracts

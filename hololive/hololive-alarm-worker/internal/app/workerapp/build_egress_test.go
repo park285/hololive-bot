@@ -2,6 +2,7 @@ package workerapp
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -14,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/shared-go/pkg/workercontract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,6 +59,26 @@ type staticOpenRooms struct{}
 func (staticOpenRooms) OpenChat(context.Context, string) bool { return true }
 
 type workerappEgressTestPostgres struct{}
+
+func alarmWorkerTestConfig(t *testing.T) (*settings.Config, *alarmWorkerRegistryState) {
+	t.Helper()
+	path, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "hololive-shared", "pkg", "config", "settings", "testdata", "stack-worker-profile-alarm-worker.json"))
+	require.NoError(t, err)
+	t.Setenv(settings.StackWorkerProfileFileEnv, path)
+	profile, err := settings.LoadAlarmWorkerProfile()
+	require.NoError(t, err)
+	profile.AlarmDispatch.WakeupEnabled = false
+	state := &alarmWorkerRegistryState{
+		trackers: make(map[string]*workercontract.ExecutorTracker, 3),
+		totals:   make(map[string]*workercontract.Counters, 3),
+		workers:  profile.Loaded.Profile.Workers,
+	}
+	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {
+		state.trackers[workerID] = workercontract.NewExecutorTracker()
+		state.totals[workerID] = &workercontract.Counters{}
+	}
+	return &settings.Config{AlarmWorkerProfile: profile}, state
+}
 
 func (workerappEgressTestPostgres) GetPool() *pgxpool.Pool {
 	return nil
@@ -119,7 +141,8 @@ func TestYouTubeOutboxKaringSenderUsesMarkdownLaneWhenEnabled(t *testing.T) {
 }
 
 func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
-	runner, err := buildNotificationEgress(t.Context(), &settings.Config{}, &sharedmodules.InfraModule{}, nil)
+	config, state := alarmWorkerTestConfig(t)
+	runner, err := buildNotificationEgress(t.Context(), config, &sharedmodules.InfraModule{}, nil, state)
 
 	require.Error(t, err)
 	assert.Nil(t, runner)
@@ -127,18 +150,18 @@ func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
 }
 
 func TestBuildAlarmDispatchRunnerBuildsPGRunner(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
-	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "7")
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
+	config, state := alarmWorkerTestConfig(t)
+	config.AlarmWorkerProfile.AlarmDispatch.MaxBatch = 7
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler, err := buildAlarmDispatchRunner(t.Context(), infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, state)
 	require.NoError(t, err)
 
 	runner, ok := scheduler.(*dispatchrun.Runner)
 	require.True(t, ok)
 	assert.NotNil(t, runner)
-	runnerConfig := alarmDispatchRunnerConfig()
+	runnerConfig := alarmDispatchRunnerConfig(config)
 	assert.Equal(t, 7, runnerConfig.MaxBatch)
 	assert.True(t, runnerConfig.KaringEnabled)
 }
@@ -155,89 +178,83 @@ func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
 }
 
 func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
-	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "9")
-	t.Setenv("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", "3")
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
+	config, state := alarmWorkerTestConfig(t)
+	config.AlarmWorkerProfile.AlarmDispatch.MaxBatch = 9
+	config.AlarmWorkerProfile.AlarmDispatch.MaxBatchesPerWake = 3
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	scheduler, err := buildAlarmDispatchRunner(t.Context(), infra, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, state)
 	require.NoError(t, err)
 
 	runner, ok := scheduler.(*dispatchrun.Runner)
 	require.True(t, ok)
 	assert.NotNil(t, runner)
-	runnerConfig := alarmDispatchRunnerConfig()
+	runnerConfig := alarmDispatchRunnerConfig(config)
 	assert.Equal(t, 9, runnerConfig.MaxBatch)
 	assert.Equal(t, 3, runnerConfig.MaxBatchesPerWake)
 	assert.False(t, runnerConfig.KaringEnabled)
 }
 
 func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "false")
-	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "false")
-	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "false")
+	config, state := alarmWorkerTestConfig(t)
+	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {
+		worker := config.AlarmWorkerProfile.Loaded.Profile.Workers[workerID]
+		worker.Executor.Enabled = false
+		config.AlarmWorkerProfile.Loaded.Profile.Workers[workerID] = worker
+	}
 
-	scheduler, err := buildAlarmDispatchRunner(t.Context(), nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, nil, egress.NewIrisMessageSender(nil), nil, state)
 	require.NoError(t, err)
 	assert.Nil(t, scheduler)
 
-	scheduler, err = buildDeliveryOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err = buildDeliveryOutboxDispatcher(config, nil, egress.NewIrisMessageSender(nil), nil, state)
 	require.NoError(t, err)
 	assert.Nil(t, scheduler)
 
-	scheduler, err = buildYouTubeOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err = buildYouTubeOutboxDispatcher(config, nil, egress.NewIrisMessageSender(nil), nil, state)
 	require.NoError(t, err)
 	assert.Nil(t, scheduler)
 }
 
 func TestBuildEgressDispatchersRejectMissingInfraWhenEnabled(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
-	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
-	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
+	config, state := alarmWorkerTestConfig(t)
 
-	scheduler, err := buildAlarmDispatchRunner(t.Context(), nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, nil, egress.NewIrisMessageSender(nil), nil, state)
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
 	assert.Contains(t, err.Error(), "infra is required")
 
-	scheduler, err = buildDeliveryOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err = buildDeliveryOutboxDispatcher(config, nil, egress.NewIrisMessageSender(nil), nil, state)
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
 	assert.Contains(t, err.Error(), "postgres is required")
 
-	scheduler, err = buildYouTubeOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err = buildYouTubeOutboxDispatcher(config, nil, egress.NewIrisMessageSender(nil), nil, state)
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
 	assert.Contains(t, err.Error(), "postgres is required")
 }
 
 func TestBuildYouTubeOutboxDispatcherValidatesV3HandoffActivation(t *testing.T) {
-	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "false")
+	config, state := alarmWorkerTestConfig(t)
+	worker := config.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"]
+	worker.Executor.Enabled = false
+	config.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"] = worker
 	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "shadow")
 
-	scheduler, err := buildYouTubeOutboxDispatcher(nil, egress.NewIrisMessageSender(nil), nil)
+	scheduler, err := buildYouTubeOutboxDispatcher(config, nil, egress.NewIrisMessageSender(nil), nil, state)
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
-	assert.Contains(t, err.Error(), "requires YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true")
-
-	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
-	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "cutover")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "false")
-	scheduler, err = buildYouTubeOutboxDispatcher(
-		&sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}},
-		egress.NewIrisMessageSender(nil),
-		nil,
-	)
-	require.Error(t, err)
-	assert.Nil(t, scheduler)
-	assert.Contains(t, err.Error(), "requires ALARM_DISPATCH_CONSUMER_ENABLED=true")
+	assert.Contains(t, err.Error(), "requires youtube_delivery executor.enabled=true")
 
 	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "dual-write")
 	scheduler, err = buildYouTubeOutboxDispatcher(
+		config,
 		&sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}},
 		egress.NewIrisMessageSender(nil),
 		nil,
+		state,
 	)
 	require.Error(t, err)
 	assert.Nil(t, scheduler)
@@ -257,9 +274,10 @@ func (c *claimKeyReleaseRecordingCache) DelMany(_ context.Context, keys []string
 }
 
 func TestNewAlarmDispatchConsumerWiresPGModeClaimKeyReleaser(t *testing.T) {
+	config, _ := alarmWorkerTestConfig(t)
 	cacheFake := &claimKeyReleaseRecordingCache{}
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}, Cache: cacheFake}
-	consumer := newAlarmDispatchConsumer(infra, nil)
+	consumer := newAlarmDispatchConsumer(config, infra, nil)
 
 	err := consumer.ReleaseClaimKeys(context.Background(), []string{
 		"notified:claim:room-1:stream-1:100:live",

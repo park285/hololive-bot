@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"time"
 
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 )
@@ -17,7 +18,6 @@ func buildConfig(
 		return nil, err
 	}
 	irisConfig := loadIrisConfig(webhookToken, botToken)
-	workerProfile := resolveIrisBotWebhookWorkerProfile(&irisConfig, options)
 	scraperConfig := loadScraperConfig()
 	tracingConfig, err := loadTracingConfig(options.TracingRuntime, scraperConfig.ActiveActive.InstanceID)
 	if err != nil {
@@ -38,10 +38,53 @@ func buildConfig(
 	config.Ingestion = loadIngestionConfig(communityShortsBigBangCutoverAt)
 	config.Tracing = tracingConfig
 	config.Scraper = scraperConfig
-	config.Webhook = loadWebhookConfig(&workerProfile)
-	config.WorkerPool = loadWorkerPoolConfig(&workerProfile)
-	config.WorkerProfile = WorkerProfileConfig{Version: workerProfile.Version, Hash: workerProfile.ProfileHash()}
+	config.Webhook = loadWebhookConfig()
+	if err := loadRoleWorkerProfile(config, options.WorkerProfileRole); err != nil {
+		return nil, err
+	}
 	return config, nil
+}
+
+func loadRoleWorkerProfile(config *Config, role string) error {
+	switch role {
+	case "":
+		return nil
+	case "api":
+		return loadAPIWorkerProfile(config)
+	case "alarm-worker":
+		return loadAlarmWorkerProfile(config)
+	default:
+		return fmt.Errorf("unsupported worker profile role %q", role)
+	}
+}
+
+func loadAPIWorkerProfile(config *Config) error {
+	profile, err := LoadAPIWorkerProfile()
+	if err != nil {
+		return err
+	}
+	config.APIWorkerProfile = profile
+	applyAPIWorkerProfile(config, profile)
+	return nil
+}
+
+func loadAlarmWorkerProfile(config *Config) error {
+	profile, err := LoadAlarmWorkerProfile()
+	if err != nil {
+		return err
+	}
+	config.AlarmWorkerProfile = profile
+	return nil
+}
+
+func applyAPIWorkerProfile(config *Config, profile *APIWorkerProfile) {
+	workers := profile.Loaded.Profile.Workers
+	inbox := workers["bot_webhook_inbox"]
+	config.Webhook.WorkerCount = inbox.Executor.ConfiguredWorkers
+	config.Webhook.HandlerTimeout = workerDuration(inbox.Executor.AttemptTimeout)
+	config.Webhook.MaxBodyBytes = profile.BotWebhookInbox.MaxBodyBytes
+	config.Webhook.DedupTTL = time.Duration(profile.BotWebhookInbox.DedupTTLMS) * time.Millisecond
+	config.Webhook.DedupTimeout = time.Duration(profile.BotWebhookInbox.DedupTimeoutMS) * time.Millisecond
 }
 
 func newBaseConfig(corsAllowedOrigins []string, corsMissingInProduction bool, options configLoadOptions) *Config {

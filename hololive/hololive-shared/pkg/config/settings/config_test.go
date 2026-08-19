@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/shared-go/pkg/workerconfig"
 )
 
 func load() (*Config, error) {
@@ -46,6 +45,7 @@ func load() (*Config, error) {
 
 func setRequiredLoadEnv(t *testing.T) {
 	t.Helper()
+	useStackWorkerProfileFixture(t, "stack-worker-profile-api.json")
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
@@ -1611,7 +1611,7 @@ func TestLoad_InvalidCoreNumeric(t *testing.T) {
 	}
 }
 
-func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
+func TestLoad_WebhookUsesLocalStackWorkerProfile(t *testing.T) {
 	setRequiredLoadEnv(t)
 	server := newIrisRuntimeDiagnosticsServer(t, `{
 		"state": "running",
@@ -1665,35 +1665,32 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if config.Webhook.WorkerCount != 20 {
-		t.Fatalf("Webhook.WorkerCount = %d, want 20", config.Webhook.WorkerCount)
+	if config.Webhook.WorkerCount != 16 {
+		t.Fatalf("Webhook.WorkerCount = %d, want 16", config.Webhook.WorkerCount)
 	}
-	if config.Webhook.QueueSize != 640 {
-		t.Fatalf("Webhook.QueueSize = %d, want 640", config.Webhook.QueueSize)
+	if config.Webhook.QueueSize != 0 {
+		t.Fatalf("Webhook.QueueSize = %d, want unused zero value", config.Webhook.QueueSize)
 	}
-	if config.Webhook.EnqueueTimeout != 80*time.Millisecond {
-		t.Fatalf("Webhook.EnqueueTimeout = %v, want 80ms", config.Webhook.EnqueueTimeout)
+	if config.Webhook.EnqueueTimeout != 0 {
+		t.Fatalf("Webhook.EnqueueTimeout = %v, want unused zero value", config.Webhook.EnqueueTimeout)
 	}
-	if config.Webhook.HandlerTimeout != 36*time.Second {
-		t.Fatalf("Webhook.HandlerTimeout = %v, want 36s", config.Webhook.HandlerTimeout)
+	if config.Webhook.HandlerTimeout != 30*time.Second {
+		t.Fatalf("Webhook.HandlerTimeout = %v, want 30s", config.Webhook.HandlerTimeout)
 	}
-	if config.Webhook.MaxBodyBytes != 262144 {
-		t.Fatalf("Webhook.MaxBodyBytes = %d, want 262144", config.Webhook.MaxBodyBytes)
+	if config.Webhook.MaxBodyBytes != 65536 {
+		t.Fatalf("Webhook.MaxBodyBytes = %d, want 65536", config.Webhook.MaxBodyBytes)
 	}
-	if config.Webhook.DedupTTL != 6*time.Minute || config.Webhook.DedupTimeout != 300*time.Millisecond {
-		t.Fatalf("Webhook dedup = (%v,%v), want (6m,300ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
+	if config.Webhook.DedupTTL != 16*time.Minute || config.Webhook.DedupTimeout != 200*time.Millisecond {
+		t.Fatalf("Webhook dedup = (%v,%v), want (16m,200ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
 	}
 	if !config.Webhook.RequireHMAC {
 		t.Fatalf("Webhook.RequireHMAC = false, want true")
 	}
-	if config.WorkerPool.Workers != 15 || config.WorkerPool.QueueSize != 200 {
-		t.Fatalf("WorkerPool = (%d,%d), want (15,200)", config.WorkerPool.Workers, config.WorkerPool.QueueSize)
+	if config.APIWorkerProfile == nil || config.APIWorkerProfile.Loaded.Profile.ProfileID != "hololive-api-test" {
+		t.Fatalf("APIWorkerProfile = %#v, want hololive-api-test", config.APIWorkerProfile)
 	}
-	if config.WorkerProfile.Version != workerconfig.CurrentVersion {
-		t.Fatalf("WorkerProfile.Version = %d, want %d", config.WorkerProfile.Version, workerconfig.CurrentVersion)
-	}
-	if config.WorkerProfile.Hash == "" {
-		t.Fatal("WorkerProfile.Hash is empty")
+	if config.APIWorkerProfile.Loaded.Hash == "" {
+		t.Fatal("APIWorkerProfile hash is empty")
 	}
 }
 

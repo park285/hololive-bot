@@ -301,24 +301,6 @@ grep -Fq 'up -d --no-build --no-deps' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh
     || fail "seoul rollback recreates from the preserved image without a runtime-host build"
 pass "seoul rollback dry-run preserves Compose extends relative paths for .prechange backups"
 
-rollback_drain_overlay="${ROOT_DIR}/deploy/compose/docker-compose.alarm-worker-rollback-drain.yml"
-grep -A3 '^  hololive-api:' "${rollback_drain_overlay}" | grep -Fq 'DELIVERY_OUTBOX_V3_HANDOFF_MODE: "off"' \
-    || fail "alarm-worker rollback drain overlay disables API delivery handoff"
-for expected in \
-    'NOTIFICATION_SCHEDULER_ROLE: "off"' \
-    'CELEBRATION_RUNNER_ENABLED: "false"' \
-    'BIRTHDAY_STREAM_RUNNER_ENABLED: "false"' \
-    'YOUTUBE_OUTBOX_V3_HANDOFF_MODE: "off"' \
-    'YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"' \
-    'ALARM_DISPATCH_CONSUMER_ENABLED: "true"'; do
-    grep -Fq "${expected}" "${rollback_drain_overlay}" \
-        || fail "alarm-worker rollback drain overlay is missing ${expected}"
-done
-if rg -n 'DELIVERY_OUTBOX_V3_HANDOFF_MODE=off.*compose\.sh' "${ROOT_DIR}/docs/current/runbooks/rollback.md"; then
-    fail "alarm-worker rollback must not use a shell-only Compose interpolation override"
-fi
-pass "alarm-worker rollback drain overlay disables every send-unit producer without shell overrides"
-
 rm -rf "${rollback_fixture_root}"
 rm -f "${SSH_KEY}"
 trap - EXIT

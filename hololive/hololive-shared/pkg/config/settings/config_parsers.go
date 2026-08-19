@@ -111,7 +111,7 @@ func requiredPositiveIntEnv(key string, fallback int) (int, error) {
 	return value, nil
 }
 
-func requiredDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
+func requiredSecondsDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
 	raw, found := os.LookupEnv(key)
 	if !found {
 		return fallback, nil
@@ -119,7 +119,7 @@ func requiredDurationUnitEnv(key string, fallback, unit time.Duration) (time.Dur
 	if strings.TrimSpace(raw) == "" {
 		return 0, fmt.Errorf("%s must be a positive duration", key)
 	}
-	value, err := strictDurationUnitEnv(key, fallback, unit)
+	value, err := strictDurationUnitEnv(key, fallback, time.Second)
 	if err != nil {
 		return 0, err
 	}

@@ -54,7 +54,7 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 | `API_SECRET_KEY` | H3 internal routes and non-loopback `/metrics` authentication | production yes |
 | `HOLOLIVE_OTLP_GRPC_ENDPOINT` | collector trace export endpoint (`host:port`, gRPC) | production yes |
 | `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true` | per-slot trace enablement (`A`/`B`/`C`/`D`) | production yes |
-| `YOUTUBE_INGESTION_ENABLED=true` | collector enablement | yes |
+| `STACK_WORKER_PROFILE_FILE` | slot-specific strict `hololive/youtube-collector` profile; `collection.executor.enabled` owns worker enablement | yes |
 | `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true` | must be true only on collector hosts | yes |
 
 `OTEL_EXPORTER_OTLP_ENDPOINT`와 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`는 URL 문법을
@@ -64,25 +64,19 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 | `PHOTO_SYNC_ENABLED=false` | photo product path stays on hololive-api admin | yes |
 | `POSTGRES_USER=hololive_scraper` | lease/observation insert only | yes |
 | `POSTGRES_SSLMODE=verify-full` | required client verification | yes |
-| `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false` | egress boundary | yes |
 | `HOLODEX_TIMEOUT_SECONDS` | Holodex request ceiling; must be positive | yes |
 | `OFFICIAL_SCHEDULE_TIMEOUT_SECONDS` | Official Schedule request ceiling; must be positive | yes |
-| `YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS` | atomic terminal publish timeout | yes |
-| `YOUTUBE_COLLECTOR_DB_TIMEOUT_SECONDS` | lease/control-plane DB timeout | yes |
-| `YOUTUBE_COLLECTOR_RENEW_TIMEOUT_SECONDS` | lease renewal timeout | yes |
-| `YOUTUBE_COLLECTOR_CLEANUP_TIMEOUT_SECONDS` | canceled runner join and release bound | yes |
 | `YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS` | `/ready` total probe budget; default 2s stays below the 5s healthprobe ceiling | yes |
 | `YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS` | helper health probe inside the readiness budget; default 1s | yes |
 | `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES` | successful provider response ceiling | yes |
-| `YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS` | collection post-fetch overhead; default 5s | yes |
 | `YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS` | per-request YouTube.js ceiling; default 30s | yes |
 
-다음 old env는 한 compatibility release 동안만 canonical env의 alias입니다. Canonical host env와 `.env.example`은 new 이름만 사용합니다. Compose는 mixed-version fleet을 위해 각 old/new pair를 함께 render하되, 입력의 unset과 explicit empty를 구분합니다.
+Worker count, local queue capacity, acquisition cadence/batch, lease/renew/cleanup/publish budgets, retry/jitter, and provider in-flight limits are required fields of the `collection` profile. The runtime rejects their retired environment-variable forms instead of translating them.
+
+Provider-owned compatibility aliases remain separate from the worker profile:
 
 | Canonical env | Compatibility alias |
 |---|---|
-| `YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS` | `YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS` |
-| `YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS` | `YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS` |
 | `YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS` | `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS` |
 | `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES` | `YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES` |
 

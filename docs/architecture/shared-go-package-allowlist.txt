@@ -30,4 +30,5 @@ sqlutil
 stringutil
 telemetry
 workerconfig
+workercontract
 workerpool

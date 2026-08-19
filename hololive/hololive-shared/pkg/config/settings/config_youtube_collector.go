@@ -255,7 +255,7 @@ func (c *YouTubeCollectorConfig) validateLeaseBudgets(holodexTimeout, officialTi
 
 func (c *YouTubeCollectorConfig) validateLeaseTiming() error {
 	if c.LeaseTTL < time.Second || c.LeaseTTL > 30*time.Minute {
-		return fmt.Errorf("YOUTUBE_COLLECTOR_LEASE_TTL_SECONDS must be between 1 and 1800")
+		return fmt.Errorf("collection lease_ttl_ms must be between 1000 and 1800000")
 	}
 	if c.RenewInterval <= 0 || c.RenewInterval >= c.LeaseTTL ||
 		c.RenewTimeout <= 0 || c.RenewTimeout > time.Minute ||
@@ -307,16 +307,16 @@ func (c *YouTubeCollectorConfig) validateRetryAndJitter() error {
 
 func (c *YouTubeCollectorConfig) validateWorkerQueue() error {
 	if c.AcquisitionBatch < 1 || c.AcquisitionBatch > youtubeCollectorMaxAcquisitionBatch {
-		return fmt.Errorf("YOUTUBE_COLLECTOR_ACQUISITION_BATCH must be between 1 and %d", youtubeCollectorMaxAcquisitionBatch)
+		return fmt.Errorf("collection.settings.acquisition_batch must be between 1 and %d", youtubeCollectorMaxAcquisitionBatch)
 	}
 	if c.TotalWorkers < 1 || c.TotalWorkers > youtubeCollectorMaxWorkerCount {
-		return fmt.Errorf("YOUTUBE_COLLECTOR_TOTAL_WORKERS must be between 1 and %d", youtubeCollectorMaxWorkerCount)
+		return fmt.Errorf("collection.executor.configured_workers must be between 1 and %d", youtubeCollectorMaxWorkerCount)
 	}
 	if c.QueueCapacity < c.TotalWorkers || c.QueueCapacity > youtubeCollectorMaxQueueCapacity {
-		return fmt.Errorf("YOUTUBE_COLLECTOR_QUEUE_CAPACITY must be between worker count and %d", youtubeCollectorMaxQueueCapacity)
+		return fmt.Errorf("collection.queue.capacity.items must be between worker count and %d", youtubeCollectorMaxQueueCapacity)
 	}
 	if c.AcquisitionCadence < 100*time.Millisecond || c.AcquisitionCadence > time.Minute {
-		return fmt.Errorf("YOUTUBE_COLLECTOR_ACQUISITION_CADENCE_MS must be between 100 and 60000")
+		return fmt.Errorf("collection.settings.acquisition_cadence_ms must be between 100 and 60000")
 	}
 	return nil
 }
@@ -329,13 +329,13 @@ func (c *YouTubeCollectorConfig) validateProviderLimits() error {
 }
 
 func (c *YouTubeCollectorConfig) validateInflightLimits() error {
-	if err := validateProviderInflight("YOUTUBE_COLLECTOR_HOLODEX_MAX_INFLIGHT", c.HolodexMaxInflight, c.TotalWorkers); err != nil {
+	if err := validateProviderInflight("collection.settings.holodex_max_inflight", c.HolodexMaxInflight, c.TotalWorkers); err != nil {
 		return err
 	}
-	if err := validateProviderInflight("YOUTUBE_COLLECTOR_OFFICIAL_MAX_INFLIGHT", c.OfficialMaxInflight, c.TotalWorkers); err != nil {
+	if err := validateProviderInflight("collection.settings.official_max_inflight", c.OfficialMaxInflight, c.TotalWorkers); err != nil {
 		return err
 	}
-	return validateProviderInflight("YOUTUBE_COLLECTOR_YOUTUBEJS_MAX_INFLIGHT", c.YouTubeJSMaxInflight, c.TotalWorkers)
+	return validateProviderInflight("collection.settings.youtubejs_max_inflight", c.YouTubeJSMaxInflight, c.TotalWorkers)
 }
 
 func (c *YouTubeCollectorConfig) validatePaginationLimits() error {
@@ -359,7 +359,7 @@ func validateProviderInflight(name string, value, totalWorkers int) error {
 		return fmt.Errorf("%s must be between 1 and %d", name, youtubeCollectorMaxWorkerCount)
 	}
 	if value > totalWorkers {
-		return fmt.Errorf("%s must not exceed YOUTUBE_COLLECTOR_TOTAL_WORKERS", name)
+		return fmt.Errorf("%s must not exceed collection.executor.configured_workers", name)
 	}
 	return nil
 }

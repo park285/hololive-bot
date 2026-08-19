@@ -35,7 +35,6 @@ type YouTubeConfig struct {
 }
 
 type IngestionConfig struct {
-	YouTubeEnabled                  bool
 	PhotoSyncEnabled                bool
 	CommunityShortsBigBangCutoverAt time.Time
 }

@@ -33,6 +33,7 @@ services:
       - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
     environment:
       <<: *osaka2-ap-db-env
+      STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-d.json
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
     volumes: !override
       - ../../data:/app/data
@@ -77,6 +78,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+      - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-d.json:/run/hololive-bot/worker-profiles/youtube-collector-d.json:ro
     logging: *osaka2-ap-logging
     deploy:
       resources:
