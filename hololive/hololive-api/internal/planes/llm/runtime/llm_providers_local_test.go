@@ -345,6 +345,13 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	t.Setenv("CLIPROXY_MODEL", "default-model")
 
 	t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
+	workerProfile, err := filepath.Abs(filepath.Join(
+		"..", "..", "..", "..", "..", "hololive-shared", "pkg", "config", "settings", "testdata", "stack-worker-profile-api.json",
+	))
+	if err != nil {
+		t.Fatalf("resolve API worker profile fixture: %v", err)
+	}
+	t.Setenv(settings.StackWorkerProfileFileEnv, workerProfile)
 
 	appConfig, err := settings.LoadBotRuntime()
 	if err != nil {
