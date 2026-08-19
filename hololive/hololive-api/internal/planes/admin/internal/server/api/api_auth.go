@@ -29,8 +29,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 	"github.com/park285/shared-go/pkg/ginjson"
 )
 

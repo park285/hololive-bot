@@ -10,11 +10,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
+	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
