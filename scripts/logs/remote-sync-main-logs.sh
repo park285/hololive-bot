@@ -6,7 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 LOG_ROOT="${LOG_ROOT:-${REPO_ROOT}/logs}"
 REMOTE_MIRROR_ROOT="${REMOTE_MIRROR_ROOT:-${LOG_ROOT}/remote}"
-FORCE_MAIN_LOG_LINKS="${FORCE_MAIN_LOG_LINKS:-0}"
 # shellcheck source=scripts/logs/lib/remote-sync-targets.sh
 source "${SCRIPT_DIR}/lib/remote-sync-targets.sh"
 usage() {
@@ -43,7 +42,6 @@ Environment:
   HOL_LOG_SEOUL_HOST_KEY_ALIAS=100.100.1.5
   HOL_LOG_SEOUL_LOG_DIR=/home/ubuntu/hololive-bot/logs
   HOL_LOG_SEOUL_SERVICES=youtube-collector-b
-  FORCE_MAIN_LOG_LINKS=1  # replace existing regular LOG_ROOT/<service>.log after backup
 USAGE
 }
 target_dir() {
@@ -227,39 +225,11 @@ sync_once_remote() {
   ensure_service_aliases "${target}"
   date -Is > "${dst}/.last_sync"
   normalize_mirror_permissions "${dst}"
-  ensure_main_links "${target}"
   echo "synced: ${user_host}:${remote_log_dir} -> ${dst}" >&2
-}
-ensure_main_links() {
-  local target="$1"
-  local dst service source_rel source_abs link backup
-  dst="$(target_dir "${target}")"
-  for service in $(target_services "${target}"); do
-    source_rel="remote/${target}/${service}.log"
-    source_abs="${LOG_ROOT}/${source_rel}"
-    link="${LOG_ROOT}/${service}.log"
-    if [[ ! -f "${source_abs}" ]]; then
-      echo "WARN: remote mirrored file not found yet: ${source_abs}" >&2
-      continue
-    fi
-    if [[ -e "${link}" && ! -L "${link}" ]]; then
-      if [[ "${FORCE_MAIN_LOG_LINKS}" != "1" ]]; then
-        echo "WARN: ${link} exists as a regular file; not replacing. Set FORCE_MAIN_LOG_LINKS=1 to backup and replace." >&2
-        continue
-      fi
-      backup="${link}.local.$(date +%Y%m%d-%H%M%S)"
-      mv "${link}" "${backup}"
-      echo "backed up existing local log: ${link} -> ${backup}" >&2
-    fi
-    (
-      cd "${LOG_ROOT}"
-      ln -sfn "${source_rel}" "${service}.log"
-    )
-  done
 }
 status_remote() {
   local target="$1"
-  local dst service link source last_sync user_host remote_log_dir
+  local dst service source last_sync user_host remote_log_dir
   dst="$(target_dir "${target}")"
   last_sync="never"
   [[ -f "${dst}/.last_sync" ]] && last_sync="$(cat "${dst}/.last_sync")"
@@ -272,19 +242,11 @@ status_remote() {
   echo "last_sync=${last_sync}"
   echo
   for service in $(target_services "${target}"); do
-    link="${LOG_ROOT}/${service}.log"
     source="${dst}/${service}.log"
-    if [[ -L "${link}" ]]; then
-      echo "${service}: main=${link} -> $(readlink "${link}")"
-    elif [[ -e "${link}" ]]; then
-      echo "${service}: main=${link} exists but is not symlink"
-    else
-      echo "${service}: main=${link} missing"
-    fi
     if [[ -f "${source}" ]]; then
-      echo "  mirror=${source} size=$(stat -Lc%s "${source}" 2>/dev/null || echo 0) mtime=$(stat -Lc%y "${source}" 2>/dev/null || echo unknown)"
+      echo "${service}: mirror=${source} size=$(stat -Lc%s "${source}" 2>/dev/null || echo 0) mtime=$(stat -Lc%y "${source}" 2>/dev/null || echo unknown)"
     else
-      echo "  mirror=${source} missing"
+      echo "${service}: mirror=${source} missing"
     fi
   done
 }
