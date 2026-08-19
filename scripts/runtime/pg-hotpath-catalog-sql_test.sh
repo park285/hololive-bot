@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CATALOG_SQL_LIB="${ROOT_DIR}/scripts/runtime/lib/pg-hotpath-catalog-sql.sh"
 
+# shellcheck source=scripts/runtime/lib/pg-hotpath-catalog-sql.sh
 source "${CATALOG_SQL_LIB}"
 sql="$(dead_tuples_sql)"
 
