@@ -13,6 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 type SchedulerState string
@@ -48,6 +49,7 @@ type SchedulerSnapshot struct {
 	CycleStartedAt         time.Time
 	LastCycleCompletedAt   time.Time
 	LastCycleOperationCode collecterr.OperationCode
+	OldestQueueAge         time.Duration
 }
 
 type projectionCandidateSource interface {
@@ -76,6 +78,7 @@ type leaseScheduler struct {
 	mu                     sync.Mutex
 	state                  SchedulerState
 	queued                 map[string]struct{}
+	queuedAt               map[string]time.Time
 	queue                  chan joblease.JobSpec
 	cancel                 context.CancelFunc
 	done                   chan struct{}
@@ -93,6 +96,8 @@ type leaseScheduler struct {
 	cycleStartedAt         time.Time
 	lastCycleCompletedAt   time.Time
 	lastCycleOperationCode collecterr.OperationCode
+	workerTracker          *workercontract.ExecutorTracker
+	workerTotals           *workercontract.Counters
 }
 
 func (s *leaseScheduler) Start(parent context.Context) error {
@@ -109,6 +114,7 @@ func (s *leaseScheduler) Start(parent context.Context) error {
 	s.cancel = cancel
 	s.done = done
 	s.state = SchedulerRunning
+	s.workerTracker.StartWorkers(s.config.WorkerCount)
 	s.wg.Add(s.config.WorkerCount + 1)
 	s.mu.Unlock()
 	for i := 0; i < s.config.WorkerCount; i++ {
@@ -182,6 +188,7 @@ func (s *leaseScheduler) waitDone(ctx context.Context, done chan struct{}) error
 
 func (s *leaseScheduler) join(done chan struct{}) {
 	s.wg.Wait()
+	s.workerTracker.StopWorkers(s.config.WorkerCount)
 	s.drainQueue()
 	s.mu.Lock()
 	s.state = SchedulerStopped
@@ -306,8 +313,16 @@ func (s *leaseScheduler) Snapshot() SchedulerSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	depth := 0
+	oldestQueueAge := time.Duration(0)
 	if s.queue != nil {
 		depth = len(s.queue)
+	}
+	now := time.Now()
+	for _, queuedAt := range s.queuedAt {
+		age := now.Sub(queuedAt)
+		if age > oldestQueueAge {
+			oldestQueueAge = age
+		}
 	}
 	return SchedulerSnapshot{
 		State:                  s.lifecycleState(),
@@ -323,6 +338,7 @@ func (s *leaseScheduler) Snapshot() SchedulerSnapshot {
 		CycleStartedAt:         s.cycleStartedAt,
 		LastCycleCompletedAt:   s.lastCycleCompletedAt,
 		LastCycleOperationCode: s.lastCycleOperationCode,
+		OldestQueueAge:         oldestQueueAge,
 	}
 }
 

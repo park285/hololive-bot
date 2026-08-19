@@ -5,30 +5,32 @@ import (
 	"crypto/rand"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 func (r *durableRuntime) runOutboxWorker(ctx context.Context) {
 	defer r.wg.Done()
-	idleDelay := durablePollEvery
+	idleDelay := r.outboxPollEvery
 	for ctx.Err() == nil {
 		if r.processNextOutbox(ctx) {
-			idleDelay = durablePollEvery
+			idleDelay = r.outboxPollEvery
 			continue
 		}
 		durableClaimIdleTotal.WithLabelValues("outbox").Inc()
 		if !waitDurableWake(ctx, idleDelay, r.outboxWake) {
 			return
 		}
-		idleDelay = nextDurableIdleDelay(idleDelay)
+		idleDelay = nextDurableIdleDelayFrom(idleDelay, r.outboxPollEvery)
 	}
 }
 
 func (r *durableRuntime) processNextOutbox(ctx context.Context) bool {
 	token := rand.Text()
-	claim, err := r.outbox.Claim(ctx, token, durableClaimLease)
+	claim, err := r.outbox.Claim(ctx, token, r.outboxClaimLease)
 	if err != nil {
 		r.logError("claim reply outbox", err)
 		return false
@@ -36,7 +38,9 @@ func (r *durableRuntime) processNextOutbox(ctx context.Context) bool {
 	if claim == nil {
 		return false
 	}
+	attemptID := r.outboxTracker.BeginAttempt(time.Now())
 	r.dispatchOutboxClaim(ctx, claim, token)
+	r.outboxTracker.EndAttempt(attemptID)
 	return true
 }
 
@@ -65,13 +69,34 @@ func (r *durableRuntime) acceptanceHook(id int64, token string, accepted *bool) 
 }
 
 func (r *durableRuntime) finishOutboxSettlement(claim *durability.ReplyOutboxClaim, accepted bool, dispatchErr error, applied bool, settleErr error) {
+	outcome := workercontract.AttemptFailed
 	switch {
 	case settleErr != nil:
 		r.logError("settle reply outbox", settleErr)
+		outcome = workercontract.AttemptOutcomeUnknown
 	case !applied && !accepted:
 		r.logError("settle reply outbox", errors.New("reply outbox settlement lost its claim"))
+		outcome = workercontract.AttemptOutcomeUnknown
 	case applied:
-		r.observeOutboxSettlement(claim, replyOutboxSettlementStatus(accepted, claim.Attempts, dispatchErr))
+		status := replyOutboxSettlementStatusWithMaxAttempts(accepted, claim.Attempts, r.outboxMaxAttempts, dispatchErr)
+		r.observeOutboxSettlement(claim, status)
+		outcome = outboxAttemptOutcome(status, dispatchErr)
+	}
+	r.outboxTotals.RecordAttempt(outcome)
+}
+
+func outboxAttemptOutcome(status string, err error) workercontract.AttemptOutcome {
+	switch {
+	case status == durability.ReplyOutboxHandoffCompleted:
+		return workercontract.AttemptSuccess
+	case status == durability.ReplyOutboxOutcomeUnknown || status == durability.ReplyOutboxManualReview:
+		return workercontract.AttemptOutcomeUnknown
+	case errors.Is(err, context.DeadlineExceeded):
+		return workercontract.AttemptTimeout
+	case errors.Is(err, context.Canceled):
+		return workercontract.AttemptCanceled
+	default:
+		return workercontract.AttemptFailed
 	}
 }
 
@@ -88,8 +113,8 @@ func (r *durableRuntime) observeOutboxSettlement(claim *durability.ReplyOutboxCl
 }
 
 func (r *durableRuntime) settleOutboxDispatch(ctx context.Context, claim *durability.ReplyOutboxClaim, token string, accepted bool, dispatchErr error) (bool, error) {
-	status := replyOutboxSettlementStatus(accepted, claim.Attempts, dispatchErr)
-	retryAfter := replyOutboxRetryAfter(status, claim.Attempts)
+	status := replyOutboxSettlementStatusWithMaxAttempts(accepted, claim.Attempts, r.outboxMaxAttempts, dispatchErr)
+	retryAfter := replyOutboxRetryAfterWithBase(status, claim.Attempts, r.outboxRetryAfter)
 	return r.outbox.Settle(ctx, durability.ReplyOutboxSettlement{
 		ID: claim.ID, ClaimToken: token, Status: status, LastError: errorText(dispatchErr), RetryAfter: retryAfter,
 	})

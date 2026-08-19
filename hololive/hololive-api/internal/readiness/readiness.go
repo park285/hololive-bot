@@ -2,7 +2,6 @@ package readiness
 
 import (
 	"context"
-	"maps"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -34,10 +33,7 @@ func GinHandler(ctx context.Context, p *sharedreadiness.Probe) gin.HandlerFunc {
 func evaluate(ctx context.Context, p *sharedreadiness.Probe) (statusCode int, payload map[string]any) {
 	base := health.Get()
 	ready, groups := p.Evaluate(ctx)
-	dependencies := map[string]bool{}
-	for _, group := range []string{sharedreadiness.GroupDependencies, sharedreadiness.GroupEgressFlags} {
-		maps.Copy(dependencies, groups[group])
-	}
+	dependencies := groups[sharedreadiness.GroupDependencies]
 	statusCode, status := sharedreadiness.HTTPStatus(ready)
 	payload = sharedreadiness.BasePayload(base, status)
 	payload["plane"] = p.Name()

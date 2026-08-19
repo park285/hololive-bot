@@ -38,7 +38,7 @@ Structured allowlist: `repository-ownership.allowlist`.
 | `youtube-collector` | AP-fleet fetch/normalize/lease and observation Publish | Canonical persist, observation claim/finalize, Iris send, outbox dispatch |
 | `hololive-api` YouTube plane | Observation consume, canonical persist, notification intent | External scraping, proactive egress |
 
-Duplicated polling prevention is enforced by PostgreSQL collection leases. Collector processes set `YOUTUBE_INGESTION_ENABLED=true`. Consume/canonical persist is owned by the `hololive-api` YouTube plane.
+Duplicated polling prevention is enforced by PostgreSQL collection leases. Each collector uses a slot-specific Stack Worker Profile v1 with `collection.executor.enabled=true`. Consume/canonical persist is owned by the `hololive-api` YouTube plane.
 Duplicated sending prevention is enforced by code and architecture gates: `youtube-collector` must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.
 Collector adapters must not import persist helpers (`batchrepo`, `PersistCommunityPosts`).
 

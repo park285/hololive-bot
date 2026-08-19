@@ -11,19 +11,17 @@ func clearRuntimeRoleEnv(t *testing.T) {
 	for _, key := range []string{
 		notificationEgressRoleEnv,
 		notificationSchedulerRoleEnv,
-		deliveryDispatcherEnabledEnv,
-		youTubeOutboxDispatcherEnabledEnv,
-		alarmDispatchConsumerEnabledEnv,
 		"MEMBER_NEWS_CLIPROXY_MODEL",
 		"DB_SSLMODE",
 		"DB_QUERY_EXEC_MODE",
 		"OTEL_ENVIRONMENT",
 	} {
-		t.Setenv(key, "")
+		unsetEnvForTest(t, key)
 	}
 }
 
-func validRuntimeRoleConfig() *Config {
+func validRuntimeRoleConfig(t *testing.T) *Config {
+	t.Helper()
 	return &Config{
 		Server: ServerConfig{
 			Port:           30001,
@@ -57,6 +55,8 @@ func validRuntimeRoleConfig() *Config {
 		MaxResponseBodyBytes: DefaultMaxResponseBodyBytes,
 		Environment:          "production",
 		YouTubeCollector:     YouTubeCollectorConfig{InstanceID: "youtube-collector-c"},
+		APIWorkerProfile:     apiWorkerProfileFixture(t),
+		AlarmWorkerProfile:   alarmWorkerProfileFixture(t),
 	}
 }
 
@@ -79,7 +79,7 @@ func TestValidateBotRuntimeRejectsNotificationEgressOwner(t *testing.T) {
 	clearRuntimeRoleEnv(t)
 	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
 
-	err := validRuntimeRoleConfig().ValidateBotRuntime()
+	err := validRuntimeRoleConfig(t).ValidateBotRuntime()
 	if err == nil || !strings.Contains(err.Error(), "must not own proactive notification egress") {
 		t.Fatalf("ValidateBotRuntime() error = %v, want proactive egress ownership rejection", err)
 	}
@@ -89,19 +89,9 @@ func TestValidateBotRuntimeRejectsMixedCaseNotificationEgressOwner(t *testing.T)
 	clearRuntimeRoleEnv(t)
 	t.Setenv(notificationEgressRoleEnv, "Owner")
 
-	err := validRuntimeRoleConfig().ValidateBotRuntime()
+	err := validRuntimeRoleConfig(t).ValidateBotRuntime()
 	if err == nil || err.Error() != "bot must not own proactive notification egress; NOTIFICATION_EGRESS_ROLE=owner is reserved for alarm-worker" {
 		t.Fatalf("ValidateBotRuntime() error = %v, want proactive egress ownership rejection", err)
-	}
-}
-
-func TestValidateAdminAPIRuntimeRejectsDispatchers(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	t.Setenv(deliveryDispatcherEnabledEnv, "true")
-
-	err := validRuntimeRoleConfig().ValidateAdminAPIRuntime()
-	if err == nil || !strings.Contains(err.Error(), deliveryDispatcherEnabledEnv) {
-		t.Fatalf("ValidateAdminAPIRuntime() error = %v, want delivery dispatcher rejection", err)
 	}
 }
 
@@ -118,14 +108,14 @@ func TestValidateLLMSchedulerRuntimeRejectsSchedulerWorkerRole(t *testing.T) {
 func TestValidateAlarmWorkerRuntimeProductionRequiresOwnerWorkerRoles(t *testing.T) {
 	clearRuntimeRoleEnv(t)
 
-	err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
+	err := validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime()
 	if err == nil || err.Error() != "alarm-worker production requires NOTIFICATION_EGRESS_ROLE=owner" {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want owner role requirement", err)
 	}
 
 	clearRuntimeRoleEnv(t)
 	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
-	err = validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
+	err = validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime()
 	if err == nil || err.Error() != "alarm-worker production requires NOTIFICATION_SCHEDULER_ROLE=worker|off" {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want scheduler role enumeration requirement", err)
 	}
@@ -137,11 +127,8 @@ func TestValidateAlarmWorkerRuntimeProductionRejectsNonOwnerEgressRoles(t *testi
 			clearRuntimeRoleEnv(t)
 			t.Setenv(notificationEgressRoleEnv, role)
 			t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
-			t.Setenv(deliveryDispatcherEnabledEnv, "true")
-			t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
-			t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
 
-			err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
+			err := validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime()
 			if err == nil || err.Error() != "alarm-worker production requires NOTIFICATION_EGRESS_ROLE=owner" {
 				t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want owner role requirement", err)
 			}
@@ -152,7 +139,7 @@ func TestValidateAlarmWorkerRuntimeProductionRejectsNonOwnerEgressRoles(t *testi
 func TestValidateAlarmWorkerRuntimeNonProductionSkipsOwnershipRequirements(t *testing.T) {
 	clearRuntimeRoleEnv(t)
 
-	cfg := validRuntimeRoleConfig()
+	cfg := validRuntimeRoleConfig(t)
 	cfg.Environment = "staging"
 
 	if err := cfg.ValidateAlarmWorkerRuntime(); err != nil {
@@ -164,11 +151,8 @@ func TestValidateAlarmWorkerRuntimeProductionAcceptsSchedulerWorkerProfile(t *te
 	clearRuntimeRoleEnv(t)
 	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
 	t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
-	t.Setenv(deliveryDispatcherEnabledEnv, "true")
-	t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
-	t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
 
-	if err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime(); err != nil {
+	if err := validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime(); err != nil {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want nil", err)
 	}
 }
@@ -177,11 +161,8 @@ func TestValidateAlarmWorkerRuntimeProductionAcceptsEgressOnlyProfile(t *testing
 	clearRuntimeRoleEnv(t)
 	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
 	t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleOff)
-	t.Setenv(deliveryDispatcherEnabledEnv, "true")
-	t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
-	t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
 
-	if err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime(); err != nil {
+	if err := validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime(); err != nil {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want nil", err)
 	}
 }
@@ -191,49 +172,27 @@ func TestValidateAlarmWorkerRuntimeRejectsUnsupportedSchedulerRole(t *testing.T)
 	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
 	t.Setenv(notificationSchedulerRoleEnv, "bot")
 
-	err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
+	err := validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime()
 	if err == nil || err.Error() != "unsupported NOTIFICATION_SCHEDULER_ROLE=bot" {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want unsupported scheduler role rejection", err)
 	}
 }
 
-func TestValidateAlarmWorkerRuntimeProductionRejectsDisabledDispatchers(t *testing.T) {
-	tests := []struct {
-		name string
-		key  string
-	}{
-		{name: "delivery dispatcher", key: deliveryDispatcherEnabledEnv},
-		{name: "alarm dispatch consumer", key: alarmDispatchConsumerEnabledEnv},
-		{name: "youtube outbox dispatcher", key: youTubeOutboxDispatcherEnabledEnv},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+func TestValidateAlarmWorkerRuntimeProductionRejectsDisabledProfileExecutor(t *testing.T) {
+	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {
+		t.Run(workerID, func(t *testing.T) {
 			clearRuntimeRoleEnv(t)
 			t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
 			t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
-			t.Setenv(deliveryDispatcherEnabledEnv, "true")
-			t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
-			t.Setenv(youTubeOutboxDispatcherEnabledEnv, "true")
-			t.Setenv(tt.key, "false")
+			cfg := validRuntimeRoleConfig(t)
+			worker := cfg.AlarmWorkerProfile.Loaded.Profile.Workers[workerID]
+			worker.Executor.Enabled = false
+			cfg.AlarmWorkerProfile.Loaded.Profile.Workers[workerID] = worker
 
-			err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
-			if err == nil || !strings.Contains(err.Error(), "requires "+tt.key+"=true") {
-				t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want %s requirement", err, tt.key)
+			err := cfg.ValidateAlarmWorkerRuntime()
+			if err == nil || !strings.Contains(err.Error(), "requires "+workerID+" executor.enabled=true") {
+				t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want %s profile requirement", err, workerID)
 			}
 		})
-	}
-}
-
-func TestValidateAlarmWorkerRuntimeProductionRequiresYouTubeOutboxDispatcher(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
-	t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
-	t.Setenv(deliveryDispatcherEnabledEnv, "true")
-	t.Setenv(alarmDispatchConsumerEnabledEnv, "true")
-
-	err := validRuntimeRoleConfig().ValidateAlarmWorkerRuntime()
-	if err == nil || !strings.Contains(err.Error(), "requires YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true") {
-		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want YouTube outbox dispatcher requirement", err)
 	}
 }

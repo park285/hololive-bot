@@ -19,7 +19,7 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 
 ## Owns
 
-- Provider adapters and bounded collection when `YOUTUBE_INGESTION_ENABLED=true`
+- Provider adapters and bounded collection under `collection.executor.enabled`
 - DB job lease/fence and `PublishBatch` (checkpoint + observation insert)
 - Collector DB role `hololive_scraper`
 
@@ -53,7 +53,7 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 ## Startup requirements
 
 - PostgreSQL availability
-- `YOUTUBE_INGESTION_ENABLED=true`
+- slot-specific strict `STACK_WORKER_PROFILE_FILE` with the `collection` worker
 - `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true`
 - `YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-{a,b,c,d}`
 - `PHOTO_SYNC_ENABLED=false`

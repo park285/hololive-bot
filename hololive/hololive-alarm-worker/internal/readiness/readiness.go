@@ -2,43 +2,13 @@ package readiness
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
-
-func BoolEnvNotFalseCheck(name, key string, defaultValue bool) sharedreadiness.Check {
-	return sharedreadiness.Check{
-		Name:  name,
-		Group: sharedreadiness.GroupEgressFlags,
-		Probe: func(context.Context) error {
-			return checkBoolEnvNotFalse(key, defaultValue)
-		},
-	}
-}
-
-func ExplicitTrueBoolEnvCheck(name, key string) sharedreadiness.Check {
-	return sharedreadiness.Check{
-		Name:  name,
-		Group: sharedreadiness.GroupEgressFlags,
-		Probe: func(context.Context) error {
-			value, explicit, err := lookupBoolEnv(key)
-			if err != nil {
-				return err
-			}
-			if !explicit || value == nil || !*value {
-				return fmt.Errorf("%s must be true", key)
-			}
-			return nil
-		},
-	}
-}
 
 func PublicGinHandler(ctx context.Context, probe *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -85,41 +55,4 @@ func runtimePayload(base health.Response, status, runtimeName string) map[string
 		payload["runtime"] = strings.TrimSpace(runtimeName)
 	}
 	return payload
-}
-
-func lookupBoolEnv(key string) (value *bool, explicit bool, err error) {
-	raw, ok := os.LookupEnv(key)
-	if !ok {
-		return nil, false, nil
-	}
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil, true, nil
-	}
-	parsed, parseErr := strconv.ParseBool(trimmed)
-	if parseErr != nil {
-		return nil, true, fmt.Errorf("%s must be boolean: %w", key, parseErr)
-	}
-	return &parsed, true, nil
-}
-
-func checkBoolEnvNotFalse(key string, defaultValue bool) error {
-	value, _, err := lookupBoolEnv(key)
-	if err != nil {
-		return err
-	}
-	if value == nil {
-		return checkDefaultBool(key, defaultValue)
-	}
-	if !*value {
-		return fmt.Errorf("%s=false", key)
-	}
-	return nil
-}
-
-func checkDefaultBool(key string, defaultValue bool) error {
-	if defaultValue {
-		return nil
-	}
-	return fmt.Errorf("%s=false", key)
 }

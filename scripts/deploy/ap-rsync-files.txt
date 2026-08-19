@@ -60,8 +60,13 @@
 ../shared-go/pkg/telemetry/doc.go
 ../shared-go/pkg/telemetry/http.go
 ../shared-go/pkg/telemetry/telemetry.go
-../shared-go/pkg/workerconfig/runtime_worker_profile_envelope.go
-../shared-go/pkg/workerconfig/worker_profile.go
+../shared-go/pkg/workercontract/diagnostics.go
+../shared-go/pkg/workercontract/metrics.go
+../shared-go/pkg/workercontract/profile.go
+../shared-go/pkg/workercontract/profile_file.go
+../shared-go/pkg/workercontract/registry.go
+../shared-go/pkg/workercontract/sampler.go
+../shared-go/pkg/workercontract/tracker.go
 deploy/compose/docker-compose.osaka.yml
 deploy/compose/docker-compose.osaka2.yml
 deploy/compose/docker-compose.prod.yml
@@ -906,6 +911,7 @@ scripts/deploy/lib/ap-host.sh
 scripts/deploy/lib/compose-env.sh
 scripts/deploy/lib/compose-paths.sh
 scripts/deploy/lib/health-gate.sh
+scripts/deploy/lib/kapu-alarm-worker-fence.sh
 scripts/deploy/lib/postgres-capacity.sh
 scripts/deploy/lib/public-bind-mounts.sh
 scripts/deploy/lib/removed-runtimes.sh

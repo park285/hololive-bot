@@ -25,7 +25,7 @@ required_tokens=(
   membernews.subscription
   majorevent.subscription
   alarm.dispatch
-  YOUTUBE_INGESTION_ENABLED=true
+  "Stack Worker Profile v1"
 )
 
 for token in "${required_tokens[@]}"; do

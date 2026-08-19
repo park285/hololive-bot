@@ -29,10 +29,21 @@ func (r *durableRuntime) Start(ctx context.Context) {
 	}
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	r.cancel = cancel
-	for range r.workers {
-		r.wg.Add(2)
-		panicguard.Go(r.logger, "durable-inbox-worker", func() { r.runInboxWorker(runCtx) })
-		panicguard.Go(r.logger, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
+	panicguard.Go(r.logger, "durable-inbox-queue-sampler", func() { r.inboxSampler.Run(runCtx) })
+	panicguard.Go(r.logger, "durable-outbox-queue-sampler", func() { r.outboxSampler.Run(runCtx) })
+	if r.inboxEnabled {
+		r.inboxTracker.StartWorkers(r.inboxWorkers)
+		for range r.inboxWorkers {
+			r.wg.Add(1)
+			panicguard.Go(r.logger, "durable-inbox-worker", func() { r.runInboxWorker(runCtx) })
+		}
+	}
+	if r.outboxEnabled {
+		r.outboxTracker.StartWorkers(r.outboxWorkers)
+		for range r.outboxWorkers {
+			r.wg.Add(1)
+			panicguard.Go(r.logger, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
+		}
 	}
 	r.wg.Add(1)
 	panicguard.Go(r.logger, "durable-maintenance", func() { r.runMaintenance(runCtx) })
@@ -47,6 +58,12 @@ func (r *durableRuntime) Stop(ctx context.Context) error {
 	panicguard.Go(r.logger, "durable-stop-wait", func() { r.wg.Wait(); close(done) })
 	select {
 	case <-done:
+		if r.inboxEnabled {
+			r.inboxTracker.StopWorkers(r.inboxWorkers)
+		}
+		if r.outboxEnabled {
+			r.outboxTracker.StopWorkers(r.outboxWorkers)
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -152,29 +169,15 @@ func (r *durableRuntime) cancelCommandForOwnership(messageID, reason string, can
 }
 
 func (r *durableRuntime) heartbeatInterval() time.Duration {
-	if r.heartbeatEvery > 0 {
-		return r.heartbeatEvery
-	}
-	return durableHeartbeatEvery
+	return r.heartbeatEvery
 }
 
 func (r *durableRuntime) claimLeaseDuration() time.Duration {
-	if r.claimLease > 0 {
-		return r.claimLease
-	}
-	return durableClaimLease
+	return r.claimLease
 }
 
 func (r *durableRuntime) ownershipSafetyMarginDuration() time.Duration {
-	lease := r.claimLeaseDuration()
-	margin := r.ownershipSafetyMargin
-	if margin <= 0 {
-		margin = durableOwnershipSafetyMargin
-	}
-	if margin >= lease {
-		return lease / 2
-	}
-	return margin
+	return r.ownershipSafetyMargin
 }
 
 func (r *durableRuntime) heartbeatClaim(ctx context.Context, messageID, token string) (leaseUntil time.Time, owned, confirmed bool) {

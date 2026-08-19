@@ -3,6 +3,7 @@ package workerapp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,11 +15,9 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
-func TestAlarmWorkerReadyProbeRequiresYouTubeDispatcherFlag(t *testing.T) {
-	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
+func TestAlarmWorkerReadyProbeRequiresPostgres(t *testing.T) {
 	infra := &sharedmodules.InfraModule{
-		Postgres: &databasemocks.Client{PingFunc: func(context.Context) error { return nil }},
+		Postgres: &databasemocks.Client{PingFunc: func(context.Context) error { return errors.New("unavailable") }},
 		Cache:    &cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }},
 	}
 
@@ -28,16 +27,13 @@ func TestAlarmWorkerReadyProbeRequiresYouTubeDispatcherFlag(t *testing.T) {
 		t.Fatalf("/internal/ready status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}
 	payload := decodeReadyPayload(t, rec)
-	flags := payloadObject(t, payload, "egress_flags")
-	if flags["youtube_outbox_dispatcher_enabled"] != false {
-		t.Fatalf("egress_flags = %v, want YouTube dispatcher false", flags)
+	dependencies := payloadObject(t, payload, "dependencies")
+	if dependencies["postgres"] != false {
+		t.Fatalf("dependencies = %v, want PostgreSQL false", dependencies)
 	}
 }
 
 func TestAlarmWorkerReadyProbeReportsReadyWhenDependenciesAndFlagsReady(t *testing.T) {
-	t.Setenv("DELIVERY_DISPATCHER_ENABLED", "true")
-	t.Setenv("ALARM_DISPATCH_CONSUMER_ENABLED", "true")
-	t.Setenv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", "true")
 	infra := &sharedmodules.InfraModule{
 		Postgres: &databasemocks.Client{PingFunc: func(context.Context) error { return nil }},
 		Cache:    &cachemocks.Client{IsConnectedFunc: func(context.Context) bool { return true }},

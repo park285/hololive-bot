@@ -26,7 +26,6 @@ import (
 	"time"
 
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
-	"github.com/park285/shared-go/pkg/workerconfig"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -169,29 +168,9 @@ func loadScraperActiveActiveConfig() ScraperActiveActiveConfig {
 	return DefaultScraperActiveActiveConfig()
 }
 
-func loadWorkerPoolConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) WorkerPoolConfig {
-	if profile == nil {
-		return WorkerPoolConfig{}
-	}
-	return WorkerPoolConfig{
-		Workers:   profile.BotPool.Workers,
-		QueueSize: profile.BotPool.QueueSize,
-	}
-}
-
-func loadWebhookConfig(profile *workerconfig.IrisBotWebhookWorkerProfile) WebhookConfig {
-	if profile == nil {
-		return WebhookConfig{}
-	}
+func loadWebhookConfig() WebhookConfig {
 	return WebhookConfig{
-		WorkerCount:    profile.Receive.Workers,
-		QueueSize:      profile.Receive.QueueSize,
-		EnqueueTimeout: profile.Receive.EnqueueTimeout,
-		HandlerTimeout: profile.Receive.HandlerTimeout,
-		MaxBodyBytes:   profile.Receive.MaxBodyBytes,
-		DedupTTL:       profile.Receive.DedupTTL,
-		DedupTimeout:   profile.Receive.DedupTimeout,
-		RequireHMAC:    sharedenv.Bool("IRIS_WEBHOOK_REQUIRE_HMAC", true),
+		RequireHMAC: sharedenv.Bool("IRIS_WEBHOOK_REQUIRE_HMAC", true),
 	}
 }
 

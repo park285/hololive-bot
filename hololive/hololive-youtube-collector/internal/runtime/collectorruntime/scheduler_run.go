@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 func (s *leaseScheduler) runSpec(ctx context.Context, spec *joblease.JobSpec) {
@@ -54,15 +55,31 @@ func (s *leaseScheduler) observeAcquireError(spec *joblease.JobSpec, err error) 
 func (s *leaseScheduler) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease, _ error) {
 	proof := lease.Proof()
 	started := time.Now()
+	attemptID := s.workerTracker.BeginAttempt(started)
 	runResult := s.repository.Run(ctx, lease, func(runCtx context.Context, leaseProof contract.LeaseProof) error {
 		return s.collectAndPublish(runCtx, registration, spec, lease, &leaseProof)
 	})
 	err := runResult.Err
+	s.workerTracker.EndAttempt(attemptID)
+	s.workerTotals.RecordAttempt(collectionAttemptOutcome(err))
 	s.metrics.ObserveAttempt(spec.Provider, spec.CollectionJobKind, attemptResult(err), time.Since(started))
 	if s.handleLeaseRunOutcome(runResult, spec) {
 		return
 	}
 	s.handleRunError(ctx, lease, spec, &proof, err)
+}
+
+func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
+	switch attemptResult(err) {
+	case resultSuccess:
+		return workercontract.AttemptSuccess
+	case resultTimeout:
+		return workercontract.AttemptTimeout
+	case resultCanceled, resultSuperseded:
+		return workercontract.AttemptCanceled
+	default:
+		return workercontract.AttemptFailed
+	}
 }
 
 func (s *leaseScheduler) handleLeaseRunOutcome(runResult joblease.LeaseRunResult, spec *joblease.JobSpec) bool {

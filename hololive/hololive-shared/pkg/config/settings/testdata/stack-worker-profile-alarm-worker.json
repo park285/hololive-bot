@@ -1,0 +1,87 @@
+{
+  "contract_version": 1,
+  "service": "hololive",
+  "role": "alarm-worker",
+  "profile_id": "hololive-alarm-worker-test",
+  "workers": {
+    "alarm_dispatch": {
+      "executor": {
+        "enabled": true,
+        "configured_workers": 1,
+        "attempt_timeout": {"mode": "fixed", "milliseconds": 30000}
+      },
+      "queue": {
+        "capacity": {"mode": "unbounded", "items": null},
+        "max_age": {"mode": "fixed", "milliseconds": 86400000}
+      },
+      "settings": {
+        "lease_ms": 60000,
+        "quarantine_threshold_ms": 180000,
+        "recovery_interval_ms": 30000,
+        "recovery_batch_size": 100,
+        "max_batch": 50,
+        "max_batches_per_wake": 20,
+        "poll_interval_ms": 1000,
+        "idle_backoff_min_ms": 250,
+        "idle_backoff_max_ms": 5000,
+        "wakeup_enabled": true
+      }
+    },
+    "notification_delivery": {
+      "executor": {
+        "enabled": true,
+        "configured_workers": 4,
+        "attempt_timeout": {"mode": "fixed", "milliseconds": 10000}
+      },
+      "queue": {
+        "capacity": {"mode": "unbounded", "items": null},
+        "max_age": {"mode": "fixed", "milliseconds": 86400000}
+      },
+      "settings": {
+        "batch_size": 50,
+        "max_retries": 3,
+        "lock_timeout_ms": 300000,
+        "poll_interval_ms": 30000,
+        "retry_backoff_ms": 60000,
+        "cleanup_after_ms": 604800000,
+        "cleanup_interval_ms": 3600000,
+        "cleanup_enabled": true,
+        "stale_sending_after_ms": 60000,
+        "stale_sending_sweep_interval_ms": 60000,
+        "stale_sending_sweep_limit": 100
+      }
+    },
+    "youtube_delivery": {
+      "executor": {
+        "enabled": true,
+        "configured_workers": 4,
+        "attempt_timeout": {"mode": "fixed", "milliseconds": 10000}
+      },
+      "queue": {
+        "capacity": {"mode": "unbounded", "items": null},
+        "max_age": {"mode": "fixed", "milliseconds": 86400000}
+      },
+      "settings": {
+        "batch_size": 50,
+        "lock_timeout_ms": 300000,
+        "poll_interval_ms": 2000,
+        "max_retries": 3,
+        "retry_backoff_ms": 60000,
+        "cleanup_after_ms": 604800000,
+        "cleanup_enabled": true,
+        "revive_enabled": true,
+        "revive_interval_ms": 300000,
+        "revive_freshness_window_ms": 3600000,
+        "claim_freshness_window_ms": 7200000,
+        "delivery_send_timeout_ms": 10000,
+        "subscriber_lookup_parallelism": 16,
+        "aggregate_sync_interval_ms": 30000,
+        "telemetry_poll_interval_ms": 30000,
+        "telemetry_backfill_batch": 200,
+        "telemetry_flush_batch": 200,
+        "telemetry_retry_backoff_ms": 30000,
+        "telemetry_retention_ms": 86400000
+      }
+    }
+  }
+}

@@ -43,6 +43,7 @@ var (
 	replyOutboxSettleSQL             = mustSQL("reply_outbox_settle.sql")
 	replyOutboxReclaimExpiredSQL     = mustSQL("reply_outbox_reclaim_expired.sql")
 	replyOutboxManualReviewStatsSQL  = mustSQL("reply_outbox_manual_review_stats.sql")
+	replyOutboxReadySnapshotSQL      = mustSQL("reply_outbox_ready_snapshot.sql")
 	replyOutboxReplayManualReviewSQL = strings.NewReplacer(
 		":'outbox_id'", "$1",
 		":'operator_actor'", "$2",
@@ -130,11 +131,45 @@ type ReplyOutboxSettlement struct {
 }
 
 type ReplyOutboxRepository struct {
-	pool *pgxpool.Pool
+	pool                   *pgxpool.Pool
+	maxAttempts            int32
+	automaticReplayHorizon time.Duration
 }
 
 func NewReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {
-	return &ReplyOutboxRepository{pool: pool}
+	repository, err := NewReplyOutboxRepositoryWithPolicy(pool, ReplyOutboxMaxAttempts, ReplyOutboxAutomaticReplayHorizon)
+	if err != nil {
+		panic(err)
+	}
+	return repository
+}
+
+func NewReplyOutboxRepositoryWithPolicy(pool *pgxpool.Pool, maxAttempts int32, automaticReplayHorizon time.Duration) (*ReplyOutboxRepository, error) {
+	if maxAttempts < 1 {
+		return nil, errors.Join(ErrInvalidArgument, errors.New("reply outbox max attempts must be positive"))
+	}
+	if _, err := leaseMilliseconds(automaticReplayHorizon); err != nil {
+		return nil, errors.Join(ErrInvalidArgument, fmt.Errorf("reply outbox automatic replay horizon: %w", err))
+	}
+	return &ReplyOutboxRepository{pool: pool, maxAttempts: maxAttempts, automaticReplayHorizon: automaticReplayHorizon}, nil
+}
+
+func (r *ReplyOutboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot, error) {
+	if err := ensurePool(r.pool); err != nil {
+		return ReadyQueueSnapshot{}, err
+	}
+	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
+	if err != nil {
+		return ReadyQueueSnapshot{}, err
+	}
+	var snapshot ReadyQueueSnapshot
+	var oldestAgeSeconds float64
+	if err := r.pool.QueryRow(ctx, replyOutboxReadySnapshotSQL, r.maxAttempts, replayHorizonMS).
+		Scan(&snapshot.Depth, &oldestAgeSeconds); err != nil {
+		return ReadyQueueSnapshot{}, fmt.Errorf("snapshot reply outbox ready queue: %w", err)
+	}
+	snapshot.OldestAge = time.Duration(oldestAgeSeconds * float64(time.Second))
+	return snapshot, nil
 }
 
 func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEntry) (ReplyOutboxInsertOutcome, error) {
@@ -206,11 +241,11 @@ func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, le
 	}
 
 	var claim ReplyOutboxClaim
-	replayHorizonMS, err := leaseMilliseconds(ReplyOutboxAutomaticReplayHorizon)
+	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
 	if err != nil {
 		return nil, err
 	}
-	row := r.pool.QueryRow(ctx, replyOutboxClaimSQL, token, leaseMS, ReplyOutboxMaxAttempts, replayHorizonMS)
+	row := r.pool.QueryRow(ctx, replyOutboxClaimSQL, token, leaseMS, r.maxAttempts, replayHorizonMS)
 	err = row.Scan(&claim.ID, &claim.MessageID, &claim.Phase, &claim.Ordinal,
 		&claim.RoomID, &claim.Payload, &claim.ClientRequestID, &claim.Attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -345,11 +380,11 @@ func (r *ReplyOutboxRepository) ReclaimExpired(ctx context.Context, batchSize in
 	}
 
 	var reclaim ReplyOutboxReclaim
-	replayHorizonMS, err := leaseMilliseconds(ReplyOutboxAutomaticReplayHorizon)
+	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
 	if err != nil {
 		return ReplyOutboxReclaim{}, err
 	}
-	err = r.pool.QueryRow(ctx, replyOutboxReclaimExpiredSQL, batchSize, ReplyOutboxMaxAttempts, replayHorizonMS).
+	err = r.pool.QueryRow(ctx, replyOutboxReclaimExpiredSQL, batchSize, r.maxAttempts, replayHorizonMS).
 		Scan(&reclaim.Requeued, &reclaim.AcceptedManualReview, &reclaim.SafetyManualReview)
 	if err != nil {
 		return ReplyOutboxReclaim{}, fmt.Errorf("reclaim expired reply outbox leases: %w", err)

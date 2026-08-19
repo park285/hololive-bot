@@ -10,9 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/backoff"
-	envutil "github.com/park285/shared-go/pkg/envutil"
-
-	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/park285/shared-go/pkg/retry"
 )
 
@@ -22,6 +19,13 @@ const (
 	alarmDispatchWakeupConsumed alarmDispatchWakeupWaitResult = "consumed"
 	alarmDispatchWakeupTimeout  alarmDispatchWakeupWaitResult = "timeout"
 )
+
+type WakeupConfig struct {
+	WakeupEnabled bool
+	PollInterval  time.Duration
+	BackoffMin    time.Duration
+	BackoffMax    time.Duration
+}
 
 type alarmDispatchWakeupWaiter struct {
 	cache         cache.LowLevelCache
@@ -35,22 +39,25 @@ type alarmDispatchWakeupWaiter struct {
 	logger        *slog.Logger
 }
 
-func NewWakeupWaiter(c cache.LowLevelCache, logger *slog.Logger) *alarmDispatchWakeupWaiter {
+func NewWakeupWaiterWithConfig(c cache.LowLevelCache, logger *slog.Logger, config WakeupConfig) (*alarmDispatchWakeupWaiter, error) {
+	if config.PollInterval <= 0 || config.BackoffMin <= 0 || config.BackoffMax < config.BackoffMin {
+		return nil, fmt.Errorf("build alarm dispatch wakeup waiter: invalid polling or backoff configuration")
+	}
+	if config.WakeupEnabled && c == nil {
+		return nil, fmt.Errorf("build alarm dispatch wakeup waiter: Valkey cache is required when wakeup is enabled")
+	}
 	waiter := &alarmDispatchWakeupWaiter{
 		cache:         c,
-		wakeupEnabled: envutil.Bool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
-		pollInterval:  envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_POLL_INTERVAL_MS", time.Second),
-		backoffMin:    envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS", 250*time.Millisecond),
-		backoffMax:    envconfig.ParsePositiveDurationMS("ALARM_DISPATCH_IDLE_BACKOFF_MAX_MS", 5*time.Second),
+		wakeupEnabled: config.WakeupEnabled,
+		pollInterval:  config.PollInterval,
+		backoffMin:    config.BackoffMin,
+		backoffMax:    config.BackoffMax,
 		sleep:         retry.Sleep,
 		logger:        logger,
 	}
-	if waiter.backoffMax < waiter.backoffMin {
-		waiter.backoffMax = waiter.backoffMin
-	}
 	waiter.currentWait = waiter.backoffMin
 	waiter.waitWakeup = waiter.waitForValkeyWakeup
-	return waiter
+	return waiter, nil
 }
 
 func (w *alarmDispatchWakeupWaiter) Wait(ctx context.Context) bool {
@@ -64,7 +71,7 @@ func (w *alarmDispatchWakeupWaiter) Wait(ctx context.Context) bool {
 }
 
 func (w *alarmDispatchWakeupWaiter) waitWithWakeup(ctx context.Context) bool {
-	waitDuration := w.effectiveCurrentWait()
+	waitDuration := w.currentWait
 	startedAt := time.Now()
 	result, err := w.waitWakeup(ctx, waitDuration)
 	observeAlarmDispatchRunnerIdleWait("pg", "wakeup", time.Since(startedAt))
@@ -104,13 +111,13 @@ func (w *alarmDispatchWakeupWaiter) handleWakeupResult(ctx context.Context, resu
 }
 
 func (w *alarmDispatchWakeupWaiter) Reset() {
-	w.currentWait = w.effectiveBackoffMin()
+	w.currentWait = w.backoffMin
 }
 
 func (w *alarmDispatchWakeupWaiter) sleepFallback(ctx context.Context, waitMode string) bool {
-	waitDuration := w.effectivePollInterval()
+	waitDuration := w.pollInterval
 	startedAt := time.Now()
-	ok := w.effectiveSleep()(ctx, waitDuration)
+	ok := w.sleep(ctx, waitDuration)
 	observeAlarmDispatchRunnerIdleWait("pg", waitMode, time.Since(startedAt))
 	return ok
 }
@@ -136,41 +143,6 @@ func (w *alarmDispatchWakeupWaiter) waitForValkeyWakeup(ctx context.Context, tim
 
 func (w *alarmDispatchWakeupWaiter) increaseBackoff() {
 	w.currentWait = backoff.NextExponentialBackoff(
-		w.effectiveCurrentWait(), w.effectiveBackoffMax(), w.effectiveBackoffMin(),
+		w.currentWait, w.backoffMax, w.backoffMin,
 	)
-}
-
-func (w *alarmDispatchWakeupWaiter) effectiveCurrentWait() time.Duration {
-	if w.currentWait > 0 {
-		return w.currentWait
-	}
-	return w.effectiveBackoffMin()
-}
-
-func (w *alarmDispatchWakeupWaiter) effectiveBackoffMin() time.Duration {
-	if w.backoffMin > 0 {
-		return w.backoffMin
-	}
-	return 250 * time.Millisecond
-}
-
-func (w *alarmDispatchWakeupWaiter) effectiveBackoffMax() time.Duration {
-	if w.backoffMax > 0 {
-		return w.backoffMax
-	}
-	return 5 * time.Second
-}
-
-func (w *alarmDispatchWakeupWaiter) effectivePollInterval() time.Duration {
-	if w.pollInterval > 0 {
-		return w.pollInterval
-	}
-	return time.Second
-}
-
-func (w *alarmDispatchWakeupWaiter) effectiveSleep() func(context.Context, time.Duration) bool {
-	if w.sleep != nil {
-		return w.sleep
-	}
-	return retry.Sleep
 }

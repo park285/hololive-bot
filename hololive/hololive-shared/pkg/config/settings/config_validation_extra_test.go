@@ -219,6 +219,7 @@ func TestLoadAdminAPIRuntime_BootsWithoutIrisEgressTokens(t *testing.T) {
 	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testURLHostname(t, server.URL))
 	t.Setenv("IRIS_TRANSPORT", "http1")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
+	useStackWorkerProfileFixture(t, "stack-worker-profile-api.json")
 	if _, err := load(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
 		t.Fatalf("Load() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)
 	}
@@ -250,7 +251,6 @@ func TestLoadAdminAPIRuntime_RequiresHolodexKey(t *testing.T) {
 
 func TestLoadAdminAPIRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	setAdminAPIRuntimeEnv(t)
-	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "0")
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
 
 	cfg, err := LoadAdminAPIRuntime()
@@ -265,7 +265,6 @@ func TestLoadAdminAPIRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 func TestLoadBotRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	clearRuntimeRoleEnv(t)
 	setRequiredLoadEnv(t)
-	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "0")
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
 
 	cfg, err := LoadBotRuntime()
@@ -280,8 +279,8 @@ func TestLoadBotRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 func TestLoadAlarmWorkerRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	clearRuntimeRoleEnv(t)
 	setRequiredLoadEnv(t)
+	useStackWorkerProfileFixture(t, "stack-worker-profile-alarm-worker.json")
 	t.Setenv("APP_ENV", "development")
-	t.Setenv("YOUTUBE_COLLECTOR_TOTAL_WORKERS", "0")
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
 
 	cfg, err := LoadAlarmWorkerRuntime()

@@ -89,6 +89,8 @@ pass "hololive-api preserves the three listener ports in one service"
 
 grep -Fq 'NOTIFICATION_EGRESS_ROLE: "owner"' "${PROD_FILE}" \
     || fail "alarm-worker is not configured as proactive egress owner"
-grep -Fq 'YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"' "${PROD_FILE}" \
-    || fail "youtube-collector is not configured without YouTube outbox dispatch"
+for profile in hololive-api alarm-worker youtube-collector-c; do
+    grep -Fq "/run/hololive-bot/worker-profiles/${profile}.json" "${PROD_FILE}" \
+        || fail "production Compose is missing ${profile} Stack Worker Profile v1"
+done
 pass "egress ownership remains isolated to alarm-worker"

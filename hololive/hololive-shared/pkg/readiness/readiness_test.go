@@ -28,7 +28,6 @@ func TestNewProbeFiltersAndNormalizesChecks(t *testing.T) {
 		Check{Name: "nil-probe"},
 		Check{Name: "   ", Probe: func(context.Context) error { return nil }},
 		Check{Name: "  postgres  ", Group: "unknown", Probe: func(context.Context) error { return nil }},
-		Check{Name: "flag", Group: GroupEgressFlags, Probe: func(context.Context) error { return nil }},
 	)
 
 	if probe.Name() != "bot" {
@@ -41,12 +40,9 @@ func TestNewProbeFiltersAndNormalizesChecks(t *testing.T) {
 	if got := groups[GroupDependencies]; len(got) != 1 || !got["postgres"] {
 		t.Fatalf("dependencies = %v, want only trimmed postgres", got)
 	}
-	if got := groups[GroupEgressFlags]; len(got) != 1 || !got["flag"] {
-		t.Fatalf("egress_flags = %v, want only flag", got)
-	}
 }
 
-func TestEvaluateSeedsStandardGroupsEvenWhenEmpty(t *testing.T) {
+func TestEvaluateSeedsDependenciesWhenEmpty(t *testing.T) {
 	t.Parallel()
 
 	ready, groups := NewProbe("bot").Evaluate(t.Context())
@@ -57,10 +53,6 @@ func TestEvaluateSeedsStandardGroupsEvenWhenEmpty(t *testing.T) {
 	deps, ok := groups[GroupDependencies]
 	if !ok || len(deps) != 0 {
 		t.Fatalf("dependencies group = %v (present=%v), want present and empty", deps, ok)
-	}
-	flags, ok := groups[GroupEgressFlags]
-	if !ok || len(flags) != 0 {
-		t.Fatalf("egress_flags group = %v (present=%v), want present and empty", flags, ok)
 	}
 }
 

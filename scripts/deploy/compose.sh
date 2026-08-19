@@ -9,6 +9,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-paths.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/public-bind-mounts.sh"
 
@@ -129,6 +130,10 @@ if [[ ${#compose_files[@]} -eq 0 ]]; then
     if (( compose_command_index >= 0 )); then
         compose_command_index=$((compose_command_index + 2))
     fi
+fi
+
+if ! assert_kapu_alarm_worker_start_allowed "$(hostname -s)" "${compose_command_index}" "${compose_args[@]}"; then
+    exit 1
 fi
 
 SHARED_GO_WORKSPACE_PATH="$(resolve_required_workspace_path \

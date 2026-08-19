@@ -22,6 +22,12 @@ import (
 var Version = "dev"
 
 func main() {
+	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
+		_, err := settings.LoadAPIWorkerProfile()
+		return err
+	}); handled {
+		os.Exit(exitCode)
+	}
 	if handled, exitCode := runConfigCheck(os.Args[1:], os.Stderr, func() error {
 		_, err := settings.LoadHololiveAPIRuntime()
 		return err
@@ -74,6 +80,20 @@ func main() {
 		}
 	}
 	os.Exit(code)
+}
+
+func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
+	if len(args) != 1 || args[0] != "--check-worker-profile" {
+		return false, 0
+	}
+	if err := load(); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Failed to load hololive-api worker profile: %v\n", err)
+		return true, 1
+	}
+	if _, err := fmt.Fprintln(stderr, "hololive-api worker profile valid"); err != nil {
+		return true, 1
+	}
+	return true, 0
 }
 
 func runConfigCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {

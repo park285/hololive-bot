@@ -37,7 +37,7 @@ func initInfrastructure(ctx context.Context, appConfig *settings.YouTubeCollecto
 	if err != nil {
 		return nil, fmt.Errorf("build collector infra: %w", err)
 	}
-	collector := appConfig.Collector.OrDefault()
+	collector := appConfig.Collector
 	helper, rpc, err := startYouTubeJSHelper(ctx, &appConfig.Proxy, &collector, ratelimiter.New(collector.RequestInterval))
 	if err != nil {
 		cleanupDB()
@@ -88,9 +88,6 @@ func (i *collectorInfrastructure) buildProviderClients(
 }
 
 func providerTransportConfig(requestTimeout time.Duration, maxConns int) providerhttp.ProviderTransportConfig {
-	if maxConns < 1 {
-		maxConns = 1
-	}
 	idle := min(maxConns, 8)
 	headerTimeout := 10 * time.Second
 	if requestTimeout > 0 && requestTimeout < headerTimeout {

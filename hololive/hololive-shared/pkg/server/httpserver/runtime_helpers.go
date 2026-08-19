@@ -10,11 +10,13 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	"github.com/kapu/hololive-shared/pkg/workerobservability"
 	"github.com/park285/shared-go/pkg/httputil"
 	"github.com/park285/shared-go/pkg/telemetry"
 )
@@ -29,6 +31,7 @@ type RuntimeRouterOptions struct {
 	RegisterRoutes         func(*gin.Engine) error
 	ReadyResponder         func(*gin.Context)
 	InternalReadyResponder func(*gin.Context)
+	WorkerRegistry         *workercontract.Registry
 
 	// TrustRemoteAddrOnly가 true이면 c.ClientIP()가 TCP RemoteAddr만 반영하도록
 	// TrustedPlatform과 trusted proxy를 모두 비운다. CF-Connecting-IP/X-Forwarded-For 등
@@ -125,7 +128,12 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts *RuntimeRou
 		APIKey:   opts.APIKey,
 		Disabled: opts.DisableMetricsAuth,
 	}))
-	metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	if opts.WorkerRegistry != nil {
+		metrics.GET("/metrics", gin.WrapH(promhttp.HandlerFor(workerobservability.NewGatherer(opts.WorkerRegistry), promhttp.HandlerOpts{})))
+		metrics.GET("/diagnostics/workers", gin.WrapH(workerobservability.DiagnosticsHandler(opts.WorkerRegistry)))
+	} else {
+		metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	}
 
 	if opts.RegisterRoutes != nil {
 		if err := opts.RegisterRoutes(router); err != nil {
@@ -212,7 +220,7 @@ func registerRuntimeInternalReadyRoute(router *gin.Engine, apiKey string, readyR
 
 func LocalPlaneTraceFilter(r *http.Request) bool {
 	switch r.URL.Path {
-	case "/health", "/ready", "/internal/ready", "/metrics":
+	case "/health", "/ready", "/internal/ready", "/metrics", "/diagnostics/workers":
 		return false
 	default:
 		return true

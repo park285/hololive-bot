@@ -28,6 +28,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 var (
@@ -41,6 +42,7 @@ var (
 	inboxReclaimExpiredKeysSQL   = mustSQL("inbox_reclaim_expired_keys.sql")
 	inboxOrderingKeyLockSQL      = mustSQL("inbox_ordering_key_lock.sql")
 	inboxOrderingKeyByMessageSQL = mustSQL("inbox_ordering_key_by_message.sql")
+	inboxReadySnapshotSQL        = mustSQL("inbox_ready_snapshot.sql")
 )
 
 type InboxReleaseOutcome int
@@ -92,36 +94,63 @@ type InboxRepository struct {
 	pool *pgxpool.Pool
 }
 
+type ReadyQueueSnapshot struct {
+	Depth     int64
+	OldestAge time.Duration
+}
+
 func NewInboxRepository(pool *pgxpool.Pool) *InboxRepository {
 	return &InboxRepository{pool: pool}
 }
 
-func (r *InboxRepository) Admit(ctx context.Context, msg InboxMessage) (admitted bool, err error) {
+func (r *InboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, err
+		return ReadyQueueSnapshot{}, err
+	}
+	var snapshot ReadyQueueSnapshot
+	var oldestAgeSeconds float64
+	if err := r.pool.QueryRow(ctx, inboxReadySnapshotSQL).Scan(&snapshot.Depth, &oldestAgeSeconds); err != nil {
+		return ReadyQueueSnapshot{}, fmt.Errorf("snapshot webhook inbox ready queue: %w", err)
+	}
+	snapshot.OldestAge = time.Duration(oldestAgeSeconds * float64(time.Second))
+	return snapshot, nil
+}
+
+func (r *InboxRepository) Admit(ctx context.Context, msg InboxMessage) (admitted bool, err error) {
+	result, err := r.AdmitResult(ctx, msg)
+	return result == workercontract.AdmissionAccepted, err
+}
+
+func (r *InboxRepository) AdmitResult(ctx context.Context, msg InboxMessage) (result workercontract.AdmissionResult, err error) {
+	if err := ensurePool(r.pool); err != nil {
+		return workercontract.AdmissionFailed, err
 	}
 	normalized, err := normalizeInboxMessage(msg)
 	if err != nil {
-		return false, err
+		return workercontract.AdmissionRejected, err
 	}
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return false, safeMessageRepositoryError("begin webhook admission", normalized.MessageID, err)
+		return workercontract.AdmissionFailed, safeMessageRepositoryError("begin webhook admission", normalized.MessageID, err)
 	}
 	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
 	if err := lockInboxOrderingKey(ctx, tx, normalized.OrderingKey); err != nil {
-		return false, safeMessageRepositoryError("lock webhook admission ordering", normalized.MessageID, err)
+		return workercontract.AdmissionFailed, safeMessageRepositoryError("lock webhook admission ordering", normalized.MessageID, err)
 	}
+	var admitted bool
 	err = tx.QueryRow(ctx, inboxAdmitSQL, normalized.MessageID, normalized.RoomID, normalized.OrderingKey, jsonbParam(normalized.Payload)).Scan(&admitted)
 	if err != nil {
-		return false, safeMessageRepositoryError("admit webhook inbox row", normalized.MessageID, err)
+		return workercontract.AdmissionFailed, safeMessageRepositoryError("admit webhook inbox row", normalized.MessageID, err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return false, safeMessageRepositoryError("commit webhook admission", normalized.MessageID, err)
+		return workercontract.AdmissionOutcomeUnknown, safeMessageRepositoryError("commit webhook admission", normalized.MessageID, err)
 	}
-	return admitted, nil
+	if !admitted {
+		return workercontract.AdmissionDuplicate, nil
+	}
+	return workercontract.AdmissionAccepted, nil
 }
 
 func normalizeInboxMessage(msg InboxMessage) (InboxMessage, error) {

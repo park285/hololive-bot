@@ -24,11 +24,11 @@ func (r *PgxRepository) findByDedupeKey(ctx context.Context, dedupeKey string) (
 
 func (r *PgxRepository) ClaimDue(ctx context.Context, workerID string, limit int, lease time.Duration) ([]*Record, error) {
 	if limit <= 0 {
-		limit = 1
+		return nil, fmt.Errorf("claim due dispatch deliveries: limit must be positive")
 	}
 	leaseSeconds := int(lease.Seconds())
 	if leaseSeconds <= 0 {
-		leaseSeconds = 60
+		return nil, fmt.Errorf("claim due dispatch deliveries: lease must be at least one second")
 	}
 	rows, err := r.pool.Query(ctx, mustSQL("repository_claim_0053_02.sql"), limit, workerID, leaseSeconds, maxDeliveriesPerSendUnit)
 	if err != nil {

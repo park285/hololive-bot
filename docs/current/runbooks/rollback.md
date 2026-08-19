@@ -37,51 +37,12 @@ sudo -n ./scripts/deploy/compose.sh \
 rollback 후에는 대상 container의 `StartedAt`, health, `RestartCount`, image revision을
 확인하고 rollback tag와 실패한 release image를 원인 분석이 끝날 때까지 보존합니다.
 
-`hololive-alarm-worker`를 send-unit 도입 전 image로 되돌릴 때는 위 일반 절차만으로
-충분하지 않습니다. 먼저 API를 중지하고 tracked drain overlay로 모든 alarm producer를
-끄되 current alarm consumer는 유지합니다. 아래 명령은 central runtime host의
-`/opt/hololive-bot/compose/current`에서 실행합니다.
-
-```bash
-export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
-sudo -n docker stop hololive-api
-sudo -n env COMPOSE_ENV_FILE="$COMPOSE_ENV_FILE" ./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  -f deploy/compose/docker-compose.alarm-worker-rollback-drain.yml \
-  config --quiet
-sudo -n env COMPOSE_ENV_FILE="$COMPOSE_ENV_FILE" ./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  -f deploy/compose/docker-compose.alarm-worker-rollback-drain.yml \
-  up -d --no-build --no-deps --force-recreate hololive-alarm-worker
-
-sudo -n ./scripts/runtime/preflight-alarm-worker-rollback.sh
-```
-
-preflight는 `hololive-api` 정지, current alarm consumer 기동, scheduler·celebration·birthday·
-YouTube handoff producer flag의 실제 container 값, read-only DB session, active send-unit 0을
-모두 확인합니다. 통과 직후에도 drain overlay를 제거하지 않은 채 rollback tag를 `prod`로
-승격하고 같은 overlay로 alarm-worker를 `--no-build --no-deps` recreate합니다. 하나라도
-실패하면 이전 image로 전환하지 않고 current consumer로 fix-forward합니다.
-
-이전 worker가 healthy이고 active send-unit이 다시 생기지 않는지 재확인한 뒤 drain
-overlay 없이 alarm-worker를 recreate해 legacy scheduler를 재개합니다. API는 current
-image를 유지하며 handoff를 강제로 끈 상태로 별도 기동합니다.
-
-```bash
-sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
-  ./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  up -d --no-build --no-deps --force-recreate hololive-alarm-worker
-sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
-  ./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  -f deploy/compose/docker-compose.alarm-worker-rollback-drain.yml \
-  up -d --no-build --no-deps hololive-api
-```
+`hololive-alarm-worker`를 Stack Worker Contract v1 이전 image로 되돌리는 것은 단일
+image rollback이 아닙니다. 해당 image와 함께 보존한 repository revision, profile,
+Compose/config, 그리고 stack-secrets backup을 하나의 승인된 rollback package로
+복원해야 합니다. 현재 config를 유지한 채 이전 image만 재기동하는 경로는 없습니다.
+paired package가 없거나 active send-unit/DB schema 호환성이 입증되지 않으면 rollback을
+중단하고 current revision을 fix-forward합니다.
 
 delivery digest의 content-sensitive identity를 도입한 revision은 기존 period-only identity와
 rollback 호환되지 않습니다. 해당 revision의 최초 배포 전에는 authoritative DB에서 아래

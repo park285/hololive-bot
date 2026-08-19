@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 func (r *Runtime) runClaimLoop(ctx context.Context, errCh chan<- error) {
@@ -192,19 +193,31 @@ func sendWork(ctx context.Context, workCh chan<- sourceobservation.ClaimWork, wo
 }
 
 func (r *Runtime) processClaim(ctx context.Context, work sourceobservation.ClaimWork) error {
+	attemptID := r.workerTracker.BeginAttempt(time.Now())
+	outcome := workercontract.AttemptFailed
+	defer func() {
+		r.workerTracker.EndAttempt(attemptID)
+		r.workerTotals.RecordAttempt(outcome)
+	}()
 	r.remember(work)
 	err := r.consumeClaim(ctx, work)
 	if err == nil {
+		outcome = workercontract.AttemptSuccess
 		youtubeFinalizeTotal.Inc()
 		youtubeConsumeTotal.WithLabelValues("success").Inc()
 		r.forget(work)
 		return nil
 	}
 	if r.forgetLostClaim(err, work) {
+		outcome = workercontract.AttemptCanceled
 		return nil
 	}
 	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		outcome = workercontract.AttemptCanceled
 		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		outcome = workercontract.AttemptTimeout
 	}
 	return r.handleConsumeFailure(ctx, work, err)
 }

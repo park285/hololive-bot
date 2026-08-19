@@ -106,10 +106,15 @@ func DefaultYouTubePlaneConfig() YouTubePlaneConfig {
 func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 	defaults := DefaultYouTubePlaneConfig()
 	config := defaults
+	config.Enabled = false
+	config.ConsumerWorkers = 0
+	config.DBOperationConcurrency = 0
+	config.ClaimBatchSize = 0
+	config.ClaimLease = 0
+	config.ClaimInterval = 0
+	config.TransactionTimeout = 0
+	config.ShutdownTimeout = 0
 	if err := loadYouTubePlanePool(&config, &defaults); err != nil {
-		return YouTubePlaneConfig{}, err
-	}
-	if err := loadYouTubePlaneClaim(&config, &defaults); err != nil {
 		return YouTubePlaneConfig{}, err
 	}
 	if err := loadYouTubePlaneRetention(&config); err != nil {
@@ -135,39 +140,10 @@ func loadYouTubePlaneConfig() (YouTubePlaneConfig, error) {
 
 func loadYouTubePlanePool(config, defaults *YouTubePlaneConfig) error {
 	var err error
-	if config.Enabled, err = sharedenv.BoolE("YOUTUBE_PLANE_ENABLED", defaults.Enabled); err != nil {
-		return err
-	}
 	if config.PostgresPoolMinConns, err = sharedenv.IntE("YOUTUBE_PLANE_POSTGRES_POOL_MIN_CONNS", defaults.PostgresPoolMinConns); err != nil {
 		return err
 	}
 	if config.PostgresPoolMaxConns, err = sharedenv.IntE("YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS", defaults.PostgresPoolMaxConns); err != nil {
-		return err
-	}
-	if config.ConsumerWorkers, err = sharedenv.IntE("YOUTUBE_PLANE_CONSUMER_WORKERS", defaults.ConsumerWorkers); err != nil {
-		return err
-	}
-	if config.DBOperationConcurrency, err = sharedenv.IntE("YOUTUBE_PLANE_DB_OPERATION_CONCURRENCY", defaults.DBOperationConcurrency); err != nil {
-		return err
-	}
-	return nil
-}
-
-func loadYouTubePlaneClaim(config, defaults *YouTubePlaneConfig) error {
-	var err error
-	if config.ClaimBatchSize, err = sharedenv.IntE("YOUTUBE_PLANE_CLAIM_BATCH_SIZE", defaults.ClaimBatchSize); err != nil {
-		return err
-	}
-	if config.ClaimLease, err = strictDurationUnitEnv("YOUTUBE_PLANE_CLAIM_LEASE_SECONDS", defaults.ClaimLease, time.Second); err != nil {
-		return err
-	}
-	if config.ClaimInterval, err = strictDurationUnitEnv("YOUTUBE_PLANE_CLAIM_INTERVAL_MS", defaults.ClaimInterval, time.Millisecond); err != nil {
-		return err
-	}
-	if config.TransactionTimeout, err = strictDurationUnitEnv("YOUTUBE_PLANE_TRANSACTION_TIMEOUT_SECONDS", defaults.TransactionTimeout, time.Second); err != nil {
-		return err
-	}
-	if config.ShutdownTimeout, err = strictDurationUnitEnv("YOUTUBE_PLANE_SHUTDOWN_TIMEOUT_SECONDS", defaults.ShutdownTimeout, time.Second); err != nil {
 		return err
 	}
 	return nil

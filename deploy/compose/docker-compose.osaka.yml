@@ -22,6 +22,7 @@ x-osaka-ap-service: &osaka-ap-service
     - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
     - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
     - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
+    - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-a.json:/run/hololive-bot/worker-profiles/youtube-collector-a.json:ro
   logging: *osaka-ap-logging
   deploy:
     resources:
@@ -74,6 +75,7 @@ services:
     container_name: hololive-youtube-collector-a
     environment:
       <<: *osaka-ap-env-common
+      STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-a.json
       YOUTUBE_COLLECTOR_INSTANCE_ID: "youtube-collector-a"
       YOUTUBE_COLLECTOR_LOG_FILE_NAME: "youtube-collector-a.log"
       SERVER_PORT: 30005

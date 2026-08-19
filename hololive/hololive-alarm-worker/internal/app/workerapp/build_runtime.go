@@ -95,13 +95,17 @@ func buildAlarmWorkerRuntimeFromInfra(
 			err = errors.Join(err, fmt.Errorf("close alarm service after build failure: %w", closeErr))
 		}
 	}()
+	workerState, err := newAlarmWorkerRegistryState(appConfig.AlarmWorkerProfile, infra.Postgres.GetPool())
+	if err != nil {
+		return nil, failAlarmWorkerBuild(infra, "worker registry", err)
+	}
 
 	scheduler, err := buildRuntimeScheduler(appConfig, infra.Cache, foundation, logger, envutil.String(notificationSchedulerRoleEnv, ""))
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, "scheduler", err)
 	}
 
-	notificationEgress, err := buildNotificationEgress(ctx, appConfig, infra, logger)
+	notificationEgress, err := buildNotificationEgress(ctx, appConfig, infra, logger, workerState)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, "notification egress", err)
 	}
@@ -109,6 +113,9 @@ func buildAlarmWorkerRuntimeFromInfra(
 	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, stage, err)
+	}
+	if metricsAddr := strings.TrimSpace(appConfig.Server.MetricsAddr); metricsAddr != "" {
+		servers.Metrics = sharedserver.NewMetricsServer(ctx, metricsAddr, appConfig.Server.APIKey, workerState.registry)
 	}
 
 	runtime = &workerruntime.AlarmWorkerRuntime{
@@ -122,6 +129,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		ServerAddr:           servers.Addr(),
 		HTTPServers:          servers,
 		AlarmService:         foundation.AlarmService,
+		WorkerObservability:  workerState,
 		Managed:              lifecycle.NewManaged(infra.Cleanup),
 	}
 	runtimeOwnsAlarmService = true
@@ -162,7 +170,7 @@ func buildAlarmWorkerHTTPRuntime(
 		return nil, alarmWorkerBackgroundRunners{}, "router", err
 	}
 
-	publishConfig := loadAlarmDispatchPublishConfig()
+	publishConfig := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
 	runners = alarmWorkerBackgroundRunners{
 		celebration:    buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger),
 		birthdayStream: buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger),
@@ -187,9 +195,6 @@ func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness
 	return sharedreadiness.NewProbe("alarm-worker",
 		sharedreadiness.PostgresCheck(postgres),
 		sharedreadiness.ValkeyCheck(cacheClient),
-		readiness.BoolEnvNotFalseCheck("delivery_dispatcher_enabled", "DELIVERY_DISPATCHER_ENABLED", true),
-		readiness.BoolEnvNotFalseCheck("alarm_dispatch_consumer_enabled", "ALARM_DISPATCH_CONSUMER_ENABLED", true),
-		readiness.ExplicitTrueBoolEnvCheck("youtube_outbox_dispatcher_enabled", "YOUTUBE_OUTBOX_DISPATCHER_ENABLED"),
 	)
 }
 
@@ -252,7 +257,7 @@ func buildRuntimeScheduler(
 		return nil, nil
 	}
 
-	publishConfig := loadAlarmDispatchPublishConfig()
+	publishConfig := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
 
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(
 		cacheClient,
@@ -357,9 +362,9 @@ func buildAlarmFoundation(
 	}, nil
 }
 
-func loadAlarmDispatchPublishConfig() queue.PublishConfig {
+func loadAlarmDispatchPublishConfig(profile *settings.AlarmWorkerProfile) queue.PublishConfig {
 	return queue.PublishConfig{
-		WakeupEnabled:         envutil.Bool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
+		WakeupEnabled:         profile.AlarmDispatch.WakeupEnabled,
 		MaxDeliveriesPerBatch: envconfig.ParsePositiveInt("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000),
 	}
 }

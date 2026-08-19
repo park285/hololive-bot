@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -23,6 +25,12 @@ var Version = "dev"
 var Revision = "unknown"
 
 func main() {
+	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
+		_, err := settings.LoadYouTubeCollectorWorkerProfile()
+		return err
+	}); handled {
+		os.Exit(exitCode)
+	}
 	os.Exit(bootstrap.Run(bootstrap.Options[*settings.YouTubeCollectorRuntimeConfig, *observability.ManagedRuntime[*collectorruntime.Runtime]]{
 		Version: Version,
 		Initialize: func(version string) {
@@ -66,6 +74,20 @@ func main() {
 		},
 		BuildErrorMessage: "Failed to build youtube collector runtime",
 	}))
+}
+
+func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
+	if len(args) != 1 || args[0] != "--check-worker-profile" {
+		return false, 0
+	}
+	if err := load(); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Failed to load youtube collector worker profile: %v\n", err)
+		return true, 1
+	}
+	if _, err := fmt.Fprintln(stderr, "youtube collector worker profile valid"); err != nil {
+		return true, 1
+	}
+	return true, 0
 }
 
 func youtubeCollectorTelemetryConfig(appConfig *settings.YouTubeCollectorRuntimeConfig, version string) telemetry.Config {
