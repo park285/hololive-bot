@@ -8,6 +8,15 @@
 
 ## 미출시
 
+## v3.0.2 - 2026-08-20
+
+### 수정
+
+- Compose AP의 `youtube-collector-b`와 `youtube-collector-d`가 collector-c에서 상속한
+  `STACK_WORKER_PROFILE_FILE`을 유지해 자신이 mount한 role profile을 찾지 못하던 identity
+  회귀를 수정했습니다. AP 렌더가 instance ID와 같은 profile 경로를 환경변수와 read-only
+  mount에 함께 사용하는지 검증합니다.
+
 ## v3.0.1 - 2026-08-20
 
 ### 수정

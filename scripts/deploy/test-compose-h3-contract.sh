@@ -312,6 +312,12 @@ for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
     ):
         check(f"{name} mounts {cert_path}", has_bind_target(svc, cert_path))
     env = svc.get("environment") or {}
+    expected_profile = f"/run/hololive-bot/worker-profiles/{name}.json"
+    check(
+        f"{name} uses its own Stack Worker Profile",
+        env.get("STACK_WORKER_PROFILE_FILE") == expected_profile,
+    )
+    check(f"{name} mounts its Stack Worker Profile", has_bind_target(svc, expected_profile))
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"{name} does not receive {iris_key}", iris_key not in env)
     check_no_unused_scraper_env(name, env)
