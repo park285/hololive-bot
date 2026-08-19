@@ -54,6 +54,7 @@ services:
       - ${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}
     environment:
       <<: *seoul-ap-db-env
+      STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/youtube-collector-b.json
       YOUTUBE_COLLECTOR_RUNTIME_ALLOWED: "true"
       POSTGRES_USER: hololive_scraper
       GOMEMLIMIT: "640MiB"
