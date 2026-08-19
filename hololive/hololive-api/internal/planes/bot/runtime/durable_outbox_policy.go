@@ -47,10 +47,6 @@ func replyOutboxSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAtte
 	return durability.ReplyOutboxRetryablePreDispatch
 }
 
-func replyUncertainSettlementStatus(accepted bool, attempts int32, err error) (string, bool) {
-	return replyUncertainSettlementStatusWithMaxAttempts(accepted, attempts, durability.ReplyOutboxMaxAttempts, err)
-}
-
 func replyUncertainSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAttempts int32, err error) (string, bool) {
 	if !accepted && !errors.Is(err, transport.ErrReplyOutcomeUnknown) {
 		return "", false

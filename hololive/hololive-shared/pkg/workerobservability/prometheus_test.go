@@ -1,7 +1,6 @@
 package workerobservability
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,7 +47,7 @@ func TestGathererExposesCommonWorkerFamilies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := fmt.Sprintf(`# HELP iris_stack_worker_configured_workers Configured executor concurrency for this process.
+	want := `# HELP iris_stack_worker_configured_workers Configured executor concurrency for this process.
 # TYPE iris_stack_worker_configured_workers gauge
 iris_stack_worker_configured_workers{queue_backend="memory",queue_scope="process",runtime="go",stack_role="youtube-collector",stack_service="hololive",worker="collection"} 4
 # HELP iris_stack_worker_queue_capacity Bounded canonical queue capacity in items.
@@ -67,7 +66,7 @@ iris_stack_worker_admissions_total{queue_backend="memory",queue_scope="process",
 # HELP iris_stack_worker_running_workers Currently running executor workers in this process.
 # TYPE iris_stack_worker_running_workers gauge
 iris_stack_worker_running_workers{queue_backend="memory",queue_scope="process",runtime="go",stack_role="youtube-collector",stack_service="hololive",worker="collection"} 4
-`)
+`
 	if err := testutil.GatherAndCompare(
 		NewGatherer(registry), strings.NewReader(want),
 		"iris_stack_worker_configured_workers",

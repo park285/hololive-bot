@@ -54,16 +54,6 @@ func mustLoadAPIWorkerProfile(t *testing.T) *APIWorkerProfile {
 	return profile
 }
 
-func mustLoadAlarmWorkerProfile(t *testing.T) *AlarmWorkerProfile {
-	t.Helper()
-	useStackWorkerProfileFixture(t, "stack-worker-profile-alarm-worker.json")
-	profile, err := LoadAlarmWorkerProfile()
-	if err != nil {
-		t.Fatalf("load alarm worker profile fixture: %v", err)
-	}
-	return profile
-}
-
 func mustLoadCollectorWorkerProfile(t *testing.T) *YouTubeCollectorWorkerProfile {
 	t.Helper()
 	useStackWorkerProfileFixture(t, "stack-worker-profile-youtube-collector.json")
