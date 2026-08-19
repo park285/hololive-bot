@@ -29,5 +29,6 @@ runtime/lifecycle
 sqlutil
 stringutil
 telemetry
+workerconfig
 workercontract
 workerpool
