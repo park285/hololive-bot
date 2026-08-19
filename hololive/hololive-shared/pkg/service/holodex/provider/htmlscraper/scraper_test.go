@@ -63,7 +63,7 @@ func newOfficialScheduleTestService(
 	server := httptest.NewTLSServer(handler)
 	t.Cleanup(server.Close)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := NewTestServiceWithHTTPClient(server.Client(), logger, server.URL, nil)
+	service := newTestServiceWithHTTPClient(server.Client(), logger, server.URL, nil)
 	service.identityIndex = buildOfficialScheduleIdentityIndex(testMemberDataProvider{members: members})
 	return service
 }
@@ -350,9 +350,9 @@ func TestFetchChannelUsesOfficialAPIOnlyAfterYouTubeFailure(t *testing.T) {
 		}]}]}`)
 	}), []*domain.Member{{Name: "Member", ChannelID: "channel-1"}})
 	service.nowFunc = func() time.Time { return time.Date(2026, 8, 13, 0, 0, 0, 0, officialScheduleJST) }
-	service.fetchUpcoming = func(context.Context, string) ([]*parser.UpcomingEvent, error) {
+	service.youtubeClient = testYouTubeClient{fetchUpcoming: func(context.Context, string) ([]*parser.UpcomingEvent, error) {
 		return nil, context.DeadlineExceeded
-	}
+	}}
 	service.cache = &cachemocks.Client{
 		GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) { return nil, false },
 		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
@@ -376,9 +376,9 @@ func TestFetchChannelDoesNotUseOfficialAPIAfterYouTubeSuccessEmpty(t *testing.T)
 		requests.Add(1)
 		writeJSON(t, writer, `{"dateGroupList":[]}`)
 	}), nil)
-	service.fetchUpcoming = func(context.Context, string) ([]*parser.UpcomingEvent, error) {
+	service.youtubeClient = testYouTubeClient{fetchUpcoming: func(context.Context, string) ([]*parser.UpcomingEvent, error) {
 		return []*parser.UpcomingEvent{}, nil
-	}
+	}}
 	service.cache = &cachemocks.Client{
 		GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) { return nil, false },
 		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},

@@ -8,21 +8,17 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/park285/shared-go/pkg/httputil"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/internal/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type Service struct {
@@ -32,8 +28,7 @@ type Service struct {
 	logger               *slog.Logger
 	officialSchedule     settings.OfficialScheduleConfig
 	maxResponseBodyBytes int64
-	youtubeClient        *scraper.Client
-	fetchUpcoming        func(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error)
+	youtubeClient        YouTubeClient
 	officialPageMu       sync.RWMutex
 	officialPage         officialSchedulePageCache
 	officialGroup        singleflight.Group
@@ -48,84 +43,6 @@ const (
 type officialSchedulePageCache struct {
 	streams   []*domain.Stream
 	expiresAt time.Time
-}
-
-func NewService(
-	cacheClient cache.StreamCache,
-	membersData domain.MemberDataProvider,
-	youtubeProxyConfig scraper.ProxyConfig,
-	sharedRL *ratelimiter.RateLimiter,
-	logger *slog.Logger,
-) *Service {
-	return NewServiceWithYouTubeClient(
-		cacheClient,
-		membersData,
-		scraper.NewClient(scraper.WithProxy(youtubeProxyConfig), scraper.WithRateLimiter(sharedRL)),
-		logger,
-	)
-}
-
-func NewServiceWithYouTubeClient(
-	cacheClient cache.StreamCache,
-	membersData domain.MemberDataProvider,
-	youtubeClient *scraper.Client,
-	logger *slog.Logger,
-) *Service {
-	return NewServiceWithOfficialSchedule(
-		cacheClient,
-		membersData,
-		youtubeClient,
-		logger,
-		settings.LoadOfficialScheduleRuntimeConfig(),
-	)
-}
-
-func NewServiceWithOfficialSchedule(
-	cacheClient cache.StreamCache,
-	membersData domain.MemberDataProvider,
-	youtubeClient *scraper.Client,
-	logger *slog.Logger,
-	runtimeConfig settings.OfficialScheduleRuntimeConfig,
-) *Service {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	runtimeConfig = normalizeOfficialScheduleRuntimeConfig(runtimeConfig)
-	identityIndex := buildOfficialScheduleIdentityIndex(membersData)
-	logger.Info("Official schedule API source initialized",
-		slog.String("path", officialScheduleAPIPath),
-		slog.Int("identity_keys", len(identityIndex)))
-
-	return &Service{
-		httpClient:           httputil.NewExternalAPIClient(runtimeConfig.OfficialSchedule.Timeout),
-		cache:                cacheClient,
-		identityIndex:        identityIndex,
-		logger:               logger,
-		officialSchedule:     runtimeConfig.OfficialSchedule,
-		maxResponseBodyBytes: runtimeConfig.MaxResponseBodyBytes,
-		youtubeClient:        youtubeClient,
-	}
-}
-
-func normalizeOfficialScheduleRuntimeConfig(config settings.OfficialScheduleRuntimeConfig) settings.OfficialScheduleRuntimeConfig {
-	defaults := settings.DefaultOfficialScheduleConfig()
-	if strings.TrimSpace(config.OfficialSchedule.BaseURL) == "" {
-		config.OfficialSchedule.BaseURL = defaults.BaseURL
-	}
-	if config.OfficialSchedule.Timeout <= 0 {
-		config.OfficialSchedule.Timeout = defaults.Timeout
-	}
-	if config.OfficialSchedule.CacheExpiry <= 0 {
-		config.OfficialSchedule.CacheExpiry = defaults.CacheExpiry
-	}
-	if config.OfficialSchedule.PageCacheTTL <= 0 {
-		config.OfficialSchedule.PageCacheTTL = defaults.PageCacheTTL
-	}
-	if config.MaxResponseBodyBytes <= 0 {
-		config.MaxResponseBodyBytes = settings.DefaultMaxResponseBodyBytes
-	}
-	return config
 }
 
 func (s *Service) FetchChannel(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, error) {
@@ -152,7 +69,7 @@ func (s *Service) fetchYouTubeChannelSchedule(
 	hours int,
 	includeLive bool,
 ) ([]*domain.Stream, error, bool) {
-	if s.youtubeClient == nil && s.fetchUpcoming == nil {
+	if s.youtubeClient == nil {
 		return nil, nil, false
 	}
 
@@ -351,6 +268,9 @@ func (s *Service) GetChannelStats(ctx context.Context, channelID string) (*parse
 	if err != nil {
 		return nil, fmt.Errorf("youtube channel stats scraper error: %w", err)
 	}
+	if stats == nil {
+		return nil, fmt.Errorf("youtube channel stats scraper returned nil result")
+	}
 	s.logger.Debug("Channel stats fetched via scraper", slog.String("channel", channelID), slog.Int64("subscribers", stats.SubscriberCount))
 	return stats, nil
 }
@@ -362,6 +282,9 @@ func (s *Service) GetChannelSnippet(ctx context.Context, channelID string) (*par
 	snippet, err := s.youtubeClient.GetChannelSnippet(ctx, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("youtube channel snippet scraper error: %w", err)
+	}
+	if snippet == nil {
+		return nil, fmt.Errorf("youtube channel snippet scraper returned nil result")
 	}
 	s.logger.Debug("Channel snippet fetched via scraper", slog.String("channel", channelID), slog.Int("avatars", len(snippet.Avatar)), slog.Int("banners", len(snippet.Banner)))
 	return snippet, nil

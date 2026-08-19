@@ -27,8 +27,6 @@ func (s *Service) fetchYouTubeSchedule(ctx context.Context, channelID string, wa
 
 func (s *Service) fetchYouTubeEvents(ctx context.Context, channelID string, waitAdmission bool) ([]*parser.UpcomingEvent, error) {
 	switch {
-	case s.fetchUpcoming != nil:
-		return s.fetchUpcoming(ctx, channelID)
 	case s.youtubeClient != nil && waitAdmission:
 		return s.youtubeClient.GetUpcomingEventsWaitAdmission(ctx, channelID)
 	case s.youtubeClient != nil:

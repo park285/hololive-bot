@@ -17,6 +17,13 @@
   기존 deferred 실패를 backfill하고 acquire 경합 및 migration 중에도 진단이 유실되지 않도록
   trigger와 constraint 설치·검증 순서를 고정했습니다.
 
+### 호환성이 깨지는 변경
+
+- htmlscraper의 production `NewTestServiceWithHTTPClient`와 `*ForTest` accessor를 제거했습니다.
+  custom YouTube/HTTP client가 필요한 구성은 `NewServiceWithDependencies`와
+  `ServiceDependencies`를 사용하며, 기존 `NewServiceWithYouTubeClient`와
+  `NewServiceWithOfficialSchedule` signature는 유지합니다.
+
 ### 변경
 
 - standalone YouTube scrape/outbox runtime 모듈을 제거하고 AP a/b/c/d identity를 `youtube-collector` fleet로 통일했습니다. Canonical consume/notification/retention은 `hololive-api` YouTube plane, `members.photo`는 admin PhotoSync, egress는 `alarm-worker`입니다. production apply는 포함하지 않습니다.
