@@ -17,7 +17,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	apiclient "github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient"
-	htmlscraper "github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
@@ -43,7 +42,7 @@ func TestGetLiveStreamsByOrgDoesNotUseOfficialSchedule(t *testing.T) {
 			Err:        fmt.Errorf("upstream unavailable"),
 		}
 	}}
-	scraperService := htmlscraper.NewTestServiceWithHTTPClient(
+	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialServer.URL,
@@ -89,7 +88,7 @@ func TestGetUpcomingStreamsByOrgUsesOfficialScheduleAPIOnlyOnPrimaryFailure(t *t
 			Err:        fmt.Errorf("upstream unavailable"),
 		}
 	}}
-	scraperService := htmlscraper.NewTestServiceWithHTTPClient(
+	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialServer.URL,
@@ -121,7 +120,7 @@ func TestGetUpcomingStreamsByOrgDoesNotFallbackOnSuccessEmpty(t *testing.T) {
 	requester := &MockRequester{DoRequestFunc: func(context.Context, string, string, url.Values) ([]byte, error) {
 		return sharedjson.Marshal([]any{})
 	}}
-	scraperService := htmlscraper.NewTestServiceWithHTTPClient(
+	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialServer.URL,
@@ -152,7 +151,7 @@ func TestGetUpcomingStreamsByOrgReturnsErrorWhenBothSourcesFail(t *testing.T) {
 			Err:        fmt.Errorf("upstream unavailable"),
 		}
 	}}
-	scraperService := htmlscraper.NewTestServiceWithHTTPClient(
+	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialServer.URL,
@@ -178,7 +177,7 @@ func TestGetChannelScheduleUsesYouTubeBeforeOfficialAPI(t *testing.T) {
 	t.Cleanup(officialServer.Close)
 
 	requester := retryableHolodexFailureRequester("channel_schedule")
-	scraperService := htmlscraper.NewTestServiceWithHTTPClient(
+	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialServer.URL,
@@ -222,18 +221,16 @@ func TestGetChannelScheduleUsesOfficialScheduleAPIAfterYouTubeFailure(t *testing
 	t.Cleanup(officialServer.Close)
 
 	requester := retryableHolodexFailureRequester("channel_schedule")
-	scraperService := htmlscraper.NewTestServiceWithHTTPClient(
+	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialServer.URL,
 		func(context.Context, string) ([]*parser.UpcomingEvent, error) {
 			return nil, context.DeadlineExceeded
 		},
+		&domain.Member{Name: "Keep", ChannelID: "channel-1"},
+		&domain.Member{Name: "Drop", ChannelID: "channel-2"},
 	)
-	scraperService.SetOfficialScheduleIdentityForTest([]*domain.Member{
-		{Name: "Keep", ChannelID: "channel-1"},
-		{Name: "Drop", ChannelID: "channel-2"},
-	})
 	service := newServiceForFallbackTestWithScraper(requester, scraperService)
 
 	streams, err := service.GetChannelSchedule(context.Background(), "channel-1", 24, false)
@@ -264,7 +261,7 @@ func TestGetChannelScheduleDoesNotFallbackOnHolodexSuccessEmpty(t *testing.T) {
 	requester := &MockRequester{DoRequestFunc: func(context.Context, string, string, url.Values) ([]byte, error) {
 		return sharedjson.Marshal([]any{})
 	}}
-	scraperService := htmlscraper.NewTestServiceWithHTTPClient(
+	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialServer.URL,
@@ -294,7 +291,7 @@ func TestGetChannelsLiveStatusDoesNotUseOfficialSchedule(t *testing.T) {
 	t.Cleanup(officialServer.Close)
 
 	requester := retryableHolodexFailureRequester("channels_live_status")
-	scraperService := htmlscraper.NewTestServiceWithHTTPClient(
+	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		officialServer.URL,

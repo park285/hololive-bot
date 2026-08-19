@@ -19,7 +19,7 @@ func TestNewServiceWithYouTubeClientUsesProvidedClient(t *testing.T) {
 }
 
 func TestOfficialScheduleAPINilResponse(t *testing.T) {
-	service := NewTestServiceWithHTTPClient(
+	service := newTestServiceWithHTTPClient(
 		&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return nil, nil
 		})},

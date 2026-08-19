@@ -1163,7 +1163,7 @@ func TestResolveFetchPolicyPropagatesAdmissionBlocking(t *testing.T) {
 ```go
 func TestFetchFromYouTubeProducerKeepsInjectedFetcherBehavior(t *testing.T) {
 	called := 0
-	svc := NewTestServiceWithHTTPClient(nil, slog.Default(), "", func(ctx context.Context, channelID string) ([]*scraper.UpcomingEvent, error) {
+	svc := newTestServiceWithHTTPClient(nil, slog.Default(), "", func(ctx context.Context, channelID string) ([]*scraper.UpcomingEvent, error) {
 		called++
 		return []*scraper.UpcomingEvent{{VideoID: "video", Title: "title", Status: "LIVE"}}, nil
 	})
@@ -1177,7 +1177,7 @@ func TestFetchFromYouTubeProducerKeepsInjectedFetcherBehavior(t *testing.T) {
 
 func TestFetchFromYouTubeProducerWaitAdmissionUsesInjectedFetcherInTests(t *testing.T) {
 	called := 0
-	svc := NewTestServiceWithHTTPClient(nil, slog.Default(), "", func(ctx context.Context, channelID string) ([]*scraper.UpcomingEvent, error) {
+	svc := newTestServiceWithHTTPClient(nil, slog.Default(), "", func(ctx context.Context, channelID string) ([]*scraper.UpcomingEvent, error) {
 		called++
 		return nil, nil
 	})

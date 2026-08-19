@@ -288,14 +288,14 @@ combined := mergeFailures(failed, deferred)
 
 ### P2-1. integration test는 `fetchUpcoming` injection으로는 blocking admission을 검증할 수 없다
 
-`htmlscraper.NewTestServiceWithHTTPClient`는 `fetchUpcoming` function injection을 지원한다. 이 injection을 쓰면 `youtubeProducer.GetUpcomingEventsWaitAdmission`를 우회하므로 blocking admission을 검증하지 못한다.
+htmlscraper package의 test-only `newTestServiceWithHTTPClient`는 `fetchUpcoming` function injection을 지원한다. 이 injection을 쓰면 `YouTubeClient.GetUpcomingEventsWaitAdmission`의 실제 구현을 우회하므로 blocking admission을 검증하지 못한다.
 
 실제 blocking path 검증은 다음처럼 해야 한다.
 
 - `scraper.NewClient`에 `WithRateLimiter(scraper.NewRateLimiter(interval))`를 넣는다.
 - network를 피하려면 `WithFetcherEngine(scraper.FetcherEngineBrowserSnapshot)` + fake `BrowserSnapshotFetcher`를 사용한다.
 - fake fetcher는 `GetUpcomingEvents` parser가 읽을 수 있는 최소 HTML/ytInitialData를 반환한다.
-- htmlscraper `Service`는 `NewServiceWithYouTubeProducer(..., client, ...)` 또는 테스트 helper 확장으로 실제 client를 물린다.
+- htmlscraper `Service`는 `NewServiceWithDependencies(..., ServiceDependencies{YouTube: client}, ...)`로 실제 client를 물린다.
 - `FetchFromYouTubeProducerWaitAdmission`을 연속 호출했을 때 두 번째 호출 시간이 interval 이상 지연되는지 boundary로 확인한다.
 
 이 테스트가 없으면 Task 1의 unit test는 통과하지만 htmlscraper public seam이 잘못 배선되어도 놓칠 수 있다.

@@ -27,7 +27,7 @@ func (f fallbackRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, err
 
 func TestFetchYouTubeScheduleKeepsInjectedFetcherBehavior(t *testing.T) {
 	called := 0
-	service := NewTestServiceWithHTTPClient(nil, slog.Default(), "", func(context.Context, string) ([]*parser.UpcomingEvent, error) {
+	service := newTestServiceWithHTTPClient(nil, slog.Default(), "", func(context.Context, string) ([]*parser.UpcomingEvent, error) {
 		called++
 		return []*parser.UpcomingEvent{{VideoID: "video", Title: "title", Status: "LIVE"}}, nil
 	})
@@ -42,7 +42,7 @@ func TestFetchYouTubeScheduleKeepsInjectedFetcherBehavior(t *testing.T) {
 
 func TestFetchYouTubeScheduleWaitAdmissionUsesInjectedFetcherInTests(t *testing.T) {
 	called := 0
-	service := NewTestServiceWithHTTPClient(nil, slog.Default(), "", func(context.Context, string) ([]*parser.UpcomingEvent, error) {
+	service := newTestServiceWithHTTPClient(nil, slog.Default(), "", func(context.Context, string) ([]*parser.UpcomingEvent, error) {
 		called++
 		return nil, nil
 	})

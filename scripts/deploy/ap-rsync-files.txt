@@ -450,9 +450,10 @@ hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/official_sched
 hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/official_schedule_decode.go
 hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/official_schedule_fetcher.go
 hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/official_schedule_metrics.go
+hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/dependencies.go
 hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/service.go
+hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/service_constructor.go
 hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/stream_mapper.go
-hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/testing.go
 hololive/hololive-shared/pkg/service/holodex/provider/htmlscraper/youtube_fallback.go
 hololive/hololive-shared/pkg/service/holodex/provider/photo_sync.go
 hololive/hololive-shared/pkg/service/holodex/provider/retry_scheduler.go

@@ -23,10 +23,13 @@ func TestNewServiceWithOfficialScheduleUsesInjectedConfig(t *testing.T) {
 		MaxResponseBodyBytes: 2048,
 	}
 	service := NewServiceWithOfficialSchedule(nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), official)
-	if got := service.OfficialScheduleBaseURLForTest(); got != "https://schedule.injected.example" {
+	if got := service.officialSchedule.BaseURL; got != "https://schedule.injected.example" {
 		t.Fatalf("BaseURL = %q, want injected origin", got)
 	}
-	if got := service.OfficialScheduleMaxResponseBodyBytesForTest(); got != 2048 {
+	if got := service.maxResponseBodyBytes; got != 2048 {
 		t.Fatalf("MaxResponseBodyBytes = %d, want 2048", got)
+	}
+	if service.youtubeClient != nil {
+		t.Fatal("nil concrete YouTube client became a typed-nil dependency")
 	}
 }
