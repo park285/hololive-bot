@@ -1,6 +1,52 @@
 package consensus
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestStageContextCapsToParentDeadline(t *testing.T) {
+	parent, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	parentDeadline, ok := parent.Deadline()
+	if !ok {
+		t.Fatal("parent deadline missing")
+	}
+
+	child, childCancel, ok := StageContext(parent, 10*time.Second)
+	if !ok {
+		t.Fatal("StageContext() ok = false, want true")
+	}
+	defer childCancel()
+
+	childDeadline, ok := child.Deadline()
+	if !ok {
+		t.Fatal("child deadline missing")
+	}
+
+	gap := parentDeadline.Sub(childDeadline)
+	if gap < 150*time.Millisecond || gap > 500*time.Millisecond {
+		t.Fatalf("deadline gap = %v, want around 250ms reserve", gap)
+	}
+}
+
+func TestStageContextReturnsFalseWhenNoBudgetLeft(t *testing.T) {
+	parent, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	child, childCancel, ok := StageContext(parent, 10*time.Second)
+	if ok {
+		t.Fatal("StageContext() ok = true, want false")
+	}
+	if child != nil {
+		t.Fatalf("StageContext() child = %v, want nil", child)
+	}
+	if childCancel != nil {
+		t.Fatal("StageContext() cancel should be nil when budget is exhausted")
+	}
+}
 
 func TestNormalizeSeverity(t *testing.T) {
 	t.Parallel()

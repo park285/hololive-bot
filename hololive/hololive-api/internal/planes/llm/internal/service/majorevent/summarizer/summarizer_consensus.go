@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	json "github.com/park285/shared-go/pkg/json"
 
@@ -60,7 +59,7 @@ func (s *EventSummarizer) reviewConsensusVerdict(
 	periodKey string,
 	primary *summaryResponse,
 ) (*consensus.ReviewVerdict, bool) {
-	reviewCtx, cancel, ok := deriveConsensusBudget(ctx, s.consensus.ReviewTimeout)
+	reviewCtx, cancel, ok := consensus.StageContext(ctx, s.consensus.ReviewTimeout)
 	if !ok {
 		s.logger.Warn("major event consensus skipped: insufficient budget for review")
 		return nil, false
@@ -96,7 +95,7 @@ func (s *EventSummarizer) applyConsensusAdjudication(
 		return primary, false
 	}
 
-	adjCtx, adjCancel, ok := deriveConsensusBudget(ctx, s.consensus.AdjudicateTimeout)
+	adjCtx, adjCancel, ok := consensus.StageContext(ctx, s.consensus.AdjudicateTimeout)
 	if !ok {
 		s.logger.Warn("major event consensus skipped: insufficient budget for adjudication")
 		return primary, false
@@ -113,26 +112,6 @@ func (s *EventSummarizer) applyConsensusAdjudication(
 		slog.Float64("confidence", verdict.Confidence),
 		slog.Int("issues", len(verdict.Issues)))
 	return adjusted, true
-}
-
-func deriveConsensusBudget(parent context.Context, requested time.Duration) (context.Context, context.CancelFunc, bool) {
-	const reserve = 250 * time.Millisecond
-	if requested <= 0 {
-		requested = time.Second
-	}
-
-	if deadline, ok := parent.Deadline(); ok {
-		remaining := time.Until(deadline) - reserve
-		if remaining <= 0 {
-			return nil, nil, false
-		}
-		if remaining < requested {
-			requested = remaining
-		}
-	}
-
-	ctx, cancel := context.WithTimeout(parent, requested)
-	return ctx, cancel, true
 }
 
 func (s *EventSummarizer) reviewSummary(
@@ -204,7 +183,11 @@ func (s *EventSummarizer) runFinalOutputReview(
 		return assembled, false
 	}
 
-	reviewCtx, cancel := context.WithTimeout(ctx, s.consensus.ReviewTimeout)
+	reviewCtx, cancel, ok := consensus.StageContext(ctx, s.consensus.ReviewTimeout)
+	if !ok {
+		s.logger.Warn("major event final output review skipped: insufficient budget")
+		return assembled, false
+	}
 	defer cancel()
 
 	raw, err := s.reviewer.GenerateJSON(

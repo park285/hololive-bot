@@ -119,7 +119,11 @@ func (c *ConsensusSummarizer) runReview(
 	primaryDigest *model.Digest,
 ) *consensus.ReviewVerdict {
 	reviewStart := time.Now()
-	reviewCtx, reviewCancel := context.WithTimeout(ctx, c.config.ReviewTimeout)
+	reviewCtx, reviewCancel, ok := consensus.StageContext(ctx, c.config.ReviewTimeout)
+	if !ok {
+		c.logger.Warn("Consensus stage 2: insufficient budget, returning primary")
+		return nil
+	}
 	defer reviewCancel()
 
 	verdict, err := c.review(reviewCtx, input, primaryDigest)
@@ -169,7 +173,11 @@ func (c *ConsensusSummarizer) runAdjudication(
 	}
 
 	adjStart := time.Now()
-	adjCtx, adjCancel := context.WithTimeout(ctx, c.config.AdjudicateTimeout)
+	adjCtx, adjCancel, ok := consensus.StageContext(ctx, c.config.AdjudicateTimeout)
+	if !ok {
+		c.logger.Warn("Consensus stage 3: insufficient budget, returning primary")
+		return nil
+	}
 	defer adjCancel()
 
 	adjResponse, err := c.adjudicate(adjCtx, input, primaryDigest, verdict)

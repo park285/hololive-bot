@@ -124,48 +124,6 @@ func TestShouldRunConsensusReview_SingleHighlightRunsReview(t *testing.T) {
 	}
 }
 
-func TestDeriveConsensusBudget_CapsToParentDeadline(t *testing.T) {
-	parent, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
-	defer cancel()
-
-	parentDeadline, ok := parent.Deadline()
-	if !ok {
-		t.Fatal("parent deadline missing")
-	}
-
-	child, childCancel, ok := deriveConsensusBudget(parent, 10*time.Second)
-	if !ok {
-		t.Fatal("deriveConsensusBudget() ok = false, want true")
-	}
-	defer childCancel()
-
-	childDeadline, ok := child.Deadline()
-	if !ok {
-		t.Fatal("child deadline missing")
-	}
-
-	gap := parentDeadline.Sub(childDeadline)
-	if gap < 150*time.Millisecond || gap > 500*time.Millisecond {
-		t.Fatalf("deadline gap = %v, want around 250ms reserve", gap)
-	}
-}
-
-func TestDeriveConsensusBudget_ReturnsFalseWhenNoBudgetLeft(t *testing.T) {
-	parent, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-	defer cancel()
-
-	child, childCancel, ok := deriveConsensusBudget(parent, 10*time.Second)
-	if ok {
-		t.Fatal("deriveConsensusBudget() ok = true, want false")
-	}
-	if child != nil {
-		t.Fatalf("deriveConsensusBudget() child = %v, want nil", child)
-	}
-	if childCancel != nil {
-		t.Fatal("deriveConsensusBudget() cancel should be nil when budget is exhausted")
-	}
-}
-
 func TestEventSummarizer_RunConsensus_UsesReservedParentBudgetForReview(t *testing.T) {
 	reviewer := &deadlineCapturingSummarizer{
 		jsonResponse: `{"approved":true,"confidence":0.99,"issues":[]}`,
