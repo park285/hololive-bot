@@ -191,6 +191,60 @@ if unsafe:
 PY
 }
 
+assert_worker_profiles_mounted() {
+  local label="$1" profiles="$2"
+  shift 2
+  local compose_file
+  compose_file="$(IFS=:; echo "$*")"
+
+  local merged
+  merged="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE="${compose_file}" COMPOSE_PROFILES="${profiles}" \
+    docker compose config --no-interpolate --format json 2>/dev/null)" \
+    || fail "hb09: ${label} merge failed to render"
+
+  COMPOSE_MERGE_LABEL="${label}" python3 - "${merged}" <<'PY'
+import json, os, sys
+
+merged = json.loads(sys.argv[1])
+label = os.environ["COMPOSE_MERGE_LABEL"]
+services = merged.get("services", {})
+expected = {
+    "hololive-api": "hololive-api.json",
+    "hololive-alarm-worker": "alarm-worker.json",
+    "youtube-collector": "youtube-collector-c.json",
+}
+
+violations = []
+for service, filename in expected.items():
+    source = f"/etc/stack-secrets/hololive-bot/worker-profiles/{filename}"
+    target = f"/run/hololive-bot/worker-profiles/{filename}"
+    mounts = services.get(service, {}).get("volumes", []) or []
+    matched = False
+    for mount in mounts:
+        if isinstance(mount, dict):
+            matched = (
+                mount.get("type") == "bind"
+                and mount.get("source") == source
+                and mount.get("target") == target
+                and mount.get("read_only") is True
+            )
+        else:
+            matched = str(mount) == f"{source}:{target}:ro"
+        if matched:
+            break
+    if not matched:
+        violations.append((service, source, target))
+
+if violations:
+    for service, source, target in violations:
+        print(
+            "[FAIL] hb09 (%s): service '%s' does not retain its read-only Stack Worker Profile bind %s -> %s"
+            % (label, service, source, target)
+        )
+    sys.exit(1)
+PY
+}
+
 assert_no_dir_mount "prod+live-compat" "" \
   docker-compose.prod.yml docker-compose.live-compat.yml
 
@@ -217,3 +271,12 @@ assert_postgres_not_host_networked "main-ap+live-compat" "main-ap" \
   docker-compose.main-ap.yml docker-compose.main-ap.live-compat.yml
 
 pass "hb08: live-compat postgres uses bridge networking with explicit host port binding (2b45b8a7/faa876be)"
+
+assert_worker_profiles_mounted "prod+live-compat" "" \
+  docker-compose.prod.yml docker-compose.live-compat.yml
+
+assert_worker_profiles_mounted "main-ap+live-compat" "main-ap" \
+  docker-compose.prod.yml docker-compose.live-compat.yml \
+  docker-compose.main-ap.yml docker-compose.main-ap.live-compat.yml
+
+pass "hb09: live-compat overrides retain role-specific Stack Worker Profile bind mounts"

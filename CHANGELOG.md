@@ -8,6 +8,15 @@
 
 ## 미출시
 
+## v3.0.1 - 2026-08-20
+
+### 수정
+
+- central live-compat의 `volumes: !override`가 API, alarm-worker, collector-c의 role별
+  Stack Worker Profile bind mount를 누락해 v3 runtime이 `profile_file_missing`으로
+  기동하지 못하던 배포 회귀를 수정했습니다. 두 central Compose 조합에서 세 mount의
+  source, target, read-only 속성을 렌더 결과로 검증합니다.
+
 ## v3.0.0 - 2026-08-20
 
 ### 추가
