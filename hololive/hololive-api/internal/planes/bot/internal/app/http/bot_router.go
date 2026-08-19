@@ -34,8 +34,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/park285/shared-go/pkg/ginjson"
 
 	"github.com/kapu/hololive-api/internal/readiness"

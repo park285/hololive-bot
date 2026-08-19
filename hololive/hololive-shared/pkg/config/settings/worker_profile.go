@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 	"github.com/park285/shared-go/pkg/workerconfig"
 )
