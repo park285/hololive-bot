@@ -36,6 +36,8 @@ func (s *leaseScheduler) recordEnqueueAdmission(result EnqueueResult) {
 		s.workerTotals.RecordAdmission(workercontract.AdmissionAccepted)
 	case EnqueueDeduped:
 		s.workerTotals.RecordAdmission(workercontract.AdmissionDuplicate)
+	case EnqueueFull, EnqueueCanceled, EnqueueInvalid:
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 	default:
 		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 	}

@@ -181,7 +181,7 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 	outboxProfile := workers["bot_reply_outbox"]
 	outboxRepository, err := durability.NewReplyOutboxRepositoryWithPolicy(
 		pgPool,
-		int32(profile.BotReplyOutbox.MaxAttempts),
+		profile.BotReplyOutbox.MaxAttempts,
 		time.Duration(profile.BotReplyOutbox.AutomaticReplayHorizonMS)*time.Millisecond,
 	)
 	if err != nil {
@@ -206,8 +206,8 @@ func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pg
 		maintenanceEvery:      time.Duration(profile.BotWebhookInbox.MaintenanceIntervalMS) * time.Millisecond,
 		inboxRetryAfter:       time.Duration(profile.BotWebhookInbox.RetryAfterMS) * time.Millisecond,
 		outboxRetryAfter:      time.Duration(profile.BotReplyOutbox.RetryAfterMS) * time.Millisecond,
-		inboxMaxAttempts:      int32(profile.BotWebhookInbox.MaxAttempts),
-		outboxMaxAttempts:     int32(profile.BotReplyOutbox.MaxAttempts),
+		inboxMaxAttempts:      profile.BotWebhookInbox.MaxAttempts,
+		outboxMaxAttempts:     profile.BotReplyOutbox.MaxAttempts,
 		settlementTimeout:     time.Duration(profile.BotWebhookInbox.SettlementTimeoutMS) * time.Millisecond,
 		terminalRetention:     time.Duration(profile.BotWebhookInbox.TerminalRetentionMS) * time.Millisecond,
 		manualReviewRetention: time.Duration(profile.BotReplyOutbox.ManualReviewRetentionMS) * time.Millisecond,

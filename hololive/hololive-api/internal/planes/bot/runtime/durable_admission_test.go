@@ -338,7 +338,9 @@ func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
 		inboxHeartbeat:    inbox.Heartbeat,
 		commandHeartbeat:  durability.NewCommandExecutionRepository(pool).Heartbeat,
 	}
-	r.processInboxClaim(ctx, claim, "deadline-token")
+	if err := r.processInboxClaim(ctx, claim, "deadline-token"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("process deadline inbox claim error = %v, want deadline exceeded", err)
+	}
 
 	seen := <-deadlineSeen
 	if seen <= 0 || seen > handlerTimeout {
@@ -559,7 +561,9 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		inboxHeartbeat:    inbox.Heartbeat,
 		commandHeartbeat:  commands.Heartbeat,
 	}
-	r.processInboxClaim(ctx, claim, "failed-token")
+	if err := r.processInboxClaim(ctx, claim, "failed-token"); err == nil || !strings.Contains(err.Error(), "validation failed") {
+		t.Fatalf("process failed inbox claim error = %v, want validation failure", err)
+	}
 	var status, summary string
 	err = pool.QueryRow(ctx, `SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1`, claim.MessageID).
 		Scan(&status, &summary)

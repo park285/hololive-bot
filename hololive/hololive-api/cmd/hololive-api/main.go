@@ -87,7 +87,9 @@ func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (
 		return false, 0
 	}
 	if err := load(); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Failed to load hololive-api worker profile: %v\n", err)
+		if _, writeErr := fmt.Fprintf(stderr, "Failed to load hololive-api worker profile: %v\n", err); writeErr != nil {
+			return true, 1
+		}
 		return true, 1
 	}
 	if _, err := fmt.Fprintln(stderr, "hololive-api worker profile valid"); err != nil {

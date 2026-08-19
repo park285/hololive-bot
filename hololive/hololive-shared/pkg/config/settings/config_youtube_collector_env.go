@@ -14,10 +14,10 @@ func loadYouTubeCollectorConfig() (YouTubeCollectorConfig, error) {
 	defaults := DefaultYouTubeCollectorConfig()
 	cfg := YouTubeCollectorConfig{InstanceID: strings.TrimSpace(sharedenv.String("YOUTUBE_COLLECTOR_INSTANCE_ID", ""))}
 	var err error
-	if cfg.ReadinessTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", defaults.ReadinessTimeout, time.Second); err != nil {
+	if cfg.ReadinessTimeout, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", defaults.ReadinessTimeout); err != nil {
 		return YouTubeCollectorConfig{}, err
 	}
-	if cfg.HelperHealthTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS", defaults.HelperHealthTimeout, time.Second); err != nil {
+	if cfg.HelperHealthTimeout, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_HELPER_HEALTH_TIMEOUT_SECONDS", defaults.HelperHealthTimeout); err != nil {
 		return YouTubeCollectorConfig{}, err
 	}
 	if err := loadCollectorYouTubeJSLimits(&cfg, &defaults); err != nil {
@@ -39,10 +39,10 @@ func loadCollectorYouTubeJSLimits(cfg, defaults *YouTubeCollectorConfig) error {
 	); err != nil {
 		return err
 	}
-	if cfg.YouTubeJSStartupTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS", defaults.YouTubeJSStartupTimeout, time.Second); err != nil {
+	if cfg.YouTubeJSStartupTimeout, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_STARTUP_TIMEOUT_SECONDS", defaults.YouTubeJSStartupTimeout); err != nil {
 		return err
 	}
-	if cfg.YouTubeJSShutdownTimeout, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS", defaults.YouTubeJSShutdownTimeout, time.Second); err != nil {
+	if cfg.YouTubeJSShutdownTimeout, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_YOUTUBEJS_SHUTDOWN_TIMEOUT_SECONDS", defaults.YouTubeJSShutdownTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -59,7 +59,7 @@ func loadCollectorPaginationLimits(cfg, defaults *YouTubeCollectorConfig) error 
 	if cfg.MaxTargetRosterRows, err = requiredPositiveIntEnv("YOUTUBE_COLLECTOR_MAX_TARGET_ROSTER_ROWS", defaults.MaxTargetRosterRows); err != nil {
 		return err
 	}
-	cfg.RequestInterval, err = requiredDurationUnitEnv("YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS", defaults.RequestInterval, time.Second)
+	cfg.RequestInterval, err = requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS", defaults.RequestInterval)
 	return err
 }
 

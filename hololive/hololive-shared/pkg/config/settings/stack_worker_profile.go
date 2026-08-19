@@ -19,18 +19,18 @@ func LoadAPIWorkerProfile() (*APIWorkerProfile, error) {
 		return nil, err
 	}
 	profile := &APIWorkerProfile{Loaded: loaded}
-	if err := decodeWorkerSettings(loaded, "bot_webhook_inbox", &profile.BotWebhookInbox,
+	if err := decodeWorkerSettings(&loaded, "bot_webhook_inbox", &profile.BotWebhookInbox,
 		"max_body_bytes", "dedup_ttl_ms", "dedup_timeout_ms", "poll_interval_ms", "claim_lease_ms",
 		"heartbeat_interval_ms", "ownership_safety_margin_ms", "retry_after_ms", "max_attempts",
 		"maintenance_interval_ms", "settlement_timeout_ms", "terminal_retention_ms"); err != nil {
 		return nil, err
 	}
-	if err := decodeWorkerSettings(loaded, "bot_reply_outbox", &profile.BotReplyOutbox,
+	if err := decodeWorkerSettings(&loaded, "bot_reply_outbox", &profile.BotReplyOutbox,
 		"poll_interval_ms", "claim_lease_ms", "dispatch_budget_ms", "retry_after_ms", "max_attempts",
 		"maintenance_interval_ms", "manual_review_retention_ms", "automatic_replay_horizon_ms"); err != nil {
 		return nil, err
 	}
-	if err := decodeWorkerSettings(loaded, "source_observation", &profile.SourceObservation,
+	if err := decodeWorkerSettings(&loaded, "source_observation", &profile.SourceObservation,
 		"db_operation_concurrency", "claim_batch_size", "claim_interval_ms", "claim_lease_ms",
 		"transaction_timeout_ms", "shutdown_timeout_ms"); err != nil {
 		return nil, err
@@ -47,18 +47,18 @@ func LoadAlarmWorkerProfile() (*AlarmWorkerProfile, error) {
 		return nil, err
 	}
 	profile := &AlarmWorkerProfile{Loaded: loaded}
-	if err := decodeWorkerSettings(loaded, "alarm_dispatch", &profile.AlarmDispatch,
+	if err := decodeWorkerSettings(&loaded, "alarm_dispatch", &profile.AlarmDispatch,
 		"lease_ms", "quarantine_threshold_ms", "recovery_interval_ms", "recovery_batch_size", "max_batch",
 		"max_batches_per_wake", "poll_interval_ms", "idle_backoff_min_ms", "idle_backoff_max_ms", "wakeup_enabled"); err != nil {
 		return nil, err
 	}
-	if err := decodeWorkerSettings(loaded, "notification_delivery", &profile.NotificationDelivery,
+	if err := decodeWorkerSettings(&loaded, "notification_delivery", &profile.NotificationDelivery,
 		"batch_size", "max_retries", "lock_timeout_ms", "poll_interval_ms", "retry_backoff_ms", "cleanup_after_ms",
 		"cleanup_interval_ms", "cleanup_enabled", "stale_sending_after_ms", "stale_sending_sweep_interval_ms",
 		"stale_sending_sweep_limit"); err != nil {
 		return nil, err
 	}
-	if err := decodeWorkerSettings(loaded, "youtube_delivery", &profile.YouTubeDelivery,
+	if err := decodeWorkerSettings(&loaded, "youtube_delivery", &profile.YouTubeDelivery,
 		"batch_size", "lock_timeout_ms", "poll_interval_ms", "max_retries", "retry_backoff_ms", "cleanup_after_ms",
 		"cleanup_enabled", "revive_enabled", "revive_interval_ms", "revive_freshness_window_ms",
 		"claim_freshness_window_ms", "delivery_send_timeout_ms", "subscriber_lookup_parallelism",
@@ -78,7 +78,7 @@ func LoadYouTubeCollectorWorkerProfile() (*YouTubeCollectorWorkerProfile, error)
 		return nil, err
 	}
 	profile := &YouTubeCollectorWorkerProfile{Loaded: loaded}
-	if err := decodeWorkerSettings(loaded, "collection", &profile.Collection,
+	if err := decodeWorkerSettings(&loaded, "collection", &profile.Collection,
 		"acquisition_batch", "acquisition_cadence_ms", "lease_ttl_ms", "renew_interval_ms", "renew_timeout_ms",
 		"db_timeout_ms", "cleanup_timeout_ms", "provider_admission_timeout_ms", "collection_overhead_ms",
 		"publish_timeout_ms", "retry_min_ms", "retry_max_ms", "release_jitter_min_ms", "release_jitter_max_ms",
@@ -110,7 +110,10 @@ func loadStackWorkerProfile(service, role string) (workercontract.LoadedProfile,
 	return loaded, nil
 }
 
-func decodeWorkerSettings(loaded workercontract.LoadedProfile, workerID string, destination any, requiredKeys ...string) error {
+func decodeWorkerSettings(loaded *workercontract.LoadedProfile, workerID string, destination any, requiredKeys ...string) error {
+	if loaded == nil {
+		return fmt.Errorf("decode %s settings: loaded profile is nil", workerID)
+	}
 	worker, ok := loaded.Profile.Workers[workerID]
 	if !ok {
 		return fmt.Errorf("decode %s settings: worker is missing", workerID)
@@ -182,9 +185,7 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 
 func apiWorkerRelationshipProblems(profile *APIWorkerProfile, workers map[string]workercontract.WorkerProfile) []string {
 	problems := make([]string, 0)
-	if !allPositiveInts(
-		profile.BotWebhookInbox.MaxAttempts,
-		profile.BotReplyOutbox.MaxAttempts,
+	if profile.BotWebhookInbox.MaxAttempts <= 0 || profile.BotReplyOutbox.MaxAttempts <= 0 || !allPositiveInts(
 		profile.SourceObservation.DBOperationConcurrency,
 		profile.SourceObservation.ClaimBatchSize,
 	) {
@@ -308,15 +309,15 @@ func validateCollectorWorkerProfile(profile *YouTubeCollectorWorkerProfile) erro
 	}
 	problems = append(problems, positiveValueProblems(positive)...)
 	worker := workers["collection"]
-	problems = append(problems, collectorCapacityProblems(profile, worker)...)
-	problems = append(problems, collectorConcurrencyProblems(profile, worker)...)
+	problems = append(problems, collectorCapacityProblems(profile, &worker)...)
+	problems = append(problems, collectorConcurrencyProblems(profile, &worker)...)
 	problems = append(problems, collectorTimingProblems(profile)...)
 	return joinWorkerProfileProblems("youtube-collector", problems)
 }
 
-func collectorCapacityProblems(profile *YouTubeCollectorWorkerProfile, worker workercontract.WorkerProfile) []string {
+func collectorCapacityProblems(profile *YouTubeCollectorWorkerProfile, worker *workercontract.WorkerProfile) []string {
 	capacity := int64(0)
-	if worker.Queue.Capacity.Items != nil {
+	if worker != nil && worker.Queue.Capacity.Items != nil {
 		capacity = *worker.Queue.Capacity.Items
 	}
 	if profile.Collection.AcquisitionBatch < 1 || int64(profile.Collection.AcquisitionBatch) > capacity {
@@ -325,8 +326,11 @@ func collectorCapacityProblems(profile *YouTubeCollectorWorkerProfile, worker wo
 	return nil
 }
 
-func collectorConcurrencyProblems(profile *YouTubeCollectorWorkerProfile, worker workercontract.WorkerProfile) []string {
+func collectorConcurrencyProblems(profile *YouTubeCollectorWorkerProfile, worker *workercontract.WorkerProfile) []string {
 	problems := make([]string, 0)
+	if worker == nil {
+		return []string{"collection worker is missing"}
+	}
 	for name, value := range map[string]int{
 		"holodex_max_inflight":   profile.Collection.HolodexMaxInflight,
 		"official_max_inflight":  profile.Collection.OfficialMaxInflight,

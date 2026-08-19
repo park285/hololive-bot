@@ -208,7 +208,7 @@ func TestRequiredCollectorNumericEnvRejectsExplicitEmptyValues(t *testing.T) {
 			}
 
 			t.Setenv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", test.value)
-			if _, err := requiredDurationUnitEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", time.Minute, time.Second); err == nil {
+			if _, err := requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", time.Minute); err == nil {
 				t.Fatal("requiredDurationUnitEnv accepted an explicitly empty value")
 			}
 		})

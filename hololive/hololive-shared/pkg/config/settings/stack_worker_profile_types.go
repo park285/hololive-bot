@@ -11,7 +11,7 @@ type BotWebhookInboxWorkerSettings struct {
 	HeartbeatIntervalMS     int64 `json:"heartbeat_interval_ms"`
 	OwnershipSafetyMarginMS int64 `json:"ownership_safety_margin_ms"`
 	RetryAfterMS            int64 `json:"retry_after_ms"`
-	MaxAttempts             int   `json:"max_attempts"`
+	MaxAttempts             int32 `json:"max_attempts"`
 	MaintenanceIntervalMS   int64 `json:"maintenance_interval_ms"`
 	SettlementTimeoutMS     int64 `json:"settlement_timeout_ms"`
 	TerminalRetentionMS     int64 `json:"terminal_retention_ms"`
@@ -22,7 +22,7 @@ type BotReplyOutboxWorkerSettings struct {
 	ClaimLeaseMS             int64 `json:"claim_lease_ms"`
 	DispatchBudgetMS         int64 `json:"dispatch_budget_ms"`
 	RetryAfterMS             int64 `json:"retry_after_ms"`
-	MaxAttempts              int   `json:"max_attempts"`
+	MaxAttempts              int32 `json:"max_attempts"`
 	MaintenanceIntervalMS    int64 `json:"maintenance_interval_ms"`
 	ManualReviewRetentionMS  int64 `json:"manual_review_retention_ms"`
 	AutomaticReplayHorizonMS int64 `json:"automatic_replay_horizon_ms"`

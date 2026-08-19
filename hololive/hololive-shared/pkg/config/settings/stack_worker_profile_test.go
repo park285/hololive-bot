@@ -1,8 +1,8 @@
 package settings
 
 import (
+	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -57,11 +57,17 @@ func TestStackWorkerProfileRejectsUnknownServiceSetting(t *testing.T) {
 		t.Fatal(err)
 	}
 	mutated := strings.Replace(string(raw), `"youtubejs_max_inflight": 4`, `"youtubejs_max_inflight": 4, "unknown_setting": 1`, 1)
-	path := filepath.Join(t.TempDir(), "profile.json")
-	if err := os.WriteFile(path, []byte(mutated), 0o600); err != nil {
+	profileFile, err := os.CreateTemp(t.TempDir(), "profile-*.json")
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(StackWorkerProfileFileEnv, path)
+	if _, err := profileFile.WriteString(mutated); err != nil {
+		t.Fatal(errors.Join(err, profileFile.Close()))
+	}
+	if err := profileFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(StackWorkerProfileFileEnv, profileFile.Name())
 	if _, err := LoadYouTubeCollectorWorkerProfile(); err == nil || !strings.Contains(err.Error(), "unknown field") {
 		t.Fatalf("LoadYouTubeCollectorWorkerProfile() error = %v", err)
 	}
