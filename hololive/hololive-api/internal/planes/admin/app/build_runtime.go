@@ -185,7 +185,7 @@ func newAdminAPIRuntime(
 	}
 
 	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, "hololive-admin-api.http",
-		sharedserver.LocalPlaneTraceFilter)
+		nil, sharedserver.LocalPlaneTraceFilter)
 	if err != nil {
 		return nil, fmt.Errorf("build admin api http servers: %w", err)
 	}

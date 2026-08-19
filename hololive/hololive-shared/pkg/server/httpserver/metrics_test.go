@@ -4,11 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
@@ -28,6 +30,62 @@ func TestNewMetricsServerServesPrometheusTextWithAPIKey(t *testing.T) {
 	}
 	if body := recorder.Body.String(); !strings.Contains(body, "go_goroutines") {
 		t.Fatalf("body missing go_goroutines:\n%.300s", body)
+	}
+}
+
+func TestNewRuntimeHTTPServersForwardsWorkerRegistryToMetricsServer(t *testing.T) {
+	identity, err := workercontract.KnownIdentity("hololive", "youtube-collector")
+	if err != nil {
+		t.Fatal(err)
+	}
+	profilePath, err := filepath.Abs(filepath.Join("..", "..", "config", "settings", "testdata", "stack-worker-profile-youtube-collector.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := workercontract.LoadProfileFile(profilePath, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker := loaded.Profile.Workers["collection"]
+	worker.Executor.Enabled = false
+	loaded.Profile.Workers["collection"] = worker
+	registry := workercontract.NewRegistry(loaded, nil)
+	if err := registry.Register(workercontract.Registration{
+		WorkerID:                "collection",
+		Runtime:                 workercontract.RuntimeGo,
+		QueueBackend:            workercontract.QueueMemory,
+		QueueScope:              workercontract.QueueScopeProcess,
+		SettingsValidated:       true,
+		PerJobDeadlineValidated: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Seal(); err != nil {
+		t.Fatal(err)
+	}
+
+	certFile, keyFile := writeH3LocalhostCertificate(t)
+	servers, err := NewRuntimeHTTPServers(t.Context(), &settings.ServerConfig{
+		APIKey:         "test-key",
+		HTTPTransports: []string{"h3"},
+		H3Addr:         "127.0.0.1:0",
+		H3CertFile:     certFile,
+		H3KeyFile:      keyFile,
+		MetricsAddr:    "127.0.0.1:0",
+	}, http.NotFoundHandler(), "test.http", registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
+	request.Header.Set(common.APIKeyHeader, "test-key")
+	recorder := httptest.NewRecorder()
+	servers.Metrics.Handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `iris_stack_worker_configured_workers{`) || !strings.Contains(body, `worker="collection"`) {
+		t.Fatalf("metrics missing worker registry:\n%.500s", body)
 	}
 }
 
@@ -95,7 +153,7 @@ func TestNewRuntimeHTTPServersBuildsMetricsServerFromConfig(t *testing.T) {
 		H3CertFile:     certFile,
 		H3KeyFile:      keyFile,
 		MetricsAddr:    "127.0.0.1:0",
-	}, http.NotFoundHandler(), "test.http")
+	}, http.NotFoundHandler(), "test.http", nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeHTTPServers() error = %v", err)
 	}
@@ -110,7 +168,7 @@ func TestNewRuntimeHTTPServersBuildsMetricsServerFromConfig(t *testing.T) {
 		H3Addr:         "127.0.0.1:0",
 		H3CertFile:     certFile,
 		H3KeyFile:      keyFile,
-	}, http.NotFoundHandler(), "test.http")
+	}, http.NotFoundHandler(), "test.http", nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeHTTPServers() error = %v", err)
 	}

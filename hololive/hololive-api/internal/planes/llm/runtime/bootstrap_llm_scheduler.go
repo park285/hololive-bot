@@ -394,5 +394,5 @@ func buildLLMSchedulerHTTPServers(
 	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
 
 	return sharedserver.NewRuntimeHTTPServers(ctx, serverConfig, router, "hololive-llm-sched.http",
-		sharedserver.LocalPlaneTraceFilter)
+		nil, sharedserver.LocalPlaneTraceFilter)
 }

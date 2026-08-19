@@ -82,7 +82,7 @@ func assembleDisabledRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("build disabled youtube collector router: %w", err)
 	}
-	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http")
+	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http", workerRegistry)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func assembleRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector router: %w", err)
 	}
-	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http")
+	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http", workerRegistry)
 	if err != nil {
 		return nil, err
 	}
