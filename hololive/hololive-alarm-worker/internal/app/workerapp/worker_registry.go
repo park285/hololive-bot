@@ -32,25 +32,11 @@ func newAlarmWorkerRegistryState(profile *settings.AlarmWorkerProfile, pool *pgx
 		totals:   make(map[string]*workercontract.Counters, 3),
 		workers:  profile.Loaded.Profile.Workers,
 	}
-	state.samplers["alarm_dispatch"] = newPostgresQueueSampler(pool, `
-		SELECT COUNT(*), COALESCE(GREATEST(EXTRACT(EPOCH FROM (clock_timestamp() - MIN(created_at))), 0), 0)
-		FROM alarm_dispatch_deliveries
-		WHERE status IN ('pending', 'retry') AND next_attempt_at <= clock_timestamp()`)
+	state.samplers["alarm_dispatch"] = newPostgresQueueSampler(pool, alarmDispatchReadySnapshotSQL)
 	lockTimeout := time.Duration(profile.NotificationDelivery.LockTimeoutMS) * time.Millisecond
-	state.samplers["notification_delivery"] = newPostgresQueueSampler(pool, `
-		SELECT COUNT(*), COALESCE(GREATEST(EXTRACT(EPOCH FROM (clock_timestamp() - MIN(created_at))), 0), 0)
-		FROM notification_delivery_outbox
-		WHERE status = 'PENDING'
-		  AND next_attempt_at <= clock_timestamp()
-		  AND (locked_at IS NULL OR lock_expires_at <= clock_timestamp()
-		       OR (lock_expires_at IS NULL AND locked_at < clock_timestamp() - ($1::bigint * INTERVAL '1 millisecond')))`, lockTimeout.Milliseconds())
+	state.samplers["notification_delivery"] = newPostgresQueueSampler(pool, notificationDeliveryReadySnapshotSQL, lockTimeout.Milliseconds())
 	youtubeLockTimeout := time.Duration(profile.YouTubeDelivery.LockTimeoutMS) * time.Millisecond
-	state.samplers["youtube_delivery"] = newPostgresQueueSampler(pool, `
-		SELECT COUNT(*), COALESCE(GREATEST(EXTRACT(EPOCH FROM (clock_timestamp() - MIN(created_at))), 0), 0)
-		FROM youtube_notification_delivery
-		WHERE status = 'PENDING'
-		  AND next_attempt_at <= clock_timestamp()
-		  AND (locked_at IS NULL OR locked_at < clock_timestamp() - ($1::bigint * INTERVAL '1 millisecond'))`, youtubeLockTimeout.Milliseconds())
+	state.samplers["youtube_delivery"] = newPostgresQueueSampler(pool, youtubeDeliveryReadySnapshotSQL, youtubeLockTimeout.Milliseconds())
 	state.registry = workercontract.NewRegistry(profile.Loaded, state.checker)
 	for _, workerID := range []string{"alarm_dispatch", "notification_delivery", "youtube_delivery"} {
 		tracker := workercontract.NewExecutorTracker()

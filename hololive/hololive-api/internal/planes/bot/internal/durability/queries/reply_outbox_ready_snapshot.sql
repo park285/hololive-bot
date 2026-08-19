@@ -1,5 +1,5 @@
 WITH ready AS (
-    SELECT candidate.created_at
+    SELECT candidate.id, candidate.created_at
     FROM bot_reply_outbox AS candidate
     WHERE candidate.status IN ('pending', 'retryable_pre_dispatch', 'outcome_unknown')
       AND candidate.available_at <= clock_timestamp()
@@ -18,6 +18,6 @@ WITH ready AS (
             )
       )
 )
-SELECT COUNT(*),
+SELECT COUNT(id),
        COALESCE(GREATEST(EXTRACT(EPOCH FROM (clock_timestamp() - MIN(created_at))), 0), 0)
 FROM ready
