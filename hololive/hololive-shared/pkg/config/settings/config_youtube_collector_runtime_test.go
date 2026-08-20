@@ -250,9 +250,29 @@ func TestCFG003ProductionValidationExact(t *testing.T) {
 			wantSub: "HOLODEX_API_KEY",
 		},
 		{
+			name:    "holodex timeout zero",
+			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Holodex.Transport.Timeout = 0 },
+			wantSub: "HOLODEX_TIMEOUT_SECONDS must be positive",
+		},
+		{
+			name:    "holodex timeout negative",
+			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Holodex.Transport.Timeout = -time.Second },
+			wantSub: "HOLODEX_TIMEOUT_SECONDS must be positive",
+		},
+		{
 			name:    "official url invalid",
 			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.OfficialSchedule.BaseURL = "http://schedule.example" },
 			wantSub: "OFFICIAL_SCHEDULE_BASE_URL",
+		},
+		{
+			name:    "official schedule timeout zero",
+			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.OfficialSchedule.Transport.Timeout = 0 },
+			wantSub: "OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive",
+		},
+		{
+			name:    "official schedule timeout negative",
+			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.OfficialSchedule.Transport.Timeout = -time.Second },
+			wantSub: "OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive",
 		},
 	}
 	for _, test := range tests {

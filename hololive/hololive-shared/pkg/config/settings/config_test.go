@@ -383,6 +383,46 @@ func TestLoad_HolodexTimeoutMustBePositive(t *testing.T) {
 	}
 }
 
+func TestLoad_HolodexTimeoutEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("HOLODEX_TIMEOUT_SECONDS", "45")
+
+	config, err := load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if config.Holodex.Timeout != 45*time.Second {
+		t.Fatalf("Holodex.Timeout = %v, want %v", config.Holodex.Timeout, 45*time.Second)
+	}
+}
+
+func TestLoad_HolodexAPIKeyRequired(t *testing.T) {
+	t.Run("load rejects both key env vars empty", func(t *testing.T) {
+		setRequiredLoadEnv(t)
+		t.Setenv("HOLODEX_API_KEY", "")
+		t.Setenv("HOLODEX_API_KEY_1", "")
+
+		_, err := load()
+		if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY is required") {
+			t.Fatalf("Load() error = %v, want HOLODEX_API_KEY is required", err)
+		}
+	})
+
+	t.Run("Validate rejects blank key", func(t *testing.T) {
+		setRequiredLoadEnv(t)
+		config, err := load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		config.Holodex.APIKey = "   "
+
+		err = config.Validate()
+		if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY is required") {
+			t.Fatalf("Validate() error = %v, want HOLODEX_API_KEY is required", err)
+		}
+	})
+}
+
 func TestLoad_HolodexLiveStatusFallbackValidation(t *testing.T) {
 	tests := []struct {
 		name    string
