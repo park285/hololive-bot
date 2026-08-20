@@ -68,7 +68,9 @@ func tryStartPostgres(
 	start func(context.Context, string) (*postgres.PostgresContainer, error),
 	holdReaper func(context.Context) error,
 ) (*postgres.PostgresContainer, error, bool) {
-	_ = holdReaper(ctx)
+	if holdErr := holdReaper(ctx); holdErr != nil {
+		return nil, holdErr, false
+	}
 	container, err := start(ctx, image)
 	if err == nil {
 		return container, nil, false
