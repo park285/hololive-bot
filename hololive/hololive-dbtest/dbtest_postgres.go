@@ -68,7 +68,7 @@ func tryStartPostgres(
 	start func(context.Context, string) (*postgres.PostgresContainer, error),
 	holdReaper func(context.Context) error,
 ) (*postgres.PostgresContainer, error, bool) {
-	if holdErr := holdReaper(ctx); holdErr != nil {
+	if holdErr := holdReaper(ctx); shouldFailClosedOnHold(holdErr) {
 		return nil, holdErr, false
 	}
 	container, err := start(ctx, image)
@@ -103,6 +103,16 @@ func tryVerifyPostgres(
 		return nil, errors.Join(wrapped, retryErr), false
 	}
 	return nil, wrapped, true
+}
+
+func shouldFailClosedOnHold(err error) bool {
+	if err == nil {
+		return false
+	}
+	if isTransientReaperError(err) {
+		return false
+	}
+	return !errors.Is(err, context.DeadlineExceeded)
 }
 
 func isTransientContainerStartError(err error) bool {

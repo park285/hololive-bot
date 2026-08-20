@@ -116,6 +116,39 @@ func TestProvisionPostgresContainerDoesNotRetryHoldError(t *testing.T) {
 	require.Equal(t, 0, starts)
 }
 
+func TestProvisionPostgresContainerStartsAfterTransientHoldError(t *testing.T) {
+	holds := 0
+	starts := 0
+	container, err := provisionPostgresContainer(
+		context.Background(),
+		"postgres:test",
+		func(context.Context, string) (*postgres.PostgresContainer, error) {
+			starts++
+			return &postgres.PostgresContainer{}, nil
+		},
+		func(context.Context) error {
+			holds++
+			return errors.Join(errSessionReaperUnavailable, context.DeadlineExceeded)
+		},
+		func(context.Context) error { return nil },
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, container)
+	require.Equal(t, 1, starts)
+	require.Equal(t, 1, holds)
+}
+
+func TestShouldFailClosedOnHold(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, shouldFailClosedOnHold(nil))
+	require.False(t, shouldFailClosedOnHold(errSessionReaperUnavailable))
+	require.False(t, shouldFailClosedOnHold(errors.Join(errSessionReaperUnavailable, context.DeadlineExceeded)))
+	require.False(t, shouldFailClosedOnHold(context.DeadlineExceeded))
+	require.True(t, shouldFailClosedOnHold(errors.New("docker daemon unavailable")))
+}
+
 func TestProvisionPostgresContainerRejectsNilStartedContainer(t *testing.T) {
 	_, err := provisionPostgresContainer(
 		context.Background(),
