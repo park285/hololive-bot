@@ -46,7 +46,13 @@ remote_log_include_patterns osaka2 youtube-collector-d | grep -Fx "youtube-colle
   fail "osaka2 should include sibling logrotate files"
 remote_log_include_patterns osaka2 youtube-collector-d | grep -Fx "archive/youtube-collector-d*" >/dev/null ||
   fail "osaka2 should include archived logrotate files"
+if declare -F ensure_main_links >/dev/null; then
+  fail "remote sync must not create aliases in the live runtime log namespace"
+fi
+status_output="$(status_remote central)"
+[[ "${status_output}" != *"main="* ]] ||
+  fail "remote sync status must expose only the isolated mirror namespace"
 grep -F "olddir /var/log/hololive-bot/archive" "${ROOT_DIR}/scripts/deploy/lib/ap-host-native-remote-apply.sh" >/dev/null ||
   fail "host-native logrotate should rotate into mirrored archive dir"
 
-pass "remote sync keeps split collector log filenames distinct"
+pass "remote sync keeps mirrors isolated from live runtime logs"

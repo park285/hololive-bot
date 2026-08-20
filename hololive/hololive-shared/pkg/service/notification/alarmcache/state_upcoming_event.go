@@ -79,37 +79,3 @@ func (s *State) MarkUpcomingEventNotified(
 
 	return nil
 }
-
-func (s *State) WasUpcomingEventNotifiedRecently(
-	ctx context.Context,
-	roomID, channelID string,
-	stream *domain.Stream,
-	window time.Duration,
-) bool {
-	if stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
-		return false
-	}
-
-	resolvedChannelID := ResolveStreamChannelID(stream, channelID)
-	if stringutil.TrimSpace(resolvedChannelID) == "" {
-		return false
-	}
-
-	key := s.BuildUpcomingEventKey(roomID, resolvedChannelID, stream.ID, stream.Title, *stream.StartScheduled)
-
-	var data dedup.UpcomingEventNotifiedData
-	if err := s.Cache.Get(ctx, key, &data); err != nil || data.NotifiedAt == "" {
-		return false
-	}
-
-	notifiedAt, err := time.Parse(time.RFC3339, data.NotifiedAt)
-	if err != nil {
-		return false
-	}
-
-	if window <= 0 {
-		return false
-	}
-
-	return time.Since(notifiedAt) <= window
-}

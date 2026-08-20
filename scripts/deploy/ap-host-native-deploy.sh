@@ -70,8 +70,7 @@ write_host_env() {
     printf 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true\n'
     printf 'YOUTUBE_COLLECTOR_INSTANCE_ID=%s\n' "$service"
     printf 'YOUTUBE_COLLECTOR_LOG_FILE_NAME=%s.log\n' "$service"
-    printf 'YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false\n'
-    printf 'YOUTUBE_INGESTION_ENABLED=true\n'
+    printf 'STACK_WORKER_PROFILE_FILE=/etc/stack-secrets/hololive-bot/worker-profiles/%s.json\n' "$service"
     printf 'SERVER_PORT=%s\n' "$port"
     printf 'HOLOLIVE_HTTP_TRANSPORTS=h3\n'
     printf 'HOLOLIVE_H3_ADDR=127.0.0.1:%s\n' "$port"

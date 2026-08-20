@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 func TestIsAlarmDispatchRetryablePostSendFailure_TypedHTTPError(t *testing.T) {

@@ -16,9 +16,11 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/shared-go/pkg/workercontract"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -47,6 +49,7 @@ type durableAdmitter struct {
 	inbox  *durability.InboxRepository
 	wake   func()
 	logger *slog.Logger
+	totals *workercontract.Counters
 }
 
 func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message) error {
@@ -73,10 +76,11 @@ func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error 
 	if err != nil {
 		return fmt.Errorf("marshal webhook inbox payload: %w", err)
 	}
-	admitted, err := a.inbox.Admit(ctx, durability.InboxMessage{
+	result, err := a.inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: messageID, RoomID: roomID, OrderingKey: "room:" + roomID, Payload: payload,
 	})
-	if err == nil && admitted && a.wake != nil {
+	a.totals.RecordAdmission(result)
+	if err == nil && result == workercontract.AdmissionAccepted && a.wake != nil {
 		a.wake()
 	}
 	return err
@@ -86,6 +90,7 @@ type durableReplyWriter struct {
 	outbox *durability.ReplyOutboxRepository
 	logger *slog.Logger
 	wake   func()
+	totals *workercontract.Counters
 }
 
 func (w durableReplyWriter) RecordReply(ctx context.Context, entry *transport.ReplyOutboxEntry) error {
@@ -97,7 +102,13 @@ func (w durableReplyWriter) RecordReply(ctx context.Context, entry *transport.Re
 		RoomID: entry.Room, Payload: []byte(entry.Payload), ClientRequestID: entry.ClientRequestID,
 	})
 	if err != nil {
+		w.totals.RecordAdmission(workercontract.AdmissionOutcomeUnknown)
 		return err
+	}
+	if outcome == durability.ReplyOutboxInserted {
+		w.totals.RecordAdmission(workercontract.AdmissionAccepted)
+	} else {
+		w.totals.RecordAdmission(workercontract.AdmissionDuplicate)
 	}
 	if outcome == durability.ReplyOutboxPayloadDiverged {
 		if w.logger != nil {
@@ -119,18 +130,38 @@ type durableRuntime struct {
 	bot                    durableMessageProcessor
 	irisClient             iris.BotClient
 	logger                 *slog.Logger
-	workers                int
+	inboxWorkers           int
+	outboxWorkers          int
+	inboxEnabled           bool
+	outboxEnabled          bool
 	handlerTimeout         time.Duration
 	inboxWake              chan struct{}
 	outboxWake             chan struct{}
 	cancel                 context.CancelFunc
 	wg                     sync.WaitGroup
 	dispatchBudget         time.Duration
+	outboxClaimLease       time.Duration
 	heartbeatEvery         time.Duration
 	claimLease             time.Duration
 	ownershipSafetyMargin  time.Duration
 	heartbeatRetryDelay    time.Duration
 	heartbeatAttemptBudget time.Duration
+	inboxPollEvery         time.Duration
+	outboxPollEvery        time.Duration
+	maintenanceEvery       time.Duration
+	inboxRetryAfter        time.Duration
+	outboxRetryAfter       time.Duration
+	inboxMaxAttempts       int32
+	outboxMaxAttempts      int32
+	settlementTimeout      time.Duration
+	terminalRetention      time.Duration
+	manualReviewRetention  time.Duration
+	inboxTracker           *workercontract.ExecutorTracker
+	outboxTracker          *workercontract.ExecutorTracker
+	inboxTotals            *workercontract.Counters
+	outboxTotals           *workercontract.Counters
+	inboxSampler           *workercontract.QueueSampler
+	outboxSampler          *workercontract.QueueSampler
 	inboxHeartbeat         func(context.Context, string, string, time.Duration) (time.Time, bool, error)
 	commandHeartbeat       func(context.Context, string, string) (bool, error)
 	now                    func() time.Time
@@ -141,37 +172,74 @@ type durableMessageProcessor interface {
 	ProcessMessage(context.Context, *webhook.Message) error
 }
 
-func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pgxpool.Pool, workers int, handlerTimeout time.Duration, logger *slog.Logger) *durableRuntime {
-	if workers <= 0 {
-		workers = 1
+func newDurableRuntime(bot *orchestration.Bot, client iris.BotClient, pgPool *pgxpool.Pool, profile *settings.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
+	if profile == nil {
+		return nil, errors.New("build durable runtime: API worker profile is required")
+	}
+	workers := profile.Loaded.Profile.Workers
+	inboxProfile := workers["bot_webhook_inbox"]
+	outboxProfile := workers["bot_reply_outbox"]
+	outboxRepository, err := durability.NewReplyOutboxRepositoryWithPolicy(
+		pgPool,
+		profile.BotReplyOutbox.MaxAttempts,
+		time.Duration(profile.BotReplyOutbox.AutomaticReplayHorizonMS)*time.Millisecond,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build durable runtime: reply outbox policy: %w", err)
 	}
 	r := &durableRuntime{
 		inbox: durability.NewInboxRepository(pgPool), commands: durability.NewCommandExecutionRepository(pgPool),
-		outbox: durability.NewReplyOutboxRepository(pgPool), ledger: durability.NewDurableLedgerRepository(pgPool),
-		bot: bot, irisClient: client, logger: logger, workers: workers,
-		handlerTimeout: handlerTimeout, inboxWake: make(chan struct{}, 1), outboxWake: make(chan struct{}, 1),
-		dispatchBudget: durableDispatchBudget, heartbeatEvery: durableHeartbeatEvery,
-		claimLease: durableClaimLease, ownershipSafetyMargin: durableOwnershipSafetyMargin,
-		heartbeatRetryDelay: 250 * time.Millisecond, heartbeatAttemptBudget: 5 * time.Second,
+		outbox: outboxRepository, ledger: durability.NewDurableLedgerRepository(pgPool),
+		bot: bot, irisClient: client, logger: logger,
+		inboxWorkers: inboxProfile.Executor.ConfiguredWorkers, outboxWorkers: outboxProfile.Executor.ConfiguredWorkers,
+		inboxEnabled: inboxProfile.Executor.Enabled, outboxEnabled: outboxProfile.Executor.Enabled,
+		handlerTimeout: time.Duration(*inboxProfile.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
+		inboxWake:      make(chan struct{}, 1), outboxWake: make(chan struct{}, 1),
+		dispatchBudget:        time.Duration(profile.BotReplyOutbox.DispatchBudgetMS) * time.Millisecond,
+		outboxClaimLease:      time.Duration(profile.BotReplyOutbox.ClaimLeaseMS) * time.Millisecond,
+		heartbeatEvery:        time.Duration(profile.BotWebhookInbox.HeartbeatIntervalMS) * time.Millisecond,
+		claimLease:            time.Duration(profile.BotWebhookInbox.ClaimLeaseMS) * time.Millisecond,
+		ownershipSafetyMargin: time.Duration(profile.BotWebhookInbox.OwnershipSafetyMarginMS) * time.Millisecond,
+		heartbeatRetryDelay:   250 * time.Millisecond, heartbeatAttemptBudget: 5 * time.Second,
+		inboxPollEvery:        time.Duration(profile.BotWebhookInbox.PollIntervalMS) * time.Millisecond,
+		outboxPollEvery:       time.Duration(profile.BotReplyOutbox.PollIntervalMS) * time.Millisecond,
+		maintenanceEvery:      time.Duration(profile.BotWebhookInbox.MaintenanceIntervalMS) * time.Millisecond,
+		inboxRetryAfter:       time.Duration(profile.BotWebhookInbox.RetryAfterMS) * time.Millisecond,
+		outboxRetryAfter:      time.Duration(profile.BotReplyOutbox.RetryAfterMS) * time.Millisecond,
+		inboxMaxAttempts:      profile.BotWebhookInbox.MaxAttempts,
+		outboxMaxAttempts:     profile.BotReplyOutbox.MaxAttempts,
+		settlementTimeout:     time.Duration(profile.BotWebhookInbox.SettlementTimeoutMS) * time.Millisecond,
+		terminalRetention:     time.Duration(profile.BotWebhookInbox.TerminalRetentionMS) * time.Millisecond,
+		manualReviewRetention: time.Duration(profile.BotReplyOutbox.ManualReviewRetentionMS) * time.Millisecond,
+		inboxTracker:          workercontract.NewExecutorTracker(), outboxTracker: workercontract.NewExecutorTracker(),
+		inboxTotals: &workercontract.Counters{}, outboxTotals: &workercontract.Counters{},
 	}
+	r.inboxSampler = workercontract.NewQueueSampler(func(sampleCtx context.Context) (workercontract.QueueValues, error) {
+		snapshot, snapshotErr := r.inbox.ReadySnapshot(sampleCtx)
+		return workercontract.QueueValues{Depth: snapshot.Depth, OldestQueuedAge: snapshot.OldestAge}, snapshotErr
+	})
+	r.outboxSampler = workercontract.NewQueueSampler(func(sampleCtx context.Context) (workercontract.QueueValues, error) {
+		snapshot, snapshotErr := r.outbox.ReadySnapshot(sampleCtx)
+		return workercontract.QueueValues{Depth: snapshot.Depth, OldestQueuedAge: snapshot.OldestAge}, snapshotErr
+	})
 	r.inboxHeartbeat = r.inbox.Heartbeat
 	r.commandHeartbeat = r.commands.Heartbeat
-	return r
+	return r, nil
 }
 
 func (r *durableRuntime) runInboxWorker(ctx context.Context) {
 	defer r.wg.Done()
-	idleDelay := durablePollEvery
+	idleDelay := r.inboxPollEvery
 	for ctx.Err() == nil {
 		if r.processNextInbox(ctx) {
-			idleDelay = durablePollEvery
+			idleDelay = r.inboxPollEvery
 			continue
 		}
 		durableClaimIdleTotal.WithLabelValues("inbox").Inc()
 		if !waitDurableWake(ctx, idleDelay, r.inboxWake) {
 			return
 		}
-		idleDelay = nextDurableIdleDelay(idleDelay)
+		idleDelay = nextDurableIdleDelayFrom(idleDelay, r.inboxPollEvery)
 	}
 }
 
@@ -185,25 +253,30 @@ func (r *durableRuntime) processNextInbox(ctx context.Context) bool {
 	if claim == nil {
 		return false
 	}
-	r.processInboxClaim(ctx, claim, token)
+	attemptID := r.inboxTracker.BeginAttempt(time.Now())
+	err = r.processInboxClaim(ctx, claim, token)
+	r.inboxTracker.EndAttempt(attemptID)
+	r.inboxTotals.RecordAttempt(workerAttemptOutcome(err))
 	return true
 }
 
-func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durability.InboxClaim, token string) {
+func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durability.InboxClaim, token string) error {
 	if claim == nil {
-		r.logError("process durable webhook", errors.New("inbox claim is nil"))
-		return
+		err := errors.New("inbox claim is nil")
+		r.logError("process durable webhook", err)
+		return err
 	}
 	var msg webhook.Message
 	if err := json.Unmarshal(claim.Payload, &msg); err != nil {
 		if _, abandonErr := r.inbox.Abandon(ctx, claim.MessageID, token, "stored webhook payload is not decodable"); abandonErr != nil {
 			r.logError("abandon poison webhook", abandonErr)
+			return errors.Join(err, abandonErr)
 		}
-		return
+		return err
 	}
 	claimed, err := r.claimCommand(ctx, claim, token)
 	if err != nil || !claimed {
-		return
+		return err
 	}
 	commandCtx, cancelCommand := context.WithTimeout(ctx, r.handlerTimeout)
 	defer cancelCommand()
@@ -222,9 +295,9 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	// shutdown이 runCtx를 취소한 뒤에도 정산은 성공해야 한다 — 취소된 ctx 그대로면
 	// command가 claimed로 방치되어 재시작 후 같은 방이 head-of-line에서 수 분간 정지한다.
 	// token fencing이 있어 소유권을 잃은 경우에도 안전한 no-op이다.
-	settleCtx, cancelSettle := context.WithTimeout(context.WithoutCancel(ctx), durableSettlementTimeout)
+	settleCtx, cancelSettle := context.WithTimeout(context.WithoutCancel(ctx), r.settlementTimeout)
 	defer cancelSettle()
-	r.completeCommandAndInbox(settleCtx, claim.MessageID, token, err)
+	return errors.Join(err, r.completeCommandAndInbox(settleCtx, claim.MessageID, token, err))
 }
 
 func (r *durableRuntime) claimCommand(ctx context.Context, claim *durability.InboxClaim, token string) (bool, error) {
@@ -262,9 +335,9 @@ func (r *durableRuntime) deferInboxForClaimedCommand(
 	token string,
 	claimedAt time.Time,
 ) error {
-	retryAfter := claimedAt.Add(commandStaleAfter + durableMaintenanceEvery).Sub(r.nowTime())
-	retryAfter = max(retryAfter, durableMaintenanceEvery)
-	outcome, err := r.inbox.Release(ctx, claim.MessageID, token, durableMaxAttempts, retryAfter,
+	retryAfter := claimedAt.Add(commandStaleAfter + r.maintenanceEvery).Sub(r.nowTime())
+	retryAfter = max(retryAfter, r.maintenanceEvery)
+	outcome, err := r.inbox.Release(ctx, claim.MessageID, token, r.inboxMaxAttempts, retryAfter,
 		durability.InboxFailureCommandAlreadyClaimed)
 	if err != nil {
 		r.logError("defer webhook behind active command claim", err)
@@ -278,7 +351,7 @@ func (r *durableRuntime) deferInboxForClaimedCommand(
 	return nil
 }
 
-func (r *durableRuntime) completeCommandAndInbox(ctx context.Context, messageID, token string, commandErr error) {
+func (r *durableRuntime) completeCommandAndInbox(ctx context.Context, messageID, token string, commandErr error) error {
 	status := commandExecutionStatus(commandErr)
 	applied, completeErr := r.commands.Complete(ctx, messageID, token, status)
 	if completeErr != nil || !applied {
@@ -286,10 +359,11 @@ func (r *durableRuntime) completeCommandAndInbox(ctx context.Context, messageID,
 			completeErr = errors.New("command completion lost its claim")
 		}
 		r.logError("complete command execution", completeErr)
-		return
+		return completeErr
 	}
 	if _, completeErr = r.inbox.Complete(ctx, messageID, token); completeErr != nil {
 		r.logError("complete durable webhook", completeErr)
+		return completeErr
 	}
 	if status == durability.CommandExecutionOutcomeUnknown {
 		durableCommandOutcomeUnknownTotal.Inc()
@@ -298,41 +372,5 @@ func (r *durableRuntime) completeCommandAndInbox(ctx context.Context, messageID,
 				slog.String("message_token", privacylog.Pseudonym(messageID)))
 		}
 	}
-}
-
-func commandExecutionStatus(commandErr error) string {
-	if commandErr == nil {
-		return durability.CommandExecutionSucceeded
-	}
-	if orchestration.IsCommandOutcomeUnknown(commandErr) || errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) {
-		return durability.CommandExecutionOutcomeUnknown
-	}
-	return durability.CommandExecutionFailed
-}
-
-func (r *durableRuntime) releaseInbox(ctx context.Context, claim *durability.InboxClaim, token string, cause error) {
-	outcome, err := r.inbox.Release(ctx, claim.MessageID, token, durableMaxAttempts, durableRetryAfter, inboxReleaseReason(cause))
-	if err != nil {
-		r.logError("release durable webhook", err)
-		return
-	}
-	if outcome == durability.InboxReleaseAbandoned && r.logger != nil {
-		r.logger.Error("durable webhook abandoned after max attempts",
-			slog.Int("attempts", int(claim.Attempts)),
-			slog.String("message_token", privacylog.Pseudonym(claim.MessageID)))
-	}
-}
-
-func inboxReleaseReason(cause error) string {
-	if cause == nil {
-		return durability.InboxFailureCommandClaimFailed
-	}
-	switch {
-	case errors.Is(cause, context.Canceled):
-		return durability.InboxFailureCommandClaimContextCanceled
-	case errors.Is(cause, context.DeadlineExceeded):
-		return durability.InboxFailureCommandClaimContextDeadline
-	default:
-		return durability.InboxFailureCommandClaimFailed
-	}
+	return nil
 }

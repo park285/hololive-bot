@@ -435,6 +435,27 @@ func TestConsensus_ReviewerTimeout(t *testing.T) {
 	}
 }
 
+func TestConsensus_ReviewerIsNotCalledWithoutReservedParentBudget(t *testing.T) {
+	reviewer := &fakeLLMWithCounter{response: `{"approved":true,"confidence":0.99,"issues":[]}`}
+	cs := NewConsensusSummarizer(
+		&fakeSummarizer{digest: primaryDigest()},
+		reviewer, nil, nil, defaultConsensusConfig(), nil,
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	digest, err := cs.Summarize(ctx, defaultTestInput())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if digest.Headline != "테스트 헤드라인" {
+		t.Errorf("expected primary headline, got %q", digest.Headline)
+	}
+	if reviewer.callCount.Load() != 0 {
+		t.Errorf("reviewer should not be called without reserved budget, got %d", reviewer.callCount.Load())
+	}
+}
+
 func TestConsensus_UnknownSeverity_TreatedAsInfo(t *testing.T) {
 	// unknown severity → info로 정규화 → adjudication 미트리거
 	v := consensus.ReviewVerdict{

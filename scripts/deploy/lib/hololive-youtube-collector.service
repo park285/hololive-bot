@@ -11,10 +11,11 @@ WorkingDirectory=/opt/hololive-bot/youtube-collector/current
 EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env
 EnvironmentFile=/etc/hololive-bot/youtube-collector-host.env
 Environment=YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true
-Environment=YOUTUBE_INGESTION_ENABLED=true
+Environment=STACK_WORKER_PROFILE_FILE=/etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-%i.json
 Environment=PHOTO_SYNC_ENABLED=false
 Environment=YOUTUBEJS_SCRIPT=/opt/hololive-bot/youtube-collector/current/youtubejs/src/server.mjs
 Environment=POSTGRES_USER=hololive_scraper
+ExecStartPre=/opt/hololive-bot/youtube-collector/current/bin/youtube-collector --check-worker-profile
 ExecStart=/opt/hololive-bot/youtube-collector/current/bin/youtube-collector
 Restart=always
 RestartSec=5s

@@ -317,7 +317,7 @@ func TestHLP004(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, err := Start(context.Background(), &Config{
-		NodePath: nodePath(t), ScriptPath: helperScriptPath(t), RuntimeBaseDir: long,
+		NodePath: nodePath(t), ScriptPath: helperScriptPath(t), RuntimeBaseDir: long, MaxInflight: 4,
 	})
 	if err == nil {
 		t.Fatal("Start must fail when socket path exceeds 100 bytes")
@@ -583,6 +583,7 @@ func testHLP012SpawnFail(t *testing.T) {
 		ScriptPath:      helperScriptPath(t),
 		RuntimeBaseDir:  base,
 		ShutdownTimeout: 3 * time.Second,
+		MaxInflight:     4,
 	})
 	if err == nil {
 		t.Fatal("expected spawn failure")

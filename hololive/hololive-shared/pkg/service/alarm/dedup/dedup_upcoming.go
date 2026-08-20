@@ -3,10 +3,12 @@ package dedup
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
@@ -56,6 +58,11 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 
 	notifiedAt, err := time.Parse(time.RFC3339, data.NotifiedAt)
 	if err != nil {
+		s.logger.Warn("upcoming event notified timestamp corrupted, treating as not notified",
+			slog.String("upcoming_key_token", privacylog.Pseudonym(key)),
+			slog.String("notified_at", data.NotifiedAt),
+			slog.String("error", err.Error()),
+		)
 		return false, nil
 	}
 

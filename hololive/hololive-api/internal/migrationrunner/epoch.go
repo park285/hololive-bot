@@ -12,6 +12,11 @@ import (
 	"github.com/park285/shared-go/pkg/dbmigrate"
 )
 
+const (
+	epoch2Baseline            = "001_schema_epoch2_baseline.sql"
+	epoch2LegacyLedgerCleanup = "182_epoch2_legacy_ledger_cleanup.sql"
+)
+
 // reconcileBaseline은 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
 // 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직
 // 미적용인 마이그레이션이 조용히 skip되는 사고(073 DB에 074-082 유실)가 나므로 거부한다.
@@ -106,23 +111,25 @@ func recordBaselineEntry(ctx context.Context, fsys fs.FS, ledger dbmigrate.Ledge
 }
 
 // manifest 밖 ledger 항목(이전 epoch 잔재)이 있는 DB는 checkpoint를 거친 경우에만
-// 진행한다. 멱등 규약 때문에 baseline이 drift 위에서 조용히 no-op 성공하는 사고를 막는
-// 유일한 방어선이다 — reconcileBaseline은 빈 ledger만 다룬다.
-func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate.Ledger, entries []string) (bool, error) {
+// 진행한다. 잔재는 epoch2LegacyLedgerCleanup이 같은 실행 안에서 지우므로 그 전까지만
+// 허용하고, 정리가 적용된 뒤에도 남은 잔재는 출처를 알 수 없는 행이라 거부한다 —
+// reconcileBaseline은 빈 ledger만 다룬다.
+func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate.Ledger, entries []string) error {
 	if len(entries) == 0 {
-		return false, nil
+		return nil
 	}
 	baseline := entries[0]
 	residue, err := hasLegacyResidue(ctx, conn, entries)
 	if err != nil {
-		return false, err
+		return err
 	}
-	applied, err := ledger.Applied(ctx, pgxRowQuerier{conn: conn}, baseline)
+	querier := pgxRowQuerier{conn: conn}
+	applied, err := ledger.Applied(ctx, querier, baseline)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if residue {
-		return validateLegacyResidue(ctx, conn, baseline, applied)
+		return validateLegacyResidue(ctx, ledger, querier, baseline, applied)
 	}
 	return validateCurrentEpochBaseline(ctx, conn, baseline, applied)
 }
@@ -135,37 +142,43 @@ func hasLegacyResidue(ctx context.Context, conn *pgxpool.Conn, entries []string)
 	return residue, nil
 }
 
-func validateLegacyResidue(ctx context.Context, conn *pgxpool.Conn, baseline string, applied bool) (bool, error) {
+func validateLegacyResidue(ctx context.Context, ledger dbmigrate.Ledger, querier dbmigrate.RowQuerier, baseline string, applied bool) error {
 	if !applied {
-		return false, fmt.Errorf(
+		return fmt.Errorf(
 			"schema_migrations has entries outside the current manifest but epoch baseline %s is not recorded; "+
 				"this database predates the epoch squash without the checkpoint migration — deploy the checkpoint release first",
 			baseline)
 	}
 	if baseline != epoch2Baseline {
-		return false, nil
+		return nil
 	}
-	if err := verifyEpoch2LegacyContract(ctx, conn); err != nil {
-		return false, fmt.Errorf("epoch-2 legacy contract: %w", err)
+	cleanupApplied, err := ledger.Applied(ctx, querier, epoch2LegacyLedgerCleanup)
+	if err != nil {
+		return err
 	}
-	_, checksumPresent, err := loadMigrationChecksum(ctx, conn, baseline)
-	return !checksumPresent, err
+	if cleanupApplied {
+		return fmt.Errorf(
+			"schema_migrations still has entries outside the current manifest after %s was applied; "+
+				"they are not the epoch-2 legacy ledger, so remove them manually before rerunning",
+			epoch2LegacyLedgerCleanup)
+	}
+	return nil
 }
 
-func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, baseline string, applied bool) (bool, error) {
+func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, baseline string, applied bool) error {
 	if baseline != epoch2Baseline || !applied {
-		return false, nil
+		return nil
 	}
 	_, checksumPresent, err := loadMigrationChecksum(ctx, conn, baseline)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if checksumPresent {
-		return false, nil
+		return nil
 	}
-	return false, fmt.Errorf(
+	return fmt.Errorf(
 		"epoch baseline %s is recorded without its checksum and no legacy ledger residue remains; "+
-			"refusing to trust a marker that cannot be proven by either the R1 legacy contract or a completed R2 application",
+			"refusing to trust a marker that cannot be proven by a completed R2 application",
 		baseline)
 }
 

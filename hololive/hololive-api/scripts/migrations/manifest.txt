@@ -40,4 +40,5 @@
 040 179_alarm_dispatch_collab_members.sql
 041 180_reply_outbox_manual_review_discard.sql
 042 181_reply_outbox_discarded_retention_index.sql
-043 182_postgres_idle_transaction_timeout.sql
+043 182_epoch2_legacy_ledger_cleanup.sql
+044 183_postgres_idle_transaction_timeout.sql

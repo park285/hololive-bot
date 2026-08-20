@@ -27,8 +27,8 @@ import (
 	"time"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v2/webhook"
 	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 

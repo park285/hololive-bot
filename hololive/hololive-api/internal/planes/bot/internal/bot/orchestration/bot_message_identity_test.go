@@ -35,7 +35,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/webhook"
 )
 
 type replyIdentityProbeCommand struct {

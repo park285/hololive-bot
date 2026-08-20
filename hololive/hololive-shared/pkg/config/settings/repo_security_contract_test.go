@@ -97,102 +97,31 @@ func TestRepoComposeProdPreservesExplicitBlankACLValues(t *testing.T) {
 	}
 }
 
-type collectorCompatEnvPair struct {
-	newName, oldName string
-	defaultValue     string
-}
-
-type collectorCompatComposeCase struct {
-	name           string
-	newRaw, oldRaw string
-	setNew, setOld bool
-	wantNew        string
-	wantOld        string
-	wantDefaults   bool
-}
-
-func collectorCompatEnvPairs() []collectorCompatEnvPair {
-	return []collectorCompatEnvPair{
-		{
-			newName:      "YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS",
-			oldName:      "YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS",
-			defaultValue: "5",
-		},
-		{
-			newName:      "YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS",
-			oldName:      "YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS",
-			defaultValue: "5",
-		},
-		{
-			newName:      "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
-			oldName:      "YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
-			defaultValue: "30",
-		},
-		{
-			newName:      "YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES",
-			oldName:      "YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES",
-			defaultValue: "1048576",
-		},
+func TestRepoComposeCollectorDropsRetiredCompatAliases(t *testing.T) {
+	for _, name := range []string{
+		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES",
+		"YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
+	} {
+		unsetEnvForTest(t, name)
 	}
-}
+	t.Setenv("YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", "4096")
+	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS", "11")
 
-func TestCFG005RepoComposeCollectorAliasesPreserveTruthTable(t *testing.T) {
-	pairs := collectorCompatEnvPairs()
-	for _, pair := range pairs {
-		unsetEnvForTest(t, pair.newName)
-		unsetEnvForTest(t, pair.oldName)
+	cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml")
+	env := composeEnvironment(t, cfg, "youtube-collector")
+	if got := env["YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES"]; got != "" {
+		t.Fatalf("retired aggregate bytes still rendered: %q", got)
 	}
-	tests := []collectorCompatComposeCase{
-		{name: "neither", wantDefaults: true},
-		{name: "new only", newRaw: "7", setNew: true, wantNew: "7", wantOld: "7"},
-		{name: "old only", oldRaw: "11", setOld: true, wantNew: "11", wantOld: "11"},
-		{name: "both equal", newRaw: "13", oldRaw: "13", setNew: true, setOld: true, wantNew: "13", wantOld: "13"},
-		{name: "both differ", newRaw: "7", oldRaw: "11", setNew: true, setOld: true, wantNew: "7", wantOld: "11"},
-		{name: "new explicitly empty", setNew: true, wantNew: "", wantOld: ""},
-		{name: "old explicitly empty", setOld: true, wantNew: "", wantOld: ""},
-		{name: "new empty old valid", oldRaw: "11", setNew: true, setOld: true, wantNew: "", wantOld: "11"},
-		{name: "new valid old empty", newRaw: "7", setNew: true, setOld: true, wantNew: "7", wantOld: ""},
+	if got := env["YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS"]; got != "" {
+		t.Fatalf("retired youtubejs timeout still rendered: %q", got)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			setCollectorCompatComposeEnv(t, pairs, &test)
-			cfg := renderComposeConfig(t, "deploy/compose/docker-compose.prod.yml")
-			env := composeEnvironment(t, cfg, "youtube-collector")
-			assertCollectorCompatComposeEnv(t, env, pairs, &test)
-		})
+	if got := env["YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES"]; got != "1048576" {
+		t.Fatalf("YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES = %q, want documented default", got)
 	}
-}
-
-func setCollectorCompatComposeEnv(t *testing.T, pairs []collectorCompatEnvPair, test *collectorCompatComposeCase) {
-	t.Helper()
-	for _, pair := range pairs {
-		if test.setNew {
-			t.Setenv(pair.newName, test.newRaw)
-		}
-		if test.setOld {
-			t.Setenv(pair.oldName, test.oldRaw)
-		}
-	}
-}
-
-func assertCollectorCompatComposeEnv(
-	t *testing.T,
-	env map[string]string,
-	pairs []collectorCompatEnvPair,
-	test *collectorCompatComposeCase,
-) {
-	t.Helper()
-	for _, pair := range pairs {
-		wantNew, wantOld := test.wantNew, test.wantOld
-		if test.wantDefaults {
-			wantNew, wantOld = pair.defaultValue, pair.defaultValue
-		}
-		if got := env[pair.newName]; got != wantNew {
-			t.Fatalf("%s = %q, want %q", pair.newName, got, wantNew)
-		}
-		if got := env[pair.oldName]; got != wantOld {
-			t.Fatalf("%s = %q, want %q", pair.oldName, got, wantOld)
-		}
+	if got := env["YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS"]; got != "30" {
+		t.Fatalf("YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS = %q, want documented default", got)
 	}
 }
 

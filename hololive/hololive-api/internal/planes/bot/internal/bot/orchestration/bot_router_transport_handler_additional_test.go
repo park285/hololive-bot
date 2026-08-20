@@ -31,8 +31,8 @@ import (
 	"github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

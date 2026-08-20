@@ -1,2 +1,0 @@
-# Collector runtime tests may mention service/cache as a forbidden token.
-*_test.go

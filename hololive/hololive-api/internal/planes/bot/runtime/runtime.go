@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/park285/shared-go/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 )
 
@@ -54,6 +55,8 @@ type BotRuntime struct {
 
 	webhookHandlerCloser interface{ CloseContext(context.Context) error }
 	durable              *durableRuntime
+	workerRegistry       *workercontract.Registry
+	workerProfileChecker *workercontract.ProfileFileChecker
 	lifecycle.Managed
 }
 

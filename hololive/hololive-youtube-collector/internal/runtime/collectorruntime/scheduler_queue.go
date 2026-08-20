@@ -3,24 +3,44 @@ package collectorruntime
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 func (s *leaseScheduler) enqueue(ctx context.Context, spec *joblease.JobSpec) EnqueueResult {
 	if !validJobSpec(spec) {
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 		return EnqueueInvalid
 	}
 	if ctx.Err() != nil {
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 		return EnqueueCanceled
 	}
 	result, marked := s.markQueued(spec.JobKey)
 	if !marked {
+		s.recordEnqueueAdmission(result)
 		return result
 	}
-	return s.sendQueued(ctx, spec)
+	result = s.sendQueued(ctx, spec)
+	s.recordEnqueueAdmission(result)
+	return result
+}
+
+func (s *leaseScheduler) recordEnqueueAdmission(result EnqueueResult) {
+	switch result {
+	case EnqueueAccepted:
+		s.workerTotals.RecordAdmission(workercontract.AdmissionAccepted)
+	case EnqueueDeduped:
+		s.workerTotals.RecordAdmission(workercontract.AdmissionDuplicate)
+	case EnqueueFull, EnqueueCanceled, EnqueueInvalid:
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+	default:
+		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+	}
 }
 
 func validJobSpec(spec *joblease.JobSpec) bool {
@@ -92,6 +112,9 @@ func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *joblease.JobS
 		s.unmarkQueued(spec.JobKey)
 		return joblease.JobSpec{}, false
 	}
+	s.mu.Lock()
+	delete(s.queuedAt, spec.JobKey)
+	s.mu.Unlock()
 	return *spec, true
 }
 
@@ -104,10 +127,15 @@ func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
 	if s.queued == nil {
 		s.queued = make(map[string]struct{})
 	}
+	if s.queuedAt == nil {
+		s.queuedAt = make(map[string]time.Time)
+	}
 	s.queued[jobKey] = struct{}{}
+	s.queuedAt[jobKey] = time.Now()
 	overflow := len(s.queued) > s.config.QueueCapacity
 	if overflow {
 		delete(s.queued, jobKey)
+		delete(s.queuedAt, jobKey)
 	}
 	s.mu.Unlock()
 	if overflow {
@@ -120,6 +148,7 @@ func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
 func (s *leaseScheduler) unmarkQueued(jobKey string) {
 	s.mu.Lock()
 	delete(s.queued, jobKey)
+	delete(s.queuedAt, jobKey)
 	s.mu.Unlock()
 }
 
@@ -136,5 +165,6 @@ func (s *leaseScheduler) drainQueue() {
 func (s *leaseScheduler) resetQueued() {
 	s.mu.Lock()
 	s.queued = make(map[string]struct{})
+	s.queuedAt = make(map[string]time.Time)
 	s.mu.Unlock()
 }

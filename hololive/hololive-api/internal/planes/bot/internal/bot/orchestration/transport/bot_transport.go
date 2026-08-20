@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/shared-go/pkg/kakaoformat"
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"

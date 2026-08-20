@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 	json "github.com/park285/shared-go/pkg/json"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 

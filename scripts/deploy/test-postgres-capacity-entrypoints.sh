@@ -59,6 +59,7 @@ assert_entrypoint_blocked() {
     : >"${tmp}/docker.log"
     if env -u BOT_POSTGRES_POOL_MAX_CONNS -u YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS \
         PATH="${tmp}/bin:${PATH}" CONTAINER_CLI=docker MOCK_DOCKER_LOG="${tmp}/docker.log" \
+        HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1 \
         COMPOSE_ENV_FILE="${env_file}" \
         SHARED_GO_WORKSPACE_PATH="${tmp}/shared-go" \
         IRIS_CLIENT_GO_WORKSPACE_PATH="${tmp}/iris-client-go" \

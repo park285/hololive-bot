@@ -20,8 +20,6 @@ required_functions=(
   target_indexes_sql
   mvcc_database_state_sql
   dead_tuples_sql
-  mvcc_index_activity_sql
-  idle_transactions_sql
   claim_statement_window_sql
   alarm_claim_sql
   youtube_outbox_claim_sql
@@ -36,7 +34,7 @@ for required_function in "${required_functions[@]}"; do
 done
 
 usage() {
-  cat <<'USAGE'
+  cat <<'EOF'
 usage: pg-hotpath-explain-snapshot.sh [--output-dir DIR] [--stats-window-seconds N] [--print-sql] [--no-index-check]
 
 Captures PostgreSQL EXPLAIN snapshots and MVCC evidence for Hololive alarm/youtube hot paths.
@@ -51,8 +49,6 @@ Outputs:
   target-indexes.txt
   mvcc-database-state.txt
   dead-tuples-autovacuum.txt
-  mvcc-index-activity.txt
-  idle-transactions.txt
   claim-statement-window.txt
   alarm-dispatch-claim-explain.txt
   youtube-outbox-claim-explain.txt
@@ -60,7 +56,7 @@ Outputs:
 Required catalog indexes:
   alarm_dispatch_deliveries: idx_alarm_dispatch_deliveries_due, idx_alarm_dispatch_deliveries_send_unit, idx_alarm_dispatch_deliveries_send_unit_due
   youtube_notification_outbox: idx_yno_pending_due_created_id
-USAGE
+EOF
 }
 
 output_dir=""
@@ -113,10 +109,6 @@ if [[ "${print_sql}" == "true" ]]; then
   mvcc_database_state_sql
   printf '\n%s\n' '-- dead-tuples-autovacuum.sql'
   dead_tuples_sql
-  printf '\n%s\n' '-- mvcc-index-activity.sql'
-  mvcc_index_activity_sql
-  printf '\n%s\n' '-- idle-transactions.sql'
-  idle_transactions_sql
   printf '\n%s\n' '-- claim-statement-window.sql'
   claim_statement_window_sql
   printf '\n%s\n' '-- alarm-dispatch-claim-explain.sql'
@@ -149,8 +141,6 @@ invalid_indexes_sql | run_psql invalid-indexes.txt -qAt
 target_indexes_sql | run_psql target-indexes.txt -qAt -F '|'
 mvcc_database_state_sql | run_psql mvcc-database-state.txt
 dead_tuples_sql | run_psql dead-tuples-autovacuum.txt
-mvcc_index_activity_sql | run_psql mvcc-index-activity.txt
-idle_transactions_sql | run_psql idle-transactions.txt
 claim_statement_window_sql | run_psql claim-statement-window.txt -qAt -F '|' \
   -v stats_window_seconds="${stats_window_seconds}"
 alarm_claim_sql | run_psql alarm-dispatch-claim-explain.txt

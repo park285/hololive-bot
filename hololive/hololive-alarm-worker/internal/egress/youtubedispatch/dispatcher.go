@@ -30,6 +30,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
@@ -47,18 +48,28 @@ import (
 var outboxCleanupLoopInterval = 1 * time.Hour
 
 type Dispatcher struct {
-	claim     *ClaimManager
-	send      *SendEngine
-	telemetry *TelemetryProcessor
-	audit     *AuditLogger
-	metrics   *MetricsRecorder
-	grouper   *OutboxGrouper
-	status    *StatusUpdater
-	logger    *slog.Logger
-	config    dispatchstate.Config
-	started   atomic.Bool
+	claim         *ClaimManager
+	send          *SendEngine
+	telemetry     *TelemetryProcessor
+	audit         *AuditLogger
+	metrics       *MetricsRecorder
+	grouper       *OutboxGrouper
+	status        *StatusUpdater
+	logger        *slog.Logger
+	config        dispatchstate.Config
+	started       atomic.Bool
+	workerTracker *workercontract.ExecutorTracker
+	workerTotals  *workercontract.Counters
 
 	testHooks dispatcherTestHooks
+}
+
+func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTracker, totals *workercontract.Counters) {
+	if d == nil {
+		return
+	}
+	d.workerTracker = tracker
+	d.workerTotals = totals
 }
 
 func (d *Dispatcher) ConfigureHandoff(mode handoff.Mode, publisher YouTubeOutboxHandoff) error {
@@ -256,14 +267,21 @@ func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (proc
 }
 
 func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, round int) int {
+	attemptID := d.workerTracker.BeginAttempt(time.Now())
+	defer d.workerTracker.EndAttempt(attemptID)
+	processed := 0
 	if len(outboxItems) == 0 {
-		return d.claim.processPendingDeliveries(ctx)
+		processed = d.claim.processPendingDeliveries(ctx)
+	} else {
+		d.logger.Debug("Processing outbox batch",
+			slog.Int("count", len(outboxItems)),
+			slog.Int("round", round+1))
+		processed = d.claim.processPerRoomBatch(ctx, outboxItems)
 	}
-
-	d.logger.Debug("Processing outbox batch",
-		slog.Int("count", len(outboxItems)),
-		slog.Int("round", round+1))
-	return d.claim.processPerRoomBatch(ctx, outboxItems)
+	if processed > 0 {
+		d.workerTotals.RecordAttempt(workercontract.AttemptSuccess)
+	}
+	return processed
 }
 
 // reviveLoop: 전송 실패로 영구 FAILED된 미발송 알람을 주기적으로 PENDING으로 되살리는 루프.

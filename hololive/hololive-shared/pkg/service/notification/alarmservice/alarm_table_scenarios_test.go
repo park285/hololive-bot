@@ -297,7 +297,7 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "UpcomingEvent roundtrip은 TTL 윈도우 내 true, 즉시 만료 설정 시 false",
+			name: "MarkUpcomingEventNotified는 방·채널·예정 시각 키로 마커를 기록한다",
 			run: func(t *testing.T, service *AlarmService, ctx context.Context) {
 				t.Helper()
 
@@ -310,8 +310,7 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 				}
 
 				require.NoError(t, service.MarkUpcomingEventNotified(ctx, "room-1", "channel-1", stream))
-				assert.True(t, service.WasUpcomingEventNotifiedRecently(ctx, "room-1", "channel-1", stream, time.Minute))
-				assert.False(t, service.WasUpcomingEventNotifiedRecently(ctx, "room-1", "channel-1", stream, 0))
+				requireUpcomingEventMarker(t, service, ctx, "room-1", "channel-1", stream)
 			},
 		},
 	}

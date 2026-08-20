@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
+	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 )
 
 func TestNewAuthHandler(t *testing.T) {

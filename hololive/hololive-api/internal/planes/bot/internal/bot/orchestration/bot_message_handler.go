@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/webhook"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 )
 

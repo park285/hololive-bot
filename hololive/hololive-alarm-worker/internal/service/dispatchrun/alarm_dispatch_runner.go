@@ -2,14 +2,17 @@ package dispatchrun
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 type Consumer interface {
@@ -53,6 +56,9 @@ type Runner struct {
 	yield             func(context.Context) bool
 	logger            *slog.Logger
 	members           domain.MemberDataProvider
+	attemptTimeout    time.Duration
+	workerTracker     *workercontract.ExecutorTracker
+	workerTotals      *workercontract.Counters
 }
 
 type RunnerConfig struct {
@@ -60,6 +66,9 @@ type RunnerConfig struct {
 	MaxBatch          int
 	MaxBatchesPerWake int
 	Members           domain.MemberDataProvider
+	AttemptTimeout    time.Duration
+	WorkerTracker     *workercontract.ExecutorTracker
+	WorkerTotals      *workercontract.Counters
 }
 
 func NewRunner(
@@ -82,6 +91,9 @@ func NewRunner(
 		maxBatchesPerWake: config.MaxBatchesPerWake,
 		logger:            logger,
 		members:           config.Members,
+		attemptTimeout:    config.AttemptTimeout,
+		workerTracker:     config.WorkerTracker,
+		workerTotals:      config.WorkerTotals,
 	}
 }
 
@@ -93,7 +105,30 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 	if len(envelopes) == 0 {
 		return false, nil
 	}
-	return true, r.dispatchGroups(ctx, groupAlarmDispatchEnvelopesForKaring(envelopes, r.karingEnabled))
+	attemptID := r.workerTracker.BeginAttempt(time.Now())
+	defer r.workerTracker.EndAttempt(attemptID)
+	attemptCtx := ctx
+	cancel := func() {}
+	if r.attemptTimeout > 0 {
+		attemptCtx, cancel = context.WithTimeout(ctx, r.attemptTimeout)
+	}
+	defer cancel()
+	err = r.dispatchGroups(attemptCtx, groupAlarmDispatchEnvelopesForKaring(envelopes, r.karingEnabled))
+	r.workerTotals.RecordAttempt(dispatchAttemptOutcome(err))
+	return true, err
+}
+
+func dispatchAttemptOutcome(err error) workercontract.AttemptOutcome {
+	switch {
+	case err == nil:
+		return workercontract.AttemptSuccess
+	case errors.Is(err, context.DeadlineExceeded):
+		return workercontract.AttemptTimeout
+	case errors.Is(err, context.Canceled):
+		return workercontract.AttemptCanceled
+	default:
+		return workercontract.AttemptFailed
+	}
 }
 
 func (r *Runner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup) error {

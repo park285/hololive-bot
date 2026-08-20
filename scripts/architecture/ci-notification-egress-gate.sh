@@ -108,24 +108,18 @@ if grep -Eq '^[[:space:]]*replicas:' <<< "${alarm_worker_block}"; then
 else
   echo "[PASS] alarm-worker declares no replicas"
 fi
-if ! grep -Fq 'DELIVERY_DISPATCHER_ENABLED: ${DELIVERY_DISPATCHER_ENABLED:-true}' <<< "${alarm_worker_block}"; then
-  echo "[FAIL] alarm-worker must enable the notification delivery outbox dispatcher by default" >&2
+if ! grep -Fq 'STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/alarm-worker.json' <<< "${alarm_worker_block}"; then
+  echo "[FAIL] alarm-worker must use its strict local Stack Worker Profile v1" >&2
   fail=1
 else
-  echo "[PASS] alarm-worker notification delivery outbox dispatcher is enabled by default"
+  echo "[PASS] alarm-worker uses its strict local Stack Worker Profile v1"
 fi
-if ! grep -Fq 'ALARM_DISPATCH_CONSUMER_ENABLED: ${ALARM_DISPATCH_CONSUMER_ENABLED:-true}' <<< "${alarm_worker_block}"; then
-  echo "[FAIL] alarm-worker must enable the alarm dispatch consumer by default" >&2
-  fail=1
-else
-  echo "[PASS] alarm-worker alarm dispatch consumer is enabled by default"
-fi
-if ! grep -Fq 'YOUTUBE_OUTBOX_DISPATCHER_ENABLED: ${YOUTUBE_OUTBOX_DISPATCHER_ENABLED:-true}' <<< "${alarm_worker_block}"; then
-  echo "[FAIL] alarm-worker must enable the YouTube outbox dispatcher by default" >&2
-  fail=1
-else
-  echo "[PASS] alarm-worker YouTube outbox dispatcher is enabled by default"
-fi
+for retired in DELIVERY_DISPATCHER_ENABLED ALARM_DISPATCH_CONSUMER_ENABLED YOUTUBE_OUTBOX_DISPATCHER_ENABLED; do
+  if grep -Fq "${retired}:" <<< "${alarm_worker_block}"; then
+    echo "[FAIL] alarm-worker still declares retired worker enablement ${retired}" >&2
+    fail=1
+  fi
+done
 
 if [[ "${fail}" -ne 0 ]]; then
   exit 1

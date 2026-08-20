@@ -27,7 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/webhook"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"

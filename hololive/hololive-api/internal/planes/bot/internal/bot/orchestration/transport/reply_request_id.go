@@ -28,7 +28,7 @@ import (
 	"strconv"
 	"strings"
 
-	iris "github.com/park285/iris-client-go/iris"
+	iris "github.com/park285/iris-client-go/v2/iris"
 )
 
 const (

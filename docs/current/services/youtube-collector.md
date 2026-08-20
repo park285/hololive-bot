@@ -19,7 +19,7 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 
 ## Owns
 
-- Provider adapters and bounded collection when `YOUTUBE_INGESTION_ENABLED=true`
+- Provider adapters and bounded collection under `collection.executor.enabled`
 - DB job lease/fence and `PublishBatch` (checkpoint + observation insert)
 - Collector DB role `hololive_scraper`
 
@@ -53,7 +53,7 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 ## Startup requirements
 
 - PostgreSQL availability
-- `YOUTUBE_INGESTION_ENABLED=true`
+- slot-specific strict `STACK_WORKER_PROFILE_FILE` with the `collection` worker
 - `YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true`
 - `YOUTUBE_COLLECTOR_INSTANCE_ID=youtube-collector-{a,b,c,d}`
 - `PHOTO_SYNC_ENABLED=false`
@@ -68,7 +68,7 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 
 YouTube.js helper는 `RuntimeBaseDir` 아래 unique `0700` directory의 private UDS만 사용하고, socket unlink와 directory cleanup은 Go가 단독 소유합니다. 정상 종료는 SIGTERM 뒤 drain을 기다리며 configured timeout에만 SIGKILL을 쓰고, `Close`가 `CLEANUP_TIMED_OUT`이면 runtime은 fatal shutdown입니다. `/ready`는 helper `Healthy`(READY), PostgreSQL queue probe, scheduler RUNNING, 첫 collection terminal commit, processed observation handoff를 증명합니다. provider freshness stale이나 local queue full은 `/ready` 503 조건이 아닙니다.
 
-Canonical success-response ceiling env는 `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES`입니다. `YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`는 한 compatibility release alias이며, collector fleet `a`/`b`/`c`/`d`가 new env revision으로 안정화된 뒤 cleanup PR에서 Compose old env, loader alias, HC-013을 함께 제거합니다. 둘 다 없으면 documented default이고, 값이 다르면 startup이 실패합니다.
+Canonical success-response ceiling env는 `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES`입니다. 없으면 documented default입니다. 명시적 empty는 startup fail입니다.
 
 Helper proxy는 `/v1/bootstrap`에서만 설정되고 bootstrap당 `ProxyAgent` 하나를 공유합니다. Collection RPC는 `protocol_version`과 `max_success_response_bytes`를 전달하며 `proxy_url`이나 `max_aggregate_bytes`를 받지 않습니다. Success와 error envelope는 분리되고 unknown field, trailing JSON value, HTTP status/error tuple mismatch는 protocol mismatch로 fail-closed됩니다. Go request cancellation이나 client disconnect는 해당 RPC의 `AbortSignal`에만 전파됩니다.
 

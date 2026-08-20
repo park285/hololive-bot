@@ -124,19 +124,13 @@ func TestSleepContextReturnsFalseWhenContextCancelled(t *testing.T) {
 	assert.False(t, retry.Sleep(ctx, time.Hour))
 }
 
-func TestNewPGIdleWaiterClampsBackoffMaxToMinimum(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_WAKEUP_ENABLED", "false")
-	t.Setenv("ALARM_DISPATCH_POLL_INTERVAL_MS", "125")
-	t.Setenv("ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS", "500")
-	t.Setenv("ALARM_DISPATCH_IDLE_BACKOFF_MAX_MS", "250")
+func TestNewPGIdleWaiterRejectsInvalidBackoffRange(t *testing.T) {
+	waiter, err := NewWakeupWaiterWithConfig(nil, nil, WakeupConfig{
+		PollInterval: 125 * time.Millisecond,
+		BackoffMin:   500 * time.Millisecond,
+		BackoffMax:   250 * time.Millisecond,
+	})
 
-	waiter := NewWakeupWaiter(nil, nil)
-
-	assert.False(t, waiter.wakeupEnabled)
-	assert.Equal(t, 125*time.Millisecond, waiter.pollInterval)
-	assert.Equal(t, 500*time.Millisecond, waiter.backoffMin)
-	assert.Equal(t, 500*time.Millisecond, waiter.backoffMax)
-	assert.Equal(t, 500*time.Millisecond, waiter.currentWait)
-	assert.NotNil(t, waiter.waitWakeup)
-	assert.NotNil(t, waiter.sleep)
+	assert.Nil(t, waiter)
+	assert.EqualError(t, err, "build alarm dispatch wakeup waiter: invalid polling or backoff configuration")
 }

@@ -18,7 +18,6 @@ const (
 	defaultProbeTimeout = 2 * time.Second
 
 	GroupDependencies = "dependencies"
-	GroupEgressFlags  = "egress_flags"
 )
 
 type Check struct {
@@ -90,10 +89,7 @@ func (p *Probe) Name() string {
 // panic이 프로세스를 죽이지 않게 하고, per-check fresh timeout으로 한 dependency
 // 의 hang이 다른 dependency 판정을 오염시키지 않게 한다.
 func (p *Probe) Evaluate(ctx context.Context) (ready bool, groups map[string]map[string]bool) {
-	groups = map[string]map[string]bool{
-		GroupDependencies: {},
-		GroupEgressFlags:  {},
-	}
+	groups = map[string]map[string]bool{GroupDependencies: {}}
 	ready = true
 	for _, check := range p.checks {
 		ok := p.runCheck(ctx, check) == nil
@@ -119,12 +115,7 @@ func (p *Probe) runCheck(ctx context.Context, check Check) error {
 }
 
 func normalizeGroup(group string) string {
-	switch strings.TrimSpace(group) {
-	case GroupEgressFlags:
-		return GroupEgressFlags
-	default:
-		return GroupDependencies
-	}
+	return GroupDependencies
 }
 
 func HTTPStatus(ready bool) (statusCode int, status string) {

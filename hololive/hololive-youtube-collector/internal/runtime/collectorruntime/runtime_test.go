@@ -23,9 +23,7 @@ func readWalkedSource(root, path string) ([]byte, error) {
 
 func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
 	runtime, err := Build(context.Background(), &settings.YouTubeCollectorRuntimeConfig{
-		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{
-			YouTubeIngestionEnabled: true,
-		},
+		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{},
 	}, testLogger())
 	if err == nil || runtime != nil {
 		t.Fatalf("Build() = %#v, %v, want runtime disabled error", runtime, err)
@@ -35,17 +33,16 @@ func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
 	}
 }
 
-func TestBuildRequiresYouTubeIngestion(t *testing.T) {
+func TestBuildRequiresWorkerProfile(t *testing.T) {
 	runtime, err := Build(context.Background(), &settings.YouTubeCollectorRuntimeConfig{
 		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{
-			RuntimeAllowed:          true,
-			YouTubeIngestionEnabled: false,
+			RuntimeAllowed: true,
 		},
 	}, testLogger())
 	if err == nil || runtime != nil {
-		t.Fatalf("Build() = %#v, %v, want youtube ingestion error", runtime, err)
+		t.Fatalf("Build() = %#v, %v, want worker profile error", runtime, err)
 	}
-	if err.Error() != "youtube collector requires YOUTUBE_INGESTION_ENABLED=true" {
+	if err.Error() != "youtube collector worker profile is required" {
 		t.Fatalf("Build() error = %q", err)
 	}
 }

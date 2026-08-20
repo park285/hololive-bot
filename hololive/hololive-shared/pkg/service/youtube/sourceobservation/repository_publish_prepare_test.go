@@ -3,6 +3,7 @@ package sourceobservation
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -62,42 +63,101 @@ func TestPreparePublishBatchRejectsNilAndEmptyInput(t *testing.T) {
 	}
 }
 
-func TestPreflightPublishBatchRejectsOversizedInputBeforeClone(t *testing.T) {
+func TestPreflightPublishBatchEnforcesBoundsBeforeClone(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name       string
-		payload    []byte
-		cursor     []byte
+		input      *PublishBatchInput
 		wantDetail string
 	}{
 		{
-			name:       "payload",
-			payload:    make([]byte, contract.MaxPayloadBytes+1),
+			name:       "payload too large",
+			input:      sizedPublishBatchInput(1, 1, 0, make([]byte, contract.MaxPayloadBytes+1), nil),
 			wantDetail: "observation 0 payload is too large",
 		},
 		{
-			name:       "cursor",
-			payload:    []byte(`{}`),
-			cursor:     make([]byte, maxCheckpointCursorBytes+1),
+			name:       "cursor too large",
+			input:      sizedPublishBatchInput(1, 1, 0, []byte(`{}`), make([]byte, maxCheckpointCursorBytes+1)),
 			wantDetail: "checkpoint 0 cursor is too large",
+		},
+		{
+			name:  "observation count at max accepted",
+			input: sizedPublishBatchInput(MaxPublishBatchSize, MaxPublishBatchSize, 0, nil, nil),
+		},
+		{
+			name:       "observation count above max",
+			input:      sizedPublishBatchInput(MaxPublishBatchSize+1, MaxPublishBatchSize+1, 0, nil, nil),
+			wantDetail: fmt.Sprintf("observation count must be between 1 and %d", MaxPublishBatchSize),
+		},
+		{
+			name:       "checkpoint count below observation count",
+			input:      sizedPublishBatchInput(2, 1, 0, nil, nil),
+			wantDetail: fmt.Sprintf("checkpoint count must equal observation count and be at most %d", MaxCheckpointCount),
+		},
+		{
+			name:       "checkpoint count above observation count",
+			input:      sizedPublishBatchInput(1, 2, 0, nil, nil),
+			wantDetail: fmt.Sprintf("checkpoint count must equal observation count and be at most %d", MaxCheckpointCount),
+		},
+		{
+			name:       "checkpoint count above observation count at batch max",
+			input:      sizedPublishBatchInput(MaxPublishBatchSize, MaxCheckpointCount+1, 0, nil, nil),
+			wantDetail: fmt.Sprintf("checkpoint count must equal observation count and be at most %d", MaxCheckpointCount),
+		},
+		{
+			name:  "collection latency at max accepted",
+			input: sizedPublishBatchInput(1, 1, MaxCollectionLatency, nil, nil),
+		},
+		{
+			name:       "collection latency negative",
+			input:      sizedPublishBatchInput(1, 1, -time.Nanosecond, nil, nil),
+			wantDetail: "collection latency is outside the accepted range",
+		},
+		{
+			name:       "collection latency above max",
+			input:      sizedPublishBatchInput(1, 1, MaxCollectionLatency+time.Nanosecond, nil, nil),
+			wantDetail: "collection latency is outside the accepted range",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			input := &PublishBatchInput{
-				Observations: []contract.Envelope{{Payload: test.payload}},
-				Checkpoint:   CheckpointUpdate{Entries: []CheckpointEntry{{Cursor: test.cursor}}},
+			err := preflightPublishBatch(test.input)
+			if test.wantDetail == "" {
+				if err != nil {
+					t.Fatalf("preflight rejected in-bound input: %v", err)
+				}
+				return
 			}
-			err := preflightPublishBatch(input)
 			if err == nil {
-				t.Fatal("preflight accepted oversized input")
+				t.Fatal("preflight accepted out-of-bound input")
 			}
 			if !errors.Is(err, ErrInvalidEnvelope) || !strings.Contains(err.Error(), test.wantDetail) {
-				t.Fatalf("preflight error = %v, want %q", err, test.wantDetail)
+				t.Fatalf("preflight error = %v, want ErrInvalidEnvelope containing %q", err, test.wantDetail)
 			}
 		})
 	}
+}
+
+func sizedPublishBatchInput(
+	observations, checkpoints int,
+	latency time.Duration,
+	payload, cursor []byte,
+) *PublishBatchInput {
+	input := &PublishBatchInput{
+		Observations: make([]contract.Envelope, observations),
+		Checkpoint: CheckpointUpdate{
+			Entries:           make([]CheckpointEntry, checkpoints),
+			CollectionLatency: latency,
+		},
+	}
+	if observations > 0 {
+		input.Observations[0].Payload = payload
+	}
+	if checkpoints > 0 {
+		input.Checkpoint.Entries[0].Cursor = cursor
+	}
+	return input
 }
 
 func TestPreflightPublishBatchRejectsOversizedAggregateBeforeClone(t *testing.T) {

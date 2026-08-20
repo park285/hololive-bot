@@ -2,15 +2,12 @@ package collectorruntime
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 
-	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
@@ -18,6 +15,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 	sharedlog "github.com/park285/shared-go/pkg/logging"
 	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/pkg/workercontract"
 )
 
 const (
@@ -32,6 +30,8 @@ type Runtime struct {
 	servers         *sharedserver.RuntimeHTTPServers
 	helper          *youtubejs.Helper
 	infra           *collectorInfrastructure
+	workerRegistry  *workercontract.Registry
+	profileChecker  *workercontract.ProfileFileChecker
 	cleanupMu       sync.Mutex
 	cleanupReported bool
 }
@@ -46,8 +46,11 @@ func Build(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfi
 	if !appConfig.RuntimeOwnership.RuntimeAllowed {
 		return nil, fmt.Errorf("youtube collector runtime disabled: set %s=true on the owning host", runtimeAllowedEnv)
 	}
-	if !appConfig.RuntimeOwnership.YouTubeIngestionEnabled {
-		return nil, fmt.Errorf("youtube collector requires YOUTUBE_INGESTION_ENABLED=true")
+	if appConfig.WorkerProfile == nil {
+		return nil, fmt.Errorf("youtube collector worker profile is required")
+	}
+	if !collectorProfileEnabled(appConfig.WorkerProfile) {
+		return assembleDisabledRuntime(ctx, appConfig, logger)
 	}
 
 	infra, err := initInfrastructure(ctx, appConfig, logger)
@@ -62,6 +65,33 @@ func Build(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfi
 	return runtime, nil
 }
 
+func assembleDisabledRuntime(
+	ctx context.Context,
+	appConfig *settings.YouTubeCollectorRuntimeConfig,
+	logger *slog.Logger,
+) (*Runtime, error) {
+	workerRegistry, profileChecker, err := newCollectorWorkerRegistry(appConfig.WorkerProfile, nil)
+	if err != nil {
+		return nil, err
+	}
+	readiness := &collectorReadiness{appConfig: appConfig, disabled: true}
+	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, appConfig.Server.APIKey, func(options *sharedserver.RuntimeRouterOptions) {
+		readiness.configure(options)
+		options.WorkerRegistry = workerRegistry
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build disabled youtube collector router: %w", err)
+	}
+	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http", workerRegistry)
+	if err != nil {
+		return nil, err
+	}
+	return &Runtime{
+		Config: appConfig, Logger: logger, servers: servers,
+		workerRegistry: workerRegistry, profileChecker: profileChecker,
+	}, nil
+}
+
 func assembleRuntime(
 	ctx context.Context,
 	appConfig *settings.YouTubeCollectorRuntimeConfig,
@@ -72,113 +102,40 @@ func assembleRuntime(
 	if err != nil {
 		return nil, err
 	}
+	workerRegistry, profileChecker, err := newCollectorWorkerRegistry(appConfig.WorkerProfile, sched)
+	if err != nil {
+		return nil, err
+	}
 
 	readiness := &collectorReadiness{appConfig: appConfig, infra: infra, scheduler: sched}
 	router, err := sharedserver.NewHealthOnlyRuntimeRouter(
 		ctx,
 		logger,
 		appConfig.Server.APIKey,
-		readiness.configure,
+		func(options *sharedserver.RuntimeRouterOptions) {
+			readiness.configure(options)
+			options.WorkerRegistry = workerRegistry
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector router: %w", err)
 	}
-	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http")
+	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, runtimeName+"-http", workerRegistry)
 	if err != nil {
 		return nil, err
 	}
 
 	runtime := &Runtime{
-		Config:    appConfig,
-		Logger:    logger,
-		Scheduler: sched,
-		servers:   servers,
-		helper:    infra.youtubejs,
-		infra:     infra,
+		Config:         appConfig,
+		Logger:         logger,
+		Scheduler:      sched,
+		servers:        servers,
+		helper:         infra.youtubejs,
+		infra:          infra,
+		workerRegistry: workerRegistry,
+		profileChecker: profileChecker,
 	}
 	return runtime, nil
-}
-
-type collectorReadiness struct {
-	appConfig *settings.YouTubeCollectorRuntimeConfig
-	infra     *collectorInfrastructure
-	scheduler *leaseScheduler
-}
-
-type readinessResponse struct {
-	Status                string         `json:"status"`
-	Runtime               string         `json:"runtime"`
-	InstanceID            string         `json:"instance_id"`
-	State                 ReadinessState `json:"state"`
-	Dependency            string         `json:"dependency,omitempty"`
-	Helper                string         `json:"helper"`
-	HelperProtocolVersion int            `json:"helper_protocol_version"`
-	FirstSuccess          bool           `json:"first_success"`
-	HandoffStatus         HandoffState   `json:"handoff_status"`
-	HandoffProcessed      bool           `json:"handoff_processed"`
-	HandoffCandidates     int            `json:"handoff_candidates"`
-	PendingQueue          *int           `json:"pending_queue"`
-	PendingQueueCapped    bool           `json:"pending_queue_capped"`
-	DueJobs               int            `json:"due_jobs"`
-	DueJobsExact          bool           `json:"due_jobs_exact"`
-	QueueDepth            int            `json:"queue_depth"`
-	QueueCapacity         int            `json:"queue_capacity"`
-	QueueFull             bool           `json:"queue_full"`
-	DiscoveryTruncated    bool           `json:"discovery_truncated"`
-}
-
-func (r *collectorReadiness) configure(opts *sharedserver.RuntimeRouterOptions) {
-	opts.EnableGzip = true
-	opts.ReadyResponder = r.respond
-}
-
-func (r *collectorReadiness) respond(c *gin.Context) {
-	cfg := settings.YouTubeCollectorConfig{}
-	if r.appConfig != nil {
-		cfg = r.appConfig.Collector.OrDefault()
-	}
-	probeCtx, cancel := context.WithTimeout(c.Request.Context(), cfg.ReadinessTimeout)
-	defer cancel()
-	deps := r.deps(&cfg)
-	body := evaluateReadiness(probeCtx, &deps)
-	payload, err := json.Marshal(body)
-	if err != nil {
-		fallback := readinessResponse{Runtime: runtimeName, Helper: helperNotReady}
-		fallback = notReady(&fallback, ReadyDegraded, "scheduler")
-		c.Status(readinessHTTPStatus(&fallback))
-		return
-	}
-	c.Data(readinessHTTPStatus(&body), gin.MIMEJSON, payload)
-}
-
-func (r *collectorReadiness) deps(cfg *settings.YouTubeCollectorConfig) readinessDeps {
-	var helper helperHealth
-	if r != nil && r.infra != nil && r.infra.youtubejs != nil {
-		helper = r.infra.youtubejs
-	}
-	var sched schedulerView
-	var tracker *readinessTracker
-	if r != nil && r.scheduler != nil {
-		sched = r.scheduler
-		tracker = r.scheduler.readiness
-	}
-	return readinessDeps{
-		instanceID:    collectorInstanceID(r.appConfig),
-		helperTimeout: cfg.HelperHealthTimeout,
-		dbTimeout:     cfg.DBTimeout,
-		pendingCap:    pendingQueueCap,
-		scheduler:     sched,
-		helper:        helper,
-		store:         queueStoreFrom(r.infra),
-		tracker:       tracker,
-	}
-}
-
-func collectorInstanceID(appConfig *settings.YouTubeCollectorRuntimeConfig) string {
-	if appConfig == nil {
-		return ""
-	}
-	return strings.TrimSpace(appConfig.Collector.InstanceID)
 }
 
 func (r *Runtime) Run() error {
@@ -205,6 +162,11 @@ func (r *Runtime) Run() error {
 }
 
 func (r *Runtime) start(ctx context.Context, errCh chan<- error) {
+	if r.profileChecker != nil {
+		panicguard.Go(r.Logger, "youtube-collector-profile-checker", func() {
+			r.profileChecker.Run(ctx)
+		})
+	}
 	r.watchHelper(ctx, errCh)
 	r.startScheduler(ctx, errCh)
 	r.watchSchedulerFatal(ctx, errCh)
@@ -215,7 +177,7 @@ func (r *Runtime) start(ctx context.Context, errCh chan<- error) {
 }
 
 func (r *Runtime) watchSchedulerFatal(ctx context.Context, errCh chan<- error) {
-	if r.Scheduler == nil {
+	if r.Scheduler == nil || !r.collectionExecutorEnabled() {
 		return
 	}
 	fatal := r.Scheduler.Fatal()
@@ -281,7 +243,7 @@ func (r *Runtime) reportHelperExit(ctx context.Context, errCh chan<- error) {
 }
 
 func (r *Runtime) startScheduler(ctx context.Context, errCh chan<- error) {
-	if r.Scheduler == nil {
+	if r.Scheduler == nil || !r.collectionExecutorEnabled() {
 		return
 	}
 	if err := r.Scheduler.Start(ctx); err != nil {
@@ -289,6 +251,22 @@ func (r *Runtime) startScheduler(ctx context.Context, errCh chan<- error) {
 		return
 	}
 	r.Logger.Info("Scraper scheduler started", slog.String("runtime", runtimeName))
+}
+
+func (r *Runtime) collectionExecutorEnabled() bool {
+	if r == nil || r.Config == nil || r.Config.WorkerProfile == nil {
+		return false
+	}
+	worker, ok := r.Config.WorkerProfile.Loaded.Profile.Workers["collection"]
+	return ok && worker.Executor.Enabled
+}
+
+func collectorProfileEnabled(profile *settings.YouTubeCollectorWorkerProfile) bool {
+	if profile == nil {
+		return false
+	}
+	worker, ok := profile.Loaded.Profile.Workers["collection"]
+	return ok && worker.Executor.Enabled
 }
 
 func (r *Runtime) startServers(errCh chan<- error) {

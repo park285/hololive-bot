@@ -8,11 +8,101 @@
 
 ## 미출시
 
+## v3.0.5 - 2026-08-20
+
+### 변경
+
+- settings가 `ALARM_DISPATCH_RETENTION_{INTERVAL_MS,QUERY_TIMEOUT_MS,LIMIT,SENT_DAYS,DLQ_DAYS,QUARANTINED_DAYS,CANCELLED_DAYS,EVENT_DAYS}`,
+  `SCRAPER_SCHEDULER_WORKER_COUNT`, `SCRAPER_POLL_{VIDEOS,SHORTS,COMMUNITY,STATS,LIVE}_INTERVAL_SECONDS`의
+  잘못된 명시 값(빈 문자열·비정수·0·음수)을 더 이상 기본값으로 되돌리지 않고 config 로딩 오류로
+  거절합니다. 미설정은 기존 기본값 그대로입니다. `positiveIntEnv`·`secondsEnv`·`positiveDurationMS`
+  helper를 제거하고 기존 `required*` 파서로 통일했습니다.
+- live catch-up 억제가 cache 오류·깨진 marker에서 fail-open으로 동작하는 횟수를
+  `hololive_youtube_outbox_live_catchup_suppression_total{result}`로 노출합니다. 동작 방향은 그대로입니다.
+- messagestrings Store가 DB 로딩 실패와 키 부재를 `hololive_messagestrings_load_failures_total`,
+  `hololive_messagestrings_lookup_fallback_total{reason,namespace}`로 구분해 노출합니다. 호출자가 없던
+  `GetOr`를 제거했습니다.
+- 운영 경로가 쓰지 않던 `alarmservice.AlarmService.WasUpcomingEventNotifiedRecently`와
+  `alarmcache.State.WasUpcomingEventNotifiedRecently`(cache 오류를 `false`로 접던 래퍼)를 제거했습니다.
+  upcoming 중복 판정은 `dedup.Service`가 계속 담당합니다.
+- 이번 릴리스는 `hololive-api`·`hololive-alarm-worker`·`youtube-collector` artifact를 함께 재빌드합니다.
+  `hololive-api` VERSION은 `v3.0.5`와 일치시키고, `hololive-alarm-worker` artifact version은 `3.0.3`에서
+  `3.0.4`로 올립니다. collector 이미지 version은 `hololive-api` VERSION을 따릅니다.
+
+## v3.0.4 - 2026-08-20
+
+### 변경
+
+- migration runner가 epoch-2 legacy ledger 계약(136건 체크섬 embed와 기동 시 검증)과
+  baseline 체크섬 backfill 허용 경로를 더 이상 갖지 않습니다. `182_epoch2_legacy_ledger_cleanup.sql`이
+  legacy ledger 행 136건을 `schema_migrations`·`schema_migration_checksums`에서 정리하고, 정리가
+  적용된 뒤에도 manifest 밖 행이 남으면 기동을 거부합니다. 체크섬 목록은 M1 게이트 데이터로
+  `scripts/architecture/`에 둡니다. (#396)
+- YouTube collector loader와 Compose에서 HC-013 compat alias(`YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`,
+  `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`)를 제거했습니다. canonical 키만 읽습니다. (#394)
+- settings 검증 helper 통합, youtubedispatch 파일 재편과 nil-fallback 접근자 제거, collector 실행
+  파이프라인 `collectionExecutor` 추출, sourceobservation publish preflight 단일화 등 동작 동등
+  구조 정리를 반영했습니다. (#393) 사후 리뷰에서 확인한 테스트 공백을 보강했습니다. (#395)
+- 이번 릴리스는 `hololive-api` artifact만 재빌드하므로 해당 VERSION만 `v3.0.4`와 일치시켰습니다.
+  `hololive-alarm-worker` artifact version은 `3.0.3`을 유지합니다.
+
+### 수정
+
+- dbtest가 postgres 컨테이너 제거 레이스에서 재시도하도록 수정했습니다. (#392)
+- security workflow의 dependency checkout pin을 정렬했습니다. (#391)
+
+## v3.0.3 - 2026-08-20
+
+### 수정
+
+- YouTube collector의 별도 metrics server에도 role-owned worker registry를 연결해
+  `iris_stack_worker_*`가 실제 scrape endpoint에 노출되도록 수정했습니다.
+
+### 변경
+
+- `shared-go v1.53.0`으로 갱신하고 제거된 `workerconfig` package를 허용 목록에서도
+  삭제했습니다. worker profile과 metrics는 strict `workercontract.Registry`만 소유합니다.
+- 함께 재빌드하는 `hololive-api`와 `hololive-alarm-worker` artifact version을 repository
+  release `v3.0.3`과 일치시켰습니다.
+
+## v3.0.2 - 2026-08-20
+
+### 수정
+
+- Compose AP의 `youtube-collector-b`와 `youtube-collector-d`가 collector-c에서 상속한
+  `STACK_WORKER_PROFILE_FILE`을 유지해 자신이 mount한 role profile을 찾지 못하던 identity
+  회귀를 수정했습니다. AP 렌더가 instance ID와 같은 profile 경로를 환경변수와 read-only
+  mount에 함께 사용하는지 검증합니다.
+
+## v3.0.1 - 2026-08-20
+
+### 수정
+
+- central live-compat의 `volumes: !override`가 API, alarm-worker, collector-c의 role별
+  Stack Worker Profile bind mount를 누락해 v3 runtime이 `profile_file_missing`으로
+  기동하지 못하던 배포 회귀를 수정했습니다. 두 central Compose 조합에서 세 mount의
+  source, target, read-only 속성을 렌더 결과로 검증합니다.
+
+## v3.0.0 - 2026-08-20
+
 ### 추가
 
+- central API·alarm-worker와 collector a/b/c/d에 role별 strict Stack Worker Contract v1
+  profile을 도입했습니다. 실제 PostgreSQL/process queue와 executor를 `/diagnostics/workers` 및
+  `iris_stack_worker_*`로 노출하고 worker enablement·capacity·timeout의 env 이중 소유를 제거했습니다.
+- `iris-client-go/v2 v2.1.1`을 pin하고 bot webhook receiver를 HMAC v3-only 계약으로
+  전환했습니다. nonce replay 방지는 명시적 Valkey store를 사용하며 v2 성공 metric을
+  제거했습니다.
 - YouTube collector의 provider 실패 class와 lease 실패 진단을 durable schema에 보존합니다.
   기존 deferred 실패를 backfill하고 acquire 경합 및 migration 중에도 진단이 유실되지 않도록
   trigger와 constraint 설치·검증 순서를 고정했습니다.
+
+### 호환성이 깨지는 변경
+
+- htmlscraper의 production `NewTestServiceWithHTTPClient`와 `*ForTest` accessor를 제거했습니다.
+  custom YouTube/HTTP client가 필요한 구성은 `NewServiceWithDependencies`와
+  `ServiceDependencies`를 사용하며, 기존 `NewServiceWithYouTubeClient`와
+  `NewServiceWithOfficialSchedule` signature는 유지합니다.
 
 ### 변경
 
@@ -20,8 +110,9 @@
 - YouTube.js 18과 current response shape를 채택하고 Official Schedule, Community와 YouTube.js
   관측의 ownership을 collector plane으로 모았습니다. Kakao room catalog의 DB 오류를 not-found나
   빈 관측으로 바꾸지 않으며 retention과 projection 권한을 최소 privilege로 제한합니다.
-- Go toolchain과 builder 기준을 `1.26.6`으로, `shared-go`를 `v1.51.0`으로 갱신하고 일반챗
-  plaintext/open-chat 판별을 공용 `kakaoformat` 정본으로 수렴했습니다.
+- Go toolchain과 builder 기준을 `1.26.6`으로, `shared-go`를 `v1.52.3`으로,
+  `iris-client-go/v2`를 `v2.1.1`로 갱신하고 일반챗 plaintext/open-chat 판별을 공용
+  `kakaoformat` 정본으로 수렴했습니다.
 - **service 로그 인코딩이 text에서 JSON으로 바뀝니다.** shared-go 로깅이 text
   인코더를 제거하고 빈 `Format` 기본값이 JSON이 되면서, `hololive-api`,
   `hololive-alarm-worker`, `hololive-youtube-collector`, admin-dashboard backend의

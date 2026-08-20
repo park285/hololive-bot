@@ -111,34 +111,13 @@ case_allowlist_excludes_fixture() {
 case_canonical_table_has_required_ids() {
   local ids
   ids="$(awk -F'\t' 'NF && $1 !~ /^#/ { print $1 }' "${SCRIPT_DIR}/youtube-collector-hardening-contract.tsv" | sort -u | tr '\n' ' ')"
-  local expected="HC-001 HC-002 HC-003 HC-004 HC-005 HC-006 HC-007 HC-008 HC-009 HC-010 HC-011 HC-012 HC-013 HC-014 HC-015 "
+  local expected="HC-002 HC-009 HC-010 HC-011 HC-012 "
   if [[ "${ids}" != "${expected}" ]]; then
     printf 'not ok - canonical rule IDs differ\nexpected: %s\nactual: %s\n' "${expected}" "${ids}" >&2
     exit 1
   fi
   PASSED=$((PASSED + 1))
-  printf 'ok - canonical rule table registers HC-001..HC-015\n'
-}
-
-case_valkey_phrase_globs_exclude_rollback() {
-  if awk -F'\t' 'NF && $1 !~ /^#/ && $1 == "HC-015" && $4 ~ /rollback\.md/' "${SCRIPT_DIR}/youtube-collector-hardening-contract.tsv" | grep -q .; then
-    printf 'not ok - HC-015 glob must not scan rollback.md\n' >&2
-    exit 1
-  fi
-  PASSED=$((PASSED + 1))
-  printf 'ok - HC-015 Valkey phrase globs exclude rollback.md\n'
-}
-
-case_hc015_forbids_optional_optimization_on_collector_docs() {
-  local rows
-  rows="$(awk -F'\t' 'NF && $1 !~ /^#/ && $1 == "HC-015" && $6 == "optional optimization" { print $4 }' "${SCRIPT_DIR}/youtube-collector-hardening-contract.tsv" | sort | tr '\n' ' ')"
-  local expected="docs/current/runbooks/youtube-collector.md docs/current/services/youtube-collector.md "
-  if [[ "${rows}" != "${expected}" ]]; then
-    printf 'not ok - HC-015 optional optimization globs differ\nexpected: %s\nactual: %s\n' "${expected}" "${rows}" >&2
-    exit 1
-  fi
-  PASSED=$((PASSED + 1))
-  printf 'ok - HC-015 forbids optional optimization on collector service and runbook docs\n'
+  printf 'ok - canonical rule table contains only steady-state contracts\n'
 }
 
 case_path_glob_is_not_global
@@ -146,7 +125,5 @@ case_expected_counts
 case_comments_do_not_satisfy_forbidden_rule
 case_allowlist_excludes_fixture
 case_canonical_table_has_required_ids
-case_valkey_phrase_globs_exclude_rollback
-case_hc015_forbids_optional_optimization_on_collector_docs
 
 printf 'ok - %s hardening-contract parser checks passed\n' "${PASSED}"

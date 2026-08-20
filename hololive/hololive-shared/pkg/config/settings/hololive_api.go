@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 )
@@ -47,6 +48,7 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load hololive-api youtube plane: %w", err)
 	}
+	applySourceObservationWorkerProfile(&youtubeConfig, botConfig.APIWorkerProfile)
 
 	config := &HololiveAPIConfig{
 		Bot:     botConfig,
@@ -60,6 +62,19 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 		return nil, fmt.Errorf("hololive-api config validation failed: %w", err)
 	}
 	return config, nil
+}
+
+func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *APIWorkerProfile) {
+	worker := profile.Loaded.Profile.Workers["source_observation"]
+	settings := profile.SourceObservation
+	config.Enabled = worker.Executor.Enabled
+	config.ConsumerWorkers = worker.Executor.ConfiguredWorkers
+	config.DBOperationConcurrency = settings.DBOperationConcurrency
+	config.ClaimBatchSize = settings.ClaimBatchSize
+	config.ClaimInterval = time.Duration(settings.ClaimIntervalMS) * time.Millisecond
+	config.ClaimLease = time.Duration(settings.ClaimLeaseMS) * time.Millisecond
+	config.TransactionTimeout = time.Duration(settings.TransactionTimeoutMS) * time.Millisecond
+	config.ShutdownTimeout = time.Duration(settings.ShutdownTimeoutMS) * time.Millisecond
 }
 
 func configureHololiveAPIPlanes(botConfig, adminConfig *Config, llmConfig *LLMSchedulerConfig) {

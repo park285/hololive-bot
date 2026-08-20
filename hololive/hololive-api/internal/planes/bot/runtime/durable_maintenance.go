@@ -8,18 +8,18 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	"github.com/park285/iris-client-go/iris"
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 func (r *durableRuntime) runMaintenance(ctx context.Context) {
 	defer r.wg.Done()
-	for waitDurable(ctx, durableMaintenanceEvery) {
+	for waitDurable(ctx, r.maintenanceEvery) {
 		r.maintainDurability(ctx)
 	}
 }
 
 func (r *durableRuntime) maintainDurability(ctx context.Context) {
-	if _, err := r.inbox.ReclaimExpired(ctx, durableMaxAttempts, durableBatchSize); err != nil {
+	if _, err := r.inbox.ReclaimExpired(ctx, r.inboxMaxAttempts, durableBatchSize); err != nil {
 		r.logError("reclaim webhook leases", err)
 	}
 	reclaim, err := r.outbox.ReclaimExpired(ctx, durableBatchSize)
@@ -35,7 +35,7 @@ func (r *durableRuntime) maintainDurability(ctx context.Context) {
 	} else {
 		r.observeExpiredCommands(expiredCommands)
 	}
-	if _, err := r.ledger.Maintain(ctx, durableTerminalRetention, durableManualReviewRetention, durableBatchSize); err != nil {
+	if _, err := r.ledger.Maintain(ctx, r.terminalRetention, r.manualReviewRetention, durableBatchSize); err != nil {
 		r.logError("maintain durable ledger retention", err)
 	}
 }
@@ -174,10 +174,14 @@ func dispatchErrorReason(err error) string {
 }
 
 func nextDurableIdleDelay(current time.Duration) time.Duration {
-	if current < durablePollEvery {
-		return durablePollEvery
+	return nextDurableIdleDelayFrom(current, durablePollEvery)
+}
+
+func nextDurableIdleDelayFrom(current, minimum time.Duration) time.Duration {
+	if current < minimum {
+		return minimum
 	}
-	return min(current*2, durablePollMax)
+	return min(current*2, max(durablePollMax, minimum))
 }
 
 func waitDurableWake(ctx context.Context, delay time.Duration, wake <-chan struct{}) bool {

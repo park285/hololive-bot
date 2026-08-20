@@ -19,8 +19,8 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-dbtest"
-	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
@@ -332,12 +332,15 @@ func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
 			<-commandCtx.Done()
 			return commandCtx.Err()
 		}),
-		handlerTimeout:   handlerTimeout,
-		heartbeatEvery:   time.Hour,
-		inboxHeartbeat:   inbox.Heartbeat,
-		commandHeartbeat: durability.NewCommandExecutionRepository(pool).Heartbeat,
+		handlerTimeout:    handlerTimeout,
+		heartbeatEvery:    time.Hour,
+		settlementTimeout: durableSettlementTimeout,
+		inboxHeartbeat:    inbox.Heartbeat,
+		commandHeartbeat:  durability.NewCommandExecutionRepository(pool).Heartbeat,
 	}
-	r.processInboxClaim(ctx, claim, "deadline-token")
+	if err := r.processInboxClaim(ctx, claim, "deadline-token"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("process deadline inbox claim error = %v, want deadline exceeded", err)
+	}
 
 	seen := <-deadlineSeen
 	if seen <= 0 || seen > handlerTimeout {
@@ -407,7 +410,12 @@ func TestDuplicateActiveCommandDefersInboxUntilOutcomeIsKnown(t *testing.T) {
 		t.Fatalf("reclaimed inbox claim = %v, err = %v", second, err)
 	}
 
-	r := &durableRuntime{inbox: inbox, commands: commands}
+	r := &durableRuntime{
+		inbox:            inbox,
+		commands:         commands,
+		maintenanceEvery: durableMaintenanceEvery,
+		inboxMaxAttempts: durableMaxAttempts,
+	}
 	assertActiveCommandDefersInbox(t, ctx, pool, r, second)
 	expireCommandClaim(t, ctx, pool, commands, second.MessageID)
 	assertTerminalDuplicateCompletes(t, ctx, pool, r, inbox, second.MessageID)
@@ -547,12 +555,15 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 		bot: durableMessageProcessorFunc(func(context.Context, *webhook.Message) error {
 			return errors.New("validation failed")
 		}),
-		handlerTimeout:   time.Second,
-		heartbeatEvery:   time.Hour,
-		inboxHeartbeat:   inbox.Heartbeat,
-		commandHeartbeat: commands.Heartbeat,
+		handlerTimeout:    time.Second,
+		heartbeatEvery:    time.Hour,
+		settlementTimeout: durableSettlementTimeout,
+		inboxHeartbeat:    inbox.Heartbeat,
+		commandHeartbeat:  commands.Heartbeat,
 	}
-	r.processInboxClaim(ctx, claim, "failed-token")
+	if err := r.processInboxClaim(ctx, claim, "failed-token"); err == nil || !strings.Contains(err.Error(), "validation failed") {
+		t.Fatalf("process failed inbox claim error = %v, want validation failure", err)
+	}
 	var status, summary string
 	err = pool.QueryRow(ctx, `SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1`, claim.MessageID).
 		Scan(&status, &summary)
@@ -760,7 +771,11 @@ func TestReleaseInboxStoresBoundedReasonWithoutCauseText(t *testing.T) {
 	if err != nil || claim == nil {
 		t.Fatalf("claim = %v, err = %v", claim, err)
 	}
-	r := &durableRuntime{inbox: inbox}
+	r := &durableRuntime{
+		inbox:            inbox,
+		inboxMaxAttempts: durableMaxAttempts,
+		inboxRetryAfter:  durableRetryAfter,
+	}
 	r.releaseInbox(ctx, claim, "release-token", errors.New("claim failed for "+sentinel))
 
 	var lastError string

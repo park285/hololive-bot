@@ -22,6 +22,7 @@ type YouTubeCollectorRuntimeConfig struct {
 	Postgres PostgresConfig
 
 	RuntimeOwnership CollectorRuntimeOwnershipConfig
+	WorkerProfile    *YouTubeCollectorWorkerProfile
 	Collector        YouTubeCollectorConfig
 	Proxy            CollectorProxyConfig
 	Holodex          CollectorHolodexConfig
@@ -29,11 +30,9 @@ type YouTubeCollectorRuntimeConfig struct {
 }
 
 type CollectorRuntimeOwnershipConfig struct {
-	RuntimeAllowed          bool
-	YouTubeIngestionEnabled bool
-	PhotoSyncEnabled        bool
-	NotificationEgressRole  string
-	YouTubeOutboxEnabled    bool
+	RuntimeAllowed         bool
+	PhotoSyncEnabled       bool
+	NotificationEgressRole string
 }
 
 type CollectorProxyConfig struct {
@@ -71,6 +70,10 @@ func LoadYouTubeCollectorRuntime() (*YouTubeCollectorRuntimeConfig, error) {
 }
 
 func buildYouTubeCollectorRuntimeConfig() (*YouTubeCollectorRuntimeConfig, error) {
+	workerProfile, err := LoadYouTubeCollectorWorkerProfile()
+	if err != nil {
+		return nil, err
+	}
 	collector, err := loadYouTubeCollectorConfig()
 	if err != nil {
 		return nil, err
@@ -87,7 +90,7 @@ func buildYouTubeCollectorRuntimeConfig() (*YouTubeCollectorRuntimeConfig, error
 	if err != nil {
 		return nil, err
 	}
-	return &YouTubeCollectorRuntimeConfig{
+	config := &YouTubeCollectorRuntimeConfig{
 		Environment:      loadAppEnvironment(),
 		Version:          sharedenv.String("APP_VERSION", "1.1.0-go"),
 		Server:           loadServerConfig(),
@@ -95,11 +98,14 @@ func buildYouTubeCollectorRuntimeConfig() (*YouTubeCollectorRuntimeConfig, error
 		Tracing:          tracingConfig,
 		Postgres:         loadPostgresConfig(),
 		RuntimeOwnership: ownership,
+		WorkerProfile:    workerProfile,
 		Collector:        collector,
 		Proxy:            proxy,
 		Holodex:          loadCollectorHolodexConfig(),
 		OfficialSchedule: loadCollectorOfficialScheduleConfig(),
-	}, nil
+	}
+	applyYouTubeCollectorWorkerProfile(config)
+	return config, nil
 }
 
 func loadCollectorRuntimeOwnershipConfig() (CollectorRuntimeOwnershipConfig, error) {
@@ -107,24 +113,14 @@ func loadCollectorRuntimeOwnershipConfig() (CollectorRuntimeOwnershipConfig, err
 	if err != nil {
 		return CollectorRuntimeOwnershipConfig{}, err
 	}
-	ingestionEnabled, err := sharedenv.BoolE("YOUTUBE_INGESTION_ENABLED", true)
-	if err != nil {
-		return CollectorRuntimeOwnershipConfig{}, err
-	}
 	photoSyncEnabled, err := sharedenv.BoolE("PHOTO_SYNC_ENABLED", false)
 	if err != nil {
 		return CollectorRuntimeOwnershipConfig{}, err
 	}
-	outboxEnabled, err := sharedenv.BoolE(youTubeOutboxDispatcherEnabledEnv, false)
-	if err != nil {
-		return CollectorRuntimeOwnershipConfig{}, err
-	}
 	return CollectorRuntimeOwnershipConfig{
-		RuntimeAllowed:          runtimeAllowed,
-		YouTubeIngestionEnabled: ingestionEnabled,
-		PhotoSyncEnabled:        photoSyncEnabled,
-		NotificationEgressRole:  trimmedEnv(notificationEgressRoleEnv),
-		YouTubeOutboxEnabled:    outboxEnabled,
+		RuntimeAllowed:         runtimeAllowed,
+		PhotoSyncEnabled:       photoSyncEnabled,
+		NotificationEgressRole: trimmedEnv(notificationEgressRoleEnv),
 	}, nil
 }
 
@@ -226,8 +222,8 @@ func (c *YouTubeCollectorRuntimeConfig) validateCollectorOwnershipFlags() error 
 	if !c.RuntimeOwnership.RuntimeAllowed {
 		return fmt.Errorf("youtube collector runtime disabled: set YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true on the owning host")
 	}
-	if !c.RuntimeOwnership.YouTubeIngestionEnabled {
-		return fmt.Errorf("youtube collector requires YOUTUBE_INGESTION_ENABLED=true")
+	if c.WorkerProfile == nil {
+		return fmt.Errorf("youtube collector worker profile is required")
 	}
 	if c.RuntimeOwnership.PhotoSyncEnabled {
 		return fmt.Errorf("%s requires PHOTO_SYNC_ENABLED=false", runtimeYouTubeCollector)
@@ -241,12 +237,6 @@ func (c *YouTubeCollectorRuntimeConfig) validateCollectorEgressOwnership() error
 	}
 	if err := rejectReservedEgressRoles(runtimeYouTubeCollector); err != nil {
 		return err
-	}
-	if err := rejectReservedDispatchers(runtimeYouTubeCollector); err != nil {
-		return err
-	}
-	if c.RuntimeOwnership.YouTubeOutboxEnabled {
-		return fmt.Errorf("%s must not enable %s=true; proactive notification egress is owned by alarm-worker", runtimeYouTubeCollector, youTubeOutboxDispatcherEnabledEnv)
 	}
 	return nil
 }
@@ -278,28 +268,48 @@ func (c *YouTubeCollectorRuntimeConfig) validatePostgres() error {
 }
 
 func (c *YouTubeCollectorRuntimeConfig) validateProviders() error {
-	if strings.TrimSpace(c.Holodex.APIKey) == "" {
-		return fmt.Errorf("HOLODEX_API_KEY is required")
+	if err := validateHolodexAPIKey(c.Holodex.APIKey); err != nil {
+		return err
 	}
-	if c.Holodex.Transport.Timeout <= 0 {
-		return fmt.Errorf("HOLODEX_TIMEOUT_SECONDS must be positive")
+	if err := validateHolodexTimeout(c.Holodex.Transport.Timeout); err != nil {
+		return err
 	}
 	if err := validateOfficialScheduleBaseURL(c.OfficialSchedule.BaseURL); err != nil {
 		return err
 	}
-	if c.OfficialSchedule.Transport.Timeout <= 0 {
-		return fmt.Errorf("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive")
+	return validateOfficialScheduleTimeout(c.OfficialSchedule.Transport.Timeout)
+}
+
+func (c *YouTubeCollectorRuntimeConfig) applyCollector() error {
+	if err := c.Collector.Validate(c.Holodex.Transport.Timeout, c.OfficialSchedule.Transport.Timeout); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (c *YouTubeCollectorRuntimeConfig) applyCollector() error {
-	collector := c.Collector.OrDefault()
-	if err := collector.Validate(c.Holodex.Transport.Timeout, c.OfficialSchedule.Transport.Timeout); err != nil {
-		return err
-	}
-	c.Collector = collector
-	return nil
+func applyYouTubeCollectorWorkerProfile(config *YouTubeCollectorRuntimeConfig) {
+	profile := config.WorkerProfile
+	worker := profile.Loaded.Profile.Workers["collection"]
+	settings := profile.Collection
+	config.Collector.TotalWorkers = worker.Executor.ConfiguredWorkers
+	config.Collector.QueueCapacity = int(*worker.Queue.Capacity.Items)
+	config.Collector.AcquisitionBatch = settings.AcquisitionBatch
+	config.Collector.AcquisitionCadence = time.Duration(settings.AcquisitionCadenceMS) * time.Millisecond
+	config.Collector.LeaseTTL = time.Duration(settings.LeaseTTLMS) * time.Millisecond
+	config.Collector.RenewInterval = time.Duration(settings.RenewIntervalMS) * time.Millisecond
+	config.Collector.RenewTimeout = time.Duration(settings.RenewTimeoutMS) * time.Millisecond
+	config.Collector.DBTimeout = time.Duration(settings.DBTimeoutMS) * time.Millisecond
+	config.Collector.CleanupTimeout = time.Duration(settings.CleanupTimeoutMS) * time.Millisecond
+	config.Collector.ProviderAdmissionTimeout = time.Duration(settings.ProviderAdmissionTimeoutMS) * time.Millisecond
+	config.Collector.CollectionOverhead = time.Duration(settings.CollectionOverheadMS) * time.Millisecond
+	config.Collector.PublishTimeout = time.Duration(settings.PublishTimeoutMS) * time.Millisecond
+	config.Collector.RetryMin = time.Duration(settings.RetryMinMS) * time.Millisecond
+	config.Collector.RetryMax = time.Duration(settings.RetryMaxMS) * time.Millisecond
+	config.Collector.ReleaseJitterMin = time.Duration(settings.ReleaseJitterMinMS) * time.Millisecond
+	config.Collector.ReleaseJitterMax = time.Duration(settings.ReleaseJitterMaxMS) * time.Millisecond
+	config.Collector.HolodexMaxInflight = settings.HolodexMaxInflight
+	config.Collector.OfficialMaxInflight = settings.OfficialMaxInflight
+	config.Collector.YouTubeJSMaxInflight = settings.YouTubeJSMaxInflight
 }
 
 func (c CollectorProxyConfig) Validate() error {

@@ -76,6 +76,7 @@ chmod +x "${tmpdir}/docker"
 export PATH="${tmpdir}:${PATH}"
 export CONTAINER_CLI=docker
 export MOCK_DOCKER_LOG="${tmpdir}/docker.log"
+export HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1
 
 : >"${MOCK_DOCKER_LOG}"
 MOCK_DOCKER_PRESENT_NAMES="" removed_runtime_cleanup_before_cutover

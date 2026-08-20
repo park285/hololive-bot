@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
+	"github.com/park285/shared-go/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )
@@ -269,4 +271,63 @@ func metricLabelsMatch(labels []*dto.LabelPair, want map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func TestNewCollectionExecutorMapsEverySchedulerField(t *testing.T) {
+	t.Parallel()
+	scheduler := newLifecycleScheduler(t)
+	scheduler.publisher = NewPublisher(nil)
+	scheduler.owner = "owner-test"
+	scheduler.gates = newProviderGates(&scheduler.collector)
+	scheduler.workerTracker = workercontract.NewExecutorTracker()
+	scheduler.workerTotals = &workercontract.Counters{}
+
+	executor := newCollectionExecutor(scheduler)
+
+	executorValue := reflect.ValueOf(executor).Elem()
+	schedulerValue := reflect.ValueOf(scheduler).Elem()
+	for i := range executorValue.NumField() {
+		field := executorValue.Type().Field(i)
+		got := executorValue.Field(i)
+		if got.IsZero() {
+			t.Fatalf("executor.%s = zero, want mapped from scheduler", field.Name)
+		}
+		if field.Type.Kind() == reflect.Func {
+			continue
+		}
+		assertExecutorFieldMirrorsScheduler(t, &field, got, schedulerValue.FieldByName(field.Name))
+	}
+
+	boom := errors.New("boom")
+	executor.reportFatal(boom)
+	select {
+	case err := <-scheduler.Fatal():
+		if !errors.Is(err, boom) {
+			t.Fatalf("fatal = %v, want wrapped %v", err, boom)
+		}
+	default:
+		t.Fatal("executor.reportFatal is not bound to the scheduler fatal channel")
+	}
+}
+
+func assertExecutorFieldMirrorsScheduler(t *testing.T, field *reflect.StructField, got, want reflect.Value) {
+	t.Helper()
+	if !want.IsValid() {
+		t.Fatalf("executor.%s has no scheduler field of the same name", field.Name)
+	}
+	if want.IsZero() {
+		t.Fatalf("scheduler.%s = zero, test fixture must populate every mapped field", field.Name)
+	}
+	switch {
+	case field.Type.Kind() == reflect.Pointer || field.Type.Kind() == reflect.Map:
+		if got.Pointer() != want.Pointer() {
+			t.Fatalf("executor.%s points to a different instance than scheduler.%s", field.Name, field.Name)
+		}
+	case field.Type.Comparable():
+		if !got.Equal(want) {
+			t.Fatalf("executor.%s = %v, want scheduler value %v", field.Name, got, want)
+		}
+	default:
+		t.Fatalf("executor.%s has unsupported kind %s, extend the mapping assertion", field.Name, field.Type.Kind())
+	}
 }

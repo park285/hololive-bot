@@ -73,36 +73,16 @@ func (c *ClaimManager) setMetricsRecorder(metrics *MetricsRecorder) {
 	}
 }
 
-func (c *ClaimManager) statusUpdater() *StatusUpdater {
-	if c == nil {
-		return newStatusUpdater(nil, nil, &dispatchstate.Config{})
-	}
-	if c.status != nil {
-		return c.status
-	}
-	return newStatusUpdater(c.db, c.logger, &c.config)
-}
-
 func (c *ClaimManager) markSent(ctx context.Context, id int64, lockedAt *time.Time) {
-	c.statusUpdater().markSentIfLocked(ctx, id, lockedAt)
+	c.status.markSentIfLocked(ctx, id, lockedAt)
 }
 
 func (c *ClaimManager) markFailed(ctx context.Context, id int64, lockedAt *time.Time, errMsg string) {
-	c.statusUpdater().markFailedIfLocked(ctx, id, lockedAt, errMsg)
-}
-
-func (c *ClaimManager) outboxGrouper() *OutboxGrouper {
-	if c == nil {
-		return newOutboxGrouper(nil, nil, nil, &dispatchstate.Config{})
-	}
-	if c.grouper != nil {
-		return c.grouper
-	}
-	return newOutboxGrouper(c.db, nil, c.logger, &c.config)
+	c.status.markFailedIfLocked(ctx, id, lockedAt, errMsg)
 }
 
 func (c *ClaimManager) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
-	return c.outboxGrouper().collectRoomsByChannel(ctx, items)
+	return c.grouper.collectRoomsByChannel(ctx, items)
 }
 
 func (c *ClaimManager) filterLiveCatchupSuppressedRooms(
@@ -110,7 +90,7 @@ func (c *ClaimManager) filterLiveCatchupSuppressedRooms(
 	item *domain.YouTubeNotificationOutbox,
 	rooms map[string]bool,
 ) map[string]bool {
-	return c.outboxGrouper().filterLiveCatchupSuppressedRooms(ctx, item, rooms)
+	return c.grouper.filterLiveCatchupSuppressedRooms(ctx, item, rooms)
 }
 
 func (c *ClaimManager) dispatchDeliveryRows(

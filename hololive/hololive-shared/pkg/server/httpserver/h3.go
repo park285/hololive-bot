@@ -13,6 +13,7 @@ import (
 	sharedh3 "github.com/park285/shared-go/pkg/h3"
 	runtimehttpserver "github.com/park285/shared-go/pkg/runtime/httpserver"
 	"github.com/park285/shared-go/pkg/telemetry"
+	"github.com/park285/shared-go/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 )
 
@@ -23,6 +24,7 @@ type RuntimeHTTPServers struct {
 }
 
 func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerConfig, handler http.Handler, operation string,
+	workerRegistry *workercontract.Registry,
 	traceFilters ...func(*http.Request) bool,
 ) (*RuntimeHTTPServers, error) {
 	if serverConfig == nil {
@@ -37,7 +39,7 @@ func NewRuntimeHTTPServers(ctx context.Context, serverConfig *settings.ServerCon
 		servers.H3 = h3Server
 	}
 	if metricsAddr := strings.TrimSpace(serverConfig.MetricsAddr); metricsAddr != "" {
-		servers.Metrics = NewMetricsServer(ctx, metricsAddr, serverConfig.APIKey)
+		servers.Metrics = NewMetricsServer(ctx, metricsAddr, serverConfig.APIKey, workerRegistry)
 	}
 	if pprofAddr := strings.TrimSpace(serverConfig.PprofAddr); pprofAddr != "" {
 		servers.Pprof = NewPprofServer(ctx, pprofAddr, serverConfig.APIKey)

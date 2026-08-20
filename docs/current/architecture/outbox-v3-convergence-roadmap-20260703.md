@@ -10,7 +10,7 @@
 
 | 계열 | 테이블 | 도메인 | 상태 어휘 | 생산자 | 소비자 |
 |---|---|---|---|---|---|
-| v1 | `youtube_notification_outbox` + `youtube_notification_delivery` + `youtube_notification_delivery_telemetry` | YouTube 콘텐츠 알림 (LIVE/NEW_VIDEO/COMMUNITY_POST/NEW_SHORT) | 대문자 `PENDING/SENT/FAILED` | youtube-producer 폴러 (`poller/internal/batchrepo/repository_batch_writes.go:235`) | alarm-worker youtube outbox dispatcher (`workerapp/build_egress.go:163`, prod `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`) |
+| v1 | `youtube_notification_outbox` + `youtube_notification_delivery` + `youtube_notification_delivery_telemetry` | YouTube 콘텐츠 알림 (LIVE/NEW_VIDEO/COMMUNITY_POST/NEW_SHORT) | 대문자 `PENDING/SENT/FAILED` | youtube-producer 폴러 (`poller/internal/batchrepo/repository_batch_writes.go:235`) | alarm-worker `youtube_delivery` worker |
 | v2 | `notification_delivery_outbox` | major-event / member-news 다이제스트 | 대문자 `PENDING/SENDING/SENT/FAILED` | LLM 플레인 스케줄러 (`majorevent/scheduler/notification_guard.go:51`, `membernews/scheduler/digest_helper.go:85`) | alarm-worker delivery dispatcher (`build_egress.go:69`) |
 | v3 | `alarm_dispatch_events`/`_deliveries`/`_admin_actions`/`_event_collisions` | `!알람` 라이브·기념일 디스패치 원장 | 소문자 `shadowed/pending/retry/leased/sending/sent/dlq/quarantined/cancelled` | alarm 스케줄러 + celebration publisher (`dispatchoutbox/repository_insert.go:105,205`) | alarm-worker dispatch consumer (`build_egress.go:96`) |
 
@@ -29,8 +29,9 @@
    변환 게시합니다. 소스 페이로드는 `YouTubeOutboxDispatchPayload`를 사용합니다.
 2. v1 `SENT`는 cutover에서 handoff 완료를 뜻하며 발송 진실은 v3 원장으로 이동합니다.
 3. 듀얼런: `shadow` 게시 ↔ 기존 dispatcher 발송을 DB와 `hololive_youtube_outbox_v3_handoff_total`로 대조합니다.
-4. 컷오버: `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=true`, `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=cutover`,
-   `ALARM_DISPATCH_CONSUMER_ENABLED=true`를 함께 유지합니다.
+4. 컷오버: `youtube_delivery.executor.enabled=true`,
+   `YOUTUBE_OUTBOX_V3_HANDOFF_MODE=cutover`, `alarm_dispatch.executor.enabled=true`를
+   같은 `hololive/alarm-worker` profile에서 유지합니다.
 5. 정리(별도 승인 필요한 파괴적 단계): v1 dispatcher 코드 서브트리
    (`youtube/outbox/internal/delivery/{dispatch,store}/`), compose/CI 게이트 플래그
    (`docker-compose.prod.yml:357`, `ci-notification-egress-gate.sh:112`), 그리고 outbox/delivery 테이블 DROP.
@@ -43,7 +44,7 @@
    현재 pre-rendered message는 기존 formatter의 deterministic output을 보존하는 compatibility seam입니다.
 2. `shadow`에서 `hololive_delivery_outbox_v3_handoff_total`과 room/kind/period 집합을 대조한 뒤 producer를
    `cutover`로 전환합니다.
-3. 기존 backlog가 0이 된 뒤 `DELIVERY_DISPATCHER_ENABLED=false` 컷오버 → `notification_delivery_outbox` +
+3. 기존 backlog가 0이 된 뒤 `notification_delivery.executor.enabled=false` 컷오버 → `notification_delivery_outbox` +
    `pkg/service/delivery/` 제거(096의 `idx_ndo_pending_due_created_id`는 이때 함께 소멸).
 
 ## Phase 3 — v3 원장 파티셔닝 (보존정책의 복잡도 정리)

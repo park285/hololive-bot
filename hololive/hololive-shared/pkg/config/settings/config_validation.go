@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	sharedenv "github.com/park285/shared-go/pkg/envutil"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -89,8 +88,8 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	if config == nil {
 		return nil
 	}
-	if config.Timeout <= 0 {
-		return fmt.Errorf("HOLODEX_TIMEOUT_SECONDS must be positive")
+	if err := validateHolodexTimeout(config.Timeout); err != nil {
+		return err
 	}
 	fallback := config.LiveStatusFallback
 	if fallback.MaxPerCycle <= 0 {
@@ -105,6 +104,27 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	return nil
 }
 
+func validateHolodexTimeout(timeout time.Duration) error {
+	if timeout <= 0 {
+		return fmt.Errorf("HOLODEX_TIMEOUT_SECONDS must be positive")
+	}
+	return nil
+}
+
+func validateHolodexAPIKey(apiKey string) error {
+	if strings.TrimSpace(apiKey) == "" {
+		return fmt.Errorf("HOLODEX_API_KEY is required")
+	}
+	return nil
+}
+
+func validateOfficialScheduleTimeout(timeout time.Duration) error {
+	if timeout <= 0 {
+		return fmt.Errorf("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive")
+	}
+	return nil
+}
+
 func validateOfficialScheduleConfig(config *OfficialScheduleConfig, maxResponseBodyBytes int64) error {
 	if config == nil {
 		return fmt.Errorf("official schedule config is required")
@@ -112,8 +132,8 @@ func validateOfficialScheduleConfig(config *OfficialScheduleConfig, maxResponseB
 	if err := validateOfficialScheduleBaseURL(config.BaseURL); err != nil {
 		return err
 	}
-	if config.Timeout <= 0 {
-		return fmt.Errorf("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive")
+	if err := validateOfficialScheduleTimeout(config.Timeout); err != nil {
+		return err
 	}
 	if config.CacheExpiry <= 0 {
 		return fmt.Errorf("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS must be positive")
@@ -148,10 +168,7 @@ func (c *Config) validateAdminAPIRequiredConfig() error {
 	if len(c.Kakao.Rooms) == 0 {
 		return fmt.Errorf("KAKAO_ROOMS is required")
 	}
-	if strings.TrimSpace(c.Holodex.APIKey) == "" {
-		return fmt.Errorf("HOLODEX_API_KEY is required")
-	}
-	return nil
+	return validateHolodexAPIKey(c.Holodex.APIKey)
 }
 
 func (c *Config) validateRequiredConfig() error {
@@ -170,10 +187,7 @@ func (c *Config) validateRequiredConfig() error {
 	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
 		return fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
-	if strings.TrimSpace(c.Holodex.APIKey) == "" {
-		return fmt.Errorf("HOLODEX_API_KEY is required")
-	}
-	return nil
+	return validateHolodexAPIKey(c.Holodex.APIKey)
 }
 
 func validateScraperConfig(config *ScraperConfig) error {
@@ -253,23 +267,27 @@ func validateScraperBackfillConfig(config ScraperBackfillConfig) error {
 	return nil
 }
 
-func loadScraperPoll() ScraperPoll {
+func loadScraperPoll() (ScraperPoll, error) {
 	defaults := DefaultScraperPoll()
-
-	return ScraperPoll{
-		Videos:    secondsEnv("SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS", defaults.Videos),
-		Shorts:    secondsEnv("SCRAPER_POLL_SHORTS_INTERVAL_SECONDS", defaults.Shorts),
-		Community: secondsEnv("SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS", defaults.Community),
-		Stats:     secondsEnv("SCRAPER_POLL_STATS_INTERVAL_SECONDS", defaults.Stats),
-		Live:      secondsEnv("SCRAPER_POLL_LIVE_INTERVAL_SECONDS", defaults.Live),
+	var poll ScraperPoll
+	for _, field := range []struct {
+		key      string
+		fallback time.Duration
+		target   *time.Duration
+	}{
+		{key: "SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS", fallback: defaults.Videos, target: &poll.Videos},
+		{key: "SCRAPER_POLL_SHORTS_INTERVAL_SECONDS", fallback: defaults.Shorts, target: &poll.Shorts},
+		{key: "SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS", fallback: defaults.Community, target: &poll.Community},
+		{key: "SCRAPER_POLL_STATS_INTERVAL_SECONDS", fallback: defaults.Stats, target: &poll.Stats},
+		{key: "SCRAPER_POLL_LIVE_INTERVAL_SECONDS", fallback: defaults.Live, target: &poll.Live},
+	} {
+		value, err := requiredSecondsDurationEnv(field.key, field.fallback)
+		if err != nil {
+			return ScraperPoll{}, err
+		}
+		*field.target = value
 	}
-}
-
-func secondsEnv(key string, fallback time.Duration) time.Duration {
-	if seconds := sharedenv.Int(key, 0); seconds > 0 {
-		return time.Duration(seconds) * time.Second
-	}
-	return fallback
+	return poll, nil
 }
 
 func validateUnsupportedLegacyEnvUsage() error {

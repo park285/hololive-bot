@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/shared-go/pkg/workerconfig"
 )
 
 func load() (*Config, error) {
@@ -46,6 +45,7 @@ func load() (*Config, error) {
 
 func setRequiredLoadEnv(t *testing.T) {
 	t.Helper()
+	useStackWorkerProfileFixture(t, "stack-worker-profile-api.json")
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
@@ -381,6 +381,46 @@ func TestLoad_HolodexTimeoutMustBePositive(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "HOLODEX_TIMEOUT_SECONDS must be positive") {
 		t.Fatalf("Load() error = %v, want HOLODEX_TIMEOUT_SECONDS must be positive", err)
 	}
+}
+
+func TestLoad_HolodexTimeoutEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("HOLODEX_TIMEOUT_SECONDS", "45")
+
+	config, err := load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if config.Holodex.Timeout != 45*time.Second {
+		t.Fatalf("Holodex.Timeout = %v, want %v", config.Holodex.Timeout, 45*time.Second)
+	}
+}
+
+func TestLoad_HolodexAPIKeyRequired(t *testing.T) {
+	t.Run("load rejects both key env vars empty", func(t *testing.T) {
+		setRequiredLoadEnv(t)
+		t.Setenv("HOLODEX_API_KEY", "")
+		t.Setenv("HOLODEX_API_KEY_1", "")
+
+		_, err := load()
+		if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY is required") {
+			t.Fatalf("Load() error = %v, want HOLODEX_API_KEY is required", err)
+		}
+	})
+
+	t.Run("Validate rejects blank key", func(t *testing.T) {
+		setRequiredLoadEnv(t)
+		config, err := load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		config.Holodex.APIKey = "   "
+
+		err = config.Validate()
+		if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY is required") {
+			t.Fatalf("Validate() error = %v, want HOLODEX_API_KEY is required", err)
+		}
+	})
 }
 
 func TestLoad_HolodexLiveStatusFallbackValidation(t *testing.T) {
@@ -738,6 +778,64 @@ func TestLoad_ScraperPollCanonicalEnvWinsOverRemovedLegacyEnv(t *testing.T) {
 		Stats:     4 * time.Hour,
 		Live:      3 * time.Minute,
 	})
+}
+
+func TestLoadScraperConfigRejectsInvalidPollAndWorkerCount(t *testing.T) {
+	for _, key := range []string{
+		"SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS",
+		"SCRAPER_POLL_SHORTS_INTERVAL_SECONDS",
+		"SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS",
+		"SCRAPER_POLL_STATS_INTERVAL_SECONDS",
+		"SCRAPER_POLL_LIVE_INTERVAL_SECONDS",
+		"SCRAPER_SCHEDULER_WORKER_COUNT",
+	} {
+		for _, value := range []string{"0", "-1", "invalid", ""} {
+			t.Run(key+"="+value, func(t *testing.T) {
+				t.Setenv(key, value)
+
+				_, err := loadScraperConfig()
+				if err == nil {
+					t.Fatalf("loadScraperConfig() accepted %s=%q", key, value)
+				}
+				if !strings.Contains(err.Error(), key) {
+					t.Fatalf("loadScraperConfig() error = %v, want it to name %s", err, key)
+				}
+			})
+		}
+	}
+}
+
+func TestLoad_ScraperInvalidEnvFailsLoad(t *testing.T) {
+	for _, key := range []string{
+		"SCRAPER_POLL_LIVE_INTERVAL_SECONDS",
+		"SCRAPER_SCHEDULER_WORKER_COUNT",
+	} {
+		t.Run(key, func(t *testing.T) {
+			setRequiredLoadEnv(t)
+			t.Setenv(key, "invalid")
+
+			_, err := load()
+			if err == nil {
+				t.Fatalf("Load() error = nil, want %s rejection", key)
+			}
+			if !strings.Contains(err.Error(), "load scraper config: ") || !strings.Contains(err.Error(), key) {
+				t.Fatalf("Load() error = %v, want wrapped %s rejection", err, key)
+			}
+		})
+	}
+}
+
+func TestLoad_AlarmDispatchRetentionInvalidEnvFailsLoad(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("ALARM_DISPATCH_RETENTION_INTERVAL_MS", "0")
+
+	_, err := load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want alarm dispatch retention rejection")
+	}
+	if !strings.Contains(err.Error(), "load alarm dispatch retention config: ") || !strings.Contains(err.Error(), "ALARM_DISPATCH_RETENTION_INTERVAL_MS") {
+		t.Fatalf("Load() error = %v, want wrapped alarm dispatch retention rejection", err)
+	}
 }
 
 func TestLoad_ScraperBackfillDefaults(t *testing.T) {
@@ -1611,7 +1709,7 @@ func TestLoad_InvalidCoreNumeric(t *testing.T) {
 	}
 }
 
-func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
+func TestLoad_WebhookUsesLocalStackWorkerProfile(t *testing.T) {
 	setRequiredLoadEnv(t)
 	server := newIrisRuntimeDiagnosticsServer(t, `{
 		"state": "running",
@@ -1665,35 +1763,32 @@ func TestLoad_WebhookUsesIrisBotWorkerProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if config.Webhook.WorkerCount != 20 {
-		t.Fatalf("Webhook.WorkerCount = %d, want 20", config.Webhook.WorkerCount)
+	if config.Webhook.WorkerCount != 16 {
+		t.Fatalf("Webhook.WorkerCount = %d, want 16", config.Webhook.WorkerCount)
 	}
-	if config.Webhook.QueueSize != 640 {
-		t.Fatalf("Webhook.QueueSize = %d, want 640", config.Webhook.QueueSize)
+	if config.Webhook.QueueSize != 0 {
+		t.Fatalf("Webhook.QueueSize = %d, want unused zero value", config.Webhook.QueueSize)
 	}
-	if config.Webhook.EnqueueTimeout != 80*time.Millisecond {
-		t.Fatalf("Webhook.EnqueueTimeout = %v, want 80ms", config.Webhook.EnqueueTimeout)
+	if config.Webhook.EnqueueTimeout != 0 {
+		t.Fatalf("Webhook.EnqueueTimeout = %v, want unused zero value", config.Webhook.EnqueueTimeout)
 	}
-	if config.Webhook.HandlerTimeout != 36*time.Second {
-		t.Fatalf("Webhook.HandlerTimeout = %v, want 36s", config.Webhook.HandlerTimeout)
+	if config.Webhook.HandlerTimeout != 30*time.Second {
+		t.Fatalf("Webhook.HandlerTimeout = %v, want 30s", config.Webhook.HandlerTimeout)
 	}
-	if config.Webhook.MaxBodyBytes != 262144 {
-		t.Fatalf("Webhook.MaxBodyBytes = %d, want 262144", config.Webhook.MaxBodyBytes)
+	if config.Webhook.MaxBodyBytes != 65536 {
+		t.Fatalf("Webhook.MaxBodyBytes = %d, want 65536", config.Webhook.MaxBodyBytes)
 	}
-	if config.Webhook.DedupTTL != 6*time.Minute || config.Webhook.DedupTimeout != 300*time.Millisecond {
-		t.Fatalf("Webhook dedup = (%v,%v), want (6m,300ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
+	if config.Webhook.DedupTTL != 16*time.Minute || config.Webhook.DedupTimeout != 200*time.Millisecond {
+		t.Fatalf("Webhook dedup = (%v,%v), want (16m,200ms)", config.Webhook.DedupTTL, config.Webhook.DedupTimeout)
 	}
 	if !config.Webhook.RequireHMAC {
 		t.Fatalf("Webhook.RequireHMAC = false, want true")
 	}
-	if config.WorkerPool.Workers != 15 || config.WorkerPool.QueueSize != 200 {
-		t.Fatalf("WorkerPool = (%d,%d), want (15,200)", config.WorkerPool.Workers, config.WorkerPool.QueueSize)
+	if config.APIWorkerProfile == nil || config.APIWorkerProfile.Loaded.Profile.ProfileID != "hololive-api-test" {
+		t.Fatalf("APIWorkerProfile = %#v, want hololive-api-test", config.APIWorkerProfile)
 	}
-	if config.WorkerProfile.Version != workerconfig.CurrentVersion {
-		t.Fatalf("WorkerProfile.Version = %d, want %d", config.WorkerProfile.Version, workerconfig.CurrentVersion)
-	}
-	if config.WorkerProfile.Hash == "" {
-		t.Fatal("WorkerProfile.Hash is empty")
+	if config.APIWorkerProfile.Loaded.Hash == "" {
+		t.Fatal("APIWorkerProfile hash is empty")
 	}
 }
 

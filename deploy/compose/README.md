@@ -67,10 +67,14 @@ The central unsuffixed `youtube-collector` (`c`) also uses scoped
 monolithic Compose env file as an `env_file`.
 
 `youtube-collector.env` must provide a non-empty `API_SECRET_KEY`, the shared
-`OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true`
+`HOLOLIVE_OTLP_GRPC_ENDPOINT`, and `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true`
 for every deployed slot. Host-native `a`/`d` bind metrics to their tailnet
 address, so omitting `API_SECRET_KEY` is a startup configuration error rather
 than a keyless metrics mode.
+
+`HOLOLIVE_OTLP_GRPC_ENDPOINT` uses the gRPC `host:port` form. The generic
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` variables
+are rejected instead of being reinterpreted with a second URL grammar.
 
 Collector compatibility env pairs use `${NEW-${OLD-default}}` / `${OLD-${NEW-default}}` interpolation. This preserves explicit empty values so the collector loader fails closed, while unset, new-only, old-only, equal, and conflicting inputs retain the truth table documented in [`youtube-collector.md`](../../docs/current/runbooks/youtube-collector.md#key-environment-variables).
 

@@ -22,10 +22,6 @@ package bootstrap
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -37,7 +33,8 @@ import (
 
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
-	"github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/iris-client-go/v2/webhooksign"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,12 +52,13 @@ func TestBuildDurableBotWebhookHandlerMalformedJSONDoesNotConsumeDedupSlot(t *te
 	admitter := &recordingWebhookAdmitter{messages: make(chan *webhook.Message, 1)}
 	handler := buildDurableBotWebhookHandlerForTest(t, admitter)
 
-	malformedRequest := newSignedBotWebhookTestRequest(t.Context(), token, messageID, "{invalid-json")
+	malformedRequest := newSignedBotWebhookTestRequest(t, t.Context(), token, messageID, "{invalid-json")
 	malformedResponse := httptest.NewRecorder()
 	handler.ServeHTTP(malformedResponse, malformedRequest)
 	assert.Equal(t, http.StatusBadRequest, malformedResponse.Code)
 
 	validRequest := newSignedBotWebhookTestRequest(
+		t,
 		t.Context(),
 		token,
 		messageID,
@@ -86,12 +84,13 @@ func TestBuildDurableBotWebhookHandlerWiresPrometheusMetrics(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", token)
 	handler := buildDurableBotWebhookHandlerForTest(t, &recordingWebhookAdmitter{messages: make(chan *webhook.Message, 1)})
 
-	request := newSignedBotWebhookTestRequest(t.Context(), token, "message-id-metrics", "{invalid-json")
+	request := newSignedBotWebhookTestRequest(t, t.Context(), token, "message-id-metrics", "{invalid-json")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 
 	assert.Equal(t, http.StatusBadRequest, response.Code)
-	assertDefaultWebhookMetricIncrements(t)
+	assertDefaultWebhookCounterAtLeast(t, "hololive_bot_webhook_bad_request_total", 1)
+	assertDefaultWebhookCounterAtLeast(t, "hololive_bot_webhook_signature_v3_validated_total", 1)
 }
 
 func TestBuildDurableBotWebhookHandlerRequiresHMACWhenConfigured(t *testing.T) {
@@ -154,18 +153,18 @@ func testDurableWebhookConfig() *settings.Config {
 	}
 }
 
-func assertDefaultWebhookMetricIncrements(t *testing.T) {
+func assertDefaultWebhookCounterAtLeast(t *testing.T, name string, minimum float64) {
 	t.Helper()
 	families, err := prometheus.DefaultGatherer.Gather()
 	require.NoError(t, err)
 	for _, family := range families {
-		if family.GetName() == "hololive_bot_webhook_bad_request_total" {
+		if family.GetName() == name {
 			require.NotEmpty(t, family.Metric)
-			assert.GreaterOrEqual(t, family.Metric[0].GetCounter().GetValue(), float64(1))
+			assert.GreaterOrEqual(t, family.Metric[0].GetCounter().GetValue(), minimum)
 			return
 		}
 	}
-	t.Fatal("hololive_bot_webhook_bad_request_total was not registered")
+	t.Fatalf("%s was not registered", name)
 }
 
 type recordingWebhookAdmitter struct {
@@ -181,7 +180,7 @@ func (a *recordingWebhookAdmitter) AdmitMessage(_ context.Context, msg *webhook.
 }
 
 func newBotWebhookTestRequest(ctx context.Context, token, messageID, body string) *http.Request {
-	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/webhook/iris", strings.NewReader(body))
+	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://hololive.example/webhook/iris", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Iris-Token", token)
 	request.Header.Set(webhook.HeaderIrisMessageID, messageID)
@@ -189,26 +188,10 @@ func newBotWebhookTestRequest(ctx context.Context, token, messageID, body string
 	return request
 }
 
-func newSignedBotWebhookTestRequest(ctx context.Context, token, messageID, body string) *http.Request {
+func newSignedBotWebhookTestRequest(t *testing.T, ctx context.Context, token, messageID, body string) *http.Request {
+	t.Helper()
 	request := newBotWebhookTestRequest(ctx, token, messageID, body)
-	signBotWebhookTestRequest(request, token, body)
+	require.NoError(t, webhooksign.SignRequest(request, token, []byte(body)))
 
 	return request
-}
-
-func signBotWebhookTestRequest(request *http.Request, secret, body string) {
-	timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
-	nonce := fmt.Sprintf("hololive-test-%d", time.Now().UnixNano())
-	bodyDigest := sha256.Sum256([]byte(body))
-	bodySHA256 := hex.EncodeToString(bodyDigest[:])
-	messageID := strings.TrimSpace(request.Header.Get(webhook.HeaderIrisMessageID))
-	canonical := strings.Join([]string{webhook.SignatureVersionV2, strings.ToUpper(request.Method), request.URL.RequestURI(), timestamp, nonce, messageID, bodySHA256}, "\n")
-	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(canonical))
-
-	request.Header.Set(webhook.HeaderIrisSignatureVersion, webhook.SignatureVersionV2)
-	request.Header.Set(webhook.HeaderIrisTimestamp, timestamp)
-	request.Header.Set(webhook.HeaderIrisNonce, nonce)
-	request.Header.Set(webhook.HeaderIrisBodySHA256, bodySHA256)
-	request.Header.Set(webhook.HeaderIrisSignature, hex.EncodeToString(mac.Sum(nil)))
 }

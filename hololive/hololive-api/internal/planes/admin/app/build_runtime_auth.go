@@ -8,9 +8,9 @@ import (
 
 	"log/slog"
 
+	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
-	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 )
 

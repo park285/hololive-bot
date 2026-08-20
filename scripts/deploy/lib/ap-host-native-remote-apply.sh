@@ -15,6 +15,7 @@ previous_link="/opt/hololive-bot/youtube-collector/previous"
 host_env="/etc/hololive-bot/youtube-collector-host.env"
 unit_file="/etc/systemd/system/hololive-youtube-collector@.service"
 unit="hololive-youtube-collector@${service}.service"
+worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 producer_state_file="$releases_root/first-cutover-producer.state"
 swapfile="/swapfile"
 
@@ -31,6 +32,7 @@ if ! id hololive >/dev/null 2>&1; then
 fi
 
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
+sudo -n test -r "$worker_profile"
 if sudo -n grep -Eq '^CACHE_(PASSWORD|HOST|PORT|DB|SOCKET_PATH)=' /etc/stack-secrets/hololive-bot/youtube-collector.env; then
   echo "collector-scoped env must not contain Valkey/cache configuration" >&2
   exit 1
@@ -105,6 +107,8 @@ sudo -n mkdir -p "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
 sudo -n chown -R root:root "$release_dir"
 sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-collector" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-collector-wrapper"
+sudo -n -u hololive env STACK_WORKER_PROFILE_FILE="$worker_profile" \
+  "$release_dir/bin/youtube-collector" --check-worker-profile
 
 if [[ -n "$old_target" && -d "$old_target" ]]; then
   sudo -n test -r "$host_env"
