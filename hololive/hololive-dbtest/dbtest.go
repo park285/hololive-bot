@@ -199,38 +199,77 @@ func provisionPostgresContainer(
 	holdReaper func(context.Context) error,
 	verifyReaper func(context.Context) error,
 ) (*postgres.PostgresContainer, error) {
-	attempts := containerStartRetryAttempts
-	if reaperRecoveryAttempts > attempts {
-		attempts = reaperRecoveryAttempts
-	}
-
 	var attemptErr error
-	for range attempts {
-		_ = holdReaper(ctx)
-
-		container, err := start(ctx, image)
-		if err != nil {
-			attemptErr = errors.Join(attemptErr, err)
-			if !isTransientContainerStartError(err) {
-				return nil, attemptErr
-			}
-			if waitErr := waitContainerStartRetry(ctx); waitErr != nil {
-				return nil, errors.Join(attemptErr, waitErr)
-			}
-			continue
-		}
-
-		verifyErr := verifyReaper(ctx)
-		if verifyErr == nil {
+	for range postgresProvisionAttempts() {
+		container, err, retry := runPostgresProvisionAttempt(ctx, image, start, holdReaper, verifyReaper)
+		if err == nil {
 			return container, nil
 		}
-		attemptErr = errors.Join(attemptErr, fmt.Errorf("verify reaper client registration: %w", verifyErr))
-
-		if retryErr := preparePostgresRetry(ctx, container, verifyErr); retryErr != nil {
-			return nil, errors.Join(attemptErr, retryErr)
+		attemptErr = errors.Join(attemptErr, err)
+		if !retry {
+			return nil, attemptErr
 		}
 	}
 	return nil, attemptErr
+}
+
+func postgresProvisionAttempts() int {
+	if reaperRecoveryAttempts > containerStartRetryAttempts {
+		return reaperRecoveryAttempts
+	}
+	return containerStartRetryAttempts
+}
+
+func runPostgresProvisionAttempt(
+	ctx context.Context,
+	image string,
+	start func(context.Context, string) (*postgres.PostgresContainer, error),
+	holdReaper func(context.Context) error,
+	verifyReaper func(context.Context) error,
+) (*postgres.PostgresContainer, error, bool) {
+	container, err, retry := tryStartPostgres(ctx, image, start, holdReaper)
+	if err != nil {
+		return nil, err, retry
+	}
+	return tryVerifyPostgres(ctx, container, verifyReaper)
+}
+
+func tryStartPostgres(
+	ctx context.Context,
+	image string,
+	start func(context.Context, string) (*postgres.PostgresContainer, error),
+	holdReaper func(context.Context) error,
+) (*postgres.PostgresContainer, error, bool) {
+	_ = holdReaper(ctx)
+	container, err := start(ctx, image)
+	if err == nil {
+		return container, nil, false
+	}
+	if !isTransientContainerStartError(err) {
+		return nil, err, false
+	}
+	waitErr := waitContainerStartRetry(ctx)
+	if waitErr != nil {
+		return nil, errors.Join(err, waitErr), false
+	}
+	return nil, err, true
+}
+
+func tryVerifyPostgres(
+	ctx context.Context,
+	container *postgres.PostgresContainer,
+	verifyReaper func(context.Context) error,
+) (*postgres.PostgresContainer, error, bool) {
+	verifyErr := verifyReaper(ctx)
+	if verifyErr == nil {
+		return container, nil, false
+	}
+	wrapped := fmt.Errorf("verify reaper client registration: %w", verifyErr)
+	retryErr := preparePostgresRetry(ctx, container, verifyErr)
+	if retryErr != nil {
+		return nil, errors.Join(wrapped, retryErr), false
+	}
+	return nil, wrapped, true
 }
 
 func isTransientContainerStartError(err error) bool {
