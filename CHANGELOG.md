@@ -8,6 +8,18 @@
 
 ## 미출시
 
+## v3.0.6 - 2026-08-21
+
+### 변경
+
+- 마이그레이션 `183_postgres_idle_transaction_timeout.sql`(manifest 순번 `044`)이 데이터베이스 기본값
+  `idle_in_transaction_session_timeout = 5min`을 설정해, 오래 열린 idle transaction이 VACUUM horizon을
+  붙잡아 `source_observation_queue`·`youtube_collection_job_leases`의 dead tuple 회수를 지연시키는 경로를
+  막습니다. MVCC 운영 증적 문서를 함께 확장했습니다. (#376)
+- 모든 Go 모듈의 `iris-client-go`를 `v2.1.2`로 갱신했습니다(내부 `randomhex` 도달 불가 분기 제거, 동작 동일).
+- 이번 릴리스는 `hololive-api`(3.0.6)·`hololive-alarm-worker`(3.0.5)·`youtube-collector` artifact를 함께
+  재빌드합니다. collector 이미지 version은 `hololive-api` VERSION을 따릅니다.
+
 ## v3.0.5 - 2026-08-20
 
 ### 변경
