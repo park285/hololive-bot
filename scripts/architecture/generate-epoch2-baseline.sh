@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 OUT="${ROOT}/hololive/hololive-api/scripts/migrations/001_schema_epoch2_baseline.sql"
-CONTRACT="${ROOT}/hololive/hololive-api/internal/migrationrunner/epoch2_legacy_contract.sha256"
+CONTRACT="${ROOT}/scripts/architecture/epoch2_legacy_contract.sha256"
 SUFFIX_CONTRACT="${ROOT}/scripts/architecture/epoch2_suffix_contract.txt"
 ACL_TAIL="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch2_acl_tail.sql"
 NORMALIZER="${ROOT}/scripts/architecture/normalize-epoch2-baseline.py"
