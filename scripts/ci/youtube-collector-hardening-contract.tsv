@@ -15,5 +15,3 @@ HC-011	true	PR-10	scripts/deploy/lib/ap-collector-readiness.sh	required	handoff_
 HC-012	true	PR-10	scripts/deploy/ap-deploy-version_test.sh	required	same remote block that validates readiness	1	1	-
 HC-012	true	PR-10	scripts/deploy/ap-deploy.sh	required	\. scripts/deploy/lib/ap-collector-readiness\.sh	1	1	-
 HC-012	true	PR-10	scripts/deploy/ap-deploy.sh	required	collector_readiness_validate	1	1	-
-# HC-013 remove_after: cleanup PR after collector fleet a/b/c/d runs a revision that understands YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES. Disable this rule and delete the alias together.
-HC-013	true	PR-07	hololive/hololive-shared/pkg/config/settings/config_youtube_collector_env.go	required	legacyEnv|compatEnv	1	1	-

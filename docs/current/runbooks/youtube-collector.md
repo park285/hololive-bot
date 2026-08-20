@@ -73,21 +73,7 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 
 Worker count, local queue capacity, acquisition cadence/batch, lease/renew/cleanup/publish budgets, retry/jitter, and provider in-flight limits are required fields of the `collection` profile. The runtime rejects their retired environment-variable forms instead of translating them.
 
-Provider-owned compatibility aliases remain separate from the worker profile:
-
-| Canonical env | Compatibility alias |
-|---|---|
-| `YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS` | `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS` |
-| `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES` | `YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES` |
-
-- new only → new 값
-- old only → old 값을 new field로 이관
-- both equal → 허용
-- both differ → startup fail
-- either explicitly empty → startup fail; Compose render도 empty를 default로 치환하지 않음
-- neither → 각 canonical documented default (`5`, `5`, `30`, `1048576`)
-
-제거 조건: collector fleet `a`/`b`/`c`/`d`가 네 canonical env를 이해하는 revision으로 안정화된 뒤, 별도 cleanup PR에서 Compose old env, loader alias, HC-013을 함께 제거합니다. 이 release에서 alias를 삭제하지 않습니다.
+Collector loader와 Compose는 canonical env만 읽습니다. `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`와 `YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`는 폐기되었고, 설정되어 있어도 무시됩니다. Canonical 값이 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
 
 ## Logs
 
