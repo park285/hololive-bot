@@ -3,6 +3,9 @@ package migrationrunner
 import (
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -542,7 +545,7 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	}
 }
 
-func TestRealManifestCheckpointedAt140SkipsBaselineAndAppliesSuffix(t *testing.T) {
+func TestRealManifestCheckpointedAt140WithoutBaselineChecksumRefuses(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	baselineFS := realManifestThrough(t, epoch2Baseline)
 	runMigrations(t, pool, baselineFS, "")
@@ -551,15 +554,11 @@ func TestRealManifestCheckpointedAt140SkipsBaselineAndAppliesSuffix(t *testing.T
 	}
 	prefillEpoch2LegacyContract(t, pool)
 
-	entries := manifestEntries(t)
-	result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
+	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if err == nil || !strings.Contains(err.Error(), epoch2Baseline+" is recorded in schema_migrations but its checksum is missing") {
+		t.Fatalf("Run() error = %v, want pre-R2 baseline without checksum to be refused now that backfill is retired", err)
 	}
-	if result.Applied != len(entries)-1 || result.Skipped != 1 || result.Total != len(entries) {
-		t.Fatalf("result = %+v, want applied=%d skipped=1 total=%d", result, len(entries)-1, len(entries))
-	}
-	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", true)
+	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", false)
 }
 
 func TestRealManifestPartialAt160AppliesOnlyRemainingSuffix(t *testing.T) {
@@ -582,20 +581,44 @@ func TestRealManifestPartialAt160AppliesOnlyRemainingSuffix(t *testing.T) {
 		t.Fatalf("result = %+v, want applied=%d skipped=%d total=%d", result, len(entries)-len(partialEntries), len(partialEntries), len(entries))
 	}
 	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", true)
+	assertMigrationRecorded(t, pool, epoch2LegacyLedgerCleanup, true)
+	assertLegacyLedgerCleared(t, pool)
 }
 
-func TestRealManifestFullyCurrentWithLegacyResidueSkipsAll(t *testing.T) {
+func TestRealManifestCurrentBeforeCleanupRemovesLegacyResidue(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	entries := manifestEntries(t)
-	runMigrations(t, pool, migrations.FS, "")
+	cleanupIndex := slices.Index(entries, epoch2LegacyLedgerCleanup)
+	if cleanupIndex < 1 {
+		t.Fatalf("manifest must list %s after at least one migration", epoch2LegacyLedgerCleanup)
+	}
+	runMigrations(t, pool, realManifestThrough(t, entries[cleanupIndex-1]), "")
 	prefillEpoch2LegacyContract(t, pool)
 
 	result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
 	if err != nil {
-		t.Fatalf("Run() error = %v", err)
+		t.Fatalf("Run() error = %v, want pending cleanup to be tolerated and applied", err)
 	}
+	if result.Applied != len(entries)-cleanupIndex || result.Skipped != cleanupIndex || result.Total != len(entries) {
+		t.Fatalf("result = %+v, want applied=%d skipped=%d total=%d", result, len(entries)-cleanupIndex, cleanupIndex, len(entries))
+	}
+	assertMigrationRecorded(t, pool, epoch2LegacyLedgerCleanup, true)
+	assertLegacyLedgerCleared(t, pool)
+
+	result = runMigrations(t, pool, migrations.FS, "")
 	if result.Applied != 0 || result.Skipped != len(entries) || result.Total != len(entries) {
-		t.Fatalf("result = %+v, want applied=0 skipped=%d total=%d", result, len(entries), len(entries))
+		t.Fatalf("second result = %+v, want applied=0 skipped=%d total=%d", result, len(entries), len(entries))
+	}
+}
+
+func TestRealManifestLegacyResidueAfterCleanupRefuses(t *testing.T) {
+	pool := dbtest.NewBlankPool(t)
+	runMigrations(t, pool, migrations.FS, "")
+	prefillEpoch2LegacyContract(t, pool)
+
+	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if err == nil || !strings.Contains(err.Error(), "after "+epoch2LegacyLedgerCleanup+" was applied") {
+		t.Fatalf("Run() error = %v, want unknown residue after the cleanup to be refused", err)
 	}
 }
 
@@ -719,61 +742,16 @@ func TestLedgerResidueWithChecksummedEpochBaselineSkipsBaseline(t *testing.T) {
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 }
 
-func TestEpoch2LegacyContractAllowsCheckpointedLedger(t *testing.T) {
+func TestEpoch2LegacyResidueWithoutBaselineChecksumRefuses(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	prefillEpoch2LegacyContract(t, pool)
 	prefillLedger(t, pool, []string{epoch2Baseline})
 
-	epochFS := epoch2BaselineProbeFS()
-	result, err := Run(t.Context(), pool, epochFS, Config{})
-	if err != nil {
-		t.Fatalf("Run() error = %v, want checkpointed contract to pass", err)
-	}
-	if result.Applied != 0 || result.Skipped != 1 || result.Total != 1 {
-		t.Fatalf("result = %+v, want applied=0 skipped=1 total=1", result)
+	_, err := Run(t.Context(), pool, epoch2BaselineProbeFS(), Config{})
+	if err == nil || !strings.Contains(err.Error(), epoch2Baseline+" is recorded in schema_migrations but its checksum is missing") {
+		t.Fatalf("Run() error = %v, want checkpointed ledger without baseline checksum to be refused", err)
 	}
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
-
-	var checksum string
-	if err := pool.QueryRow(t.Context(), "SELECT checksum_sha256 FROM schema_migration_checksums WHERE filename = $1", epoch2Baseline).Scan(&checksum); err != nil {
-		t.Fatalf("read backfilled baseline checksum: %v", err)
-	}
-	if checksum != migrationChecksum(mustMapFile(t, epochFS, epoch2Baseline).Data) {
-		t.Fatalf("baseline checksum = %s, want current source checksum", checksum)
-	}
-}
-
-func TestEpoch2LegacyContractRejectsMissingLedger(t *testing.T) {
-	pool := dbtest.NewBlankPool(t)
-	prefillEpoch2LegacyContract(t, pool)
-	prefillLedger(t, pool, []string{epoch2Baseline})
-	missing := mustEpoch2LegacyContract(t)[0].name
-	if _, err := pool.Exec(t.Context(), "DELETE FROM schema_migrations WHERE filename = $1", missing); err != nil {
-		t.Fatalf("remove legacy ledger fixture: %v", err)
-	}
-	assertEpoch2ContractRefusal(t, pool, missing+" is missing from schema_migrations")
-}
-
-func TestEpoch2LegacyContractRejectsMissingChecksum(t *testing.T) {
-	pool := dbtest.NewBlankPool(t)
-	prefillEpoch2LegacyContract(t, pool)
-	prefillLedger(t, pool, []string{epoch2Baseline})
-	missing := mustEpoch2LegacyContract(t)[0].name
-	if _, err := pool.Exec(t.Context(), "DELETE FROM schema_migration_checksums WHERE filename = $1", missing); err != nil {
-		t.Fatalf("remove legacy checksum fixture: %v", err)
-	}
-	assertEpoch2ContractRefusal(t, pool, missing+" checksum is missing")
-}
-
-func TestEpoch2LegacyContractRejectsChecksumMismatch(t *testing.T) {
-	pool := dbtest.NewBlankPool(t)
-	prefillEpoch2LegacyContract(t, pool)
-	prefillLedger(t, pool, []string{epoch2Baseline})
-	mismatch := mustEpoch2LegacyContract(t)[0].name
-	if _, err := pool.Exec(t.Context(), "UPDATE schema_migration_checksums SET checksum_sha256 = repeat('0', 64) WHERE filename = $1", mismatch); err != nil {
-		t.Fatalf("mutate legacy checksum fixture: %v", err)
-	}
-	assertEpoch2ContractRefusal(t, pool, mismatch+" checksum mismatch")
 }
 
 func epoch2BaselineProbeFS() fstest.MapFS {
@@ -783,13 +761,30 @@ func epoch2BaselineProbeFS() fstest.MapFS {
 	}
 }
 
-func mustEpoch2LegacyContract(t *testing.T) []epoch2LegacyMigration {
+type legacyLedgerEntry struct {
+	name     string
+	checksum string
+}
+
+func legacyLedgerFixture(t *testing.T) []legacyLedgerEntry {
 	t.Helper()
-	contract, err := parseEpoch2LegacyContract(epoch2LegacyContractRaw)
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "architecture", "epoch2_legacy_contract.sha256"))
 	if err != nil {
-		t.Fatalf("parse epoch-2 contract: %v", err)
+		t.Fatalf("read epoch-2 legacy ledger fixture: %v", err)
 	}
-	return contract
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	entries := make([]legacyLedgerEntry, 0, len(lines))
+	for number, line := range lines {
+		checksum, name, found := strings.Cut(line, "  ")
+		if !found {
+			t.Fatalf("epoch-2 legacy ledger fixture line %d is malformed", number+1)
+		}
+		entries = append(entries, legacyLedgerEntry{name: name, checksum: checksum})
+	}
+	if len(entries) != 136 {
+		t.Fatalf("epoch-2 legacy ledger fixture has %d entries, want 136", len(entries))
+	}
+	return entries
 }
 
 func prefillEpoch2LegacyContract(t *testing.T, pool *pgxpool.Pool) {
@@ -798,24 +793,33 @@ func prefillEpoch2LegacyContract(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(ctx, mustSQL("ensure_migration_checksums.sql")); err != nil {
 		t.Fatalf("create checksum ledger fixture: %v", err)
 	}
-	contract := mustEpoch2LegacyContract(t)
-	names := make([]string, len(contract))
-	for index, migration := range contract {
-		names[index] = migration.name
-		if _, err := pool.Exec(ctx, mustSQL("record_migration_checksum.sql"), migration.name, migration.checksum); err != nil {
-			t.Fatalf("prefill legacy checksum %s: %v", migration.name, err)
+	fixture := legacyLedgerFixture(t)
+	names := make([]string, len(fixture))
+	for index, entry := range fixture {
+		names[index] = entry.name
+		if _, err := pool.Exec(ctx, mustSQL("record_migration_checksum.sql"), entry.name, entry.checksum); err != nil {
+			t.Fatalf("prefill legacy checksum %s: %v", entry.name, err)
 		}
 	}
 	prefillLedger(t, pool, names)
 }
 
-func assertEpoch2ContractRefusal(t *testing.T, pool *pgxpool.Pool, want string) {
+func assertLegacyLedgerCleared(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	_, err := Run(t.Context(), pool, epoch2BaselineProbeFS(), Config{})
-	if err == nil || !strings.Contains(err.Error(), want) {
-		t.Fatalf("Run() error = %v, want %q", err, want)
+	fixture := legacyLedgerFixture(t)
+	names := make([]string, len(fixture))
+	for index, entry := range fixture {
+		names[index] = entry.name
 	}
-	assertTableAbsent(t, pool, "epoch2_baseline_ran")
+	var ledgered, checksummed int
+	if err := pool.QueryRow(t.Context(), `SELECT
+		(SELECT count(*) FROM schema_migrations WHERE filename = ANY($1)),
+		(SELECT count(*) FROM schema_migration_checksums WHERE filename = ANY($1))`, names).Scan(&ledgered, &checksummed); err != nil {
+		t.Fatalf("count legacy ledger residue: %v", err)
+	}
+	if ledgered != 0 || checksummed != 0 {
+		t.Fatalf("legacy ledger residue = %d ledger rows / %d checksum rows, want 0 / 0", ledgered, checksummed)
+	}
 }
 
 func TestEpochLedgerWithoutResidueProceeds(t *testing.T) {

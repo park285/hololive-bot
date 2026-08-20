@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MIGRATIONS_DIR="${ROOT_DIR}/hololive/hololive-api/scripts/migrations"
-EPOCH2_CONTRACT="${ROOT_DIR}/hololive/hololive-api/internal/migrationrunner/epoch2_legacy_contract.sha256"
+EPOCH2_CONTRACT="${SCRIPT_DIR}/epoch2_legacy_contract.sha256"
 
 check_sources() {
   local label="$1"

@@ -97,15 +97,14 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 	if err := reconcileBaseline(ctx, conn, fsys, ledger, entries, cfg); err != nil {
 		return Result{}, err
 	}
-	allowBaselineChecksumBackfill, err := guardEpochResidue(ctx, conn, ledger, entries)
-	if err != nil {
+	if err := guardEpochResidue(ctx, conn, ledger, entries); err != nil {
 		return Result{}, err
 	}
 	if err := configureBlockingIndexDropPolicy(ctx, conn, exec, cfg); err != nil {
 		return Result{}, err
 	}
 
-	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, allowBaselineChecksumBackfill, cfg)
+	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
 	if err != nil {
 		return Result{}, err
 	}

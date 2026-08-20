@@ -27,7 +27,6 @@ func applyManifest(
 	exec *guardedExecer,
 	ledger dbmigrate.Ledger,
 	entries []string,
-	allowBaselineChecksumBackfill bool,
 	cfg Config,
 ) (Result, error) {
 	querier := pgxRowQuerier{conn: conn}
@@ -37,7 +36,7 @@ func applyManifest(
 		if err != nil {
 			return Result{}, err
 		}
-		applied, err := applyMigrationSource(ctx, exec, ledger, querier, source, allowBaselineChecksumBackfill, cfg)
+		applied, err := applyMigrationSource(ctx, exec, ledger, querier, source, cfg)
 		if err != nil {
 			return Result{}, err
 		}
@@ -72,7 +71,6 @@ func applyMigrationSource(
 	ledger dbmigrate.Ledger,
 	querier dbmigrate.RowQuerier,
 	source migrationSource,
-	allowBaselineChecksumBackfill bool,
 	cfg Config,
 ) (bool, error) {
 	alreadyApplied, err := ledger.Applied(ctx, querier, source.name)
@@ -80,7 +78,7 @@ func applyMigrationSource(
 		return false, err
 	}
 	if alreadyApplied {
-		return false, skipAppliedMigration(ctx, exec, source, allowBaselineChecksumBackfill, cfg)
+		return false, skipAppliedMigration(source, cfg)
 	}
 	cfg.logf("apply %s", source.name)
 	if err := applyEntry(ctx, exec, ledger, source); err != nil {
@@ -89,22 +87,11 @@ func applyMigrationSource(
 	return true, nil
 }
 
-func skipAppliedMigration(
-	ctx context.Context,
-	exec *guardedExecer,
-	source migrationSource,
-	allowBaselineChecksumBackfill bool,
-	cfg Config,
-) error {
+func skipAppliedMigration(source migrationSource, cfg Config) error {
 	if !source.checksumPresent {
-		if source.name != epoch2Baseline || !allowBaselineChecksumBackfill {
-			return fmt.Errorf(
-				"migration %s is recorded in schema_migrations but its checksum is missing; refusing to trust the current source without an explicit epoch contract",
-				source.name)
-		}
-		if err := recordMigrationChecksum(ctx, exec.Exec, source.name, source.checksum); err != nil {
-			return err
-		}
+		return fmt.Errorf(
+			"migration %s is recorded in schema_migrations but its checksum is missing; refusing to trust the current source",
+			source.name)
 	}
 	cfg.logf("skip %s (already applied)", source.name)
 	return nil
