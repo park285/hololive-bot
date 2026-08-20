@@ -125,17 +125,6 @@ func singleDeliveryBatch(
 	return []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{*outbox}
 }
 
-func (d *ClaimManager) releaseDeliveryClaimsWithWarning(
-	ctx context.Context,
-	claims []dispatchstate.ClaimToken,
-	message string,
-	attrs ...any,
-) {
-	if releaseErr := d.releaseDeliveryClaims(ctx, claims); releaseErr != nil && d.logger != nil {
-		d.logger.Warn(message, append(attrs, slog.Any("error", releaseErr))...)
-	}
-}
-
 // preFormatMessages: outbox_id별로 메시지를 1회 포맷하여 캐싱
 func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]string, failures map[int64]bool) {
 	messages = make(map[int64]string, len(outboxByID))

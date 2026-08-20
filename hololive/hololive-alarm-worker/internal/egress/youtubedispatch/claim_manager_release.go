@@ -140,6 +140,17 @@ func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispa
 	return nil
 }
 
+func (d *ClaimManager) releaseDeliveryClaimsWithWarning(
+	ctx context.Context,
+	claims []dispatchstate.ClaimToken,
+	message string,
+	attrs ...any,
+) {
+	if releaseErr := d.releaseDeliveryClaims(ctx, claims); releaseErr != nil && d.logger != nil {
+		d.logger.Warn(message, append(attrs, slog.Any("error", releaseErr))...)
+	}
+}
+
 func (d *ClaimManager) deliveryClaimTimeout() time.Duration {
 	claimTimeout := maxCommunityShortsClaimHold
 	if d != nil && d.config.LockTimeout > 0 && d.config.LockTimeout < claimTimeout {
