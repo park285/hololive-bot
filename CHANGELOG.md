@@ -8,6 +8,20 @@
 
 ## 미출시
 
+## v3.0.7 - 2026-08-21
+
+### 변경
+
+- YouTube plane의 `queue_observability.sql`이 `status IN (...)` 대신 `OR` 조건으로 `source_observation_queue`의
+  partial index 경로(BitmapOr)를 타고, `observePendingQueue`의 DB 조회는 5초 간격으로 제한됩니다(utilization
+  게이지는 매 호출 갱신). 운영 EXPLAIN에서 Seq Scan이 Bitmap Index Scan으로 바뀌는 것을 확인했습니다. (#402)
+- youtubejs helper가 youtubei.js 18.0.0 `Text.fromAttributed`의 `length` 없는 attachment run 미매칭을
+  상류 PR LuanRT/YouTube.js#1241과 같은 정규화 shim(`youtubei-attachment-run-fix.mjs`)으로 선적용해, 채널 페이지마다
+  남던 `[YOUTUBEJS][Text]` 경고와 객체 덤프의 원인을 제거합니다. canary 테스트가 상류 수정이 반영되면 실패해
+  shim 제거 시점을 알립니다. (#402)
+- 이번 릴리스는 `hololive-api`(3.0.7)와 `youtube-collector` artifact를 재빌드합니다. `hololive-alarm-worker`(3.0.5)는
+  변경이 없어 재빌드하지 않습니다. collector 이미지 version은 `hololive-api` VERSION을 따릅니다.
+
 ## v3.0.6 - 2026-08-21
 
 ### 변경
