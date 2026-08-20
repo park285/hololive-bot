@@ -15,6 +15,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
+const wsSessionRevocationPoll = time.Second
+
+type sessionFamilyChecker interface {
+	FamilyActive(ctx context.Context, familyID string) (bool, error)
+}
+
 func (r *Runtime) handleHealth(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, statusResponse{Status: "ok"})
 }
@@ -81,12 +87,20 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 		httpx.Abort(c, err)
 		return
 	}
-	sessionID, _ := sessionIDFrom(c)
-	if !r.acquireSessionStream(sessionID) {
-		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams for this session", Details: map[string]int{"limit": maxStreamsPerSession}}})
+	sess, ok := sessionFrom(c)
+	if !ok {
+		httpx.Abort(c, httpx.Unauthorized())
 		return
 	}
-	defer r.releaseSessionStream(sessionID)
+	familyID := sess.FamilyID
+	if familyID == "" {
+		familyID = sess.ID
+	}
+	if familyID == "" || !r.acquireSessionStream(familyID) {
+		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams for this session family", Details: map[string]int{"limit": maxStreamsPerSession}}})
+		return
+	}
+	defer r.releaseSessionStream(familyID)
 	select {
 	case r.wsStreams <- struct{}{}:
 		defer func() { <-r.wsStreams }()
@@ -107,14 +121,16 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 		return
 	}
 	defer closeConn(conn)
-	r.streamSystemStats(conn)
+	r.streamSystemStats(conn, familyID)
 }
 
-func (r *Runtime) streamSystemStats(conn *websocket.Conn) {
+func (r *Runtime) streamSystemStats(conn *websocket.Conn, familyID string) {
 	history, updates, unsubscribe := r.statsHub.Subscribe()
 	defer unsubscribe()
 
 	peerGone := watchPeer(conn, r.wsPongWait)
+	stopRevocationWatch := r.watchSessionFamilyRevocation(conn, familyID)
+	defer stopRevocationWatch()
 
 	for _, stats := range history {
 		if !writeSystemStatsFrame(conn, stats) {
@@ -123,6 +139,44 @@ func (r *Runtime) streamSystemStats(conn *websocket.Conn) {
 	}
 
 	r.pumpSystemStats(conn, updates, peerGone)
+}
+
+func (r *Runtime) watchSessionFamilyRevocation(conn *websocket.Conn, familyID string) context.CancelFunc {
+	checker, ok := r.sessions.(sessionFamilyChecker)
+	if !ok {
+		return func() {}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	panicguard.Go(r.logger, "admin-dashboard-websocket-session-revocation", func() {
+		ticker := time.NewTicker(wsSessionRevocationPoll)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				checkCtx, checkCancel := context.WithTimeout(ctx, wsSessionRevocationPoll)
+				active, err := checker.FamilyActive(checkCtx, familyID)
+				checkCancel()
+				if err != nil {
+					r.logger.Warn("websocket session-family check failed; closing stream", slog.Any("error", err))
+					closeWebSocketForRevocation(conn, "session store unavailable")
+					return
+				}
+				if !active {
+					closeWebSocketForRevocation(conn, "session revoked")
+					return
+				}
+			}
+		}
+	})
+	return cancel
+}
+
+func closeWebSocketForRevocation(conn *websocket.Conn, reason string) {
+	deadline := time.Now().Add(wsWriteWait)
+	_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason), deadline)
+	_ = conn.Close()
 }
 
 func (r *Runtime) pumpSystemStats(conn *websocket.Conn, updates <-chan status.SystemStats, peerGone <-chan struct{}) {
@@ -163,7 +217,6 @@ func watchPeer(conn *websocket.Conn, pongWait time.Duration) <-chan struct{} {
 			if _, _, err := conn.ReadMessage(); err != nil {
 				return
 			}
-		}
 	})
 	return gone
 }
