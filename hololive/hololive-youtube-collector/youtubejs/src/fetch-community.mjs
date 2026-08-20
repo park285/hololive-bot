@@ -118,7 +118,8 @@ export function emptyCommunityPage() {
 
 /** @param {YouTubeJSFetchOptions} [options] */
 export async function createInnertube({ fetchImpl } = {}) {
-  const { Innertube } = await import("youtubei.js");
+  const { Innertube, Log } = await import("youtubei.js");
+  Log.setLevel(Log.Level.ERROR);
   return Innertube.create({
     retrieve_player: false,
     generate_session_locally: true,

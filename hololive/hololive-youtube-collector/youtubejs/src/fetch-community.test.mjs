@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fetchCommunityFeed, fetchCommunityPosts, isMissingCommunity, listBackstagePosts } from "./fetch-community.mjs";
+import {
+  createInnertube,
+  fetchCommunityFeed,
+  fetchCommunityPosts,
+  isMissingCommunity,
+  listBackstagePosts,
+} from "./fetch-community.mjs";
 
 test("listBackstagePosts reads memo.getType", () => {
   const posts = listBackstagePosts(
@@ -128,4 +134,31 @@ test("fetchCommunityFeed preserves continuation metadata across pages", async ()
   assert.equal(result.page_count, 2);
   assert.equal(result.exhausted, true);
   assert.equal(result.cursor_start, "page-2");
+});
+
+test("createInnertube pins youtubei.js Log level to ERROR", async (t) => {
+  const { Log } = await import("youtubei.js");
+  const warnCalls = [];
+  const errorCalls = [];
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  console.warn = (...args) => warnCalls.push(args);
+  console.error = (...args) => errorCalls.push(args);
+  t.after(() => {
+    console.warn = originalWarn;
+    console.error = originalError;
+  });
+  await createInnertube({
+    fetchImpl: async () => {
+      throw new Error("offline");
+    },
+  });
+  warnCalls.length = 0;
+  errorCalls.length = 0;
+  Log.warn("Text", "Unable to find matching run for attachment run. Skipping...", {});
+  Log.error("Text", "boom");
+  assert.deepEqual(warnCalls, []);
+  assert.equal(errorCalls.length, 1);
+  assert.equal(errorCalls[0][0], "[YOUTUBEJS][Text]:");
+  assert.equal(errorCalls[0][1], "boom");
 });
