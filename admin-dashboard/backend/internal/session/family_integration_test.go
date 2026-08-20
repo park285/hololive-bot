@@ -33,7 +33,9 @@ func TestSessionFamilyLeaseTracksCreateRotateAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, rotated)
 	require.Equal(t, old.FamilyID, rotated.FamilyID)
-	require.Equal(t, rotated.ID, mr.Get(familyKey(old.FamilyID)))
+	familyCurrent, err := mr.Get(familyKey(old.FamilyID))
+	require.NoError(t, err)
+	require.Equal(t, rotated.ID, familyCurrent)
 
 	// Deleting the grace-period marker must not revoke the authoritative token.
 	require.NoError(t, store.Delete(ctx, old.ID))
@@ -102,7 +104,9 @@ func TestConcurrentRotationConvergesOnSingleWinner(t *testing.T) {
 	require.NotNil(t, marker)
 	require.NotNil(t, marker.RotatedTo)
 	require.Equal(t, winnerID, *marker.RotatedTo)
-	require.Equal(t, winnerID, mr.Get(familyKey(old.FamilyID)))
+	familyCurrent, err := mr.Get(familyKey(old.FamilyID))
+	require.NoError(t, err)
+	require.Equal(t, winnerID, familyCurrent)
 
 	winner, err := store.Get(ctx, winnerID)
 	require.NoError(t, err)
@@ -130,5 +134,7 @@ func TestLegacySessionGetsStableFamilyOnRefresh(t *testing.T) {
 	require.Equal(t, RefreshRefreshed, result.Kind)
 	require.NotNil(t, result.Session)
 	require.Equal(t, legacy.ID, result.Session.FamilyID)
-	require.Equal(t, legacy.ID, mr.Get(familyKey(legacy.ID)))
+	familyCurrent, err := mr.Get(familyKey(legacy.ID))
+	require.NoError(t, err)
+	require.Equal(t, legacy.ID, familyCurrent)
 }
