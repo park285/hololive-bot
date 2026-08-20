@@ -8,6 +8,28 @@
 
 ## 미출시
 
+## v3.0.4 - 2026-08-20
+
+### 변경
+
+- migration runner가 epoch-2 legacy ledger 계약(136건 체크섬 embed와 기동 시 검증)과
+  baseline 체크섬 backfill 허용 경로를 더 이상 갖지 않습니다. `182_epoch2_legacy_ledger_cleanup.sql`이
+  legacy ledger 행 136건을 `schema_migrations`·`schema_migration_checksums`에서 정리하고, 정리가
+  적용된 뒤에도 manifest 밖 행이 남으면 기동을 거부합니다. 체크섬 목록은 M1 게이트 데이터로
+  `scripts/architecture/`에 둡니다. (#396)
+- YouTube collector loader와 Compose에서 HC-013 compat alias(`YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`,
+  `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`)를 제거했습니다. canonical 키만 읽습니다. (#394)
+- settings 검증 helper 통합, youtubedispatch 파일 재편과 nil-fallback 접근자 제거, collector 실행
+  파이프라인 `collectionExecutor` 추출, sourceobservation publish preflight 단일화 등 동작 동등
+  구조 정리를 반영했습니다. (#393) 사후 리뷰에서 확인한 테스트 공백을 보강했습니다. (#395)
+- 이번 릴리스는 `hololive-api` artifact만 재빌드하므로 해당 VERSION만 `v3.0.4`와 일치시켰습니다.
+  `hololive-alarm-worker` artifact version은 `3.0.3`을 유지합니다.
+
+### 수정
+
+- dbtest가 postgres 컨테이너 제거 레이스에서 재시도하도록 수정했습니다. (#392)
+- security workflow의 dependency checkout pin을 정렬했습니다. (#391)
+
 ## v3.0.3 - 2026-08-20
 
 ### 수정
