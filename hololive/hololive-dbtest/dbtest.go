@@ -34,9 +34,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const (
@@ -48,8 +45,6 @@ const (
 
 	// postgresImage는 production migration 기준과 같은 PostgreSQL 18 image다.
 	postgresImage = "postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
-
-	reaperRecoveryAttempts = 2
 )
 
 // baseProvider는 테스트 바이너리당 1개의 base DSN(컨테이너 또는 외부 DB)을 lazily 확보한다.
@@ -169,7 +164,13 @@ func provisionBaseDSN() (_ string, err error) {
 	}
 	defer func() { err = errors.Join(err, unlock()) }()
 
-	container, err := startVerifiedPostgres(ctx, postgresImage)
+	container, err := provisionPostgresContainer(
+		ctx,
+		postgresImage,
+		startPostgresContainer,
+		holdExistingSessionReaper,
+		ensureVerifiedReaperClient,
+	)
 	if err != nil {
 		return "", fmt.Errorf("start postgres container %s: %w", postgresImage, err)
 	}
@@ -182,39 +183,21 @@ func provisionBaseDSN() (_ string, err error) {
 	return dsn, nil
 }
 
-func startVerifiedPostgres(ctx context.Context, image string) (*postgres.PostgresContainer, error) {
-	var attemptErr error
-	for range reaperRecoveryAttempts {
-		container, err := startPostgresContainer(ctx, image)
-		if err != nil {
-			return nil, errors.Join(attemptErr, err)
-		}
-
-		verifyErr := ensureVerifiedReaperClient(ctx)
-		if verifyErr == nil {
-			return container, nil
-		}
-		attemptErr = errors.Join(attemptErr, fmt.Errorf("verify reaper client registration: %w", verifyErr))
-
-		if retryErr := preparePostgresRetry(ctx, container, verifyErr); retryErr != nil {
-			return nil, errors.Join(attemptErr, retryErr)
-		}
+func holdExistingSessionReaper(ctx context.Context) error {
+	if verifiedReaperConn != nil {
+		return nil
 	}
-	return nil, attemptErr
-}
-
-func preparePostgresRetry(
-	ctx context.Context,
-	container *postgres.PostgresContainer,
-	verifyErr error,
-) error {
-	if terminateErr := container.Terminate(ctx); terminateErr != nil {
-		return fmt.Errorf("terminate unverified postgres container: %w", terminateErr)
+	_, found, err := findSessionReaper(ctx)
+	if err != nil {
+		if isTransientReaperError(err) {
+			return nil
+		}
+		return err
 	}
-	if !isTransientReaperError(verifyErr) {
-		return errors.New("reaper registration failure is not transient")
+	if !found {
+		return nil
 	}
-	return nil
+	return ensureVerifiedReaperClient(ctx)
 }
 
 func validatedPresetDSN(dsn string) (string, error) {
@@ -269,11 +252,15 @@ func validateOwnershipEvidence(expectedToken, gotToken string, queryErr error, a
 // reaper(Ryuk) 컨테이너 1개를 같이 쓴다. 여러 바이너리가 첫 컨테이너 생성을 동시에 시작하면
 // reaper 기동과 재사용 조회가 경합해 늦게 진입한 프로세스의 reaper 연결이 소리 없이 유실되고,
 // Ryuk이 클라이언트 0으로 오판해 reconnection timeout(10s) 뒤 실행 중인 다른 바이너리의
-// PG 컨테이너까지 세션 라벨로 일괄 회수한다. 첫 프로비저닝을 세션 단위 flock으로 직렬화해
-// reaper가 완전히 기동한 뒤에만 후속 프로세스가 진입하게 한다.
+// PG 컨테이너까지 세션 라벨로 일괄 회수한다. SessionID()가 UUID fallback이 되어도
+// 같은 호출을 직렬화하도록 parent pid로 flock한다.
+func sessionProvisionLockPath() string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("dbtest-provision-%d.lock", os.Getppid()))
+}
+
 func lockSessionProvisioning() (func() error, error) {
-	path := filepath.Join(os.TempDir(), "dbtest-provision-"+testcontainers.SessionID()+".lock")
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // TempDir와 내부 session ID로만 구성되는 test lock path입니다.
+	path := sessionProvisionLockPath()
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // TempDir와 parent pid로만 구성되는 test lock path입니다.
 	if err != nil {
 		return nil, fmt.Errorf("open lock file %s: %w", path, err)
 	}
@@ -290,19 +277,6 @@ func lockSessionProvisioning() (func() error, error) {
 		}
 		return nil
 	}, nil
-}
-
-func startPostgresContainer(ctx context.Context, image string) (*postgres.PostgresContainer, error) {
-	return postgres.Run(ctx, image,
-		postgres.WithDatabase("dbtest"),
-		postgres.WithUsername("dbtest"),
-		postgres.WithPassword("dbtest"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second),
-		),
-	)
 }
 
 // dropDatabase는 격리 데이터베이스를 제거한다(cleanup 경로). best-effort지만 에러를
