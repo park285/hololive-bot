@@ -29,6 +29,7 @@ require "INTERVAL '5 minutes'"
 require "INTERVAL '2 hours'"
 require "FOR UPDATE SKIP LOCKED"
 require "ROLLBACK;"
+require "idle_in_transaction_session_timeout"
 require "pg_stat_user_tables"
 require "pg_stat_statements"
 require "pg_stat_statements_info"
@@ -327,6 +328,7 @@ DATABASE_URL="${secret_dsn}" \
 for artifact in \
   invalid-indexes.txt \
   target-indexes.txt \
+  mvcc-database-state.txt \
   dead-tuples-autovacuum.txt \
   claim-statement-window.txt \
   alarm-dispatch-claim-explain.txt \

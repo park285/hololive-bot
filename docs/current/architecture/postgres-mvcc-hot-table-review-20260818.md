@@ -344,66 +344,68 @@ idle_in_transaction_session_timeout = 5min
 
 ---
 
-## 6. 이번 PR에서 추가하는 운영 증적
+## 6. 이번 PR에서 확장하는 운영 증적
 
-`./scripts/runtime/pg-hotpath-explain-snapshot.sh`의 기존 claim plan 검증은 유지합니다.
-다음 artifact를 추가합니다.
+`./scripts/runtime/pg-hotpath-explain-snapshot.sh`의 기존 claim plan 검증과 strict index gate는
+그대로 유지합니다. MVCC 증적은 다음 두 artifact로 수집합니다.
 
-### 6.1 `mvcc-database-state.txt`
+### 6.1 `mvcc-database-state.txt` (신규)
 
 수집 항목:
 
-- 현재 database/user
+- 수집 시각과 대상 database
 - `idle_in_transaction_session_timeout`
 - `transaction_timeout`
 - `statement_timeout`
 - `datfrozenxid` age
 - `datminmxid` age
 - `autovacuum_freeze_max_age`
+- `autovacuum_multixact_freeze_max_age`
 - DB stats reset 시각
 
 이 artifact는 migration이 새 session에 실제 반영됐는지와 freeze 위험을 함께 확인합니다.
+`stats_reset`을 여기서 고정하므로, 다른 artifact의 누적 통계를 어느 구간의 값으로 읽어야 하는지가
+snapshot마다 분명해집니다. 이 값이 바뀐 구간의 `idx_scan=0`은 인덱스 제거 근거로 쓸 수 없습니다.
 
-### 6.2 `dead-tuples-autovacuum.txt`
+### 6.2 `dead-tuples-autovacuum.txt` (확장)
 
-기존 출력에 다음을 추가합니다.
+이 artifact는 `table`, `index`, `transaction` 세 section으로 구성됩니다.
+
+`table` section:
 
 - relation total size
 - live/dead tuple 및 dead tuple 비율
-- insert/update/HOT update/delete 누적량
-- HOT update 비율
+- insert/update/HOT update/newpage update/delete 누적량
+- HOT update 비율과 newpage update 비율
 - manual/auto VACUUM 및 ANALYZE 횟수와 마지막 실행 시각
+- table reloption
 
-관측 대상을 새 YouTube convergence 테이블까지 확장합니다.
+`index` section:
 
-### 6.3 `mvcc-index-activity.txt`
+- 대상 테이블의 index 크기
+- `idx_scan`과 `last_idx_scan`
+- `idx_tup_read` / `idx_tup_fetch`
 
-다음 테이블의 모든 index 사용량과 크기를 수집합니다.
+`transaction` section:
+
+- pid/user/application/backend type과 state
+- transaction age와 state age
+- `backend_xid`, `backend_xmin` 및 xmin age
+- wait event
+
+관측 대상에 YouTube convergence 테이블을 편입했습니다.
 
 - `source_observation_queue`
 - `source_collection_checkpoints`
 - `youtube_collection_job_leases`
 - `source_observations`
 
-`captured_at`과 `pg_stat_database.stats_reset`도 같이 기록합니다. 이 값이 없으면 `idx_scan=0`을
-인덱스 제거 근거로 사용하면 안 됩니다.
+`transaction` section은 `idle in transaction` 세션만이 아니라 xmin을 잡고 있는 backend 전체를
+대상으로 합니다. VACUUM horizon을 붙잡는 주체는 idle 세션에 한정되지 않기 때문입니다.
 
-### 6.4 `idle-transactions.txt`
+raw query text는 SQL literal이나 사용자 데이터를 포함할 수 있어 수집하지 않습니다. 필요한 경우
+권한이 통제된 운영 세션에서 별도로 조사합니다.
 
-현재 `idle in transaction` 및 aborted transaction 세션을 수집합니다.
-
-- pid/user/application/client
-- transaction 시작 시각
-- idle 시작 시각
-- transaction/idle age
-- `backend_xmin` 및 age
-- wait event와 backend type
-- `query_id`
-
-raw query text는 SQL literal이나 사용자 데이터를 포함할 수 있어 수집하지 않습니다. `query_id`로 동일 패턴을
-식별하고, 필요한 경우 권한이 통제된 운영 세션에서 별도로 조사합니다.
-
-artifact가 비어 있으면 해당 snapshot 시점에는 idle transaction이 없다는 뜻입니다.
 출력이 있다고 즉시 프로세스를 종료하는 자동 gate로 만들지는 않았습니다. 배치/운영 세션의 의도를
 사람이 확인해야 하기 때문입니다.
 
@@ -487,6 +489,28 @@ CREATE INDEX CONCURRENTLY idx_youtube_collection_job_due
 
 ## 8. 배포 및 검증 절차
 
+### 8.0 사전 조건: migration role 권한
+
+`ALTER DATABASE ... SET`은 대상 database의 owner 또는 superuser만 실행할 수 있습니다. migration은
+`hololive_migrator`(`PGUSER` 기본값) role로 실행되므로, 배포 전에 이 role이 owner인지 확인해야 합니다.
+
+```sql
+SELECT pg_catalog.pg_get_userbyid(datdba) AS database_owner, current_user AS migration_role
+FROM pg_database
+WHERE datname = current_database();
+```
+
+두 값이 다르면 migration이 `must be owner of database` 오류로 실패합니다. testcontainer는 superuser로
+실행되므로 `hololive-dbtest`는 이 조건을 검증하지 못합니다.
+
+`GRANT SET ON PARAMETER idle_in_transaction_session_timeout`으로는 대체할 수 없습니다. PostgreSQL 18에서
+확인한 결과 이 권한은 세션 `SET`만 허용하며 `ALTER DATABASE ... SET`은 여전히 owner 권한을 요구합니다.
+owner가 아니라면 owner role의 멤버십을 부여하는 방법이 있습니다.
+
+```sql
+GRANT <database_owner_role> TO hololive_migrator;
+```
+
 ### 8.1 배포 전 baseline
 
 ```bash
@@ -500,8 +524,6 @@ CREATE INDEX CONCURRENTLY idx_youtube_collection_job_due
 ```text
 mvcc-database-state.txt
 dead-tuples-autovacuum.txt
-mvcc-index-activity.txt
-idle-transactions.txt
 claim-statement-window.txt
 alarm-dispatch-claim-explain.txt
 youtube-outbox-claim-explain.txt
@@ -509,7 +531,7 @@ youtube-outbox-claim-explain.txt
 
 ### 8.2 migration 적용
 
-`182_postgres_idle_transaction_timeout.sql`이 적용되면 database catalog에 default가 저장됩니다.
+`183_postgres_idle_transaction_timeout.sql`이 적용되면 database catalog에 default가 저장됩니다.
 현재 연결에는 소급되지 않습니다.
 
 ### 8.3 connection pool 순차 재기동
