@@ -18,7 +18,10 @@ func buildConfig(
 		return nil, err
 	}
 	irisConfig := loadIrisConfig(webhookToken, botToken)
-	scraperConfig := loadScraperConfig()
+	scraperConfig, err := loadScraperConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load scraper config: %w", err)
+	}
 	tracingConfig, err := loadTracingConfig(options.TracingRuntime, scraperConfig.ActiveActive.InstanceID)
 	if err != nil {
 		return nil, fmt.Errorf("load tracing config: %w", err)
@@ -31,7 +34,10 @@ func buildConfig(
 	if err != nil {
 		return nil, err
 	}
-	config := newBaseConfig(corsAllowedOrigins, corsMissingInProduction, options)
+	config, err := newBaseConfig(corsAllowedOrigins, corsMissingInProduction, options)
+	if err != nil {
+		return nil, err
+	}
 	config.Iris = irisConfig
 	config.Kakao = newKakaoConfig(kakaoConfig.Rooms, kakaoConfig.ACLEnabled, kakaoConfig.ACLMode)
 	config.YouTube = youtubeConfig
@@ -87,14 +93,18 @@ func applyAPIWorkerProfile(config *Config, profile *APIWorkerProfile) {
 	config.Webhook.DedupTimeout = time.Duration(profile.BotWebhookInbox.DedupTimeoutMS) * time.Millisecond
 }
 
-func newBaseConfig(corsAllowedOrigins []string, corsMissingInProduction bool, options configLoadOptions) *Config {
+func newBaseConfig(corsAllowedOrigins []string, corsMissingInProduction bool, options configLoadOptions) (*Config, error) {
+	alarmDispatchRetention, err := loadAlarmDispatchRetentionConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load alarm dispatch retention config: %w", err)
+	}
 	return &Config{
 		Server:                 loadServerConfig(),
 		Holodex:                loadHolodexConfig(),
 		Valkey:                 loadValkeyConfig(),
 		Postgres:               loadPostgresConfig(),
 		Notification:           loadNotificationConfig(),
-		AlarmDispatchRetention: loadAlarmDispatchRetentionConfig(),
+		AlarmDispatchRetention: alarmDispatchRetention,
 		Logging:                loadLoggingConfig(),
 		Bot:                    loadBotConfig(),
 		Services:               loadServicesConfig(),
@@ -112,5 +122,5 @@ func newBaseConfig(corsAllowedOrigins []string, corsMissingInProduction bool, op
 		BotInternalURL:         sharedenv.String("HOLOLIVE_BOT_INTERNAL_URL", ""),
 		CORS:                   loadCORSConfig(corsAllowedOrigins, corsMissingInProduction, options),
 		Version:                sharedenv.String("APP_VERSION", "1.1.0-go"),
-	}
+	}, nil
 }

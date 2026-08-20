@@ -25,12 +25,15 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
+	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/service/notification/platformmap"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 // mockMemberDataProvider: 테스트용 멤버 데이터 프로바이더.
@@ -82,4 +85,21 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
 	service.platformMapper = platformmap.NewMapper(cacheClient, memberDataFn, logger)
 	return service
+}
+
+func requireUpcomingEventMarker(t *testing.T, as *AlarmService, ctx context.Context, roomID, channelID string, stream *domain.Stream) {
+	t.Helper()
+
+	require.NotNil(t, stream, "stream must not be nil")
+	require.NotNil(t, stream.StartScheduled, "stream.StartScheduled must not be nil")
+
+	key := as.buildUpcomingEventKey(roomID, channelID, stream.ID, stream.Title, *stream.StartScheduled)
+
+	var data dedup.UpcomingEventNotifiedData
+	require.NoError(t, as.cache.Get(ctx, key, &data))
+	require.NotEmpty(t, data.NotifiedAt, "upcoming event marker missing at key %s", key)
+
+	notifiedAt, err := time.Parse(time.RFC3339, data.NotifiedAt)
+	require.NoError(t, err)
+	require.WithinDuration(t, time.Now().UTC(), notifiedAt, time.Minute)
 }

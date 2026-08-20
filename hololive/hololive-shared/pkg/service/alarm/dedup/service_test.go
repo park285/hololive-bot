@@ -597,6 +597,83 @@ func TestService_WasUpcomingEventNotifiedRecently_InvalidPayloadReturnsError(t *
 	assert.ErrorContains(t, err, "was upcoming event notified recently: get cache data")
 }
 
+func TestService_WasUpcomingEventNotifiedRecently_NonPositiveWindowSkipsCache(t *testing.T) {
+	service := NewService(nil, []int{5, 3, 1}, newTestLogger())
+
+	start := time.Date(2026, 3, 4, 11, 0, 0, 0, time.UTC)
+	stream := &domain.Stream{
+		ID:             "vid-upcoming",
+		Title:          "Upcoming",
+		StartScheduled: &start,
+	}
+
+	tests := []struct {
+		name   string
+		window time.Duration
+	}{
+		{name: "zero window", window: 0},
+		{name: "negative window", window: -time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recent, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, tt.window)
+			require.NoError(t, err)
+			assert.False(t, recent)
+		})
+	}
+}
+
+func TestService_WasUpcomingEventNotifiedRecently_MissingNotifiedAtReturnsFalse(t *testing.T) {
+	start := time.Date(2026, 3, 4, 11, 0, 0, 0, time.UTC)
+	stream := &domain.Stream{
+		ID:             "vid-upcoming",
+		Title:          "Upcoming",
+		StartScheduled: &start,
+	}
+	key := keys.BuildUpcomingEventKey("room1", "UC_TEST", stream.ID, stream.Title, start)
+
+	tests := []struct {
+		name string
+		seed func(state *mockDedupCacheState)
+	}{
+		{name: "cache miss", seed: func(*mockDedupCacheState) {}},
+		{name: "empty notified_at", seed: func(state *mockDedupCacheState) {
+			state.setRawString(key, `{"notified_at":""}`)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cacheMock, state := newMockDedupCache(t)
+			service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+			tt.seed(state)
+
+			recent, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
+			require.NoError(t, err)
+			assert.False(t, recent)
+		})
+	}
+}
+
+func TestService_WasUpcomingEventNotifiedRecently_MalformedNotifiedAtTreatedAsNotNotified(t *testing.T) {
+	cacheMock, state := newMockDedupCache(t)
+	service := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	start := time.Date(2026, 3, 4, 11, 0, 0, 0, time.UTC)
+	stream := &domain.Stream{
+		ID:             "vid-upcoming",
+		Title:          "Upcoming",
+		StartScheduled: &start,
+	}
+	key := keys.BuildUpcomingEventKey("room1", "UC_TEST", stream.ID, stream.Title, start)
+	corrupted, err := json.Marshal(UpcomingEventNotifiedData{NotifiedAt: "invalid-time"})
+	require.NoError(t, err)
+	state.setRawString(key, string(corrupted))
+
+	recent, err := service.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
+	require.NoError(t, err)
+	assert.False(t, recent)
+}
+
 func TestService_TryClaimNotification_SetNXFailureDoesNotAcquire(t *testing.T) {
 	cacheMock := &cachemocks.Client{
 		SetNXFunc: func(_ context.Context, _, _ string, _ time.Duration) (bool, error) {

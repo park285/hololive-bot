@@ -16,6 +16,8 @@ require (
 	golang.org/x/sync v0.22.0
 )
 
+require github.com/kylelemons/godebug v1.1.0 // indirect
+
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect

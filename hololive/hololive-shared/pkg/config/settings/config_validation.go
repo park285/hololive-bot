@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	sharedenv "github.com/park285/shared-go/pkg/envutil"
 	"github.com/park285/shared-go/pkg/stringutil"
 )
 
@@ -268,23 +267,27 @@ func validateScraperBackfillConfig(config ScraperBackfillConfig) error {
 	return nil
 }
 
-func loadScraperPoll() ScraperPoll {
+func loadScraperPoll() (ScraperPoll, error) {
 	defaults := DefaultScraperPoll()
-
-	return ScraperPoll{
-		Videos:    secondsEnv("SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS", defaults.Videos),
-		Shorts:    secondsEnv("SCRAPER_POLL_SHORTS_INTERVAL_SECONDS", defaults.Shorts),
-		Community: secondsEnv("SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS", defaults.Community),
-		Stats:     secondsEnv("SCRAPER_POLL_STATS_INTERVAL_SECONDS", defaults.Stats),
-		Live:      secondsEnv("SCRAPER_POLL_LIVE_INTERVAL_SECONDS", defaults.Live),
+	var poll ScraperPoll
+	for _, field := range []struct {
+		key      string
+		fallback time.Duration
+		target   *time.Duration
+	}{
+		{key: "SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS", fallback: defaults.Videos, target: &poll.Videos},
+		{key: "SCRAPER_POLL_SHORTS_INTERVAL_SECONDS", fallback: defaults.Shorts, target: &poll.Shorts},
+		{key: "SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS", fallback: defaults.Community, target: &poll.Community},
+		{key: "SCRAPER_POLL_STATS_INTERVAL_SECONDS", fallback: defaults.Stats, target: &poll.Stats},
+		{key: "SCRAPER_POLL_LIVE_INTERVAL_SECONDS", fallback: defaults.Live, target: &poll.Live},
+	} {
+		value, err := requiredSecondsDurationEnv(field.key, field.fallback)
+		if err != nil {
+			return ScraperPoll{}, err
+		}
+		*field.target = value
 	}
-}
-
-func secondsEnv(key string, fallback time.Duration) time.Duration {
-	if seconds := sharedenv.Int(key, 0); seconds > 0 {
-		return time.Duration(seconds) * time.Second
-	}
-	return fallback
+	return poll, nil
 }
 
 func validateUnsupportedLegacyEnvUsage() error {

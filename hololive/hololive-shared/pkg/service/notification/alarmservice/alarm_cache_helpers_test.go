@@ -28,9 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
 	"github.com/stretchr/testify/assert"
@@ -213,7 +211,7 @@ func TestBuildUpcomingEventKey(t *testing.T) {
 	}
 }
 
-func TestMarkUpcomingEventNotifiedAndWasRecently(t *testing.T) {
+func TestMarkUpcomingEventNotifiedWritesMarker(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
@@ -226,34 +224,15 @@ func TestMarkUpcomingEventNotifiedAndWasRecently(t *testing.T) {
 		StartScheduled: &start,
 	}
 
-	if err := as.MarkUpcomingEventNotified(ctx, "room1", "channel1", stream); err != nil {
-		t.Fatalf("MarkUpcomingEventNotified() error = %v", err)
-	}
+	require.NoError(t, as.MarkUpcomingEventNotified(ctx, "room1", "channel1", stream))
+	requireUpcomingEventMarker(t, as, ctx, "room1", "channel1", stream)
 
-	if !as.WasUpcomingEventNotifiedRecently(ctx, "room1", "channel1", stream, time.Hour) {
-		t.Fatal("expected upcoming event to be considered recently notified")
-	}
+	otherRoomKey := as.buildUpcomingEventKey("other-room", "channel1", stream.ID, stream.Title, *stream.StartScheduled)
+	otherRoomExists, err := as.cache.Exists(ctx, otherRoomKey)
+	require.NoError(t, err)
+	assert.False(t, otherRoomExists)
 
-	if as.WasUpcomingEventNotifiedRecently(ctx, "room1", "channel1", stream, 0) {
-		t.Fatal("expected zero window to return false")
-	}
-
-	if as.WasUpcomingEventNotifiedRecently(ctx, "other-room", "channel1", stream, time.Hour) {
-		t.Fatal("expected different room key to return false")
-	}
-
-	key := as.buildUpcomingEventKey("room1", "channel1", stream.ID, stream.Title, *stream.StartScheduled)
-	if err := as.cache.Set(ctx, key, dedup.UpcomingEventNotifiedData{NotifiedAt: "invalid-time"}, constants.CacheTTL.NotificationSent); err != nil {
-		t.Fatalf("cache.Set invalid payload failed: %v", err)
-	}
-
-	if as.WasUpcomingEventNotifiedRecently(ctx, "room1", "channel1", stream, time.Hour) {
-		t.Fatal("expected invalid notified timestamp to return false")
-	}
-
-	if err := as.MarkUpcomingEventNotified(ctx, "room1", "channel1", nil); err != nil {
-		t.Fatalf("MarkUpcomingEventNotified(nil) error = %v", err)
-	}
+	require.NoError(t, as.MarkUpcomingEventNotified(ctx, "room1", "channel1", nil))
 }
 
 type nextStreamInfoCase struct {

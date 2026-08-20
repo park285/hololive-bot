@@ -780,6 +780,64 @@ func TestLoad_ScraperPollCanonicalEnvWinsOverRemovedLegacyEnv(t *testing.T) {
 	})
 }
 
+func TestLoadScraperConfigRejectsInvalidPollAndWorkerCount(t *testing.T) {
+	for _, key := range []string{
+		"SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS",
+		"SCRAPER_POLL_SHORTS_INTERVAL_SECONDS",
+		"SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS",
+		"SCRAPER_POLL_STATS_INTERVAL_SECONDS",
+		"SCRAPER_POLL_LIVE_INTERVAL_SECONDS",
+		"SCRAPER_SCHEDULER_WORKER_COUNT",
+	} {
+		for _, value := range []string{"0", "-1", "invalid", ""} {
+			t.Run(key+"="+value, func(t *testing.T) {
+				t.Setenv(key, value)
+
+				_, err := loadScraperConfig()
+				if err == nil {
+					t.Fatalf("loadScraperConfig() accepted %s=%q", key, value)
+				}
+				if !strings.Contains(err.Error(), key) {
+					t.Fatalf("loadScraperConfig() error = %v, want it to name %s", err, key)
+				}
+			})
+		}
+	}
+}
+
+func TestLoad_ScraperInvalidEnvFailsLoad(t *testing.T) {
+	for _, key := range []string{
+		"SCRAPER_POLL_LIVE_INTERVAL_SECONDS",
+		"SCRAPER_SCHEDULER_WORKER_COUNT",
+	} {
+		t.Run(key, func(t *testing.T) {
+			setRequiredLoadEnv(t)
+			t.Setenv(key, "invalid")
+
+			_, err := load()
+			if err == nil {
+				t.Fatalf("Load() error = nil, want %s rejection", key)
+			}
+			if !strings.Contains(err.Error(), "load scraper config: ") || !strings.Contains(err.Error(), key) {
+				t.Fatalf("Load() error = %v, want wrapped %s rejection", err, key)
+			}
+		})
+	}
+}
+
+func TestLoad_AlarmDispatchRetentionInvalidEnvFailsLoad(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("ALARM_DISPATCH_RETENTION_INTERVAL_MS", "0")
+
+	_, err := load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want alarm dispatch retention rejection")
+	}
+	if !strings.Contains(err.Error(), "load alarm dispatch retention config: ") || !strings.Contains(err.Error(), "ALARM_DISPATCH_RETENTION_INTERVAL_MS") {
+		t.Fatalf("Load() error = %v, want wrapped alarm dispatch retention rejection", err)
+	}
+}
+
 func TestLoad_ScraperBackfillDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 

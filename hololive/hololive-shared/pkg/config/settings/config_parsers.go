@@ -85,14 +85,6 @@ func parseIntList(value string) []int {
 	return result
 }
 
-// positiveIntEnv 는 양수 env 값만 채택하고, 미설정/파싱 실패/0 이하는 fallback 으로 되돌린다.
-func positiveIntEnv(key string, fallback int) int {
-	if value := sharedenv.Int(key, 0); value > 0 {
-		return value
-	}
-	return fallback
-}
-
 func requiredPositiveIntEnv(key string, fallback int) (int, error) {
 	raw, found := os.LookupEnv(key)
 	if !found {
@@ -112,6 +104,14 @@ func requiredPositiveIntEnv(key string, fallback int) (int, error) {
 }
 
 func requiredSecondsDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
+	return requiredPositiveDurationUnitEnv(key, fallback, time.Second)
+}
+
+func requiredMillisDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
+	return requiredPositiveDurationUnitEnv(key, fallback, time.Millisecond)
+}
+
+func requiredPositiveDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
 	raw, found := os.LookupEnv(key)
 	if !found {
 		return fallback, nil
@@ -119,7 +119,7 @@ func requiredSecondsDurationEnv(key string, fallback time.Duration) (time.Durati
 	if strings.TrimSpace(raw) == "" {
 		return 0, fmt.Errorf("%s must be a positive duration", key)
 	}
-	value, err := strictDurationUnitEnv(key, fallback, time.Second)
+	value, err := strictDurationUnitEnv(key, fallback, unit)
 	if err != nil {
 		return 0, err
 	}
