@@ -106,6 +106,24 @@ func newLeaseScheduler(
 	}, nil
 }
 
+func newCollectionExecutor(s *leaseScheduler) *collectionExecutor {
+	return &collectionExecutor{
+		repository:    s.repository,
+		registry:      s.registry,
+		publisher:     s.publisher,
+		metrics:       s.metrics,
+		owner:         s.owner,
+		logger:        s.logger,
+		config:        s.config,
+		collector:     s.collector,
+		gates:         s.gates,
+		readiness:     s.readiness,
+		workerTracker: s.workerTracker,
+		workerTotals:  s.workerTotals,
+		reportFatal:   s.reportFatal,
+	}
+}
+
 func newCollectorRegistry(
 	infra *collectorInfrastructure,
 	cfg *settings.YouTubeCollectorConfig,

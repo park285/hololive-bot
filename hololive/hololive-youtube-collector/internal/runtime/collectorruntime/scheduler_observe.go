@@ -14,18 +14,33 @@ import (
 )
 
 func (s *leaseScheduler) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
+	s.exec().observePublishError(spec, output, err)
+}
+
+func (s *leaseScheduler) recordTerminalSuccess(published *sourceobservation.PublishBatchResult) {
+	if s == nil {
+		return
+	}
+	s.exec().recordTerminalSuccess(published)
+}
+
+func (s *leaseScheduler) logFailure(phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+	s.exec().logFailure(phase, code, class, detail, spec, proof)
+}
+
+func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
 	if supersededError(err) {
-		s.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
+		e.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
 		return
 	}
 	if errors.Is(err, joblease.ErrFenceLost) {
-		s.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phasePublish)
+		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phasePublish)
 	}
-	s.observePublishOutcome(spec.Provider, output, outcomeRejected)
+	e.observePublishOutcome(spec.Provider, output, outcomeRejected)
 }
 
-func (s *leaseScheduler) acquireProvider(ctx context.Context, provider contract.Provider) error {
-	gate := s.gates[provider]
+func (e *collectionExecutor) acquireProvider(ctx context.Context, provider contract.Provider) error {
+	gate := e.gates[provider]
 	if gate == nil {
 		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider gate is not configured")
 	}
@@ -37,8 +52,8 @@ func (s *leaseScheduler) acquireProvider(ctx context.Context, provider contract.
 	}
 }
 
-func (s *leaseScheduler) releaseProvider(provider contract.Provider) {
-	gate := s.gates[provider]
+func (e *collectionExecutor) releaseProvider(provider contract.Provider) {
+	gate := e.gates[provider]
 	if gate == nil {
 		return
 	}
@@ -48,7 +63,7 @@ func (s *leaseScheduler) releaseProvider(provider contract.Provider) {
 	}
 }
 
-func (s *leaseScheduler) observePublished(output collectutil.RunOutput, result sourceobservation.PublishBatchResult) {
+func (e *collectionExecutor) observePublished(output collectutil.RunOutput, result sourceobservation.PublishBatchResult) {
 	observations := output.Observations()
 	for i := range observations {
 		envelope := &observations[i]
@@ -56,20 +71,20 @@ func (s *leaseScheduler) observePublished(output collectutil.RunOutput, result s
 		if !ok {
 			continue
 		}
-		s.metrics.ObservePublish(envelope.Provider, string(envelope.ObservationKind), outcome)
-		s.metrics.ObserveCompleteness(envelope.Provider, string(envelope.ObservationKind), envelope.Completeness, envelope.Continuity)
+		e.metrics.ObservePublish(envelope.Provider, string(envelope.ObservationKind), outcome)
+		e.metrics.ObserveCompleteness(envelope.Provider, string(envelope.ObservationKind), envelope.Completeness, envelope.Continuity)
 	}
 }
 
-func (s *leaseScheduler) recordTerminalSuccess(published *sourceobservation.PublishBatchResult) {
-	if s == nil || s.readiness == nil {
+func (e *collectionExecutor) recordTerminalSuccess(published *sourceobservation.PublishBatchResult) {
+	if e == nil || e.readiness == nil {
 		return
 	}
-	s.readiness.ObserveCollectionSuccess()
+	e.readiness.ObserveCollectionSuccess()
 	if published == nil {
 		return
 	}
-	s.readiness.AddHandoffCandidates(handoffCandidateIDs(*published)...)
+	e.readiness.AddHandoffCandidates(handoffCandidateIDs(*published)...)
 }
 
 func handoffCandidateIDs(result sourceobservation.PublishBatchResult) []int64 {
@@ -108,11 +123,11 @@ func publishOutcomeLabel(outcome sourceobservation.PublishOutcome) (string, bool
 	return "", false
 }
 
-func (s *leaseScheduler) observePublishOutcome(provider contract.Provider, output collectutil.RunOutput, outcome string) {
+func (e *collectionExecutor) observePublishOutcome(provider contract.Provider, output collectutil.RunOutput, outcome string) {
 	observations := output.Observations()
 	for i := range observations {
 		envelope := &observations[i]
-		s.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcome)
+		e.metrics.ObservePublish(provider, string(envelope.ObservationKind), outcome)
 	}
 }
 
@@ -144,10 +159,10 @@ func attemptFailureResult(err error) string {
 	}
 }
 
-func (s *leaseScheduler) retryAt(err error) time.Time {
+func (e *collectionExecutor) retryAt(err error) time.Time {
 	now := time.Now().UTC()
-	minAt := now.Add(s.config.MinRetryDelay)
-	maxAt := now.Add(s.config.MaxRetryDelay)
+	minAt := now.Add(e.config.MinRetryDelay)
+	maxAt := now.Add(e.config.MaxRetryDelay)
 	hint := collecterr.RetryOf(err)
 	switch hint.Kind() {
 	case collecterr.RetryAt:
@@ -155,9 +170,9 @@ func (s *leaseScheduler) retryAt(err error) time.Time {
 	case collecterr.RetryAfter:
 		return clampRetryAt(now.Add(hint.After()), minAt, maxAt)
 	case collecterr.RetryDefault:
-		return now.Add(s.config.MinRetryDelay + (s.config.MaxRetryDelay-s.config.MinRetryDelay)/2)
+		return now.Add(e.config.MinRetryDelay + (e.config.MaxRetryDelay-e.config.MinRetryDelay)/2)
 	default:
-		return now.Add(s.config.MinRetryDelay + (s.config.MaxRetryDelay-s.config.MinRetryDelay)/2)
+		return now.Add(e.config.MinRetryDelay + (e.config.MaxRetryDelay-e.config.MinRetryDelay)/2)
 	}
 }
 
@@ -171,12 +186,12 @@ func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
 	return retryAt.UTC()
 }
 
-func (s *leaseScheduler) logFailure(phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
-	if s.logger == nil {
+func (e *collectionExecutor) logFailure(phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+	if e.logger == nil {
 		return
 	}
 	detail = collecterr.SanitizeDetail(detail)
-	s.logger.Warn("YouTube collection job failed",
+	e.logger.Warn("YouTube collection job failed",
 		slog.String("job_key", spec.JobKey),
 		slog.String("provider", string(spec.Provider)),
 		slog.String("job_kind", spec.CollectionJobKind),
