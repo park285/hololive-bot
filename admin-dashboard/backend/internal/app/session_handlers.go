@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	json "github.com/park285/shared-go/pkg/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -13,12 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/pkg/ginjson"
 	"github.com/park285/shared-go/pkg/httputil"
+	json "github.com/park285/shared-go/pkg/json"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/httpx"
 	"github.com/kapu/admin-dashboard/internal/session"
-
 	"github.com/kapu/hololive-shared/pkg/httpbody"
 )
 
@@ -34,21 +33,40 @@ func (r *Runtime) handleLogin(c *gin.Context) {
 		return
 	}
 	ip := r.clientIP(c.Request)
-	allowed, retryAfter := r.rateLimiter.IsAllowed(ip)
-	if !allowed {
-		retry := uint64(retryAfter.Seconds())
+	localAllowed, localRetryAfter := r.rateLimiter.IsAllowed(ip)
+	distributedRetryAfter, err := r.distributedLoginLimiter.Check(c.Request.Context(), ip, r.cfg.AdminUser)
+	if err != nil {
+		r.logger.Error("distributed login limiter check failed", slog.Any("error", err))
+		httpx.Abort(c, httpx.StoreUnavailable())
+		return
+	}
+	if !localAllowed || distributedRetryAfter > 0 {
+		retryAfter := max(localRetryAfter, distributedRetryAfter)
+		retry := uint64(max(retryAfter.Seconds(), 1))
 		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many login attempts", RetryAfter: &retry}})
 		return
 	}
 	usernameOK := httputil.ConstantTimeStringEqual(body.Username, r.cfg.AdminUser)
 	passwordOK := bcrypt.CompareHashAndPassword([]byte(r.cfg.AdminPassHash), []byte(body.Password)) == nil
 	if !(usernameOK && passwordOK) {
-		count := r.rateLimiter.RecordFailure(ip)
+		localCount := r.rateLimiter.RecordFailure(ip)
+		distributedCount, err := r.distributedLoginLimiter.RecordFailure(c.Request.Context(), ip, r.cfg.AdminUser)
+		if err != nil {
+			r.logger.Error("distributed login limiter failure record failed", slog.Any("error", err))
+			httpx.Abort(c, httpx.StoreUnavailable())
+			return
+		}
+		count := max(localCount, distributedCount)
 		delay := time.Duration(min(count*500, 3000)) * time.Millisecond
 		if !waitForLoginBackoff(c.Request.Context(), delay) {
 			return
 		}
 		httpx.Abort(c, httpx.Unauthorized())
+		return
+	}
+	if err := r.distributedLoginLimiter.RecordSuccess(c.Request.Context(), ip, r.cfg.AdminUser); err != nil {
+		r.logger.Error("distributed login limiter success record failed", slog.Any("error", err))
+		httpx.Abort(c, httpx.StoreUnavailable())
 		return
 	}
 	r.rateLimiter.RecordSuccess(ip)
