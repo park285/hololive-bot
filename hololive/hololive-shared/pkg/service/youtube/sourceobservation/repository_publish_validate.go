@@ -16,10 +16,9 @@ import (
 
 const maxCheckpointCursorBytes = 16384
 
+// 카운트·바이트·cursor 크기 상한은 preflightPublishBatch가 복사 전 가드로 이미 검증했다는
+// 전제 위에서만 호출된다. 단독 호출 시 해당 상한은 검증되지 않는다.
 func validatePublishBatch(input *PublishBatchInput) error {
-	if err := validatePublishBatchCounts(input); err != nil {
-		return err
-	}
 	if err := validatePublishBatchObservations(input); err != nil {
 		return err
 	}
@@ -155,10 +154,14 @@ func validateCheckpointTextField(name, value string, index int) error {
 	return nil
 }
 
-func validateCheckpointCursor(entry *CheckpointEntry, index int) error {
-	if len(entry.Cursor) > maxCheckpointCursorBytes {
+func validateCheckpointCursorSize(cursor []byte, index int) error {
+	if len(cursor) > maxCheckpointCursorBytes {
 		return fmt.Errorf("%w: checkpoint %d cursor is too large", ErrInvalidEnvelope, index)
 	}
+	return nil
+}
+
+func validateCheckpointCursor(entry *CheckpointEntry, index int) error {
 	if len(entry.Cursor) == 0 {
 		return nil
 	}

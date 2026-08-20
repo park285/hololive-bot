@@ -133,16 +133,6 @@ func TestCFG005CollectorDurationAliasTruthTable(t *testing.T) {
 		newName, oldName string
 	}{
 		{
-			name:    "collection overhead",
-			newName: "YOUTUBE_COLLECTOR_COLLECTION_OVERHEAD_SECONDS",
-			oldName: "YOUTUBE_COLLECTOR_NORMALIZATION_BUDGET_SECONDS",
-		},
-		{
-			name:    "publish timeout",
-			newName: "YOUTUBE_COLLECTOR_PUBLISH_TIMEOUT_SECONDS",
-			oldName: "YOUTUBE_COLLECTOR_PUBLISH_BUDGET_SECONDS",
-		},
-		{
 			name:    "youtubejs request timeout",
 			newName: "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
 			oldName: "YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",

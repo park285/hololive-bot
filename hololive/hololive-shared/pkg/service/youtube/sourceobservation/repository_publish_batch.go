@@ -47,11 +47,7 @@ type publishContractRow struct {
 }
 
 func encodePublishBatch(input *PublishBatchInput) (observationJSON, contractJSON []byte, err error) {
-	checkpoints := checkpointEntriesByBinding(input.Checkpoint.Entries)
-	if err := validatePublishBatchBytes(input, checkpoints); err != nil {
-		return nil, nil, err
-	}
-	rows, contracts := encodePublishBatchRows(input, checkpoints)
+	rows, contracts := encodePublishBatchRows(input, checkpointEntriesByBinding(input.Checkpoint.Entries))
 	return marshalPublishBatch(rows, contracts)
 }
 
@@ -61,19 +57,6 @@ func checkpointEntriesByBinding(entries []CheckpointEntry) map[checkpointBinding
 		checkpoints[checkpointBindingForEntry(&entries[i])] = entries[i]
 	}
 	return checkpoints
-}
-
-func validatePublishBatchBytes(input *PublishBatchInput, checkpoints map[checkpointBinding]CheckpointEntry) error {
-	aggregateBytes := 0
-	for i := range input.Observations {
-		checkpoint := checkpoints[checkpointBindingForObservation(&input.Observations[i])]
-		inputBytes := len(input.Observations[i].Payload) + len(checkpoint.Cursor)
-		if inputBytes > MaxPublishBatchBytes-aggregateBytes {
-			return fmt.Errorf("publish source observation batch: %w", publishBatchBytesError())
-		}
-		aggregateBytes += inputBytes
-	}
-	return nil
 }
 
 func encodePublishBatchRows(input *PublishBatchInput, checkpoints map[checkpointBinding]CheckpointEntry) (batchRows []publishBatchRow, contractRows []publishContractRow) {
