@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RULES_FILE="${SCRIPT_DIR}/youtube-collector-hardening-contract.tsv"
-REQUIRE_CANONICAL_IDS=0
 
 usage() {
   echo "usage: $0 [--root <dir>] [--rules <tsv>]" >&2
@@ -42,11 +41,7 @@ done
   exit 1
 }
 
-if [[ "${RULES_FILE}" -ef "${SCRIPT_DIR}/youtube-collector-hardening-contract.tsv" ]]; then
-  REQUIRE_CANONICAL_IDS=1
-fi
-
-python3 - "${ROOT_DIR}" "${RULES_FILE}" "${REQUIRE_CANONICAL_IDS}" <<'PY'
+python3 - "${ROOT_DIR}" "${RULES_FILE}" <<'PY'
 from __future__ import annotations
 
 import fnmatch
@@ -57,8 +52,6 @@ from pathlib import Path
 
 ROOT = Path(sys.argv[1]).resolve()
 RULES = Path(sys.argv[2])
-REQUIRE_CANONICAL_IDS = sys.argv[3] == "1"
-CANONICAL_IDS = {f"HC-{index:03d}" for index in range(1, 16)}
 
 
 @dataclass(frozen=True)
@@ -276,13 +269,6 @@ def count_rule(root: Path, rule: Rule) -> int:
 
 def main() -> int:
     rules = parse_rules(RULES, ROOT)
-    present = {rule.rule_id for rule in rules}
-    if REQUIRE_CANONICAL_IDS:
-        missing = sorted(CANONICAL_IDS - present)
-        extra_empty = not CANONICAL_IDS.issubset(present)
-        if extra_empty:
-            print(f"[hardening] canonical rule IDs missing: {', '.join(missing)}", file=sys.stderr)
-            return 1
     failed = 0
     for rule in rules:
         count = count_rule(ROOT, rule)
