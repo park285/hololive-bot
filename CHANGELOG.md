@@ -8,6 +8,8 @@
 
 ## 미출시
 
+## v3.0.5 - 2026-08-20
+
 ### 변경
 
 - settings가 `ALARM_DISPATCH_RETENTION_{INTERVAL_MS,QUERY_TIMEOUT_MS,LIMIT,SENT_DAYS,DLQ_DAYS,QUARANTINED_DAYS,CANCELLED_DAYS,EVENT_DAYS}`,
@@ -23,6 +25,9 @@
 - 운영 경로가 쓰지 않던 `alarmservice.AlarmService.WasUpcomingEventNotifiedRecently`와
   `alarmcache.State.WasUpcomingEventNotifiedRecently`(cache 오류를 `false`로 접던 래퍼)를 제거했습니다.
   upcoming 중복 판정은 `dedup.Service`가 계속 담당합니다.
+- 이번 릴리스는 `hololive-api`·`hololive-alarm-worker`·`youtube-collector` artifact를 함께 재빌드합니다.
+  `hololive-api` VERSION은 `v3.0.5`와 일치시키고, `hololive-alarm-worker` artifact version은 `3.0.3`에서
+  `3.0.4`로 올립니다. collector 이미지 version은 `hololive-api` VERSION을 따릅니다.
 
 ## v3.0.4 - 2026-08-20
 
