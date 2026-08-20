@@ -60,10 +60,16 @@ func initMetrics() {
 
 func observeLoadFailure() {
 	initMetrics()
+	if loadFailuresTotal == nil {
+		return
+	}
 	loadFailuresTotal.Inc()
 }
 
 func observeLookupFallback(reason, namespace string) {
 	initMetrics()
+	if lookupFallbackTotal == nil {
+		return
+	}
 	lookupFallbackTotal.WithLabelValues(reason, namespace).Inc()
 }
