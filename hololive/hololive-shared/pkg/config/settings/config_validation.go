@@ -89,8 +89,8 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	if config == nil {
 		return nil
 	}
-	if config.Timeout <= 0 {
-		return fmt.Errorf("HOLODEX_TIMEOUT_SECONDS must be positive")
+	if err := validateHolodexTimeout(config.Timeout); err != nil {
+		return err
 	}
 	fallback := config.LiveStatusFallback
 	if fallback.MaxPerCycle <= 0 {
@@ -101,6 +101,13 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	}
 	if fallback.DeadlineMargin < 0 {
 		return fmt.Errorf("HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS must be >= 0")
+	}
+	return nil
+}
+
+func validateHolodexTimeout(timeout time.Duration) error {
+	if timeout <= 0 {
+		return fmt.Errorf("HOLODEX_TIMEOUT_SECONDS must be positive")
 	}
 	return nil
 }

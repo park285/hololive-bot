@@ -271,8 +271,8 @@ func (c *YouTubeCollectorRuntimeConfig) validateProviders() error {
 	if strings.TrimSpace(c.Holodex.APIKey) == "" {
 		return fmt.Errorf("HOLODEX_API_KEY is required")
 	}
-	if c.Holodex.Transport.Timeout <= 0 {
-		return fmt.Errorf("HOLODEX_TIMEOUT_SECONDS must be positive")
+	if err := validateHolodexTimeout(c.Holodex.Transport.Timeout); err != nil {
+		return err
 	}
 	if err := validateOfficialScheduleBaseURL(c.OfficialSchedule.BaseURL); err != nil {
 		return err
