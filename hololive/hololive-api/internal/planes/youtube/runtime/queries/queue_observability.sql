@@ -10,4 +10,4 @@ SELECT COUNT(queue.observation_id),
 FROM source_observation_queue AS queue
 JOIN source_observations AS observation
   ON observation.id = queue.observation_id
-WHERE queue.status IN ('PENDING', 'PROCESSING')
+WHERE (queue.status = 'PENDING' OR queue.status = 'PROCESSING')
