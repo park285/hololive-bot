@@ -26,9 +26,26 @@ for token in \
   fi
 done
 
-if [[ "${sql}" == *"query"* ]]; then
-  echo "MVCC catalog SQL must not expose active query text" >&2
-  exit 1
-fi
+database_state_sql="$(mvcc_database_state_sql)"
+
+for token in \
+  "idle_in_transaction_session_timeout" \
+  "autovacuum_freeze_max_age" \
+  "autovacuum_multixact_freeze_max_age" \
+  "age(database_catalog.datfrozenxid)" \
+  "mxid_age(database_catalog.datminmxid)" \
+  "database_stats.stats_reset"; do
+  if [[ "${database_state_sql}" != *"${token}"* ]]; then
+    echo "missing MVCC database state SQL token: ${token}" >&2
+    exit 1
+  fi
+done
+
+for catalog_sql in "${sql}" "${database_state_sql}"; do
+  if [[ "${catalog_sql}" == *"query"* ]]; then
+    echo "MVCC catalog SQL must not expose active query text" >&2
+    exit 1
+  fi
+done
 
 echo "ok: pg hotpath catalog SQL preserves bounded secret-free MVCC evidence"

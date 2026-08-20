@@ -18,6 +18,7 @@ source "${CLAIM_WINDOW_LIB}"
 required_functions=(
   invalid_indexes_sql
   target_indexes_sql
+  mvcc_database_state_sql
   dead_tuples_sql
   claim_statement_window_sql
   alarm_claim_sql
@@ -36,7 +37,7 @@ usage() {
   cat <<'EOF'
 usage: pg-hotpath-explain-snapshot.sh [--output-dir DIR] [--stats-window-seconds N] [--print-sql] [--no-index-check]
 
-Captures PostgreSQL EXPLAIN snapshots for Hololive alarm/youtube claim hot paths.
+Captures PostgreSQL EXPLAIN snapshots and MVCC evidence for Hololive alarm/youtube hot paths.
 
 Connection:
   Prefer DATABASE_URL, or standard PG* environment variables accepted by psql.
@@ -46,6 +47,7 @@ Connection:
 Outputs:
   invalid-indexes.txt
   target-indexes.txt
+  mvcc-database-state.txt
   dead-tuples-autovacuum.txt
   claim-statement-window.txt
   alarm-dispatch-claim-explain.txt
@@ -103,6 +105,8 @@ if [[ "${print_sql}" == "true" ]]; then
   invalid_indexes_sql
   printf '\n%s\n' '-- target-indexes.sql'
   target_indexes_sql
+  printf '\n%s\n' '-- mvcc-database-state.sql'
+  mvcc_database_state_sql
   printf '\n%s\n' '-- dead-tuples-autovacuum.sql'
   dead_tuples_sql
   printf '\n%s\n' '-- claim-statement-window.sql'
@@ -135,6 +139,7 @@ run_psql() {
 
 invalid_indexes_sql | run_psql invalid-indexes.txt -qAt
 target_indexes_sql | run_psql target-indexes.txt -qAt -F '|'
+mvcc_database_state_sql | run_psql mvcc-database-state.txt
 dead_tuples_sql | run_psql dead-tuples-autovacuum.txt
 claim_statement_window_sql | run_psql claim-statement-window.txt -qAt -F '|' \
   -v stats_window_seconds="${stats_window_seconds}"

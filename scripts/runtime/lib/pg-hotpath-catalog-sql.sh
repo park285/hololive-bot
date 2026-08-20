@@ -108,12 +108,33 @@ ORDER BY index_name;
 SQL
 }
 
+mvcc_database_state_sql() {
+  cat <<'SQL'
+SELECT
+    clock_timestamp() AS captured_at,
+    database_catalog.datname AS database_name,
+    current_setting('idle_in_transaction_session_timeout') AS idle_in_transaction_session_timeout,
+    current_setting('transaction_timeout') AS transaction_timeout,
+    current_setting('statement_timeout') AS statement_timeout,
+    age(database_catalog.datfrozenxid) AS frozen_xid_age,
+    mxid_age(database_catalog.datminmxid) AS frozen_multixact_age,
+    current_setting('autovacuum_freeze_max_age')::bigint AS autovacuum_freeze_max_age,
+    current_setting('autovacuum_multixact_freeze_max_age')::bigint AS autovacuum_multixact_freeze_max_age,
+    database_stats.stats_reset
+FROM pg_database AS database_catalog
+JOIN pg_stat_database AS database_stats
+  ON database_stats.datid = database_catalog.oid
+WHERE database_catalog.datname = current_database();
+SQL
+}
+
 dead_tuples_sql() {
   cat <<'SQL'
 SELECT
     'table' AS section,
     stats.schemaname,
     stats.relname,
+    pg_size_pretty(pg_total_relation_size(stats.relid)) AS total_size,
     stats.n_live_tup,
     stats.n_dead_tup,
     stats.n_tup_ins,
