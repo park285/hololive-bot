@@ -88,118 +88,52 @@ func TestLoadYouTubeCollectorConfigNonDefaultOverride(t *testing.T) {
 	}
 }
 
-func TestCFG005MaxSuccessResponseBytesDualEnvMatrix(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name           string
-		newRaw, oldRaw string
-		hasNew, hasOld bool
-		want           int
-		wantErr        bool
-	}{
-		{name: "new only", newRaw: "2048", hasNew: true, want: 2048},
-		{name: "old only", oldRaw: "4096", hasOld: true, want: 4096},
-		{name: "both equal", newRaw: "8192", oldRaw: "8192", hasNew: true, hasOld: true, want: 8192},
-		{name: "both differ", newRaw: "8192", oldRaw: "4096", hasNew: true, hasOld: true, wantErr: true},
-		{name: "neither", want: 1024},
-		{name: "new explicitly empty", hasNew: true, wantErr: true},
-		{name: "old explicitly empty", hasOld: true, wantErr: true},
-		{name: "both explicitly empty", hasNew: true, hasOld: true, wantErr: true},
-		{name: "new invalid", newRaw: "not-an-integer", hasNew: true, wantErr: true},
-		{name: "old zero", oldRaw: "0", hasOld: true, wantErr: true},
+func TestLoadYouTubeCollectorConfigIgnoresRetiredAliasEnv(t *testing.T) {
+	for _, name := range []string{
+		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES",
+		"YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
+	} {
+		unsetEnvForTest(t, name)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := resolveDualPositiveInt(
-				"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES", test.newRaw, test.hasNew,
-				"YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", test.oldRaw, test.hasOld,
-				1024,
-			)
-			if (err != nil) != test.wantErr {
-				t.Fatalf("resolve error = %v, wantErr %t", err, test.wantErr)
-			}
-			if err == nil && got != test.want {
-				t.Fatalf("resolved value = %d, want %d", got, test.want)
-			}
-		})
+	t.Setenv("YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", "4096")
+	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS", "11")
+
+	cfg, err := loadYouTubeCollectorConfig()
+	if err != nil {
+		t.Fatalf("loadYouTubeCollectorConfig() error = %v", err)
+	}
+	defaults := DefaultYouTubeCollectorConfig()
+	if cfg.MaxSuccessResponseBytes != defaults.MaxSuccessResponseBytes {
+		t.Fatalf("MaxSuccessResponseBytes = %d, want default %d", cfg.MaxSuccessResponseBytes, defaults.MaxSuccessResponseBytes)
+	}
+	if cfg.YouTubeJSRequestTimeout != defaults.YouTubeJSRequestTimeout {
+		t.Fatalf("YouTubeJSRequestTimeout = %s, want default %s", cfg.YouTubeJSRequestTimeout, defaults.YouTubeJSRequestTimeout)
 	}
 }
 
-func TestCFG005CollectorDurationAliasTruthTable(t *testing.T) {
-	t.Parallel()
-	pairs := []struct {
-		name             string
-		newName, oldName string
-	}{
-		{
-			name:    "youtubejs request timeout",
-			newName: "YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
-			oldName: "YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
-		},
-	}
-	cases := []struct {
-		name           string
-		newRaw, oldRaw string
-		hasNew, hasOld bool
-		want           time.Duration
-		wantErr        bool
-	}{
-		{name: "new only", newRaw: "7", hasNew: true, want: 7 * time.Second},
-		{name: "old only", oldRaw: "11", hasOld: true, want: 11 * time.Second},
-		{name: "both equal", newRaw: "13", oldRaw: "13", hasNew: true, hasOld: true, want: 13 * time.Second},
-		{name: "both differ", newRaw: "7", oldRaw: "11", hasNew: true, hasOld: true, wantErr: true},
-		{name: "neither", want: 5 * time.Second},
-		{name: "new explicitly empty", hasNew: true, wantErr: true},
-		{name: "old explicitly empty", hasOld: true, wantErr: true},
-		{name: "both explicitly empty", hasNew: true, hasOld: true, wantErr: true},
-		{name: "new empty old valid", oldRaw: "11", hasNew: true, hasOld: true, wantErr: true},
-		{name: "new valid old empty", newRaw: "7", hasNew: true, hasOld: true, wantErr: true},
-		{name: "negative", newRaw: "-1", hasNew: true, wantErr: true},
-		{name: "out of range", newRaw: "9223372036854775807", hasNew: true, wantErr: true},
-	}
-	for _, pair := range pairs {
-		t.Run(pair.name, func(t *testing.T) {
-			t.Parallel()
-			for _, test := range cases {
-				t.Run(test.name, func(t *testing.T) {
-					t.Parallel()
-					got, err := resolveDualPositiveDurationUnit(
-						pair.newName, test.newRaw, test.hasNew,
-						pair.oldName, test.oldRaw, test.hasOld,
-						5*time.Second,
-						time.Second,
-					)
-					if (err != nil) != test.wantErr {
-						t.Fatalf("resolve error = %v, wantErr %t", err, test.wantErr)
-					}
-					if err == nil && got != test.want {
-						t.Fatalf("resolved value = %s, want %s", got, test.want)
-					}
-				})
-			}
-		})
-	}
-}
-
-func TestRequiredCollectorNumericEnvRejectsExplicitEmptyValues(t *testing.T) {
+func TestRequiredCollectorNumericEnvRejectsInvalidValues(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string
 	}{
 		{name: "empty", value: ""},
 		{name: "whitespace", value: "   "},
+		{name: "not an integer", value: "not-an-integer"},
+		{name: "zero", value: "0"},
+		{name: "negative", value: "-1"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("YOUTUBE_COLLECTOR_MAX_PAGES", test.value)
 			if _, err := requiredPositiveIntEnv("YOUTUBE_COLLECTOR_MAX_PAGES", 4); err == nil {
-				t.Fatal("requiredPositiveIntEnv accepted an explicitly empty value")
+				t.Fatalf("requiredPositiveIntEnv accepted %q", test.value)
 			}
 
 			t.Setenv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", test.value)
 			if _, err := requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", time.Minute); err == nil {
-				t.Fatal("requiredDurationUnitEnv accepted an explicitly empty value")
+				t.Fatalf("requiredSecondsDurationEnv accepted %q", test.value)
 			}
 		})
 	}

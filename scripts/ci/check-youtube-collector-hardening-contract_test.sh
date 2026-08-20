@@ -111,7 +111,7 @@ case_allowlist_excludes_fixture() {
 case_canonical_table_has_required_ids() {
   local ids
   ids="$(awk -F'\t' 'NF && $1 !~ /^#/ { print $1 }' "${SCRIPT_DIR}/youtube-collector-hardening-contract.tsv" | sort -u | tr '\n' ' ')"
-  local expected="HC-002 HC-009 HC-010 HC-011 HC-012 HC-013 "
+  local expected="HC-002 HC-009 HC-010 HC-011 HC-012 "
   if [[ "${ids}" != "${expected}" ]]; then
     printf 'not ok - canonical rule IDs differ\nexpected: %s\nactual: %s\n' "${expected}" "${ids}" >&2
     exit 1
