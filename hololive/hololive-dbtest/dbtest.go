@@ -49,8 +49,12 @@ const (
 	// postgresImage는 production migration 기준과 같은 PostgreSQL 18 image다.
 	postgresImage = "postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
 
-	reaperRecoveryAttempts = 2
+	reaperRecoveryAttempts         = 2
+	containerStartRetryAttempts    = 5
+	defaultContainerStartRetryWait = 500 * time.Millisecond
 )
+
+var containerStartRetryInterval = defaultContainerStartRetryWait
 
 // baseProvider는 테스트 바이너리당 1개의 base DSN(컨테이너 또는 외부 DB)을 lazily 확보한다.
 type baseProvider struct {
@@ -169,7 +173,13 @@ func provisionBaseDSN() (_ string, err error) {
 	}
 	defer func() { err = errors.Join(err, unlock()) }()
 
-	container, err := startVerifiedPostgres(ctx, postgresImage)
+	container, err := provisionPostgresContainer(
+		ctx,
+		postgresImage,
+		startPostgresContainer,
+		holdExistingSessionReaper,
+		ensureVerifiedReaperClient,
+	)
 	if err != nil {
 		return "", fmt.Errorf("start postgres container %s: %w", postgresImage, err)
 	}
@@ -182,15 +192,35 @@ func provisionBaseDSN() (_ string, err error) {
 	return dsn, nil
 }
 
-func startVerifiedPostgres(ctx context.Context, image string) (*postgres.PostgresContainer, error) {
+func provisionPostgresContainer(
+	ctx context.Context,
+	image string,
+	start func(context.Context, string) (*postgres.PostgresContainer, error),
+	holdReaper func(context.Context) error,
+	verifyReaper func(context.Context) error,
+) (*postgres.PostgresContainer, error) {
+	attempts := containerStartRetryAttempts
+	if reaperRecoveryAttempts > attempts {
+		attempts = reaperRecoveryAttempts
+	}
+
 	var attemptErr error
-	for range reaperRecoveryAttempts {
-		container, err := startPostgresContainer(ctx, image)
+	for range attempts {
+		_ = holdReaper(ctx)
+
+		container, err := start(ctx, image)
 		if err != nil {
-			return nil, errors.Join(attemptErr, err)
+			attemptErr = errors.Join(attemptErr, err)
+			if !isTransientContainerStartError(err) {
+				return nil, attemptErr
+			}
+			if waitErr := waitContainerStartRetry(ctx); waitErr != nil {
+				return nil, errors.Join(attemptErr, waitErr)
+			}
+			continue
 		}
 
-		verifyErr := ensureVerifiedReaperClient(ctx)
+		verifyErr := verifyReaper(ctx)
 		if verifyErr == nil {
 			return container, nil
 		}
@@ -201,6 +231,48 @@ func startVerifiedPostgres(ctx context.Context, image string) (*postgres.Postgre
 		}
 	}
 	return nil, attemptErr
+}
+
+func isTransientContainerStartError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "marked for removal") {
+		return true
+	}
+	return strings.Contains(msg, "removal") && strings.Contains(msg, "already in progress")
+}
+
+func waitContainerStartRetry(ctx context.Context) error {
+	if containerStartRetryInterval <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(containerStartRetryInterval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-timer.C:
+		return nil
+	}
+}
+
+func holdExistingSessionReaper(ctx context.Context) error {
+	if verifiedReaperConn != nil {
+		return nil
+	}
+	_, found, err := findSessionReaper(ctx)
+	if err != nil {
+		if isTransientReaperError(err) {
+			return nil
+		}
+		return err
+	}
+	if !found {
+		return nil
+	}
+	return ensureVerifiedReaperClient(ctx)
 }
 
 func preparePostgresRetry(
