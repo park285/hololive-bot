@@ -90,8 +90,8 @@ func preflightPublishObservations(observations []contract.Envelope, aggregateByt
 
 func preflightPublishCheckpoints(checkpoints []CheckpointEntry, aggregateBytes *int) error {
 	for i := range checkpoints {
-		if len(checkpoints[i].Cursor) > maxCheckpointCursorBytes {
-			return fmt.Errorf("%w: checkpoint %d cursor is too large", ErrInvalidEnvelope, i)
+		if err := validateCheckpointCursorSize(checkpoints[i].Cursor, i); err != nil {
+			return err
 		}
 		if !publishBytesWithinLimit(aggregateBytes, len(checkpoints[i].Cursor)) {
 			return publishBatchBytesError()
