@@ -73,6 +73,9 @@ func tryStartPostgres(
 	}
 	container, err := start(ctx, image)
 	if err == nil {
+		if container == nil {
+			return nil, errors.New("postgres container start returned nil"), false
+		}
 		return container, nil, false
 	}
 	if !isTransientContainerStartError(err) {
@@ -132,6 +135,9 @@ func preparePostgresRetry(
 	container *postgres.PostgresContainer,
 	verifyErr error,
 ) error {
+	if container == nil {
+		return errors.New("unverified postgres container is missing")
+	}
 	if terminateErr := container.Terminate(ctx); terminateErr != nil {
 		return fmt.Errorf("terminate unverified postgres container: %w", terminateErr)
 	}

@@ -94,3 +94,48 @@ func TestProvisionPostgresContainerExhaustsTransientStartRetries(t *testing.T) {
 	require.Equal(t, containerStartRetryAttempts, starts)
 	require.Contains(t, err.Error(), "marked for removal")
 }
+
+func TestProvisionPostgresContainerDoesNotRetryHoldError(t *testing.T) {
+	wantErr := errors.New("docker daemon unavailable")
+	starts := 0
+	_, err := provisionPostgresContainer(
+		context.Background(),
+		"postgres:test",
+		func(context.Context, string) (*postgres.PostgresContainer, error) {
+			starts++
+			return &postgres.PostgresContainer{}, nil
+		},
+		func(context.Context) error { return wantErr },
+		func(context.Context) error {
+			t.Fatal("verify must not run after hold failure")
+			return nil
+		},
+	)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, 0, starts)
+}
+
+func TestProvisionPostgresContainerRejectsNilStartedContainer(t *testing.T) {
+	_, err := provisionPostgresContainer(
+		context.Background(),
+		"postgres:test",
+		func(context.Context, string) (*postgres.PostgresContainer, error) {
+			return nil, nil
+		},
+		func(context.Context) error { return nil },
+		func(context.Context) error {
+			t.Fatal("verify must not run after nil start")
+			return nil
+		},
+	)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "postgres container start returned nil")
+}
+
+func TestPreparePostgresRetryRejectsNilContainer(t *testing.T) {
+	err := preparePostgresRetry(context.Background(), nil, errors.New("reaper gone"))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unverified postgres container is missing")
+}
