@@ -89,21 +89,30 @@ func loadNotificationConfig() NotificationConfig {
 	}
 }
 
-func loadScraperConfig() ScraperConfig {
+func loadScraperConfig() (ScraperConfig, error) {
 	scraperSchedulerDefaults := DefaultScraperSchedulerConfig()
 	snapshotDefaults := DefaultScraperSnapshotConfig()
+
+	workerCount, err := requiredPositiveIntEnv("SCRAPER_SCHEDULER_WORKER_COUNT", DefaultScraperWorkerCount())
+	if err != nil {
+		return ScraperConfig{}, err
+	}
+	poll, err := loadScraperPoll()
+	if err != nil {
+		return ScraperConfig{}, err
+	}
 
 	return ScraperConfig{
 		ProxyEnabled:  sharedenv.Bool("SCRAPER_PROXY_ENABLED", false),
 		ProxyURL:      sharedenv.String("SCRAPER_PROXY_URL", ""),
 		FetcherEngine: NormalizeScraperFetcherEngine(sharedenv.String("SCRAPER_FETCHER_ENGINE", DefaultScraperFetcherEngine())),
-		WorkerCount:   positiveIntEnv("SCRAPER_SCHEDULER_WORKER_COUNT", DefaultScraperWorkerCount()),
+		WorkerCount:   workerCount,
 		Scheduler: ScraperSchedulerConfig{
 			PollTimeout:     time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS", int(scraperSchedulerDefaults.PollTimeout/time.Second))) * time.Second,
 			ErrorBackoffMin: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMin/time.Second))) * time.Second,
 			ErrorBackoffMax: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMax/time.Second))) * time.Second,
 		},
-		Poll: loadScraperPoll(),
+		Poll: poll,
 		Snapshot: ScraperSnapshotConfig{
 			Enabled:      sharedenv.Bool("SCRAPER_SNAPSHOT_ENABLED", snapshotDefaults.Enabled),
 			Dir:          sharedenv.String("SCRAPER_SNAPSHOT_DIR", snapshotDefaults.Dir),
@@ -115,7 +124,7 @@ func loadScraperConfig() ScraperConfig {
 		PollTiering:       loadScraperPollTieringConfig(),
 		Backfill:          loadScraperBackfillConfig(),
 		ActiveActive:      loadScraperActiveActiveConfig(),
-	}
+	}, nil
 }
 
 func loadScraperChannelHealthConfig() ScraperChannelHealthConfig {

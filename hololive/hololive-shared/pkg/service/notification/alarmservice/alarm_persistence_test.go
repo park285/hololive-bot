@@ -73,6 +73,5 @@ func TestAlarmPersistence_UpcomingEventRoundTrip(t *testing.T) {
 	}
 
 	require.NoError(t, as.MarkUpcomingEventNotified(ctx, "room-1", "channel-1", stream))
-	assert.True(t, as.WasUpcomingEventNotifiedRecently(ctx, "room-1", "channel-1", stream, time.Minute))
-	assert.False(t, as.WasUpcomingEventNotifiedRecently(ctx, "room-1", "channel-1", stream, 0))
+	requireUpcomingEventMarker(t, as, ctx, "room-1", "channel-1", stream)
 }

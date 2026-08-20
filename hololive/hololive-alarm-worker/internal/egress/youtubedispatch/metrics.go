@@ -48,6 +48,13 @@ var (
 
 	outboxDeliveryRetryAfterClampedTotal prometheus.Counter
 	youtubeOutboxV3HandoffTotal          *prometheus.CounterVec
+	outboxLiveCatchupSuppressionTotal    *prometheus.CounterVec
+)
+
+const (
+	liveCatchupSuppressionResultSuppressed    = "suppressed"
+	liveCatchupSuppressionResultCacheError    = "cache_error"
+	liveCatchupSuppressionResultInvalidMarker = "invalid_marker"
 )
 
 func initOutboxMetrics() {
@@ -127,6 +134,21 @@ func initOutboxDispatchMetrics() {
 		},
 		[]string{"mode", "result"},
 	)
+	outboxLiveCatchupSuppressionTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "hololive_youtube_outbox_live_catchup_suppression_total",
+			Help: "YouTube outbox live catch-up suppression marker lookups by result (suppressed, cache_error, invalid_marker).",
+		},
+		[]string{"result"},
+	)
+}
+
+func observeLiveCatchupSuppression(result string) {
+	initOutboxMetrics()
+	if outboxLiveCatchupSuppressionTotal == nil {
+		return
+	}
+	outboxLiveCatchupSuppressionTotal.WithLabelValues(result).Inc()
 }
 
 func observeYouTubeOutboxHandoff(mode handoff.Mode, result string, rows int) {

@@ -6,28 +6,42 @@ import (
 	sharedenv "github.com/park285/shared-go/pkg/envutil"
 )
 
-func loadAlarmDispatchRetentionConfig() AlarmDispatchRetentionConfig {
-	return AlarmDispatchRetentionConfig{
-		Enabled:         sharedenv.Bool("ALARM_DISPATCH_RETENTION_ENABLED", true),
-		Interval:        positiveDurationMS("ALARM_DISPATCH_RETENTION_INTERVAL_MS", time.Hour),
-		QueryTimeout:    positiveDurationMS("ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS", 30*time.Second),
-		Limit:           alarmDispatchRetentionLimit(),
-		SentDays:        positiveIntEnv("ALARM_DISPATCH_RETENTION_SENT_DAYS", 90),
-		DLQDays:         positiveIntEnv("ALARM_DISPATCH_RETENTION_DLQ_DAYS", 180),
-		QuarantinedDays: positiveIntEnv("ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS", 180),
-		CancelledDays:   positiveIntEnv("ALARM_DISPATCH_RETENTION_CANCELLED_DAYS", 90),
-		EventDays:       positiveIntEnv("ALARM_DISPATCH_RETENTION_EVENT_DAYS", 90),
+func loadAlarmDispatchRetentionConfig() (AlarmDispatchRetentionConfig, error) {
+	config := AlarmDispatchRetentionConfig{
+		Enabled: sharedenv.Bool("ALARM_DISPATCH_RETENTION_ENABLED", true),
 	}
+	var err error
+	if config.Interval, err = requiredMillisDurationEnv("ALARM_DISPATCH_RETENTION_INTERVAL_MS", time.Hour); err != nil {
+		return AlarmDispatchRetentionConfig{}, err
+	}
+	if config.QueryTimeout, err = requiredMillisDurationEnv("ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS", 30*time.Second); err != nil {
+		return AlarmDispatchRetentionConfig{}, err
+	}
+	if config.Limit, err = alarmDispatchRetentionLimit(); err != nil {
+		return AlarmDispatchRetentionConfig{}, err
+	}
+	for _, field := range []struct {
+		key      string
+		fallback int
+		target   *int
+	}{
+		{key: "ALARM_DISPATCH_RETENTION_SENT_DAYS", fallback: 90, target: &config.SentDays},
+		{key: "ALARM_DISPATCH_RETENTION_DLQ_DAYS", fallback: 180, target: &config.DLQDays},
+		{key: "ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS", fallback: 180, target: &config.QuarantinedDays},
+		{key: "ALARM_DISPATCH_RETENTION_CANCELLED_DAYS", fallback: 90, target: &config.CancelledDays},
+		{key: "ALARM_DISPATCH_RETENTION_EVENT_DAYS", fallback: 90, target: &config.EventDays},
+	} {
+		if *field.target, err = requiredPositiveIntEnv(field.key, field.fallback); err != nil {
+			return AlarmDispatchRetentionConfig{}, err
+		}
+	}
+	return config, nil
 }
 
-func alarmDispatchRetentionLimit() int {
-	return min(positiveIntEnv("ALARM_DISPATCH_RETENTION_LIMIT", 1000), 10000)
-}
-
-func positiveDurationMS(key string, defaultValue time.Duration) time.Duration {
-	value := positiveIntEnv(key, 0)
-	if value == 0 {
-		return defaultValue
+func alarmDispatchRetentionLimit() (int, error) {
+	limit, err := requiredPositiveIntEnv("ALARM_DISPATCH_RETENTION_LIMIT", 1000)
+	if err != nil {
+		return 0, err
 	}
-	return time.Duration(value) * time.Millisecond
+	return min(limit, 10000), nil
 }

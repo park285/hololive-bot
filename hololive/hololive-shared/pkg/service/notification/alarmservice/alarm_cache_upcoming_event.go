@@ -23,12 +23,3 @@ func (as *AlarmService) MarkUpcomingEventNotified(
 ) error {
 	return as.cacheState.MarkUpcomingEventNotified(ctx, roomID, channelID, stream)
 }
-
-func (as *AlarmService) WasUpcomingEventNotifiedRecently(
-	ctx context.Context,
-	roomID, channelID string,
-	stream *domain.Stream,
-	window time.Duration,
-) bool {
-	return as.cacheState.WasUpcomingEventNotifiedRecently(ctx, roomID, channelID, stream, window)
-}

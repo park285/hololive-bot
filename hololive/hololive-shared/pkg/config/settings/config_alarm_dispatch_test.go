@@ -5,10 +5,23 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
+var alarmDispatchRetentionEnvKeys = []string{
+	"ALARM_DISPATCH_RETENTION_INTERVAL_MS",
+	"ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS",
+	"ALARM_DISPATCH_RETENTION_LIMIT",
+	"ALARM_DISPATCH_RETENTION_SENT_DAYS",
+	"ALARM_DISPATCH_RETENTION_DLQ_DAYS",
+	"ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS",
+	"ALARM_DISPATCH_RETENTION_CANCELLED_DAYS",
+	"ALARM_DISPATCH_RETENTION_EVENT_DAYS",
+}
+
 func TestLoadAlarmDispatchRetentionConfigDefaults(t *testing.T) {
-	config := loadAlarmDispatchRetentionConfig()
+	config, err := loadAlarmDispatchRetentionConfig()
+	require.NoError(t, err)
 
 	assert.Equal(t, AlarmDispatchRetentionConfig{
 		Enabled:         true,
@@ -34,7 +47,8 @@ func TestLoadAlarmDispatchRetentionConfigFromEnvironment(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_RETENTION_CANCELLED_DAYS", "80")
 	t.Setenv("ALARM_DISPATCH_RETENTION_EVENT_DAYS", "90")
 
-	config := loadAlarmDispatchRetentionConfig()
+	config, err := loadAlarmDispatchRetentionConfig()
+	require.NoError(t, err)
 
 	assert.Equal(t, AlarmDispatchRetentionConfig{
 		Enabled:         false,
@@ -49,40 +63,26 @@ func TestLoadAlarmDispatchRetentionConfigFromEnvironment(t *testing.T) {
 	}, config)
 }
 
-func TestLoadAlarmDispatchRetentionConfigFallsBackForInvalidValues(t *testing.T) {
-	for _, value := range []string{"0", "-1", "invalid"} {
-		t.Run(value, func(t *testing.T) {
-			for _, key := range []string{
-				"ALARM_DISPATCH_RETENTION_INTERVAL_MS",
-				"ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS",
-				"ALARM_DISPATCH_RETENTION_LIMIT",
-				"ALARM_DISPATCH_RETENTION_SENT_DAYS",
-				"ALARM_DISPATCH_RETENTION_DLQ_DAYS",
-				"ALARM_DISPATCH_RETENTION_QUARANTINED_DAYS",
-				"ALARM_DISPATCH_RETENTION_CANCELLED_DAYS",
-				"ALARM_DISPATCH_RETENTION_EVENT_DAYS",
-			} {
+func TestLoadAlarmDispatchRetentionConfigRejectsInvalidValues(t *testing.T) {
+	for _, key := range alarmDispatchRetentionEnvKeys {
+		for _, value := range []string{"0", "-1", "invalid", ""} {
+			t.Run(key+"="+value, func(t *testing.T) {
 				t.Setenv(key, value)
-			}
 
-			config := loadAlarmDispatchRetentionConfig()
+				_, err := loadAlarmDispatchRetentionConfig()
 
-			assert.Equal(t, time.Hour, config.Interval)
-			assert.Equal(t, 30*time.Second, config.QueryTimeout)
-			assert.Equal(t, 1000, config.Limit)
-			assert.Equal(t, 90, config.SentDays)
-			assert.Equal(t, 180, config.DLQDays)
-			assert.Equal(t, 180, config.QuarantinedDays)
-			assert.Equal(t, 90, config.CancelledDays)
-			assert.Equal(t, 90, config.EventDays)
-		})
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), key)
+			})
+		}
 	}
 }
 
 func TestLoadAlarmDispatchRetentionConfigClampsLimit(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_RETENTION_LIMIT", "10001")
 
-	config := loadAlarmDispatchRetentionConfig()
+	config, err := loadAlarmDispatchRetentionConfig()
+	require.NoError(t, err)
 
 	assert.Equal(t, 10000, config.Limit)
 }

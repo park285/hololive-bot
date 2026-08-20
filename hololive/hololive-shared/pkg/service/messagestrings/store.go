@@ -74,6 +74,7 @@ type Store struct {
 }
 
 func NewStore(pool *pgxpool.Pool, logger *slog.Logger) *Store {
+	initMetrics()
 	return &Store{pool: pool, logger: logger, loadTimeout: lazyLoadTimeout}
 }
 
@@ -95,18 +96,22 @@ func (s *Store) GetContext(ctx context.Context, namespace, key string) string {
 	s.ensureLoaded(ctx)
 
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	loaded := s.loaded
+	var value string
 	if values, ok := s.cache[namespace]; ok {
-		return values[key]
+		value = values[key]
 	}
-	return ""
-}
+	s.mu.RUnlock()
+	if value != "" {
+		return value
+	}
 
-func (s *Store) GetOr(namespace, key, fallback string) string {
-	if v := s.Get(namespace, key); v != "" {
-		return v
+	reason := fallbackReasonMissing
+	if !loaded {
+		reason = fallbackReasonUnloaded
 	}
-	return fallback
+	observeLookupFallback(reason, namespace)
+	return ""
 }
 
 func (s *Store) GetOrContext(ctx context.Context, namespace, key, fallback string) string {
@@ -186,6 +191,14 @@ func (s *Store) ensureLoaded(ctx context.Context) {
 }
 
 func (s *Store) reload(ctx context.Context) error {
+	if err := s.load(ctx); err != nil {
+		observeLoadFailure()
+		return err
+	}
+	return nil
+}
+
+func (s *Store) load(ctx context.Context) error {
 	rows, err := s.pool.Query(ctx, mustSQL("store_0189_01.sql"))
 	if err != nil {
 		return fmt.Errorf("query message_strings: %w", err)
