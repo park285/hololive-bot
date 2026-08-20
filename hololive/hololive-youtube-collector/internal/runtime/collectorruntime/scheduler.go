@@ -100,6 +100,13 @@ type leaseScheduler struct {
 	workerTotals           *workercontract.Counters
 }
 
+func (s *leaseScheduler) readinessTrackerRef() *readinessTracker {
+	if s == nil {
+		return nil
+	}
+	return s.readiness
+}
+
 func (s *leaseScheduler) Start(parent context.Context) error {
 	if s == nil || s.repository == nil || s.registry == nil {
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: scheduler is not configured")

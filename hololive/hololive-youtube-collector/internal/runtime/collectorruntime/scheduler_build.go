@@ -83,6 +83,7 @@ func newLeaseScheduler(
 	if err != nil {
 		return nil, err
 	}
+	tracker := &readinessTracker{}
 	return &leaseScheduler{
 		repository:    repository,
 		candidates:    repository,
@@ -99,7 +100,7 @@ func newLeaseScheduler(
 		queuedAt:      make(map[string]time.Time),
 		queue:         make(chan joblease.JobSpec, collector.QueueCapacity),
 		fatal:         make(chan error, 1),
-		readiness:     &readinessTracker{},
+		readiness:     tracker,
 		workerTracker: workercontract.NewExecutorTracker(),
 		workerTotals:  &workercontract.Counters{},
 	}, nil

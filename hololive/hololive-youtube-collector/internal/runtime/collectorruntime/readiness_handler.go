@@ -14,6 +14,7 @@ type collectorReadiness struct {
 	appConfig *settings.YouTubeCollectorRuntimeConfig
 	infra     *collectorInfrastructure
 	scheduler *leaseScheduler
+	tracker   *readinessTracker
 	disabled  bool
 }
 
@@ -40,6 +41,7 @@ type readinessResponse struct {
 }
 
 func (r *collectorReadiness) configure(opts *sharedserver.RuntimeRouterOptions) {
+	r.tracker = r.scheduler.readinessTrackerRef()
 	opts.EnableGzip = true
 	opts.ReadyResponder = r.respond
 }
@@ -87,10 +89,8 @@ func (r *collectorReadiness) deps(cfg *settings.YouTubeCollectorConfig) readines
 		helper = r.infra.youtubejs
 	}
 	var sched schedulerView
-	var tracker *readinessTracker
 	if r != nil && r.scheduler != nil {
 		sched = r.scheduler
-		tracker = r.scheduler.readiness
 	}
 	return readinessDeps{
 		instanceID:    collectorInstanceID(r.appConfig),
@@ -100,7 +100,7 @@ func (r *collectorReadiness) deps(cfg *settings.YouTubeCollectorConfig) readines
 		scheduler:     sched,
 		helper:        helper,
 		store:         queueStoreFrom(r.infra),
-		tracker:       tracker,
+		tracker:       r.tracker,
 	}
 }
 
