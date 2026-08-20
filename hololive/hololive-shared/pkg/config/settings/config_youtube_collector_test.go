@@ -89,6 +89,14 @@ func TestLoadYouTubeCollectorConfigNonDefaultOverride(t *testing.T) {
 }
 
 func TestLoadYouTubeCollectorConfigIgnoresRetiredAliasEnv(t *testing.T) {
+	for _, name := range []string{
+		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES",
+		"YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
+	} {
+		unsetEnvForTest(t, name)
+	}
 	t.Setenv("YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", "4096")
 	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS", "11")
 
@@ -105,24 +113,27 @@ func TestLoadYouTubeCollectorConfigIgnoresRetiredAliasEnv(t *testing.T) {
 	}
 }
 
-func TestRequiredCollectorNumericEnvRejectsExplicitEmptyValues(t *testing.T) {
+func TestRequiredCollectorNumericEnvRejectsInvalidValues(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string
 	}{
 		{name: "empty", value: ""},
 		{name: "whitespace", value: "   "},
+		{name: "not an integer", value: "not-an-integer"},
+		{name: "zero", value: "0"},
+		{name: "negative", value: "-1"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("YOUTUBE_COLLECTOR_MAX_PAGES", test.value)
 			if _, err := requiredPositiveIntEnv("YOUTUBE_COLLECTOR_MAX_PAGES", 4); err == nil {
-				t.Fatal("requiredPositiveIntEnv accepted an explicitly empty value")
+				t.Fatalf("requiredPositiveIntEnv accepted %q", test.value)
 			}
 
 			t.Setenv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", test.value)
 			if _, err := requiredSecondsDurationEnv("YOUTUBE_COLLECTOR_READINESS_TIMEOUT_SECONDS", time.Minute); err == nil {
-				t.Fatal("requiredDurationUnitEnv accepted an explicitly empty value")
+				t.Fatalf("requiredSecondsDurationEnv accepted %q", test.value)
 			}
 		})
 	}
