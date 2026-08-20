@@ -14,7 +14,7 @@ import (
 func (r *Runtime) Handler() http.Handler {
 	engine := gin.New()
 	engine.HandleMethodNotAllowed = true
-	engine.Use(gin.Recovery(), r.securityHeaders(), r.etag())
+	engine.Use(gin.Recovery(), r.securityHeaders(), r.hardenedCSP(), r.etag())
 
 	engine.GET("/health", r.handleHealth)
 	engine.GET("/favicon.svg", gin.WrapF(r.static.ServeFavicon))
