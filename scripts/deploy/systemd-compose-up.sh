@@ -31,6 +31,7 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   exec_tree=(
     "${verifier}"
     "${ROOT_DIR}/scripts/deploy/systemd-compose-up.sh"
+    "${ROOT_DIR}/scripts/deploy/materialize-admin-dashboard-secrets.sh"
     "${ROOT_DIR}/scripts/deploy/compose.sh"
     "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
     "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
@@ -77,6 +78,7 @@ wait_for_file() {
 }
 
 COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
+ADMIN_DASHBOARD_ENV_FILE="${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}"
 wait_for_file "$COMPOSE_ENV_FILE"
 
 bind_ip="$(sed -n 's/^HOLOLIVE_BOT_PORT_BIND_IP=[[:space:]]*//p' "$COMPOSE_ENV_FILE" | head -1)"
@@ -99,7 +101,7 @@ for file in \
   /etc/stack-secrets/hololive-bot/bot.env \
   /etc/stack-secrets/hololive-bot/alarm-worker.env \
   /etc/stack-secrets/hololive-bot/youtube-collector.env \
-  /etc/stack-secrets/hololive-bot/admin-dashboard.env \
+  "${ADMIN_DASHBOARD_ENV_FILE}" \
   /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   /etc/stack-secrets/hololive-bot/certs/hololive-h3.key \
   /etc/stack-secrets/hololive-bot/certs/iris-ca.pem \
@@ -110,9 +112,13 @@ do
   wait_for_file "$file"
 done
 
-export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
+export COMPOSE_ENV_FILE ADMIN_DASHBOARD_ENV_FILE
+"${ROOT_DIR}/scripts/deploy/materialize-admin-dashboard-secrets.sh"
 
-base_files=(-f deploy/compose/docker-compose.prod.yml)
+base_files=(
+  -f deploy/compose/docker-compose.prod.yml
+  -f deploy/compose/docker-compose.admin-security.yml
+)
 if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" == "1" ]]; then
   base_files+=(-f deploy/compose/docker-compose.live-compat.yml)
 fi
