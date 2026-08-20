@@ -1123,7 +1123,6 @@ github.com/kapu/hololive-shared/pkg/service/notification/alarmcache -> github.co
 github.com/kapu/hololive-shared/pkg/service/notification/alarmcache -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/notification/alarmcache -> github.com/park285/shared-go/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/notification/alarmcache -> github.com/park285/shared-go/pkg/stringutil
-github.com/kapu/hololive-shared/pkg/service/notification/alarmservice -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/service/notification/alarmservice -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/notification/alarmservice -> github.com/kapu/hololive-shared/pkg/privacylog
 github.com/kapu/hololive-shared/pkg/service/notification/alarmservice -> github.com/kapu/hololive-shared/pkg/service/alarm
