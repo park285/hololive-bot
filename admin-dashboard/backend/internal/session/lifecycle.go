@@ -5,10 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/valkey-io/valkey-go"
-
 	"github.com/kapu/admin-dashboard/internal/auth"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/json"
 )
 
@@ -221,23 +218,6 @@ func (s *Store) rotationWinner(ctx context.Context, oldID string) (*Session, err
 		return nil, fmt.Errorf("session rotation winner is missing or inconsistent")
 	}
 	return winner, nil
-}
-
-func intResultAllowingNil(resp valkey.ValkeyResult) (value int64, ok bool, err error) {
-	if err := resp.Error(); err != nil {
-		if util.IsValkeyNil(err) {
-			return 0, false, nil
-		}
-		return 0, false, err
-	}
-	value, err = resp.AsInt64()
-	if err != nil {
-		if util.IsValkeyNil(err) {
-			return 0, false, nil
-		}
-		return 0, false, err
-	}
-	return value, true, nil
 }
 
 func (s *Store) refreshResultForRotatedTo(ctx context.Context, rotatedTo string) (RefreshResult, error) {

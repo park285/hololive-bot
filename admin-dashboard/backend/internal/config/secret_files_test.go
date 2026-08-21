@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func writeSecretForTest(t *testing.T, name, value string) string {
@@ -19,8 +21,14 @@ func writeSecretForTest(t *testing.T, name, value string) string {
 func TestApplySecretFilesMaterializesAndRestores(t *testing.T) {
 	path := writeSecretForTest(t, "session-secret", strings.Repeat("s", 32)+"\n")
 	t.Setenv("SESSION_SECRET_FILE", path)
-	_ = os.Unsetenv("SESSION_SECRET")
-	_ = os.Unsetenv("ADMIN_SECRET_KEY")
+	t.Setenv("SESSION_SECRET", "")
+	t.Setenv("ADMIN_SECRET_KEY", "")
+	if err := os.Unsetenv("SESSION_SECRET"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Unsetenv("ADMIN_SECRET_KEY"); err != nil {
+		t.Fatal(err)
+	}
 
 	restore, err := applySecretFiles()
 	if err != nil {
@@ -29,7 +37,9 @@ func TestApplySecretFilesMaterializesAndRestores(t *testing.T) {
 	if got := os.Getenv("SESSION_SECRET"); got != strings.Repeat("s", 32) {
 		t.Fatalf("SESSION_SECRET = %q", got)
 	}
-	restore()
+	if err := restore(); err != nil {
+		t.Fatalf("restore() error = %v", err)
+	}
 	if _, ok := os.LookupEnv("SESSION_SECRET"); ok {
 		t.Fatal("SESSION_SECRET must be removed after restore")
 	}
@@ -65,9 +75,12 @@ func TestReadSecretFileRejectsSymlinkAndEmbeddedNewline(t *testing.T) {
 }
 
 func TestLoadSecureRequires32ByteSessionSecret(t *testing.T) {
-	passwordHash := "$2b$04$C6UzMDM.H6dfI/f/IKcEe.4C5BH98Un6Rl/UfDB7jV9Y3xQffwWqK"
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("test-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("GenerateFromPassword() error = %v", err)
+	}
 	t.Setenv("ENV", "test")
-	t.Setenv("ADMIN_PASS_HASH", passwordHash)
+	t.Setenv("ADMIN_PASS_HASH", string(passwordHash))
 	t.Setenv("SESSION_SECRET", strings.Repeat("x", 31))
 	t.Setenv("VALKEY_URL", "valkey-cache:6379")
 	if _, err := LoadSecure(); err == nil {

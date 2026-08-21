@@ -1,20 +1,27 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
 
 const (
-	maxSecretFileBytes = 64 << 10
+	maxSecretFileBytes    = 64 << 10
 	minSessionSecretBytes = 32
 )
 
 type secretFileSpec struct {
-	fileEnv   string
-	valueEnv  string
-	aliases   []string
+	fileEnv  string
+	valueEnv string
+	aliases  []string
+}
+
+type secretEnvValue struct {
+	value string
+	set   bool
 }
 
 var adminSecretFiles = []secretFileSpec{
@@ -28,14 +35,19 @@ var adminSecretFiles = []secretFileSpec{
 // of Config loading, then removes the materialized values from the process
 // environment. The returned Config owns ordinary Go strings; Docker Config.Env
 // therefore contains only file paths, not the secret values themselves.
-func LoadSecure() (*Config, error) {
+func LoadSecure() (cfg *Config, err error) {
 	restore, err := applySecretFiles()
 	if err != nil {
 		return nil, err
 	}
-	defer restore()
+	defer func() {
+		if restoreErr := restore(); restoreErr != nil {
+			cfg = nil
+			err = errors.Join(err, restoreErr)
+		}
+	}()
 
-	cfg, err := Load()
+	cfg, err = Load()
 	if err != nil {
 		return nil, err
 	}
@@ -45,25 +57,9 @@ func LoadSecure() (*Config, error) {
 	return cfg, nil
 }
 
-func applySecretFiles() (func(), error) {
-	type originalValue struct {
-		value string
-		set   bool
-	}
-	originals := make(map[string]originalValue, len(adminSecretFiles))
+func applySecretFiles() (func() error, error) {
+	originals := make(map[string]secretEnvValue, len(adminSecretFiles))
 	applied := make([]string, 0, len(adminSecretFiles))
-
-	restore := func() {
-		for i := len(applied) - 1; i >= 0; i-- {
-			key := applied[i]
-			original := originals[key]
-			if original.set {
-				_ = os.Setenv(key, original.value)
-			} else {
-				_ = os.Unsetenv(key)
-			}
-		}
-	}
 
 	for _, spec := range adminSecretFiles {
 		path := strings.TrimSpace(os.Getenv(spec.fileEnv))
@@ -71,23 +67,39 @@ func applySecretFiles() (func(), error) {
 			continue
 		}
 		if directSecretConfigured(spec) {
-			restore()
-			return nil, fmt.Errorf("config: %s cannot be combined with %s or its aliases", spec.fileEnv, spec.valueEnv)
+			return nil, errors.Join(
+				fmt.Errorf("config: %s cannot be combined with %s or its aliases", spec.fileEnv, spec.valueEnv),
+				restoreSecretEnv(applied, originals),
+			)
 		}
 		value, err := readSecretFile(path)
 		if err != nil {
-			restore()
-			return nil, fmt.Errorf("config: read %s: %w", spec.fileEnv, err)
+			return nil, errors.Join(fmt.Errorf("config: read %s: %w", spec.fileEnv, err), restoreSecretEnv(applied, originals))
 		}
 		original, set := os.LookupEnv(spec.valueEnv)
-		originals[spec.valueEnv] = originalValue{value: original, set: set}
+		originals[spec.valueEnv] = secretEnvValue{value: original, set: set}
 		if err := os.Setenv(spec.valueEnv, value); err != nil {
-			restore()
-			return nil, fmt.Errorf("config: materialize %s: %w", spec.fileEnv, err)
+			return nil, errors.Join(fmt.Errorf("config: materialize %s: %w", spec.fileEnv, err), restoreSecretEnv(applied, originals))
 		}
 		applied = append(applied, spec.valueEnv)
 	}
-	return restore, nil
+	return func() error { return restoreSecretEnv(applied, originals) }, nil
+}
+
+func restoreSecretEnv(applied []string, originals map[string]secretEnvValue) error {
+	var restoreErr error
+	for i := len(applied) - 1; i >= 0; i-- {
+		key := applied[i]
+		original := originals[key]
+		if original.set {
+			if err := os.Setenv(key, original.value); err != nil {
+				restoreErr = errors.Join(restoreErr, fmt.Errorf("config: restore %s: %w", key, err))
+			}
+		} else if err := os.Unsetenv(key); err != nil {
+			restoreErr = errors.Join(restoreErr, fmt.Errorf("config: unset %s: %w", key, err))
+		}
+	}
+	return restoreErr
 }
 
 func directSecretConfigured(spec secretFileSpec) bool {
@@ -102,8 +114,8 @@ func directSecretConfigured(spec secretFileSpec) bool {
 	return false
 }
 
-func readSecretFile(path string) (string, error) {
-	info, err := os.Lstat(path)
+func readSecretFile(path string) (value string, err error) {
+	info, err := os.Lstat(path) // #nosec G703 -- the administrator-configured secret path is checked before and after opening
 	if err != nil {
 		return "", err
 	}
@@ -113,14 +125,30 @@ func readSecretFile(path string) (string, error) {
 	if info.Size() > maxSecretFileBytes {
 		return "", fmt.Errorf("%s exceeds %d bytes", path, maxSecretFileBytes)
 	}
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path) // #nosec G304,G703 -- file identity is compared with the preceding non-symlink Lstat result
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close %s: %w", path, closeErr))
+		}
+	}()
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+		return "", fmt.Errorf("%s changed while opening", path)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxSecretFileBytes+1))
 	if err != nil {
 		return "", err
 	}
 	if len(data) > maxSecretFileBytes {
 		return "", fmt.Errorf("%s exceeds %d bytes", path, maxSecretFileBytes)
 	}
-	value := strings.TrimSuffix(string(data), "\n")
+	value = strings.TrimSuffix(string(data), "\n")
 	value = strings.TrimSuffix(value, "\r")
 	if strings.ContainsAny(value, "\x00\r\n") {
 		return "", fmt.Errorf("%s contains embedded NUL or newline", path)

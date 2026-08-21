@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,13 +43,14 @@ func TestSystemStatsWSClosesWhenSessionFamilyIsRevoked(t *testing.T) {
 	if resp != nil {
 		require.NoError(t, resp.Body.Close())
 	}
-	defer func() { _ = conn.Close() }()
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	store.active.Store(false)
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(3*time.Second)))
 	_, _, err = conn.ReadMessage()
 	require.Error(t, err, "revoked session family must terminate an already-upgraded WebSocket")
-	if closeErr, ok := err.(*websocket.CloseError); ok {
+	var closeErr *websocket.CloseError
+	if errors.As(err, &closeErr) {
 		require.Equal(t, websocket.ClosePolicyViolation, closeErr.Code)
 	}
 }
@@ -66,11 +68,11 @@ func TestSystemStatsWSLimitSurvivesTokenRotation(t *testing.T) {
 	dialURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/admin/api/ws/system-stats"
 
 	conns := make([]*websocket.Conn, 0, maxStreamsPerSession)
-	defer func() {
+	t.Cleanup(func() {
 		for _, conn := range conns {
-			_ = conn.Close()
+			require.NoError(t, conn.Close())
 		}
-	}()
+	})
 
 	ids := []string{old.ID, newSession.ID, old.ID, newSession.ID}
 	for _, id := range ids {

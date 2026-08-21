@@ -160,11 +160,11 @@ func (r *Runtime) watchSessionFamilyRevocation(conn *websocket.Conn, familyID st
 				checkCancel()
 				if err != nil {
 					r.logger.Warn("websocket session-family check failed; closing stream", slog.Any("error", err))
-					closeWebSocketForRevocation(conn, "session store unavailable")
+					r.closeWebSocketForRevocation(conn, "session store unavailable")
 					return
 				}
 				if !active {
-					closeWebSocketForRevocation(conn, "session revoked")
+					r.closeWebSocketForRevocation(conn, "session revoked")
 					return
 				}
 			}
@@ -173,10 +173,14 @@ func (r *Runtime) watchSessionFamilyRevocation(conn *websocket.Conn, familyID st
 	return cancel
 }
 
-func closeWebSocketForRevocation(conn *websocket.Conn, reason string) {
+func (r *Runtime) closeWebSocketForRevocation(conn *websocket.Conn, reason string) {
 	deadline := time.Now().Add(wsWriteWait)
-	_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason), deadline)
-	_ = conn.Close()
+	if err := conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason), deadline); err != nil {
+		r.logger.Debug("write websocket revocation close frame", slog.Any("error", err))
+	}
+	if err := conn.Close(); err != nil {
+		r.logger.Debug("close revoked websocket", slog.Any("error", err))
+	}
 }
 
 func (r *Runtime) pumpSystemStats(conn *websocket.Conn, updates <-chan status.SystemStats, peerGone <-chan struct{}) {
@@ -217,6 +221,7 @@ func watchPeer(conn *websocket.Conn, pongWait time.Duration) <-chan struct{} {
 			if _, _, err := conn.ReadMessage(); err != nil {
 				return
 			}
+		}
 	})
 	return gone
 }

@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	loginLimitWindow       = 15 * time.Minute
-	loginIPFailureLimit    = 10
+	loginLimitWindow         = 15 * time.Minute
+	loginIPFailureLimit      = 10
 	loginAccountFailureLimit = 30
 	loginGlobalFailureLimit  = 200
 )
@@ -32,6 +32,8 @@ func newDistributedLoginLimiter(ctx context.Context, valkeyURL string) (*distrib
 	client, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
 		Password:          password,
+		DisableCache:      true,
+		ForceSingleClient: true,
 		PipelineMultiplex: 4,
 		BlockingPoolSize:  32,
 		Dialer:            net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second},
