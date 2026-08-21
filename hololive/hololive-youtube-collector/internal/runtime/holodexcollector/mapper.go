@@ -45,6 +45,32 @@ type parsedLive struct {
 }
 
 func parseLiveRows(body []byte) ([]parsedLive, error) {
+	rawRows, err := decodeLiveRows(body)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]parsedLive, 0, len(rawRows))
+	seen := make(map[string]struct{}, len(rawRows))
+	validRows := 0
+	for _, raw := range rawRows {
+		row, rowErr := parseLiveRow(raw)
+		if rowErr != nil {
+			continue
+		}
+		validRows++
+		if _, exists := seen[row.row.ID]; exists {
+			continue
+		}
+		seen[row.row.ID] = struct{}{}
+		rows = append(rows, row)
+	}
+	if len(rawRows) > 0 && validRows == 0 {
+		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response has no valid rows")
+	}
+	return rows, nil
+}
+
+func decodeLiveRows(body []byte) ([]json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(body)
 	if !json.Valid(trimmed) || len(trimmed) == 0 || trimmed[0] != '[' {
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response is not a JSON array")
@@ -53,28 +79,7 @@ func parseLiveRows(body []byte) ([]parsedLive, error) {
 	if err := json.Unmarshal(trimmed, &rawRows); err != nil {
 		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex live: %w", err))
 	}
-	rows := make([]parsedLive, 0, len(rawRows))
-	seen := make(map[string]struct{}, len(rawRows))
-	for _, raw := range rawRows {
-		row, err := appendUniqueLiveRow(raw, seen)
-		if err != nil {
-			return nil, err
-		}
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
-func appendUniqueLiveRow(raw json.RawMessage, seen map[string]struct{}) (parsedLive, error) {
-	row, err := parseLiveRow(raw)
-	if err != nil {
-		return parsedLive{}, err
-	}
-	if _, exists := seen[row.row.ID]; exists {
-		return parsedLive{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response has duplicate video id")
-	}
-	seen[row.row.ID] = struct{}{}
-	return row, nil
+	return rawRows, nil
 }
 
 func parseLiveRow(raw json.RawMessage) (parsedLive, error) {
@@ -97,10 +102,14 @@ func parseLiveRow(raw json.RawMessage) (parsedLive, error) {
 	if err != nil {
 		return parsedLive{}, err
 	}
-	return parsedLive{
+	parsed := parsedLive{
 		row: row, channelID: channelID, status: status,
 		scheduled: scheduled, started: started, ended: ended,
-	}, nil
+	}
+	if _, _, err := viewerAvailability(&parsed); err != nil {
+		return parsedLive{}, err
+	}
+	return parsed, nil
 }
 
 func liveChannelID(row *liveRow) (string, error) {

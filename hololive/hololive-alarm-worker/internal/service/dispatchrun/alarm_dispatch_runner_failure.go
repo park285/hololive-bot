@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -70,19 +69,7 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []doma
 }
 
 func hasPersistedClientRequestID(envelopes []domain.AlarmQueueEnvelope) bool {
-	if len(envelopes) == 0 {
-		return false
-	}
-	want := strings.TrimSpace(envelopes[0].ClientRequestID)
-	if want == "" {
-		return false
-	}
-	for i := 1; i < len(envelopes); i++ {
-		if strings.TrimSpace(envelopes[i].ClientRequestID) != want {
-			return false
-		}
-	}
-	return true
+	return persistedAlarmDispatchClientRequestID(alarmDispatchGroup{envelopes: envelopes}) != ""
 }
 
 func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {

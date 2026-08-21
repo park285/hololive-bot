@@ -22,11 +22,13 @@ package repository_test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/repository"
@@ -249,4 +251,286 @@ func TestTemplateRepository_PruneOldRevisions_KeepZeroNoop(t *testing.T) {
 	revisions, err := repo.GetRevisions(ctx, tmpl.ID, 100)
 	require.NoError(t, err)
 	assert.Len(t, revisions, 3)
+}
+
+func newTemplateRepositoryWithPool(t *testing.T) (*repository.TemplateRepository, *pgxpool.Pool) {
+	t.Helper()
+	pool := dbtest.NewPool(t)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	return repository.NewTemplateRepository(pool, logger), pool
+}
+
+func blockRevisionInserts(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := pool.Exec(ctx, `CREATE OR REPLACE FUNCTION test_block_revision_insert() RETURNS trigger AS $$
+BEGIN
+	RAISE EXCEPTION 'revision insert blocked by test';
+END;
+$$ LANGUAGE plpgsql`)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `CREATE TRIGGER test_block_revision_insert
+		BEFORE INSERT ON notification_template_revisions
+		FOR EACH ROW EXECUTE FUNCTION test_block_revision_insert()`)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(),
+			`DROP TRIGGER IF EXISTS test_block_revision_insert ON notification_template_revisions`); err != nil {
+			t.Errorf("drop test trigger: %v", err)
+		}
+	})
+}
+
+func TestTemplateRepository_UpsertWithRevision(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := context.Background()
+	key := domain.TemplateKey("I06_UPSERT_WITH_REVISION")
+
+	created, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	assert.Nil(t, previousBody)
+	assert.Equal(t, "v1", created.Body)
+
+	revisions, err := repo.GetRevisions(ctx, created.ID, 10)
+	require.NoError(t, err)
+	assert.Empty(t, revisions)
+
+	updated, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, "v2", 0)
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.NotNil(t, previousBody)
+	assert.Equal(t, created.ID, updated.ID)
+	assert.Equal(t, "v1", *previousBody)
+	assert.Equal(t, "v2", updated.Body)
+
+	revisions, err = repo.GetRevisions(ctx, updated.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, revisions, 1)
+	assert.Equal(t, "v1", revisions[0].Body)
+}
+
+func TestTemplateRepository_UpsertWithRevision_IdenticalBodyRecordsNoRevision(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := context.Background()
+	key := domain.TemplateKey("I06_UPSERT_WITH_REVISION_NOOP")
+
+	created, _, err := repo.UpsertWithRevision(ctx, key, nil, "same", 5)
+	require.NoError(t, err)
+
+	for range 3 {
+		_, previousBody, saveErr := repo.UpsertWithRevision(ctx, key, nil, "same", 5)
+		require.NoError(t, saveErr)
+		require.NotNil(t, previousBody)
+		assert.Equal(t, "same", *previousBody)
+	}
+
+	revisions, err := repo.GetRevisions(ctx, created.ID, 10)
+	require.NoError(t, err)
+	assert.Empty(t, revisions, "identical re-saves must not push revisions into the retention ring")
+
+	changed, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, "next", 5)
+	require.NoError(t, err)
+	require.NotNil(t, previousBody)
+	assert.Equal(t, "same", *previousBody)
+
+	revisions, err = repo.GetRevisions(ctx, changed.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, revisions, 1)
+	assert.Equal(t, "same", revisions[0].Body)
+}
+
+func TestTemplateRepository_UpsertWithRevision_Override(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := context.Background()
+	key := domain.TemplateKey("I06_UPSERT_WITH_REVISION_OVERRIDE")
+	channelID := "room_i06"
+
+	created, previousBody, err := repo.UpsertWithRevision(ctx, key, &channelID, "o1", 0)
+	require.NoError(t, err)
+	require.NotNil(t, created.ChannelID)
+	assert.Equal(t, channelID, *created.ChannelID)
+	assert.Nil(t, previousBody)
+
+	updated, previousBody, err := repo.UpsertWithRevision(ctx, key, &channelID, "o2", 0)
+	require.NoError(t, err)
+	require.NotNil(t, previousBody)
+	assert.Equal(t, created.ID, updated.ID)
+	assert.Equal(t, "o1", *previousBody)
+
+	revisions, err := repo.GetRevisions(ctx, updated.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, revisions, 1)
+	assert.Equal(t, "o1", revisions[0].Body)
+}
+
+func TestTemplateRepository_UpsertWithRevision_RollsBackWhenRevisionInsertFails(t *testing.T) {
+	repo, pool := newTemplateRepositoryWithPool(t)
+	ctx := context.Background()
+	key := domain.TemplateKey("I06_ROLLBACK")
+
+	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
+	require.NoError(t, err)
+
+	blockRevisionInserts(t, pool)
+
+	tmpl, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, "v2", 0)
+	require.Error(t, err)
+	assert.Nil(t, tmpl)
+	assert.Nil(t, previousBody)
+	assert.ErrorContains(t, err, "create revision")
+
+	found, err := repo.FindByKeyAndChannel(ctx, key, nil)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, "v1", found.Body)
+
+	revisions, err := repo.GetRevisions(ctx, seeded.ID, 10)
+	require.NoError(t, err)
+	assert.Empty(t, revisions)
+}
+
+func TestTemplateRepository_UpsertWithRevision_CanceledContextWritesNothing(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := context.Background()
+	key := domain.TemplateKey("I06_CANCELED")
+
+	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
+	require.NoError(t, err)
+
+	canceledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	tmpl, previousBody, err := repo.UpsertWithRevision(canceledCtx, key, nil, "v2", 0)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, tmpl)
+	assert.Nil(t, previousBody)
+
+	found, err := repo.FindByKeyAndChannel(ctx, key, nil)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, "v1", found.Body)
+
+	revisions, err := repo.GetRevisions(ctx, seeded.ID, 10)
+	require.NoError(t, err)
+	assert.Empty(t, revisions)
+}
+
+func TestTemplateRepository_UpsertWithRevision_PrunesInSameTransaction(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := context.Background()
+	key := domain.TemplateKey("I06_PRUNE")
+
+	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
+	require.NoError(t, err)
+
+	for i := range 10 {
+		require.NoError(t, repo.CreateRevision(ctx, seeded.ID, fmt.Sprintf("old-%d", i)))
+	}
+
+	updated, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, "v2", 3)
+	require.NoError(t, err)
+	require.NotNil(t, previousBody)
+	assert.Equal(t, "v1", *previousBody)
+
+	revisions, err := repo.GetRevisions(ctx, updated.ID, 100)
+	require.NoError(t, err)
+	require.Len(t, revisions, 3)
+	assert.Equal(t, "v1", revisions[0].Body)
+}
+
+func TestTemplateRepository_UpsertWithRevision_KeepZeroSkipsPrune(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := context.Background()
+	key := domain.TemplateKey("I06_PRUNE_ZERO")
+
+	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
+	require.NoError(t, err)
+
+	for i := range 3 {
+		require.NoError(t, repo.CreateRevision(ctx, seeded.ID, fmt.Sprintf("old-%d", i)))
+	}
+
+	updated, _, err := repo.UpsertWithRevision(ctx, key, nil, "v2", 0)
+	require.NoError(t, err)
+
+	revisions, err := repo.GetRevisions(ctx, updated.ID, 100)
+	require.NoError(t, err)
+	assert.Len(t, revisions, 4)
+}
+
+// 동시 저장이 서로의 revision 사이에 끼어들면 목록이 더 오래된 본문을 최신으로
+// 보여준다. 각 호출이 돌려준 previousBody로 실제 교체 순서를 복원해 GetRevisions
+// 순서와 대조한다.
+func TestTemplateRepository_UpsertWithRevision_ConcurrentChainOrdering(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := context.Background()
+	key := domain.TemplateKey("I06_CONCURRENT")
+
+	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "b0", 0)
+	require.NoError(t, err)
+
+	const writers = 8
+
+	type link struct {
+		body     string
+		previous string
+	}
+
+	var (
+		mu      sync.Mutex
+		links   = make(map[string]link, writers)
+		wg      sync.WaitGroup
+		failure = make(chan error, writers)
+	)
+
+	for i := range writers {
+		wg.Go(func() {
+			body := fmt.Sprintf("w%d", i)
+			tmpl, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, body, 0)
+			if err != nil {
+				failure <- fmt.Errorf("writer %d: %w", i, err)
+				return
+			}
+			if tmpl == nil || previousBody == nil {
+				failure <- fmt.Errorf("writer %d: missing previous body", i)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			links[*previousBody] = link{body: body, previous: *previousBody}
+		})
+	}
+	wg.Wait()
+	close(failure)
+
+	for err := range failure {
+		require.NoError(t, err)
+	}
+
+	require.Len(t, links, writers, "두 writer가 같은 previousBody를 봤다면 갱신이 유실된 것이다")
+
+	var expectedNewestFirst []string
+	for current := "b0"; ; {
+		next, ok := links[current]
+		if !ok {
+			break
+		}
+		expectedNewestFirst = append([]string{next.previous}, expectedNewestFirst...)
+		current = next.body
+	}
+	require.Len(t, expectedNewestFirst, writers)
+
+	revisions, err := repo.GetRevisions(ctx, seeded.ID, 100)
+	require.NoError(t, err)
+	require.Len(t, revisions, writers)
+
+	actual := make([]string, 0, len(revisions))
+	for _, revision := range revisions {
+		actual = append(actual, revision.Body)
+	}
+	assert.Equal(t, expectedNewestFirst, actual)
 }

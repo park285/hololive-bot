@@ -8,6 +8,56 @@
 
 ## 미출시
 
+## v3.1.0 - 2026-08-21
+
+### 변경
+
+- 적대적 감사에서 확정된 결함 6건을 수정했습니다.
+  - 분류되지 않은 상류 오류가 fatal로 승격되어 수집기 프로세스 전체를 정지시키던 문제를
+    고쳤습니다. `FromContext`의 catch-all이 만들어낸 typed 오류와 진짜 분류를 구분하는
+    미분류 표식을 도입하고, fatal 승격에서 미분류를 제외합니다.
+  - 템플릿 저장의 UPSERT와 이전 본문 revision 기록을 한 트랜잭션으로 원자화했습니다.
+    이전에는 본문만 교체되고 revision이 남지 않아 이 API로는 롤백할 수단이 없었습니다.
+    동시 저장 시 revision 순서가 뒤집히지 않도록 기록 시각을 잠금 획득 시점에 맞춥니다.
+  - 알람 발송에서 만료된 attempt 컨텍스트로 상태를 기록하려다 실패해, 드레인된 행이
+    `sending`으로 남아 재시도 대신 terminal quarantine으로 굳던 문제를 고쳤습니다.
+    상태 기록과 실패 라우팅은 발송 attempt와 분리된 컨텍스트에서 완료됩니다.
+  - 요청 ID의 봉투 수 상한이 재시도 허가 판정과 어긋나 같은 알람이 두 번 발화할 수 있던
+    중복 구현을 제거했습니다.
+  - Holodex 응답에서 row 하나가 어긋나면 정상 row 전체가 폐기되고 같은 파서를 공유하는
+    live·viewer·channel_stats·photo·schedule 작업이 동시에 멈추던 문제를 고쳤습니다.
+    같은 저장소 `officialcollector`와 동일하게 불량 row는 건너뛰고 전부 불량일 때만
+    실패합니다.
+  - lease 획득이 in-flight 완료 트랜잭션 뒤로 직렬화되던 잠금 순서를 교정했습니다.
+    SQL 변경 없이 호출 순서만 바꿔, 획득 불가 상태에서 완료 커밋을 기다리지 않습니다.
+- `shared-go`를 `v1.54.0`으로, `iris-client-go`를 `v2.1.3`으로 올렸습니다.
+
+## v3.0.7 - 2026-08-21
+
+### 변경
+
+- YouTube plane의 `queue_observability.sql`이 `status IN (...)` 대신 `OR` 조건으로 `source_observation_queue`의
+  partial index 경로(BitmapOr)를 타고, `observePendingQueue`의 DB 조회는 5초 간격으로 제한됩니다(utilization
+  게이지는 매 호출 갱신). 운영 EXPLAIN에서 Seq Scan이 Bitmap Index Scan으로 바뀌는 것을 확인했습니다. (#402)
+- youtubejs helper가 youtubei.js 18.0.0 `Text.fromAttributed`의 `length` 없는 attachment run 미매칭을
+  상류 PR LuanRT/YouTube.js#1241과 같은 정규화 shim(`youtubei-attachment-run-fix.mjs`)으로 선적용해, 채널 페이지마다
+  남던 `[YOUTUBEJS][Text]` 경고와 객체 덤프의 원인을 제거합니다. canary 테스트가 상류 수정이 반영되면 실패해
+  shim 제거 시점을 알립니다. (#402)
+- 이번 릴리스는 `hololive-api`(3.0.7)와 `youtube-collector` artifact를 재빌드합니다. `hololive-alarm-worker`(3.0.5)는
+  변경이 없어 재빌드하지 않습니다. collector 이미지 version은 `hololive-api` VERSION을 따릅니다.
+
+## v3.0.6 - 2026-08-21
+
+### 변경
+
+- 마이그레이션 `183_postgres_idle_transaction_timeout.sql`(manifest 순번 `044`)이 데이터베이스 기본값
+  `idle_in_transaction_session_timeout = 5min`을 설정해, 오래 열린 idle transaction이 VACUUM horizon을
+  붙잡아 `source_observation_queue`·`youtube_collection_job_leases`의 dead tuple 회수를 지연시키는 경로를
+  막습니다. MVCC 운영 증적 문서를 함께 확장했습니다. (#376)
+- 모든 Go 모듈의 `iris-client-go`를 `v2.1.2`로 갱신했습니다(내부 `randomhex` 도달 불가 분기 제거, 동작 동일).
+- 이번 릴리스는 `hololive-api`(3.0.6)·`hololive-alarm-worker`(3.0.5)·`youtube-collector` artifact를 함께
+  재빌드합니다. collector 이미지 version은 `hololive-api` VERSION을 따릅니다.
+
 ## v3.0.5 - 2026-08-20
 
 ### 변경

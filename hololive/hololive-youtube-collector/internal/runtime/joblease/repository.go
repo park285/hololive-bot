@@ -76,10 +76,17 @@ func (r *Repository) acquireTx(
 	if err := r.verifyAcquireTargets(ctx, tx, spec, definition, kinds, generation); err != nil {
 		return contract.LeaseProof{}, err
 	}
-	if err := ensureAcquireJobRow(ctx, tx, spec, generation); err != nil {
+	if err := insertAcquireJobRow(ctx, tx, spec, generation); err != nil {
 		return contract.LeaseProof{}, err
 	}
-	return acquireLeaseProof(ctx, tx, spec, owner, generation, r.config.LeaseTTL)
+	proof, err := acquireLeaseProof(ctx, tx, spec, owner, generation, r.config.LeaseTTL)
+	if err != nil {
+		return contract.LeaseProof{}, err
+	}
+	if err := verifyAcquireJobIdentity(ctx, tx, spec); err != nil {
+		return contract.LeaseProof{}, err
+	}
+	return proof, nil
 }
 
 func lockAcquireProjection(ctx context.Context, tx dbx.Tx) (int64, error) {
@@ -134,11 +141,17 @@ func acquireCadenceMismatch(spec *JobSpec, _ sourceobservation.JobContract, minI
 	return minIntervalMS <= 0 || minIntervalMS != maxIntervalMS || minIntervalMS != spec.PollInterval.Milliseconds()
 }
 
-func ensureAcquireJobRow(ctx context.Context, tx dbx.Tx, spec *JobSpec, generation int64) error {
+func insertAcquireJobRow(ctx context.Context, tx dbx.Tx, spec *JobSpec, generation int64) error {
 	if _, err := tx.Exec(ctx, mustSQL("repository_lease_insert_0144_06.sql"), spec.JobKey, spec.Provider, spec.Class, spec.CollectionJobKind, spec.SubjectKey,
 		generation, spec.PollInterval.Milliseconds()); err != nil {
 		return fmt.Errorf("acquire collection job lease: create job row: %w", err)
 	}
+	return nil
+}
+
+// 0144_07은 job_key만 qual로 쓰는 무가드 FOR UPDATE다. 자기 방어적인 0144_08 UPDATE가 성공해
+// 행 배타 락을 이미 쥔 뒤에만 호출해야 다른 트랜잭션의 행 락 뒤로 직렬화되지 않는다.
+func verifyAcquireJobIdentity(ctx context.Context, tx dbx.Tx, spec *JobSpec) error {
 	var storedProvider string
 	var storedClass string
 	var storedKind string

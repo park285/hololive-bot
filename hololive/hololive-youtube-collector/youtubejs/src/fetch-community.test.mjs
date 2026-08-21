@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fetchCommunityFeed, fetchCommunityPosts, isMissingCommunity, listBackstagePosts } from "./fetch-community.mjs";
+import { upstreamFromAttributedOf } from "./youtubei-attachment-run-fix.mjs";
+
+import {
+  createInnertube,
+  fetchCommunityFeed,
+  fetchCommunityPosts,
+  isMissingCommunity,
+  listBackstagePosts,
+} from "./fetch-community.mjs";
 
 test("listBackstagePosts reads memo.getType", () => {
   const posts = listBackstagePosts(
@@ -128,4 +136,14 @@ test("fetchCommunityFeed preserves continuation metadata across pages", async ()
   assert.equal(result.page_count, 2);
   assert.equal(result.exhausted, true);
   assert.equal(result.cursor_start, "page-2");
+});
+
+test("createInnertube installs the attachment run length shim", async () => {
+  const { Misc } = await import("youtubei.js");
+  await createInnertube({
+    fetchImpl: async () => {
+      throw new Error("offline");
+    },
+  });
+  assert.equal(typeof upstreamFromAttributedOf(Misc.Text), "function");
 });
