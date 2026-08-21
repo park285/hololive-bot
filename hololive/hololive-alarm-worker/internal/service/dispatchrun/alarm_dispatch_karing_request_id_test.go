@@ -1,10 +1,12 @@
 package dispatchrun
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -161,4 +163,117 @@ func TestAlarmDispatchPersistedOutboxUsesDistinctKaringChunkIDs(t *testing.T) {
 	assert.NotEqual(t, *first[0].ClientRequestID, *first[1].ClientRequestID)
 	assert.Equal(t, *first[0].ClientRequestID, *second[0].ClientRequestID)
 	assert.Equal(t, *first[1].ClientRequestID, *second[1].ClientRequestID)
+}
+
+func alarmDispatchPersistedSendUnitTestEnvelopes(t *testing.T, count int) []domain.AlarmQueueEnvelope {
+	t.Helper()
+	envelopes := make([]domain.AlarmQueueEnvelope, 0, count)
+	for i := range count {
+		envelope := alarmDispatchKaringIdentityTestEnvelope("room-1", int64(11+i))
+		envelope.SendUnitID = 7
+		envelope.ClientRequestID = "hololive-alarm:0123456789abcdef0123456789abcdef"
+		envelopes = append(envelopes, envelope)
+	}
+	return envelopes
+}
+
+func TestHasPersistedClientRequestIDMatchesPersistedIDActuallySent(t *testing.T) {
+	t.Parallel()
+
+	for _, count := range []int{1, alarmDispatchKaringMaxItemsPerRequest, alarmDispatchKaringMaxItemsPerRequest + 1} {
+		envelopes := alarmDispatchPersistedSendUnitTestEnvelopes(t, count)
+		group := alarmDispatchGroup{roomID: "room-1", envelopes: envelopes}
+		sentIsPersisted := alarmDispatchClientRequestID(group, 0, len(envelopes)) == envelopes[0].ClientRequestID
+
+		assert.Equal(t, sentIsPersisted, hasPersistedClientRequestID(envelopes),
+			"재시도 허가는 실제로 전송된 ClientRequestID가 persisted ID일 때만 참이어야 한다 (envelopes=%d)", count)
+	}
+}
+
+func TestAlarmDispatchRunnerPersistedSendUnitOverMaxItemsQuarantinesAmbiguousFailure(t *testing.T) {
+	transportErr := &iris.TransportError{Op: "post", URL: "/reply", Err: errors.New("connection reset")}
+	envelopes := alarmDispatchPersistedSendUnitTestEnvelopes(t, alarmDispatchKaringMaxItemsPerRequest+1)
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
+	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, sender.clientRequestIDs, 1)
+	require.NotEqual(t, envelopes[0].ClientRequestID, sender.clientRequestIDs[0],
+		"상한 초과 그룹은 persisted ID를 쓰지 않고 조합 파생 해시로 나간다")
+	require.Len(t, consumer.quarantined, len(envelopes),
+		"전송 ID를 재생산할 수 없는 그룹의 ambiguous 실패는 재시도가 아니라 quarantine이어야 한다")
+	assert.Empty(t, consumer.scheduledSendingRetry)
+	assert.Empty(t, consumer.markDispatched)
+}
+
+func TestAlarmDispatchRunnerPersistedSendUnitAtMaxItemsStillRetriesAmbiguousFailure(t *testing.T) {
+	transportErr := &iris.TransportError{Op: "post", URL: "/reply", Err: errors.New("connection reset")}
+	envelopes := alarmDispatchPersistedSendUnitTestEnvelopes(t, alarmDispatchKaringMaxItemsPerRequest)
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
+	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, sender.clientRequestIDs, 1)
+	assert.Equal(t, envelopes[0].ClientRequestID, sender.clientRequestIDs[0])
+	require.Len(t, consumer.scheduledSendingRetry, len(envelopes))
+	assert.Empty(t, consumer.quarantined)
+}
+
+func TestAlarmDispatchOutboxRetryReproducesEveryKaringChunkClientRequestID(t *testing.T) {
+	t.Parallel()
+
+	const itemCount = alarmDispatchKaringMaxItemsPerRequest + 2
+	build := func(retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {
+		envelope := alarmDispatchRunnerTestEnvelope("room-1", retry)
+		envelope.DispatchOutboxID = 91
+		envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
+		envelope.Notification.AlarmType = domain.AlarmTypeCommunity
+		items := make([]domain.YouTubeOutboxItem, 0, itemCount)
+		for i := range itemCount {
+			items = append(items, domain.YouTubeOutboxItem{
+				OutboxID:  int64(200 + i),
+				ContentID: fmt.Sprintf("post-%d", i),
+				Payload:   `{"post_id":"p","content_text":"본문"}`,
+			})
+		}
+		envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
+			Kind:       domain.OutboxKindCommunityPost,
+			AlarmType:  domain.AlarmTypeCommunity,
+			ChannelID:  "UCtest",
+			MemberName: "Member",
+			Items:      items,
+		}
+		return envelope
+	}
+
+	chunkIDs := func(envelope domain.AlarmQueueEnvelope) []string {
+		groups := groupAlarmDispatchEnvelopesForKaring([]domain.AlarmQueueEnvelope{envelope}, true)
+		ids := make([]string, 0, itemCount)
+		for g := range groups {
+			requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, groups[g])
+			require.NoError(t, err)
+			for i := range requests {
+				require.NotNil(t, requests[i].ClientRequestID)
+				ids = append(ids, *requests[i].ClientRequestID)
+			}
+		}
+		return ids
+	}
+
+	firstSend := chunkIDs(build(nil))
+	require.Len(t, firstSend, 2,
+		"봉투 1건에 상한 초과 item을 담은 outbox 그룹은 요청 2건으로 나가 부분 성공 상태가 가능하다")
+
+	redrained := chunkIDs(build(&domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "transport"}))
+
+	assert.Equal(t, firstSend, redrained,
+		"부분 성공 후 재드레인은 chunk ID를 그대로 재생산해야 이미 전송된 chunk가 Iris dedup에 접힌다")
 }

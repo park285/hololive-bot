@@ -22,6 +22,8 @@ package template_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -188,4 +190,66 @@ func TestAdminService_GetRevisionByID(t *testing.T) {
 		_, err := service.GetRevisionByID(ctx, 99999)
 		assert.ErrorIs(t, err, template.ErrRevisionNotFound)
 	})
+}
+
+func TestAdminService_SavePrunesToMaxRevisions(t *testing.T) {
+	service, templateRepo := setupTestService(t)
+	ctx := context.Background()
+
+	const saveCount = 7
+	bodies := make([]string, 0, saveCount)
+	for i := range saveCount {
+		body := fmt.Sprintf("[{{.MemberName}}] v%d", i)
+		bodies = append(bodies, body)
+		_, err := service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, body)
+		require.NoError(t, err)
+	}
+
+	tmpl, err := templateRepo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, nil)
+	require.NoError(t, err)
+	require.NotNil(t, tmpl)
+	assert.Equal(t, bodies[saveCount-1], tmpl.Body)
+
+	stored, err := templateRepo.GetRevisions(ctx, tmpl.ID, 100)
+	require.NoError(t, err)
+	require.Len(t, stored, 5, "prune must keep exactly maxRevisions rows")
+
+	want := []string{bodies[5], bodies[4], bodies[3], bodies[2], bodies[1]}
+	got := make([]string, 0, len(stored))
+	for _, rev := range stored {
+		got = append(got, rev.Body)
+	}
+	assert.Equal(t, want, got)
+}
+
+func TestAdminService_SaveRollsBackOnContextCancel(t *testing.T) {
+	service, templateRepo := setupTestService(t)
+	ctx := context.Background()
+
+	const committed = "[{{.MemberName}}] committed"
+	_, err := service.Save(ctx, domain.TemplateKeyOutboxShorts, nil, committed)
+	require.NoError(t, err)
+
+	tmpl, err := templateRepo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, nil)
+	require.NoError(t, err)
+	require.NotNil(t, tmpl)
+
+	before, err := templateRepo.GetRevisions(ctx, tmpl.ID, 100)
+	require.NoError(t, err)
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+
+	_, err = service.Save(canceled, domain.TemplateKeyOutboxShorts, nil, "[{{.MemberName}}] never lands")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, context.Canceled), "want context.Canceled in chain, got %v", err)
+
+	after, err := templateRepo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, nil)
+	require.NoError(t, err)
+	require.NotNil(t, after)
+	assert.Equal(t, committed, after.Body, "failed save must not replace the body")
+
+	afterRevisions, err := templateRepo.GetRevisions(ctx, tmpl.ID, 100)
+	require.NoError(t, err)
+	assert.Len(t, afterRevisions, len(before), "failed save must not leave a revision behind")
 }

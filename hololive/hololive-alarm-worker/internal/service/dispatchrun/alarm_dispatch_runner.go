@@ -133,11 +133,59 @@ func dispatchAttemptOutcome(err error) workercontract.AttemptOutcome {
 
 func (r *Runner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup) error {
 	for _, group := range groups {
+		// 만료된 attempt로 남은 그룹을 계속 보내면 즉시 실패한 미발송 행이 sending으로 전이돼
+		// 재시도 대신 quarantine으로 굳는다. 남은 그룹은 leased로 두고 다음 드레인에 맡긴다.
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("dispatch alarm groups: %w", err)
+		}
 		if err := r.dispatchGroup(ctx, group); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+const alarmDispatchStateTimeout = 5 * time.Second
+
+// 상태 기록과 실패 라우팅은 발송 attempt가 끝난 뒤에도 완료돼야 한다. attempt deadline이나
+// 종료 신호로 같이 끊기면 드레인된 행이 sending으로 남아 terminal quarantine으로 굳는다.
+func (r *Runner) withStateContext(ctx context.Context, fn func(context.Context) error) error {
+	stateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), alarmDispatchStateTimeout)
+	defer cancel()
+	return fn(stateCtx)
+}
+
+func (r *Runner) markSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (proceed bool, err error) {
+	markErr := r.withStateContext(ctx, func(stateCtx context.Context) error {
+		return r.consumer.MarkSending(stateCtx, envelopes)
+	})
+	if markErr == nil {
+		return true, nil
+	}
+	return false, r.withStateContext(ctx, func(stateCtx context.Context) error {
+		return r.persistMarkSendingFailure(stateCtx, envelopes, markErr)
+	})
+}
+
+func (r *Runner) markDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	return r.withStateContext(ctx, func(stateCtx context.Context) error {
+		if err := r.consumer.MarkDispatched(stateCtx, envelopes); err != nil {
+			return fmt.Errorf("mark alarm dispatch sent: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r *Runner) routePreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	return r.withStateContext(ctx, func(stateCtx context.Context) error {
+		return r.persistPreSendFailure(stateCtx, envelopes, cause)
+	})
+}
+
+func (r *Runner) routePostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	return r.withStateContext(ctx, func(stateCtx context.Context) error {
+		return r.persistPostSendingFailure(stateCtx, envelopes, cause)
+	})
 }
 
 func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
@@ -169,18 +217,15 @@ func alarmDispatchGroupUsesTextPath(group alarmDispatchGroup) bool {
 func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
 	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, group)
 	if err != nil {
-		return r.persistPreSendFailure(ctx, group.envelopes, err)
+		return r.routePreSendFailure(ctx, group.envelopes, err)
 	}
-	if err := r.consumer.MarkSending(ctx, group.envelopes); err != nil {
-		return r.persistMarkSendingFailure(ctx, group.envelopes, err)
+	if proceed, err := r.markSending(ctx, group.envelopes); !proceed {
+		return err
 	}
 	if err := sendAlarmDispatchMessage(ctx, r.sender, group, message); err != nil {
-		return r.persistPostSendingFailure(ctx, group.envelopes, err)
+		return r.routePostSendingFailure(ctx, group.envelopes, err)
 	}
-	if err := r.consumer.MarkDispatched(ctx, group.envelopes); err != nil {
-		return fmt.Errorf("mark alarm dispatch sent: %w", err)
-	}
-	return nil
+	return r.markDispatched(ctx, group.envelopes)
 }
 
 func sendAlarmDispatchMessage(ctx context.Context, sender Sender, group alarmDispatchGroup, message string) error {
@@ -193,18 +238,15 @@ func sendAlarmDispatchMessage(ctx context.Context, sender Sender, group alarmDis
 func (r *Runner) dispatchKaringContentListGroup(ctx context.Context, group alarmDispatchGroup) error {
 	requests, err := buildAlarmDispatchKaringContentListRequests(ctx, r.messageStrings, group)
 	if err != nil {
-		return r.persistPreSendFailure(ctx, group.envelopes, err)
+		return r.routePreSendFailure(ctx, group.envelopes, err)
 	}
-	if err := r.consumer.MarkSending(ctx, group.envelopes); err != nil {
-		return r.persistMarkSendingFailure(ctx, group.envelopes, err)
+	if proceed, err := r.markSending(ctx, group.envelopes); !proceed {
+		return err
 	}
 	for i := range requests {
 		if err := r.sender.SendKaringContentList(ctx, group.roomID, &requests[i]); err != nil {
-			return r.persistPostSendingFailure(ctx, group.envelopes, err)
+			return r.routePostSendingFailure(ctx, group.envelopes, err)
 		}
 	}
-	if err := r.consumer.MarkDispatched(ctx, group.envelopes); err != nil {
-		return fmt.Errorf("mark alarm dispatch sent: %w", err)
-	}
-	return nil
+	return r.markDispatched(ctx, group.envelopes)
 }
