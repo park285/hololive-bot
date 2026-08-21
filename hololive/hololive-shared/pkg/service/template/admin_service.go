@@ -91,26 +91,14 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 		return nil, err
 	}
 
-	result, previousBody, err := s.repo.UpsertWithPreviousBody(ctx, key, channelID, body)
+	result, _, err := s.repo.UpsertWithRevision(ctx, key, channelID, body, maxRevisions)
 	if err != nil {
 		return nil, fmt.Errorf("upsert template: %w", err)
-	}
-	if previousBody != nil && *previousBody != body {
-		s.createRevision(ctx, result.ID, *previousBody)
 	}
 
 	s.invalidateRendererCache(key, channelID)
 
 	return result, nil
-}
-
-func (s *AdminService) createRevision(ctx context.Context, templateID int64, body string) {
-	if revErr := s.repo.CreateRevision(ctx, templateID, body); revErr != nil {
-		s.logger.Warn("failed to create revision", slog.Any("error", revErr))
-	}
-	if pruneErr := s.repo.PruneOldRevisions(ctx, templateID, maxRevisions); pruneErr != nil {
-		s.logger.Warn("failed to prune revisions", slog.Any("error", pruneErr))
-	}
 }
 
 func (s *AdminService) invalidateRendererCache(key domain.TemplateKey, channelID *string) {

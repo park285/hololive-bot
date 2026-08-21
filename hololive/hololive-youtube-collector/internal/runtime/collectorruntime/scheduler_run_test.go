@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -329,5 +331,169 @@ func assertExecutorFieldMirrorsScheduler(t *testing.T, field *reflect.StructFiel
 		}
 	default:
 		t.Fatalf("executor.%s has unsupported kind %s, extend the mapping assertion", field.Name, field.Type.Kind())
+	}
+}
+
+type recordingLease struct {
+	deferCalls int
+	deferCode  string
+	deferClass string
+}
+
+func (l *recordingLease) Proof() contract.LeaseProof                            { return contract.LeaseProof{} }
+func (l *recordingLease) Renew(context.Context) error                           { return nil }
+func (l *recordingLease) CompleteCurrent(context.Context) error                 { return nil }
+func (l *recordingLease) Release(context.Context, joblease.ReleaseReason) error { return nil }
+
+func (l *recordingLease) Defer(_ context.Context, _ time.Time, code, class, _ string) error {
+	l.deferCalls++
+	l.deferCode = code
+	l.deferClass = class
+	return nil
+}
+
+func newRunErrorExecutor(fatal *[]error) *collectionExecutor {
+	collector := settings.DefaultYouTubeCollectorConfig()
+	collector.CleanupTimeout = time.Second
+	return &collectionExecutor{
+		logger:    slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		metrics:   NewMetrics(prometheus.NewPedanticRegistry()),
+		collector: collector,
+		config: joblease.Config{
+			MinRetryDelay: time.Minute,
+			MaxRetryDelay: 10 * time.Minute,
+		},
+		reportFatal: func(err error) { *fatal = append(*fatal, err) },
+	}
+}
+
+type handleRunErrorCase struct {
+	name      string
+	err       error
+	wantFatal bool
+	wantCode  collecterr.ErrorCode
+	wantClass collecterr.FailureClass
+}
+
+func assertHandleRunErrorCase(t *testing.T, test handleRunErrorCase) {
+	t.Helper()
+
+	var fatal []error
+
+	executor := newRunErrorExecutor(&fatal)
+	lease := &recordingLease{}
+	spec := &joblease.JobSpec{
+		JobKey:            "job",
+		Provider:          contract.ProviderYouTubeJS,
+		CollectionJobKind: "community_collect",
+		SubjectKey:        "UC_TEST",
+	}
+
+	executor.handleRunError(context.Background(), lease, spec, &contract.LeaseProof{}, test.err)
+
+	if lease.deferCalls != 1 {
+		t.Fatalf("lease.Defer calls = %d, want 1", lease.deferCalls)
+	}
+
+	if lease.deferCode != string(test.wantCode) || lease.deferClass != string(test.wantClass) {
+		t.Fatalf("deferred diagnostic = %q/%q, want %q/%q",
+			lease.deferCode, lease.deferClass, test.wantCode, test.wantClass)
+	}
+
+	if !test.wantFatal {
+		if len(fatal) != 0 {
+			t.Fatalf("retryable error was promoted to fatal: %v", fatal)
+		}
+
+		return
+	}
+
+	if len(fatal) != 1 {
+		t.Fatalf("fatal reports = %d, want 1", len(fatal))
+	}
+
+	var runtimeErr *FatalRuntimeError
+	if !errors.As(fatal[0], &runtimeErr) || runtimeErr.Phase != "collection" {
+		t.Fatalf("fatal report = %#v, want collection phase FatalRuntimeError", fatal[0])
+	}
+
+	if !errors.Is(fatal[0], test.err) {
+		t.Fatalf("fatal report does not wrap the original error: %v", fatal[0])
+	}
+}
+
+func TestHandleRunErrorPromotesOnlyClassifiedFatalErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []handleRunErrorCase{
+		{
+			name:      "unclassified database failure",
+			err:       errors.New("acquire connection: connection reset by peer"),
+			wantFatal: false,
+			wantCode:  collecterr.Internal,
+			wantClass: collecterr.ClassInternal,
+		},
+		{
+			name:      "unclassified deadlock",
+			err:       fmt.Errorf("load target snapshot: %w", errors.New("SQLSTATE 40P01 deadlock detected")),
+			wantFatal: false,
+			wantCode:  collecterr.Internal,
+			wantClass: collecterr.ClassInternal,
+		},
+		{
+			name:      "unclassified maintenance page body",
+			err:       fmt.Errorf("decode response: %w", errors.New("invalid character '<' looking for beginning of value")),
+			wantFatal: false,
+			wantCode:  collecterr.Internal,
+			wantClass: collecterr.ClassInternal,
+		},
+		{
+			name:      "helper read deadline through FromContext",
+			err:       collecterr.FromContext(fmt.Errorf("read youtube.js helper: %w", os.ErrDeadlineExceeded)),
+			wantFatal: false,
+			wantCode:  collecterr.Internal,
+			wantClass: collecterr.ClassInternal,
+		},
+		{
+			name:      "provider body read failure through FromContext",
+			err:       collecterr.FromContext(fmt.Errorf("read holodex: %w", syscall.ECONNREFUSED)),
+			wantFatal: false,
+			wantCode:  collecterr.Internal,
+			wantClass: collecterr.ClassInternal,
+		},
+		{
+			name:      "classified transient failure",
+			err:       collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, errors.New("upstream unavailable")),
+			wantFatal: false,
+			wantCode:  collecterr.Failed,
+			wantClass: collecterr.ClassTransient,
+		},
+		{
+			name:      "classified internal invariant",
+			err:       collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure is missing"),
+			wantFatal: true,
+			wantCode:  collecterr.Internal,
+			wantClass: collecterr.ClassInternal,
+		},
+		{
+			name:      "wrapped classified internal invariant",
+			err:       fmt.Errorf("collect and publish: %w", collecterr.New(collecterr.Internal, collecterr.ClassInternal, "invariant violated")),
+			wantFatal: true,
+			wantCode:  collecterr.Internal,
+			wantClass: collecterr.ClassInternal,
+		},
+		{
+			name:      "classified helper protocol mismatch",
+			err:       collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "helper protocol mismatch"),
+			wantFatal: true,
+			wantCode:  collecterr.HelperProtocolMismatch,
+			wantClass: collecterr.ClassProtocol,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertHandleRunErrorCase(t, test)
+		})
 	}
 }
