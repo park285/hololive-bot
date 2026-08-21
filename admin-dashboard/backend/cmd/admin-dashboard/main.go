@@ -22,7 +22,7 @@ func main() {
 			automaxprocs.Init(nil)
 			gin.SetMode(gin.ReleaseMode)
 		},
-		LoadConfig:             config.Load,
+		LoadConfig:             config.LoadSecure,
 		LoadConfigErrorMessage: "Failed to load admin dashboard config",
 		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
 			return sharedlogging.Config{

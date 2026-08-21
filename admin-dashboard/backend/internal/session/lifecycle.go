@@ -5,10 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/valkey-io/valkey-go"
-
 	"github.com/kapu/admin-dashboard/internal/auth"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/shared-go/pkg/json"
 )
 
@@ -31,6 +28,7 @@ func (s *Store) refreshOnce(ctx context.Context, id string, idle bool) (RefreshR
 	if err := json.Unmarshal([]byte(data), &sess); err != nil {
 		return RefreshResult{}, false, err
 	}
+	normalizeLegacySession(&sess)
 	now := time.Now().UTC()
 	result, done, err := s.refreshExistingSession(ctx, id, &sess, now)
 	if done || err != nil {
@@ -57,7 +55,9 @@ func (s *Store) refreshCAS(ctx context.Context, id string, idle bool, data strin
 	if err != nil {
 		return RefreshResult{}, false, err
 	}
-	result, err := s.evalInt(ctx, refreshCASScript, []string{sessionKey(id)}, []string{data, string(refreshedData), fmt.Sprint(ttlSeconds(refreshed.ExpiresAt, now))})
+	result, err := s.evalInt(ctx, refreshCASScript,
+		[]string{sessionKey(id), familyKey(refreshed.FamilyID)},
+		[]string{data, string(refreshedData), fmt.Sprint(ttlSeconds(refreshed.ExpiresAt, now)), id})
 	if err != nil {
 		return RefreshResult{}, false, err
 	}
@@ -86,9 +86,15 @@ func refreshCASOutcome(result int64, success RefreshResult) (RefreshResult, bool
 		return RefreshResult{Kind: RefreshMissing}, false, nil
 	case -1:
 		return RefreshResult{}, true, nil
-	default:
-		return RefreshResult{}, false, fmt.Errorf("unexpected session refresh CAS result: %d", result)
 	}
+	return RefreshResult{}, false, refreshCASError(result)
+}
+
+func refreshCASError(result int64) error {
+	if result == -2 {
+		return fmt.Errorf("session family lease points to another token")
+	}
+	return fmt.Errorf("unexpected session refresh CAS result: %d", result)
 }
 
 func (s *Store) refreshAfterCASMiss(ctx context.Context, id string, idle bool) (RefreshResult, error) {
@@ -118,11 +124,23 @@ func (s *Store) Rotate(ctx context.Context, oldID string) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	rotated, err := s.rotateExec(ctx, oldID, oldData, &newSession, &oldMarker, now)
-	if err != nil || !rotated {
+	result, err := s.rotateExec(ctx, oldID, oldData, &newSession, &oldMarker, now)
+	if err != nil {
 		return nil, err
 	}
-	return &newSession, nil
+	return s.rotateOutcome(ctx, oldID, &newSession, result)
+}
+
+func (s *Store) rotateOutcome(ctx context.Context, oldID string, newSession *Session, result int64) (*Session, error) {
+	switch result {
+	case 1:
+		return newSession, nil
+	case 0:
+		return s.rotationWinner(ctx, oldID)
+	case -1:
+		return nil, fmt.Errorf("session family lease points to another token")
+	}
+	return nil, fmt.Errorf("unexpected session rotate result: %d", result)
 }
 
 func (s *Store) currentRotation(ctx context.Context, oldID string, old *Session, now time.Time) (*Session, bool, error) {
@@ -148,6 +166,7 @@ func (s *Store) rotateSource(ctx context.Context, oldID string) (string, *Sessio
 	if err := json.Unmarshal([]byte(oldData), &old); err != nil {
 		return "", nil, err
 	}
+	normalizeLegacySession(&old)
 	return oldData, &old, nil
 }
 
@@ -158,6 +177,7 @@ func (s *Store) buildRotation(old *Session, now time.Time) (newSession, oldMarke
 	}
 	newSession = Session{
 		ID:                newID,
+		FamilyID:          old.FamilyID,
 		CreatedAt:         old.CreatedAt,
 		ExpiresAt:         cappedExpiresAt(now, s.cfg.ExpiryDuration, old.AbsoluteExpiresAt),
 		AbsoluteExpiresAt: old.AbsoluteExpiresAt,
@@ -170,41 +190,41 @@ func (s *Store) buildRotation(old *Session, now time.Time) (newSession, oldMarke
 	return newSession, oldMarker, nil
 }
 
-func (s *Store) rotateExec(ctx context.Context, oldID, oldData string, newSession, oldMarker *Session, now time.Time) (bool, error) {
+func (s *Store) rotateExec(ctx context.Context, oldID, oldData string, newSession, oldMarker *Session, now time.Time) (int64, error) {
 	newData, err := json.Marshal(*newSession)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	markerData, err := json.Marshal(*oldMarker)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	resp := s.client.Do(ctx, s.client.B().Eval().Script(rotateScript).Numkeys(2).
-		Key(sessionKey(oldID), sessionKey(newSession.ID)).
-		Arg(string(newData), string(markerData), fmt.Sprint(ttlSeconds(newSession.ExpiresAt, now)), fmt.Sprint(ttlSeconds(oldMarker.ExpiresAt, now)), oldData).
-		Build())
-	result, ok, err := intResultAllowingNil(resp)
-	if err != nil {
-		return false, err
-	}
-	return ok && result == 1, nil
+	return s.evalInt(ctx, rotateScript,
+		[]string{sessionKey(oldID), sessionKey(newSession.ID), familyKey(newSession.FamilyID)},
+		[]string{
+			string(newData),
+			string(markerData),
+			fmt.Sprint(ttlSeconds(newSession.ExpiresAt, now)),
+			fmt.Sprint(ttlSeconds(oldMarker.ExpiresAt, now)),
+			oldData,
+			newSession.ID,
+			oldID,
+		})
 }
 
-func intResultAllowingNil(resp valkey.ValkeyResult) (value int64, ok bool, err error) {
-	if err := resp.Error(); err != nil {
-		if util.IsValkeyNil(err) {
-			return 0, false, nil
-		}
-		return 0, false, err
+func (s *Store) rotationWinner(ctx context.Context, oldID string) (*Session, error) {
+	current, err := s.Get(ctx, oldID)
+	if err != nil || current == nil || current.RotatedTo == nil {
+		return nil, err
 	}
-	value, err = resp.AsInt64()
+	winner, err := s.Get(ctx, *current.RotatedTo)
 	if err != nil {
-		if util.IsValkeyNil(err) {
-			return 0, false, nil
-		}
-		return 0, false, err
+		return nil, err
 	}
-	return value, true, nil
+	if winner == nil || winner.RotatedTo != nil || winner.FamilyID != current.FamilyID {
+		return nil, fmt.Errorf("session rotation winner is missing or inconsistent")
+	}
+	return winner, nil
 }
 
 func (s *Store) refreshResultForRotatedTo(ctx context.Context, rotatedTo string) (RefreshResult, error) {
@@ -219,29 +239,40 @@ func (s *Store) refreshResultForRotatedTo(ctx context.Context, rotatedTo string)
 }
 
 const refreshCASScript = `
-local key = KEYS[1]
+local session_key = KEYS[1]
+local family_key = KEYS[2]
 local expected_data = ARGV[1]
 local refreshed_data = ARGV[2]
 local ttl = tonumber(ARGV[3])
-local current_data = redis.call('GET', key)
+local id = ARGV[4]
+local current_data = redis.call('GET', session_key)
 if not current_data then return 0 end
 if current_data ~= expected_data then return -1 end
-redis.call('SET', key, refreshed_data, 'EX', ttl)
+local family_current = redis.call('GET', family_key)
+if family_current and family_current ~= id then return -2 end
+redis.call('SET', session_key, refreshed_data, 'EX', ttl)
+redis.call('SET', family_key, id, 'EX', ttl)
 return 1
 `
 
 const rotateScript = `
 local old_key = KEYS[1]
 local new_key = KEYS[2]
+local family_key = KEYS[3]
 local new_data = ARGV[1]
 local old_marker_data = ARGV[2]
 local new_ttl = tonumber(ARGV[3])
 local grace_ttl = tonumber(ARGV[4])
 local expected_old_data = ARGV[5]
+local new_id = ARGV[6]
+local old_id = ARGV[7]
 local old_data = redis.call('GET', old_key)
-if not old_data then return nil end
-if old_data ~= expected_old_data then return nil end
+if not old_data then return 0 end
+if old_data ~= expected_old_data then return 0 end
+local family_current = redis.call('GET', family_key)
+if family_current and family_current ~= old_id then return -1 end
 redis.call('SET', new_key, new_data, 'EX', new_ttl)
 redis.call('SET', old_key, old_marker_data, 'EX', grace_ttl)
+redis.call('SET', family_key, new_id, 'EX', new_ttl)
 return 1
 `

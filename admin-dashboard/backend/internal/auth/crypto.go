@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+const (
+	sessionSigningContext = "admin-dashboard/session-signing/v1"
+	csrfSigningContext    = "admin-dashboard/csrf-signing/v1"
+)
+
 func GenerateSessionID() (string, error) {
 	var b [32]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -19,7 +24,7 @@ func GenerateSessionID() (string, error) {
 }
 
 func SignSessionID(sessionID, secret string) string {
-	mac := hmac.New(sha256.New, []byte(secret))
+	mac := hmac.New(sha256.New, deriveSigningKey(secret, sessionSigningContext))
 	_, _ = mac.Write([]byte(sessionID))
 	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return sessionID + "." + sig
@@ -44,7 +49,7 @@ func NewCSRFToken(sessionID, secret string) (string, error) {
 		return "", err
 	}
 	nonce := hex.EncodeToString(nonceBytes[:])
-	mac := hmac.New(sha256.New, []byte(secret))
+	mac := hmac.New(sha256.New, deriveSigningKey(secret, csrfSigningContext))
 	_, _ = mac.Write([]byte(nonce))
 	_, _ = mac.Write([]byte(sessionID))
 	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
@@ -56,9 +61,15 @@ func ValidateCSRFToken(sessionID, token, secret string) bool {
 	if !ok || nonce == "" || sig == "" {
 		return false
 	}
-	mac := hmac.New(sha256.New, []byte(secret))
+	mac := hmac.New(sha256.New, deriveSigningKey(secret, csrfSigningContext))
 	_, _ = mac.Write([]byte(nonce))
 	_, _ = mac.Write([]byte(sessionID))
 	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1
+}
+
+func deriveSigningKey(secret, purpose string) []byte {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(purpose))
+	return mac.Sum(nil)
 }

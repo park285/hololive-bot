@@ -8,6 +8,28 @@
 
 ## 미출시
 
+## v3.2.0 - 2026-08-21
+
+### 변경
+
+- 관리자 대시보드 세션을 안정적인 family 단위로 다시 묶었습니다. Valkey에 family lease를
+  두고 회전을 family 인식·수렴형으로 바꿔, 동시 회전에서도 승자가 하나로 정해지고 이미
+  업그레이드된 WebSocket까지 family 단위로 취소됩니다. 세션당 스트림 상한은 토큰 회전을
+  건너도 유지됩니다.
+- 로그인 실패 예산을 프로세스 로컬에서 Valkey 기반 분산 카운터로 옮기고 IP·계정·전역 세
+  축으로 나눴습니다(15분 창, 각각 10·30·200회). Valkey 클라이언트는 `DisableCache`·
+  `ForceSingleClient`로 고정해 카운터가 클라이언트 캐시나 다중 연결로 흩어지지 않습니다.
+- 세션 서명 키와 CSRF 서명 키에 도메인 분리를 적용해, 한쪽 토큰을 다른 쪽 검증에 재사용할
+  수 없게 했습니다.
+- 운영 시크릿을 `*_FILE` 경로로만 읽도록 바꾸고 `SESSION_SECRET`에 32바이트 하한을
+  강제합니다. 읽기 경로는 `Lstat` → `Open` → `os.SameFile` 대조로 TOCTOU를 막고,
+  환경 변수 복원 실패를 삼키지 않고 오류로 전파해 시크릿이 남은 채로 기동하지 않습니다.
+  Docker `Config.Env`에는 경로만 남습니다.
+- CSP와 브라우저 권한 정책을 강화한 미들웨어를 필수 경로로 만들고, Docker 소켓 접근을
+  최소 권한 프록시로 격리했습니다. 배포는 `deploy/compose/docker-compose.admin-security.yml`
+  오버레이를 기동 시 필수로 요구하며, `scripts/deploy/materialize-admin-dashboard-secrets.sh`가
+  `*_FILE` 시크릿을 안전한 권한으로 준비합니다.
+
 ## v3.1.0 - 2026-08-21
 
 ### 변경

@@ -49,22 +49,23 @@ type sessionStore interface {
 }
 
 type Runtime struct {
-	cfg             config.Config
-	logger          *slog.Logger
-	sessions        sessionStore
-	rateLimiter     *httputil.LoginFailureRateLimiter
-	docker          *docker.Client
-	holo            *holo.Client
-	statusCollector *status.Collector
-	endpointSampler *status.Sampler
-	statsHub        *status.Hub
-	static          static.Handler
-	wsStreams       chan struct{}
-	wsMu            sync.Mutex
-	wsPerSession    map[string]int
-	wsPongWait      time.Duration
-	wsPingPeriod    time.Duration
-	openapiJSON     []byte
+	cfg                     config.Config
+	logger                  *slog.Logger
+	sessions                sessionStore
+	rateLimiter             *httputil.LoginFailureRateLimiter
+	distributedLoginLimiter *distributedLoginLimiter
+	docker                  *docker.Client
+	holo                    *holo.Client
+	statusCollector         *status.Collector
+	endpointSampler         *status.Sampler
+	statsHub                *status.Hub
+	static                  static.Handler
+	wsStreams               chan struct{}
+	wsMu                    sync.Mutex
+	wsPerSession            map[string]int
+	wsPongWait              time.Duration
+	wsPingPeriod            time.Duration
+	openapiJSON             []byte
 }
 
 func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime, error) {
@@ -75,6 +76,11 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	if err != nil {
 		return nil, err
 	}
+	distributedLimiter, err := newDistributedLoginLimiter(ctx, cfg.ValkeyURL)
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
 	dockerClient, err := docker.NewClient(cfg.DockerHost)
 	if err != nil {
 		logger.Warn("docker service disabled", slog.Any("error", err))
@@ -82,12 +88,14 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	}
 	holoClient, err := holo.NewClient(cfg.HoloAdminAPIURL, cfg.HoloBotAPIKey)
 	if err != nil {
+		distributedLimiter.Close()
 		store.Close()
 		return nil, err
 	}
 	endpoints := []status.ServiceEndpoint{{Name: "hololive-admin-api", URL: cfg.HoloAdminAPIURL, HealthPath: "/health"}}
 	openapiJSON, err := json.Marshal(openapi.Spec(cfg.RuntimeVersion))
 	if err != nil {
+		distributedLimiter.Close()
 		store.Close()
 		return nil, fmt.Errorf("marshal openapi spec: %w", err)
 	}
@@ -97,21 +105,22 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	statsHub := status.NewHubWithSampler(endpointSampler)
 	startStatsHub(statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다
 	return &Runtime{
-		cfg:             *cfg,
-		logger:          logger,
-		sessions:        newCleanupSessionStore(store),
-		rateLimiter:     rateLimiter,
-		docker:          dockerClient,
-		holo:            holoClient,
-		statusCollector: status.NewCollectorWithSampler(endpointSampler, cfg.RuntimeVersion),
-		endpointSampler: endpointSampler,
-		statsHub:        statsHub,
-		static:          static.NewHandler(),
-		wsStreams:       make(chan struct{}, maxSystemStatsStreams),
-		wsPerSession:    make(map[string]int),
-		wsPongWait:      defaultWSPongWait,
-		wsPingPeriod:    defaultWSPingPeriod,
-		openapiJSON:     openapiJSON,
+		cfg:                     *cfg,
+		logger:                  logger,
+		sessions:                newCleanupSessionStore(store),
+		rateLimiter:             rateLimiter,
+		distributedLoginLimiter: distributedLimiter,
+		docker:                  dockerClient,
+		holo:                    holoClient,
+		statusCollector:         status.NewCollectorWithSampler(endpointSampler, cfg.RuntimeVersion),
+		endpointSampler:         endpointSampler,
+		statsHub:                statsHub,
+		static:                  static.NewHandler(),
+		wsStreams:               make(chan struct{}, maxSystemStatsStreams),
+		wsPerSession:            make(map[string]int),
+		wsPongWait:              defaultWSPongWait,
+		wsPingPeriod:            defaultWSPingPeriod,
+		openapiJSON:             openapiJSON,
 	}, nil
 }
 
@@ -150,6 +159,9 @@ func (r *Runtime) Close() {
 	// 닫힌 transport로 샘플링해 구독 중인 대시보드에 거짓 DOWN을 방송한다.
 	r.stopBackgroundServices()
 	r.closeRemoteClients()
+	if r.distributedLoginLimiter != nil {
+		r.distributedLoginLimiter.Close()
+	}
 	if r.sessions != nil {
 		r.sessions.Close()
 	}

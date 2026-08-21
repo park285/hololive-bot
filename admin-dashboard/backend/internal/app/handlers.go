@@ -11,9 +11,16 @@ import (
 	"github.com/park285/shared-go/pkg/ginjson"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
+	"github.com/kapu/admin-dashboard/internal/session"
 	"github.com/kapu/admin-dashboard/internal/status"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
+
+const wsSessionRevocationPoll = time.Second
+
+type sessionFamilyChecker interface {
+	FamilyActive(ctx context.Context, familyID string) (bool, error)
+}
 
 func (r *Runtime) handleHealth(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, statusResponse{Status: "ok"})
@@ -81,12 +88,17 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 		httpx.Abort(c, err)
 		return
 	}
-	sessionID, _ := sessionIDFrom(c)
-	if !r.acquireSessionStream(sessionID) {
-		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams for this session", Details: map[string]int{"limit": maxStreamsPerSession}}})
+	sess, ok := sessionFrom(c)
+	if !ok {
+		httpx.Abort(c, httpx.Unauthorized())
 		return
 	}
-	defer r.releaseSessionStream(sessionID)
+	familyID := sessionStreamFamilyID(sess)
+	if familyID == "" || !r.acquireSessionStream(familyID) {
+		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams for this session family", Details: map[string]int{"limit": maxStreamsPerSession}}})
+		return
+	}
+	defer r.releaseSessionStream(familyID)
 	select {
 	case r.wsStreams <- struct{}{}:
 		defer func() { <-r.wsStreams }()
@@ -94,7 +106,23 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams", Details: map[string]int{"limit": maxSystemStatsStreams}}})
 		return
 	}
-	upgrader := websocket.Upgrader{
+	conn, err := newSystemStatsUpgrader().Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	defer closeConn(conn)
+	r.streamSystemStats(conn, familyID)
+}
+
+func sessionStreamFamilyID(sess *session.Session) string {
+	if sess.FamilyID != "" {
+		return sess.FamilyID
+	}
+	return sess.ID
+}
+
+func newSystemStatsUpgrader() *websocket.Upgrader {
+	return &websocket.Upgrader{
 		HandshakeTimeout: 5 * time.Second,
 		ReadBufferSize:   1024,
 		WriteBufferSize:  4096,
@@ -102,19 +130,15 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 			return req.Context().Err() == nil
 		},
 	}
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		return
-	}
-	defer closeConn(conn)
-	r.streamSystemStats(conn)
 }
 
-func (r *Runtime) streamSystemStats(conn *websocket.Conn) {
+func (r *Runtime) streamSystemStats(conn *websocket.Conn, familyID string) {
 	history, updates, unsubscribe := r.statsHub.Subscribe()
 	defer unsubscribe()
 
 	peerGone := watchPeer(conn, r.wsPongWait)
+	stopRevocationWatch := r.watchSessionFamilyRevocation(conn, familyID)
+	defer stopRevocationWatch()
 
 	for _, stats := range history {
 		if !writeSystemStatsFrame(conn, stats) {
@@ -123,6 +147,77 @@ func (r *Runtime) streamSystemStats(conn *websocket.Conn) {
 	}
 
 	r.pumpSystemStats(conn, updates, peerGone)
+}
+
+func (r *Runtime) watchSessionFamilyRevocation(conn *websocket.Conn, familyID string) context.CancelFunc {
+	checker, ok := r.sessions.(sessionFamilyChecker)
+	if !ok {
+		return func() {}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	panicguard.Go(r.logger, "admin-dashboard-websocket-session-revocation", func() {
+		r.pollSessionFamilyRevocation(ctx, conn, checker, familyID)
+	})
+	return cancel
+}
+
+func (r *Runtime) pollSessionFamilyRevocation(
+	ctx context.Context,
+	conn *websocket.Conn,
+	checker sessionFamilyChecker,
+	familyID string,
+) {
+	ticker := time.NewTicker(wsSessionRevocationPoll)
+	defer ticker.Stop()
+
+	for awaitRevocationTick(ctx, ticker) {
+		if !r.sessionFamilyStillActive(ctx, conn, checker, familyID) {
+			return
+		}
+	}
+}
+
+func awaitRevocationTick(ctx context.Context, ticker *time.Ticker) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-ticker.C:
+		return true
+	}
+}
+
+func (r *Runtime) sessionFamilyStillActive(
+	ctx context.Context,
+	conn *websocket.Conn,
+	checker sessionFamilyChecker,
+	familyID string,
+) bool {
+	checkCtx, checkCancel := context.WithTimeout(ctx, wsSessionRevocationPoll)
+	defer checkCancel()
+
+	active, err := checker.FamilyActive(checkCtx, familyID)
+	if err != nil {
+		r.logger.Warn("websocket session-family check failed; closing stream", slog.Any("error", err))
+		r.closeWebSocketForRevocation(conn, "session store unavailable")
+
+		return false
+	}
+	if !active {
+		r.closeWebSocketForRevocation(conn, "session revoked")
+
+		return false
+	}
+	return true
+}
+
+func (r *Runtime) closeWebSocketForRevocation(conn *websocket.Conn, reason string) {
+	deadline := time.Now().Add(wsWriteWait)
+	if err := conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason), deadline); err != nil {
+		r.logger.Debug("write websocket revocation close frame", slog.Any("error", err))
+	}
+	if err := conn.Close(); err != nil {
+		r.logger.Debug("close revoked websocket", slog.Any("error", err))
+	}
 }
 
 func (r *Runtime) pumpSystemStats(conn *websocket.Conn, updates <-chan status.SystemStats, peerGone <-chan struct{}) {

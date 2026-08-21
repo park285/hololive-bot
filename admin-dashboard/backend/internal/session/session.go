@@ -17,10 +17,14 @@ import (
 	"github.com/park285/shared-go/pkg/json"
 )
 
-const keyPrefix = "session:admin:"
+const (
+	keyPrefix       = "session:admin:"
+	familyKeyPrefix = "session:admin:family:"
+)
 
 type Session struct {
 	ID                string    `json:"id"`
+	FamilyID          string    `json:"family_id,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
 	ExpiresAt         time.Time `json:"expires_at"`
 	AbsoluteExpiresAt time.Time `json:"absolute_expires_at"`
@@ -98,15 +102,22 @@ func (s *Store) Create(ctx context.Context) (Session, error) {
 		return Session{}, err
 	}
 	now := time.Now().UTC()
-	session := s.buildSession(id, now)
-	data, err := json.Marshal(session)
+	sess := s.buildSession(id, now)
+	data, err := json.Marshal(sess)
 	if err != nil {
 		return Session{}, err
 	}
-	if err := s.client.Do(ctx, s.client.B().Set().Key(sessionKey(id)).Value(string(data)).ExSeconds(ttlSeconds(session.ExpiresAt, now)).Build()).Error(); err != nil {
+	ttl := ttlSeconds(sess.ExpiresAt, now)
+	result, err := s.evalInt(ctx, createSessionScript,
+		[]string{sessionKey(id), familyKey(sess.FamilyID)},
+		[]string{string(data), id, fmt.Sprint(ttl)})
+	if err != nil {
 		return Session{}, err
 	}
-	return session, nil
+	if result != 1 {
+		return Session{}, fmt.Errorf("unexpected session create result: %d", result)
+	}
+	return sess, nil
 }
 
 func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
@@ -118,11 +129,9 @@ func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 	if err := json.Unmarshal([]byte(data), &sess); err != nil {
 		return nil, err
 	}
-	if sess.LastRotatedAt.IsZero() {
-		sess.LastRotatedAt = sess.CreatedAt
-	}
+	normalizeLegacySession(&sess)
 	if isAbsolutelyExpiredAt(&sess, time.Now().UTC()) {
-		if err := s.Delete(ctx, id); err != nil {
+		if err := s.deleteLoadedSession(ctx, &sess); err != nil {
 			return nil, err
 		}
 		return nil, nil
@@ -131,15 +140,66 @@ func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 }
 
 func (s *Store) Delete(ctx context.Context, id string) error {
+	data, ok, err := s.getRaw(ctx, id)
+	if err != nil || !ok {
+		return err
+	}
+	var sess Session
+	if err := json.Unmarshal([]byte(data), &sess); err != nil {
+		return err
+	}
+	normalizeLegacySession(&sess)
+	return s.deleteLoadedSession(ctx, &sess)
+}
+
+func (s *Store) deleteLoadedSession(ctx context.Context, sess *Session) error {
 	deleteCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return s.client.Do(deleteCtx, s.client.B().Del().Key(sessionKey(id)).Build()).Error()
+	result, err := s.evalInt(deleteCtx, deleteSessionScript,
+		[]string{sessionKey(sess.ID), familyKey(sess.FamilyID)},
+		[]string{sess.ID})
+	if err != nil {
+		return err
+	}
+	if result != 0 && result != 1 {
+		return fmt.Errorf("unexpected session delete result: %d", result)
+	}
+	return nil
+}
+
+// FamilyActive checks the stable session-family lease. A family lease always
+// points at the currently authoritative token ID, so logout, expiry and
+// rotation are visible to long-lived WebSocket connections across processes.
+func (s *Store) FamilyActive(ctx context.Context, familyID string) (bool, error) {
+	if familyID == "" {
+		return false, nil
+	}
+	currentID, ok, err := s.getString(ctx, familyKey(familyID))
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		// family lease가 도입되기 전에 만들어진 세션을 위한 하위 호환 경로다. 그 시절에는
+		// familyID가 곧 토큰 ID였고, 첫 refresh나 회전이 내구성 있는 lease를 기록하면
+		// 이 분기는 더 이상 타지 않는다.
+		currentID = familyID
+	}
+	return s.tokenHoldsFamily(ctx, currentID, familyID)
+}
+
+func (s *Store) tokenHoldsFamily(ctx context.Context, tokenID, familyID string) (bool, error) {
+	sess, err := s.Get(ctx, tokenID)
+	if err != nil || sess == nil {
+		return false, err
+	}
+	return sess.RotatedTo == nil && sess.FamilyID == familyID, nil
 }
 
 func (s *Store) buildSession(id string, now time.Time) Session {
 	absolute := now.Add(s.cfg.AbsoluteTimeout)
 	return Session{
 		ID:                id,
+		FamilyID:          id,
 		CreatedAt:         now,
 		ExpiresAt:         cappedExpiresAt(now, s.cfg.ExpiryDuration, absolute),
 		AbsoluteExpiresAt: absolute,
@@ -148,7 +208,11 @@ func (s *Store) buildSession(id string, now time.Time) Session {
 }
 
 func (s *Store) getRaw(ctx context.Context, id string) (data string, ok bool, err error) {
-	resp := s.client.Do(ctx, s.client.B().Get().Key(sessionKey(id)).Build())
+	return s.getString(ctx, sessionKey(id))
+}
+
+func (s *Store) getString(ctx context.Context, key string) (data string, ok bool, err error) {
+	resp := s.client.Do(ctx, s.client.B().Get().Key(key).Build())
 	if err := resp.Error(); err != nil {
 		if util.IsValkeyNil(err) {
 			return "", false, nil
@@ -174,7 +238,17 @@ func (s *Store) evalInt(ctx context.Context, script string, keys, args []string)
 	return resp.AsInt64()
 }
 
+func normalizeLegacySession(sess *Session) {
+	if sess.FamilyID == "" {
+		sess.FamilyID = sess.ID
+	}
+	if sess.LastRotatedAt.IsZero() {
+		sess.LastRotatedAt = sess.CreatedAt
+	}
+}
+
 func sessionKey(id string) string { return keyPrefix + id }
+func familyKey(id string) string  { return familyKeyPrefix + id }
 
 func cappedExpiresAt(now time.Time, ttl time.Duration, absolute time.Time) time.Time {
 	candidate := now.Add(ttl)
@@ -210,3 +284,25 @@ func parseValkeyAddress(value string) (addr, password string, err error) {
 	}
 	return host, password, nil
 }
+
+const createSessionScript = `
+local session_key = KEYS[1]
+local family_key = KEYS[2]
+local data = ARGV[1]
+local id = ARGV[2]
+local ttl = tonumber(ARGV[3])
+redis.call('SET', session_key, data, 'EX', ttl)
+redis.call('SET', family_key, id, 'EX', ttl)
+return 1
+`
+
+const deleteSessionScript = `
+local session_key = KEYS[1]
+local family_key = KEYS[2]
+local id = ARGV[1]
+local deleted = redis.call('DEL', session_key)
+if redis.call('GET', family_key) == id then
+  redis.call('DEL', family_key)
+end
+return deleted
+`
