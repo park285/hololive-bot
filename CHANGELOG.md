@@ -8,6 +8,15 @@
 
 ## 미출시
 
+## v3.2.1 - 2026-08-21
+
+### 수정
+
+- `scripts/deploy/materialize-admin-dashboard-secrets.sh`에 실행 권한을 부여했습니다.
+  v3.2.0에서 이 스크립트가 `100644`로 커밋되는 바람에, `systemd-compose-up.sh`가 직접
+  실행하는 지점에서 `Permission denied`(exit 126)로 기동이 멈췄습니다. 중앙 호스트
+  배포에서 재현했으며, 실행 중인 컨테이너는 영향을 받지 않고 기동만 실패합니다.
+
 ## v3.2.0 - 2026-08-21
 
 ### 변경
