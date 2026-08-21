@@ -139,6 +139,10 @@ func (r *TemplateRepository) UpsertWithRevision(
 		return nil, nil, fmt.Errorf("upsert template with revision: %w", err)
 	}
 
+	if tmpl == nil {
+		return nil, nil, fmt.Errorf("upsert template with revision: no row returned")
+	}
+
 	return tmpl, previousBody, nil
 }
 

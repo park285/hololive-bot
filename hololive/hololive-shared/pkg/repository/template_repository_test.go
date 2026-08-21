@@ -488,9 +488,7 @@ func TestTemplateRepository_UpsertWithRevision_ConcurrentChainOrdering(t *testin
 	)
 
 	for i := range writers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			body := fmt.Sprintf("w%d", i)
 			tmpl, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, body, 0)
 			if err != nil {
@@ -504,7 +502,7 @@ func TestTemplateRepository_UpsertWithRevision_ConcurrentChainOrdering(t *testin
 			mu.Lock()
 			defer mu.Unlock()
 			links[*previousBody] = link{body: body, previous: *previousBody}
-		}()
+		})
 	}
 	wg.Wait()
 	close(failure)

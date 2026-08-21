@@ -162,9 +162,7 @@ func TestConcurrentExpiredTakeoverProducesExactlyOneHolder(t *testing.T) {
 	errs := make([]error, contenders)
 	start := make(chan struct{})
 	for i := range contenders {
-		group.Add(1)
-		go func() {
-			defer group.Done()
+		group.Go(func() {
 			<-start
 			lease, err := repository.Acquire(ctx, spec, "collector-"+strconv.Itoa(i))
 			if err == nil {
@@ -177,7 +175,7 @@ func TestConcurrentExpiredTakeoverProducesExactlyOneHolder(t *testing.T) {
 			if !errors.Is(err, ErrNotAcquired) {
 				errs[i] = err
 			}
-		}()
+		})
 	}
 	close(start)
 	group.Wait()
