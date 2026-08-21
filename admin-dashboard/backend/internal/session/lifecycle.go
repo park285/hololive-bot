@@ -86,11 +86,15 @@ func refreshCASOutcome(result int64, success RefreshResult) (RefreshResult, bool
 		return RefreshResult{Kind: RefreshMissing}, false, nil
 	case -1:
 		return RefreshResult{}, true, nil
-	case -2:
-		return RefreshResult{}, false, fmt.Errorf("session family lease points to another token")
-	default:
-		return RefreshResult{}, false, fmt.Errorf("unexpected session refresh CAS result: %d", result)
 	}
+	return RefreshResult{}, false, refreshCASError(result)
+}
+
+func refreshCASError(result int64) error {
+	if result == -2 {
+		return fmt.Errorf("session family lease points to another token")
+	}
+	return fmt.Errorf("unexpected session refresh CAS result: %d", result)
 }
 
 func (s *Store) refreshAfterCASMiss(ctx context.Context, id string, idle bool) (RefreshResult, error) {
@@ -124,16 +128,19 @@ func (s *Store) Rotate(ctx context.Context, oldID string) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.rotateOutcome(ctx, oldID, &newSession, result)
+}
+
+func (s *Store) rotateOutcome(ctx context.Context, oldID string, newSession *Session, result int64) (*Session, error) {
 	switch result {
 	case 1:
-		return &newSession, nil
+		return newSession, nil
 	case 0:
 		return s.rotationWinner(ctx, oldID)
 	case -1:
 		return nil, fmt.Errorf("session family lease points to another token")
-	default:
-		return nil, fmt.Errorf("unexpected session rotate result: %d", result)
 	}
+	return nil, fmt.Errorf("unexpected session rotate result: %d", result)
 }
 
 func (s *Store) currentRotation(ctx context.Context, oldID string, old *Session, now time.Time) (*Session, bool, error) {

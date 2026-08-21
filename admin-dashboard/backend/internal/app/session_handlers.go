@@ -33,37 +33,59 @@ func (r *Runtime) handleLogin(c *gin.Context) {
 		return
 	}
 	ip := r.clientIP(c.Request)
+	if !r.admitLoginAttempt(c, ip) {
+		return
+	}
+	if !r.loginCredentialsMatch(body) {
+		r.rejectLoginAttempt(c, ip)
+		return
+	}
+	r.completeLogin(c, ip)
+}
+
+func (r *Runtime) admitLoginAttempt(c *gin.Context, ip string) bool {
 	localAllowed, localRetryAfter := r.rateLimiter.IsAllowed(ip)
 	distributedRetryAfter, err := r.distributedLoginLimiter.Check(c.Request.Context(), ip, r.cfg.AdminUser)
 	if err != nil {
 		r.logger.Error("distributed login limiter check failed", slog.Any("error", err))
 		httpx.Abort(c, httpx.StoreUnavailable())
-		return
+		return false
 	}
-	if !localAllowed || distributedRetryAfter > 0 {
-		retryAfter := max(localRetryAfter, distributedRetryAfter)
-		retry := uint64(max(retryAfter.Seconds(), 1))
-		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many login attempts", RetryAfter: &retry}})
-		return
+	if localAllowed && distributedRetryAfter <= 0 {
+		return true
 	}
+	retryAfter := max(localRetryAfter, distributedRetryAfter)
+	retry := uint64(max(retryAfter.Seconds(), 1))
+	httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many login attempts", RetryAfter: &retry}})
+
+	return false
+}
+
+// 사용자명이 틀려도 bcrypt 비교를 건너뛰지 않아야 응답 시간이 사용자명 존재 여부를 흘리지 않는다.
+func (r *Runtime) loginCredentialsMatch(body loginRequest) bool {
 	usernameOK := httputil.ConstantTimeStringEqual(body.Username, r.cfg.AdminUser)
 	passwordOK := bcrypt.CompareHashAndPassword([]byte(r.cfg.AdminPassHash), []byte(body.Password)) == nil
-	if !(usernameOK && passwordOK) {
-		localCount := r.rateLimiter.RecordFailure(ip)
-		distributedCount, err := r.distributedLoginLimiter.RecordFailure(c.Request.Context(), ip, r.cfg.AdminUser)
-		if err != nil {
-			r.logger.Error("distributed login limiter failure record failed", slog.Any("error", err))
-			httpx.Abort(c, httpx.StoreUnavailable())
-			return
-		}
-		count := max(localCount, distributedCount)
-		delay := time.Duration(min(count*500, 3000)) * time.Millisecond
-		if !waitForLoginBackoff(c.Request.Context(), delay) {
-			return
-		}
-		httpx.Abort(c, httpx.Unauthorized())
+
+	return usernameOK && passwordOK
+}
+
+func (r *Runtime) rejectLoginAttempt(c *gin.Context, ip string) {
+	localCount := r.rateLimiter.RecordFailure(ip)
+	distributedCount, err := r.distributedLoginLimiter.RecordFailure(c.Request.Context(), ip, r.cfg.AdminUser)
+	if err != nil {
+		r.logger.Error("distributed login limiter failure record failed", slog.Any("error", err))
+		httpx.Abort(c, httpx.StoreUnavailable())
 		return
 	}
+	count := max(localCount, distributedCount)
+	delay := time.Duration(min(count*500, 3000)) * time.Millisecond
+	if !waitForLoginBackoff(c.Request.Context(), delay) {
+		return
+	}
+	httpx.Abort(c, httpx.Unauthorized())
+}
+
+func (r *Runtime) completeLogin(c *gin.Context, ip string) {
 	if err := r.distributedLoginLimiter.RecordSuccess(c.Request.Context(), ip, r.cfg.AdminUser); err != nil {
 		r.logger.Error("distributed login limiter success record failed", slog.Any("error", err))
 		httpx.Abort(c, httpx.StoreUnavailable())

@@ -24,6 +24,11 @@ type secretEnvValue struct {
 	set   bool
 }
 
+type secretEnvSwap struct {
+	originals map[string]secretEnvValue
+	applied   []string
+}
+
 var adminSecretFiles = []secretFileSpec{
 	{fileEnv: "ADMIN_PASS_HASH_FILE", valueEnv: "ADMIN_PASS_HASH", aliases: []string{"ADMIN_PASS_BCRYPT"}},
 	{fileEnv: "SESSION_SECRET_FILE", valueEnv: "SESSION_SECRET", aliases: []string{"ADMIN_SECRET_KEY"}},
@@ -58,48 +63,57 @@ func LoadSecure() (cfg *Config, err error) {
 }
 
 func applySecretFiles() (func() error, error) {
-	originals := make(map[string]secretEnvValue, len(adminSecretFiles))
-	applied := make([]string, 0, len(adminSecretFiles))
+	swap := &secretEnvSwap{originals: make(map[string]secretEnvValue, len(adminSecretFiles))}
 
 	for _, spec := range adminSecretFiles {
-		path := strings.TrimSpace(os.Getenv(spec.fileEnv))
-		if path == "" {
-			continue
+		if err := swap.apply(spec); err != nil {
+			return nil, errors.Join(err, swap.restore())
 		}
-		if directSecretConfigured(spec) {
-			return nil, errors.Join(
-				fmt.Errorf("config: %s cannot be combined with %s or its aliases", spec.fileEnv, spec.valueEnv),
-				restoreSecretEnv(applied, originals),
-			)
-		}
-		value, err := readSecretFile(path)
-		if err != nil {
-			return nil, errors.Join(fmt.Errorf("config: read %s: %w", spec.fileEnv, err), restoreSecretEnv(applied, originals))
-		}
-		original, set := os.LookupEnv(spec.valueEnv)
-		originals[spec.valueEnv] = secretEnvValue{value: original, set: set}
-		if err := os.Setenv(spec.valueEnv, value); err != nil {
-			return nil, errors.Join(fmt.Errorf("config: materialize %s: %w", spec.fileEnv, err), restoreSecretEnv(applied, originals))
-		}
-		applied = append(applied, spec.valueEnv)
 	}
-	return func() error { return restoreSecretEnv(applied, originals) }, nil
+	return swap.restore, nil
 }
 
-func restoreSecretEnv(applied []string, originals map[string]secretEnvValue) error {
+func (swap *secretEnvSwap) apply(spec secretFileSpec) error {
+	path := strings.TrimSpace(os.Getenv(spec.fileEnv))
+	if path == "" {
+		return nil
+	}
+	if directSecretConfigured(spec) {
+		return fmt.Errorf("config: %s cannot be combined with %s or its aliases", spec.fileEnv, spec.valueEnv)
+	}
+	value, err := readSecretFile(path)
+	if err != nil {
+		return fmt.Errorf("config: read %s: %w", spec.fileEnv, err)
+	}
+	original, set := os.LookupEnv(spec.valueEnv)
+	swap.originals[spec.valueEnv] = secretEnvValue{value: original, set: set}
+	if err := os.Setenv(spec.valueEnv, value); err != nil {
+		return fmt.Errorf("config: materialize %s: %w", spec.fileEnv, err)
+	}
+	swap.applied = append(swap.applied, spec.valueEnv)
+	return nil
+}
+
+func (swap *secretEnvSwap) restore() error {
 	var restoreErr error
-	for i := len(applied) - 1; i >= 0; i-- {
-		key := applied[i]
-		original := originals[key]
-		if original.set {
-			if err := os.Setenv(key, original.value); err != nil {
-				restoreErr = errors.Join(restoreErr, fmt.Errorf("config: restore %s: %w", key, err))
-			}
-		} else if err := os.Unsetenv(key); err != nil {
-			restoreErr = errors.Join(restoreErr, fmt.Errorf("config: unset %s: %w", key, err))
-		}
+	for i := len(swap.applied) - 1; i >= 0; i-- {
+		key := swap.applied[i]
+		restoreErr = errors.Join(restoreErr, restoreSecretEnvKey(key, swap.originals[key]))
 	}
 	return restoreErr
+}
+
+func restoreSecretEnvKey(key string, original secretEnvValue) error {
+	if original.set {
+		if err := os.Setenv(key, original.value); err != nil {
+			return fmt.Errorf("config: restore %s: %w", key, err)
+		}
+		return nil
+	}
+	if err := os.Unsetenv(key); err != nil {
+		return fmt.Errorf("config: unset %s: %w", key, err)
+	}
+	return nil
 }
 
 func directSecretConfigured(spec secretFileSpec) bool {
@@ -114,20 +128,36 @@ func directSecretConfigured(spec secretFileSpec) bool {
 	return false
 }
 
-func readSecretFile(path string) (value string, err error) {
+func readSecretFile(path string) (string, error) {
+	info, err := statSecretFile(path)
+	if err != nil {
+		return "", err
+	}
+	data, err := readVerifiedSecretFile(path, info)
+	if err != nil {
+		return "", err
+	}
+	return sanitizeSecretValue(path, data)
+}
+
+func statSecretFile(path string) (os.FileInfo, error) {
 	info, err := os.Lstat(path) // #nosec G703 -- the administrator-configured secret path is checked before and after opening
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%s is not a regular file", path)
+		return nil, fmt.Errorf("%s is not a regular file", path)
 	}
 	if info.Size() > maxSecretFileBytes {
-		return "", fmt.Errorf("%s exceeds %d bytes", path, maxSecretFileBytes)
+		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxSecretFileBytes)
 	}
+	return info, nil
+}
+
+func readVerifiedSecretFile(path string, info os.FileInfo) (data []byte, err error) {
 	file, err := os.Open(path) // #nosec G304,G703 -- file identity is compared with the preceding non-symlink Lstat result
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
@@ -136,19 +166,19 @@ func readSecretFile(path string) (value string, err error) {
 	}()
 	openedInfo, err := file.Stat()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
-		return "", fmt.Errorf("%s changed while opening", path)
+		return nil, fmt.Errorf("%s changed while opening", path)
 	}
-	data, err := io.ReadAll(io.LimitReader(file, maxSecretFileBytes+1))
-	if err != nil {
-		return "", err
-	}
+	return io.ReadAll(io.LimitReader(file, maxSecretFileBytes+1))
+}
+
+func sanitizeSecretValue(path string, data []byte) (string, error) {
 	if len(data) > maxSecretFileBytes {
 		return "", fmt.Errorf("%s exceeds %d bytes", path, maxSecretFileBytes)
 	}
-	value = strings.TrimSuffix(string(data), "\n")
+	value := strings.TrimSuffix(string(data), "\n")
 	value = strings.TrimSuffix(value, "\r")
 	if strings.ContainsAny(value, "\x00\r\n") {
 		return "", fmt.Errorf("%s contains embedded NUL or newline", path)

@@ -179,19 +179,20 @@ func (s *Store) FamilyActive(ctx context.Context, familyID string) (bool, error)
 		return false, err
 	}
 	if !ok {
-		// Backward-compatible bridge for sessions created before family leases
-		// existed. The first refresh/rotation writes the durable family lease.
-		legacy, err := s.Get(ctx, familyID)
-		if err != nil || legacy == nil {
-			return false, err
-		}
-		return legacy.RotatedTo == nil && legacy.FamilyID == familyID, nil
+		// family lease가 도입되기 전에 만들어진 세션을 위한 하위 호환 경로다. 그 시절에는
+		// familyID가 곧 토큰 ID였고, 첫 refresh나 회전이 내구성 있는 lease를 기록하면
+		// 이 분기는 더 이상 타지 않는다.
+		currentID = familyID
 	}
-	current, err := s.Get(ctx, currentID)
-	if err != nil || current == nil {
+	return s.tokenHoldsFamily(ctx, currentID, familyID)
+}
+
+func (s *Store) tokenHoldsFamily(ctx context.Context, tokenID, familyID string) (bool, error) {
+	sess, err := s.Get(ctx, tokenID)
+	if err != nil || sess == nil {
 		return false, err
 	}
-	return current.RotatedTo == nil && current.FamilyID == familyID, nil
+	return sess.RotatedTo == nil && sess.FamilyID == familyID, nil
 }
 
 func (s *Store) buildSession(id string, now time.Time) Session {
