@@ -71,14 +71,12 @@ func TestConcurrentRotationConvergesOnSingleWinner(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for range callers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 			rotated, err := store.Rotate(ctx, old.ID)
 			results <- rotated
 			errs <- err
-		}()
+		})
 	}
 	close(start)
 	wg.Wait()
