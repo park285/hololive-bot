@@ -159,7 +159,9 @@ func TestRetainDeletesOnlyUnlockedRetiredProjectionState(t *testing.T) {
 		t.Fatal(err)
 	}
 	insertProjectionLease(t, pool, "retired-idle", first.Generation, "IDLE", projectionNow.Add(7*24*time.Hour))
-	insertProjectionLease(t, pool, "retired-active", second.Generation, "ACTIVE", projectionNow.Add(7*24*time.Hour))
+	// 삭제 함수는 lease 만료만 clock_timestamp()로 판정하므로, 고정 anchor 기준으로 잡으면
+	// 실제 시각이 anchor+7일을 넘긴 날부터 이 lease가 만료로 보여 테스트가 깨진다.
+	insertProjectionLease(t, pool, "retired-active", second.Generation, "ACTIVE", time.Now().Add(7*24*time.Hour))
 
 	result, err := refresher.Retain(ctx, projectionNow.Add(4*24*time.Hour), 24*time.Hour, 100)
 	if err != nil {

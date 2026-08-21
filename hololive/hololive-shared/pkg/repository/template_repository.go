@@ -107,6 +107,73 @@ func (r *TemplateRepository) UpsertWithPreviousBody(
 	channelID *string,
 	body string,
 ) (*domain.NotificationTemplate, *string, error) {
+	return upsertTemplateRow(ctx, r.pool, key, channelID, body)
+}
+
+// UpsertWithRevision은 본문 교체와 직전 본문 revision 기록, 보존 개수 정리를 한
+// 트랜잭션에 묶는다. UPSERT가 잡은 템플릿 행 잠금이 커밋까지 유지되므로 동시 저장이
+// 서로의 revision 사이에 끼어들지 못한다.
+func (r *TemplateRepository) UpsertWithRevision(
+	ctx context.Context,
+	key domain.TemplateKey,
+	channelID *string,
+	body string,
+	keepRevisions int,
+) (*domain.NotificationTemplate, *string, error) {
+	var (
+		tmpl         *domain.NotificationTemplate
+		previousBody *string
+	)
+
+	if err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var err error
+		tmpl, previousBody, err = upsertTemplateRow(ctx, tx, key, channelID, body)
+		if err != nil {
+			return err
+		}
+		if previousBody == nil || *previousBody == body {
+			return nil
+		}
+		return recordRevision(ctx, tx, tmpl.ID, *previousBody, keepRevisions)
+	}); err != nil {
+		return nil, nil, fmt.Errorf("upsert template with revision: %w", err)
+	}
+
+	if tmpl == nil {
+		return nil, nil, fmt.Errorf("upsert template with revision: no row returned")
+	}
+
+	return tmpl, previousBody, nil
+}
+
+// 트랜잭션 안에서는 created_at 기본값 now()가 BEGIN 시각으로 고정된다. 먼저 BEGIN한
+// 트랜잭션이 템플릿 행 잠금을 나중에 얻으면 더 이른 시각이 기록되어 revision_list와
+// revision_prune의 ORDER BY created_at DESC가 뒤집힌다. clock_timestamp()는 잠금을
+// 얻은 뒤의 실제 실행 시각을 남겨 순서를 잠금 획득 순서와 일치시킨다.
+func recordRevision(ctx context.Context, tx pgx.Tx, templateID int64, body string, keepRevisions int) error {
+	if _, err := tx.Exec(ctx, revisionInsertAtClockSQL, templateID, body); err != nil {
+		return fmt.Errorf("create revision: %w", err)
+	}
+	if keepRevisions <= 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, revisionPruneSQL, templateID, keepRevisions); err != nil {
+		return fmt.Errorf("prune revisions: %w", err)
+	}
+	return nil
+}
+
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func upsertTemplateRow(
+	ctx context.Context,
+	q rowQuerier,
+	key domain.TemplateKey,
+	channelID *string,
+	body string,
+) (*domain.NotificationTemplate, *string, error) {
 	query := templateUpsertDefaultSQL
 	args := []any{key, body}
 	if channelID != nil {
@@ -120,7 +187,7 @@ func (r *TemplateRepository) UpsertWithPreviousBody(
 		returnedChannel  sql.NullString
 		previousBodyText sql.NullString
 	)
-	if err := r.pool.QueryRow(ctx, query, args...).Scan(
+	if err := q.QueryRow(ctx, query, args...).Scan(
 		&tmpl.ID,
 		&templateKey,
 		&returnedChannel,

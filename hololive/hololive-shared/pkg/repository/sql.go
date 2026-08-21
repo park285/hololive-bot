@@ -23,6 +23,7 @@ var (
 	templateUpsertOverrideSQL      = mustSQL("template_upsert_override.sql")
 	templateDeleteOverrideSQL      = mustSQL("template_delete_override.sql")
 	revisionInsertSQL              = mustSQL("revision_insert.sql")
+	revisionInsertAtClockSQL       = mustSQL("revision_insert_at_clock.sql")
 	revisionListSQL                = mustSQL("revision_list.sql")
 	revisionGetSQL                 = mustSQL("revision_get.sql")
 	revisionPruneSQL               = mustSQL("revision_prune.sql")

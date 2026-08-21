@@ -3,7 +3,10 @@ package joblease
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -109,6 +112,144 @@ func TestOnlyOneGlobalHolderIsActive(t *testing.T) {
 	}
 	if active != 1 {
 		t.Fatalf("active global holders = %d", active)
+	}
+}
+
+func TestAcquireDoesNotBlockOnLeaseRowLockHeldByFinishingHolder(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+
+	lease, err := repository.Acquire(ctx, spec, "collector-a")
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	proof := lease.Proof()
+	holdActiveLeaseRow(t, pool, &proof)
+
+	acquireCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	started := time.Now()
+	_, err = repository.Acquire(acquireCtx, spec, "collector-b")
+	elapsed := time.Since(started)
+	if !errors.Is(err, ErrNotAcquired) {
+		t.Fatalf("contended acquire error = %v after %s, want ErrNotAcquired", err, elapsed)
+	}
+	if elapsed >= 2*time.Second {
+		t.Fatalf("contended acquire elapsed = %s, want rejection without waiting on the row lock", elapsed)
+	}
+}
+
+func TestConcurrentExpiredTakeoverProducesExactlyOneHolder(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{{"channel:a", contract.KindCommunityPage, time.Minute, true}})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+
+	if _, err := repository.Acquire(ctx, spec, "collector-a"); err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	if _, err := pool.Exec(ctx, mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	const contenders = 4
+	var acquired atomic.Int64
+	var group sync.WaitGroup
+	errs := make([]error, contenders)
+	start := make(chan struct{})
+	for i := range contenders {
+		group.Go(func() {
+			<-start
+			lease, err := repository.Acquire(ctx, spec, "collector-"+strconv.Itoa(i))
+			if err == nil {
+				acquired.Add(1)
+				if lease.Proof().FenceEpoch != 2 {
+					errs[i] = fmt.Errorf("winner fence epoch = %d, want 2", lease.Proof().FenceEpoch)
+				}
+				return
+			}
+			if !errors.Is(err, ErrNotAcquired) {
+				errs[i] = err
+			}
+		})
+	}
+	close(start)
+	group.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("contender %d: %v", i, err)
+		}
+	}
+	if acquired.Load() != 1 {
+		t.Fatalf("successful takeovers = %d, want 1", acquired.Load())
+	}
+	var active int
+	if err := pool.QueryRow(ctx, mustTestSQL("active_lease_count.sql"), spec.JobKey).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != 1 {
+		t.Fatalf("active holders = %d, want 1", active)
+	}
+}
+
+func TestMismatchedIdentityAcquireRollsBackTheLeaseUpdate(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.NewPool(t)
+	seedProjection(t, pool, []leaseTarget{
+		{"channel:a", contract.KindCommunityPage, time.Minute, true},
+		{"channel:b", contract.KindCommunityPage, time.Minute, true},
+	})
+	repository := newTestRepository(t, pool)
+	spec := communityJob()
+
+	if _, err := repository.Acquire(ctx, spec, "collector-a"); err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	if _, err := pool.Exec(ctx, mustTestSQL("expire_lease.sql"), spec.JobKey); err != nil {
+		t.Fatal(err)
+	}
+
+	impostor := *spec
+	impostor.SubjectKey = "channel:b"
+	if _, err := repository.Acquire(ctx, &impostor, "collector-b"); !errors.Is(err, ErrInvalidJob) {
+		t.Fatalf("mismatched identity acquire error = %v, want ErrInvalidJob", err)
+	}
+
+	takeover, err := repository.Acquire(ctx, spec, "collector-c")
+	if err != nil {
+		t.Fatalf("takeover after rejected identity: %v", err)
+	}
+	if takeover.Proof().FenceEpoch != 2 {
+		t.Fatalf("fence epoch = %d, want 2 because the rejected acquire must roll back", takeover.Proof().FenceEpoch)
+	}
+}
+
+func holdActiveLeaseRow(t *testing.T, pool *pgxpool.Pool, proof *contract.LeaseProof) {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			t.Errorf("release held lease row: %v", err)
+		}
+	})
+	var failureCode, failureClass, failureDetail *string
+	var failureAt *time.Time
+	err = tx.QueryRow(
+		ctx,
+		mustSQL("repository_lease_failure_lock_0144_14.sql"),
+		proof.JobKey, proof.OwnerInstance, proof.FenceEpoch, proof.ProjectionGeneration, proof.ScheduledFor,
+	).Scan(&failureCode, &failureClass, &failureDetail, &failureAt)
+	if err != nil {
+		t.Fatalf("hold active lease row: %v", err)
 	}
 }
 

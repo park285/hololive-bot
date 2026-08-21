@@ -151,10 +151,19 @@ func (e *collectionExecutor) handleRunError(
 		return
 	}
 	e.deferFailedRun(ctx, lease, spec, proof, err)
-	class := collecterr.ClassOf(err)
-	if class == collecterr.ClassInternal || class == collecterr.ClassProtocol {
+	if fatalCollectionError(err) {
 		e.reportFatal(&FatalRuntimeError{Phase: "collection", Err: err})
 	}
+}
+
+func fatalCollectionError(err error) bool {
+	if err == nil || collecterr.IsUnclassified(err) {
+		return false
+	}
+
+	class := collecterr.ClassOf(err)
+
+	return class == collecterr.ClassInternal || class == collecterr.ClassProtocol
 }
 
 func (e *collectionExecutor) handleSuperseded(ctx context.Context, lease joblease.Lease) {

@@ -47,10 +47,11 @@ const (
 )
 
 type Error struct {
-	code  ErrorCode
-	class FailureClass
-	retry RetryHint
-	err   error
+	code         ErrorCode
+	class        FailureClass
+	retry        RetryHint
+	err          error
+	unclassified bool
 }
 
 func (e *Error) Error() string {
@@ -87,9 +88,18 @@ func WithRetry(err error, hint RetryHint) error {
 	}
 	normalized := Normalize(err)
 	if hint.Validate() != nil {
-		return newError(Internal, ClassInternal, defaultRetryHint(), err)
+		degraded := newError(Internal, ClassInternal, defaultRetryHint(), err)
+		degraded.unclassified = normalized.unclassified
+
+		return degraded
 	}
-	return &Error{code: normalized.code, class: normalized.class, retry: hint, err: err}
+	return &Error{
+		code:         normalized.code,
+		class:        normalized.class,
+		retry:        hint,
+		err:          err,
+		unclassified: normalized.unclassified,
+	}
 }
 
 func Normalize(err error) *Error {
@@ -109,7 +119,7 @@ func Normalize(err error) *Error {
 	if recognizedTransientNetwork(err) {
 		return &Error{code: Failed, class: ClassTransient, retry: defaultRetryHint(), err: err}
 	}
-	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: err}
+	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: err, unclassified: true}
 }
 
 func CodeOf(err error) ErrorCode {
@@ -183,7 +193,24 @@ func FromContext(err error) error {
 	if recognizedTransientNetwork(err) {
 		return Wrap(Failed, ClassTransient, err)
 	}
-	return Wrap(Internal, ClassInternal, err)
+	return unclassifiedError(err)
+}
+
+// unclassifiedError는 collecterr가 원인을 인식하지 못해 기본 버킷으로 떨어뜨린 오류를 만든다.
+// 진단 tuple은 Internal/ClassInternal 그대로지만, 호출자가 명시적으로 붙인 것과 구별된다.
+func unclassifiedError(err error) error {
+	typed := newError(Internal, ClassInternal, defaultRetryHint(), err)
+	typed.unclassified = true
+
+	return typed
+}
+
+// IsUnclassified는 오류가 명시적 분류 없이 기본 버킷에 담겼는지 알린다.
+// 미분류 여부로 치명 여부를 가르는 판정에만 쓴다.
+func IsUnclassified(err error) bool {
+	normalized := Normalize(err)
+
+	return normalized != nil && normalized.unclassified
 }
 
 func newError(code ErrorCode, class FailureClass, hint RetryHint, cause error) *Error {
@@ -214,7 +241,7 @@ func (e *Error) normalized() *Error {
 		hint = defaultRetryHint()
 	}
 	if repaired, ok := repairFailureTuple(e.code, e.class); ok {
-		return &Error{code: repaired.code, class: repaired.class, retry: hint, err: e.err}
+		return &Error{code: repaired.code, class: repaired.class, retry: hint, err: e.err, unclassified: e.unclassified}
 	}
 	if errors.Is(e.err, context.DeadlineExceeded) {
 		return &Error{code: Timeout, class: ClassTimeout, retry: defaultRetryHint(), err: e.err}
@@ -222,7 +249,7 @@ func (e *Error) normalized() *Error {
 	if errors.Is(e.err, context.Canceled) {
 		return &Error{code: Canceled, class: ClassCanceled, retry: defaultRetryHint(), err: e.err}
 	}
-	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: e.err}
+	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: e.err, unclassified: e.unclassified}
 }
 
 type repairedFailure struct {

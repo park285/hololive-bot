@@ -1117,3 +1117,183 @@ func (w *alarmDispatchRunnerTestIdleWaiter) Wait(context.Context) bool {
 func (w *alarmDispatchRunnerTestIdleWaiter) Reset() {
 	w.resets++
 }
+
+type alarmDispatchRunnerContextConsumer struct {
+	alarmDispatchRunnerTestConsumer
+	markSendingCtxErr    error
+	markDispatchedCtxErr error
+	routeSendingCtxErr   error
+	quarantineCtxErr     error
+	routeSendingDeadline bool
+	quarantineDeadline   bool
+}
+
+func (c *alarmDispatchRunnerContextConsumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.markSendingCtxErr = ctx.Err()
+	if c.markSendingCtxErr != nil {
+		return fmt.Errorf("mark alarm dispatch sending: %w", c.markSendingCtxErr)
+	}
+	return c.alarmDispatchRunnerTestConsumer.MarkSending(ctx, envelopes)
+}
+
+func (c *alarmDispatchRunnerContextConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.markDispatchedCtxErr = ctx.Err()
+	if c.markDispatchedCtxErr != nil {
+		return fmt.Errorf("mark alarm dispatch sent: %w", c.markDispatchedCtxErr)
+	}
+	return c.alarmDispatchRunnerTestConsumer.MarkDispatched(ctx, envelopes)
+}
+
+func (c *alarmDispatchRunnerContextConsumer) RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
+	c.routeSendingCtxErr = ctx.Err()
+	if c.routeSendingCtxErr != nil {
+		return fmt.Errorf("route alarm dispatch sending failure: %w", c.routeSendingCtxErr)
+	}
+	_, c.routeSendingDeadline = ctx.Deadline()
+	return c.alarmDispatchRunnerTestConsumer.RouteSendingFailures(ctx, retryEnvelopes, dlqEnvelopes)
+}
+
+func (c *alarmDispatchRunnerContextConsumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	c.quarantineCtxErr = ctx.Err()
+	if c.quarantineCtxErr != nil {
+		return fmt.Errorf("quarantine alarm dispatch: %w", c.quarantineCtxErr)
+	}
+	_, c.quarantineDeadline = ctx.Deadline()
+	return c.alarmDispatchRunnerTestConsumer.Quarantine(ctx, envelopes, cause)
+}
+
+func (c *alarmDispatchRunnerContextConsumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("release alarm dispatch claim keys: %w", err)
+	}
+	return c.alarmDispatchRunnerTestConsumer.ReleaseClaimKeys(ctx, claimKeys)
+}
+
+func (c *alarmDispatchRunnerContextConsumer) RequeuePreSend(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("requeue alarm dispatch before send: %w", err)
+	}
+	return c.alarmDispatchRunnerTestConsumer.RequeuePreSend(ctx, envelopes)
+}
+
+type alarmDispatchRunnerBlockingSender struct {
+	rooms   []string
+	onSend  func()
+	succeed bool
+}
+
+func (s *alarmDispatchRunnerBlockingSender) waitForAttemptEnd(ctx context.Context, roomID string) error {
+	s.rooms = append(s.rooms, roomID)
+	if s.onSend != nil {
+		s.onSend()
+	}
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		return errors.New("send alarm dispatch message: attempt context never ended")
+	}
+	if s.succeed {
+		return nil
+	}
+	return fmt.Errorf("send alarm dispatch message: %w", ctx.Err())
+}
+
+func (s *alarmDispatchRunnerBlockingSender) SendMessage(ctx context.Context, roomID, _ string) error {
+	return s.waitForAttemptEnd(ctx, roomID)
+}
+
+func (s *alarmDispatchRunnerBlockingSender) SendKaringContentList(ctx context.Context, roomID string, _ *iris.KaringContentListRequest) error {
+	return s.waitForAttemptEnd(ctx, roomID)
+}
+
+func TestAlarmDispatchRunnerRoutesSendingRetryWithLiveContextAfterAttemptDeadline(t *testing.T) {
+	consumer := &alarmDispatchRunnerContextConsumer{}
+	consumer.batches = [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}
+	sender := &alarmDispatchRunnerBlockingSender{}
+	runner := Runner{
+		consumer:       consumer,
+		sender:         sender,
+		karingEnabled:  true,
+		maxBatch:       10,
+		attemptTimeout: 50 * time.Millisecond,
+	}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.NoError(t, consumer.routeSendingCtxErr, "attempt 만료 뒤에도 실패 라우팅은 살아있는 컨텍스트로 실행돼야 한다")
+	assert.True(t, consumer.routeSendingDeadline, "정리 컨텍스트도 시간 상한을 가져야 한다")
+	require.Len(t, consumer.scheduledSendingRetry, 1)
+	assert.Empty(t, consumer.quarantined)
+	assert.Empty(t, consumer.markDispatched)
+}
+
+func TestAlarmDispatchRunnerMarksDispatchedAfterAttemptDeadlineExpires(t *testing.T) {
+	consumer := &alarmDispatchRunnerContextConsumer{}
+	consumer.batches = [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}
+	sender := &alarmDispatchRunnerBlockingSender{succeed: true}
+	runner := Runner{
+		consumer:       consumer,
+		sender:         sender,
+		karingEnabled:  true,
+		maxBatch:       10,
+		attemptTimeout: 50 * time.Millisecond,
+	}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.NoError(t, consumer.markDispatchedCtxErr, "발송에 성공한 배치는 attempt 만료 뒤에도 sent로 기록돼야 한다")
+	require.Len(t, consumer.markDispatched, 1)
+	assert.Empty(t, consumer.scheduledSendingRetry)
+	assert.Empty(t, consumer.quarantined)
+}
+
+func TestAlarmDispatchRunnerStopsRemainingGroupsWhenAttemptDeadlineExpires(t *testing.T) {
+	consumer := &alarmDispatchRunnerContextConsumer{}
+	consumer.batches = [][]domain.AlarmQueueEnvelope{{
+		alarmDispatchRunnerTestEnvelope("room-1", nil),
+		alarmDispatchRunnerTestEnvelope("room-2", nil),
+	}}
+	sender := &alarmDispatchRunnerBlockingSender{}
+	runner := Runner{
+		consumer:       consumer,
+		sender:         sender,
+		karingEnabled:  true,
+		maxBatch:       10,
+		attemptTimeout: 50 * time.Millisecond,
+	}
+
+	processed, err := runner.runOnce(t.Context())
+
+	assert.True(t, processed)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, []string{"room-1"}, sender.rooms, "만료된 attempt로 남은 그룹을 더 보내면 미발송 행이 sending으로 굳는다")
+	require.Len(t, consumer.markSending, 1)
+	require.Len(t, consumer.scheduledSendingRetry, 1)
+	assert.Empty(t, consumer.quarantined)
+}
+
+func TestAlarmDispatchRunnerBoundsStateContextWhenParentCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	consumer := &alarmDispatchRunnerContextConsumer{}
+	consumer.batches = [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}
+	sender := &alarmDispatchRunnerBlockingSender{onSend: cancel}
+	runner := Runner{
+		consumer:      consumer,
+		sender:        sender,
+		karingEnabled: true,
+		maxBatch:      10,
+	}
+
+	processed, err := runner.runOnce(ctx)
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, consumer.quarantined, 1)
+	require.NoError(t, consumer.quarantineCtxErr, "프로세스 종료로 부모가 취소돼도 상태 기록은 완료돼야 한다")
+	assert.True(t, consumer.quarantineDeadline, "취소를 끊은 정리 컨텍스트에도 시간 상한이 있어야 한다")
+}
