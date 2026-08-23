@@ -6,6 +6,7 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "$REPO_ROOT/.." && pwd)}"
 REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-hololive-bot}"
 FILES_FROM="${FILES_FROM:-$REPO_ROOT/scripts/deploy/ap-rsync-files.txt}"
 EXCLUDES="${EXCLUDES:-$REPO_ROOT/scripts/deploy/ap-rsync-excludes.txt}"
+AP_ROLLBACK_TAG_KEEP="${AP_ROLLBACK_TAG_KEEP:-5}"
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
 . "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
@@ -185,6 +186,7 @@ AP_COMPOSE_LEGACY_FILE="$(basename "$AP_COMPOSE_FILE")"
 change_id="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="backups/$AP_BACKUP_PREFIX-$change_id"
 rollback_image_tag="hololive-youtube-collector:rollback-$change_id"
+rollback_tag_prune_offset="$((AP_ROLLBACK_TAG_KEEP + 1))"
 producer_state_file="$backup_dir/retired-producer-runtime.state"
 
 remote "set -euo pipefail
@@ -194,6 +196,10 @@ if sudo -n docker image inspect '$IMAGE_REF' >/dev/null 2>&1; then
   sudo -n docker tag '$IMAGE_REF' '$rollback_image_tag'
   printf '%s\n' '$rollback_image_tag' > '$backup_dir/rollback-image-tag'
   sudo -n docker image inspect '$rollback_image_tag' >/dev/null
+  stale_rollback_tags=\$(sudo -n docker images 'hololive-youtube-collector' --format '{{.Tag}}' | grep -E '^rollback-[0-9]{8}T[0-9]{6}Z\$' | sort -r | tail -n +'$rollback_tag_prune_offset' || true)
+  for stale_rollback_tag in \$stale_rollback_tags; do
+    sudo -n docker rmi \"hololive-youtube-collector:\$stale_rollback_tag\" >/dev/null 2>&1 || true
+  done
 fi
 prod_prechange_file='$PROD_COMPOSE_FILE'
 if [[ ! -r \"\$prod_prechange_file\" && -r '$PROD_COMPOSE_LEGACY_FILE' ]]; then
