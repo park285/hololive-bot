@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
@@ -48,12 +49,16 @@ func buildACLReloadHandler(
 	runtimeDeps BotConfigSubscriberRuntimeDependencies,
 	logger *slog.Logger,
 ) func(contractssettings.ACLPayloadV1) {
+	baseCtx := context.WithoutCancel(ctx)
 	return func(payload contractssettings.ACLPayloadV1) {
 		if runtimeDeps.ACL == nil {
 			return
 		}
 
-		if err := runtimeDeps.ACL.Reload(ctx); err != nil {
+		reloadCtx, cancel := context.WithTimeout(baseCtx, constants.RequestTimeout.AdminRequest)
+		defer cancel()
+
+		if err := runtimeDeps.ACL.Reload(reloadCtx); err != nil {
 			logger.Warn("Failed to reload ACL after config update",
 				slog.String("reason", payload.Reason),
 				slog.Any("error", err),
@@ -75,8 +80,20 @@ func buildAlarmAdvanceMinutesHandler(
 	runtimeDeps BotConfigSubscriberRuntimeDependencies,
 	logger *slog.Logger,
 ) func(contractssettings.AlarmAdvanceMinutesPayloadV1) {
+	baseCtx := context.WithoutCancel(ctx)
 	return func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
-		targets := runtimeDeps.AlarmCRUD.UpdateAlarmAdvanceMinutes(ctx, payload.Minutes)
+		updateCtx, cancel := context.WithTimeout(baseCtx, constants.RequestTimeout.AlarmService)
+		targets := runtimeDeps.AlarmCRUD.UpdateAlarmAdvanceMinutes(updateCtx, payload.Minutes)
+		cancel()
+
+		// 원격 alarm client는 실패 시 빈 슬라이스를 돌려주고, 로컬 AlarmService는 항상 1개 이상을 돌려준다.
+		if len(targets) == 0 {
+			logger.Warn("Skipped persisting alarm_advance_minutes: alarm update returned no targets",
+				slog.Int("minutes", payload.Minutes),
+			)
+			return
+		}
+
 		logger.Info("Applied alarm advance minutes via pub/sub",
 			slog.Int("minutes", payload.Minutes),
 			slog.Any("targets", targets),

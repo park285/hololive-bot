@@ -40,6 +40,7 @@ type deliveryClaimSelection struct {
 	alreadySentOutboxIDs   []int64
 	retryDeliveryIDs       []int64
 	retryOutboxIDs         []int64
+	deferredDeliveryIDs    []int64
 }
 
 func (d *ClaimManager) selectClaimedDeliveries(
@@ -83,22 +84,7 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 		return
 	}
 
-	type claimResult struct {
-		decision   deliveryClaimDecision
-		claimToken *dispatchstate.ClaimToken
-	}
-
-	result, err := reuseCache.ResolveClaim(ctx, claimIdentity, func(ctx context.Context) (claim.Decision, *claim.Token, error) {
-		decision, claimToken, claimErr := d.tryClaimDelivery(ctx, row, outbox)
-		if claimErr != nil {
-			return claim.Decision{}, nil, claimErr
-		}
-		var token *claim.Token
-		if claimToken != nil {
-			token = &claim.Token{AuthorizedAt: claimToken.AuthorizedAt}
-		}
-		return claim.Decision{Value: claimResult{decision: decision, claimToken: claimToken}}, token, nil
-	})
+	result, err := reuseCache.ResolveClaim(ctx, claimIdentity, d.claimDeliveryResolver(row, outbox))
 	if err != nil {
 		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to claim community/shorts alarm state before send", err)
 		return
@@ -109,7 +95,56 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 		d.retryDeliveryClaimSelection(selection, row, outbox, "Unexpected community/shorts claim result type before send", fmt.Errorf("claim result type %T", result.Decision.Value))
 		return
 	}
-	d.applyDeliveryClaimDecision(selection, row, outbox, cr.decision, cr.claimToken, result.Hit)
+
+	// post 단위 결정은 reuseCache로 공유되지만 "이 room이 이미 받았는가"는 행마다 다르므로 캐시 밖에서 판정한다.
+	decision := cr.decision
+	if decision == deliveryClaimDecisionAlreadySent {
+		roomDecision, roomErr := d.resolveRoomDeliveryDecision(ctx, row, outbox)
+		if roomErr != nil {
+			d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve per-room community/shorts sent state before send", roomErr)
+			return
+		}
+		decision = roomDecision
+	}
+	d.applyDeliveryClaimDecision(ctx, selection, row, outbox, decision, cr.claimToken, result.Hit)
+}
+
+type claimResult struct {
+	decision   deliveryClaimDecision
+	claimToken *dispatchstate.ClaimToken
+}
+
+func (d *ClaimManager) claimDeliveryResolver(
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+) func(ctx context.Context) (claim.Decision, *claim.Token, error) {
+	return func(ctx context.Context) (claim.Decision, *claim.Token, error) {
+		decision, claimToken, claimErr := d.tryClaimDelivery(ctx, row, outbox)
+		if claimErr != nil {
+			return claim.Decision{}, nil, claimErr
+		}
+		var token *claim.Token
+		if claimToken != nil {
+			token = &claim.Token{AuthorizedAt: claimToken.AuthorizedAt}
+		}
+		return claim.Decision{Value: claimResult{decision: decision, claimToken: claimToken}}, token, nil
+	}
+}
+
+func (d *ClaimManager) resolveRoomDeliveryDecision(
+	ctx context.Context,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+) (deliveryClaimDecision, error) {
+	received, err := d.roomAlreadyReceivedPost(ctx, row, outbox)
+	if err != nil {
+		return deliveryClaimDecisionRetryLater, err
+	}
+	if received {
+		return deliveryClaimDecisionAlreadySent, nil
+	}
+	d.logClaimIssue("Proceeding with community/shorts delivery because this room has not received the already-sent post", row, outbox, slog.LevelInfo)
+	return deliveryClaimDecisionProceed, nil
 }
 
 func (d *ClaimManager) retryDeliveryClaimSelection(
@@ -125,6 +160,7 @@ func (d *ClaimManager) retryDeliveryClaimSelection(
 }
 
 func (d *ClaimManager) applyDeliveryClaimDecision(
+	ctx context.Context,
 	selection *deliveryClaimSelection,
 	row *domain.YouTubeNotificationDelivery,
 	outbox *domain.YouTubeNotificationOutbox,
@@ -140,10 +176,50 @@ func (d *ClaimManager) applyDeliveryClaimDecision(
 		selection.alreadySentDeliveryIDs = append(selection.alreadySentDeliveryIDs, row.ID)
 		selection.alreadySentOutboxIDs = append(selection.alreadySentOutboxIDs, outbox.ID)
 	case deliveryClaimDecisionRetryLater:
-		d.logClaimIssue("Skipped community/shorts delivery because another execution owns the post claim", row, outbox, slog.LevelInfo)
+		d.applyRetryLaterDeliveryClaim(ctx, selection, row, outbox)
+	}
+}
+
+func (d *ClaimManager) applyRetryLaterDeliveryClaim(
+	ctx context.Context,
+	selection *deliveryClaimSelection,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+) {
+	d.logClaimIssue("Skipped community/shorts delivery because another execution owns the post claim", row, outbox, slog.LevelInfo)
+	deferred, err := d.deferDeliveryClaim(ctx, row)
+	if err != nil {
+		d.logClaimIssue("Failed to defer community/shorts delivery without consuming an attempt", row, outbox, slog.LevelWarn, slog.Any("error", err))
+	}
+	if !deferred {
 		selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
 		selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+		return
 	}
+	selection.deferredDeliveryIDs = append(selection.deferredDeliveryIDs, row.ID)
+}
+
+func (d *ClaimManager) deferDeliveryClaim(ctx context.Context, row *domain.YouTubeNotificationDelivery) (bool, error) {
+	if d == nil || deliverysql.IsNilDB(d.db) || row == nil {
+		return false, nil
+	}
+
+	nextAttemptAt := time.Now().UTC()
+	if d.config.RetryBackoff > 0 {
+		nextAttemptAt = nextAttemptAt.Add(d.config.RetryBackoff)
+	}
+	query := mustSQL("dispatcher_claim_gate_0195_02.sql")
+	args := []any{domain.OutboxStatusPending, nextAttemptAt, row.ID, store.DeliveryStatusSending}
+	if row.LockedAt != nil {
+		query += " AND locked_at = ?"
+		args = append(args, *row.LockedAt)
+	}
+
+	affected, err := deliverysql.ExecDeliverySQL(ctx, d.db, "defer delivery claim", query, args...)
+	if err != nil {
+		return false, fmt.Errorf("defer delivery claim: %w", err)
+	}
+	return affected > 0, nil
 }
 
 func appendProceedingDeliveryClaim(

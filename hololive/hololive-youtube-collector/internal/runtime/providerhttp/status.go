@@ -99,6 +99,9 @@ func MapRequestError(action string, err error, secrets ...string) error {
 	if collecterr.CodeOf(normalized) == collecterr.Failed && collecterr.ClassOf(normalized) == collecterr.ClassTransient {
 		return collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, cause)
 	}
+	if collecterr.IsUnclassified(normalized) {
+		return unclassifiedRedacted(cause)
+	}
 	return collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, cause)
 }
 
@@ -111,10 +114,18 @@ func RedactError(err error, secrets ...string) error {
 	if redacted == text {
 		return err
 	}
-	return collecterr.WithRetry(
-		collecterr.Wrap(collecterr.CodeOf(err), collecterr.ClassOf(err), fmt.Errorf("%s", redacted)),
-		collecterr.RetryOf(err),
-	)
+	redactedErr := fmt.Errorf("%s", redacted)
+	base := collecterr.Wrap(collecterr.CodeOf(err), collecterr.ClassOf(err), redactedErr)
+	if collecterr.IsUnclassified(err) {
+		base = unclassifiedRedacted(redactedErr)
+	}
+	return collecterr.WithRetry(base, collecterr.RetryOf(err))
+}
+
+// collecterr는 미분류 생성자를 노출하지 않는다. 평문 문자열 오류는 context/transient 판정에
+// 걸리지 않으므로 FromContext가 항상 기본 버킷(Internal, unclassified)으로 떨어뜨린다.
+func unclassifiedRedacted(redactedErr error) error {
+	return collecterr.FromContext(redactedErr)
 }
 
 func redactRequestText(text string, secrets ...string) string {

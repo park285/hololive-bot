@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
@@ -70,13 +73,39 @@ func (r *Runtime) applyRetryStatus(observationID int64, status contract.Status) 
 	}
 	if status == contract.StatusDeadLetter {
 		youtubeConsumeTotal.WithLabelValues("dead_letter").Inc()
-		r.degraded.Store(true)
-		if r.started.Load() {
-			r.publishHealth()
-		}
+		r.markDeadLettered()
 		return nil
 	}
 	return fmt.Errorf("retry observation %d: invalid status %q", observationID, status)
+}
+
+func (r *Runtime) markDeadLettered() {
+	r.degraded.Store(true)
+	if r.started.Load() {
+		r.publishHealth()
+	}
+}
+
+type observationDeadLetterer interface {
+	DeadLetter(context.Context, sourceobservation.DeadLetterInput) error
+}
+
+var _ observationDeadLetterer = (*sourceobservation.ConsumeRepository)(nil)
+
+func (r *Runtime) deadLetterObservation(ctx context.Context, deadLetterer observationDeadLetterer, work sourceobservation.ClaimWork, cause error) error {
+	if r.Config.TransactionTimeout <= 0 {
+		return errors.New("youtube plane transaction timeout must be positive")
+	}
+	deadLetterCtx, cancel := context.WithTimeout(ctx, r.Config.TransactionTimeout)
+	defer cancel()
+	return r.withDB(deadLetterCtx, func(ctx context.Context) error {
+		return deadLetterer.DeadLetter(ctx, sourceobservation.DeadLetterInput{
+			ObservationID: work.ObservationID,
+			LeaseToken:    work.LeaseToken,
+			ErrorCode:     "youtube_plane_fatal",
+			ErrorDetail:   boundedError(cause),
+		})
+	})
 }
 
 func (r *Runtime) reportLoopError(ctx context.Context, errCh chan<- error, action string, err error) {
@@ -97,15 +126,32 @@ func isInputReadError(err error) bool {
 }
 
 func retryableObservationError(err error) bool {
+	if err == nil {
+		return false
+	}
 	if errors.Is(err, context.DeadlineExceeded) || pgconn.SafeToRetry(err) {
+		return true
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, pgconn.ErrConnClosed) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
 		return true
 	}
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
 		return false
 	}
-	switch pgErr.Code {
-	case "40001", "40P01", "55P03":
+	return transientSQLState(pgErr.Code)
+}
+
+func transientSQLState(code string) bool {
+	if strings.HasPrefix(code, "08") {
+		return true
+	}
+	switch code {
+	case "40001", "40P01", "55P03", "53300", "57014", "57P01", "57P02", "57P03":
 		return true
 	default:
 		return false

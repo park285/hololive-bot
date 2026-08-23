@@ -416,6 +416,19 @@ func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactly
 			require.NotNil(t, updatedSentOutbox.SentAt)
 			assert.Equal(t, fixedSentAt, updatedSentOutbox.SentAt.UTC())
 
+			var servedDelivery deliveryTestDeliveryModel
+			require.NoError(t, firstDeliveryTestRow(db, &servedDelivery, fixture.servedDelivery.ID).Error)
+			assert.Equal(t, string(domain.OutboxStatusSent), servedDelivery.Status)
+			assert.Equal(t, 1, servedDelivery.AttemptCount)
+			require.NotNil(t, servedDelivery.SentAt)
+			assert.Equal(t, tc.spec.alreadySentAt, servedDelivery.SentAt.UTC())
+
+			var servedOutbox deliveryTestOutboxModel
+			require.NoError(t, firstDeliveryTestRow(db, &servedOutbox, fixture.servedOutbox.ID).Error)
+			assert.Equal(t, string(domain.OutboxStatusSent), servedOutbox.Status)
+			require.NotNil(t, servedOutbox.SentAt)
+			assert.Equal(t, tc.spec.alreadySentAt, servedOutbox.SentAt.UTC())
+
 			var updatedPendingOutbox deliveryTestOutboxModel
 			require.NoError(t, firstDeliveryTestRow(db, &updatedPendingOutbox, fixture.pendingOutbox.ID).Error)
 			assert.Equal(t, string(domain.OutboxStatusSent), updatedPendingOutbox.Status)
@@ -449,7 +462,7 @@ func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactly
 
 			var deliveryRows []deliveryTestDeliveryModel
 			require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveryRows, "id ASC").Error)
-			require.Len(t, deliveryRows, 2)
+			require.Len(t, deliveryRows, 3)
 		})
 	}
 }

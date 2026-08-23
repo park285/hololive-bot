@@ -38,8 +38,9 @@ import (
 // 대상 선정 predicate:
 //   - status='FAILED': aggregate FAILED는 pending room이 없음을 함의(delivery_repository_aggregate_sync.sql) = 재시도 소진.
 //   - sent_at IS NULL: aggregate가 한 번도 SENT에 도달 안 함 = 사용자에게 전달된 적 없음(중복 방지 가드).
-//     community/shorts는 한 room이라도 보내면 alarm-once로 aggregate가 SENT가 되어 이 가드가 제외하며,
-//     부분 전송 행이 남더라도 dispatch의 alarm-once 게이트(alarm_sent_at)가 재전달을 한 번 더 막는다.
+//     community/shorts는 한 room이라도 보내면 alarm-once로 aggregate가 SENT가 되어 이 가드가 제외한다.
+//     dispatch의 alarm-once 게이트(alarm_sent_at)는 (post, room) 단위로 판정하므로, 이미 SENT delivery 행이 있는
+//     room만 건너뛰고 전송된 적 없는 room 행은 보낸다(claim_manager_gate.go resolveRoomDeliveryDecision).
 //   - created_at >= now-freshnessWindow: 콘텐츠가 아직 신선할 때만(철 지난 알림 스팸 방지). created_at은
 //     poller가 콘텐츠를 감지한 시각 ≈ 발행 직후라 freshness proxy로 적합하다.
 //   - locked_at 만료: 처리 중(in-flight) 행은 건드리지 않음.

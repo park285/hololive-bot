@@ -1,11 +1,13 @@
 package youtubedispatch
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"strings"
 	"time"
 
@@ -39,6 +41,7 @@ const (
 
 var ErrDeliveryDedupeKeyRequired = errors.New("delivery dedupe key is required")
 var errDeliverySendTimeout = errors.New("delivery send timeout exceeded")
+var errDeliverySendOutcomeUnknown = errors.New("delivery send outcome unknown")
 
 const (
 	deliveryReasonAuth        = "auth"
@@ -139,7 +142,34 @@ func deliveryFailureReasonIsPermanent(reason string) bool {
 }
 
 func shouldFallbackGroupedSend(err error) bool {
-	return deliveryFailureReason(err) == deliveryReasonPermanent
+	return !errors.Is(err, errDeliverySendOutcomeUnknown) && deliveryFailureReason(err) == deliveryReasonPermanent
+}
+
+// sender 호출 이후의 오류만 대상으로 한다. 호출 전 취소는 sendDeliveryMessage가 먼저 걸러내며,
+// 여기서 context 오류를 unknown으로 보는 이유는 요청이 이미 Iris에 도달했을 수 있기 때문이다.
+func deliverySendOutcomeUnknown(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errDeliverySendTimeout) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	if iris.HTTPErrorCode(err) == iris.HTTPErrorCodeClientRequestIDOutcomeUnknown {
+		return true
+	}
+	if errors.Is(err, iris.ErrTransport) {
+		return !deliverySendNeverLeftClient(err)
+	}
+	return false
+}
+
+func deliverySendNeverLeftClient(err error) bool {
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr != nil && opErr.Op == "dial" {
+		return true
+	}
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr)
 }
 
 const maxDeliveryRetryAfter = 5 * time.Minute
