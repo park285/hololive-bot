@@ -134,13 +134,13 @@ docker run --rm \
   -e PGSSLMODE=verify-full \
   -e PGSSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem \
   --entrypoint pg_basebackup \
-  postgres:18.4-alpine \
+  postgres:18.6-alpine \
   -h 100.100.1.8 -p 5433 -U hololive_replicator \
   -D /var/lib/postgresql/pgdata -X stream -S iris_seoul_standby -P -v
 
 # 3. standby signal
 docker run --rm -v hololive-bot_holo-pg-standby-data:/v --user 70:70 \
-  --entrypoint sh postgres:18.4-alpine -c \
+  --entrypoint sh postgres:18.6-alpine -c \
   'touch /v/pgdata/standby.signal'
 
 # 4. 기동

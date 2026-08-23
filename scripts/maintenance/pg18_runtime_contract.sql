@@ -1,4 +1,4 @@
--- hololive-bot용 PostgreSQL 18.4+ runtime 계약 검사다.
+-- hololive-bot용 PostgreSQL 18.6+ runtime 계약 검사다.
 --
 -- 기존 volume에서는 bootstrap administrator 또는 pg_aios를 읽을 수 있는 역할
 -- (superuser 또는 pg_read_all_stats)로 실행한다. 이 스크립트는 read-only이며
@@ -10,6 +10,9 @@ SELECT
   current_database() AS database_name,
   current_setting('server_version') AS server_version,
   current_setting('server_version_num')::integer AS server_version_num,
+  (SELECT datlocprovider FROM pg_database WHERE datname = current_database()) AS locale_provider,
+  (SELECT datlocale FROM pg_database WHERE datname = current_database()) AS builtin_locale,
+  (SELECT datcollversion FROM pg_database WHERE datname = current_database()) AS collation_version,
   current_setting('data_directory') AS data_directory,
   current_setting('data_checksums') AS data_checksums,
   current_setting('io_method') AS io_method,
@@ -25,8 +28,17 @@ DO $pg18_contract$
 DECLARE
   server_num integer := current_setting('server_version_num')::integer;
 BEGIN
-  IF server_num < 180004 OR server_num >= 190000 THEN
-    RAISE EXCEPTION 'expected PostgreSQL 18.4 or newer within major 18, got %', current_setting('server_version');
+  IF server_num < 180006 OR server_num >= 190000 THEN
+    RAISE EXCEPTION 'expected PostgreSQL 18.6 or newer within major 18, got %', current_setting('server_version');
+  END IF;
+  -- libc provider는 컨테이너 base image가 glibc↔musl로 바뀌면 정렬 순서가 달라져 기존 인덱스를 조용히 무효화한다.
+  IF (SELECT datlocprovider FROM pg_database WHERE datname = current_database()) <> 'b' THEN
+    RAISE EXCEPTION 'locale provider must be builtin, got %',
+      (SELECT datlocprovider FROM pg_database WHERE datname = current_database());
+  END IF;
+  IF (SELECT datlocale FROM pg_database WHERE datname = current_database()) IS DISTINCT FROM 'C.UTF-8' THEN
+    RAISE EXCEPTION 'builtin locale must be C.UTF-8, got %',
+      coalesce((SELECT datlocale FROM pg_database WHERE datname = current_database()), '(none)');
   END IF;
   IF current_setting('data_checksums') <> 'on' THEN
     RAISE EXCEPTION 'data_checksums is off; enable it only with an approved offline pg_checksums procedure';

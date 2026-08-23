@@ -4,8 +4,17 @@ DO $pg18_contract$
 DECLARE
   server_num integer := current_setting('server_version_num')::integer;
 BEGIN
-  IF server_num < 180004 OR server_num >= 190000 THEN
-    RAISE EXCEPTION 'expected PostgreSQL 18.4 or newer within major 18, got %', current_setting('server_version');
+  IF server_num < 180006 OR server_num >= 190000 THEN
+    RAISE EXCEPTION 'expected PostgreSQL 18.6 or newer within major 18, got %', current_setting('server_version');
+  END IF;
+  -- libc provider는 컨테이너 base image가 glibc↔musl로 바뀌면 정렬 순서가 달라져 기존 인덱스를 조용히 무효화한다.
+  IF (SELECT datlocprovider FROM pg_database WHERE datname = current_database()) <> 'b' THEN
+    RAISE EXCEPTION 'locale provider must be builtin, got %',
+      (SELECT datlocprovider FROM pg_database WHERE datname = current_database());
+  END IF;
+  IF (SELECT datlocale FROM pg_database WHERE datname = current_database()) IS DISTINCT FROM 'C.UTF-8' THEN
+    RAISE EXCEPTION 'builtin locale must be C.UTF-8, got %',
+      coalesce((SELECT datlocale FROM pg_database WHERE datname = current_database()), '(none)');
   END IF;
   IF current_setting('data_checksums') <> 'on' THEN
     RAISE EXCEPTION 'data_checksums must be on for a new PostgreSQL 18 cluster';

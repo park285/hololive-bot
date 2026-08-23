@@ -11,7 +11,7 @@ REPAIR_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch
 RECOVERY_SOURCE_DIR="${ROOT}/hololive/hololive-api/scripts/migrations/manual/epoch1_recovery_sources"
 INTEGRATION_SOURCE_DIR="${ROOT}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations"
 OBSERVATION_SOURCE_DIR="${ROOT}/hololive/hololive-shared/pkg/service/youtube/tracking/observation/testdata/epoch1_migrations"
-PG_IMAGE="${PG_IMAGE:-postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}"
+PG_IMAGE="${PG_IMAGE:-postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}"
 NAME="holobot-epoch2-baseline-$$"
 READINESS_ATTEMPTS=60
 TMP_DIR="$(mktemp -d)"
@@ -144,6 +144,7 @@ docker run -d --rm --name "${NAME}" \
   -e POSTGRES_USER=hololive \
   -e POSTGRES_PASSWORD=hololive \
   -e POSTGRES_DB=hololive \
+  -e POSTGRES_INITDB_ARGS="--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8" \
   "${PG_IMAGE}" >/dev/null
 
 ready=false
