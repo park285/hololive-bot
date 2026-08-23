@@ -164,8 +164,7 @@ func listBotPlaneDependencies(t *testing.T, moduleRoot string) []byte {
 		if ctx.Err() != nil {
 			t.Fatalf("list bot plane production dependencies: %v", ctx.Err())
 		}
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			t.Fatalf("list bot plane production dependencies: %v: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
 		}
 		t.Fatalf("list bot plane production dependencies: %v", err)

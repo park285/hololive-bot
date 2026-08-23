@@ -83,9 +83,8 @@ func FindMemberWithCandidatesOrError(ctx context.Context, deps *Dependencies, ro
 
 	channel, err := deps.Matcher.FindBestMatchWithCandidates(ctx, memberName)
 	if err != nil {
-		var ambiguousErr *matcher.AmbiguousMatchError
 
-		if errors.As(err, &ambiguousErr) {
+		if ambiguousErr, ok := errors.AsType[*matcher.AmbiguousMatchError](err); ok {
 			message := deps.Formatter.FormatAmbiguousMembers(ctx, ambiguousErr.Candidates, commandExample)
 
 			return nil, sendAmbiguousMembers(ctx, deps, room, message)

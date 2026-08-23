@@ -104,8 +104,7 @@ func isAlarmDispatchRetryablePostSendFailure(cause error) bool {
 }
 
 func isAlarmDispatchNotAdmittedRetryableFailure(cause error) bool {
-	var httpErr *iris.HTTPError
-	if errors.As(cause, &httpErr) {
+	if httpErr, ok := errors.AsType[*iris.HTTPError](cause); ok {
 		return httpErr.StatusCode == 429 || httpErr.StatusCode == 502 || httpErr.StatusCode == 503
 	}
 	return false
@@ -115,8 +114,7 @@ func isAlarmDispatchAmbiguousPostSendFailure(cause error) bool {
 	if cause == nil {
 		return false
 	}
-	var transportErr *iris.TransportError
-	if errors.As(cause, &transportErr) {
+	if _, ok := errors.AsType[*iris.TransportError](cause); ok {
 		return true
 	}
 	return errors.Is(cause, context.DeadlineExceeded)

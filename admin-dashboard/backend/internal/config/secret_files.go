@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -96,8 +97,7 @@ func (swap *secretEnvSwap) apply(spec secretFileSpec) error {
 
 func (swap *secretEnvSwap) restore() error {
 	var restoreErr error
-	for i := len(swap.applied) - 1; i >= 0; i-- {
-		key := swap.applied[i]
+	for _, key := range slices.Backward(swap.applied) {
 		restoreErr = errors.Join(restoreErr, restoreSecretEnvKey(key, swap.originals[key]))
 	}
 	return restoreErr

@@ -65,11 +65,9 @@ func TestNonRetryableConsumeErrorDeadLettersWithoutExit(t *testing.T) {
 	var deadLettered atomic.Int64
 	var input sourceobservation.DeadLetterInput
 	runtime := newTestRuntime(deadLetterClaimer{
-		fakeClaimer: fakeClaimer{
-			retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
-				retries.Add(1)
-				return contract.StatusPending, nil
-			},
+		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+			retries.Add(1)
+			return contract.StatusPending, nil
 		},
 		deadLetter: func(_ context.Context, in sourceobservation.DeadLetterInput) error {
 			deadLettered.Add(1)
@@ -166,11 +164,9 @@ func TestConnectionLossConsumeErrorIsRetried(t *testing.T) {
 	var retries atomic.Int64
 	var deadLettered atomic.Int64
 	runtime := newTestRuntime(deadLetterClaimer{
-		fakeClaimer: fakeClaimer{
-			retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
-				retries.Add(1)
-				return contract.StatusPending, nil
-			},
+		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
+			retries.Add(1)
+			return contract.StatusPending, nil
 		},
 		deadLetter: func(context.Context, sourceobservation.DeadLetterInput) error {
 			deadLettered.Add(1)

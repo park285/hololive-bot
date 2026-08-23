@@ -346,7 +346,7 @@ func isLocalhostOrigin(origin string) bool {
 			return authority[:end+1] == "[::1]"
 		}
 	}
-	host := strings.Split(authority, ":")[0]
+	host, _, _ := strings.Cut(authority, ":")
 	return host == "localhost" || host == "127.0.0.1"
 }
 

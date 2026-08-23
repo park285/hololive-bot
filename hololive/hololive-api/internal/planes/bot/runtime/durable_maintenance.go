@@ -105,12 +105,14 @@ func irisHTTPStatus(err error) (int, bool) {
 	return httpErr.StatusCode, true
 }
 
+type safeLoggableError interface {
+	error
+	SafeMessageToken() string
+	SafeReason() string
+}
+
 func safeErrorLogAttrs(err error) ([]any, bool) {
-	var safeErr interface {
-		SafeMessageToken() string
-		SafeReason() string
-	}
-	if errors.As(err, &safeErr) {
+	if safeErr, ok := errors.AsType[safeLoggableError](err); ok {
 		attrs := []any{slog.String("reason", safeErr.SafeReason())}
 		if token := safeErr.SafeMessageToken(); token != "" {
 			attrs = append(attrs, slog.String("message_token", token))

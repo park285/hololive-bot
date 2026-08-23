@@ -49,8 +49,7 @@ func TestSystemStatsWSClosesWhenSessionFamilyIsRevoked(t *testing.T) {
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(3*time.Second)))
 	_, _, err = conn.ReadMessage()
 	require.Error(t, err, "revoked session family must terminate an already-upgraded WebSocket")
-	var closeErr *websocket.CloseError
-	if errors.As(err, &closeErr) {
+	if closeErr, ok := errors.AsType[*websocket.CloseError](err); ok {
 		require.Equal(t, websocket.ClosePolicyViolation, closeErr.Code)
 	}
 }

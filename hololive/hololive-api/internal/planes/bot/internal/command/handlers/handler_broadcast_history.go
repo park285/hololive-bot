@@ -111,8 +111,8 @@ func newBroadcastHistoryQuery(params map[string]any) (query handlercore.Broadcas
 	query = handlercore.BroadcastHistoryQuery{
 		Limit:   limit,
 		TopicID: stringParam(params, "topic"),
+		Since:   time.Now().AddDate(0, 0, -days),
 	}
-	query.Since = time.Now().AddDate(0, 0, -days)
 	return query, formatter.BroadcastHistoryFilter{
 		TopicID: query.TopicID,
 		Days:    days,

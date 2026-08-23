@@ -27,7 +27,7 @@ esac
 
 # 필요한 보안 patch toolchain을 확보하되, go.mod/go.work 정본은 local-ci의
 # ensure_go_mod_toolchains가 관리한다.
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.6+auto}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.27.0+auto}"
 
 # hook이 주입한 GIT_DIR 등이 남으면 linked worktree나 tmp 레포 대상 git 호출이
 # 본 레포를 조작하므로 게이트 진입 시 일괄 해제한다.

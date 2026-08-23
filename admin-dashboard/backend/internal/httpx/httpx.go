@@ -61,8 +61,7 @@ func JSON(w http.ResponseWriter, status int, payload any) error {
 }
 
 func Error(w http.ResponseWriter, err error) {
-	var appErr *AppError
-	if errors.As(err, &appErr) {
+	if appErr, ok := errors.AsType[*AppError](err); ok {
 		respondJSON(w, appErr.Status, appErr.Body)
 		return
 	}
@@ -76,8 +75,7 @@ func respondJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func Abort(c *gin.Context, err error) {
-	var appErr *AppError
-	if errors.As(err, &appErr) {
+	if appErr, ok := errors.AsType[*AppError](err); ok {
 		ginjson.Respond(c, appErr.Status, appErr.Body)
 		c.Abort()
 		return

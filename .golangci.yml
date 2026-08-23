@@ -43,6 +43,9 @@ linters:
     errcheck:
       check-type-assertions: true
       check-blank: true
+      exclude-functions:
+        # errors.AsType의 첫 반환값은 typed target이라 blank 할당이 의도적(ok만 검사)이다.
+        - errors.AsType
 
     staticcheck:
       checks:

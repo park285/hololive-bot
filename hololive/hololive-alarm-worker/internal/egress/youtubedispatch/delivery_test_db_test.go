@@ -850,11 +850,11 @@ func deliveryTestTableName(model any) string {
 
 func deliveryTestColumnName(field *reflect.StructField) (string, bool) {
 	if dbTag := field.Tag.Get("db"); dbTag != "" {
-		name := strings.Split(dbTag, ",")[0]
+		name, _, _ := strings.Cut(dbTag, ",")
 		return name, name != "-" && name != ""
 	}
 	if jsonTag := field.Tag.Get("json"); jsonTag != "" {
-		name := strings.Split(jsonTag, ",")[0]
+		name, _, _ := strings.Cut(jsonTag, ",")
 		if name != "" && name != "-" {
 			return name, true
 		}

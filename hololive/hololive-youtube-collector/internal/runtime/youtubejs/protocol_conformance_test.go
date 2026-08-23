@@ -180,7 +180,7 @@ func collectJSONFields(typ reflect.Type, fields map[string]bool) {
 		if tag == "" || tag == "-" {
 			continue
 		}
-		name := strings.Split(tag, ",")[0]
+		name, _, _ := strings.Cut(tag, ",")
 		if name != "" {
 			fields[name] = true
 		}

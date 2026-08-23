@@ -46,18 +46,16 @@ func TestClientFetchCommunityDecodesHelperPosts(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(CommunityResult{
-			ProtocolMeta: ProtocolMeta{ProtocolVersion: ProtocolVersion},
+			ProtocolVersion: ProtocolVersion,
 			Posts: []*parser.CommunityPost{{
 				PostID: "post-1", UpstreamPostID: "post-1", AuthorID: "UC_TEST",
 				AuthorName: "Author", ContentText: "hello world",
 				PublishedText: published.Format(time.RFC3339), LikeCount: 1200, CommentCount: 7,
 			}},
-			Pagination: Pagination{
-				PageCount:         1,
-				Exhausted:         true,
-				Continuity:        "CONTIGUOUS",
-				TerminationReason: TerminationExhausted,
-			},
+			PageCount:         1,
+			Exhausted:         true,
+			Continuity:        "CONTIGUOUS",
+			TerminationReason: TerminationExhausted,
 		}); err != nil {
 			t.Errorf("encode community result: %v", err)
 		}
@@ -123,13 +121,11 @@ func TestClientFetchDoesNotCallHTMLGetCommunityPosts(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(CommunityResult{
-			ProtocolMeta: ProtocolMeta{ProtocolVersion: ProtocolVersion},
-			Pagination: Pagination{
-				PageCount:         1,
-				Exhausted:         true,
-				Continuity:        "CONTIGUOUS",
-				TerminationReason: TerminationExhausted,
-			},
+			ProtocolVersion:   ProtocolVersion,
+			PageCount:         1,
+			Exhausted:         true,
+			Continuity:        "CONTIGUOUS",
+			TerminationReason: TerminationExhausted,
 		}); err != nil {
 			t.Errorf("encode empty community result: %v", err)
 		}

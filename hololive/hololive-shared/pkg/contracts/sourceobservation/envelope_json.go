@@ -190,7 +190,7 @@ func jsonFieldTypes(valueType reflect.Type) map[string]reflect.Type {
 			continue
 		}
 		tag := field.Tag.Get("json")
-		name := strings.Split(tag, ",")[0]
+		name, _, _ := strings.Cut(tag, ",")
 		if name == "-" {
 			continue
 		}

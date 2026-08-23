@@ -228,8 +228,7 @@ func TestMapRequestErrorFromRealClientTLSVerifyFailure(t *testing.T) {
 		}
 		t.Fatal("expected TLS verification failure against untrusted test certificate")
 	}
-	var verifyErr *tls.CertificateVerificationError
-	if !errors.As(doErr, &verifyErr) {
+	if _, ok := errors.AsType[*tls.CertificateVerificationError](doErr); !ok {
 		t.Fatalf("Do() error = %v, want *tls.CertificateVerificationError", doErr)
 	}
 	mapped := MapRequestError("request holodex live", doErr, "secret-key")

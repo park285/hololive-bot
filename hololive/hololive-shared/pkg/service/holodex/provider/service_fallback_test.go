@@ -96,9 +96,9 @@ func newServiceForFallbackTestWithScraper(requester apiclient.Requester, scraper
 
 func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 	var (
-		inFlight       int32
-		maxInFlight    int32
-		channelReqsCnt int32
+		inFlight       atomic.Int32
+		maxInFlight    atomic.Int32
+		channelReqsCnt atomic.Int32
 	)
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
@@ -119,17 +119,17 @@ func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 			}
 
 			channelID := strings.TrimPrefix(path, "/channels/")
-			current := atomic.AddInt32(&inFlight, 1)
-			atomic.AddInt32(&channelReqsCnt, 1)
+			current := inFlight.Add(1)
+			channelReqsCnt.Add(1)
 			for {
-				previous := atomic.LoadInt32(&maxInFlight)
-				if current <= previous || atomic.CompareAndSwapInt32(&maxInFlight, previous, current) {
+				previous := maxInFlight.Load()
+				if current <= previous || maxInFlight.CompareAndSwap(previous, current) {
 					break
 				}
 			}
 
 			time.Sleep(20 * time.Millisecond)
-			atomic.AddInt32(&inFlight, -1)
+			inFlight.Add(-1)
 
 			return fmt.Appendf(nil, `{"id":"%s","name":"%s"}`, channelID, channelID), nil
 		},
@@ -156,17 +156,17 @@ func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 		}
 	}
 
-	if observedMax := atomic.LoadInt32(&maxInFlight); observedMax > 5 {
+	if observedMax := maxInFlight.Load(); observedMax > 5 {
 		t.Fatalf("fallback max concurrency = %d, want <= 5", observedMax)
 	}
 
-	if gotReqs := atomic.LoadInt32(&channelReqsCnt); int(gotReqs) != len(channelIDs) {
+	if gotReqs := channelReqsCnt.Load(); int(gotReqs) != len(channelIDs) {
 		t.Fatalf("fallback request count = %d, want %d", gotReqs, len(channelIDs))
 	}
 }
 
 func TestGetChannels_FallbackStopsWhenContextCanceled(t *testing.T) {
-	var fallbackChannelReqs int32
+	var fallbackChannelReqs atomic.Int32
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
 			if method != "GET" {
@@ -176,7 +176,7 @@ func TestGetChannels_FallbackStopsWhenContextCanceled(t *testing.T) {
 				return nil, context.Canceled
 			}
 			if strings.HasPrefix(path, "/channels/") {
-				atomic.AddInt32(&fallbackChannelReqs, 1)
+				fallbackChannelReqs.Add(1)
 				return nil, context.Canceled
 			}
 			return nil, fmt.Errorf("unexpected path: %s", path)
@@ -195,7 +195,7 @@ func TestGetChannels_FallbackStopsWhenContextCanceled(t *testing.T) {
 	if !strings.Contains(err.Error(), "get channels batch list") {
 		t.Fatalf("GetChannels() error = %v, want contains %q", err, "get channels batch list")
 	}
-	if got := atomic.LoadInt32(&fallbackChannelReqs); got != 0 {
+	if got := fallbackChannelReqs.Load(); got != 0 {
 		t.Fatalf("fallback channel request count = %d, want 0", got)
 	}
 }
@@ -227,7 +227,7 @@ func TestCollectIndividualChannelFetchResultsReturnsOnCancel(t *testing.T) {
 }
 
 func TestGetChannels_DoesNotFallbackOnNonRetryableListError(t *testing.T) {
-	var fallbackChannelReqs int32
+	var fallbackChannelReqs atomic.Int32
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
 			if method != "GET" {
@@ -241,7 +241,7 @@ func TestGetChannels_DoesNotFallbackOnNonRetryableListError(t *testing.T) {
 				}
 			}
 			if strings.HasPrefix(path, "/channels/") {
-				atomic.AddInt32(&fallbackChannelReqs, 1)
+				fallbackChannelReqs.Add(1)
 				return []byte(`{"id":"c1","name":"c1"}`), nil
 			}
 			return nil, fmt.Errorf("unexpected path: %s", path)
@@ -260,7 +260,7 @@ func TestGetChannels_DoesNotFallbackOnNonRetryableListError(t *testing.T) {
 	if len(got) != 0 {
 		t.Fatalf("GetChannels() len = %d, want 0", len(got))
 	}
-	if gotReqs := atomic.LoadInt32(&fallbackChannelReqs); gotReqs != 0 {
+	if gotReqs := fallbackChannelReqs.Load(); gotReqs != 0 {
 		t.Fatalf("fallback channel request count = %d, want 0", gotReqs)
 	}
 }

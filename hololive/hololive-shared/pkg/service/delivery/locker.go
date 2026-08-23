@@ -25,8 +25,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/privacylog"

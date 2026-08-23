@@ -21,10 +21,8 @@ type Client struct {
 
 func New(baseURL, apiKey string) *Client {
 	return &Client{
-		Client: subscriptionclient.Client{
-			HTTPClient:        internalhttp.NewJSONClient(baseURL, apiKey, 60*time.Second, nil),
-			SubscriptionsPath: membernewscontracts.SubscriptionsPath,
-		},
+		HTTPClient:        internalhttp.NewJSONClient(baseURL, apiKey, 60*time.Second, nil),
+		SubscriptionsPath: membernewscontracts.SubscriptionsPath,
 	}
 }
 

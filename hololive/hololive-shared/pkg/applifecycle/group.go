@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 )
 
@@ -69,8 +70,7 @@ func (g *GroupRuntime) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	var errs []error
-	for i := len(g.Components) - 1; i >= 0; i-- {
-		component := g.Components[i]
+	for i, component := range slices.Backward(g.Components) {
 		if component.Shutdown == nil {
 			continue
 		}

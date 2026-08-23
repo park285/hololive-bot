@@ -149,23 +149,23 @@ func TestExecuteCountsRecoveredPanicAsFailure(t *testing.T) {
 func TestExecuteRespectsParallelismLimit(t *testing.T) {
 	t.Parallel()
 
-	var inFlight int32
-	var maxInFlight int32
+	var inFlight atomic.Int32
+	var maxInFlight atomic.Int32
 
 	summary := Execute(context.Background(), FetchPlan[int, string]{
 		Targets:     []int{1, 2, 3, 4, 5, 6},
 		Parallelism: 2,
 		Fetch: func(_ context.Context, target int) (string, error) {
-			current := atomic.AddInt32(&inFlight, 1)
+			current := inFlight.Add(1)
 			for {
-				previous := atomic.LoadInt32(&maxInFlight)
-				if current <= previous || atomic.CompareAndSwapInt32(&maxInFlight, previous, current) {
+				previous := maxInFlight.Load()
+				if current <= previous || maxInFlight.CompareAndSwap(previous, current) {
 					break
 				}
 			}
 
 			time.Sleep(10 * time.Millisecond)
-			atomic.AddInt32(&inFlight, -1)
+			inFlight.Add(-1)
 			return "ok", nil
 		},
 	})
@@ -173,7 +173,7 @@ func TestExecuteRespectsParallelismLimit(t *testing.T) {
 	if summary.SuccessCount != 6 {
 		t.Fatalf("SuccessCount = %d, want 6", summary.SuccessCount)
 	}
-	if observedMax := atomic.LoadInt32(&maxInFlight); observedMax > 2 {
+	if observedMax := maxInFlight.Load(); observedMax > 2 {
 		t.Fatalf("maxInFlight = %d, want <= 2", observedMax)
 	}
 }

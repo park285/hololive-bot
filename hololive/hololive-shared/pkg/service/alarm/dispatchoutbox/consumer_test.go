@@ -582,8 +582,7 @@ func TestConsumerRouteFailuresPartialObservesAppliedSubsets(t *testing.T) {
 	err := consumer.RouteFailures(context.Background(),
 		[]domain.AlarmQueueEnvelope{retryApplied, retryUnapplied},
 		[]domain.AlarmQueueEnvelope{dlqApplied})
-	var partialErr *PartialTransitionError
-	if !errors.As(err, &partialErr) {
+	if _, ok := errors.AsType[*PartialTransitionError](err); !ok {
 		t.Fatalf("RouteFailures() error = %T %v, want *PartialTransitionError", err, err)
 	}
 	if got := testutil.ToFloat64(alarmDispatchPGRetryScheduledTotal); got != retryBefore+1 {

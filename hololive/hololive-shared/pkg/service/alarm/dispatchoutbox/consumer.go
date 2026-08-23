@@ -281,8 +281,7 @@ func observeRoutedFailures(err error, updates []FailureUpdate, retryCount, dlqCo
 		observePGDLQ(dlqCount)
 		return nil
 	}
-	var partial *PartialTransitionError
-	if errors.As(err, &partial) {
+	if partial, ok := errors.AsType[*PartialTransitionError](err); ok {
 		retryApplied, dlqApplied := appliedFailureCounts(updates, partial.UnappliedIDs)
 		observePGRetryScheduled(retryApplied)
 		observePGDLQ(dlqApplied)

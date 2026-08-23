@@ -229,8 +229,7 @@ func isRetryableTransportError(err error) bool {
 		return isRetryableDeadlineExceeded(err)
 	}
 
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
 		return isRetryableURLError(urlErr)
 	}
 

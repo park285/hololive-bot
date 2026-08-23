@@ -164,7 +164,7 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 	if len(result.SuccessDeliveryIDs) != 2 {
 		t.Fatalf("successDeliveryIDs = %#v, want 2 ids", result.SuccessDeliveryIDs)
 	}
-	if got := atomic.LoadInt32(&sender.maxActive); got != 1 {
+	if got := sender.maxActive.Load(); got != 1 {
 		t.Fatalf("max active Karing sends = %d, want 1", got)
 	}
 }
@@ -208,9 +208,9 @@ func TestSendEngineKaringMutexWaitUsesDeliverySendTimeout(t *testing.T) {
 type blockingKaringSender struct {
 	entered      chan struct{}
 	release      chan struct{}
-	active       int32
-	maxActive    int32
-	blockedFirst int32
+	active       atomic.Int32
+	maxActive    atomic.Int32
+	blockedFirst atomic.Int32
 }
 
 func newBlockingKaringSender() *blockingKaringSender {
@@ -225,16 +225,16 @@ func (s *blockingKaringSender) SendMessage(_ context.Context, _, _ string) error
 }
 
 func (s *blockingKaringSender) SendYouTubeOutboxKaring(ctx context.Context, _ string, _ *domain.YouTubeOutboxDispatchPayload) error {
-	active := atomic.AddInt32(&s.active, 1)
-	defer atomic.AddInt32(&s.active, -1)
+	active := s.active.Add(1)
+	defer s.active.Add(-1)
 	for {
-		maxActive := atomic.LoadInt32(&s.maxActive)
-		if active <= maxActive || atomic.CompareAndSwapInt32(&s.maxActive, maxActive, active) {
+		maxActive := s.maxActive.Load()
+		if active <= maxActive || s.maxActive.CompareAndSwap(maxActive, active) {
 			break
 		}
 	}
 	s.entered <- struct{}{}
-	if atomic.CompareAndSwapInt32(&s.blockedFirst, 0, 1) {
+	if s.blockedFirst.CompareAndSwap(0, 1) {
 		select {
 		case <-s.release:
 		case <-ctx.Done():

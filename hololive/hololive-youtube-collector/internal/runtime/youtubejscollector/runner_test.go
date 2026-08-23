@@ -368,11 +368,9 @@ func TestChannelRunnerRejectsMismatchedLiveIdentity(t *testing.T) {
 func TestCommunityRunnerRejectsNullRows(t *testing.T) {
 	t.Parallel()
 	result := youtubejs.CommunityResult{
-		Posts: []*parser.CommunityPost{nil},
-		Pagination: youtubejs.Pagination{
-			PageCount: 1, Exhausted: true, Continuity: string(contract.ContinuityContiguous),
-			TerminationReason: youtubejs.TerminationExhausted,
-		},
+		Posts:     []*parser.CommunityPost{nil},
+		PageCount: 1, Exhausted: true, Continuity: string(contract.ContinuityContiguous),
+		TerminationReason: youtubejs.TerminationExhausted,
 	}
 	output, err := NewCommunityRunner(&communityFake{result: result}, 10).Collect(
 		context.Background(), youtubeInput(t, "UC_TEST", "community_collect", contract.KindCommunityPage),

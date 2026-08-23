@@ -73,24 +73,20 @@ func ClassifyErrorCode(cause error) string {
 	if errors.Is(cause, context.Canceled) {
 		return ErrorCodeCanceled
 	}
-	var httpErr *iris.HTTPError
-	if errors.As(cause, &httpErr) {
+	if httpErr, ok := errors.AsType[*iris.HTTPError](cause); ok {
 		return classifyHTTPStatus(httpErr.StatusCode)
 	}
 	return classifyInfraErrorCode(cause)
 }
 
 func classifyInfraErrorCode(cause error) string {
-	var pgErr *pgconn.PgError
-	if errors.As(cause, &pgErr) {
+	if _, ok := errors.AsType[*pgconn.PgError](cause); ok {
 		return ErrorCodePG
 	}
-	var pgConnectErr *pgconn.ConnectError
-	if errors.As(cause, &pgConnectErr) {
+	if _, ok := errors.AsType[*pgconn.ConnectError](cause); ok {
 		return ErrorCodePG
 	}
-	var netErr net.Error
-	if errors.As(cause, &netErr) {
+	if _, ok := errors.AsType[net.Error](cause); ok {
 		return ErrorCodeNetwork
 	}
 	if errors.Is(cause, iris.ErrTransport) {

@@ -178,8 +178,7 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName string) (*domain.Channel, error) {
 	channel, err := c.Deps().Matcher.FindBestMatchWithCandidates(ctx, memberName)
 	if err != nil {
-		var ambiguousErr *matcher.AmbiguousMatchError
-		if stdErrors.As(err, &ambiguousErr) {
+		if ambiguousErr, ok := stdErrors.AsType[*matcher.AmbiguousMatchError](err); ok {
 			message := c.Deps().Formatter.FormatAmbiguousMembers(ctx, ambiguousErr.Candidates, "알람 추가")
 			return nil, c.Deps().SendMessage(ctx, room, message)
 		}

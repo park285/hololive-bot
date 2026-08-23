@@ -298,8 +298,7 @@ func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
 		t.Error("Expected circuit breaker error")
 	}
 
-	var circuitErr errors.CircuitOpenError
-	if !stdErrors.As(err, &circuitErr) {
+	if _, ok := stdErrors.AsType[errors.CircuitOpenError](err); !ok {
 		t.Fatalf("expected CircuitOpenError, got %T: %v", err, err)
 	}
 

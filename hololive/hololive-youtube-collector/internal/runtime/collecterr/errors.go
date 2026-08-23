@@ -274,8 +274,7 @@ func recognizedTransientNetwork(err error) bool {
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
-	var dns *net.DNSError
-	if errors.As(err, &dns) {
+	if _, ok := errors.AsType[*net.DNSError](err); ok {
 		return true
 	}
 	return errors.Is(err, syscall.ECONNRESET) ||

@@ -128,11 +128,11 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 	firstStarted := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	secondStarted := make(chan struct{}, 1)
-	var callCount int32
+	var callCount atomic.Int32
 
 	cache := cachemocks.NewStrictClient()
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		callNumber := atomic.AddInt32(&callCount, 1)
+		callNumber := callCount.Add(1)
 		if callNumber == 1 {
 			close(firstStarted)
 			<-releaseFirst
@@ -183,8 +183,8 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 		t.Fatal("collectRoomsByChannel() did not complete")
 	}
 
-	if atomic.LoadInt32(&callCount) != 2 {
-		t.Fatalf("lookup count = %d, want 2", atomic.LoadInt32(&callCount))
+	if callCount.Load() != 2 {
+		t.Fatalf("lookup count = %d, want 2", callCount.Load())
 	}
 
 	targets, ok := roomsByChannel["UCtarget"]

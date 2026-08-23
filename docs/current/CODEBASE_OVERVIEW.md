@@ -25,7 +25,7 @@
     └── docker-compose.main-ap.yml  # main-host AP overlay reserved for collector-c live-compat; service remains youtube-collector
 ```
 
-`go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.26.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
+`go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
 
 ## Runtime Services
 
