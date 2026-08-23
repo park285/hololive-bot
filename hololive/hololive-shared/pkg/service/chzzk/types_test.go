@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 func TestLiveStatusResponse_Unmarshal(t *testing.T) {
@@ -69,7 +69,7 @@ func TestLiveStatusResponse_Unmarshal(t *testing.T) {
 			}
 
 			var resp LiveStatusResponse
-			if err := json.Unmarshal(data, &resp); err != nil {
+			if err := jsonv2.Unmarshal(data, &resp); err != nil {
 				t.Fatalf("Failed to unmarshal: %v", err)
 			}
 
@@ -95,7 +95,7 @@ func TestLiveStatusContent_Fields(t *testing.T) {
 	}
 
 	var resp LiveStatusResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
+	if err := jsonv2.Unmarshal(data, &resp); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
 
@@ -150,7 +150,7 @@ func TestScheduledLivesResponse_Unmarshal(t *testing.T) {
 			}
 
 			var resp ScheduledLivesResponse
-			if err := json.Unmarshal(data, &resp); err != nil {
+			if err := jsonv2.Unmarshal(data, &resp); err != nil {
 				t.Fatalf("Failed to unmarshal: %v", err)
 			}
 
@@ -176,7 +176,7 @@ func TestScheduledLive_Fields(t *testing.T) {
 	}
 
 	var resp ScheduledLivesResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
+	if err := jsonv2.Unmarshal(data, &resp); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
 

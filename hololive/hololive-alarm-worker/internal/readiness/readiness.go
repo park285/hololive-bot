@@ -8,19 +8,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 func PublicGinHandler(ctx context.Context, probe *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		statusCode, payload := publicResponse(probe, sharedreadiness.RequestContext(ctx, c))
-		c.JSON(statusCode, payload)
+		ginjson.Respond(c, statusCode, payload)
 	}
 }
 
 func InternalGinHandler(ctx context.Context, probe *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		statusCode, payload := internalResponse(probe, sharedreadiness.RequestContext(ctx, c))
-		c.JSON(statusCode, payload)
+		ginjson.Respond(c, statusCode, payload)
 	}
 }
 

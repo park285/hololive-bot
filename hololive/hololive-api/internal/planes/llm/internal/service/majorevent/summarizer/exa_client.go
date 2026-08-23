@@ -32,8 +32,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/park285/shared-go/pkg/httputil"
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 )
@@ -114,7 +114,7 @@ func (c *ExaMCPClient) newSearchRequest(ctx context.Context, query string) (*htt
 		"id": 1,
 	}
 
-	bodyJSON, err := json.Marshal(requestBody)
+	bodyJSON, err := jsonv2.Marshal(requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal exa request: %w", err)
 	}
@@ -172,7 +172,7 @@ func (c *ExaMCPClient) logSearchResults(query string, resultCount int) {
 // parseExaResponse: JSON-RPC 응답을 파싱하여 검색 결과를 추출합니다.
 func parseExaResponse(respBody []byte) ([]model.SearchResult, error) {
 	var rpcResp exaRPCResponse
-	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
+	if err := jsonv2.Unmarshal(respBody, &rpcResp); err != nil {
 		return nil, fmt.Errorf("unmarshal exa response: %w", err)
 	}
 	if rpcResp.Error != nil {
@@ -205,7 +205,7 @@ func parseExaContentItems(index int, text string) ([]exaSearchItem, error) {
 	var wrapped struct {
 		Results []exaSearchItem `json:"results"`
 	}
-	if err := json.Unmarshal([]byte(text), &wrapped); err != nil {
+	if err := jsonv2.Unmarshal([]byte(text), &wrapped); err != nil {
 		direct, directErr := parseDirectExaContentItems(text)
 		if directErr != nil {
 			return nil, fmt.Errorf("unmarshal exa content[%d]: %w", index, err)
@@ -226,7 +226,7 @@ func parseExaContentItems(index int, text string) ([]exaSearchItem, error) {
 
 func parseDirectExaContentItems(text string) ([]exaSearchItem, error) {
 	var direct []exaSearchItem
-	if err := json.Unmarshal([]byte(text), &direct); err != nil {
+	if err := jsonv2.Unmarshal([]byte(text), &direct); err != nil {
 		return nil, err
 	}
 	return direct, nil

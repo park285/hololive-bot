@@ -11,8 +11,8 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 
-	"github.com/park285/shared-go/pkg/logging"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type MemberDataFunc func() domain.MemberDataProvider

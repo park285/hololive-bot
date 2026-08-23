@@ -129,7 +129,7 @@ func TestSettingsService_RewritesHealedLegacyTargetMinutesOnReload(t *testing.T)
 	if err != nil {
 		t.Fatalf("read settings: %v", err)
 	}
-	if string(raw) != "{\"alarmAdvanceMinutes\":5,\"scraperProxyEnabled\":false,\"targetMinutes\":[5,3,1]}\n" {
+	if string(raw) != "{\"alarmAdvanceMinutes\":5,\"scraperProxyEnabled\":false,\"targetMinutes\":[5,3,1]}" {
 		t.Fatalf("expected healed settings file, got %q", string(raw))
 	}
 }

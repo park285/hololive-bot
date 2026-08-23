@@ -3,7 +3,7 @@ package alarmservice
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -127,7 +127,7 @@ func decodeSingleJSONLog(t *testing.T, logBuffer *bytes.Buffer) map[string]any {
 	t.Helper()
 
 	var logRecord map[string]any
-	require.NoError(t, json.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
+	require.NoError(t, jsonv2.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
 
 	return logRecord
 }
@@ -195,7 +195,7 @@ func TestAddAlarm_PersistFailureLogsWrappedEvent(t *testing.T) {
 	assert.False(t, added)
 
 	var logRecord map[string]any
-	require.NoError(t, json.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
+	require.NoError(t, jsonv2.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &logRecord))
 	assert.Equal(t, "persist alarm before cache write.failed", logRecord["event"])
 	assert.NotContains(t, logRecord, "error")
 	assert.Equal(t, "wrapError", logRecord["error_type"])

@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -145,7 +145,7 @@ func (c *Consumer) envelopeFromRecord(ctx context.Context, record *Record, event
 
 func (c *Consumer) decodeEnvelopePayload(ctx context.Context, record *Record, payload []byte) (domain.AlarmQueueEnvelope, bool, error) {
 	var envelope domain.AlarmQueueEnvelope
-	if err := json.Unmarshal(payload, &envelope); err != nil {
+	if err := jsonv2.Unmarshal(payload, &envelope); err != nil {
 		if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid payload: %v", err), "move invalid payload to dlq"); err != nil {
 			return domain.AlarmQueueEnvelope{}, false, err
 		}
@@ -390,7 +390,7 @@ func rehydrateDeliveryContext(envelope *domain.AlarmQueueEnvelope, record *Recor
 		return nil
 	}
 	var deliveryCtx deliveryContext
-	if err := json.Unmarshal(record.DeliveryContext, &deliveryCtx); err != nil {
+	if err := jsonv2.Unmarshal(record.DeliveryContext, &deliveryCtx); err != nil {
 		return err
 	}
 	envelope.Notification.Users = deliveryCtx.Users

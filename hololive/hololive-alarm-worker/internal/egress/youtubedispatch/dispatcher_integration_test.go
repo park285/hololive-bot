@@ -35,9 +35,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,7 +57,7 @@ type sentMessage struct {
 
 func mustMarshalPayload(t testing.TB, value any) []byte {
 	t.Helper()
-	payload, err := json.Marshal(value)
+	payload, err := jsonv2.Marshal(value)
 	require.NoError(t, err)
 	return payload
 }

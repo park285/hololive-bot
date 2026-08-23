@@ -28,7 +28,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/park285/shared-go/pkg/outputguard"
+	"github.com/park285/shared-go/v2/pkg/outputguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"

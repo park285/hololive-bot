@@ -23,7 +23,7 @@ package configsub
 import (
 	"log/slog"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
@@ -108,7 +108,7 @@ func applyUnknownConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, updat
 }
 
 func decodeConfigUpdatePayload(logger *slog.Logger, update contractssettings.ConfigUpdateV1, target any) bool {
-	if err := json.Unmarshal(update.Payload, target); err != nil {
+	if err := jsonv2.Unmarshal(update.Payload, target); err != nil {
 		logger.Warn("Failed to decode config update payload",
 			slog.String("type", update.Type),
 			slog.Any("error", err),

@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 func TestNewCollector_DefaultConfiguration(t *testing.T) {
@@ -93,7 +93,7 @@ func TestCollector_GetCachedStats_CloneAndExpiry(t *testing.T) {
 
 func TestCollector_FetchServiceGoroutines_MixedEndpoints(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		if err := json.NewEncoder(w).Encode(map[string]any{"goroutines": 11}); err != nil {
+		if err := jsonv2.MarshalWrite(w, map[string]any{"goroutines": 11}); err != nil {
 			t.Fatalf("encode stats response: %v", err)
 		}
 	}))

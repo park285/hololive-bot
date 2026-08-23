@@ -3,8 +3,8 @@ package domain_test
 import (
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func TestCelebrationDispatchPayload_Identity(t *testing.T) {
@@ -159,13 +159,13 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 		Version:    1,
 	}
 
-	data, err := json.Marshal(&envelope)
+	data, err := jsonv2.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 
 	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := jsonv2.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("raw Unmarshal: %v", err)
 	}
 	if raw["source_kind"] != string(domain.AlarmDispatchSourceKindCelebration) {
@@ -176,7 +176,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 	}
 
 	var decoded domain.AlarmQueueEnvelope
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	if err := jsonv2.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if decoded.SourceKind != domain.AlarmDispatchSourceKindCelebration {

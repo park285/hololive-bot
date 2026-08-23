@@ -40,8 +40,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/park285/shared-go/pkg/httputil"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/httputil"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 type fakePostgresClient struct{}

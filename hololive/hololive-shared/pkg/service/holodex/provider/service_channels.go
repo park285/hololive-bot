@@ -29,7 +29,7 @@ import (
 	"net/url"
 	"slices"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -49,7 +49,7 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 	}
 
 	var rawStreams []streammapping.StreamRaw
-	if err := json.Unmarshal(body, &rawStreams); err != nil {
+	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal channel schedule: %w", err)
 	}
 

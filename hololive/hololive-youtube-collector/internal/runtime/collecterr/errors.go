@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 type ErrorCode = contract.CollectionErrorCode

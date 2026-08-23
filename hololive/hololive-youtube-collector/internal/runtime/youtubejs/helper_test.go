@@ -2,7 +2,7 @@ package youtubejs
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -35,7 +35,7 @@ func TestClientFetchCommunityDecodesHelperPosts(t *testing.T) {
 			t.Fatalf("read body: %v", err)
 		}
 		var req CommunityRequest
-		if err := json.Unmarshal(raw, &req); err != nil {
+		if err := jsonv2.Unmarshal(raw, &req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		if req.ProtocolVersion != ProtocolVersion || req.ChannelID != "UC_TEST" || req.MaxResults != 10 || req.MaxPages != 1 {
@@ -45,7 +45,7 @@ func TestClientFetchCommunityDecodesHelperPosts(t *testing.T) {
 			t.Fatalf("collection request contains removed fields: %s", raw)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(CommunityResult{
+		if err := jsonv2.MarshalWrite(w, CommunityResult{
 			ProtocolVersion: ProtocolVersion,
 			Posts: []*parser.CommunityPost{{
 				PostID: "post-1", UpstreamPostID: "post-1", AuthorID: "UC_TEST",
@@ -120,7 +120,7 @@ func TestClientFetchDoesNotCallHTMLGetCommunityPosts(t *testing.T) {
 			t.Fatal("helper client must not fetch the HTML /posts page")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(CommunityResult{
+		if err := jsonv2.MarshalWrite(w, CommunityResult{
 			ProtocolVersion:   ProtocolVersion,
 			PageCount:         1,
 			Exhausted:         true,

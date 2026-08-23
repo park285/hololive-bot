@@ -36,8 +36,8 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	sharedjson "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -61,10 +61,10 @@ func newInMemoryCacheClient() *cachemocks.Client {
 			if !ok {
 				return nil
 			}
-			return sharedjson.Unmarshal(payload, dest)
+			return jsonv2.Unmarshal(payload, dest)
 		},
 		SetFunc: func(_ context.Context, key string, value any, _ time.Duration) error {
-			payload, err := sharedjson.Marshal(value)
+			payload, err := jsonv2.Marshal(value)
 			if err != nil {
 				return err
 			}

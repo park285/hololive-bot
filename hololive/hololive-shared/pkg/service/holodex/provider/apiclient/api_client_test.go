@@ -36,7 +36,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/constants"

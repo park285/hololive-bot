@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -38,7 +38,7 @@ func (c *Consumer) reconcileLive(
 
 func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error) {
 	var payload contract.LiveSnapshotV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return live.Evidence{}, fmt.Errorf("decode live snapshot payload: %w", err)
 	}
 	facts := make([]live.SessionFact, 0, len(payload.Sessions))

@@ -24,7 +24,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -95,7 +95,7 @@ func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name st
 }
 
 func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) error {
-	aliasesJSON, err := json.Marshal(member.Aliases)
+	aliasesJSON, err := jsonv2.Marshal(member.Aliases)
 	if err != nil {
 		return fmt.Errorf("failed to marshal aliases: %w", err)
 	}

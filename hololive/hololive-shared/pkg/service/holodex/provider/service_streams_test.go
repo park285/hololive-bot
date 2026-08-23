@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	sharedjson "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -329,7 +329,7 @@ func streamRawList(count int, org string, status domain.StreamStatus) []streamma
 func mustMarshalStreamRawList(t *testing.T, streams []streammapping.StreamRaw) []byte {
 	t.Helper()
 
-	body, err := sharedjson.Marshal(streams)
+	body, err := jsonv2.Marshal(streams)
 	if err != nil {
 		t.Fatalf("marshal streams: %v", err)
 	}

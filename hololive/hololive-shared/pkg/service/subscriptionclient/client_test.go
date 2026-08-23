@@ -2,7 +2,7 @@ package subscriptionclient_test
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	"github.com/kapu/hololive-shared/pkg/service/subscriptionclient"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const testSubscriptionsPath = "/internal/subscriptions"
@@ -56,7 +56,7 @@ func TestIsSubscribedReturnsServerStatus(t *testing.T) {
 			client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assertStatusLookupRequest(t, r)
 				w.Header().Set("Content-Type", "application/json")
-				if err := json.NewEncoder(w).Encode(subscription.SubscriptionStatusResponse{Subscribed: tc.subscribed}); err != nil {
+				if err := jsonv2.MarshalWrite(w, subscription.SubscriptionStatusResponse{Subscribed: tc.subscribed}); err != nil {
 					t.Errorf("encode response: %v", err)
 				}
 			}))
@@ -172,7 +172,7 @@ func TestSubscribeSendsTrimmedJSONPayload(t *testing.T) {
 			t.Errorf("content type = %q, want %q", got, "application/json")
 		}
 		var req subscription.SubscribeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := jsonv2.UnmarshalRead(r.Body, &req); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
 		if req.RoomID != "room-7" {

@@ -31,8 +31,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/pkg/db/pgxdb"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"

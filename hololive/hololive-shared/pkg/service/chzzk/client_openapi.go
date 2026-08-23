@@ -30,8 +30,8 @@ import (
 	"strings"
 	"sync"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	json "github.com/park285/shared-go/pkg/json"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -113,7 +113,7 @@ func getOpenAPIContent[T any](ctx context.Context, c *Client, op, reqURL string)
 }
 
 func decodeOpenAPIResponse[T any](body []byte, apiResp *OpenAPIResponse[T]) error {
-	if err := json.Unmarshal(body, apiResp); err != nil {
+	if err := jsonv2.Unmarshal(body, apiResp); err != nil {
 		return fmt.Errorf("unmarshal response: %w", err)
 	}
 

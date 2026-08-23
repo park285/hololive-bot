@@ -16,7 +16,7 @@ import (
 	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	sharedlifecycle "github.com/park285/shared-go/pkg/runtime/lifecycle"
+	sharedlifecycle "github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 // Runtime은 bot ingress, admin API, LLM scheduler, YouTube plane을 하나의 Go

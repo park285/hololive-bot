@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/domain"

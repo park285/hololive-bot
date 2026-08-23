@@ -24,8 +24,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
-	"github.com/park285/shared-go/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 type scraperHolodexProfileFoundation struct {

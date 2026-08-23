@@ -28,7 +28,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 //go:embed internal/model/data/official_profiles_raw/*.json
@@ -130,7 +130,7 @@ func readEmbeddedProfile[T any](
 		return "", zero, fmt.Errorf("failed to read %s %s: %w", itemLabel, filename, err)
 	}
 
-	if err := json.Unmarshal(data, &profile); err != nil {
+	if err := jsonv2.Unmarshal(data, &profile); err != nil {
 		return "", profile, fmt.Errorf("failed to parse %s %s: %w", itemLabel, filename, err)
 	}
 

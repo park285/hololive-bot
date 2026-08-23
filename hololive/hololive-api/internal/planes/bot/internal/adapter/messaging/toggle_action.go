@@ -20,7 +20,7 @@
 
 package messaging
 
-import "github.com/park285/shared-go/pkg/stringutil"
+import "github.com/park285/shared-go/v2/pkg/stringutil"
 
 func parseToggleAction(args []string, aliases map[string]string, fallback string) string {
 	if len(args) == 0 {

@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -48,7 +48,7 @@ func evidenceFromObservation(observation *Observation) (content.Evidence, error)
 
 func videoEvidence(observation *Observation) (content.Evidence, error) {
 	var payload contract.VideoListV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return content.Evidence{}, fmt.Errorf("decode video list payload: %w", err)
 	}
 	return content.Evidence{
@@ -69,7 +69,7 @@ func videoEvidence(observation *Observation) (content.Evidence, error) {
 
 func shortsEvidence(observation *Observation) (content.Evidence, error) {
 	var payload contract.ShortsListV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return content.Evidence{}, fmt.Errorf("decode shorts list payload: %w", err)
 	}
 	return content.Evidence{

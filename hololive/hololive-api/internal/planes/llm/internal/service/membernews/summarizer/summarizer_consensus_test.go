@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
@@ -106,7 +106,7 @@ func approvedVerdictJSON(confidence float64) string {
 		Issues:     []consensus.ReviewIssue{},
 		Confidence: confidence,
 	}
-	b, err := json.Marshal(v)
+	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
@@ -121,7 +121,7 @@ func criticalVerdictJSON() string {
 		},
 		Confidence: 0.3,
 	}
-	b, err := json.Marshal(v)
+	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
@@ -134,7 +134,7 @@ func lowConfidenceVerdictJSON() string {
 		Issues:     []consensus.ReviewIssue{},
 		Confidence: 0.5,
 	}
-	b, err := json.Marshal(v)
+	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
@@ -149,7 +149,7 @@ func warningOnlyVerdictJSON() string {
 		},
 		Confidence: 0.9,
 	}
-	b, err := json.Marshal(v)
+	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
@@ -166,7 +166,7 @@ func adjudicatorResponseJSON(title string) string {
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
-	b, err := json.Marshal(r)
+	b, err := jsonv2.Marshal(r)
 	if err != nil {
 		panic(err)
 	}
@@ -341,7 +341,7 @@ func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
-	badJSON, err := json.Marshal(badResponse)
+	badJSON, err := jsonv2.Marshal(badResponse)
 	if err != nil {
 		t.Fatalf("marshal bad response: %v", err)
 	}
@@ -466,7 +466,7 @@ func TestConsensus_UnknownSeverity_TreatedAsInfo(t *testing.T) {
 		},
 		Confidence: 0.9,
 	}
-	b, err := json.Marshal(v)
+	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		t.Fatalf("marshal verdict: %v", err)
 	}
@@ -524,7 +524,7 @@ func TestConsensus_ValidationDropsAllAdjudicatorItems_ReturnsPrimary(t *testing.
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
-	allBadJSON, err := json.Marshal(allBadResponse)
+	allBadJSON, err := jsonv2.Marshal(allBadResponse)
 	if err != nil {
 		t.Fatalf("marshal all bad response: %v", err)
 	}

@@ -29,8 +29,8 @@ import (
 	"strings"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func skipIfNoCliproxy(t *testing.T) {
@@ -159,7 +159,7 @@ func TestIntegration_Summarize_RawJSON_GPT(t *testing.T) {
 
 	// JSON 파싱 검증
 	var resp summaryResponse
-	if err := json.Unmarshal([]byte(rawJSON), &resp); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
 		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
 	}
 
@@ -277,7 +277,7 @@ func TestIntegration_Summarize_RawJSON_GPT_WebSearch(t *testing.T) {
 
 	// JSON 파싱 검증
 	var resp summaryResponse
-	if err := json.Unmarshal([]byte(rawJSON), &resp); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
 		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
 	}
 
@@ -455,7 +455,7 @@ func TestIntegration_Summarize_Weekly_ExaPlusWebSearch(t *testing.T) {
 	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
 
 	var resp summaryResponse
-	if err := json.Unmarshal([]byte(rawJSON), &resp); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
 		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
 	}
 
@@ -523,7 +523,7 @@ func TestIntegration_Summarize_Monthly_ExaPlusWebSearch(t *testing.T) {
 	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
 
 	var resp summaryResponse
-	if err := json.Unmarshal([]byte(rawJSON), &resp); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
 		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
 	}
 
@@ -616,7 +616,7 @@ func TestIntegration_Summarize_DateAccuracy(t *testing.T) {
 	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
 
 	var resp summaryResponse
-	if err := json.Unmarshal([]byte(rawJSON), &resp); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
 		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
 	}
 
@@ -675,7 +675,7 @@ func TestIntegration_Summarize_ANIPLUSDiscovery(t *testing.T) {
 	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
 
 	var resp summaryResponse
-	if err := json.Unmarshal([]byte(rawJSON), &resp); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
 		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
 	}
 

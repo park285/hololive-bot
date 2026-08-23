@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"reflect"
@@ -1535,7 +1535,7 @@ func publishInput(envelope *contract.Envelope) *PublishBatchInput {
 		Checkpoint: CheckpointUpdate{
 			Entries: []CheckpointEntry{func() CheckpointEntry {
 				entry := checkpointForEnvelope(envelope)
-				entry.Cursor = json.RawMessage(`{"page":1}`)
+				entry.Cursor = jsontext.Value(`{"page":1}`)
 				return entry
 			}()},
 			CollectionLatency: time.Second,

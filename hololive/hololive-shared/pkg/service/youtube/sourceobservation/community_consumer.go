@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"time"
@@ -270,7 +270,7 @@ func (c *Consumer) finalizeContent(
 
 func decodeCommunityPayload(observation *Observation) (contract.CommunityPayloadV1, error) {
 	var payload contract.CommunityPayloadV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return contract.CommunityPayloadV1{}, fmt.Errorf("decode community payload: %w", err)
 	}
 	if err := payload.Validate(observation.SubjectKey); err != nil {

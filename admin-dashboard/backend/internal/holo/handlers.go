@@ -1,14 +1,13 @@
 package holo
 
 import (
+	"encoding/json/jsontext"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
 )
@@ -88,7 +87,7 @@ func readJSONBody(r *http.Request) ([]byte, error) {
 	if strings.TrimSpace(string(data)) == "" {
 		data = []byte("{}")
 	}
-	if !json.Valid(data) {
+	if !jsontext.Value(data).IsValid() {
 		return nil, httpx.BadRequest("invalid json payload")
 	}
 	return data, nil

@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 type LogEntry struct {
@@ -92,8 +92,12 @@ func (l *Logger) Log(entryType, summary string, details map[string]any) {
 		return
 	}
 
-	if err := json.NewEncoder(file).Encode(entry); err != nil {
+	if err := jsonv2.MarshalWrite(file, entry); err != nil {
 		l.logger.Error("Failed to write activity log", slog.Any("error", err))
+		return
+	}
+	if _, err := file.WriteString("\n"); err != nil {
+		l.logger.Error("Failed to terminate activity log entry", slog.Any("error", err))
 	}
 }
 
@@ -223,7 +227,7 @@ func splitTailChunk(buf []byte, hasEarlierBytes bool) (lines [][]byte, carry []b
 func appendNewestFirstEntries(entries []LogEntry, lines [][]byte, limit int) []LogEntry {
 	for i := len(lines) - 1; i >= 0 && len(entries) < limit; i-- {
 		var entry LogEntry
-		if err := json.Unmarshal(lines[i], &entry); err != nil {
+		if err := jsonv2.Unmarshal(lines[i], &entry); err != nil {
 			continue // 잘못된 형식의 줄은 건너뜀
 		}
 		entries = append(entries, entry)

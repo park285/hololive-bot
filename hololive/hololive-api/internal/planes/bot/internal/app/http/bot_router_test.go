@@ -27,8 +27,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
-	json "github.com/park285/shared-go/pkg/json"
 
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
@@ -43,7 +43,7 @@ func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
 	}
 
@@ -73,7 +73,7 @@ func TestBotReadyResponder_DegradedDependencyReturns503(t *testing.T) {
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
 	}
 	if payload["status"] != "not_ready" {
@@ -99,7 +99,7 @@ func TestBotReadyResponder_HealthyDependencyReturns200(t *testing.T) {
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
 	}
 	if payload["status"] != "ready" {

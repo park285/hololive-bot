@@ -35,14 +35,14 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	errors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
 func writeJSONResponse(t testing.TB, w http.ResponseWriter, response any) {
 	t.Helper()
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := jsonv2.MarshalWrite(w, response); err != nil {
 		t.Fatalf("write json response: %v", err)
 	}
 }

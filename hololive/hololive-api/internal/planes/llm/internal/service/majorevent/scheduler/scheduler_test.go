@@ -30,8 +30,8 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/park285/shared-go/pkg/outputguard"
-	"github.com/park285/shared-go/pkg/promptguard"
+	"github.com/park285/shared-go/v2/pkg/outputguard"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 )
 
 type mockFormatter struct {

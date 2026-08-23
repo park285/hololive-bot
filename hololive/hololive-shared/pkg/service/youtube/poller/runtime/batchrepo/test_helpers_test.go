@@ -3,7 +3,7 @@ package batchrepo
 import (
 	"strings"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 	"github.com/prometheus/client_golang/prometheus"
 
 	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
@@ -72,7 +72,7 @@ func normalizeCommunityResourceID(id string) string {
 }
 
 func mustMarshalJSON(v any) string {
-	data, err := json.Marshal(v)
+	data, err := jsonv2.Marshal(v)
 	if err != nil {
 		return "{}"
 	}

@@ -2,7 +2,8 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"testing"
 	"time"
@@ -50,7 +51,7 @@ func publishMixedCollisionBatch(
 	mixed := publishInput(collision)
 	mixed.Observations = append(mixed.Observations, *independent)
 	independentCheckpoint := checkpointForEnvelope(independent)
-	independentCheckpoint.Cursor = json.RawMessage(`{"page":2}`)
+	independentCheckpoint.Cursor = jsontext.Value(`{"page":2}`)
 	mixed.Checkpoint.Entries = append(mixed.Checkpoint.Entries, independentCheckpoint)
 	result, err = repo.PublishBatch(ctx, mixed)
 	if err != nil {
@@ -75,7 +76,7 @@ func independentCommunityEnvelope(t *testing.T, proof *contract.LeaseProof) *con
 	t.Helper()
 	independent := communityEnvelope(t, proof, "post-independent")
 	var independentPayload contract.CommunityPayloadV1
-	if err := json.Unmarshal(independent.Payload, &independentPayload); err != nil {
+	if err := jsonv2.Unmarshal(independent.Payload, &independentPayload); err != nil {
 		t.Fatalf("decode independent payload: %v", err)
 	}
 	independentPayload.Coverage.MaxResults = 20

@@ -8,7 +8,7 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 func (s *State) CacheMemberName(ctx context.Context, channelID, memberName string) error {

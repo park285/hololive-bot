@@ -16,7 +16,7 @@ import (
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type logsResponse struct {
@@ -125,7 +125,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 		RoomName string `json:"roomName" binding:"required,min=1"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return
@@ -163,7 +163,7 @@ func (h *SettingsHandler) SetUserName(c *gin.Context) {
 		UserName string `json:"userName" binding:"required,min=1"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return
@@ -244,7 +244,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 
 func (h *SettingsHandler) bindUpdateSettingsRequest(c *gin.Context) (updateSettingsRequest, bool) {
 	var req updateSettingsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return req, false
@@ -360,7 +360,7 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 
 func (h *SettingsHandler) bindUpdateLLMSettingsRequest(c *gin.Context) (updateLLMSettingsRequest, bool) {
 	var req updateLLMSettingsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return req, false

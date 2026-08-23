@@ -28,7 +28,7 @@ import (
 	"regexp"
 	"strings"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 
@@ -278,7 +278,7 @@ func loadXAllowlist(path string) ([]string, error) {
 	}
 
 	var direct []string
-	if err := json.Unmarshal(bytes, &direct); err == nil {
+	if err := jsonv2.Unmarshal(bytes, &direct); err == nil {
 		return direct, nil
 	}
 
@@ -286,7 +286,7 @@ func loadXAllowlist(path string) ([]string, error) {
 		Accounts         []string `json:"accounts"`
 		OfficialAccounts []string `json:"official_accounts"`
 	}
-	if err := json.Unmarshal(bytes, &wrapped); err != nil {
+	if err := jsonv2.Unmarshal(bytes, &wrapped); err != nil {
 		return nil, fmt.Errorf("unmarshal allowlist: %w", err)
 	}
 

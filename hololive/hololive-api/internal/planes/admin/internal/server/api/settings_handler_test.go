@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
-	json "github.com/park285/shared-go/pkg/json"
 
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
@@ -73,7 +73,7 @@ func decodeSettingsResponse(t *testing.T, rec *httptest.ResponseRecorder) map[st
 	t.Helper()
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	return payload

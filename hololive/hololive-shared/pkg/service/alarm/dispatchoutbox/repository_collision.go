@@ -2,10 +2,11 @@ package dispatchoutbox
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"fmt"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/jackc/pgx/v5"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 type eventCollision struct {
@@ -15,15 +16,15 @@ type eventCollision struct {
 }
 
 type eventCollisionBatchRow struct {
-	ExistingEventID     *int64          `json:"existing_event_id"`
-	EventKey            string          `json:"event_key"`
-	ExistingPayloadHash string          `json:"existing_payload_hash"`
-	IncomingPayloadHash string          `json:"incoming_payload_hash"`
-	AlarmType           string          `json:"alarm_type"`
-	ChannelID           string          `json:"channel_id"`
-	StreamID            string          `json:"stream_id"`
-	Category            string          `json:"category"`
-	Payload             json.RawMessage `json:"payload"`
+	ExistingEventID     *int64         `json:"existing_event_id"`
+	EventKey            string         `json:"event_key"`
+	ExistingPayloadHash string         `json:"existing_payload_hash"`
+	IncomingPayloadHash string         `json:"incoming_payload_hash"`
+	AlarmType           string         `json:"alarm_type"`
+	ChannelID           string         `json:"channel_id"`
+	StreamID            string         `json:"stream_id"`
+	Category            string         `json:"category"`
+	Payload             jsontext.Value `json:"payload"`
 }
 
 func recordEventCollisions(ctx context.Context, tx pgx.Tx, collisions []eventCollision) error {
@@ -31,7 +32,7 @@ func recordEventCollisions(ctx context.Context, tx pgx.Tx, collisions []eventCol
 		return nil
 	}
 	rows := buildEventCollisionBatchRows(dedupeEventCollisions(collisions))
-	raw, err := json.Marshal(rows)
+	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
 		return fmt.Errorf("record dispatch event collisions: marshal batch: %w", err)
 	}
@@ -74,7 +75,7 @@ func buildEventCollisionBatchRows(collisions []eventCollision) []eventCollisionB
 			ChannelID:           collision.Event.ChannelID,
 			StreamID:            collision.Event.StreamID,
 			Category:            collision.Event.Category,
-			Payload:             json.RawMessage(collision.Event.Payload),
+			Payload:             jsontext.Value(collision.Event.Payload).Clone(),
 		})
 	}
 	return rows

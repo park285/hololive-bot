@@ -3,7 +3,7 @@ package botruntime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -299,7 +299,7 @@ func TestDurableCommandUsesConfiguredHandlerDeadline(t *testing.T) {
 	msg := webhook.Message{Msg: "!help", Room: "room", JSON: &webhook.MessageJSON{
 		MessageID: "deadline-message", ChatID: "room-1",
 	}}
-	payload, err := json.Marshal(msg)
+	payload, err := jsonv2.Marshal(msg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,7 +530,7 @@ func TestDurableDefiniteFailureWritesFailed(t *testing.T) {
 	msg := webhook.Message{Msg: "!bad", Room: "room", JSON: &webhook.MessageJSON{
 		MessageID: "failed-message", ChatID: "room-1",
 	}}
-	payload, err := json.Marshal(msg)
+	payload, err := jsonv2.Marshal(msg)
 	if err != nil {
 		t.Fatal(err)
 	}

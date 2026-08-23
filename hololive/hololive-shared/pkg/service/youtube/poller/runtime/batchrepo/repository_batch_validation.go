@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -108,7 +108,7 @@ func validateShortPublishedAtNotification(videosByID map[string]*domain.YouTubeV
 	}
 
 	var payload shortNotificationPublishedAtPayload
-	if err := json.Unmarshal([]byte(notification.Payload), &payload); err != nil {
+	if err := jsonv2.Unmarshal([]byte(notification.Payload), &payload); err != nil {
 		return fmt.Errorf("video %s: unmarshal payload: %w", video.VideoID, err)
 	}
 	if err := validateCanonicalNotificationIdentity(notification.Kind, notification.ContentID, payload.VideoID, payload.CanonicalPostID); err != nil {
@@ -176,7 +176,7 @@ func validateCommunityPublishedAtNotification(postsByID map[string]*domain.YouTu
 	}
 
 	var payload communityNotificationPublishedAtPayload
-	if err := json.Unmarshal([]byte(notification.Payload), &payload); err != nil {
+	if err := jsonv2.Unmarshal([]byte(notification.Payload), &payload); err != nil {
 		return fmt.Errorf("post %s: unmarshal payload: %w", post.PostID, err)
 	}
 	if err := validateCanonicalNotificationIdentity(notification.Kind, notification.ContentID, payload.PostID, payload.CanonicalPostID); err != nil {

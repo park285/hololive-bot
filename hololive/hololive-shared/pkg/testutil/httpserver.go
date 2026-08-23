@@ -1,7 +1,7 @@
 package testutil
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,7 +19,7 @@ func NewJSONTestServer(t *testing.T, statusCode int, responseBody any, assertFn 
 		w.WriteHeader(statusCode)
 
 		if responseBody != nil {
-			if err := json.NewEncoder(w).Encode(responseBody); err != nil {
+			if err := jsonv2.MarshalWrite(w, responseBody); err != nil {
 				t.Errorf("encode JSON response: %v", err)
 			}
 		}

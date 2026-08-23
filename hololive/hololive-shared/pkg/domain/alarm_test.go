@@ -24,8 +24,8 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
@@ -49,13 +49,13 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(&envelope)
+	data, err := jsonv2.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("Marshal 실패: %v", err)
 	}
 
 	var decoded domain.AlarmQueueEnvelope
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	if err := jsonv2.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal 실패: %v", err)
 	}
 
@@ -114,13 +114,13 @@ func TestAlarmQueueEnvelope_JSONRoundtripYouTubeOutboxSource(t *testing.T) {
 		Version:    1,
 	}
 
-	data, err := json.Marshal(&envelope)
+	data, err := jsonv2.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("Marshal 실패: %v", err)
 	}
 
 	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := jsonv2.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("raw Unmarshal 실패: %v", err)
 	}
 	if raw["source_kind"] != string(domain.AlarmDispatchSourceKindYouTubeOutbox) {
@@ -131,7 +131,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripYouTubeOutboxSource(t *testing.T) {
 	}
 
 	var decoded domain.AlarmQueueEnvelope
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	if err := jsonv2.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal 실패: %v", err)
 	}
 	if decoded.SourceKind != domain.AlarmDispatchSourceKindYouTubeOutbox {
@@ -163,7 +163,7 @@ func TestAlarmQueueEnvelope_RustCompatibility(t *testing.T) {
 	}`
 
 	var env domain.AlarmQueueEnvelope
-	if err := json.Unmarshal([]byte(rustJSON), &env); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rustJSON), &env); err != nil {
 		t.Fatalf("Rust JSON 역직렬화 실패: %v", err)
 	}
 
@@ -198,14 +198,14 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 		Version:    1,
 	}
 
-	data, err := json.Marshal(&envelope)
+	data, err := jsonv2.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("Marshal 실패: %v", err)
 	}
 
 	// schedule_change_message는 빈 문자열이면 직렬화에 포함되지 않아야 함
 	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := jsonv2.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("raw Unmarshal 실패: %v", err)
 	}
 

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func (r *Runtime) runClaimLoop(ctx context.Context, errCh chan<- error) {

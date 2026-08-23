@@ -22,7 +22,7 @@ package durability
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"sync"
 	"testing"
@@ -49,7 +49,7 @@ func TestInboxClaimDoesNotScanBlockedFollowers(t *testing.T) {
 	err = tx.QueryRow(ctx, "EXPLAIN (ANALYZE, FORMAT JSON) "+inboxClaimSQL, "plan-token", int64(durabilityTestLease/time.Millisecond)).Scan(&planJSON)
 	require.NoError(t, err)
 	var plan []map[string]any
-	require.NoError(t, json.Unmarshal(planJSON, &plan))
+	require.NoError(t, jsonv2.Unmarshal(planJSON, &plan))
 	require.NotEmpty(t, plan)
 	stats := inboxPlanStats(plan[0])
 	assert.False(t, stats.SeqScan, "claim plan must not sequentially scan the inbox")

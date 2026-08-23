@@ -1,7 +1,7 @@
 package sourceobservation
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"strings"
@@ -86,7 +86,7 @@ type CheckpointEntry struct {
 	LastEvidenceSHA256 string
 	LastScheduledFor   time.Time
 	Continuity         contract.Continuity
-	Cursor             json.RawMessage
+	Cursor             jsontext.Value
 }
 
 type CheckpointUpdate struct {
@@ -137,7 +137,7 @@ type Observation struct {
 	ScopeSHA256          string
 	Completeness         contract.Completeness
 	Continuity           contract.Continuity
-	Payload              json.RawMessage
+	Payload              jsontext.Value
 	PayloadSHA256        string
 	EvidenceSHA256       string
 	CollectorInstance    string

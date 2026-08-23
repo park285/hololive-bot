@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	sharedenv "github.com/park285/shared-go/pkg/envutil"
-	sharedh3 "github.com/park285/shared-go/pkg/h3"
-	"github.com/park285/shared-go/pkg/httputil"
+	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const (

@@ -67,7 +67,7 @@ while IFS='|' read -r mode module pkg compose_services extra; do
 
   out="${tmp_dir}/binary-${entry_count}"
   echo "[pgo-gate] building ${module} ${pkg} (policy=off)"
-  (cd "${module_dir}" && CGO_ENABLED=0 go build -pgo=off -tags sonic -trimpath -buildvcs=false -o "${out}" "${pkg}")
+  (cd "${module_dir}" && CGO_ENABLED=0 go build -pgo=off -trimpath -buildvcs=false -o "${out}" "${pkg}")
   if go version -m "${out}" | grep -q -- '-pgo='; then
     echo "[pgo-gate] ${module} ${pkg}: off policy build carries a -pgo stamp" >&2
     exit 1

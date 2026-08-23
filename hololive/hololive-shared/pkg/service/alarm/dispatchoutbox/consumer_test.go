@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/park285/iris-client-go/v2/iris"
-	json "github.com/park285/shared-go/pkg/json"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -377,7 +377,7 @@ func TestConsumerDrainBatchRestoresAttemptCountForRetryRows(t *testing.T) {
 func mustMarshalTestEnvelope(t *testing.T, envelope *domain.AlarmQueueEnvelope) []byte {
 	t.Helper()
 
-	payload, err := json.Marshal(&envelope)
+	payload, err := jsonv2.Marshal(&envelope)
 	if err != nil {
 		t.Fatalf("marshal test envelope: %v", err)
 	}

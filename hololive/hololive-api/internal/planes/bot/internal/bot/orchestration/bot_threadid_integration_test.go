@@ -26,10 +26,10 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/webhook"
-	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -106,13 +106,13 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ir
 	mux := http.NewServeMux()
 	mux.HandleFunc("/reply", func(w http.ResponseWriter, r *http.Request) {
 		var req iris.ReplyRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := jsonv2.UnmarshalRead(r.Body, &req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		reqCh <- req
-		if err := json.NewEncoder(w).Encode(iris.ReplyAcceptedResponse{
+		if err := jsonv2.MarshalWrite(w, iris.ReplyAcceptedResponse{
 			RequestID: "reply-capture",
 			Success:   true,
 			Delivery:  "queued",
@@ -123,7 +123,7 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ir
 		}
 	})
 	mux.HandleFunc("/reply-status/reply-capture", func(w http.ResponseWriter, _ *http.Request) {
-		if err := json.NewEncoder(w).Encode(iris.ReplyStatusSnapshot{
+		if err := jsonv2.MarshalWrite(w, iris.ReplyStatusSnapshot{
 			RequestID: "reply-capture",
 			State:     "handoff_completed",
 		}); err != nil {

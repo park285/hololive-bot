@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/alicebob/miniredis/v2"
-	"github.com/park285/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/internal/testredis"
@@ -133,7 +133,7 @@ func TestCacheServiceMSetMGetDel(t *testing.T) {
 		t.Fatalf("mget failed: %v", err)
 	}
 	var decoded testPayload
-	if err := json.Unmarshal([]byte(values["a"]), &decoded); err != nil {
+	if err := jsonv2.Unmarshal([]byte(values["a"]), &decoded); err != nil {
 		t.Fatalf("decode failed: %v", err)
 	}
 	if decoded.Name != "A" {

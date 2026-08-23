@@ -30,9 +30,9 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/park285/shared-go/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 )
 

@@ -29,10 +29,10 @@ import (
 	"sync"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/internal/service/fallback"
 	ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 const (
@@ -103,7 +103,7 @@ func (ys *serviceImpl) cachedChannelStats(ctx context.Context, channelID string)
 	}
 
 	var stats ytcontract.ChannelStats
-	if err := json.Unmarshal([]byte(raw), &stats); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), &stats); err != nil {
 		ys.logger.Debug("Channel statistics cache decode failed",
 			slog.String("channel", channelID),
 			slog.Any("error", err))

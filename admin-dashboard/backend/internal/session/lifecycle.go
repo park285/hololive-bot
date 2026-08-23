@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/admin-dashboard/internal/auth"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 func (s *Store) Refresh(ctx context.Context, id string, idle bool) (RefreshResult, error) {
@@ -25,7 +25,7 @@ func (s *Store) refreshOnce(ctx context.Context, id string, idle bool) (RefreshR
 		return RefreshResult{Kind: RefreshMissing}, false, err
 	}
 	var sess Session
-	if err := json.Unmarshal([]byte(data), &sess); err != nil {
+	if err := jsonv2.Unmarshal([]byte(data), &sess); err != nil {
 		return RefreshResult{}, false, err
 	}
 	normalizeLegacySession(&sess)
@@ -51,7 +51,7 @@ func (s *Store) refreshExistingSession(ctx context.Context, id string, sess *Ses
 func (s *Store) refreshCAS(ctx context.Context, id string, idle bool, data string, sess *Session, now time.Time) (RefreshResult, bool, error) {
 	refreshed := *sess
 	refreshed.ExpiresAt = cappedExpiresAt(now, s.refreshTTL(idle), sess.AbsoluteExpiresAt)
-	refreshedData, err := json.Marshal(refreshed)
+	refreshedData, err := jsonv2.Marshal(refreshed)
 	if err != nil {
 		return RefreshResult{}, false, err
 	}
@@ -163,7 +163,7 @@ func (s *Store) rotateSource(ctx context.Context, oldID string) (string, *Sessio
 		return "", nil, err
 	}
 	var old Session
-	if err := json.Unmarshal([]byte(oldData), &old); err != nil {
+	if err := jsonv2.Unmarshal([]byte(oldData), &old); err != nil {
 		return "", nil, err
 	}
 	normalizeLegacySession(&old)
@@ -191,11 +191,11 @@ func (s *Store) buildRotation(old *Session, now time.Time) (newSession, oldMarke
 }
 
 func (s *Store) rotateExec(ctx context.Context, oldID, oldData string, newSession, oldMarker *Session, now time.Time) (int64, error) {
-	newData, err := json.Marshal(*newSession)
+	newData, err := jsonv2.Marshal(*newSession)
 	if err != nil {
 		return 0, err
 	}
-	markerData, err := json.Marshal(*oldMarker)
+	markerData, err := jsonv2.Marshal(*oldMarker)
 	if err != nil {
 		return 0, err
 	}

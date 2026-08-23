@@ -27,7 +27,7 @@ test-youtubejs:
 .PHONY: build-portable
 build-portable:
 	mkdir -p bin
-	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -o bin/$(BINARY_NAME) ./cmd/runtime/$(BINARY_NAME)
+	CGO_ENABLED=0 $(GO) build -trimpath -o bin/$(BINARY_NAME) ./cmd/runtime/$(BINARY_NAME)
 
 .PHONY: build-prod
 build-prod:

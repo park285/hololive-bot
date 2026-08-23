@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/shared-go/pkg/telemetry"
+	"github.com/park285/shared-go/v2/pkg/telemetry"
 )
 
 type testRuntime struct {

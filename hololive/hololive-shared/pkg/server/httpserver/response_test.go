@@ -30,8 +30,8 @@ import (
 	"strings"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func TestRespondError(t *testing.T) {
@@ -54,7 +54,7 @@ func TestRespondError(t *testing.T) {
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
 
@@ -94,7 +94,7 @@ func TestRespondInternalError(t *testing.T) {
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
 

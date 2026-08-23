@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/shared-go/pkg/outputguard"
-	"github.com/park285/shared-go/pkg/promptguard"
+	"github.com/park285/shared-go/v2/pkg/outputguard"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 )
 
 type llmGuards struct {

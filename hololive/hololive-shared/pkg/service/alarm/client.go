@@ -23,6 +23,7 @@ package alarm
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"fmt"
 	"io"
 	"log/slog"
@@ -31,8 +32,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/shared-go/pkg/httputil"
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -118,10 +119,10 @@ type minutesResp struct {
 }
 
 type apiEnvelope struct {
-	Success bool            `json:"success"`
-	Error   string          `json:"error,omitempty"`
-	Message string          `json:"message,omitempty"`
-	Data    json.RawMessage `json:"data,omitempty"`
+	Success bool           `json:"success"`
+	Error   string         `json:"error,omitempty"`
+	Message string         `json:"message,omitempty"`
+	Data    jsontext.Value `json:"data,omitempty"`
 }
 
 func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
@@ -298,7 +299,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 
 func decodeAPIEnvelope(path string, body io.Reader, out any) error {
 	var envelope apiEnvelope
-	if err := json.NewDecoder(body).Decode(&envelope); err != nil {
+	if err := jsonv2.UnmarshalRead(body, &envelope); err != nil {
 		return fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
 	}
 	if !envelope.Success {
@@ -307,7 +308,7 @@ func decodeAPIEnvelope(path string, body io.Reader, out any) error {
 	if !envelopeHasData(out, envelope.Data) {
 		return nil
 	}
-	if err := json.Unmarshal(envelope.Data, out); err != nil {
+	if err := jsonv2.Unmarshal(envelope.Data, out); err != nil {
 		return fmt.Errorf("alarm-api: %s: decode data: %w", path, err)
 	}
 	return nil
@@ -324,7 +325,7 @@ func envelopeFailureMessage(envelope apiEnvelope) string {
 	return message
 }
 
-func envelopeHasData(out any, data json.RawMessage) bool {
+func envelopeHasData(out any, data jsontext.Value) bool {
 	if out == nil || len(data) == 0 {
 		return false
 	}
@@ -336,7 +337,7 @@ func encodeJSONRequestBody(path string, body any) (io.Reader, error) {
 		return nil, nil
 	}
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(body); err != nil {
+	if err := jsonv2.MarshalWrite(&buf, body); err != nil {
 		return nil, fmt.Errorf("alarm-api: %s: encode request: %w", path, err)
 	}
 	return &buf, nil

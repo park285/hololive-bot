@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"net/http"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
@@ -50,7 +50,7 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 
 	var liveStatusResp LiveStatusResponse
 	if err := c.executeRequest(chzzkGetLiveStatusOp, req, "failed to read response body", func(body []byte) error {
-		if err := json.Unmarshal(body, &liveStatusResp); err != nil {
+		if err := jsonv2.Unmarshal(body, &liveStatusResp); err != nil {
 			return fmt.Errorf("failed to unmarshal response: %w", err)
 		}
 
@@ -100,7 +100,7 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 
 	var scheduledResp ScheduledLivesResponse
 	if err := c.executeRequest(chzzkGetScheduledLivesOp, req, "failed to read response body", func(body []byte) error {
-		if err := json.Unmarshal(body, &scheduledResp); err != nil {
+		if err := jsonv2.Unmarshal(body, &scheduledResp); err != nil {
 			return fmt.Errorf("failed to unmarshal response: %w", err)
 		}
 

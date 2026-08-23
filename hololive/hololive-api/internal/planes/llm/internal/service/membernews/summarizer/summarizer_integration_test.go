@@ -30,11 +30,11 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/util"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func skipIfNoLLMKey(t *testing.T) {
@@ -240,7 +240,7 @@ func TestIntegration_MemberNewsSummarize_Weekly(t *testing.T) {
 	}
 
 	// JSON 직렬화 검증
-	raw, err := json.Marshal(digest)
+	raw, err := jsonv2.Marshal(digest)
 	if err != nil {
 		t.Fatalf("digest JSON 직렬화 실패: %v", err)
 	}

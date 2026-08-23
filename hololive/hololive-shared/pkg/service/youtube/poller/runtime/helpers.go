@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -56,11 +56,11 @@ func ConvertThumbnails(thumbnails []parser.Thumbnail) domain.ThumbnailsJSON {
 	return result
 }
 
-// mustMarshalJSON: JSON 마샬링 (에러 시 빈 객체)
+// MustMarshalJSON marshals v or panics when v cannot be represented as JSON.
 func MustMarshalJSON(v any) string {
-	data, err := json.Marshal(v)
+	data, err := jsonv2.Marshal(v)
 	if err != nil {
-		return "{}"
+		panic(err)
 	}
 	return string(data)
 }

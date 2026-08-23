@@ -1,7 +1,8 @@
 package sourceobservation
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"sort"
 	"strings"
@@ -256,11 +257,11 @@ func scheduleItemOutsideWindow(scheduledAt time.Time, coverage ScheduleCoverageV
 		coverage.WindowEnd != nil && scheduledAt.After(*coverage.WindowEnd)
 }
 
-func MarshalPayloadV1(value any) (json.RawMessage, error) {
+func MarshalPayloadV1(value any) (jsontext.Value, error) {
 	if err := validateCanonicalJSONStrings(value); err != nil {
 		return nil, fmt.Errorf("marshal source observation payload: %w", err)
 	}
-	raw, err := json.Marshal(value)
+	raw, err := jsonv2.Marshal(value)
 	if err != nil {
 		return nil, fmt.Errorf("marshal source observation payload: %w", err)
 	}

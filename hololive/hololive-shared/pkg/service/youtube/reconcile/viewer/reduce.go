@@ -1,7 +1,7 @@
 package viewer
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"time"
 
@@ -133,10 +133,10 @@ func SampleDigest(availability string, count *int64) (string, error) {
 }
 
 func sampleDigest(availability string, count *int64) (string, error) {
-	payload, err := json.Marshal(struct {
+	payload, err := jsonv2.Marshal(struct {
 		Availability string `json:"availability"`
 		ViewerCount  *int64 `json:"viewer_count"`
-	}{Availability: availability, ViewerCount: count})
+	}{Availability: availability, ViewerCount: count}, jsonv2.Deterministic(true))
 	if err != nil {
 		return "", fmt.Errorf("marshal viewer sample digest: %w", err)
 	}

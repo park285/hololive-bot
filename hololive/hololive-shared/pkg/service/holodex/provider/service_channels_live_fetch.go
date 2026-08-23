@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -69,7 +69,7 @@ func (h *Service) fetchHololiveChannelListPage(ctx context.Context, pageSize, of
 	}
 
 	var rawChannels []streammapping.ChannelRaw
-	if err := json.Unmarshal(body, &rawChannels); err != nil {
+	if err := jsonv2.Unmarshal(body, &rawChannels); err != nil {
 		return nil, 0, fmt.Errorf("failed to unmarshal channel list: %w", err)
 	}
 

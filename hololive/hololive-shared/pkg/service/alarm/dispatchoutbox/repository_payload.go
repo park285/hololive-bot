@@ -3,12 +3,13 @@ package dispatchoutbox
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json/jsontext"
 	"fmt"
 	"strconv"
 	"strings"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 type eventPayloadEnvelope struct {
@@ -51,7 +52,7 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 		return eventInsert{}, deliveryInsert{}, err
 	}
 	hash := sha256.Sum256(payload)
-	deliveryContext, err := json.Marshal(deliveryContext{Users: envelope.Notification.Users})
+	deliveryContext, err := jsonv2.Marshal(deliveryContext{Users: envelope.Notification.Users})
 	if err != nil {
 		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch delivery context: %w", err)
 	}
@@ -60,22 +61,22 @@ func buildLedgerRows(envelope *domain.AlarmQueueEnvelope, status Status) (eventI
 		dispatchGroupKey = BuildDispatchGroupKeyFromEnvelope(envelope)
 	}
 	return eventInsert{
-			EventKey:    eventKey,
-			PayloadHash: hex.EncodeToString(hash[:]),
-			AlarmType:   alarmType,
-			ChannelID:   input.ChannelID,
-			StreamID:    input.StreamID,
-			Category:    eventCategory(input),
-			Payload:     payload,
-		}, deliveryInsert{
-			EventKey:         eventKey,
-			RoomID:           input.RoomID,
-			DedupeKey:        dedupeKey,
-			ClaimKeys:        envelope.ClaimKeys,
-			DeliveryContext:  deliveryContext,
-			DispatchGroupKey: dispatchGroupKey,
-			Status:           status,
-		}, nil
+		EventKey:    eventKey,
+		PayloadHash: hex.EncodeToString(hash[:]),
+		AlarmType:   alarmType,
+		ChannelID:   input.ChannelID,
+		StreamID:    input.StreamID,
+		Category:    eventCategory(input),
+		Payload:     payload,
+	}, deliveryInsert{
+		EventKey:         eventKey,
+		RoomID:           input.RoomID,
+		DedupeKey:        dedupeKey,
+		ClaimKeys:        envelope.ClaimKeys,
+		DeliveryContext:  deliveryContext,
+		DispatchGroupKey: dispatchGroupKey,
+		Status:           status,
+	}, nil
 }
 
 func eventCategory(input *DedupeInput) string {
@@ -105,7 +106,7 @@ func marshalEventPayload(envelope *domain.AlarmQueueEnvelope) ([]byte, error) {
 		DeliveryDigest: envelope.DeliveryDigest,
 		Version:        envelope.Version,
 	}
-	raw, err := json.Marshal(payload)
+	raw, err := jsonv2.Marshal(payload, jsonv2.Deterministic(true))
 	if err != nil {
 		return nil, fmt.Errorf("marshal dispatch event payload: %w", err)
 	}
@@ -114,18 +115,18 @@ func marshalEventPayload(envelope *domain.AlarmQueueEnvelope) ([]byte, error) {
 
 func validateEventPayloadRoomAgnostic(raw []byte) error {
 	var payload struct {
-		RoomID       json.RawMessage `json:"room_id"`
-		RoomIDCamel  json.RawMessage `json:"roomId"`
-		Room         json.RawMessage `json:"room"`
-		Users        json.RawMessage `json:"users"`
+		RoomID       jsontext.Value `json:"room_id"`
+		RoomIDCamel  jsontext.Value `json:"roomId"`
+		Room         jsontext.Value `json:"room"`
+		Users        jsontext.Value `json:"users"`
 		Notification struct {
-			RoomID      json.RawMessage `json:"room_id"`
-			RoomIDCamel json.RawMessage `json:"roomId"`
-			Room        json.RawMessage `json:"room"`
-			Users       json.RawMessage `json:"users"`
+			RoomID      jsontext.Value `json:"room_id"`
+			RoomIDCamel jsontext.Value `json:"roomId"`
+			Room        jsontext.Value `json:"room"`
+			Users       jsontext.Value `json:"users"`
 		} `json:"notification"`
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := jsonv2.Unmarshal(raw, &payload); err != nil {
 		return fmt.Errorf("validate dispatch event payload: %w", err)
 	}
 	if hasDeliverySpecificFields(payload.RoomID, payload.RoomIDCamel, payload.Room, payload.Users) {
@@ -137,7 +138,7 @@ func validateEventPayloadRoomAgnostic(raw []byte) error {
 	return nil
 }
 
-func hasDeliverySpecificFields(fields ...json.RawMessage) bool {
+func hasDeliverySpecificFields(fields ...jsontext.Value) bool {
 	for _, field := range fields {
 		if field != nil {
 			return true

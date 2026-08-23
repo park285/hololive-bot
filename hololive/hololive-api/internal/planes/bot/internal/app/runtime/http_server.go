@@ -25,7 +25,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/park285/shared-go/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/v2/pkg/runtime/httpserver"
 	"github.com/quic-go/quic-go/http3"
 )
 

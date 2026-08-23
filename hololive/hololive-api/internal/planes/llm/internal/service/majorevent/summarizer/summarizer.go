@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/promptguard"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
@@ -345,7 +345,7 @@ func (s *EventSummarizer) buildSummaryResponse(
 	}
 
 	var resp summaryResponse
-	if err := json.Unmarshal([]byte(rawJSON), &resp); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
 		return nil, fmt.Errorf("parse summary json: %w", err)
 	}
 	return &resp, nil

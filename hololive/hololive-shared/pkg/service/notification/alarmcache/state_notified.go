@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func NormalizeScheduledMinute(startScheduled time.Time) time.Time {

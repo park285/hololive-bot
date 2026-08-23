@@ -31,7 +31,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/readiness"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func buildHealthOnlyRouter(ctx context.Context, logger *slog.Logger, authConfig httputil.AdminAuthConfig) (*gin.Engine, error) {

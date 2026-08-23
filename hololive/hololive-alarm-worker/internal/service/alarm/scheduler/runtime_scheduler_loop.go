@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	sharedlog "github.com/park285/shared-go/pkg/logging"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 	"golang.org/x/sync/errgroup"
 )
 

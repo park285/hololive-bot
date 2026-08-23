@@ -1,7 +1,8 @@
 package officialcollector
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -42,7 +43,7 @@ func TestParseScheduleRowCollectsCollaboTalentNames(t *testing.T) {
 
 func TestParseScheduleRowRejectsInvalidCollaboTalentsType(t *testing.T) {
 	t.Parallel()
-	rawRow := json.RawMessage(`{
+	rawRow := jsontext.Value(`{
 		"datetime":"2026/08/14 20:00:00",
 		"url":"https://www.youtube.com/watch?v=collabrow002",
 		"title":"Talk",
@@ -67,7 +68,7 @@ func TestParseScheduleRowRejectsCollaboTalentNamesOverflow(t *testing.T) {
 		"name":           "Host Talent",
 		"collaboTalents": talents,
 	}
-	rawRow, err := json.Marshal(row)
+	rawRow, err := jsonv2.Marshal(row)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +88,7 @@ func TestParseScheduleRowRejectsOversizeCollaboTalentName(t *testing.T) {
 			"name": strings.Repeat("x", contract.MaxScheduleCollaboTalentNameBytes+1),
 		}},
 	}
-	rawRow, err := json.Marshal(row)
+	rawRow, err := jsonv2.Marshal(row)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +108,7 @@ func TestRunnerPublishesCollaboTalentNames(t *testing.T) {
 	}]}]}`)
 	observation := mustSingleObservation(t, mustCollect(t, body))
 	var payload contract.ScheduleSnapshotV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if len(payload.Items) != 1 {

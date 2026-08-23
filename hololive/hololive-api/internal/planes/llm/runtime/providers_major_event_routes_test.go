@@ -36,8 +36,8 @@ import (
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
 
-	"github.com/park285/shared-go/pkg/httputil"
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
@@ -142,7 +142,7 @@ func assertErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, want strin
 	t.Helper()
 
 	var payload map[string]any
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &payload))
+	require.NoError(t, jsonv2.Unmarshal(rr.Body.Bytes(), &payload))
 	assert.Equal(t, want, payload["error"])
 	assert.Len(t, payload, 1)
 }

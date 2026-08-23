@@ -2,7 +2,8 @@ package holodexcollector
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"net/url"
 	"strings"
@@ -16,15 +17,15 @@ import (
 const officialScheduleSubject = "global:hololive-schedule"
 
 type liveRow struct {
-	ID             string          `json:"id"`
-	Title          string          `json:"title"`
-	ChannelID      string          `json:"channel_id"`
-	Status         string          `json:"status"`
-	StartScheduled string          `json:"start_scheduled"`
-	StartActual    string          `json:"start_actual"`
-	EndActual      string          `json:"end_actual"`
-	LiveViewers    json.RawMessage `json:"live_viewers"`
-	Channel        liveChannel     `json:"channel"`
+	ID             string         `json:"id"`
+	Title          string         `json:"title"`
+	ChannelID      string         `json:"channel_id"`
+	Status         string         `json:"status"`
+	StartScheduled string         `json:"start_scheduled"`
+	StartActual    string         `json:"start_actual"`
+	EndActual      string         `json:"end_actual"`
+	LiveViewers    jsontext.Value `json:"live_viewers"`
+	Channel        liveChannel    `json:"channel"`
 }
 
 type liveChannel struct {
@@ -70,21 +71,21 @@ func parseLiveRows(body []byte) ([]parsedLive, error) {
 	return rows, nil
 }
 
-func decodeLiveRows(body []byte) ([]json.RawMessage, error) {
+func decodeLiveRows(body []byte) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(body)
-	if !json.Valid(trimmed) || len(trimmed) == 0 || trimmed[0] != '[' {
+	if !jsontext.Value(trimmed).IsValid() || len(trimmed) == 0 || trimmed[0] != '[' {
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response is not a JSON array")
 	}
-	var rawRows []json.RawMessage
-	if err := json.Unmarshal(trimmed, &rawRows); err != nil {
+	var rawRows []jsontext.Value
+	if err := jsonv2.Unmarshal(trimmed, &rawRows); err != nil {
 		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex live: %w", err))
 	}
 	return rawRows, nil
 }
 
-func parseLiveRow(raw json.RawMessage) (parsedLive, error) {
+func parseLiveRow(raw jsontext.Value) (parsedLive, error) {
 	var row liveRow
-	if err := json.Unmarshal(raw, &row); err != nil {
+	if err := jsonv2.Unmarshal(raw, &row); err != nil {
 		return parsedLive{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex live row: %w", err))
 	}
 	if strings.TrimSpace(row.ID) == "" {
@@ -212,7 +213,7 @@ func viewerAvailability(row *parsedLive) (availability string, viewerCount *int6
 		return "UNAVAILABLE", nil, nil
 	}
 	var count int64
-	if err := json.Unmarshal(raw, &count); err != nil {
+	if err := jsonv2.Unmarshal(raw, &count); err != nil {
 		return "", nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex viewer count: %w", err))
 	}
 	if count < 0 {

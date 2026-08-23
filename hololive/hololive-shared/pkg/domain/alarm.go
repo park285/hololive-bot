@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 type AlarmType string
@@ -289,7 +289,7 @@ func (e *AlarmQueueEnvelope) EnsureSourcePayloadFromRaw() {
 
 func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 	var wire alarmQueueEnvelopeWire
-	if err := json.Unmarshal(data, &wire); err != nil {
+	if err := jsonv2.Unmarshal(data, &wire); err != nil {
 		return fmt.Errorf("unmarshal alarm queue envelope: %w", err)
 	}
 
@@ -322,7 +322,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		rawPayload:       string(data),
 	}
 
-	normalizedPayload, err := json.Marshal(*e)
+	normalizedPayload, err := jsonv2.Marshal(*e)
 	if err != nil {
 		return fmt.Errorf("marshal alarm queue envelope: %w", err)
 	}

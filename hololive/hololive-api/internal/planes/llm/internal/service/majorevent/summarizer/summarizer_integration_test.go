@@ -21,8 +21,8 @@
 package summarizer
 
 import (
+	jsonv2 "encoding/json/v2"
 	"fmt"
-	json "github.com/park285/shared-go/pkg/json"
 	"strings"
 	"testing"
 	"time"
@@ -128,7 +128,7 @@ func TestIntegration_BuildUserPrompt_Output(t *testing.T) {
 		t.Fatal("프롬프트에 JSON 배열이 없음")
 	}
 	jsonPart := prompt[idx:]
-	if err := json.Unmarshal([]byte(jsonPart), &promptEvents); err != nil {
+	if err := jsonv2.Unmarshal([]byte(jsonPart), &promptEvents); err != nil {
 		t.Fatalf("프롬프트 JSON 파싱 실패: %v", err)
 	}
 

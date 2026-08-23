@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 // mockLockCache: lockCache mock 구현

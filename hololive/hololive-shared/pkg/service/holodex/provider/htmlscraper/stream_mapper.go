@@ -1,13 +1,14 @@
 package htmlscraper
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
@@ -41,7 +42,7 @@ type officialScheduleRowStats struct {
 	Duplicate int
 }
 
-func (s *Service) mapOfficialScheduleRows(rows []json.RawMessage) ([]*domain.Stream, officialScheduleRowStats, error) {
+func (s *Service) mapOfficialScheduleRows(rows []jsontext.Value) ([]*domain.Stream, officialScheduleRowStats, error) {
 	stats := officialScheduleRowStats{Total: len(rows)}
 	streams := make([]*domain.Stream, 0, len(rows))
 	byVideoID := make(map[string]*officialScheduleMappedRow, len(rows))
@@ -59,7 +60,7 @@ func (s *Service) mapOfficialScheduleRows(rows []json.RawMessage) ([]*domain.Str
 }
 
 func (s *Service) applyOfficialScheduleRow(
-	rawRow json.RawMessage,
+	rawRow jsontext.Value,
 	streams *[]*domain.Stream,
 	byVideoID map[string]*officialScheduleMappedRow,
 	stats *officialScheduleRowStats,
@@ -84,9 +85,9 @@ func (s *Service) applyOfficialScheduleRow(
 	stats.Valid++
 }
 
-func (s *Service) mapOfficialScheduleRow(rawRow json.RawMessage) (*officialScheduleMappedRow, error) {
+func (s *Service) mapOfficialScheduleRow(rawRow jsontext.Value) (*officialScheduleMappedRow, error) {
 	var item officialScheduleVideoItem
-	if err := json.Unmarshal(rawRow, &item); err != nil {
+	if err := jsonv2.Unmarshal(rawRow, &item); err != nil {
 		return nil, fmt.Errorf("decode official schedule video row: %w", err)
 	}
 

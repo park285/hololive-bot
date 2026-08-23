@@ -27,7 +27,7 @@ import (
 	"runtime/debug"
 
 	"github.com/gin-gonic/gin"
-	sharedlog "github.com/park285/shared-go/pkg/logging"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 // RecoveryMiddleware는 HTTP boundary에서 발생한 panic이 프로세스 밖으로 전파되지 않도록

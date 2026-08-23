@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -42,7 +42,7 @@ func (c *Consumer) reconcileViewer(
 
 func viewerEvidenceFromObservation(observation *Observation) (viewer.Evidence, error) {
 	var payload contract.ViewerSampleV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return viewer.Evidence{}, fmt.Errorf("decode viewer sample payload: %w", err)
 	}
 	return viewer.Evidence{

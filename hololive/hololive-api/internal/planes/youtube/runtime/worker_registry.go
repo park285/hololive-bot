@@ -3,7 +3,7 @@ package runtime
 import (
 	"time"
 
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func (r *Runtime) WorkerRegistration() workercontract.Registration {

@@ -130,42 +130,42 @@ func newCommunityClaimGateFixture(now time.Time, suffix string) (domain.YouTubeN
 	contentID := "post-" + suffix
 	postID := "community:" + contentID
 	return domain.YouTubeNotificationDelivery{
-			ID:        100 + int64(len(suffix)),
-			OutboxID:  200 + int64(len(suffix)),
-			RoomID:    "room-community",
-			CreatedAt: now.Add(15 * time.Second),
-		}, domain.YouTubeNotificationOutbox{
-			ID:            200 + int64(len(suffix)),
-			Kind:          domain.OutboxKindCommunityPost,
-			ChannelID:     "UC_COMMUNITY",
-			ContentID:     contentID,
-			Payload:       fmt.Sprintf(`{"canonical_post_id":%q,"post_id":%q,"content_text":"body-%s"}`, postID, contentID, suffix),
-			Status:        domain.OutboxStatusPending,
-			AttemptCount:  0,
-			NextAttemptAt: now,
-			CreatedAt:     now,
-		}, postID
+		ID:        100 + int64(len(suffix)),
+		OutboxID:  200 + int64(len(suffix)),
+		RoomID:    "room-community",
+		CreatedAt: now.Add(15 * time.Second),
+	}, domain.YouTubeNotificationOutbox{
+		ID:            200 + int64(len(suffix)),
+		Kind:          domain.OutboxKindCommunityPost,
+		ChannelID:     "UC_COMMUNITY",
+		ContentID:     contentID,
+		Payload:       fmt.Sprintf(`{"canonical_post_id":%q,"post_id":%q,"content_text":"body-%s"}`, postID, contentID, suffix),
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: now,
+		CreatedAt:     now,
+	}, postID
 }
 
 func newShortClaimGateFixture(now time.Time, suffix string) (domain.YouTubeNotificationDelivery, domain.YouTubeNotificationOutbox, string) {
 	contentID := "short-" + suffix
 	postID := "short:" + contentID
 	return domain.YouTubeNotificationDelivery{
-			ID:        300 + int64(len(suffix)),
-			OutboxID:  400 + int64(len(suffix)),
-			RoomID:    "room-shorts",
-			CreatedAt: now.Add(15 * time.Second),
-		}, domain.YouTubeNotificationOutbox{
-			ID:            400 + int64(len(suffix)),
-			Kind:          domain.OutboxKindNewShort,
-			ChannelID:     "UC_SHORTS",
-			ContentID:     contentID,
-			Payload:       fmt.Sprintf(`{"canonical_post_id":%q,"video_id":%q,"title":"title-%s"}`, postID, contentID, suffix),
-			Status:        domain.OutboxStatusPending,
-			AttemptCount:  0,
-			NextAttemptAt: now,
-			CreatedAt:     now,
-		}, postID
+		ID:        300 + int64(len(suffix)),
+		OutboxID:  400 + int64(len(suffix)),
+		RoomID:    "room-shorts",
+		CreatedAt: now.Add(15 * time.Second),
+	}, domain.YouTubeNotificationOutbox{
+		ID:            400 + int64(len(suffix)),
+		Kind:          domain.OutboxKindNewShort,
+		ChannelID:     "UC_SHORTS",
+		ContentID:     contentID,
+		Payload:       fmt.Sprintf(`{"canonical_post_id":%q,"video_id":%q,"title":"title-%s"}`, postID, contentID, suffix),
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: now,
+		CreatedAt:     now,
+	}, postID
 }
 
 func insertSentSiblingDelivery(t *testing.T, db *deliveryTestDB, outbox *domain.YouTubeNotificationOutbox, roomID string, sentAt time.Time) {

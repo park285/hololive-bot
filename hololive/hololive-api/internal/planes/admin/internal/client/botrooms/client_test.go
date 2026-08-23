@@ -1,7 +1,7 @@
 package botrooms
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +21,7 @@ func TestClientGetRoomsSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotAPIKey = r.Header.Get(commoncontracts.APIKeyHeader)
-		if err := json.NewEncoder(w).Encode(iris.RoomListResponse{Rooms: []iris.RoomSummary{
+		if err := jsonv2.MarshalWrite(w, iris.RoomListResponse{Rooms: []iris.RoomSummary{
 			{ChatID: 123, Type: &roomType, LinkName: &roomName},
 		}}); err != nil {
 			t.Fatalf("encode response: %v", err)

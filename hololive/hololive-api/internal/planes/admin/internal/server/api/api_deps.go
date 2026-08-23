@@ -4,9 +4,18 @@ import (
 	"log/slog"
 	"net/http"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
+
+func bindJSON(c *gin.Context, destination any) error {
+	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
+		return err
+	}
+	return binding.Validator.ValidateStruct(destination)
+}
 
 func loggerOrDefault(logger *slog.Logger) *slog.Logger {
 	if logger != nil {

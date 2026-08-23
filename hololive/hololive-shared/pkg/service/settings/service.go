@@ -29,8 +29,8 @@ import (
 	"slices"
 	"sync"
 
+	jsonv2 "encoding/json/v2"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 type Settings struct {
@@ -107,7 +107,7 @@ func (s *Service) load() {
 	}()
 
 	var disk settingsDisk
-	if err := json.NewDecoder(f).Decode(&disk); err != nil {
+	if err := jsonv2.UnmarshalRead(f, &disk); err != nil {
 		if s.logger != nil {
 			s.logger.Warn("Failed to decode settings file, using defaults", slog.String("error", err.Error()))
 		}
@@ -218,7 +218,7 @@ func (s *Service) writeSettingsTempFile() (path string, err error) {
 		}
 	}()
 
-	if encodeErr := json.NewEncoder(temp).Encode(s.cache); encodeErr != nil {
+	if encodeErr := jsonv2.MarshalWrite(temp, s.cache); encodeErr != nil {
 		return temp.Name(), fmt.Errorf("failed to write settings: %w", encodeErr)
 	}
 	if syncErr := temp.Sync(); syncErr != nil {

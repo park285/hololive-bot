@@ -1,7 +1,7 @@
 package dedup_test
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
@@ -14,7 +14,7 @@ func TestH5_NotifiedDataWireRoundTrip(t *testing.T) {
 		StartScheduled: "x",
 		SentAt:         map[int]bool{1: true},
 	}
-	b, err := json.Marshal(orig)
+	b, err := jsonv2.Marshal(orig)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestH5_NotifiedDataWireRoundTrip(t *testing.T) {
 	}
 
 	var got dedup.NotifiedData
-	if err := json.Unmarshal(b, &got); err != nil {
+	if err := jsonv2.Unmarshal(b, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if got.StartScheduled != orig.StartScheduled {
@@ -39,7 +39,7 @@ func TestH5_UpcomingEventNotifiedDataWireRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	orig := dedup.UpcomingEventNotifiedData{NotifiedAt: "2026-01-01T00:00:00Z"}
-	b, err := json.Marshal(orig)
+	b, err := jsonv2.Marshal(orig)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestH5_UpcomingEventNotifiedDataWireRoundTrip(t *testing.T) {
 		t.Fatalf("wire = %q, want %q", string(b), want)
 	}
 	var got dedup.UpcomingEventNotifiedData
-	if err := json.Unmarshal(b, &got); err != nil {
+	if err := jsonv2.Unmarshal(b, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if got.NotifiedAt != orig.NotifiedAt {

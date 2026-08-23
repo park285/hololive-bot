@@ -65,7 +65,7 @@ func RegisterHealthRoutes(router gin.IRoutes) {
 	}
 
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, health.Get())
+		respondJSON(c, http.StatusOK, health.Get())
 	})
 	router.GET("/ready", func(c *gin.Context) {
 		response, ready := health.GetReadiness()
@@ -73,6 +73,6 @@ func RegisterHealthRoutes(router gin.IRoutes) {
 		if !ready {
 			status = http.StatusServiceUnavailable
 		}
-		c.JSON(status, response)
+		respondJSON(c, status, response)
 	})
 }

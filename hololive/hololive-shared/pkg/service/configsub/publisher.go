@@ -24,7 +24,7 @@ import (
 	"context"
 	"fmt"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 	"github.com/valkey-io/valkey-go"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -71,7 +71,7 @@ func (p *Publisher) publish(ctx context.Context, updateType string, payload any)
 		return fmt.Errorf("publish config update: client is nil")
 	}
 
-	rawPayload, err := json.Marshal(payload)
+	rawPayload, err := jsonv2.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("publish config update: marshal payload: %w", err)
 	}
@@ -80,7 +80,7 @@ func (p *Publisher) publish(ctx context.Context, updateType string, payload any)
 		Type:    updateType,
 		Payload: rawPayload,
 	}
-	rawUpdate, err := json.Marshal(update)
+	rawUpdate, err := jsonv2.Marshal(update)
 	if err != nil {
 		return fmt.Errorf("publish config update: marshal update: %w", err)
 	}

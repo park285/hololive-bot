@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"net/http"
 	"testing"
@@ -39,7 +39,7 @@ func TestStatsHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 	}
 
 	var response YouTubeCommunityShortsOpsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
 

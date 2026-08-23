@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,7 +19,7 @@ func TestErrorMapsAppError(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	var body ErrorResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &body))
 	require.Equal(t, "nope", body.Error)
 	require.Equal(t, "bad_request", body.Code)
 }

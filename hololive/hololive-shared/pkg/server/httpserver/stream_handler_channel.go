@@ -65,7 +65,7 @@ func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
 		return
 	}
 
-	c.JSON(200, gin.H{"status": "ok", "channels": channelResponses(channelsMap)})
+	respondJSON(c, 200, gin.H{"status": "ok", "channels": channelResponses(channelsMap)})
 }
 
 func (h *StreamHandler) respondChannelQueryError(c *gin.Context) {
@@ -115,5 +115,5 @@ func (h *StreamHandler) SearchChannels(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"status": "ok", "channels": channels})
+	respondJSON(c, 200, gin.H{"status": "ok", "channels": channels})
 }

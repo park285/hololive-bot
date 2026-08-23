@@ -22,14 +22,14 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	common "github.com/kapu/hololive-shared/pkg/contracts/common"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func TestAPIKeyAuthMiddleware(t *testing.T) {
@@ -111,7 +111,7 @@ func TestAPIKeyAuthMiddleware_ResponseBodyContract(t *testing.T) {
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
 
@@ -217,7 +217,7 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
 

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 var errScrapeFailed = errors.New("scrape failed")
@@ -63,7 +63,7 @@ func newFakeStatsCache() (client *mocks.Client, writeCount func() int) {
 			return value, ok, nil
 		},
 		SetFunc: func(_ context.Context, key string, value any, _ time.Duration) error {
-			raw, err := json.Marshal(value)
+			raw, err := jsonv2.Marshal(value)
 			if err != nil {
 				return err
 			}

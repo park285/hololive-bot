@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 
@@ -80,7 +80,7 @@ func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, period
 }
 
 func marshalPromptJSON(value any, fallback string) []byte {
-	data, err := json.Marshal(value)
+	data, err := jsonv2.Marshal(value)
 	if err != nil {
 		return []byte(fallback)
 	}

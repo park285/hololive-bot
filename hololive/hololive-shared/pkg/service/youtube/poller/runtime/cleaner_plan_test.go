@@ -2,7 +2,7 @@ package polling
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"testing"
 	"time"
 
@@ -95,7 +95,7 @@ func TestViewerSampleCleanerPlanBoundsIneligiblePrefixAndPaginatesEmptySessions(
 	require.NoError(t, tx.Rollback(ctx))
 
 	var plans []viewerSampleExplainEnvelope
-	require.NoError(t, json.Unmarshal([]byte(rawPlan), &plans))
+	require.NoError(t, jsonv2.Unmarshal([]byte(rawPlan), &plans))
 	require.Len(t, plans, 1)
 	require.True(t, viewerSamplePlanUsesIndex(&plans[0].Plan, "idx_yls_ended_cleanup"))
 	require.True(t, viewerSamplePlanUsesIndex(&plans[0].Plan, "youtube_live_viewer_samples_pkey"))

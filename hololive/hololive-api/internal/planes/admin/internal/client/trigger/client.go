@@ -30,7 +30,7 @@ import (
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 // Client는 llm-scheduler 내부 트리거 API를 호출한다.

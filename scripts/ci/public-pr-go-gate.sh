@@ -114,17 +114,17 @@ case "${stage}" in
       work_root="$(mktemp -d)"
       trap 'rm -rf "${work_root}"' EXIT
     fi
-    jsonl="${work_root}/collector-go-sonic.jsonl"
-    echo "[public-pr] module=${module} CGO_ENABLED=0 go test -json -count=1 -tags sonic ./..."
+    jsonl="${work_root}/collector-go-default-json.jsonl"
+    echo "[public-pr] module=${module} CGO_ENABLED=0 go test -json -count=1 ./..."
     set +e
     set +o pipefail
-    CGO_ENABLED=0 go test -json -count=1 -tags sonic ./... | tee "${jsonl}"
+    CGO_ENABLED=0 go test -json -count=1 ./... | tee "${jsonl}"
     pipeline_status=("${PIPESTATUS[@]}")
     test_status="${pipeline_status[0]}"
     tee_status="${pipeline_status[1]}"
     set -euo pipefail
     if [[ "${tee_status}" -ne 0 ]]; then
-      echo "failed to record sonic test JSON" >&2
+      echo "failed to record default JSON test output" >&2
       exit 1
     fi
     python3 "${ROOT_DIR}/scripts/ci/check-go-test-json.py" \
@@ -132,7 +132,7 @@ case "${stage}" in
       --require-pass \
       --allow-skip-file "${ROOT_DIR}/scripts/ci/collector-test-skip-allowlist.txt"
     if [[ "${test_status}" -ne 0 ]]; then
-      echo "::error title=sonic tests failed::module=${module} stage=${stage}"
+      echo "::error title=default JSON tests failed::module=${module} stage=${stage}"
       exit 1
     fi
     ;;

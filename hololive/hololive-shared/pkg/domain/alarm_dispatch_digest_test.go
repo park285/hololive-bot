@@ -3,7 +3,7 @@ package domain
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"testing"
 )
 
@@ -64,12 +64,12 @@ func TestAlarmQueueEnvelopeRoundTripsDeliveryDigest(t *testing.T) {
 	if err := envelope.ValidateCanonicalDispatch(); err != nil {
 		t.Fatalf("ValidateCanonicalDispatch() error = %v", err)
 	}
-	raw, err := json.Marshal(envelope)
+	raw, err := jsonv2.Marshal(envelope)
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
 	var decoded AlarmQueueEnvelope
-	if err := json.Unmarshal(raw, &decoded); err != nil {
+	if err := jsonv2.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
 	if decoded.DeliveryDigest == nil || decoded.DeliveryDigest.PreRenderedMessage != "8월 멤버 뉴스" {

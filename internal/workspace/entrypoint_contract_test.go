@@ -1,7 +1,7 @@
 package workspace
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -127,7 +127,7 @@ func loadEntrypointContracts(t *testing.T, root string) []entrypointContract {
 	data := []byte(readRepoFile(t, root, "internal/workspace/testdata/entrypoint_contracts.json"))
 
 	var contracts []entrypointContract
-	if err := json.Unmarshal(data, &contracts); err != nil {
+	if err := jsonv2.Unmarshal(data, &contracts); err != nil {
 		t.Fatalf("entrypoint contract manifest 파싱 실패: %v", err)
 	}
 	return contracts

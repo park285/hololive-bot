@@ -19,7 +19,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
 	"github.com/park285/iris-client-go/v2/iris"
-	envutil "github.com/park285/shared-go/pkg/envutil"
+	envutil "github.com/park285/shared-go/v2/pkg/envutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"

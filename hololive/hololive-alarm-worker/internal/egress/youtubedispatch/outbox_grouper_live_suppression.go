@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -52,7 +52,7 @@ func shouldFilterLiveCatchupSuppression(g *OutboxGrouper, item *domain.YouTubeNo
 
 func liveStreamPayloadForSuppression(item *domain.YouTubeNotificationOutbox) (format.VideoPayload, bool) {
 	var payload format.VideoPayload
-	if err := json.Unmarshal([]byte(item.Payload), &payload); err != nil {
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &payload); err != nil {
 		return format.VideoPayload{}, false
 	}
 	scheduledAt := liveSuppressionScheduledAt(&payload)

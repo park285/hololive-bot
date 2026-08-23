@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"io"
 	"net/http"
@@ -77,7 +78,8 @@ func TestParseHeartbeatRejectsUnknownFields(t *testing.T) {
 
 func TestParseHeartbeatRejectsMultipleValues(t *testing.T) {
 	_, err := parseHeartbeat(heartbeatRequestWithBody(`{"idle":false}{"idle":true}`))
-	require.ErrorContains(t, err, "multiple json values")
+	var syntaxErr *jsontext.SyntacticError
+	require.True(t, errors.As(err, &syntaxErr))
 }
 
 func TestParseHeartbeatReturnsBodyCloseError(t *testing.T) {

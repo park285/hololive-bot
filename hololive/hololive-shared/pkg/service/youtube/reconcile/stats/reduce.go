@@ -1,7 +1,7 @@
 package stats
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"time"
 
@@ -163,7 +163,7 @@ func SampleDigest(sample *Sample) (string, error) {
 }
 
 func sampleDigest(sample *Sample) (string, error) {
-	payload, err := json.Marshal(struct {
+	payload, err := jsonv2.Marshal(struct {
 		SubscriberCount   *int64 `json:"subscriber_count"`
 		ViewCount         *int64 `json:"view_count"`
 		VideoCount        *int64 `json:"video_count"`
@@ -173,7 +173,7 @@ func sampleDigest(sample *Sample) (string, error) {
 	}{
 		SubscriberCount: sample.SubscriberCount, ViewCount: sample.ViewCount, VideoCount: sample.VideoCount,
 		SubscriberCovered: sample.SubscriberCovered, ViewCovered: sample.ViewCovered, VideoCovered: sample.VideoCovered,
-	})
+	}, jsonv2.Deterministic(true))
 	if err != nil {
 		return "", fmt.Errorf("marshal channel stats digest: %w", err)
 	}

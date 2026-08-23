@@ -33,8 +33,8 @@ import (
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 type stubMajorEvent struct {
@@ -79,7 +79,7 @@ func postTrigger(t *testing.T, r *gin.Engine, path string) *httptest.ResponseRec
 func unmarshalBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var m map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &m); err != nil {
 		t.Fatalf("응답 본문 파싱 실패: %v", err)
 	}
 	return m

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/kapu/hololive-shared/pkg/service/subscriptionclient"
-	sharedjson "github.com/park285/shared-go/pkg/json"
 )
 
 type Client struct {
@@ -106,7 +106,7 @@ func handleRoomDigestNotFound(resp *http.Response) error {
 	}
 
 	var parsed errorResponse
-	if decodeErr := sharedjson.NewDecoder(resp.Body).Decode(&parsed); decodeErr != nil {
+	if decodeErr := jsonv2.UnmarshalRead(resp.Body, &parsed); decodeErr != nil {
 		return fmt.Errorf("decode not found response: %w", decodeErr)
 	}
 

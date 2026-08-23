@@ -13,6 +13,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 const (
@@ -139,7 +140,7 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	memberNames := h.loadYouTubeCommunityShortsMemberNames(ctx)
 	latencySummary := firstYouTubeCommunityShortsOpsLatencySummary(latencySummaries)
 
-	c.JSON(200, YouTubeCommunityShortsOpsResponse{
+	ginjson.Respond(c, 200, YouTubeCommunityShortsOpsResponse{
 		Status:             "ok",
 		GeneratedAt:        now,
 		WindowStart:        windowStart,

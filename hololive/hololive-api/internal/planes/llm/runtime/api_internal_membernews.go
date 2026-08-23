@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 
@@ -34,7 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 type memberNewsDigestRequest struct {
@@ -70,7 +71,7 @@ func memberNewsSubscriptionStatusHandler(service *membernewssvc.Service) gin.Han
 			return
 		}
 
-		c.JSON(http.StatusOK, subscription.SubscriptionStatusResponse{Subscribed: subscribed})
+		ginjson.Respond(c, http.StatusOK, subscription.SubscriptionStatusResponse{Subscribed: subscribed})
 	}
 }
 
@@ -86,7 +87,7 @@ func memberNewsSubscribeHandler(service *membernewssvc.Service) gin.HandlerFunc 
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status": "subscribed"})
+		ginjson.Respond(c, http.StatusOK, gin.H{"status": "subscribed"})
 	}
 }
 
@@ -103,7 +104,7 @@ func memberNewsUnsubscribeHandler(service *membernewssvc.Service) gin.HandlerFun
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status": "unsubscribed"})
+		ginjson.Respond(c, http.StatusOK, gin.H{"status": "unsubscribed"})
 	}
 }
 
@@ -121,7 +122,7 @@ func memberNewsDigestHandler(service *membernewssvc.Service) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, convertMemberNewsDigest(digest))
+		ginjson.Respond(c, http.StatusOK, convertMemberNewsDigest(digest))
 	}
 }
 
@@ -131,7 +132,7 @@ func trimmedRoomIDParam(c *gin.Context) string {
 
 func bindMemberNewsSubscribeRequest(c *gin.Context) (subscription.SubscribeRequest, bool) {
 	var req subscription.SubscribeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
 		return subscription.SubscribeRequest{}, false
 	}
@@ -146,7 +147,7 @@ func bindMemberNewsSubscribeRequest(c *gin.Context) (subscription.SubscribeReque
 
 func bindMemberNewsDigestRequest(c *gin.Context) (memberNewsDigestRequest, bool) {
 	var req memberNewsDigestRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
 		return memberNewsDigestRequest{}, false
 	}

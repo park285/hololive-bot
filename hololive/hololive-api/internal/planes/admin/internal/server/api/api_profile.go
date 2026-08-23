@@ -29,6 +29,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type ProfileResponse struct {
@@ -117,7 +118,7 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		}
 	}
 
-	c.JSON(200, resp)
+	ginjson.Respond(c, 200, resp)
 }
 
 func (h *ProfileHandler) GetProfileByName(c *gin.Context) {
@@ -160,7 +161,7 @@ func (h *ProfileHandler) GetProfileByName(c *gin.Context) {
 		}
 	}
 
-	c.JSON(200, resp)
+	ginjson.Respond(c, 200, resp)
 }
 
 func convertToProfileData(p *domain.TalentProfile) *ProfileData {

@@ -27,7 +27,7 @@ import (
 	"log/slog"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
@@ -226,7 +226,7 @@ func (c *ConsensusSummarizer) review(
 	}
 
 	var verdict consensus.ReviewVerdict
-	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), &verdict); err != nil {
 		c.logger.Warn("Consensus review: JSON parse failed",
 			slog.String("error", err.Error()),
 		)
@@ -259,7 +259,7 @@ func (c *ConsensusSummarizer) adjudicate(
 	}
 
 	var response summaryResponse
-	if err := json.Unmarshal([]byte(raw), &response); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), &response); err != nil {
 		c.logger.Warn("Consensus adjudicator: JSON parse failed",
 			slog.String("error", err.Error()),
 		)

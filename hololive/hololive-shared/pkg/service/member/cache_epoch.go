@@ -30,7 +30,7 @@ import (
 	"strings"
 	"time"
 
-	sharedjson "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/panicguard"
@@ -98,7 +98,7 @@ func (a *valkeyMemberEpochAuthority) Advance(ctx context.Context) (uint64, error
 }
 
 func (a *valkeyMemberEpochAuthority) Publish(ctx context.Context, epoch uint64) error {
-	payload, err := sharedjson.Marshal(memberEpochNotification{Version: memberEpochVersion, Epoch: epoch})
+	payload, err := jsonv2.Marshal(memberEpochNotification{Version: memberEpochVersion, Epoch: epoch})
 	if err != nil {
 		return fmt.Errorf("marshal epoch notification: %w", err)
 	}
@@ -212,7 +212,7 @@ func waitForEpochReconcile(ctx context.Context, ticks <-chan time.Time, triggers
 
 func (c *Cache) handleEpochNotification(payload string) {
 	var notification memberEpochNotification
-	if err := sharedjson.Unmarshal([]byte(payload), &notification); err != nil || notification.Version != memberEpochVersion || notification.Epoch == 0 {
+	if err := jsonv2.Unmarshal([]byte(payload), &notification); err != nil || notification.Version != memberEpochVersion || notification.Epoch == 0 {
 		memberCacheEpochNotificationsTotal.WithLabelValues("invalid").Inc()
 		if c.logger != nil {
 			c.logger.Warn("invalid member cache epoch notification; reconciling authority", slog.Any("error", err))

@@ -149,7 +149,7 @@ cmd_start() {
 
   if [[ ! -f "bin/bot" ]]; then
     echo "[BUILD] Binary not found, building..."
-    CGO_ENABLED=0 go build -tags go_json -o bin/bot ./cmd/hololive-api || {
+    CGO_ENABLED=0 go build -o bin/bot ./cmd/hololive-api || {
       echo "[ERROR] Build failed"
       exit 1
     }
@@ -353,7 +353,7 @@ cmd_restart() {
 
   if [[ "${build}" == "true" ]]; then
     echo "[BUILD] Building..."
-    CGO_ENABLED=0 go build -tags go_json -o bin/bot ./cmd/hololive-api
+    CGO_ENABLED=0 go build -o bin/bot ./cmd/hololive-api
   fi
 
   cmd_start "${start_args[@]}"
@@ -386,7 +386,7 @@ cmd_rebuild() {
   go clean -cache
 
   echo "[BUILD] Building optimized binary (static + stripped + netgo)..."
-  time CGO_ENABLED=0 go build -tags netgo,go_json -ldflags="-s -w" -o bin/bot ./cmd/hololive-api
+  time CGO_ENABLED=0 go build -tags netgo -ldflags="-s -w" -o bin/bot ./cmd/hololive-api
 
   if [[ -f "bin/bot" ]]; then
     size="$(du -h bin/bot | cut -f1)"

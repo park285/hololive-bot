@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 func (r *PgxRepository) MarkSending(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error {
@@ -91,7 +91,7 @@ func validateFailureUpdates(updates []FailureUpdate, action string) error {
 }
 
 func (r *PgxRepository) applyFailureUpdates(ctx context.Context, updates []FailureUpdate, workerID, queryFile, action string) ([]int64, error) {
-	raw, err := json.Marshal(updates)
+	raw, err := jsonv2.Marshal(updates)
 	if err != nil {
 		return nil, fmt.Errorf("%s: marshal batch: %w", action, err)
 	}

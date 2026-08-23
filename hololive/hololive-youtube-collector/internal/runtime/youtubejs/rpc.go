@@ -3,7 +3,7 @@ package youtubejs
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -156,7 +156,7 @@ func minimumSuccessResponseBytes(path string) int64 {
 }
 
 func (c *RPC) newJSONRequest(ctx context.Context, path string, request any) (*http.Request, error) {
-	raw, err := json.Marshal(request)
+	raw, err := jsonv2.Marshal(request)
 	if err != nil {
 		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassProtocol, fmt.Errorf("marshal youtube.js helper request: %w", err))
 	}
@@ -240,19 +240,7 @@ func closeHTTPResponse(resp *http.Response) error {
 }
 
 func strictDecode(payload []byte, dst any) error {
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		return err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return fmt.Errorf("trailing JSON value")
-		}
-		return err
-	}
-	return nil
+	return jsonv2.Unmarshal(payload, dst, jsonv2.RejectUnknownMembers(true))
 }
 
 func protocolMetaOf(response any) (ProtocolMeta, bool) {

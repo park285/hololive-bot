@@ -7,8 +7,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
-	"github.com/park285/shared-go/pkg/backoff"
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/backoff"
+	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {

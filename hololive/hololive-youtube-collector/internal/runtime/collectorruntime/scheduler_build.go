@@ -16,7 +16,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig) (joblease.Config, error) {

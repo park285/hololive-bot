@@ -3,7 +3,7 @@ package targetprojection
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"sort"
 	"strings"
@@ -191,7 +191,7 @@ func hashNormalizedTargets(targets []TargetSpec) (string, error) {
 			Priority: target.Priority, PollIntervalMS: target.PollInterval.Milliseconds(), Enabled: target.Enabled,
 		}
 	}
-	encoded, err := json.Marshal(hashInput)
+	encoded, err := jsonv2.Marshal(hashInput, jsonv2.Deterministic(true))
 	if err != nil {
 		return "", fmt.Errorf("%w: encode projection hash input: %w", ErrInvalidProjection, err)
 	}

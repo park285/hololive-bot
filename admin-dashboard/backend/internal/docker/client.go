@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/admin-dashboard/internal/httpx"
 	"github.com/kapu/hololive-shared/pkg/httpbody"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 type Container struct {
@@ -171,7 +171,7 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 		return nil, httpx.Internal(fmt.Errorf("docker list containers returned %s", resp.Status))
 	}
 	var summaries []containerSummary
-	if err := json.Unmarshal(body, &summaries); err != nil {
+	if err := jsonv2.Unmarshal(body, &summaries); err != nil {
 		return nil, httpx.Internal(fmt.Errorf("decode docker list containers response: %w", err))
 	}
 	return summaries, nil

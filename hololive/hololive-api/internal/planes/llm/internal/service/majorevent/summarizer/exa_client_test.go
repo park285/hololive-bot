@@ -22,7 +22,7 @@ package summarizer
 
 import (
 	"context"
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -145,7 +145,7 @@ func buildExaRPCBody(t *testing.T, texts []string) []byte {
 		content = append(content, map[string]string{"text": text})
 	}
 
-	raw, err := json.Marshal(map[string]any{
+	raw, err := jsonv2.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"result": map[string]any{
 			"content": content,
@@ -160,7 +160,7 @@ func buildExaRPCBody(t *testing.T, texts []string) []byte {
 
 func mustJSONString(t *testing.T, v any) string {
 	t.Helper()
-	b, err := json.Marshal(v)
+	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		t.Fatalf("marshal json string: %v", err)
 	}

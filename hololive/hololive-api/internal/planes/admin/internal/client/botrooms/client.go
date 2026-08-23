@@ -14,7 +14,7 @@ import (
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 type Client struct {

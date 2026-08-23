@@ -1,15 +1,14 @@
 package httpx
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/ginjson"
-	"github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type ErrorResponse struct {
@@ -55,9 +54,14 @@ func Internal(err error) *AppError {
 }
 
 func JSON(w http.ResponseWriter, status int, payload any) error {
+	body, err := jsonv2.Marshal(payload)
+	if err != nil {
+		return err
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	return json.NewEncoder(w).Encode(payload)
+	_, err = w.Write(body)
+	return err
 }
 
 func Error(w http.ResponseWriter, err error) {
@@ -102,18 +106,8 @@ func DecodeJSON(r *http.Request, dst any, maxBytes int64) error {
 
 // DecodeJSONBytes decodes exactly one JSON value and rejects unknown fields.
 func DecodeJSONBytes(body []byte, dst any) error {
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
+	if err := jsonv2.Unmarshal(body, dst, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return fmt.Errorf("invalid json body: %w", err)
-	}
-
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err != nil {
-			return fmt.Errorf("invalid json body: trailing data: %w", err)
-		}
-		return fmt.Errorf("invalid json body: multiple json values are not allowed")
 	}
 	return nil
 }

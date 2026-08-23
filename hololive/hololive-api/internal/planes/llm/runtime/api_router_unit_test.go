@@ -39,9 +39,9 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	"github.com/park285/shared-go/pkg/httputil"
-	json "github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func newDiscardLogger() *slog.Logger {
@@ -95,7 +95,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 
 		var payload map[string]any
-		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &payload))
+		require.NoError(t, jsonv2.Unmarshal(rr.Body.Bytes(), &payload))
 		assert.Equal(t, "ok", payload["status"])
 	})
 
@@ -134,7 +134,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 
 		var payload map[string]any
-		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &payload))
+		require.NoError(t, jsonv2.Unmarshal(rr.Body.Bytes(), &payload))
 		assert.Equal(t, "ok", payload["status"])
 	})
 

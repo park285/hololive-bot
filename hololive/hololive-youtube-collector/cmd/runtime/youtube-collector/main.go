@@ -14,11 +14,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime"
-	"github.com/park285/shared-go/pkg/envutil"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
-	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
-	"github.com/park285/shared-go/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/pkg/telemetry"
+	"github.com/park285/shared-go/v2/pkg/envutil"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
+	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/v2/pkg/telemetry"
 )
 
 var Version = "dev"

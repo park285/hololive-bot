@@ -68,7 +68,7 @@ func TestStackWorkerProfileRejectsUnknownServiceSetting(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(StackWorkerProfileFileEnv, profileFile.Name())
-	if _, err := LoadYouTubeCollectorWorkerProfile(); err == nil || !strings.Contains(err.Error(), "unknown field") {
+	if _, err := LoadYouTubeCollectorWorkerProfile(); err == nil || !strings.Contains(err.Error(), "unknown") {
 		t.Fatalf("LoadYouTubeCollectorWorkerProfile() error = %v", err)
 	}
 }

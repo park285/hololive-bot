@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 

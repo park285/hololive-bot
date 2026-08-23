@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go/v3"
-	sharedllm "github.com/park285/shared-go/pkg/llm"
+	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
 )
 
 type safeProviderError struct {

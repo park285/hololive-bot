@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
@@ -274,7 +274,7 @@ func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(abortRec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(abortRec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
 	if payload["error"] != "too many requests" {

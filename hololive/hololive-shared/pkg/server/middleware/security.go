@@ -25,7 +25,7 @@ import (
 	"uuid"
 
 	"github.com/gin-gonic/gin"
-	sharedlog "github.com/park285/shared-go/pkg/logging"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )

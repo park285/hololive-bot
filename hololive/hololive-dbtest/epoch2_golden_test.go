@@ -2,7 +2,8 @@ package dbtest
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io/fs"
 	"os"
@@ -36,9 +37,9 @@ type epoch2Roles struct {
 }
 
 type epoch2DataSnapshot struct {
-	Tables                   map[string][]json.RawMessage `json:"tables"`
-	Sequences                map[string]epoch2Sequence    `json:"sequences"`
-	VolatileTimestampColumns map[string][]string          `json:"volatile_timestamp_columns"`
+	Tables                   map[string][]jsontext.Value `json:"tables"`
+	Sequences                map[string]epoch2Sequence   `json:"sequences"`
+	VolatileTimestampColumns map[string][]string         `json:"volatile_timestamp_columns"`
 }
 
 type epoch2Sequence struct {
@@ -198,14 +199,14 @@ func serializeEpoch2Data(ctx context.Context, pool *pgxpool.Pool) (string, error
 		Sequences:                sequences,
 		VolatileTimestampColumns: volatileColumns,
 	}
-	raw, err := json.MarshalIndent(snapshot, "", "  ")
+	raw, err := jsonv2.Marshal(snapshot, jsonv2.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return "", fmt.Errorf("marshal epoch-2 data: %w", err)
 	}
 	return string(raw) + "\n", nil
 }
 
-func snapshotEpoch2Tables(ctx context.Context, pool *pgxpool.Pool) (tables map[string][]json.RawMessage, volatileColumns map[string][]string, resultErr error) {
+func snapshotEpoch2Tables(ctx context.Context, pool *pgxpool.Pool) (tables map[string][]jsontext.Value, volatileColumns map[string][]string, resultErr error) {
 	tableNames, err := queryTables(ctx, pool)
 	if err != nil {
 		return nil, nil, err
@@ -214,7 +215,7 @@ func snapshotEpoch2Tables(ctx context.Context, pool *pgxpool.Pool) (tables map[s
 	if err != nil {
 		return nil, nil, err
 	}
-	tables = make(map[string][]json.RawMessage, len(tableNames))
+	tables = make(map[string][]jsontext.Value, len(tableNames))
 	for _, table := range tableNames {
 		values, err := queryEpoch2TableRows(ctx, pool, table, volatileColumns[table])
 		if err != nil {
@@ -225,13 +226,13 @@ func snapshotEpoch2Tables(ctx context.Context, pool *pgxpool.Pool) (tables map[s
 	return tables, volatileColumns, nil
 }
 
-func queryEpoch2TableRows(ctx context.Context, pool *pgxpool.Pool, table string, volatileColumns []string) ([]json.RawMessage, error) {
+func queryEpoch2TableRows(ctx context.Context, pool *pgxpool.Pool, table string, volatileColumns []string) ([]jsontext.Value, error) {
 	rows, err := pool.Query(ctx, "SELECT to_jsonb(t)::text FROM "+pgx.Identifier{"public", table}.Sanitize()+" AS t")
 	if err != nil {
 		return nil, fmt.Errorf("query data table %s: %w", table, err)
 	}
 	defer rows.Close()
-	values := make([]json.RawMessage, 0)
+	values := make([]jsontext.Value, 0)
 	for rows.Next() {
 		var value string
 		if err := rows.Scan(&value); err != nil {
@@ -321,21 +322,21 @@ func queryEpoch2VolatileTimestampColumns(ctx context.Context, pool *pgxpool.Pool
 	return out, nil
 }
 
-func normalizeEpoch2DataRow(value string, volatileColumns []string) (json.RawMessage, error) {
-	row := make(map[string]json.RawMessage)
-	if err := json.Unmarshal([]byte(value), &row); err != nil {
+func normalizeEpoch2DataRow(value string, volatileColumns []string) (jsontext.Value, error) {
+	row := make(map[string]jsontext.Value)
+	if err := jsonv2.Unmarshal([]byte(value), &row); err != nil {
 		return nil, err
 	}
 	for _, column := range volatileColumns {
 		if raw, exists := row[column]; exists && string(raw) != "null" {
-			row[column] = json.RawMessage(`"<migration-time>"`)
+			row[column] = jsontext.Value(`"<migration-time>"`)
 		}
 	}
-	normalized, err := json.Marshal(row)
+	normalized, err := jsonv2.Marshal(row, jsonv2.Deterministic(true))
 	if err != nil {
 		return nil, err
 	}
-	return json.RawMessage(normalized), nil
+	return jsontext.Value(normalized), nil
 }
 
 func serializeEpoch2ACL(ctx context.Context, pool *pgxpool.Pool, roles epoch2Roles) (string, error) {

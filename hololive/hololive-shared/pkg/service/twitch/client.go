@@ -33,10 +33,10 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/pkg/httputil"
-	"github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const maxUserLoginsPerRequest = 100
@@ -194,7 +194,7 @@ func (c *Client) requestToken(ctx context.Context) (TokenResponse, error) {
 	}
 
 	var tokenResp TokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
+	if err := jsonv2.Unmarshal(body, &tokenResp); err != nil {
 		return TokenResponse{}, fmt.Errorf("unmarshal token response: %w", err)
 	}
 

@@ -1,7 +1,7 @@
 package content
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"time"
 
@@ -40,11 +40,11 @@ func (e Entity) item() contract.VideoListItemV1 {
 }
 
 func valueDigest(entity *Entity) string {
-	payload, err := json.Marshal(struct {
+	payload, err := jsonv2.Marshal(struct {
 		Title        string     `json:"title"`
 		PublishedAt  *time.Time `json:"published_at,omitempty"`
 		ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
-	}{Title: entity.Title, PublishedAt: entity.PublishedAt, ScheduledFor: entity.ScheduledFor})
+	}{Title: entity.Title, PublishedAt: entity.PublishedAt, ScheduledFor: entity.ScheduledFor}, jsonv2.Deterministic(true))
 	if err != nil {
 		return ""
 	}
@@ -61,7 +61,7 @@ func coverageBytes(value coverageValue) []byte {
 	default:
 		return nil
 	}
-	raw, err := json.Marshal(payload)
+	raw, err := jsonv2.Marshal(payload)
 	if err != nil {
 		return nil
 	}
@@ -71,13 +71,13 @@ func coverageBytes(value coverageValue) []byte {
 func ParseCoverage(kind contract.ObservationKind, raw []byte) (coverageValue, error) {
 	if kind == contract.KindShortsList {
 		var coverage contract.ShortsListCoverageV1
-		if err := json.Unmarshal(raw, &coverage); err != nil {
+		if err := jsonv2.Unmarshal(raw, &coverage); err != nil {
 			return coverageValue{}, fmt.Errorf("decode shorts coverage: %w", err)
 		}
 		return ShortsCoverage(&coverage), nil
 	}
 	var coverage contract.ChannelListCoverageV1
-	if err := json.Unmarshal(raw, &coverage); err != nil {
+	if err := jsonv2.Unmarshal(raw, &coverage); err != nil {
 		return coverageValue{}, fmt.Errorf("decode video coverage: %w", err)
 	}
 	return VideoCoverage(&coverage), nil

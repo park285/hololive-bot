@@ -31,9 +31,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/httputil"
-	sharedllm "github.com/park285/shared-go/pkg/llm"
-	sharedlog "github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/httputil"
+	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )

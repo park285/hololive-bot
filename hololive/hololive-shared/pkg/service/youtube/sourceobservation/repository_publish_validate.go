@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -166,7 +166,7 @@ func validateCheckpointCursor(entry *CheckpointEntry, index int) error {
 		return nil
 	}
 	var cursor map[string]any
-	if err := json.Unmarshal(entry.Cursor, &cursor); err != nil || cursor == nil {
+	if err := jsonv2.Unmarshal(entry.Cursor, &cursor); err != nil || cursor == nil {
 		return fmt.Errorf("%w: checkpoint %d cursor must be an object", ErrInvalidEnvelope, index)
 	}
 	return nil

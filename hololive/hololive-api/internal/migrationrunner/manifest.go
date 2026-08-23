@@ -8,7 +8,7 @@ import (
 	"io/fs"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/pkg/dbmigrate"
+	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
 )

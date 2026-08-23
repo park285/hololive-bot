@@ -2,7 +2,7 @@ package httpserver
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +28,7 @@ func TestNewRuntimeRouter_PublicReadyIncludesProcessComponents(t *testing.T) {
 		t.Fatalf("/ready status = %d, want %d", response.Code, http.StatusServiceUnavailable)
 	}
 	var body health.Response
-	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+	if err := jsonv2.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode /ready response: %v", err)
 	}
 	if got := body.Components["youtube"]; got.Ready || !got.Degraded {
@@ -44,7 +44,7 @@ func TestNewRuntimeRouter_InternalReadyRequiresAPIKey(t *testing.T) {
 		APIKey: "probe-key",
 		InternalReadyResponder: func(c *gin.Context) {
 			probeCalls++
-			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
+			respondJSON(c, http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
 		},
 	})
 	if err != nil {

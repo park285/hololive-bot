@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 func newStubCollector(name, healthPath string, srv *httptest.Server) *Collector {
@@ -93,7 +93,7 @@ func TestFetchRuntimeSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(healthPayload{Goroutines: 42}); err != nil {
+		if err := jsonv2.MarshalWrite(w, healthPayload{Goroutines: 42}); err != nil {
 			t.Errorf("encode health response: %v", err)
 		}
 	}))
@@ -148,7 +148,7 @@ func TestFetchRuntimeErrorStatus(t *testing.T) {
 func TestFetchRuntimeComponentFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(healthPayload{
+		if err := jsonv2.MarshalWrite(w, healthPayload{
 			Components: map[string]healthComponent{
 				"app": {Detail: map[string]any{"goroutines": float64(7)}},
 			},

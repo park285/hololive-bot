@@ -27,8 +27,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/webhook"
-	sharedlog "github.com/park285/shared-go/pkg/logging"
-	"github.com/park285/shared-go/pkg/stringutil"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/service/acl"

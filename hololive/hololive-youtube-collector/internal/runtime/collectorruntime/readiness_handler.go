@@ -2,12 +2,13 @@ package collectorruntime
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type collectorReadiness struct {
@@ -59,7 +60,7 @@ func (r *collectorReadiness) respond(c *gin.Context) {
 	defer cancel()
 	deps := r.deps(&cfg)
 	body := evaluateReadiness(probeCtx, &deps)
-	payload, err := json.Marshal(body)
+	payload, err := jsonv2.Marshal(body)
 	if err != nil {
 		fallback := readinessResponse{Runtime: runtimeName, Helper: helperNotReady}
 		fallback = notReady(&fallback, ReadyDegraded, "scheduler")
@@ -77,7 +78,7 @@ func (r *collectorReadiness) respondDisabled(c *gin.Context) {
 			capacity = int(*worker.Queue.Capacity.Items)
 		}
 	}
-	c.JSON(200, readinessResponse{
+	ginjson.Respond(c, 200, readinessResponse{
 		Status: "ready", Runtime: runtimeName, InstanceID: collectorInstanceID(r.appConfig), State: ReadyReady,
 		Helper: "disabled", HandoffStatus: HandoffNone, DueJobsExact: true, QueueCapacity: capacity,
 	})

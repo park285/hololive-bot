@@ -3,16 +3,17 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/ginjson"
-	"github.com/park285/shared-go/pkg/httputil"
-	json "github.com/park285/shared-go/pkg/json"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/admin-dashboard/internal/auth"
@@ -183,7 +184,7 @@ type heartbeatRequest struct {
 }
 
 type heartbeatPayload struct {
-	Idle json.RawMessage `json:"idle"`
+	Idle jsontext.Value `json:"idle"`
 }
 
 func (r *Runtime) handleHeartbeat(c *gin.Context) {
@@ -230,7 +231,7 @@ func parseHeartbeat(req *http.Request) (heartbeatRequest, error) {
 	if bytes.Equal(bytes.TrimSpace(payload.Idle), []byte("null")) {
 		return hb, fmt.Errorf("heartbeat idle must be a boolean")
 	}
-	if err := json.Unmarshal(payload.Idle, &hb.Idle); err != nil {
+	if err := jsonv2.Unmarshal(payload.Idle, &hb.Idle); err != nil {
 		return hb, fmt.Errorf("decode heartbeat idle: %w", err)
 	}
 	return hb, nil

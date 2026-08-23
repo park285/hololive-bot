@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalUpdate, status Status, workerID string) error {
@@ -12,7 +12,7 @@ func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalU
 		return nil
 	}
 	column, statusFilter := terminalStatusSQL(status)
-	raw, err := json.Marshal(updates)
+	raw, err := jsonv2.Marshal(updates)
 	if err != nil {
 		return fmt.Errorf("mark dispatch deliveries terminal: marshal batch: %w", err)
 	}

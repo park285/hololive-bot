@@ -9,9 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/runtime/httpserver"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/admin-dashboard/internal/config"
 	"github.com/kapu/admin-dashboard/internal/docker"
@@ -20,7 +19,7 @@ import (
 	"github.com/kapu/admin-dashboard/internal/session"
 	"github.com/kapu/admin-dashboard/internal/static"
 	"github.com/kapu/admin-dashboard/internal/status"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const (
@@ -93,7 +92,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		return nil, err
 	}
 	endpoints := []status.ServiceEndpoint{{Name: "hololive-admin-api", URL: cfg.HoloAdminAPIURL, HealthPath: "/health"}}
-	openapiJSON, err := json.Marshal(openapi.Spec(cfg.RuntimeVersion))
+	openapiJSON, err := openapi.MarshalSpec(cfg.RuntimeVersion)
 	if err != nil {
 		distributedLimiter.Close()
 		store.Close()

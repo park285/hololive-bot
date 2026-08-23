@@ -2,7 +2,8 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"time"
 
@@ -27,7 +28,7 @@ type publishBatchRow struct {
 	ScopeSHA256          string                   `json:"scope_sha256"`
 	Completeness         contract.Completeness    `json:"completeness"`
 	Continuity           contract.Continuity      `json:"continuity"`
-	Payload              json.RawMessage          `json:"payload"`
+	Payload              jsontext.Value           `json:"payload"`
 	PayloadSHA256        string                   `json:"payload_sha256"`
 	EvidenceSHA256       string                   `json:"evidence_sha256"`
 	CollectorInstance    string                   `json:"collector_instance"`
@@ -36,7 +37,7 @@ type publishBatchRow struct {
 	FenceEpoch           int64                    `json:"fence_epoch"`
 	ProjectionGeneration int64                    `json:"projection_generation"`
 	CollectionLatencyMS  int64                    `json:"collection_latency_ms"`
-	Cursor               json.RawMessage          `json:"cursor"`
+	Cursor               jsontext.Value           `json:"cursor"`
 }
 
 type publishContractRow struct {
@@ -77,7 +78,7 @@ func encodePublishBatchRows(input *PublishBatchInput, checkpoints map[checkpoint
 func newPublishBatchRow(
 	ordinal int,
 	observation *contract.Envelope,
-	cursor json.RawMessage,
+	cursor jsontext.Value,
 	latency time.Duration,
 ) publishBatchRow {
 	return publishBatchRow{
@@ -97,7 +98,7 @@ func newPublishBatchRow(
 }
 
 func marshalPublishBatch(rows []publishBatchRow, contracts []publishContractRow) (observationJSON, contractJSON []byte, err error) {
-	encoded, err := json.Marshal(rows)
+	encoded, err := jsonv2.Marshal(rows)
 	if err != nil {
 		return nil, nil, fmt.Errorf("publish source observation batch: encode set: %w", err)
 	}
@@ -108,7 +109,7 @@ func marshalPublishBatch(rows []publishBatchRow, contracts []publishContractRow)
 			MaxPublishBatchBytes,
 		)
 	}
-	contractEncoded, err := json.Marshal(contracts)
+	contractEncoded, err := jsonv2.Marshal(contracts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("publish source observation batch: encode contracts: %w", err)
 	}

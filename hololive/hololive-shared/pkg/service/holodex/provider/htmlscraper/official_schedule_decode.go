@@ -2,7 +2,8 @@ package htmlscraper
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -20,17 +21,17 @@ func (s *Service) decodeOfficialScheduleAPI(body []byte) ([]*domain.Stream, offi
 	return s.mapOfficialScheduleRows(rows)
 }
 
-func decodeOfficialScheduleGroups(body []byte) ([]json.RawMessage, error) {
+func decodeOfficialScheduleGroups(body []byte) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(body)
-	if !json.Valid(trimmed) {
+	if !jsontext.Value(trimmed).IsValid() {
 		return nil, newOfficialScheduleSourceError(officialScheduleReasonDecode, 0, fmt.Errorf("decode official schedule response: invalid JSON"))
 	}
 	if len(trimmed) == 0 || trimmed[0] != 0x7b {
 		return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("official schedule response root must be an object"))
 	}
 
-	var root map[string]json.RawMessage
-	if err := json.Unmarshal(trimmed, &root); err != nil {
+	var root map[string]jsontext.Value
+	if err := jsonv2.Unmarshal(trimmed, &root); err != nil {
 		return nil, newOfficialScheduleSourceError(officialScheduleReasonDecode, 0, fmt.Errorf("decode official schedule response: %w", err))
 	}
 	rawGroups, ok := root["dateGroupList"]
@@ -44,11 +45,11 @@ func decodeOfficialScheduleGroups(body []byte) ([]json.RawMessage, error) {
 	return groups, nil
 }
 
-func decodeOfficialScheduleRows(groups []json.RawMessage) ([]json.RawMessage, error) {
-	rows := make([]json.RawMessage, 0)
+func decodeOfficialScheduleRows(groups []jsontext.Value) ([]jsontext.Value, error) {
+	rows := make([]jsontext.Value, 0)
 	for index, rawGroup := range groups {
-		var group map[string]json.RawMessage
-		if err := json.Unmarshal(rawGroup, &group); err != nil {
+		var group map[string]jsontext.Value
+		if err := jsonv2.Unmarshal(rawGroup, &group); err != nil {
 			return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("decode official schedule group %d: %w", index, err))
 		}
 		rawRows, ok := group["videoList"]
@@ -64,14 +65,14 @@ func decodeOfficialScheduleRows(groups []json.RawMessage) ([]json.RawMessage, er
 	return rows, nil
 }
 
-func decodeRawJSONArray(raw json.RawMessage, field string) ([]json.RawMessage, error) {
+func decodeRawJSONArray(raw jsontext.Value, field string) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("official schedule field %s must be an array", field))
 	}
 
-	var values []json.RawMessage
-	if err := json.Unmarshal(trimmed, &values); err != nil {
+	var values []jsontext.Value
+	if err := jsonv2.Unmarshal(trimmed, &values); err != nil {
 		return nil, newOfficialScheduleSourceError(officialScheduleReasonSchema, 0, fmt.Errorf("decode official schedule field %s: %w", field, err))
 	}
 	return values, nil

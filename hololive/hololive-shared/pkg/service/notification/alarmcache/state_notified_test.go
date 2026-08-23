@@ -2,7 +2,7 @@ package alarmcache
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"testing"
 	"time"
@@ -45,7 +45,7 @@ func TestStateNotifiedUsesCanonicalMinuteMarkerOnly(t *testing.T) {
 
 func TestStateNotifiedIgnoresOldAggregateOnly(t *testing.T) {
 	start := time.Date(2026, 7, 27, 10, 15, 0, 0, time.UTC)
-	oldPayload, err := json.Marshal(dedup.NotifiedData{
+	oldPayload, err := jsonv2.Marshal(dedup.NotifiedData{
 		StartScheduled: start.Format(time.RFC3339),
 		SentAt:         map[int]bool{5: true},
 	})

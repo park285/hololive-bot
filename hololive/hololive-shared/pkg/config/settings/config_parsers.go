@@ -29,8 +29,8 @@ import (
 	"strings"
 	"time"
 
-	sharedenv "github.com/park285/shared-go/pkg/envutil"
-	"github.com/park285/shared-go/pkg/stringutil"
+	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 // clampConfidence: confidence 값을 [0, 1] 범위로 정규화한다.

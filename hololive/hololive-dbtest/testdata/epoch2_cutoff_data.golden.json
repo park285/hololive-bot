@@ -591,915 +591,915 @@
     ],
     "message_strings": [
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 1,
         "key": "Hololive",
         "namespace": "org",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "Holo"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 10,
         "key": "ALL",
         "namespace": "alarmtype",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "전체"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 11,
         "key": "birthday_live",
         "namespace": "newscat",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "생일 라이브"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 12,
         "key": "solo_live",
         "namespace": "newscat",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "솔로 라이브"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 123,
         "key": "stream_time_days",
         "namespace": "timefmt",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%s (%d일 후)"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 124,
         "key": "stream_time_hours_minutes",
         "namespace": "timefmt",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%s (%d시간 %d분 후)"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 125,
         "key": "stream_time_minutes",
         "namespace": "timefmt",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%s (%d분 후)"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 126,
         "key": "relative_days",
         "namespace": "timefmt",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%d일 후"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 127,
         "key": "relative_hours_minutes",
         "namespace": "timefmt",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%d시간 %d분 후"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 128,
         "key": "relative_minutes",
         "namespace": "timefmt",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%d분 후"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 129,
         "key": "alarm_title_prelive",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "방송 %d분 전 알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 13,
         "key": "collab",
         "namespace": "newscat",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "콜라보"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 130,
         "key": "alarm_title_live",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "라이브 시작"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 131,
         "key": "time_left_prelive",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%d분 후 시작"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 132,
         "key": "time_left_live",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "지금 시작"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 133,
         "key": "outbox_title_community",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "커뮤니티 알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 134,
         "key": "outbox_time_community",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "새 커뮤니티"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 135,
         "key": "outbox_title_shorts",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "쇼츠 알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 136,
         "key": "outbox_time_shorts",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "새 쇼츠"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 137,
         "key": "outbox_title_video",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "새 영상"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 138,
         "key": "outbox_time_video",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "새 영상"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 139,
         "key": "outbox_title_live",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "방송 알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 14,
         "key": "event",
         "namespace": "newscat",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "이벤트"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 140,
         "key": "outbox_time_live",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "방송 알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 141,
         "key": "title_fallback",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 142,
         "key": "time_fallback",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "새 알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 143,
         "key": "count_suffix",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%s · %d건"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 144,
         "key": "item_title_community_fallback",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "커뮤니티 알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 145,
         "key": "status_community",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "커뮤니티"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 146,
         "key": "status_shorts",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "쇼츠"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 147,
         "key": "status_video",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "새 영상"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 148,
         "key": "status_fallback",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 149,
         "key": "overflow_footer",
         "namespace": "calendar",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "외 %d건 생략"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 15,
         "key": "goods",
         "namespace": "newscat",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "굿즈"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 150,
         "key": "header",
         "namespace": "livecard",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "현재 라이브"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 151,
         "key": "summary",
         "namespace": "livecard",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "총 %d건"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 152,
         "key": "badge_chzzk",
         "namespace": "livecard",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "치지직"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 153,
         "key": "overflow_footer",
         "namespace": "livecard",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "외 %d건 생략"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 154,
         "key": "badge_graduated",
         "namespace": "profilecard",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "졸업"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 155,
         "key": "header",
         "namespace": "rankcard",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "구독자 증가 순위"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 156,
         "key": "summary",
         "namespace": "rankcard",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%s · 상위 %d"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 157,
         "key": "total",
         "namespace": "rankcard",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "구독자 %s"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 158,
         "key": "alarm_title_prelive_premiere",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "선행공개 %d분 전 알림"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 159,
         "key": "alarm_title_live_premiere",
         "namespace": "karing",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "선행공개 시작"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 16,
         "key": "other",
         "namespace": "newscat",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "기타"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 17,
         "key": "歌の再生リスト",
         "namespace": "social",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "음악 플레이리스트"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 18,
         "key": "公式グッズ",
         "namespace": "social",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "공식 굿즈"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 19,
         "key": "オフィシャルグッズ",
         "namespace": "social",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "공식 굿즈"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 2,
         "key": "Nijisanji",
         "namespace": "org",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "니지산지"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 20,
         "key": "vtuber_fallback",
         "namespace": "misc",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "VTuber"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 21,
         "key": "chzzk_title",
         "namespace": "misc",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "치지직 라이브"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 22,
         "key": "no_member_info_found",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 등록된 멤버 정보를 찾을 수 없습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 23,
         "key": "cannot_display_member_info",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 멤버 정보를 표시할 수 없습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 24,
         "key": "member_profile_load_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 프로필을 불러오는 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 25,
         "key": "member_profile_build_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 프로필을 구성하지 못했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 26,
         "key": "graduated_member_blocked",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "⚠️ 졸업한 멤버입니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 27,
         "key": "alarm_service_not_initialized",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 알람 서비스가 초기화되지 않았습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 28,
         "key": "alarm_add_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 알람 설정 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 29,
         "key": "alarm_remove_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 알람 제거 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 3,
         "key": "Independents",
         "namespace": "org",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "개인세"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 30,
         "key": "alarm_list_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 알람 목록 조회 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 31,
         "key": "alarm_clear_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 알람 초기화 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 32,
         "key": "alarm_need_member_name_add",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 멤버 이름을 입력해주세요.\n예) !알람 추가 페코라"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 33,
         "key": "alarm_need_member_name_remove",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 멤버 이름을 입력해주세요.\n예) !알람 제거 페코라"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 34,
         "key": "invalid_alarm_usage",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 지원하지 않는 알람 명령입니다.\n예) !알람 추가 페코라"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 35,
         "key": "live_stream_query_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 라이브 조회 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 36,
         "key": "upcoming_stream_query_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 예정 방송 조회 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 37,
         "key": "schedule_query_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 일정 조회 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 38,
         "key": "schedule_need_member_name",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 멤버 이름을 입력해주세요.\n예) !일정 페코라"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 39,
         "key": "unknown_stats_period",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 알 수 없는 통계 유형입니다. !도움말을 참고해주세요."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 4,
         "key": "Stellive",
         "namespace": "org",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "스텔라이브"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 40,
         "key": "stats_query_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 구독자 순위 조회 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 41,
         "key": "no_stats_data",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 해당 기간의 통계 데이터가 없습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 42,
         "key": "subscriber_need_member_name",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 멤버 이름을 입력해주세요.\n예) !구독자 페코라"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 43,
         "key": "subscriber_query_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 구독자 정보 조회 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 44,
         "key": "no_subscriber_data",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 해당 멤버의 구독자 정보가 없습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 45,
         "key": "calendar_query_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 기념일 조회 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 46,
         "key": "major_event_service_not_initialized",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 행사 알림 서비스가 초기화되지 않았습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 47,
         "key": "major_event_status_check_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 행사 알림 상태 확인 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 48,
         "key": "major_event_subscribe_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 행사 알림 설정 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 49,
         "key": "major_event_unsubscribe_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 행사 알림 해제 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 5,
         "key": "LIVE",
         "namespace": "alarmtype",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "방송"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 50,
         "key": "member_news_service_not_initialized",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 뉴스 서비스가 초기화되지 않았습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 51,
         "key": "member_news_query_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 뉴스 조회 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 52,
         "key": "member_news_subscription_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 뉴스 알림 설정 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 53,
         "key": "unknown_command",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 알 수 없는 명령입니다.\n!도움말에서 사용 가능한 명령을 확인할 수 있습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 54,
         "key": "external_api_call_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 외부 데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 55,
         "key": "cache_connection_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 일시적인 문제로 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 56,
         "key": "iris_connection_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 57,
         "key": "command_processing_failed",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 명령 처리 중 오류가 발생했습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 58,
         "key": "async_command_backpressure",
         "namespace": "error",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "❌ 요청이 많아 잠시 후 다시 시도해주세요."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 59,
         "key": "member_news_no_members",
         "namespace": "notify",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "📰 뉴스 대상 멤버가 없습니다.\n예) !알람 추가 페코라"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 6,
         "key": "COMMUNITY",
         "namespace": "alarmtype",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "커뮤니티"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 60,
         "key": "member_news_subscribed",
         "namespace": "notify",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "✅ 뉴스 알림을 켰습니다.\n매주 월요일 09:00 KST에 발송됩니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 61,
         "key": "member_news_already_subscribed",
         "namespace": "notify",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "ℹ️ 뉴스 알림이 이미 켜져 있습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 62,
         "key": "member_news_unsubscribed",
         "namespace": "notify",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "✅ 뉴스 알림을 껐습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 63,
         "key": "member_news_not_subscribed",
         "namespace": "notify",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "ℹ️ 뉴스 알림이 이미 꺼져 있습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 64,
         "key": "member_news_status_on",
         "namespace": "notify",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "🔔 뉴스 알림: 켜짐\n- 발송: 매주 월요일 09:00 KST\n- 해제: !뉴스알림 끄기"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 65,
         "key": "member_news_status_off",
         "namespace": "notify",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "🔕 뉴스 알림: 꺼짐\n- 설정: !뉴스알림 켜기"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 66,
         "key": "graduated_member_warning",
         "namespace": "notify",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "⚠️ 졸업한 멤버입니다.\n\n"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 67,
         "key": "time_unknown",
         "namespace": "misc",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "시간 미정"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 68,
         "key": "alarm_unknown_member",
         "namespace": "misc",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "알 수 없는 멤버"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 69,
         "key": "alarm_no_title",
         "namespace": "misc",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "제목 없음"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 7,
         "key": "SHORTS",
         "namespace": "alarmtype",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "쇼츠"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 70,
         "key": "alarm_no_stream",
         "namespace": "misc",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "방송 정보 없음"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 71,
         "key": "header_month",
         "namespace": "calendar",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%d년 %d월 기념일"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 72,
         "key": "summary",
         "namespace": "calendar",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "총 %d건 · 생일 %d · 데뷔주년 %d"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 73,
         "key": "empty",
         "namespace": "calendar",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "등록된 기념일이 없습니다."
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 74,
         "key": "day",
         "namespace": "calendar",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "%d월 %d일"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 75,
         "key": "badge_birthday",
         "namespace": "calendar",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "생일"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 76,
         "key": "badge_anniversary",
         "namespace": "calendar",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "데뷔 %d주년"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 77,
         "key": "unknown",
         "namespace": "calendar",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "알 수 없음"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 8,
         "key": "BIRTHDAY",
         "namespace": "alarmtype",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "생일"
       },
       {
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 9,
         "key": "ANNIVERSARY",
         "namespace": "alarmtype",
-        "updated_at": "\u003cmigration-time\u003e",
+        "updated_at": "<migration-time>",
         "value": "주년"
       }
     ],
@@ -1507,396 +1507,396 @@
     "notification_template_revisions": [],
     "notification_templates": [
       {
-        "body": "## {{if .IsStarting}}🔴 **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 시작{{else if .IsScheduled}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 예정{{else}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}\n{{- $url := .URL}}\n{{- $parts := split $url \" | \"}}\n{{- $shortLinkURL := hasPrefix $url \"https://short.holoshi.com/l/\"}}\n{{- $youtubeURL := or $shortLinkURL (hasPrefix $url \"https://www.youtube.com/watch?\") (hasPrefix $url \"https://youtube.com/watch?\") (hasPrefix $url \"https://m.youtube.com/watch?\") (hasPrefix $url \"https://www.youtube.com/live/\") (hasPrefix $url \"https://youtube.com/live/\") (hasPrefix $url \"https://youtu.be/\")}}\n{{- $trustedURL := or $youtubeURL (hasPrefix $url \"https://www.twitch.tv/\") (hasPrefix $url \"https://twitch.tv/\") (hasPrefix $url \"https://chzzk.naver.com/live/\")}}\n{{- $delimiterSafe := and (not (contains $url \"\\t\")) (not (contains $url \"\\n\")) (not (contains $url \"\\r\")) (not (contains $url \"(\")) (not (contains $url \")\")) (not (contains $url \"[\")) (not (contains $url \"]\")) (not (contains $url \"\u003c\")) (not (contains $url \"\u003e\")) (not (contains $url \"\\\\\"))}}\n{{- $safeURL := and $url $trustedURL $delimiterSafe (not (contains $url \" \")) (not (contains $url \"|\"))}}\n{{- $composite := and (eq (len $parts) 2) $youtubeURL (hasPrefix (index $parts 1) \"https://chzzk.naver.com/live/\") $delimiterSafe (not (contains (index $parts 0) \" \")) (not (contains (index $parts 1) \" \"))}}\n{{- $linkable := and .Title $safeURL}}\n{{- if $linkable}}\n[{{mdsafe .Title}}]({{.URL}})\n{{- else if .Title}}\n{{printf \"\\u200b\"}}{{mdsafe .Title}}\n{{- end}}\n{{- if .ScheduleMessage}}\n{{printf \"\\u200b\"}}{{mdsafe .ScheduleMessage}}\n{{- end}}\n{{- if and .URL (not $linkable)}}\n{{if or $safeURL $composite}}{{.URL}}{{else}}{{printf \"\\u200b\"}}{{mdsafe (replace (replace .URL \"\\n\" \" \") \"\\r\" \" \")}}{{end}}\n{{- end}}",
+        "body": "## {{if .IsStarting}}🔴 **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 시작{{else if .IsScheduled}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 예정{{else}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}\n{{- $url := .URL}}\n{{- $parts := split $url \" | \"}}\n{{- $shortLinkURL := hasPrefix $url \"https://short.holoshi.com/l/\"}}\n{{- $youtubeURL := or $shortLinkURL (hasPrefix $url \"https://www.youtube.com/watch?\") (hasPrefix $url \"https://youtube.com/watch?\") (hasPrefix $url \"https://m.youtube.com/watch?\") (hasPrefix $url \"https://www.youtube.com/live/\") (hasPrefix $url \"https://youtube.com/live/\") (hasPrefix $url \"https://youtu.be/\")}}\n{{- $trustedURL := or $youtubeURL (hasPrefix $url \"https://www.twitch.tv/\") (hasPrefix $url \"https://twitch.tv/\") (hasPrefix $url \"https://chzzk.naver.com/live/\")}}\n{{- $delimiterSafe := and (not (contains $url \"\\t\")) (not (contains $url \"\\n\")) (not (contains $url \"\\r\")) (not (contains $url \"(\")) (not (contains $url \")\")) (not (contains $url \"[\")) (not (contains $url \"]\")) (not (contains $url \"<\")) (not (contains $url \">\")) (not (contains $url \"\\\\\"))}}\n{{- $safeURL := and $url $trustedURL $delimiterSafe (not (contains $url \" \")) (not (contains $url \"|\"))}}\n{{- $composite := and (eq (len $parts) 2) $youtubeURL (hasPrefix (index $parts 1) \"https://chzzk.naver.com/live/\") $delimiterSafe (not (contains (index $parts 0) \" \")) (not (contains (index $parts 1) \" \"))}}\n{{- $linkable := and .Title $safeURL}}\n{{- if $linkable}}\n[{{mdsafe .Title}}]({{.URL}})\n{{- else if .Title}}\n{{printf \"\\u200b\"}}{{mdsafe .Title}}\n{{- end}}\n{{- if .ScheduleMessage}}\n{{printf \"\\u200b\"}}{{mdsafe .ScheduleMessage}}\n{{- end}}\n{{- if and .URL (not $linkable)}}\n{{if or $safeURL $composite}}{{.URL}}{{else}}{{printf \"\\u200b\"}}{{mdsafe (replace (replace .URL \"\\n\" \" \") \"\\r\" \" \")}}{{end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 51,
         "template_key": "ALARM_DISPATCH_NOTIFICATION",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
-        "body": "## {{if .IsStarting}}🔴 {{if .AllPremiere}}선행공개{{else}}방송{{end}} 시작{{else}}⏰ {{if .AllPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}\n{{- range .Entries}}\n\n{{if .IsStarting}}🔴 **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 시작{{else if .IsScheduled}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 예정{{else}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}\n{{- $url := .URL}}\n{{- $parts := split $url \" | \"}}\n{{- $shortLinkURL := hasPrefix $url \"https://short.holoshi.com/l/\"}}\n{{- $youtubeURL := or $shortLinkURL (hasPrefix $url \"https://www.youtube.com/watch?\") (hasPrefix $url \"https://youtube.com/watch?\") (hasPrefix $url \"https://m.youtube.com/watch?\") (hasPrefix $url \"https://www.youtube.com/live/\") (hasPrefix $url \"https://youtube.com/live/\") (hasPrefix $url \"https://youtu.be/\")}}\n{{- $trustedURL := or $youtubeURL (hasPrefix $url \"https://www.twitch.tv/\") (hasPrefix $url \"https://twitch.tv/\") (hasPrefix $url \"https://chzzk.naver.com/live/\")}}\n{{- $delimiterSafe := and (not (contains $url \"\\t\")) (not (contains $url \"\\n\")) (not (contains $url \"\\r\")) (not (contains $url \"(\")) (not (contains $url \")\")) (not (contains $url \"[\")) (not (contains $url \"]\")) (not (contains $url \"\u003c\")) (not (contains $url \"\u003e\")) (not (contains $url \"\\\\\"))}}\n{{- $safeURL := and $url $trustedURL $delimiterSafe (not (contains $url \" \")) (not (contains $url \"|\"))}}\n{{- $composite := and (eq (len $parts) 2) $youtubeURL (hasPrefix (index $parts 1) \"https://chzzk.naver.com/live/\") $delimiterSafe (not (contains (index $parts 0) \" \")) (not (contains (index $parts 1) \" \"))}}\n{{- $linkable := and .Title $safeURL}}\n{{- if $linkable}}\n[{{mdsafe .Title}}]({{.URL}})\n{{- else if .Title}}\n{{printf \"\\u200b\"}}{{mdsafe .Title}}\n{{- end}}\n{{- if .ScheduleMessage}}\n{{printf \"\\u200b\"}}{{mdsafe .ScheduleMessage}}\n{{- end}}\n{{- if and .URL (not $linkable)}}\n{{if or $safeURL $composite}}{{.URL}}{{else}}{{printf \"\\u200b\"}}{{mdsafe (replace (replace .URL \"\\n\" \" \") \"\\r\" \" \")}}{{end}}\n{{- end}}\n{{- end}}",
+        "body": "## {{if .IsStarting}}🔴 {{if .AllPremiere}}선행공개{{else}}방송{{end}} 시작{{else}}⏰ {{if .AllPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}\n{{- range .Entries}}\n\n{{if .IsStarting}}🔴 **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 시작{{else if .IsScheduled}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} 예정{{else}}⏰ **{{mdsafe .MemberName}}** {{if .IsPremiere}}선행공개{{else}}방송{{end}} {{.MinutesUntil}}분 전{{end}}\n{{- $url := .URL}}\n{{- $parts := split $url \" | \"}}\n{{- $shortLinkURL := hasPrefix $url \"https://short.holoshi.com/l/\"}}\n{{- $youtubeURL := or $shortLinkURL (hasPrefix $url \"https://www.youtube.com/watch?\") (hasPrefix $url \"https://youtube.com/watch?\") (hasPrefix $url \"https://m.youtube.com/watch?\") (hasPrefix $url \"https://www.youtube.com/live/\") (hasPrefix $url \"https://youtube.com/live/\") (hasPrefix $url \"https://youtu.be/\")}}\n{{- $trustedURL := or $youtubeURL (hasPrefix $url \"https://www.twitch.tv/\") (hasPrefix $url \"https://twitch.tv/\") (hasPrefix $url \"https://chzzk.naver.com/live/\")}}\n{{- $delimiterSafe := and (not (contains $url \"\\t\")) (not (contains $url \"\\n\")) (not (contains $url \"\\r\")) (not (contains $url \"(\")) (not (contains $url \")\")) (not (contains $url \"[\")) (not (contains $url \"]\")) (not (contains $url \"<\")) (not (contains $url \">\")) (not (contains $url \"\\\\\"))}}\n{{- $safeURL := and $url $trustedURL $delimiterSafe (not (contains $url \" \")) (not (contains $url \"|\"))}}\n{{- $composite := and (eq (len $parts) 2) $youtubeURL (hasPrefix (index $parts 1) \"https://chzzk.naver.com/live/\") $delimiterSafe (not (contains (index $parts 0) \" \")) (not (contains (index $parts 1) \" \"))}}\n{{- $linkable := and .Title $safeURL}}\n{{- if $linkable}}\n[{{mdsafe .Title}}]({{.URL}})\n{{- else if .Title}}\n{{printf \"\\u200b\"}}{{mdsafe .Title}}\n{{- end}}\n{{- if .ScheduleMessage}}\n{{printf \"\\u200b\"}}{{mdsafe .ScheduleMessage}}\n{{- end}}\n{{- if and .URL (not $linkable)}}\n{{if or $safeURL $composite}}{{.URL}}{{else}}{{printf \"\\u200b\"}}{{mdsafe (replace (replace .URL \"\\n\" \" \") \"\\r\" \" \")}}{{end}}\n{{- end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 52,
         "template_key": "ALARM_DISPATCH_NOTIFICATION_GROUP",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "## {{if eq .Kind \"LIVE_STREAM\"}}🔴 {{mdsafe .MemberName}} 방송 시작 ({{.Count}}){{else if eq .Kind \"NEW_VIDEO\"}}🔔 {{mdsafe .MemberName}} 새 영상 ({{.Count}}){{else}}🔔 {{mdsafe .MemberName}} 알림 ({{.Count}}){{end}}\n{{- $n := 0}}\n{{- range $item := .Items}}\n{{- if and $item.Title $item.URL}}\n{{- $n = add $n 1}}\n{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})\n{{- else if $item.Title}}\n{{- $n = add $n 1}}\n{{$n}}. {{mdsafe (truncate 40 $item.Title)}}\n{{- else if $item.URL}}\n{{- $n = add $n 1}}\n{{$n}}. {{$item.URL}}\n{{- end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 21,
         "template_key": "OUTBOX_VIDEO_GROUP",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "## 📅 이번 달 행사 ({{.Count}})\n{{- if .LLMSummary}}\n\n{{.LLMSummary}}\n{{- end}}\n{{range $index, $event := .Events}}\n{{- if and $event.Title $event.Link}}\n{{add $index 1}}. [{{mdsafe $event.Title}}]({{$event.Link}})\n{{- else if $event.Title}}\n{{add $index 1}}. {{mdsafe $event.Title}}\n{{- else}}\n{{add $index 1}}. {{$event.Link}}\n{{- end}}\n{{- if $event.DateStr}}\n   ⏰ {{$event.DateStr}}\n{{- end}}\n{{- if $event.Members}}\n   {{mdsafe $event.Members}}\n{{- end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 31,
         "template_key": "CMD_MAJOR_EVENT_MONTHLY_SUMMARY",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "## 📅 이번 주 행사 ({{.Count}})\n{{- if .LLMSummary}}\n\n{{.LLMSummary}}\n{{- end}}\n{{range $index, $event := .Events}}\n{{- if and $event.Title $event.Link}}\n{{add $index 1}}. [{{mdsafe $event.Title}}]({{$event.Link}})\n{{- else if $event.Title}}\n{{add $index 1}}. {{mdsafe $event.Title}}\n{{- else}}\n{{add $index 1}}. {{$event.Link}}\n{{- end}}\n{{- if $event.DateStr}}\n   ⏰ {{$event.DateStr}}\n{{- end}}\n{{- if $event.Members}}\n   {{mdsafe $event.Members}}\n{{- end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 24,
         "template_key": "CMD_MAJOR_EVENT_WEEKLY_SUMMARY",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "## 📊 구독자 증가 순위{{if .Period}} ({{.Period}}){{end}}\n{{range .Gainers}}\n{{.Rank}}. **{{mdsafe .MemberName}}** +{{.Delta}}명{{if .Current}} (현재 {{.Current}}명){{end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 42,
         "template_key": "CMD_STATS_GAINERS",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "## 🔔 {{mdsafe .MemberName}} 새 쇼츠 ({{.Count}})\n{{- $n := 0}}\n{{- range $item := .Items}}\n{{- if and $item.Title $item.URL}}\n{{- $n = add $n 1}}\n{{$n}}. [{{mdsafe (truncate 40 $item.Title)}}]({{$item.URL}})\n{{- else if $item.Title}}\n{{- $n = add $n 1}}\n{{$n}}. {{mdsafe (truncate 40 $item.Title)}}\n{{- else if $item.URL}}\n{{- $n = add $n 1}}\n{{$n}}. {{$item.URL}}\n{{- end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 22,
         "template_key": "OUTBOX_SHORTS_GROUP",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "## 🔔 {{mdsafe .MemberName}} 커뮤니티 글 ({{.Count}})\n{{- $n := 0}}\n{{- range $item := .Items}}\n{{- if $item.ContentText}}\n{{- $n = add $n 1}}\n{{$n}}. {{mdsafe (truncate 40 $item.ContentText)}}\n{{- if $item.URL}}\n   [커뮤니티 글 보기]({{$item.URL}})\n{{- end}}\n{{- else if $item.URL}}\n{{- $n = add $n 1}}\n{{$n}}. [커뮤니티 글 보기]({{$item.URL}})\n{{- end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 23,
         "template_key": "OUTBOX_COMMUNITY_GROUP",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "## 🔔 방송 알림 ({{.Count}})\n{{if le .MinutesUntil 0}}방송이 시작되었습니다.{{else if eq (len .ScheduledTimes) 0}}곧 시작합니다.{{else if eq (len .ScheduledTimes) 1}}⏰ {{index .ScheduledTimes 0}}{{else}}⏰ {{join .ScheduledTimes \", \"}}{{end}}\n{{- range .Entries}}\n{{.Index}}. **{{mdsafe (default \"알 수 없는 채널\" .ChannelName)}}**{{if .ScheduledKST}} ({{.ScheduledKST}}){{end}}\n{{- if and .Title .URL}}\n   [{{mdsafe .Title}}]({{.URL}})\n{{- else if .Title}}\n   {{mdsafe .Title}}\n{{- else if .URL}}\n   {{.URL}}\n{{- end}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 47,
         "template_key": "CMD_ALARM_NOTIFICATION_GROUP",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if .Added -}}\n✅ **{{mdsafe .MemberName}}** 알람을 설정했습니다. 방송 시작 5분 전에 알립니다.\n{{- if .NextStream}}\n{{- if eq .NextStream.Status \"live\"}}\n- 🔴 방송 중\n{{- if and .NextStream.Title .NextStream.URL}}\n- [{{mdsafe .NextStream.Title}}]({{.NextStream.URL}})\n{{- else if .NextStream.Title}}\n- {{mdsafe .NextStream.Title}}\n{{- else if .NextStream.URL}}\n- {{.NextStream.URL}}\n{{- end}}\n{{- else if eq .NextStream.Status \"upcoming\"}}\n- ⏰ {{if .NextStream.StartingSoon}}곧 시작{{else}}{{.NextStream.ScheduledKST}}{{if .NextStream.TimeDetail}} ({{.NextStream.TimeDetail}}){{end}}{{end}}\n{{- if and .NextStream.Title .NextStream.URL}}\n- [{{mdsafe .NextStream.Title}}]({{.NextStream.URL}})\n{{- else if .NextStream.Title}}\n- {{mdsafe .NextStream.Title}}\n{{- else if .NextStream.URL}}\n- {{.NextStream.URL}}\n{{- end}}\n{{- end}}\n{{- end}}\n{{- else -}}\nℹ️ **{{mdsafe .MemberName}}** 알람이 이미 설정되어 있습니다.\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 16,
         "template_key": "CMD_ALARM_ADDED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if .Headline -}}\n## {{mdsafe .Headline}}\n{{- else -}}\n## 📰 멤버 뉴스\n{{- end -}}\n{{- if eq (len .TopItems) 0 }}\n표시할 뉴스가 없습니다.\n{{- else }}\n{{range $index, $item := .TopItems}}\n{{add $index 1}}. {{$item.DateText}} · **{{mdsafe $item.Member}}** · {{mdsafe $item.Category}}\n{{- if and $item.Title $item.SourceURL}}\n   [{{mdsafe $item.Title}}]({{$item.SourceURL}})\n{{- else if $item.Title}}\n   {{mdsafe $item.Title}}\n{{- else if $item.SourceURL}}\n   {{$item.SourceURL}}\n{{- end}}\n{{- if $item.Summary}}\n   {{mdsafe $item.Summary}}\n{{- end}}\n{{- end}}\n{{- if .MoreSummary }}\n\n{{mdsafe .MoreSummary}}\n{{- end }}\n{{- end }}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 33,
         "template_key": "CMD_MEMBER_NEWS_DIGEST",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if .Removed -}}\n✅ **{{mdsafe .MemberName}}** 알람을 해제했습니다.\n{{- else -}}\nℹ️ **{{mdsafe .MemberName}}** 알람이 설정되어 있지 않습니다.\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 17,
         "template_key": "CMD_ALARM_REMOVED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if eq (len .Groups) 0 -}}\n👤 등록된 멤버가 없습니다.\n{{- else -}}\n## 👤 멤버 목록 ({{.Total}})\n{{- range .Groups}}\n\n**{{mdsafe .GroupName}}**\n{{- range .Members}}\n{{- if .ShowBoth}}\n- {{mdsafe .Primary}} ({{mdsafe .Secondary}})\n{{- else if .Primary}}\n- {{mdsafe .Primary}}\n{{- else if .Secondary}}\n- {{mdsafe .Secondary}}\n{{- end}}\n{{- end}}\n{{- end}}\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 14,
         "template_key": "CMD_MEMBER_DIRECTORY",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if eq (len .Names) 0 -}}\n## 👤 멤버 정보\n{{- else -}}\n## 👤 {{mdsafe (index .Names 0)}}{{if gt (len .Names) 1}} ({{mdsafe (join (slice .Names 1) \" / \")}}){{end}}\n{{- end}}\n{{- if .Catchphrase}}\n\"{{mdsafe .Catchphrase}}\"\n{{- end}}\n{{- if .Summary}}\n{{mdsafe .Summary}}\n{{- end}}\n{{- if .Highlights}}\n\n**하이라이트**\n{{- range .Highlights}}\n- {{mdsafe .}}\n{{- end}}\n{{- end}}\n{{- if .DataRows}}\n\n**프로필**\n{{- range .DataRows}}\n{{- if .Multiline}}\n- {{mdsafe .Label}}:\n{{mdsafe .Value}}\n{{- else}}\n- {{mdsafe .Label}}: {{mdsafe .Value}}\n{{- end}}\n{{- end}}\n{{- end}}\n{{- if .SocialLinks}}\n\n**링크**\n{{- range .SocialLinks}}\n- [{{mdsafe .Label}}]({{.URL}})\n{{- end}}\n{{- end}}\n{{- if .OfficialURL}}\n\n[공식 프로필]({{.OfficialURL}})\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 40,
         "template_key": "CMD_PROFILE",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if eq .Count 0 -}}\n📅 {{.Hours}}시간 이내 예정된 방송이 없습니다.\n{{- else -}}\n## 📅 예정 방송 ({{.Hours}}시간 이내, {{.Count}})\n{{range .Streams}}\n- **{{mdsafe .ChannelName}}**\n  ⏰ {{.TimeInfo}}\n{{- if and .Title .URL}}\n  [{{mdsafe .Title}}]({{.URL}})\n{{- else if .Title}}\n  {{mdsafe .Title}}\n{{- else if .URL}}\n  {{.URL}}\n{{- end}}\n{{- end -}}\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 12,
         "template_key": "CMD_UPCOMING_STREAMS",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if eq .Count 0 -}}\n📅 {{.Year}}년 {{.Month}}월 등록된 기념일이 없습니다.\n{{- else -}}\n## 📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}})\n{{- range .Days}}\n\n**{{printf \"%02d/%02d\" .Month .Day}}**\n{{- range .Entries}}\n{{- if .IsBirthday}}\n- 🎂 {{mdsafe .Name}} 생일\n{{- else}}\n- 🎉 {{mdsafe .Name}} 데뷔 {{.Years}}주년\n{{- end}}\n{{- end}}\n{{- end}}\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 43,
         "template_key": "CMD_CALENDAR",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if eq .Count 0 -}}\n🔔 설정된 알람이 없습니다.\n{{- else -}}\n✅ 알람 **{{.Count}}개**를 모두 해제했습니다.\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 18,
         "template_key": "CMD_ALARM_CLEARED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if eq .Count 0 -}}\n🔔 설정된 알람이 없습니다.\n예) `{{.Prefix}}알람 추가 페코라`\n{{- else -}}\n## 🔔 알람 ({{.Count}})\n{{range $index, $alarm := .Alarms}}\n{{add $index 1}}. **{{mdsafe $alarm.MemberName}}**{{if $alarm.TypesLabel}} ({{mdsafe $alarm.TypesLabel}}){{end}}\n{{- if $alarm.NextStream}}\n{{- if eq $alarm.NextStream.Status \"live\"}}\n   🔴 방송 중\n{{- if and $alarm.NextStream.Title $alarm.NextStream.URL}}\n   [{{mdsafe $alarm.NextStream.Title}}]({{$alarm.NextStream.URL}})\n{{- else if $alarm.NextStream.Title}}\n   {{mdsafe $alarm.NextStream.Title}}\n{{- else if $alarm.NextStream.URL}}\n   {{$alarm.NextStream.URL}}\n{{- end}}\n{{- else if eq $alarm.NextStream.Status \"upcoming\"}}\n   ⏰ {{if $alarm.NextStream.StartingSoon}}곧 시작{{else}}{{$alarm.NextStream.ScheduledKST}}{{if $alarm.NextStream.TimeDetail}} ({{$alarm.NextStream.TimeDetail}}){{end}}{{end}}\n{{- if and $alarm.NextStream.Title $alarm.NextStream.URL}}\n   [{{mdsafe $alarm.NextStream.Title}}]({{$alarm.NextStream.URL}})\n{{- else if $alarm.NextStream.Title}}\n   {{mdsafe $alarm.NextStream.Title}}\n{{- else if $alarm.NextStream.URL}}\n   {{$alarm.NextStream.URL}}\n{{- end}}\n{{- end}}\n{{- end}}\n{{- end}}\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 9,
         "template_key": "CMD_ALARM_LIST",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if eq .Count 0 -}}\n🔴 방송 중인 스트림이 없습니다.\n{{- else -}}\n## 🔴 라이브 ({{.Count}})\n{{range .Streams}}\n- **{{mdsafe .ChannelName}}**{{if gt .ViewerCount 0}} ({{formatNumberKR .ViewerCount}}명){{end}}\n{{- if and .Title .URL}}\n  [{{mdsafe .Title}}]({{.URL}})\n{{- else if .Title}}\n  {{mdsafe .Title}}\n{{- else if .URL}}\n  {{.URL}}\n{{- end}}\n{{- end -}}\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 11,
         "template_key": "CMD_LIVE_STREAMS",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{- if not .ChannelName -}}\n❌ 채널 정보를 찾을 수 없습니다.\n{{- else if eq .Count 0 -}}\n📅 **{{mdsafe .ChannelName}}**\n{{.Days}}일 이내 예정된 방송이 없습니다.\n{{- else -}}\n## 📅 {{mdsafe .ChannelName}} 일정 ({{.Days}}일 이내, {{.Count}})\n{{range .Streams}}\n{{- if .IsLive}}\n- 🔴 방송 중\n{{- else}}\n- ⏰ {{.TimeInfo}}\n{{- end}}\n{{- if and .Title .URL}}\n  [{{mdsafe .Title}}]({{.URL}})\n{{- else if .Title}}\n  {{mdsafe .Title}}\n{{- else if .URL}}\n  {{.URL}}\n{{- end}}\n{{- end -}}\n{{- end -}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 15,
         "template_key": "CMD_CHANNEL_SCHEDULE",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{if .IsSubscribed}}🔔{{else}}🔕{{end}} 뉴스 알림: **{{if .IsSubscribed}}켜짐{{else}}꺼짐{{end}}**\n{{- if .IsSubscribed}}\n- 발송: 매주 월요일 09:00 KST\n- 해제: `{{.Prefix}}뉴스알림 끄기`\n{{- else}}\n- 설정: `{{.Prefix}}뉴스알림 켜기`\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 39,
         "template_key": "CMD_MEMBER_NEWS_STATUS",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{if .IsSubscribed}}🔔{{else}}🔕{{end}} 행사 알림: **{{if .IsSubscribed}}켜짐{{else}}꺼짐{{end}}**\n{{- if .IsSubscribed}}\n- 해제: `{{.Prefix}}행사 끄기`\n{{- else}}\n- 설정: `{{.Prefix}}행사 켜기`\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 29,
         "template_key": "CMD_MAJOR_EVENT_STATUS",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{if eq .Kind \"LIVE_STREAM\"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}\n{{- if and .Title .URL}}\n[{{mdsafe (truncate 50 .Title)}}]({{.URL}})\n{{- else if .Title}}\n{{mdsafe (truncate 50 .Title)}}\n{{- else if .URL}}\n{{.URL}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 7,
         "template_key": "OUTBOX_VIDEO",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{mdsafe .MemberName}}은(는) {{.Hours}}시간 이내 예정된 방송이 없습니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 45,
         "template_key": "CMD_MEMBER_NO_UPCOMING",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "{{mdsafe .MemberName}}은(는) 현재 방송 중이 아닙니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 44,
         "template_key": "CMD_MEMBER_NOT_LIVE",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "ℹ️ 뉴스 알림이 이미 꺼져 있습니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 38,
         "template_key": "CMD_MEMBER_NEWS_NOT_SUB",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "ℹ️ 뉴스 알림이 이미 켜져 있습니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 37,
         "template_key": "CMD_MEMBER_NEWS_ALREADY_SUB",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "ℹ️ 행사 알림이 꺼져 있습니다.\n- 설정: `{{.Prefix}}행사 켜기`",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 28,
         "template_key": "CMD_MAJOR_EVENT_NOT_SUB",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "ℹ️ 행사 알림이 이미 켜져 있습니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 27,
         "template_key": "CMD_MAJOR_EVENT_ALREADY_SUB",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "⏰ **{{mdsafe .ChannelName}}** 방송 예정\n{{- if .ScheduledTimeKST}}\n- {{.ScheduledTimeKST}} 시작\n{{- else}}\n- 곧 시작\n{{- end}}\n{{- if .ScheduleMessage}}\n- {{mdsafe .ScheduleMessage}}\n{{- end}}\n{{- if .Title}}\n- {{mdsafe .Title}}\n{{- end}}\n{{- if .URL}}\n\n{{.URL}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 10,
         "template_key": "CMD_ALARM_NOTIFICATION",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "✅ 뉴스 알림을 껐습니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 36,
         "template_key": "CMD_MEMBER_NEWS_UNSUBSCRIBED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "✅ 뉴스 알림을 켰습니다.\n- 발송: **매주 월요일 09:00 KST**",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 35,
         "template_key": "CMD_MEMBER_NEWS_SUBSCRIBED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "✅ 행사 알림을 껐습니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 26,
         "template_key": "CMD_MAJOR_EVENT_UNSUBSCRIBED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "✅ 행사 알림을 켰습니다.\n- 발송: **매주 행사 요약**",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 25,
         "template_key": "CMD_MAJOR_EVENT_SUBSCRIBED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "❌ '{{mdsafe .MemberName}}' 멤버를 찾을 수 없습니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 46,
         "template_key": "CMD_MEMBER_NOT_FOUND",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "동일한 이름의 멤버가 여러 명 있습니다.\n{{range .Candidates}}{{.Index}}. {{mdsafe .Name}}\n{{end}}\n예) `{{.Prefix}}{{.CommandExample}}` {{mdsafe .FirstName}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 50,
         "template_key": "CMD_AMBIGUOUS_MEMBER",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "홀로라이브 봇 명령어\n\n[방송]\n  {{.Prefix}}라이브 - 방송 중 목록\n  {{.Prefix}}라이브 [멤버명] - 멤버 라이브 확인\n  {{.Prefix}}예정 - 예정 방송 목록\n  {{.Prefix}}예정 [멤버명] - 멤버 예정 방송\n  {{.Prefix}}멤버 [이름] - 일주일 이내 방송 일정\n  {{.Prefix}}방송이력/방송기록 [멤버명] [타입] - 종료된 방송 이력\n  {{.Prefix}}방송이력 경마 30 - 최근 30일 경마\n  {{.Prefix}}방송기록 페코라 게임 - 멤버·타입 필터\n  {{.Prefix}}방송이력 카테고리:게임 14일 개수:10 - 타입·기간·개수\n  타입: 게임/잡담/노래/ASMR/멤버십/이벤트/경마/동시시청/뉴스/기타/미분류\n  {{.Prefix}}방송이력 썸네일 [video_id] - 종료 방송 썸네일\n\n[멤버]\n  {{.Prefix}}멤버 - 전체 멤버 목록\n  {{.Prefix}}정보 [멤버명] - 프로필 조회\n\n[알람]\n  {{.Prefix}}알람 추가 [멤버명]\n  {{.Prefix}}알람 제거 [멤버명]\n  {{.Prefix}}알람 목록\n  {{.Prefix}}알람 초기화\n\n[뉴스]\n  {{.Prefix}}뉴스 - 주간 뉴스 요약\n  {{.Prefix}}뉴스알림 켜기 / 끄기 / 상태\n\n[행사]\n  {{.Prefix}}행사 - 행사 알림 상태\n  {{.Prefix}}행사 켜기 / 끄기\n\n[기념일]\n  {{.Prefix}}기념일 - 이번 달 생일·주년\n  {{.Prefix}}기념일 다음달 / 저번달\n\n[기타]\n  {{.Prefix}}구독자 [멤버명] - 구독자 수\n  {{.Prefix}}도움말 - 도움말",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 13,
         "template_key": "CMD_HELP",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🎂 **{{mdsafe .MemberName}}** 생일 방송 일정이 잡혔습니다!\n{{- if and .StreamTitle .StreamURL}}\n- [{{mdsafe .StreamTitle}}]({{.StreamURL}})\n{{- else if .StreamTitle}}\n- {{mdsafe .StreamTitle}}\n{{- else if .StreamURL}}\n- {{.StreamURL}}\n{{- end}}\n{{- if .ScheduledStartKST}}\n- ⏰ {{.ScheduledStartKST}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 103,
         "template_key": "CELEBRATION_BIRTHDAY_STREAM",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🎂 **{{mdsafe .MemberName}}**{{if gt .Ordinal 0}} {{.Ordinal}}번째{{end}} 생일 축하합니다!{{if .ChannelID}}\n[YouTube 채널 보기](https://youtube.com/channel/{{.ChannelID}}){{end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 48,
         "template_key": "CELEBRATION_BIRTHDAY",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🎉 **{{mdsafe .MemberName}}** {{mdsafe .Milestone}} 달성",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 8,
         "template_key": "OUTBOX_MILESTONE",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🎉 **{{mdsafe .MemberName}}** 구독자 {{.Milestone}}명 달성!",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 19,
         "template_key": "CMD_MILESTONE_ACHIEVED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🎉 **{{mdsafe .MemberName}}** 데뷔 {{.Years}}주년 축하합니다!{{if .ChannelID}}\n[YouTube 채널 보기](https://youtube.com/channel/{{.ChannelID}}){{end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 49,
         "template_key": "CELEBRATION_ANNIVERSARY",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "📊 **{{mdsafe .MemberName}}** 구독자 {{.Milestone}}명까지 {{.Remaining}}명 남았습니다.",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 20,
         "template_key": "CMD_MILESTONE_APPROACHING",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "📊 **{{mdsafe .MemberName}}** 구독자 {{.Subscribers}}명",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 41,
         "template_key": "CMD_STATS_COUNT",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "📰 뉴스 대상 멤버가 없습니다.\n예) `{{.Prefix}}알람 추가 페코라`",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 34,
         "template_key": "CMD_MEMBER_NEWS_NO_MEMBERS",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🔔 **{{mdsafe .MemberName}}** 새 쇼츠\n{{- if and .Title .URL}}\n[{{mdsafe (truncate 50 .Title)}}]({{.URL}})\n{{- else if .Title}}\n{{mdsafe (truncate 50 .Title)}}\n{{- else if .URL}}\n{{.URL}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 5,
         "template_key": "OUTBOX_SHORTS",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🔔 **{{mdsafe .MemberName}}** 커뮤니티 글\n{{- if .ContentText}}\n{{mdsafe (truncate 100 .ContentText)}}\n{{- end}}\n{{- if .URL}}\n[커뮤니티 글 보기]({{.URL}})\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 6,
         "template_key": "OUTBOX_COMMUNITY",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🔔 행사 알림 명령어\n- `{{.Prefix}}행사 켜기 / 끄기 / 상태`",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 30,
         "template_key": "CMD_MAJOR_EVENT_USAGE",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       },
       {
         "body": "🔴 **{{mdsafe .ChannelName}}** 방송 시작\n{{- if .ScheduledTimeKST}}\n- {{.ScheduledTimeKST}} 시작\n{{- end}}\n{{- if .Title}}\n- {{mdsafe .Title}}\n{{- end}}\n{{- if .URL}}\n\n{{.URL}}\n{{- end}}",
         "channel_id": null,
-        "created_at": "\u003cmigration-time\u003e",
+        "created_at": "<migration-time>",
         "id": 32,
         "template_key": "CMD_ALARM_LIVE_STARTED",
-        "updated_at": "\u003cmigration-time\u003e"
+        "updated_at": "<migration-time>"
       }
     ],
     "youtube_channel_latest_stats": [],

@@ -34,8 +34,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 // mockAlarmCRUD: 테스트용 domain.AlarmCRUD mock
@@ -123,7 +123,7 @@ func newTestHandler(t *testing.T, mock *mockAlarmCRUD) *gin.Engine {
 // jsonBody: 구조체를 JSON 바이트 버퍼로 변환합니다.
 func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	t.Helper()
-	b, err := json.Marshal(v)
+	b, err := jsonv2.Marshal(v)
 	require.NoError(t, err)
 	return bytes.NewBuffer(b)
 }
@@ -132,7 +132,7 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 func decodeResponse(t *testing.T, body *bytes.Buffer) APIResponse {
 	t.Helper()
 	var resp APIResponse
-	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+	if err := jsonv2.UnmarshalRead(body, &resp); err != nil {
 		t.Fatalf("응답 디코딩 실패: %v", err)
 	}
 	return resp

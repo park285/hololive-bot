@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 func TestHandleMessageRecoversApplyPanicAndKeepsSubscribing(t *testing.T) {
@@ -46,7 +46,7 @@ func TestHandleMessageRecoversApplyPanicAndKeepsSubscribing(t *testing.T) {
 		},
 	}
 
-	payload, err := json.Marshal(contractssettings.ConfigUpdateV1{Type: "scraper_proxy"})
+	payload, err := jsonv2.Marshal(contractssettings.ConfigUpdateV1{Type: "scraper_proxy"})
 	require.NoError(t, err)
 	msg := valkey.PubSubMessage{Channel: defaultChannel, Message: string(payload)}
 

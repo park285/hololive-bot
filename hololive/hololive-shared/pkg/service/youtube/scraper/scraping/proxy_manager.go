@@ -33,7 +33,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 var ytDefaults = settings.DefaultYouTubeOperationalConfig()

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/iris-client-go/v2/iris"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 type alarmDispatchKaringVideoPayload struct {
@@ -85,7 +85,7 @@ func buildAlarmDispatchVideoOutboxKaringContentItem(
 	item domain.YouTubeOutboxItem,
 ) (iris.KaringContentItem, error) {
 	var data alarmDispatchKaringVideoPayload
-	if err := json.Unmarshal([]byte(item.Payload), &data); err != nil {
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &data); err != nil {
 		return iris.KaringContentItem{}, fmt.Errorf("build youtube video karing content list request: unmarshal payload: %w", err)
 	}
 	videoID := firstNonEmptyString(data.VideoID, item.ContentID)
@@ -126,7 +126,7 @@ func buildAlarmDispatchCommunityOutboxKaringContentItem(
 	item domain.YouTubeOutboxItem,
 ) (iris.KaringContentItem, error) {
 	var data alarmDispatchKaringCommunityPayload
-	if err := json.Unmarshal([]byte(item.Payload), &data); err != nil {
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &data); err != nil {
 		return iris.KaringContentItem{}, fmt.Errorf("build youtube community karing content list request: unmarshal payload: %w", err)
 	}
 	memberName := resolveAlarmDispatchOutboxMemberName(ctx, messageStrings, payload)
