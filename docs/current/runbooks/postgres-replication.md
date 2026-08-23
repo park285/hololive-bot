@@ -47,7 +47,7 @@ commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션
 | primary 복제 역할 | `hololive_replicator`. init-db가 `HOLOLIVE_REPLICATOR_PASSWORD`가 있을 때만 만듭니다. |
 | failover DB 권한 | `hololive_replicator`에 `hololive` CONNECT와 `pg_catalog.pg_promote(boolean, integer)` EXECUTE만 부여합니다. OS controller에 admin/superuser 자격을 주지 않습니다. |
 | primary 복제 슬롯 | `iris_seoul_standby` physical slot. standby가 오래 끊기면 슬롯이 WAL을 보존해 primary 디스크가 찰 수 있습니다. |
-| standby 자격 | `/etc/stack-secrets/hololive-bot/postgres/pgpass` (`0600 70:70`). PostgreSQL 컨테이너 uid 70이 읽을 수 있어야 합니다. |
+| standby 자격 | `/etc/stack-secrets/hololive-bot/postgres/pgpass` (`0600 999:999`). PostgreSQL 컨테이너는 스택 공통 uid 999로 실행되므로 그 uid가 읽을 수 있어야 합니다. |
 | standby CA | `/etc/stack-secrets/hololive-bot/certs/postgres-ca.pem`. `primary_conninfo`와 controller probe가 `sslmode=verify-full`을 사용합니다. |
 | host client | PGDG `postgresql-client-18`의 canonical `/usr/lib/postgresql/18/bin/psql`. `/usr/bin/psql`의 `pg_wrapper` symlink는 trusted-path 검사에서 거부합니다. controller는 Docker socket 또는 `docker` 그룹을 사용하지 않습니다. |
 | failover env | `/etc/stack-secrets/hololive-bot/postgres-failover.env` (`0600 root:root`). systemd `LoadCredential`이 전용 사용자에게 read-only 사본을 전달하고 allowlist launcher가 해석합니다. |
@@ -129,7 +129,7 @@ docker run --rm \
   -v hololive-bot_holo-pg-standby-data:/var/lib/postgresql \
   -v /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro \
   -v /etc/stack-secrets/hololive-bot/postgres/pgpass:/run/hololive-bot/postgres/pgpass:ro \
-  --user 70:70 \
+  --user 999:999 \
   -e PGPASSFILE=/run/hololive-bot/postgres/pgpass \
   -e PGSSLMODE=verify-full \
   -e PGSSLROOTCERT=/run/hololive-bot/certs/postgres-ca.pem \
@@ -139,7 +139,7 @@ docker run --rm \
   -D /var/lib/postgresql/pgdata -X stream -S iris_seoul_standby -P -v
 
 # 3. standby signal
-docker run --rm -v hololive-bot_holo-pg-standby-data:/v --user 70:70 \
+docker run --rm -v hololive-bot_holo-pg-standby-data:/v --user 999:999 \
   --entrypoint sh postgres:18.6-alpine -c \
   'touch /v/pgdata/standby.signal'
 
@@ -452,7 +452,7 @@ unfence한 뒤에만 정상 Compose lifecycle을 재개합니다.
 | `hostssl` 규칙이 보이지 않음 | 서버 `ssl=off` | `ssl=on` 조건에서 `pg_hba_file_rules`를 확인합니다. |
 | primary 디스크 증가 | standby 단절 중 physical slot이 WAL 보존 | standby 복구 또는 승인 후 slot 제거. |
 | standby 기동 거부 `max_connections` | standby 설정이 primary보다 작음 | primary 이상으로 맞춥니다. |
-| `could not read password file` | pgpass 소유자가 uid 70이 아님 | `0600 70:70`으로 sync합니다. |
+| `could not read password file` | pgpass 소유자가 uid 999가 아님 | `0600 999:999`로 sync합니다. |
 | `promotion_blocked reason=no_healthy_observation` | exact-lag 정상 샘플을 아직 저장하지 못함 | 복제를 정상화하고 `primary_healthy`가 기록될 때까지 승격하지 않습니다. |
 | `fence_failed` | SSH-only fence에서 구 host가 unreachable이거나 외부 fence 실패 | 구 primary 상태를 수동 확인하거나 out-of-band fence backend를 복구합니다. fencing을 우회하지 않습니다. |
 | `old_primary_still_writable_after_fence` | fence가 거짓 성공했거나 다른 endpoint를 막음 | 즉시 hook을 비활성화하고 구 primary를 실제 격리합니다. |
