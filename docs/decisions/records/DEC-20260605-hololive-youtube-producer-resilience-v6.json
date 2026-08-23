@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260605-hololive-youtube-producer-resilience-v6",
+  "title": "youtube producer resilience v6/v6.1: JobRunGuard와 GlobalBudgetLimiter 역할 분리, Holodex live는 global batch, 200 consent/challenge 페이지는 blocked response, source cooldown은 AP 전체 hard failure에만",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-06-05",
+  "summary": "JobRunGuard는 (pollerName, channelID) 중복 실행 방지에, GlobalBudgetLimiter는 source별 admission/in-flight와 cooldown gate에 집중하고 local rate limiter 대기 중에는 global slot을 점유하지 않는다. Holodex live는 채널별 poll 대신 synthetic global batch chunk로 실행하고 fallback scraper 비용은 FallbackSourceUnits로 기록한다. v6.1(2026-06-06)은 fallback의 채널별 실패 전파, 순서 무관 오류 분류, 도메인 고정 blocked 시그니처만 사용(일반 단어 금지), ytInitialData 전부 invalid이면 ErrNotFound, readiness source_cooldown TTL 자동 해제, too-large 분류는 typed sentinel만, community 폴링의 shorts 간격 추종, Retry-After를 포함한 재시도 지연의 MaxDelay 캡, transient transport 시그니처 확장을 추가했다.",
+  "sources": [
+    "docs/current/architecture/youtube-producer-resilience-v6-20260605.md#핵심 결정",
+    "docs/current/architecture/youtube-producer-resilience-v6-20260605.md#v6.1 후속 결정 (2026-06-06)"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-shared/pkg/providers/scraper_scheduler_options.go",
+    "hololive/hololive-shared/pkg/service/youtube/scraper/scraping/client_http.go"
+  ],
+  "supersedes": []
+}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
@@ -204,7 +204,7 @@ func resolveOutboxPublishedAt(outbox *domain.YouTubeNotificationOutbox) *time.Ti
 
 func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
 	var payload format.VideoPayload
-	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		return nil
 	}
 	return yttimestamp.NormalizePtr(payload.PublishedAt)
@@ -212,7 +212,7 @@ func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
 
 func resolveCommunityPayloadPublishedAt(rawPayload string) *time.Time {
 	var payload format.CommunityPayload
-	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		return nil
 	}
 	return yttimestamp.NormalizePtr(payload.PublishedAt)

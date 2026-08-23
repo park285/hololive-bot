@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -38,7 +38,7 @@ func (c *Consumer) reconcileStats(
 
 func statsEvidenceFromObservation(observation *Observation) (stats.Evidence, error) {
 	var payload contract.ChannelStatsV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return stats.Evidence{}, fmt.Errorf("decode channel stats payload: %w", err)
 	}
 	covered := map[string]bool{}

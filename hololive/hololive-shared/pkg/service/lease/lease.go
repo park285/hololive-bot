@@ -9,7 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 const (

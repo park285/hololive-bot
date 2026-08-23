@@ -33,11 +33,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	json "github.com/park285/shared-go/pkg/json"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 var newTestLogger = sharedlogging.NewLogger
@@ -218,7 +218,7 @@ func configureMockDedupStringCache(client *cachemocks.Client, state *mockDedupCa
 		case string:
 			state.strings[key] = v
 		default:
-			encoded, err := json.Marshal(v)
+			encoded, err := jsonv2.Marshal(v)
 			if err != nil {
 				return fmt.Errorf("mock set: marshal value: %w", err)
 			}
@@ -243,7 +243,7 @@ func configureMockDedupStringCache(client *cachemocks.Client, state *mockDedupCa
 			return nil
 		}
 
-		if err := json.Unmarshal([]byte(raw), dest); err != nil {
+		if err := jsonv2.Unmarshal([]byte(raw), dest); err != nil {
 			return fmt.Errorf("mock get: unmarshal value: %w", err)
 		}
 		return nil
@@ -527,7 +527,7 @@ func TestService_OldStringNotifiedDataFailsClosed(t *testing.T) {
 	start := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
 	key := keys.NotifiedKey(streamID)
 
-	oldJSON, err := json.Marshal(NotifiedData{
+	oldJSON, err := jsonv2.Marshal(NotifiedData{
 		StartScheduled: keys.FormatScheduled(start),
 		SentAt:         map[int]bool{5: true},
 	})
@@ -570,7 +570,7 @@ func TestService_UpcomingEventRecentlyWindow(t *testing.T) {
 	stale := UpcomingEventNotifiedData{
 		NotifiedAt: time.Now().UTC().Add(-time.Hour).Format(time.RFC3339),
 	}
-	staleJSON, err := json.Marshal(stale)
+	staleJSON, err := jsonv2.Marshal(stale)
 	require.NoError(t, err)
 	state.setRawString(key, string(staleJSON))
 
@@ -665,7 +665,7 @@ func TestService_WasUpcomingEventNotifiedRecently_MalformedNotifiedAtTreatedAsNo
 		StartScheduled: &start,
 	}
 	key := keys.BuildUpcomingEventKey("room1", "UC_TEST", stream.ID, stream.Title, start)
-	corrupted, err := json.Marshal(UpcomingEventNotifiedData{NotifiedAt: "invalid-time"})
+	corrupted, err := jsonv2.Marshal(UpcomingEventNotifiedData{NotifiedAt: "invalid-time"})
 	require.NoError(t, err)
 	state.setRawString(key, string(corrupted))
 

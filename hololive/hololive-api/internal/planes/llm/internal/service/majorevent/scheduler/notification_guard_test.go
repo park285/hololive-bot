@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
-	"github.com/park285/shared-go/pkg/outputguard"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/outputguard"
 )
 
 type mockOutboxRepository struct {

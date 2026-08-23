@@ -3,7 +3,7 @@ package common_test
 import (
 	"testing"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 )
@@ -11,7 +11,7 @@ import (
 func TestErrorResponseCompatibilityShape(t *testing.T) {
 	t.Parallel()
 
-	payload, err := json.Marshal(commoncontracts.ErrorResponse{Error: "notification_in_progress"})
+	payload, err := jsonv2.Marshal(commoncontracts.ErrorResponse{Error: "notification_in_progress"})
 	if err != nil {
 		t.Fatalf("marshal error response: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestErrorResponseAdditiveFields(t *testing.T) {
 	}`)
 
 	var response commoncontracts.ErrorResponse
-	if err := json.Unmarshal(payload, &response); err != nil {
+	if err := jsonv2.Unmarshal(payload, &response); err != nil {
 		t.Fatalf("unmarshal error response: %v", err)
 	}
 	if response.Error != "no_subscribed_members" {

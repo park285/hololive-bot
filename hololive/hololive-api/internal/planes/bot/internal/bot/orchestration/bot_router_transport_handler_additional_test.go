@@ -339,9 +339,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 	t.Run("send image returns failed reply status", func(t *testing.T) {
 		failedDetail := "image bridge send failed: image lease last modified mismatch"
 		client := &acceptedImageTestIrisClient{
-			acceptedTestIrisClient: acceptedTestIrisClient{
-				statuses: []*iris.ReplyStatusSnapshot{{State: "failed", Detail: &failedDetail}},
-			},
+			statuses: []*iris.ReplyStatusSnapshot{{State: "failed", Detail: &failedDetail}},
 		}
 		transport := bottransport.NewCommandTransport(client, nil)
 

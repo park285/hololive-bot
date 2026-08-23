@@ -11,7 +11,7 @@ import (
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
-	sharedenv "github.com/park285/shared-go/pkg/envutil"
+	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 )
 
 func buildAdminAPIACLService(

@@ -6,13 +6,13 @@ Module and runtime inventory for the `hololive-bot` workspace.
 
 | Module | Language | Path | Role | Port |
 |--------|----------|------|------|------|
-| `hololive-alarm-worker` | Go 1.26 | `hololive/hololive-alarm-worker/` | Alarm checker, dispatch queue consumer, and proactive egress worker | 30007 |
-| `hololive-api` | Go 1.26 | `hololive/hololive-api/` | Unified runtime hosting bot/admin/llm planes and the YouTube consume plane | 30001/30003/30006 |
-| `hololive-dbtest` | Go 1.26 | `hololive/hololive-dbtest/` | PostgreSQL testcontainers harness and production migration replay support | - |
-| `hololive-youtube-collector` | Go 1.26 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | AP-fleet YouTube collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30035 |
-| `hololive-shared` | Go 1.26 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
-| `shared-go` | Go 1.26 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
-| `admin-dashboard-backend` | Go 1.26 | `admin-dashboard/backend/` | Admin dashboard Go backend (auth/session, holo API relay, Docker control, embedded frontend serving) | 30190 |
+| `hololive-alarm-worker` | Go 1.27 | `hololive/hololive-alarm-worker/` | Alarm checker, dispatch queue consumer, and proactive egress worker | 30007 |
+| `hololive-api` | Go 1.27 | `hololive/hololive-api/` | Unified runtime hosting bot/admin/llm planes and the YouTube consume plane | 30001/30003/30006 |
+| `hololive-dbtest` | Go 1.27 | `hololive/hololive-dbtest/` | PostgreSQL testcontainers harness and production migration replay support | - |
+| `hololive-youtube-collector` | Go 1.27 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | AP-fleet YouTube collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30035 |
+| `hololive-shared` | Go 1.27 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
+| `shared-go` | Go 1.27 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
+| `admin-dashboard-backend` | Go 1.27 | `admin-dashboard/backend/` | Admin dashboard Go backend (auth/session, holo API relay, Docker control, embedded frontend serving) | 30190 |
 | `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Production docker compose stack | - |
 | `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-collector-a`, host `<tailnet-osaka-a>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-collector-d`, host `<tailnet-osaka2-d>`) for compose-path contract validation; live runtime is host-native `systemd` | - |

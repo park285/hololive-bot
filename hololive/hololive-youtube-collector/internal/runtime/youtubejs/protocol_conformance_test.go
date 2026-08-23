@@ -1,7 +1,7 @@
 package youtubejs
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -92,7 +92,7 @@ func TestPAG013PaginationValidateAndQuality(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(raw, &fixture); err != nil {
+	if err := jsonv2.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
 	for _, item := range fixture.Valid {
@@ -132,7 +132,7 @@ func TestPAG012PaginationCursorJSONByteBound(t *testing.T) {
 		Continuity:        "GAP_UNRESOLVED",
 		TerminationReason: TerminationMaxPages,
 	}
-	if encoded, err := json.Marshal(accepted.CursorStart); err != nil || len(encoded) != 8192 {
+	if encoded, err := jsonv2.Marshal(accepted.CursorStart); err != nil || len(encoded) != 8192 {
 		t.Fatalf("accepted cursor bytes = %d, error = %v", len(encoded), err)
 	}
 	if err := accepted.Validate(); err != nil {
@@ -180,7 +180,7 @@ func collectJSONFields(typ reflect.Type, fields map[string]bool) {
 		if tag == "" || tag == "-" {
 			continue
 		}
-		name := strings.Split(tag, ",")[0]
+		name, _, _ := strings.Cut(tag, ",")
 		if name != "" {
 			fields[name] = true
 		}

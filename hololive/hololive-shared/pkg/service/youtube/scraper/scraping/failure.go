@@ -124,8 +124,7 @@ func classifyYouTubeSentinelFailure(err error, detail *FailureDetail) bool {
 		detail.Reason = FailureReasonParserDrift
 		return true
 	}
-	var cooldown *CooldownError
-	if errors.As(err, &cooldown) {
+	if cooldown, ok := errors.AsType[*CooldownError](err); ok {
 		detail.Reason = FailureReasonCooldown
 		detail.RetryAfter = cooldown.RetryDelay()
 		return true

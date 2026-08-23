@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
@@ -90,7 +90,7 @@ func readPersistedSettings(settingsPath string) (persistedSettings, error) {
 	}()
 
 	var persisted persistedSettings
-	if err := json.NewDecoder(file).Decode(&persisted); err != nil {
+	if err := jsonv2.UnmarshalRead(file, &persisted); err != nil {
 		return persistedSettings{}, fmt.Errorf("decode settings file: %w", err)
 	}
 

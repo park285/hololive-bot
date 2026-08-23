@@ -224,12 +224,12 @@ assert_contains "Makefile test-prod delegates to go-gate" "${make_n}" \
   "public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod"
 assert_contains "Makefile build-prod delegates to go-gate" "${make_n}" \
   "public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod"
-if [[ "${make_n}" == *"go test -tags sonic"* ]]; then
-  printf 'not ok - Makefile still implements a second sonic test path\n%s\n' "${make_n}" >&2
+if [[ "${make_n}" == *"go test -tags"* ]]; then
+  printf 'not ok - Makefile still implements a second tagged test path\n%s\n' "${make_n}" >&2
   exit 1
 fi
 PASSED=$((PASSED + 1))
-printf 'ok - Makefile has no second sonic test implementation\n'
+printf 'ok - Makefile has no second tagged test implementation\n'
 if grep -Eq '^build-bin:' "${MAKEFILE}"; then
   printf 'not ok - Makefile still exposes the retired build-bin alias\n' >&2
   exit 1

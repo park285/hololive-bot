@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"net"
 	"net/http"
@@ -786,11 +786,11 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 		if r.Header.Get("X-Iris-Signature") == "" {
 			t.Fatal("missing iris signature")
 		}
-		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+		if err := jsonv2.UnmarshalRead(r.Body, &gotRequest); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		w.WriteHeader(http.StatusAccepted)
-		if err := json.NewEncoder(w).Encode(iris.ReplyAcceptedResponse{
+		if err := jsonv2.MarshalWrite(w, iris.ReplyAcceptedResponse{
 			Success:   true,
 			Delivery:  "queued",
 			RequestID: "reply-123",
@@ -835,11 +835,11 @@ func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
 		if r.Header.Get(iris.HeaderIrisSignature) == "" {
 			t.Fatal("missing iris signature")
 		}
-		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+		if err := jsonv2.UnmarshalRead(r.Body, &gotRequest); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		streamCount := 1
-		if err := json.NewEncoder(w).Encode(iris.KaringDryRunResponse{
+		if err := jsonv2.MarshalWrite(w, iris.KaringDryRunResponse{
 			OK:          true,
 			DryRun:      true,
 			TemplateID:  133220,

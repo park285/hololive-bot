@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/shared-go/pkg/promptguard"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-shared/pkg/domain"

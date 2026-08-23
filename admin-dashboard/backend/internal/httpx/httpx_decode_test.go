@@ -2,6 +2,8 @@ package httpx
 
 import (
 	"context"
+	"encoding/json/jsontext"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -43,7 +45,8 @@ func TestDecodeJSONRejectsMultipleValues(t *testing.T) {
 
 	var dst decodeJSONFixture
 	err := DecodeJSON(req, &dst, int64(len(payload)))
-	require.ErrorContains(t, err, "multiple json values")
+	var syntaxErr *jsontext.SyntacticError
+	require.True(t, errors.As(err, &syntaxErr))
 }
 
 func TestDecodeJSONBytesRejectsUnknownField(t *testing.T) {

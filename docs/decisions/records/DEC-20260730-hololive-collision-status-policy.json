@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260730-hololive-collision-status-policy",
+  "title": "hololive collision(Q4-08) 재발 시 상태 전이 정책",
+  "decision_status": "proposed",
+  "delivery_status": "unknown",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-07-30",
+  "summary": "repository_collision_0038_01.sql의 무조건 status = detected를 고치기 전에 정책이 필요하다. (a) resolved 이후 재발은 detected로 재개하고 acknowledged 중 재발은 상태 유지, (b) 자동 재개 없이 recurrence_count/last_detected_at만 증가. 어느 안이든 재발 증거 보존용 additive migration이 코드보다 먼저이고, WHERE status='detected'를 DO UPDATE에 붙이는 수정은 금지한다. 2026-08-23 기준 hololive-bot에 recurrence_count/last_detected_at 컬럼은 없다.",
+  "sources": [
+    "iris-stack@db3927cf0ed1:docs/agent-workflows/plans/2026-07-30-stack-remediation-execution.md#결정 게이트 (사용자 결정 전 착수 금지)",
+    "iris-stack@db3927cf0ed1:docs/agent-workflows/plans/2026-07-30-stack-remediation-execution.md#D1. Q4-08 collision 상태 전이 정책 (db-audit C4/B2)",
+    "iris-stack@db3927cf0ed1:docs/agent-workflows/handoffs/2026-07-30-db-audit-plan-rereview.md#B2. Q4-08은 코드 수정 전에 상태 전이 정책 결정이 선행돼야 한다"
+  ],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": [],
+  "review": {
+    "after": "2026-09-30"
+  }
+}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
@@ -22,11 +23,11 @@ func Pick(probes ...*sharedreadiness.Probe) *sharedreadiness.Probe {
 func GinHandler(ctx context.Context, p *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if p == nil {
-			c.JSON(http.StatusOK, map[string]any{"status": "ready", "health": health.Get()})
+			ginjson.Respond(c, http.StatusOK, map[string]any{"status": "ready", "health": health.Get()})
 			return
 		}
 		statusCode, payload := evaluate(sharedreadiness.RequestContext(ctx, c), p)
-		c.JSON(statusCode, payload)
+		ginjson.Respond(c, statusCode, payload)
 	}
 }
 

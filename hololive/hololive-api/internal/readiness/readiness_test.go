@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func okCheck(name string) sharedreadiness.Check {
@@ -145,7 +145,7 @@ func serveReady(t *testing.T, handler gin.HandlerFunc) (statusCode int, payload 
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
 	}
 	return rec.Code, payload

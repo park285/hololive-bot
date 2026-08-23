@@ -6,9 +6,9 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	json "github.com/park285/shared-go/pkg/json"
 	"image/png"
 	"strings"
 )
@@ -86,7 +86,7 @@ func (p *HelpCardProvider) HelpImages(ctx context.Context) ([][]byte, error) {
 
 func mustLoadHelpCards(data []byte, assets map[string][]byte) []helpCard {
 	var catalog helpCatalog
-	if err := json.Unmarshal(data, &catalog); err != nil {
+	if err := jsonv2.Unmarshal(data, &catalog); err != nil {
 		panic(fmt.Sprintf("parse help card catalog: %v", err))
 	}
 	if err := validateHelpCatalog(catalog, assets); err != nil {

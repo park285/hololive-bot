@@ -204,8 +204,11 @@ x-collector-volumes: &collector-volumes
 services:
   holo-postgres:
     <<: *db-service
-    # PostgreSQL 18.4의 2026-07-25 manifest digest. 이후 갱신도 tag와 digest를 함께 검증한다.
-    image: ${POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}
+    # alpine 이미지의 postgres는 uid 70이지만 스택 공통으로 999를 쓴다(TwentyQ·ChatBotGo와 동일).
+    # user 지정 시 entrypoint의 root 준비 단계가 빠지므로 소켓 tmpfs에 uid/gid를 직접 준다.
+    user: "999:999"
+    # PostgreSQL 18.6의 2026-08-13 manifest digest. 이후 갱신도 tag와 digest를 함께 검증한다.
+    image: ${POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}
     container_name: holo-postgres
     oom_score_adj: -300
     shm_size: 512mb
@@ -268,6 +271,8 @@ services:
       HOLOLIVE_REPLICATOR_USER: ${HOLOLIVE_REPLICATOR_USER:-hololive_replicator}
       HOLOLIVE_REPLICATOR_PASSWORD: ${HOLOLIVE_REPLICATOR_PASSWORD:-}
       # PG18 parent mount를 사용하되 기존 named volume의 pgdata 상대 경로는 유지한다.
+      # builtin provider는 정렬을 libc에 위임하지 않아 base image가 glibc↔musl로 바뀌어도 기존 인덱스가 유효하다.
+      POSTGRES_INITDB_ARGS: "--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8"
       PGDATA: /var/lib/postgresql/pgdata
       PGPORT: "5432"
     volumes:
@@ -278,7 +283,7 @@ services:
       - /etc/stack-secrets/hololive-bot/postgres-tls:/run/hololive-bot/postgres-tls:ro
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /var/run/postgresql:size=16m,mode=3775
+      - /var/run/postgresql:size=16m,mode=3775,uid=999,gid=999
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t"]
       interval: 10s

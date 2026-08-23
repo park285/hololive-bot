@@ -31,7 +31,7 @@ import (
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const TriggerExecutionTimeout = 5 * time.Minute
@@ -115,7 +115,7 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "weekly notification sent"})
+	respondJSON(c, http.StatusOK, gin.H{"status": "weekly notification sent"})
 }
 
 func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
@@ -142,7 +142,7 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "monthly notification sent"})
+	respondJSON(c, http.StatusOK, gin.H{"status": "monthly notification sent"})
 }
 
 func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
@@ -165,5 +165,5 @@ func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "member news weekly digest sent"})
+	respondJSON(c, http.StatusOK, gin.H{"status": "member news weekly digest sent"})
 }

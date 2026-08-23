@@ -23,7 +23,7 @@ package runtime
 import (
 	"log/slog"
 
-	"github.com/park285/shared-go/pkg/envutil"
+	"github.com/park285/shared-go/v2/pkg/envutil"
 
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"

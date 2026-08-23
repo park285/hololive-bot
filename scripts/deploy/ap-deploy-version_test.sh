@@ -64,6 +64,12 @@ grep -Fq "sudo -n docker tag '\$IMAGE_REF' '\$rollback_image_tag'" "$deploy_scri
   || fail "AP cutover must preserve the previous runtime image before loading the candidate"
 grep -Fq "printf '%s\\n' '\$rollback_image_tag' > '\$backup_dir/rollback-image-tag'" "$deploy_script" \
   || fail "AP cutover must record the rollback image tag in the release backup"
+grep -Fq 'AP_ROLLBACK_TAG_KEEP="${AP_ROLLBACK_TAG_KEEP:-5}"' "$deploy_script" \
+  || fail "AP cutover must define a bounded rollback image tag retention count"
+grep -Fq '^rollback-[0-9]{8}T[0-9]{6}Z' "$deploy_script" \
+  || fail "AP cutover must prune only auto-generated timestamped rollback image tags"
+grep -Fq 'stale_rollback_tags=' "$deploy_script" \
+  || fail "AP cutover must collect superseded rollback image tags for pruning"
 grep -Fq '  "$image_archive"' "$deploy_script" \
   || fail "AP cutover must transfer the image archive to the AP host"
 grep -Fq '"ubuntu@$AP_SSH_HOST:~/$image_remote_path"' "$deploy_script" \

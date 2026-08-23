@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 func TestProxyRoundTripOverHTTP(t *testing.T) {
@@ -40,7 +40,7 @@ func TestProxyRoundTripOverHTTP(t *testing.T) {
 		t.Fatalf("Proxy() status = %d, want 200", resp.StatusCode)
 	}
 	var body map[string]any
-	if err := json.Unmarshal(resp.Body, &body); err != nil {
+	if err := jsonv2.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 	if body["ok"] != true {

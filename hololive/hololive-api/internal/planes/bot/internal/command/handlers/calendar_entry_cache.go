@@ -1,10 +1,9 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
-	json "github.com/park285/shared-go/pkg/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -109,9 +108,7 @@ func (f *cachedCelebrationCalendarFinder) readSnapshot(path string) ([]domain.Ca
 	}
 
 	var snapshot calendarEntriesSnapshot
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&snapshot); err != nil {
+	if err := jsonv2.Unmarshal(data, &snapshot, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return nil, false
 	}
 	if snapshot.Version != calendarEntryCacheVersion || snapshot.CachedAt.IsZero() {
@@ -132,7 +129,7 @@ func (f *cachedCelebrationCalendarFinder) writeSnapshot(path string, entries []d
 		CachedAt: f.now().UTC(),
 		Entries:  cloneCalendarEntries(entries),
 	}
-	data, err := json.Marshal(snapshot)
+	data, err := jsonv2.Marshal(snapshot)
 	if err != nil || len(data) > calendarEntryCacheMaxBytes {
 		return
 	}

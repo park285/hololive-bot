@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 var ErrDistributedLimiterUnavailable = errors.New("distributed rate limiter unavailable")

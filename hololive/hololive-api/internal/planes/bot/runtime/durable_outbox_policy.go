@@ -7,7 +7,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/shared-go/pkg/backoff"
+	"github.com/park285/shared-go/v2/pkg/backoff"
 )
 
 func replyOutboxRetryAfter(status string, attempts int32) time.Duration {

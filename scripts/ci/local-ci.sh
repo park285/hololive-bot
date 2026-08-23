@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.26.6+auto}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.27.0+auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
 source "${SCRIPT_DIR}/nilaway-inputs.sh"
@@ -41,9 +41,9 @@ run_step() {
 }
 
 check_go_toolchain() {
-    # 1.26.x patch는 자동 추종한다: minor family만 강제하고 정확한 patch는 고정하지 않는다.
-    # 새 patch(예: go1.26.6)가 설치되면 파일 수정 없이 그대로 통과한다.
-    local family="${GO_TOOLCHAIN_FAMILY:-go1.26.}"
+    # 1.27.x patch는 자동 추종한다: minor family만 강제하고 정확한 patch는 고정하지 않는다.
+    # 새 patch(예: go1.27.1)가 설치되면 파일 수정 없이 그대로 통과한다.
+    local family="${GO_TOOLCHAIN_FAMILY:-go1.27.}"
     local actual
     actual="$(go env GOVERSION)"
     case "${actual}" in
@@ -57,9 +57,9 @@ check_go_toolchain() {
 
 ensure_go_mod_toolchains() {
     # go.mod/go.work의 toolchain 하한을 현재 보안 patch로 고정한다.
-    # GOTOOLCHAIN=go1.26.6+auto가 필요한 patch toolchain을 확보한다.
+    # GOTOOLCHAIN=go1.27.0+auto가 필요한 patch toolchain을 확보한다.
     local module
-    local pin="${GO_TOOLCHAIN_PIN:-go1.26.6}"
+    local pin="${GO_TOOLCHAIN_PIN:-go1.27.0}"
     local pin_version="${pin#go}"
 
     # go directive가 핀 이상이면 directive 자체가 하한이고, 그때의 toolchain 라인은
@@ -284,7 +284,7 @@ run_step "collector go-test-json parser tests" python3 ./scripts/ci/check-go-tes
 run_step "collector hardening-contract parser tests" ./scripts/ci/check-youtube-collector-hardening-contract_test.sh
 run_step "collector hardening-contract gate" ./scripts/ci/check-youtube-collector-hardening-contract.sh
 run_step "collector production build entrypoint tests" ./scripts/build/build-youtube-collector-go_test.sh
-run_step "collector production sonic tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
+run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
 run_step "production Go workspace gate tests" ./scripts/ci/check-production-go-workspace_test.sh

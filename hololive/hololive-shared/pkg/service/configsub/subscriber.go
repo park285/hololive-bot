@@ -25,7 +25,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 	"github.com/valkey-io/valkey-go"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -67,7 +67,7 @@ func (s *Subscriber) Run(ctx context.Context) {
 
 func (s *Subscriber) handleMessage(msg valkey.PubSubMessage) {
 	var update contractssettings.ConfigUpdateV1
-	if err := json.Unmarshal([]byte(msg.Message), &update); err != nil {
+	if err := jsonv2.Unmarshal([]byte(msg.Message), &update); err != nil {
 		s.logger.Warn("Failed to unmarshal config update",
 			slog.String("channel", s.channel),
 			slog.Any("error", err),

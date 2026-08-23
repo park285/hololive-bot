@@ -2,9 +2,10 @@ package sourceobservation
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"errors"
 	"fmt"
-	"reflect"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +27,8 @@ type canonicalJSONMember struct {
 	value any
 }
 
+type canonicalJSONNumber string
+
 func CanonicalizeJSON(raw []byte) ([]byte, error) {
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("payload is empty")
@@ -33,20 +36,16 @@ func CanonicalizeJSON(raw []byte) ([]byte, error) {
 	if len(raw) > MaxPayloadBytes {
 		return nil, fmt.Errorf("payload exceeds %d bytes", MaxPayloadBytes)
 	}
-	if err := validateJSONText(raw); err != nil {
-		return nil, err
-	}
-	if err := rejectDuplicateJSONNames(raw); err != nil {
-		return nil, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
+	decoder := jsontext.NewDecoder(bytes.NewReader(raw))
+	value, err := readCanonicalJSONValue(decoder, 0)
+	if err != nil {
 		return nil, fmt.Errorf("decode json: %w", err)
 	}
-	if err := ensureJSONEOF(decoder); err != nil {
-		return nil, err
+	if _, err := decoder.ReadToken(); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return nil, fmt.Errorf("decode json: trailing value")
+		}
+		return nil, fmt.Errorf("decode json trailing data: %w", err)
 	}
 	canonical, err := appendCanonicalJSON(make([]byte, 0, len(raw)), value, 0)
 	if err != nil {
@@ -56,6 +55,93 @@ func CanonicalizeJSON(raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("canonical payload exceeds %d bytes", MaxPayloadBytes)
 	}
 	return canonical, nil
+}
+
+func readCanonicalJSONValue(decoder *jsontext.Decoder, depth int) (any, error) {
+	token, err := decoder.ReadToken()
+	if err != nil {
+		return nil, err
+	}
+
+	kind := token.Kind()
+	if kind == jsontext.KindBeginArray {
+		return readCanonicalJSONArray(decoder, depth)
+	}
+	if kind == jsontext.KindBeginObject {
+		return readCanonicalJSONObject(decoder, depth)
+	}
+	return canonicalJSONScalar(token)
+}
+
+func canonicalJSONScalar(token jsontext.Token) (any, error) {
+	kind := token.Kind()
+	if kind == jsontext.KindNull {
+		return nil, nil
+	}
+	if kind == jsontext.KindTrue || kind == jsontext.KindFalse {
+		return token.Bool(), nil
+	}
+	if kind == jsontext.KindString {
+		return token.String(), nil
+	}
+	if kind == jsontext.KindNumber {
+		return canonicalJSONNumber(token.String()), nil
+	}
+	return nil, fmt.Errorf("unexpected json token %q", kind)
+}
+
+func readCanonicalJSONArray(decoder *jsontext.Decoder, depth int) ([]any, error) {
+	if depth >= MaxCanonicalJSONDepth {
+		return nil, fmt.Errorf("canonical json nesting exceeds %d", MaxCanonicalJSONDepth)
+	}
+
+	values := make([]any, 0)
+	for decoder.PeekKind() != jsontext.KindEndArray {
+		value, err := readCanonicalJSONValue(decoder, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	if _, err := decoder.ReadToken(); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func readCanonicalJSONObject(decoder *jsontext.Decoder, depth int) (map[string]any, error) {
+	if depth >= MaxCanonicalJSONDepth {
+		return nil, fmt.Errorf("canonical json nesting exceeds %d", MaxCanonicalJSONDepth)
+	}
+
+	values := make(map[string]any)
+	for decoder.PeekKind() != jsontext.KindEndObject {
+		name, value, err := readCanonicalJSONField(decoder, depth)
+		if err != nil {
+			return nil, err
+		}
+		values[name] = value
+	}
+	if _, err := decoder.ReadToken(); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func readCanonicalJSONField(decoder *jsontext.Decoder, depth int) (name string, value any, err error) {
+	nameToken, err := decoder.ReadToken()
+	if err != nil {
+		return "", nil, err
+	}
+	if nameToken.Kind() != jsontext.KindString {
+		return "", nil, fmt.Errorf("object field name is not a string")
+	}
+	name = nameToken.String()
+	value, err = readCanonicalJSONValue(decoder, depth+1)
+	if err != nil {
+		return "", nil, err
+	}
+	return name, value, nil
 }
 
 func appendCanonicalJSON(destination []byte, value any, depth int) ([]byte, error) {
@@ -80,7 +166,7 @@ func appendCanonicalJSONBool(destination []byte, value bool) []byte {
 
 func appendCanonicalJSONNumberOrComposite(destination []byte, value any, depth int) ([]byte, error) {
 	switch typed := value.(type) {
-	case json.Number:
+	case canonicalJSONNumber:
 		return appendCanonicalJSONNumber(destination, typed)
 	case []any:
 		return appendCanonicalJSONArray(destination, typed, depth)
@@ -91,7 +177,7 @@ func appendCanonicalJSONNumberOrComposite(destination []byte, value any, depth i
 	}
 }
 
-func appendCanonicalJSONNumber(destination []byte, value json.Number) ([]byte, error) {
+func appendCanonicalJSONNumber(destination []byte, value canonicalJSONNumber) ([]byte, error) {
 	canonical, err := canonicalizeIntegerJSONNumber(string(value))
 	if err != nil {
 		return nil, err
@@ -293,99 +379,4 @@ func shrinkJSONIntegerDigits(digits string, fractionalDigits int64) (string, err
 func exceedsSafeJSONInteger(digits string) bool {
 	return len(digits) > len(maxCanonicalSafeIntegerString) ||
 		len(digits) == len(maxCanonicalSafeIntegerString) && digits > maxCanonicalSafeIntegerString
-}
-
-func validateCanonicalJSONStrings(value any) error {
-	return validateCanonicalJSONStringValue(reflect.ValueOf(value), 0)
-}
-
-func validateCanonicalJSONStringValue(value reflect.Value, depth int) error {
-	if !value.IsValid() {
-		return nil
-	}
-	if depth > MaxCanonicalJSONDepth {
-		return fmt.Errorf("canonical json value nesting exceeds %d", MaxCanonicalJSONDepth)
-	}
-	return validateCanonicalJSONKind(value, depth)
-}
-
-func validateCanonicalJSONKind(value reflect.Value, depth int) error {
-	kind := value.Kind()
-	if kind == reflect.Interface || kind == reflect.Pointer {
-		return validateCanonicalJSONIndirect(value, depth)
-	}
-	if kind == reflect.String {
-		return validateCanonicalJSONStringKind(value)
-	}
-	if kind == reflect.Struct {
-		return validateCanonicalJSONStruct(value, depth)
-	}
-	return validateCanonicalJSONCollection(value, depth)
-}
-
-func validateCanonicalJSONCollection(value reflect.Value, depth int) error {
-	kind := value.Kind()
-	if kind == reflect.Map {
-		return validateCanonicalJSONMap(value, depth)
-	}
-	if kind == reflect.Array || kind == reflect.Slice {
-		return validateCanonicalJSONList(value, depth)
-	}
-	return nil
-}
-
-func validateCanonicalJSONIndirect(value reflect.Value, depth int) error {
-	if value.IsNil() {
-		return nil
-	}
-	return validateCanonicalJSONStringValue(value.Elem(), depth+1)
-}
-
-func validateCanonicalJSONStringKind(value reflect.Value) error {
-	if !utf8.ValidString(value.String()) {
-		return fmt.Errorf("canonical json string contains invalid UTF-8")
-	}
-	return nil
-}
-
-func validateCanonicalJSONStruct(value reflect.Value, depth int) error {
-	valueType := value.Type()
-	for index := 0; index < value.NumField(); index++ {
-		field := valueType.Field(index)
-		if field.PkgPath != "" || strings.Split(field.Tag.Get("json"), ",")[0] == "-" {
-			continue
-		}
-		if err := validateCanonicalJSONStringValue(value.Field(index), depth+1); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateCanonicalJSONMap(value reflect.Value, depth int) error {
-	if value.IsNil() {
-		return nil
-	}
-	iterator := value.MapRange()
-	for iterator.Next() {
-		if err := validateCanonicalJSONStringValue(iterator.Key(), depth+1); err != nil {
-			return err
-		}
-		if err := validateCanonicalJSONStringValue(iterator.Value(), depth+1); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateCanonicalJSONList(value reflect.Value, depth int) error {
-	if value.Kind() == reflect.Slice && value.IsNil() {
-		return nil
-	}
-	for index := 0; index < value.Len(); index++ {
-		if err := validateCanonicalJSONStringValue(value.Index(index), depth+1); err != nil {
-			return err
-		}
-	}
-	return nil
 }

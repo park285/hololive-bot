@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/cleanupctx"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 var errJobClaimRenewLoopStopped = errors.New("job claim renew loop stopped")

@@ -40,7 +40,7 @@
 
 ### 사전 요구 사양 (Prerequisites)
 
-* Go 1.26 계열
+* Go 1.27 계열
 * PostgreSQL (영속 저장소)
 * Valkey (세션 및 큐)
 * Docker Compose (로컬 개발 및 통합 검증용)

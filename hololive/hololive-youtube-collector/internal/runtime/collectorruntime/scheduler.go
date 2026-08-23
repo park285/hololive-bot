@@ -13,7 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 type SchedulerState string

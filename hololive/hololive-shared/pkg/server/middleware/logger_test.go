@@ -29,8 +29,8 @@ import (
 	"strings"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func TestShouldSkipPath(t *testing.T) {
@@ -194,7 +194,7 @@ func TestLoggerMiddleware_TruncatesOverlongForwardedHeaders(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	var entry map[string]any
-	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
+	if err := jsonv2.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
 		t.Fatalf("로그 JSON 파싱 실패: %v, raw=%s", err, buf.String())
 	}
 
@@ -251,7 +251,7 @@ func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 	}
 
 	var entry map[string]any
-	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
+	if err := jsonv2.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
 		t.Fatalf("로그 JSON 파싱 실패: %v, raw=%s", err, buf.String())
 	}
 

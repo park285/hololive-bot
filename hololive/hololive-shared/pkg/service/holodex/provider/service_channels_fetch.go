@@ -26,9 +26,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	sharedlog "github.com/park285/shared-go/pkg/logging"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
@@ -71,7 +71,7 @@ func (h *Service) fetchChannelDirect(ctx context.Context, channelID string) (*do
 	}
 
 	var rawChannel streammapping.ChannelRaw
-	if err := json.Unmarshal(body, &rawChannel); err != nil {
+	if err := jsonv2.Unmarshal(body, &rawChannel); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal channel: %w", err)
 	}
 

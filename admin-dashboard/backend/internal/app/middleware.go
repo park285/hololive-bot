@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/httputil"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/config"

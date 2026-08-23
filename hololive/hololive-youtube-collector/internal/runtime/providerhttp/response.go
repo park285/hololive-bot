@@ -3,7 +3,7 @@ package providerhttp
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
@@ -121,7 +121,7 @@ func readProviderSuccess(ctx context.Context, body io.Reader, policy ProviderRes
 	if overflow {
 		return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, string(provider)+" response exceeds body limit")
 	}
-	if !json.Valid(data) {
+	if !jsontext.Value(data).IsValid() {
 		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" response is not a single JSON document")
 	}
 	return data, nil

@@ -26,8 +26,8 @@ import (
 	"log/slog"
 	"strings"
 
-	json "github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/promptguard"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
@@ -122,7 +122,7 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeIn
 	}
 
 	var response summaryResponse
-	if err := json.Unmarshal([]byte(raw), &response); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), &response); err != nil {
 		s.logger.Warn("MemberNews schema parse failed, using fallback", slog.String("error", err.Error()))
 		return BuildDeterministicFallback(input.Period, input.Candidates), nil
 	}

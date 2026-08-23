@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func TestDisabledCollectionRegistryHasKnownEmptyProcessQueue(t *testing.T) {

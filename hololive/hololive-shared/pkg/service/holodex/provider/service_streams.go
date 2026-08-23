@@ -27,8 +27,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/stringutil"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -156,7 +156,7 @@ func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hou
 	}
 
 	var rawStreams []streammapping.StreamRaw
-	if err := json.Unmarshal(body, &rawStreams); err != nil {
+	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
 		return nil, fmt.Errorf("unmarshal streams by org (%s): %w", org, err)
 	}
 
@@ -260,7 +260,7 @@ func (h *Service) fetchIndieStreams(ctx context.Context) ([]*domain.Stream, erro
 	}
 
 	var rawStreams []streammapping.StreamRaw
-	if err := json.Unmarshal(body, &rawStreams); err != nil {
+	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
 		return nil, fmt.Errorf("unmarshal indie streams: %w", err)
 	}
 

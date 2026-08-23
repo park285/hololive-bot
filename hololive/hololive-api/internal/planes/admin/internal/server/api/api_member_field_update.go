@@ -28,7 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type updateChannelIDRequest struct {
@@ -64,7 +64,7 @@ func updateMemberField[T any](h *MemberHandler, c *gin.Context, spec memberField
 	}
 
 	var req T
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 

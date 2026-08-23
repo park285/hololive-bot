@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/admin-dashboard/internal/httpx"
 	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 type Client struct {
@@ -163,7 +163,7 @@ func upstreamError(status int, body []byte) error {
 		return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: fallback}}
 	}
 	var raw any
-	if err := json.Unmarshal(body, &raw); err != nil {
+	if err := jsonv2.Unmarshal(body, &raw); err != nil {
 		return rawTextError(status, body, fallback)
 	}
 	return decodedUpstreamError(status, raw, fallback)

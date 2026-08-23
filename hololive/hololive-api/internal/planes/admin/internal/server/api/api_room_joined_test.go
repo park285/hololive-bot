@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"net/http"
 	"testing"
@@ -54,7 +54,7 @@ func TestRoomHandler_GetJoinedRooms(t *testing.T) {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 		}
 		var got joinedRoomListResponse
-		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		if err := jsonv2.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 			t.Fatalf("decode response: %v", err)
 		}
 		if got.Status != "ok" || len(got.Rooms) != 2 {

@@ -8,6 +8,7 @@
 ../shared-go/pkg/envutil/env.go
 ../shared-go/pkg/envutil/file.go
 ../shared-go/pkg/envutil/file_nofollow_unix.go
+../shared-go/pkg/ginjson/ginjson.go
 ../shared-go/pkg/h3/h3.go
 ../shared-go/pkg/healthprobe/cli.go
 ../shared-go/pkg/healthprobe/healthprobe.go
@@ -20,7 +21,6 @@
 ../shared-go/pkg/httputil/ratelimit.go
 ../shared-go/pkg/httputil/request_json.go
 ../shared-go/pkg/httputil/response.go
-../shared-go/pkg/json/json.go
 ../shared-go/pkg/logging/async_writer.go
 ../shared-go/pkg/logging/attrs.go
 ../shared-go/pkg/logging/context.go
@@ -132,6 +132,7 @@ hololive/hololive-shared/pkg/contracts/alarm/contracts.go
 hololive/hololive-shared/pkg/contracts/common/constants.go
 hololive/hololive-shared/pkg/contracts/common/errors.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/canonical_json.go
+hololive/hololive-shared/pkg/contracts/sourceobservation/canonical_json_validate.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/collection_failure.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/community_v1.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/coverage.go
@@ -376,6 +377,7 @@ hololive/hololive-shared/pkg/service/alarm/cache_warm_write.go
 hololive/hololive-shared/pkg/service/alarm/checker/helpers.go
 hololive/hololive-shared/pkg/service/alarm/checker/target_policy.go
 hololive/hololive-shared/pkg/service/alarm/client.go
+hololive/hololive-shared/pkg/service/alarm/client_transport.go
 hololive/hololive-shared/pkg/service/alarm/client_strict.go
 hololive/hololive-shared/pkg/service/alarm/dto.go
 hololive/hololive-shared/pkg/service/alarm/handoff/mode.go

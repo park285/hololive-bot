@@ -28,7 +28,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 var (

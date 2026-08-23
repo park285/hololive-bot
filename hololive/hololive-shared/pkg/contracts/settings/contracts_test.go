@@ -23,7 +23,7 @@ package settings_test
 import (
 	"testing"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
@@ -52,7 +52,7 @@ func TestSettingsPubSubContractConstants(t *testing.T) {
 func TestConfigUpdateV1_JSONContract(t *testing.T) {
 	t.Parallel()
 
-	payload, err := json.Marshal(contractssettings.ScraperProxyPayloadV1{Enabled: true})
+	payload, err := jsonv2.Marshal(contractssettings.ScraperProxyPayloadV1{Enabled: true})
 	if err != nil {
 		t.Fatalf("Marshal payload error = %v", err)
 	}
@@ -62,13 +62,13 @@ func TestConfigUpdateV1_JSONContract(t *testing.T) {
 		Payload: payload,
 	}
 
-	b, err := json.Marshal(update)
+	b, err := jsonv2.Marshal(update)
 	if err != nil {
 		t.Fatalf("Marshal update error = %v", err)
 	}
 
 	var decoded contractssettings.ConfigUpdateV1
-	if err := json.Unmarshal(b, &decoded); err != nil {
+	if err := jsonv2.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal update error = %v", err)
 	}
 	if decoded.Type != contractssettings.UpdateTypeScraperProxy {
@@ -76,7 +76,7 @@ func TestConfigUpdateV1_JSONContract(t *testing.T) {
 	}
 
 	var decodedPayload contractssettings.ScraperProxyPayloadV1
-	if err := json.Unmarshal(decoded.Payload, &decodedPayload); err != nil {
+	if err := jsonv2.Unmarshal(decoded.Payload, &decodedPayload); err != nil {
 		t.Fatalf("Unmarshal payload error = %v", err)
 	}
 	if decodedPayload.Enabled != true {

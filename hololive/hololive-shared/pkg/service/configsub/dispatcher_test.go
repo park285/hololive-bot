@@ -27,8 +27,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	jsonv2 "encoding/json/v2"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func newDiscardLogger() *slog.Logger {
@@ -46,7 +46,7 @@ func TestNewApplyFn_ScraperProxy(t *testing.T) {
 		},
 	})
 
-	payload, err := json.Marshal(contractssettings.ScraperProxyPayloadV1{Enabled: true})
+	payload, err := jsonv2.Marshal(contractssettings.ScraperProxyPayloadV1{Enabled: true})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestNewApplyFn_AlarmAdvanceMinutes(t *testing.T) {
 		},
 	})
 
-	payload, err := json.Marshal(contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 15})
+	payload, err := jsonv2.Marshal(contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 15})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestNewApplyFn_ACL(t *testing.T) {
 		},
 	})
 
-	payload, err := json.Marshal(contractssettings.ACLPayloadV1{Reason: "room_add", Room: "room-1", Mode: "whitelist"})
+	payload, err := jsonv2.Marshal(contractssettings.ACLPayloadV1{Reason: "room_add", Room: "room-1", Mode: "whitelist"})
 	assert.NoError(t, err)
 
 	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeACL, Payload: payload})
@@ -147,7 +147,7 @@ func TestNewApplyFn_ACLWithoutHandlerDoesNotFallThroughToUnknown(t *testing.T) {
 		Unknown: func(string) { unknownCalled = true },
 	})
 
-	payload, err := json.Marshal(contractssettings.ACLPayloadV1{Reason: "room_add"})
+	payload, err := jsonv2.Marshal(contractssettings.ACLPayloadV1{Reason: "room_add"})
 	assert.NoError(t, err)
 
 	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeACL, Payload: payload})

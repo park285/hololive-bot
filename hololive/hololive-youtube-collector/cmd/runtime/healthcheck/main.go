@@ -8,7 +8,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	"github.com/park285/shared-go/pkg/healthprobe"
+	"github.com/park285/shared-go/v2/pkg/healthprobe"
 )
 
 const externalSmokeURL = "https://www.google.com/generate_204"

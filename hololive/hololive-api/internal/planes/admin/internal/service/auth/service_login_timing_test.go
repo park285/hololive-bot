@@ -9,7 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/hololive-shared/pkg/testutil"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 type comparePasswordSpy struct {

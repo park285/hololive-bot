@@ -26,10 +26,10 @@ import (
 	"strings"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
 	"github.com/kapu/hololive-shared/pkg/testutil"
-	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
 )
@@ -93,7 +93,7 @@ func TestNew(t *testing.T) {
 
 				w.WriteHeader(http.StatusOK)
 
-				if err := json.NewEncoder(w).Encode(map[string]bool{"subscribed": false}); err != nil {
+				if err := jsonv2.MarshalWrite(w, map[string]bool{"subscribed": false}); err != nil {
 					t.Fatalf("encode subscription response: %v", err)
 				}
 			}))
@@ -120,7 +120,7 @@ func TestNew_URLTrimming(t *testing.T) {
 
 		w.WriteHeader(http.StatusOK)
 
-		if err := json.NewEncoder(w).Encode(map[string]bool{"subscribed": false}); err != nil {
+		if err := jsonv2.MarshalWrite(w, map[string]bool{"subscribed": false}); err != nil {
 			t.Fatalf("encode subscription response: %v", err)
 		}
 	}))

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260626-hololive-api-three-runtime-consolidation",
+  "title": "bot·admin-api·llm-scheduler를 하나의 hololive-api 프로세스로 통합하되 config·infra·lifecycle·alarm provider·logging·metrics·memory·failure isolation 규칙을 고정한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-06-26",
+  "summary": "config는 LoadHololiveAPIRuntime이 Common+Bot+Admin+LLM plane config를 한 번에 만들고, PostgreSQL pool과 Valkey client는 process당 한 번만 생성하며 초기값은 pool min 2/max 12와 shared Valkey client 1개다. applifecycle.GroupRuntime이 llm→admin→bot 순서로 시작하고 역순으로 종료한다. /internal/alarm/* provider는 alarm-worker가 가져가고 hololive-api는 facade/client만 유지한다. file logger는 하나이며 record에 plane attribute를 붙이고, 초기 rollout은 기존 metrics/pprof port를 유지한다. memory는 deploy limit 1024MiB, GOMEMLIMIT 768MiB, GOGC 80으로 시작한다. listener bind·shared infra·plane init 실패는 fatal, 개별 scheduled job 실패는 non-fatal이며 panic recovery는 request middleware와 job boundary에만 둔다. DEC-20260710-hololive-single-process-trust-domain이 이 구조의 보안 경계를 수용했다.",
+  "sources": [
+    "docs/design/three-runtime-consolidation-plan.md#config 결정",
+    "docs/design/three-runtime-consolidation-plan.md#infra 결정",
+    "docs/design/three-runtime-consolidation-plan.md#lifecycle 결정",
+    "docs/design/three-runtime-consolidation-plan.md#alarm HTTP provider 결정",
+    "docs/design/three-runtime-consolidation-plan.md#logging / IO 결정",
+    "docs/design/three-runtime-consolidation-plan.md#metrics / pprof 결정",
+    "docs/design/three-runtime-consolidation-plan.md#memory / GC 결정",
+    "docs/design/three-runtime-consolidation-plan.md#failure isolation 결정"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-api/cmd/hololive-api/main.go"
+  ],
+  "supersedes": []
+}

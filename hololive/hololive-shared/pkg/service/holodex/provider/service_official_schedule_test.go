@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	sharedjson "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -118,7 +118,7 @@ func TestGetUpcomingStreamsByOrgDoesNotFallbackOnSuccessEmpty(t *testing.T) {
 	t.Cleanup(officialServer.Close)
 
 	requester := &MockRequester{DoRequestFunc: func(context.Context, string, string, url.Values) ([]byte, error) {
-		return sharedjson.Marshal([]any{})
+		return jsonv2.Marshal([]any{})
 	}}
 	scraperService := newScraperServiceForTest(
 		officialServer.Client(),
@@ -259,7 +259,7 @@ func TestGetChannelScheduleDoesNotFallbackOnHolodexSuccessEmpty(t *testing.T) {
 	t.Cleanup(officialServer.Close)
 
 	requester := &MockRequester{DoRequestFunc: func(context.Context, string, string, url.Values) ([]byte, error) {
-		return sharedjson.Marshal([]any{})
+		return jsonv2.Marshal([]any{})
 	}}
 	scraperService := newScraperServiceForTest(
 		officialServer.Client(),

@@ -2,7 +2,7 @@ package officialcollector
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io/fs"
 	"os"
 	"testing"
@@ -27,7 +27,7 @@ func TestRunnerPublishesCompleteScheduleFixture(t *testing.T) {
 		t.Fatalf("completeness = %s", observation.Completeness)
 	}
 	var payload contract.ScheduleSnapshotV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if len(payload.Items) != 2 {
@@ -49,7 +49,7 @@ func TestRunnerTreatsEmptySuccessAsComplete(t *testing.T) {
 	output := mustCollect(t, testdata(t, "empty.json"))
 	observation := mustSingleObservation(t, output)
 	var payload contract.ScheduleSnapshotV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if observation.Completeness != contract.CompletenessComplete || len(payload.Items) != 0 {
@@ -84,7 +84,7 @@ func TestRunnerSkipsInvalidRowsWhenValidRowsRemain(t *testing.T) {
 	output := mustCollect(t, body)
 	observation := mustSingleObservation(t, output)
 	var payload contract.ScheduleSnapshotV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if len(payload.Items) != 1 || payload.Items[0].VideoID != "validrow001" {

@@ -19,7 +19,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 )
@@ -28,6 +28,7 @@ type supersededLease struct {
 	reason      joblease.ReleaseReason
 	releaseCall int
 	contextErr  error
+	releaseErr  error
 }
 
 func (l *supersededLease) Proof() contract.LeaseProof            { return contract.LeaseProof{} }
@@ -40,7 +41,7 @@ func (l *supersededLease) Release(ctx context.Context, reason joblease.ReleaseRe
 	l.releaseCall++
 	l.reason = reason
 	l.contextErr = ctx.Err()
-	return nil
+	return l.releaseErr
 }
 
 func TestSupersededReleaseUsesDetachedCleanupContext(t *testing.T) {
@@ -495,5 +496,114 @@ func TestHandleRunErrorPromotesOnlyClassifiedFatalErrors(t *testing.T) {
 			t.Parallel()
 			assertHandleRunErrorCase(t, test)
 		})
+	}
+}
+
+func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name          string
+		outcome       joblease.LeaseRunOutcome
+		err           error
+		wantFatal     bool
+		wantRenewLost float64
+	}{
+		{
+			name:          "renew timeout",
+			outcome:       joblease.LeaseRunReleasedAfterRenewFailure,
+			err:           fmt.Errorf("run collection job: renew lease: %w", errors.Join(context.DeadlineExceeded)),
+			wantRenewLost: 1,
+		},
+		{
+			name:          "renew database error",
+			outcome:       joblease.LeaseRunReleasedAfterRenewFailure,
+			err:           fmt.Errorf("run collection job: renew lease: %w", errors.Join(errors.New("connection reset by peer"))),
+			wantRenewLost: 1,
+		},
+		{
+			name:    "cleanup timed out",
+			outcome: joblease.LeaseRunCleanupTimedOut,
+			err:     fmt.Errorf("run collection job: join after renew failure: %w", errors.Join(context.DeadlineExceeded)),
+		},
+		{
+			name:          "renew failure joined with classified internal invariant",
+			outcome:       joblease.LeaseRunReleasedAfterRenewFailure,
+			err:           fmt.Errorf("run collection job: renew lease: %w", errors.Join(context.DeadlineExceeded, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "invariant violated"))),
+			wantFatal:     true,
+			wantRenewLost: 1,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var fatal []error
+			executor := newRunErrorExecutor(&fatal)
+			registerer := prometheus.NewPedanticRegistry()
+			executor.metrics = NewMetrics(registerer)
+			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: "community_collect", SubjectKey: "UC_TEST"}
+
+			handled := executor.handleLeaseRunOutcome(joblease.LeaseRunResult{Outcome: test.outcome, Err: test.err}, spec, &contract.LeaseProof{})
+
+			if !handled {
+				t.Fatal("supervision failure must be handled without falling through to handleRunError")
+			}
+			if got := metricValue(t, registerer, "youtube_collection_lease_lost_total", map[string]string{
+				"provider": string(contract.ProviderYouTubeJS), "kind": "community_collect", "phase": phaseRenew,
+			}); got != test.wantRenewLost {
+				t.Fatalf("renew lease lost count = %v, want %v", got, test.wantRenewLost)
+			}
+			assertSupervisionFatal(t, fatal, test.err, test.wantFatal)
+		})
+	}
+}
+
+func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		releaseErr error
+		wantFatal  bool
+	}{
+		{name: "database error", releaseErr: errors.New("release lease: connection reset by peer")},
+		{name: "timeout", releaseErr: fmt.Errorf("release lease: %w", context.DeadlineExceeded)},
+		{name: "fence lost", releaseErr: joblease.ErrFenceLost},
+		{name: "classified internal invariant", releaseErr: collecterr.New(collecterr.Internal, collecterr.ClassInternal, "invariant violated"), wantFatal: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var fatal []error
+			executor := newRunErrorExecutor(&fatal)
+			lease := &supersededLease{releaseErr: test.releaseErr}
+			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: "community_collect", SubjectKey: "UC_TEST"}
+			runErr := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, fmt.Errorf("publish fence: %w", sourceobservation.ErrProjectionStale))
+
+			executor.handleRunError(context.Background(), lease, spec, &contract.LeaseProof{}, runErr)
+
+			if lease.releaseCall != 1 || lease.reason != joblease.ReleaseSuperseded {
+				t.Fatalf("release = calls:%d reason:%q, want one superseded release", lease.releaseCall, lease.reason)
+			}
+			assertSupervisionFatal(t, fatal, test.releaseErr, test.wantFatal)
+		})
+	}
+}
+
+func assertSupervisionFatal(t *testing.T, fatal []error, cause error, wantFatal bool) {
+	t.Helper()
+	if !wantFatal {
+		if len(fatal) != 0 {
+			t.Fatalf("transient supervision failure was promoted to fatal: %v", fatal)
+		}
+		return
+	}
+	if len(fatal) != 1 {
+		t.Fatalf("fatal reports = %d, want 1", len(fatal))
+	}
+	var runtimeErr *FatalRuntimeError
+	if !errors.As(fatal[0], &runtimeErr) || runtimeErr.Phase != "lease_supervision" {
+		t.Fatalf("fatal report = %#v, want lease_supervision FatalRuntimeError", fatal[0])
+	}
+	if !errors.Is(fatal[0], cause) {
+		t.Fatalf("fatal report does not wrap the original error: %v", fatal[0])
 	}
 }

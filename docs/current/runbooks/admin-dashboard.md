@@ -2,7 +2,7 @@
 
 ## Role
 
-`admin-dashboard`는 운영 대시보드 서비스입니다. Go 1.26/gin backend가 embedded frontend(React 빌드 산출물)를 서빙하고, Valkey 기반 admin 세션 인증, `hololive-api` admin plane relay, docker-proxy를 통한 컨테이너 제어를 담당합니다.
+`admin-dashboard`는 운영 대시보드 서비스입니다. Go 1.27/gin backend가 embedded frontend(React 빌드 산출물)를 서빙하고, Valkey 기반 admin 세션 인증, `hololive-api` admin plane relay, docker-proxy를 통한 컨테이너 제어를 담당합니다.
 
 ## Normal status
 

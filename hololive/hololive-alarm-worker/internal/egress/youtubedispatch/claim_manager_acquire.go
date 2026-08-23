@@ -3,6 +3,7 @@ package youtubedispatch
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"strings"
 	"time"
 
@@ -126,6 +127,44 @@ func (d *ClaimManager) isCommunityShortsDeliveryAlreadyCompleted(
 		return false, fmt.Errorf("load tracking row: %w", err)
 	}
 	return communityShortsTrackingRowMarkedSent(trackingRow), nil
+}
+
+func (d *ClaimManager) roomAlreadyReceivedPost(
+	ctx context.Context,
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+) (bool, error) {
+	if row == nil || shouldSkipDeliveryClaim(d, outbox) {
+		return false, nil
+	}
+	postID := strings.TrimSpace(telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
+	if postID == "" {
+		return false, fmt.Errorf("resolve post id: empty")
+	}
+
+	rows, err := d.db.Query(ctx, mustSQL("dispatcher_claim_acquire_0131_01.sql"), string(outbox.Kind), outbox.ContentID, postID, row.RoomID, string(domain.OutboxStatusSent), row.ID)
+	if err != nil {
+		return false, fmt.Errorf("load sent sibling deliveries for room: %w", err)
+	}
+	defer rows.Close()
+
+	return sentSiblingRowsContainPost(rows, outbox.Kind, postID)
+}
+
+func sentSiblingRowsContainPost(rows pgx.Rows, kind domain.OutboxKind, postID string) (bool, error) {
+	for rows.Next() {
+		var contentID, payload string
+		if err := rows.Scan(&contentID, &payload); err != nil {
+			return false, fmt.Errorf("scan sent sibling delivery for room: %w", err)
+		}
+		if strings.TrimSpace(telemetry.ResolveTelemetryPostID(kind, contentID, payload)) == postID {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate sent sibling deliveries for room: %w", err)
+	}
+	return false, nil
 }
 
 func communityShortsAlarmStateMarkedSent(state *domain.YouTubeCommunityShortsAlarmState) bool {

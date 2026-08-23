@@ -2,12 +2,13 @@ package dispatchoutbox
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"log/slog"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/jackc/pgx/v5"
-	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/pgxutil"
@@ -37,25 +38,25 @@ type deliveryInsert struct {
 }
 
 type eventBatchRow struct {
-	EventKey    string          `json:"event_key"`
-	PayloadHash string          `json:"payload_hash"`
-	AlarmType   string          `json:"alarm_type"`
-	ChannelID   string          `json:"channel_id"`
-	StreamID    string          `json:"stream_id"`
-	Category    string          `json:"category"`
-	Payload     json.RawMessage `json:"payload"`
+	EventKey    string         `json:"event_key"`
+	PayloadHash string         `json:"payload_hash"`
+	AlarmType   string         `json:"alarm_type"`
+	ChannelID   string         `json:"channel_id"`
+	StreamID    string         `json:"stream_id"`
+	Category    string         `json:"category"`
+	Payload     jsontext.Value `json:"payload"`
 }
 
 type deliveryBatchRow struct {
-	EventID          int64           `json:"event_id"`
-	RoomID           string          `json:"room_id"`
-	DedupeKey        string          `json:"dedupe_key"`
-	ClaimKeys        []string        `json:"claim_keys"`
-	DeliveryContext  json.RawMessage `json:"delivery_context"`
-	DispatchGroupKey string          `json:"dispatch_group_key"`
-	SendUnitKey      string          `json:"send_unit_key"`
-	ClientRequestID  string          `json:"client_request_id"`
-	Status           string          `json:"status"`
+	EventID          int64          `json:"event_id"`
+	RoomID           string         `json:"room_id"`
+	DedupeKey        string         `json:"dedupe_key"`
+	ClaimKeys        []string       `json:"claim_keys"`
+	DeliveryContext  jsontext.Value `json:"delivery_context"`
+	DispatchGroupKey string         `json:"dispatch_group_key"`
+	SendUnitKey      string         `json:"send_unit_key"`
+	ClientRequestID  string         `json:"client_request_id"`
+	Status           string         `json:"status"`
 }
 
 func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (result0 map[string]int64, result1 int, err error) {
@@ -64,7 +65,7 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (result0
 		return eventIDs, 0, nil
 	}
 	rows, _ := buildEventBatchRows(events)
-	raw, err := json.Marshal(rows)
+	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
 		return nil, 0, fmt.Errorf("insert dispatch events: marshal batch: %w", err)
 	}
@@ -86,7 +87,7 @@ func buildEventBatchRows(events []eventInsert) (result0 []eventBatchRow, result1
 			ChannelID:   event.ChannelID,
 			StreamID:    event.StreamID,
 			Category:    event.Category,
-			Payload:     json.RawMessage(event.Payload),
+			Payload:     jsontext.Value(event.Payload).Clone(),
 		})
 		expectedHashes[event.EventKey] = event.PayloadHash
 	}
@@ -130,7 +131,7 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 	if err != nil {
 		return 0, err
 	}
-	raw, err := json.Marshal(rows)
+	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
 		return 0, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
 	}
@@ -166,7 +167,7 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 			RoomID:           delivery.RoomID,
 			DedupeKey:        delivery.DedupeKey,
 			ClaimKeys:        delivery.ClaimKeys,
-			DeliveryContext:  json.RawMessage(delivery.DeliveryContext),
+			DeliveryContext:  jsontext.Value(delivery.DeliveryContext).Clone(),
 			DispatchGroupKey: delivery.DispatchGroupKey,
 			SendUnitKey:      delivery.SendUnitKey,
 			ClientRequestID:  delivery.ClientRequestID,

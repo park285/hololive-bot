@@ -31,7 +31,7 @@ import (
 	"github.com/gin-gonic/gin"
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type AuthHandler struct {
@@ -176,7 +176,7 @@ func mapAuthErrorToHTTP(err error) (status int, code authsvc.ErrorCode) {
 
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
 		return
 	}
@@ -208,7 +208,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
 		return
 	}
@@ -330,7 +330,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 func (h *AuthHandler) ResetRequest(c *gin.Context) {
 	var req resetRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
 		return
 	}
@@ -356,7 +356,7 @@ func (h *AuthHandler) ResetRequest(c *gin.Context) {
 
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
 		return
 	}

@@ -30,14 +30,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 type MessageSender interface {
@@ -296,7 +296,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		d.workerTotals.RecordAttempt(outcome)
 	}()
 	var p outboxPayload
-	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
 		d.logger.Error("Failed to unmarshal outbox payload",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))

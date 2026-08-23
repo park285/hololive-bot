@@ -10,10 +10,10 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	sharedh3 "github.com/park285/shared-go/pkg/h3"
-	runtimehttpserver "github.com/park285/shared-go/pkg/runtime/httpserver"
-	"github.com/park285/shared-go/pkg/telemetry"
-	"github.com/park285/shared-go/pkg/workercontract"
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+	runtimehttpserver "github.com/park285/shared-go/v2/pkg/runtime/httpserver"
+	"github.com/park285/shared-go/v2/pkg/telemetry"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
 )
 

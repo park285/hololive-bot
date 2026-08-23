@@ -1,7 +1,7 @@
 package sourceobservation
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"regexp"
 	"time"
@@ -84,7 +84,7 @@ type Envelope struct {
 	ScopeSHA256        string          `json:"scope_sha256"`
 	Completeness       Completeness    `json:"completeness"`
 	Continuity         Continuity      `json:"continuity"`
-	Payload            json.RawMessage `json:"payload"`
+	Payload            jsontext.Value  `json:"payload"`
 	PayloadSHA256      string          `json:"payload_sha256"`
 	EvidenceSHA256     string          `json:"evidence_sha256"`
 	CollectorInstance  string          `json:"collector_instance"`

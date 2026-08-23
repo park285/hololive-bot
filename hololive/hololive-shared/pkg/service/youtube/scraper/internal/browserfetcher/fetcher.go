@@ -3,14 +3,14 @@ package browserfetcher
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 type Config struct {
@@ -107,7 +107,7 @@ func isNilHTTPResponseError(err error) bool {
 }
 
 func (f *Fetcher) newSnapshotRequest(ctx context.Context, req Request) (*http.Request, error) {
-	payload, err := json.Marshal(browserSnapshotRequest{URL: req.URL, Headers: req.Header, Screenshot: true})
+	payload, err := jsonv2.Marshal(browserSnapshotRequest{URL: req.URL, Headers: req.Header, Screenshot: true})
 	if err != nil {
 		return nil, fmt.Errorf("marshal browser snapshot request: %w", err)
 	}
@@ -128,7 +128,7 @@ func readSnapshotResponse(resp *http.Response) (Response, error) {
 		return Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone()}, fmt.Errorf("browser snapshot unexpected status: %d", resp.StatusCode)
 	}
 	var parsed browserSnapshotResponse
-	if err := json.Unmarshal(body, &parsed); err != nil {
+	if err := jsonv2.Unmarshal(body, &parsed); err != nil {
 		return Response{}, fmt.Errorf("decode browser snapshot response: %w", err)
 	}
 	return Response{StatusCode: parsed.StatusCode, Header: parsed.Header, Body: []byte(parsed.HTML)}, nil

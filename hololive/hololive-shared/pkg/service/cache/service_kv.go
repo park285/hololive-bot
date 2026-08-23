@@ -7,7 +7,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/privacylog"
@@ -25,7 +25,7 @@ func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, erro
 		return hit, err
 	}
 	if dest != nil {
-		if err := json.Unmarshal([]byte(value), dest); err != nil {
+		if err := jsonv2.Unmarshal([]byte(value), dest); err != nil {
 			c.logger.Error("Cache value unmarshal failed", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 			return true, NewCacheError("get", key, err)
 		}
@@ -95,7 +95,7 @@ func ttlSecondsCeil(ttl time.Duration) (int64, error) {
 }
 
 func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-	jsonData, err := json.Marshal(value)
+	jsonData, err := jsonv2.Marshal(value)
 	if err != nil {
 		return NewCacheError("set", key, err)
 	}
@@ -153,7 +153,7 @@ func (c *Service) msetCommands(pairs map[string]any, ttl time.Duration) ([]valke
 }
 
 func (c *Service) msetCommand(key string, value any, ttl time.Duration) (valkey.Completed, error) {
-	jsonData, err := json.Marshal(value)
+	jsonData, err := jsonv2.Marshal(value)
 	if err != nil {
 		c.logger.Error("Failed to marshal value for MSet", privacylog.CacheKeyAttr(key), slog.Any("error", err))
 		return valkey.Completed{}, NewCacheError("mset", key, err)

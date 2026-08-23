@@ -22,11 +22,11 @@ package scraping
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"fmt"
 
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
 	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	json "github.com/park285/shared-go/pkg/json"
 	"github.com/tidwall/gjson"
 )
 
@@ -54,7 +54,7 @@ func (c *Client) fetchPlaylistBrowseData(ctx context.Context, channelID string) 
 	if err != nil {
 		return gjson.Result{}, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
-	if !json.Valid([]byte(jsonStr)) {
+	if !jsontext.Value(jsonStr).IsValid() {
 		return gjson.Result{}, fmt.Errorf("invalid ytInitialData JSON")
 	}
 

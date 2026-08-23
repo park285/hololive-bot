@@ -8,7 +8,6 @@ h3
 healthprobe
 httputil
 internal/guardtext
-json
 jsonutil
 kakaoformat
 llm

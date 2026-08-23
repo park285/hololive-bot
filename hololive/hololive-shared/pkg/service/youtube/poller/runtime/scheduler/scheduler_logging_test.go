@@ -3,7 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"sync"
 	"testing"
@@ -59,7 +59,7 @@ func findRecord(buffer *lockedLogBuffer, message string) (capturedLogRecord, boo
 
 func decodeCapturedLogRecord(line []byte) (capturedLogRecord, bool) {
 	var fields map[string]any
-	if err := json.Unmarshal(line, &fields); err != nil {
+	if err := jsonv2.Unmarshal(line, &fields); err != nil {
 		return capturedLogRecord{}, false
 	}
 	record := capturedLogRecord{attrs: make(map[string]any, len(fields))}

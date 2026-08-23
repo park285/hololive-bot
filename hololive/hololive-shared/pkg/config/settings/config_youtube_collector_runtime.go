@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	sharedenv "github.com/park285/shared-go/pkg/envutil"
+	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 )
 
 type YouTubeCollectorRuntimeConfig struct {

@@ -3,7 +3,7 @@ package telemetry
 import (
 	"strings"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format"
@@ -28,7 +28,7 @@ func ResolveTelemetryPostID(kind domain.OutboxKind, contentID, payload string) s
 
 func resolveVideoTelemetryPostID(contentID, payload string) string {
 	var parsed format.VideoPayload
-	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+	if err := jsonv2.Unmarshal([]byte(payload), &parsed); err != nil {
 		return normalizeTelemetryPostID(contentID)
 	}
 
@@ -37,7 +37,7 @@ func resolveVideoTelemetryPostID(contentID, payload string) string {
 
 func resolveCommunityTelemetryPostID(contentID, payload string) string {
 	var parsed format.CommunityPayload
-	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+	if err := jsonv2.Unmarshal([]byte(payload), &parsed); err != nil {
 		return normalizeTelemetryPostID(contentID)
 	}
 

@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/park285/shared-go/pkg/promptguard"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"

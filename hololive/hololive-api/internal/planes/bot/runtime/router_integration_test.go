@@ -29,8 +29,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	json "github.com/park285/shared-go/pkg/json"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
@@ -134,7 +134,7 @@ func TestProvideBotRouter_SkipsScraperShortLinkWarnings(t *testing.T) {
 	}
 	if logs.Len() != 0 {
 		var entry map[string]any
-		if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &entry); err != nil {
+		if err := jsonv2.Unmarshal(bytes.TrimSpace(logs.Bytes()), &entry); err != nil {
 			t.Fatalf("unexpected short-link log = %q (JSON parse failed: %v)", logs.String(), err)
 		}
 		t.Fatalf("scraper short-link request emitted log entry: %v", entry)

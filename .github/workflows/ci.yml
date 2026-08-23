@@ -35,6 +35,14 @@ jobs:
         with:
           persist-credentials: false
 
+      # gofmt 규칙은 릴리스마다 바뀐다. 이 단계가 없으면 러너 기본 Go로 검사해
+      # go.mod가 요구하는 판본과 다른 결과를 낸다.
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
       - name: Workflow PR boundary and gate ownership
         run: bash scripts/ci/check-workflow-secrets.sh
 

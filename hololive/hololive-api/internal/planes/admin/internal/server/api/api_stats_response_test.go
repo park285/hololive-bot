@@ -9,12 +9,27 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 )
+
+func readSystemStatsFrame(t *testing.T, conn *websocket.Conn, destination any) {
+	t.Helper()
+	messageType, payload, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read system stats frame: %v", err)
+	}
+	if messageType != websocket.TextMessage {
+		t.Fatalf("system stats message type = %d, want %d", messageType, websocket.TextMessage)
+	}
+	if err := jsonv2.Unmarshal(payload, destination); err != nil {
+		t.Fatalf("decode system stats frame: %v", err)
+	}
+}
 
 func TestStatsHandler_StreamSystemStats_CollectorUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -82,9 +97,7 @@ func TestStatsHandler_StreamSystemStats_WritesInitialFrameAndStopsAfterRequestCo
 	}
 
 	var initial map[string]any
-	if err := conn.ReadJSON(&initial); err != nil {
-		t.Fatalf("ReadJSON initial stats error: %v", err)
-	}
+	readSystemStatsFrame(t, conn, &initial)
 	if _, ok := initial["goroutines"]; !ok {
 		t.Fatalf("initial stats = %#v, want goroutines field", initial)
 	}
@@ -168,17 +181,13 @@ func TestStatsHandler_StreamSystemStats_WritesPeriodicFrame(t *testing.T) {
 	}
 
 	var initial map[string]any
-	if err := conn.ReadJSON(&initial); err != nil {
-		t.Fatalf("ReadJSON initial stats error: %v", err)
-	}
+	readSystemStatsFrame(t, conn, &initial)
 	if _, ok := initial["goroutines"]; !ok {
 		t.Fatalf("initial stats = %#v, want goroutines field", initial)
 	}
 
 	var periodic map[string]any
-	if err := conn.ReadJSON(&periodic); err != nil {
-		t.Fatalf("ReadJSON periodic stats error: %v", err)
-	}
+	readSystemStatsFrame(t, conn, &periodic)
 	if _, ok := periodic["goroutines"]; !ok {
 		t.Fatalf("periodic stats = %#v, want goroutines field", periodic)
 	}

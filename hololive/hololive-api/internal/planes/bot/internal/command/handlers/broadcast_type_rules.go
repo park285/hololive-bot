@@ -21,9 +21,8 @@
 package handlers
 
 import (
-	"bytes"
+	jsonv2 "encoding/json/v2"
 	"fmt"
-	json "github.com/park285/shared-go/pkg/json"
 	"strings"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
@@ -31,9 +30,7 @@ import (
 
 func mustLoadBroadcastRules(data []byte) broadcastTypeRules {
 	var rules broadcastTypeRules
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&rules); err != nil {
+	if err := jsonv2.Unmarshal(data, &rules, jsonv2.RejectUnknownMembers(true)); err != nil {
 		panic(fmt.Sprintf("load broadcast type rules: %v", err))
 	}
 	if err := validateBroadcastRules(&rules); err != nil {

@@ -33,8 +33,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/testutil"
-	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -120,14 +120,14 @@ func newTestValkeyClient(t *testing.T) (client valkey.Client, address string) {
 func publishConfigUpdate(t *testing.T, client valkey.Client, updateType string, payload any) {
 	t.Helper()
 
-	rawPayload, err := json.Marshal(payload)
+	rawPayload, err := jsonv2.Marshal(payload)
 	require.NoError(t, err)
 
 	update := contractssettings.ConfigUpdateV1{
 		Type:    updateType,
 		Payload: rawPayload,
 	}
-	rawUpdate, err := json.Marshal(update)
+	rawUpdate, err := jsonv2.Marshal(update)
 	require.NoError(t, err)
 
 	cmd := client.B().Publish().Channel(contractssettings.PubSubChannelV1).Message(string(rawUpdate)).Build()

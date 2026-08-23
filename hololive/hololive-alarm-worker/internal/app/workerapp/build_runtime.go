@@ -25,9 +25,9 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
-	"github.com/park285/shared-go/pkg/envutil"
-	"github.com/park285/shared-go/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/envutil"
+	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-alarm-worker/internal/readiness"
 	alarmscheduler "github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler"

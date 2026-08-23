@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/netguard"
+	"github.com/park285/shared-go/v2/pkg/netguard"
 )
 
 var errBlockedLink = errors.New("parse link: blocked host")

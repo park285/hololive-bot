@@ -20,7 +20,7 @@
 
 package filter
 
-import "github.com/park285/shared-go/pkg/stringutil"
+import "github.com/park285/shared-go/v2/pkg/stringutil"
 
 func buildCandidateMemberTokenSet(members []string) map[string]struct{} {
 	memberTokenSet := make(map[string]struct{}, len(members))

@@ -13,9 +13,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
-	sharedlog "github.com/park285/shared-go/pkg/logging"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
-	"github.com/park285/shared-go/pkg/workercontract"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 const (

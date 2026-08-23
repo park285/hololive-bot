@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func (r *Runtime) runClaimLoop(ctx context.Context, errCh chan<- error) {
@@ -248,12 +248,33 @@ func (r *Runtime) handleConsumeFailure(ctx context.Context, work sourceobservati
 		slog.String("subject_key", work.SubjectKey),
 		slog.Any("error", err),
 	)
-	if !retryableObservationError(err) {
+	if retryableObservationError(err) {
+		return r.retryAndForget(ctx, work, err)
+	}
+	return r.deadLetterAndForget(ctx, work, err)
+}
+
+func (r *Runtime) deadLetterAndForget(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {
+	deadLetterer, ok := r.claimer.(observationDeadLetterer)
+	if !ok {
 		youtubeConsumeTotal.WithLabelValues("fatal").Inc()
 		r.forget(work)
-		return err
+		return cause
 	}
-	return r.retryAndForget(ctx, work, err)
+	deadLetterErr := r.deadLetterObservation(ctx, deadLetterer, work, cause)
+	r.forget(work)
+	if errors.Is(deadLetterErr, sourceobservation.ErrClaimLost) {
+		youtubeClaimLostTotal.Inc()
+		youtubeConsumeTotal.WithLabelValues("claim_lost").Inc()
+		return nil
+	}
+	if deadLetterErr != nil {
+		youtubeConsumeTotal.WithLabelValues("dead_letter_error").Inc()
+		return fmt.Errorf("dead letter observation %d: %w", work.ObservationID, deadLetterErr)
+	}
+	youtubeConsumeTotal.WithLabelValues("fatal").Inc()
+	r.markDeadLettered()
+	return nil
 }
 
 func (r *Runtime) retryAndForget(ctx context.Context, work sourceobservation.ClaimWork, cause error) error {

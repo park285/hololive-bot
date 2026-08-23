@@ -27,12 +27,12 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/pkg/db/pgxdb"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/db/pgxdb"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -122,7 +122,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 
 	now := time.Now().UTC()
 	model := &userModel{
-		ID:           uuid.NewString(),
+		ID:           uuid.New().String(),
 		Email:        email,
 		PasswordHash: string(passwordHash),
 		DisplayName:  displayName,

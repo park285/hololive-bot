@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -11,7 +12,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/park285/iris-client-go/v2/webhook"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 const privacySentinel = "SENTINEL"
@@ -78,8 +79,8 @@ func appendLogGroup(groups []string, name string) []string {
 }
 
 func groupedLogAttr(groups []string, attr slog.Attr) slog.Attr {
-	for index := len(groups) - 1; index >= 0; index-- {
-		attr = slog.Attr{Key: groups[index], Value: slog.GroupValue(attr)}
+	for _, group := range slices.Backward(groups) {
+		attr = slog.Attr{Key: group, Value: slog.GroupValue(attr)}
 	}
 
 	return attr

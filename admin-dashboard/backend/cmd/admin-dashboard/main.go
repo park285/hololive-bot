@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
-	"github.com/park285/shared-go/pkg/runtime/automaxprocs"
-	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
+	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
 	"github.com/kapu/admin-dashboard/internal/app"
 	"github.com/kapu/admin-dashboard/internal/config"

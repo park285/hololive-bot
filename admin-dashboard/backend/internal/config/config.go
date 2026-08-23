@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/envutil"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/envutil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -346,7 +346,7 @@ func isLocalhostOrigin(origin string) bool {
 			return authority[:end+1] == "[::1]"
 		}
 	}
-	host := strings.Split(authority, ":")[0]
+	host, _, _ := strings.Cut(authority, ":")
 	return host == "localhost" || host == "127.0.0.1"
 }
 

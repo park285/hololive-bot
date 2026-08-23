@@ -27,8 +27,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/stringutil"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type OfficialTalent struct {
@@ -47,7 +47,7 @@ var officialTalentsJSON []byte
 
 func LoadTalents() (*Talents, error) {
 	var talents []*OfficialTalent
-	if err := json.Unmarshal(officialTalentsJSON, &talents); err != nil {
+	if err := jsonv2.Unmarshal(officialTalentsJSON, &talents); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal talents data: %w", err)
 	}
 

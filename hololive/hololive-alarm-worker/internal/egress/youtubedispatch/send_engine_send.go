@@ -22,6 +22,7 @@ package youtubedispatch
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -211,6 +212,10 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 	attemptStartedAt := time.Now().UTC()
 	d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, "per_room")
 	if sendErr := d.sendDeliveryMessage(ctx, sendReq); sendErr != nil {
+		if errors.Is(sendErr, errDeliverySendOutcomeUnknown) {
+			d.recordPerRoomSendOutcomeUnknown(row, sendReq, sendErr)
+			return
+		}
 		d.recordPerRoomSendFailure(ctx, row, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
 		return
 	}
@@ -240,6 +245,10 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 	attemptStartedAt := time.Now().UTC()
 	d.logCommunityShortsDeliveryAttemptStarted(validRows, validOutboxes, attemptStartedAt, "grouped")
 	if sendErr := d.sendDeliveryMessage(ctx, sendReq); sendErr != nil {
+		if errors.Is(sendErr, errDeliverySendOutcomeUnknown) {
+			d.recordGroupedSendOutcomeUnknown(group, validRows, sendReq, sendErr)
+			return
+		}
 		if shouldFallbackGroupedSend(sendErr) {
 			d.logger.Warn("Grouped delivery send failed, falling back to individual deliveries",
 				slog.String("room_id", group.roomID),

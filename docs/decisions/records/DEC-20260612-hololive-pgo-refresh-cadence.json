@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260612-hololive-pgo-refresh-cadence",
+  "title": "hololive PGO profile(default.pgo) 갱신 주기",
+  "decision_status": "superseded",
+  "delivery_status": "not_applicable",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-06-12",
+  "summary": "default.pgo 갱신 주기(30일, 45일, hot path 변경 시, Go 버전 변경 시)를 묻는 질문이었다. 07_pgo_profile_lifecycle.md가 45일 초과를 갱신 기준으로 적었으나, 2026-07-10에 production 빌드 전체가 -pgo=off로 전환되면서 질문 자체가 무효가 되었다.",
+  "sources": [
+    "iris-stack@db3927cf0ed1:docs/performance_reliability_program_v2/28_open_decisions.md#OD-2 — hololive PGO profile refresh cadence"
+  ],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": []
+}

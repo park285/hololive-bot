@@ -102,6 +102,7 @@ func TestMustMarshalJSON(t *testing.T) {
 		value     any
 		wantExact string
 		contains  []string
+		wantPanic bool
 	}{
 		{
 			name:      "marshal success",
@@ -110,15 +111,26 @@ func TestMustMarshalJSON(t *testing.T) {
 			contains:  []string{"\"name\":\"pekora\"", "\"value\":1"},
 		},
 		{
-			name:      "marshal failure returns fallback",
+			name:      "marshal failure panics",
 			value:     map[string]any{"fn": func() {}},
-			wantExact: "{}",
+			wantPanic: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			if tt.wantPanic {
+				var recovered any
+				func() {
+					defer func() { recovered = recover() }()
+					MustMarshalJSON(tt.value)
+				}()
+				if recovered == nil {
+					t.Fatal("MustMarshalJSON() did not panic")
+				}
+				return
+			}
 			got := MustMarshalJSON(tt.value)
 			if tt.wantExact != "" && got != tt.wantExact {
 				t.Fatalf("MustMarshalJSON() = %q, want %q", got, tt.wantExact)

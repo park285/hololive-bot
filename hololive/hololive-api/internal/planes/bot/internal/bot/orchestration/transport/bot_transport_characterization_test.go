@@ -660,8 +660,8 @@ func TestSendReply(t *testing.T) {
 
 			t.Run("accepted then handoff_completed succeeds", func(t *testing.T) {
 				s := &stubAcceptedSender{
-					accepted:         &iris.ReplyAcceptedResponse{RequestID: "r-1"},
-					stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}},
+					accepted: &iris.ReplyAcceptedResponse{RequestID: "r-1"},
+					snap:     &iris.ReplyStatusSnapshot{State: "handoff_completed"},
 				}
 				require.NoError(t, sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil))
 				assert.Equal(t, 1, s.acceptCalls)
@@ -670,8 +670,8 @@ func TestSendReply(t *testing.T) {
 			t.Run("accepted then failed is terminal without re-post", func(t *testing.T) {
 				detail := "boom"
 				s := &stubAcceptedSender{
-					accepted:         &iris.ReplyAcceptedResponse{RequestID: "r-1"},
-					stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
+					accepted: &iris.ReplyAcceptedResponse{RequestID: "r-1"},
+					snap:     &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail},
 				}
 				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 				require.Error(t, err)
@@ -681,8 +681,8 @@ func TestSendReply(t *testing.T) {
 
 			t.Run("accepted then outcome_unknown does not re-post", func(t *testing.T) {
 				s := &stubAcceptedSender{
-					accepted:         &iris.ReplyAcceptedResponse{RequestID: "r-1"},
-					stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "outcome_unknown"}},
+					accepted: &iris.ReplyAcceptedResponse{RequestID: "r-1"},
+					snap:     &iris.ReplyStatusSnapshot{State: "outcome_unknown"},
 				}
 				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
 				require.Error(t, err)
@@ -720,8 +720,8 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 
 	t.Run("failed conflict reissues once and succeeds", func(t *testing.T) {
 		s := &stubAcceptedSender{
-			stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}},
-			acceptErr:        irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed),
+			snap:      &iris.ReplyStatusSnapshot{State: "handoff_completed"},
+			acceptErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed),
 		}
 		s.onAccept = func(call int) {
 			if call == 2 {
@@ -787,8 +787,8 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 
 	t.Run("failed conflict after a lost attempt advances generation", func(t *testing.T) {
 		s := &stubAcceptedSender{
-			stubStatusGetter: stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}},
-			acceptErr:        lostAdmissionResponseError(),
+			snap:      &iris.ReplyStatusSnapshot{State: "handoff_completed"},
+			acceptErr: lostAdmissionResponseError(),
 		}
 		s.onAccept = func(call int) {
 			switch call {

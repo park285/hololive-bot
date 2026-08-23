@@ -26,7 +26,7 @@ import (
 	"log/slog"
 	"strings"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 
@@ -134,7 +134,7 @@ func (s *EventSummarizer) reviewSummary(
 	}
 
 	var verdict consensus.ReviewVerdict
-	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), &verdict); err != nil {
 		return nil, fmt.Errorf("parse reviewer verdict: %w", err)
 	}
 
@@ -166,7 +166,7 @@ func (s *EventSummarizer) adjudicateSummary(
 	}
 
 	var resp summaryResponse
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), &resp); err != nil {
 		return nil, fmt.Errorf("parse adjudicator summary: %w", err)
 	}
 	return &resp, nil
@@ -203,7 +203,7 @@ func (s *EventSummarizer) runFinalOutputReview(
 	}
 
 	var reviewed consensus.FinalOutputReviewResponse
-	if err := json.Unmarshal([]byte(raw), &reviewed); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), &reviewed); err != nil {
 		s.logger.Warn("major event final output review parse failed; keep assembled",
 			slog.String("error", err.Error()))
 		return assembled, false

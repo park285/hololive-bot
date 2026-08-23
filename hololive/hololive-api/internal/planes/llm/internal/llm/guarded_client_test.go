@@ -25,7 +25,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/park285/shared-go/pkg/outputguard"
+	"github.com/park285/shared-go/v2/pkg/outputguard"
 )
 
 type guardedClientStub struct {

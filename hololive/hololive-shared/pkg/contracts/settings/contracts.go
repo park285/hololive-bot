@@ -20,7 +20,9 @@
 
 package settings
 
-import "github.com/park285/shared-go/pkg/json"
+import (
+	"encoding/json/jsontext"
+)
 
 const (
 	// PubSubChannelV1: 설정 변경 Pub/Sub 채널 이름 (SSOT).
@@ -40,8 +42,8 @@ const (
 )
 
 type ConfigUpdateV1 struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
+	Type    string         `json:"type"`
+	Payload jsontext.Value `json:"payload"`
 }
 
 type ScraperProxyPayloadV1 struct {

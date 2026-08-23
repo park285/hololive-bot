@@ -25,7 +25,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
@@ -39,11 +40,12 @@ func errorPayload(code, message string) gin.H {
 }
 
 func abortWithError(c *gin.Context, status int, code, message string) {
-	c.AbortWithStatusJSON(status, errorPayload(code, message))
+	c.Abort()
+	ginjson.Respond(c, status, errorPayload(code, message))
 }
 
 func respondWithError(c *gin.Context, status int, code, message string) {
-	c.JSON(status, errorPayload(code, message))
+	ginjson.Respond(c, status, errorPayload(code, message))
 }
 
 func AuthMiddleware(config httputil.AdminAuthConfig) gin.HandlerFunc {

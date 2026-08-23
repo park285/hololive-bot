@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260604-hololive-pg18-performance-decisions",
+  "title": "hololive PG18 운영 결정: image는 patch+digest로 고정, GUC는 Track A 유지, pool cap 서비스별 명시, autovacuum 파라미터 명시, blind index·skip scan 재설계·uuidv7 즉시 채택 금지",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-06-04",
+  "summary": "불변 원칙은 운영 DB 변경을 관측/설정, 스키마, 코드 경로의 3단계로 나눠 한 배포에 섞지 않고, manifest migration에 CREATE INDEX CONCURRENTLY를 넣지 않으며(작은 테이블의 IF NOT EXISTS만 허용), 인덱스는 pg_stat_statements·EXPLAIN (ANALYZE, BUFFERS)·pg_stat_io의 느린 증거가 있을 때만 추가한다. 최종 결정 H1~H8: POSTGRES_IMAGE를 postgres:18.6-alpine과 digest로 고정, PG18 GUC는 Track A 값 유지, pool cap을 서비스별로 명시, pg_stat_statements extension 생성 경로 유지, autovacuum table storage parameter 명시, 현재 claim 인덱스 유지와 blind index 추가 금지, skip scan용 인덱스 재설계 안 함, uuidv7()·virtual generated column·temporal constraint는 즉시 채택하지 않음.",
+  "sources": [
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#4. 최종 결정 사항",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#3. 불변 원칙",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#결정 H1 — PostgreSQL image pinning",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#결정 H2 — PG18 GUC는 현재 Track A 값을 유지한다",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#결정 H3 — pool cap을 서비스별로 명시한다",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#결정 H4 — `pg_stat_statements` extension 생성 경로는 현재 유지한다",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#결정 H5 — autovacuum table storage parameter를 명시한다",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#결정 H6 — 현재 claim 인덱스는 유지하고, blind index 추가는 금지한다",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#결정 H7 — skip scan을 위한 인덱스 재설계는 하지 않는다",
+    "docs/current/architecture/pg18-full-spectrum-performance-io-index-workdoc-20260604.md#결정 H8 — `uuidv7()`, virtual generated columns, temporal constraint는 즉시 채택하지 않는다"
+  ],
+  "evidence": [],
+  "implementation": [
+    "deploy/compose/docker-compose.prod.yml"
+  ],
+  "supersedes": []
+}

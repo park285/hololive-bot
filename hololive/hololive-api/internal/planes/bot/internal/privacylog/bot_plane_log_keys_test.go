@@ -3,7 +3,8 @@ package privacylog
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -164,8 +165,7 @@ func listBotPlaneDependencies(t *testing.T, moduleRoot string) []byte {
 		if ctx.Err() != nil {
 			t.Fatalf("list bot plane production dependencies: %v", ctx.Err())
 		}
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			t.Fatalf("list bot plane production dependencies: %v: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
 		}
 		t.Fatalf("list bot plane production dependencies: %v", err)
@@ -203,11 +203,11 @@ func decodeScannerPackageGraph(t *testing.T, output []byte, moduleRoot string) s
 	packages := make([]listedPackage, 0, 64)
 	exports := make(map[string]string)
 	seen := make(map[string]struct{})
-	decoder := json.NewDecoder(bytes.NewReader(output))
+	decoder := jsontext.NewDecoder(bytes.NewReader(output))
 	for {
 		var pkg listedPackage
-		err := decoder.Decode(&pkg)
-		if err == io.EOF {
+		err := jsonv2.UnmarshalDecode(decoder, &pkg)
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

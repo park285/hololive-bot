@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -159,7 +159,7 @@ func TestAlarmQueueEnvelopeV1FixtureRoundTrip(t *testing.T) {
 	raw := readAlarmContractFixture(t, "envelope_v1.json")
 
 	var envelope domain.AlarmQueueEnvelope
-	if err := json.Unmarshal(raw, &envelope); err != nil {
+	if err := jsonv2.Unmarshal(raw, &envelope); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
 	if envelope.Version != contractsalarm.QueueEnvelopeVersionV1 {
@@ -191,12 +191,12 @@ func TestAlarmQueueEnvelopeV1FixtureRoundTrip(t *testing.T) {
 		t.Fatalf("ValidateCanonicalDispatch: %v", err)
 	}
 
-	encoded, err := json.Marshal(envelope)
+	encoded, err := jsonv2.Marshal(envelope)
 	if err != nil {
 		t.Fatalf("marshal fixture: %v", err)
 	}
 	var roundTrip domain.AlarmQueueEnvelope
-	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
+	if err := jsonv2.Unmarshal(encoded, &roundTrip); err != nil {
 		t.Fatalf("unmarshal round trip: %v", err)
 	}
 	if roundTrip.Notification.RoomID != envelope.Notification.RoomID {
@@ -222,15 +222,15 @@ func TestAlarmQueueRetryMetadataRoundTrip(t *testing.T) {
 	raw := readAlarmContractFixture(t, "envelope_v1.json")
 
 	var envelope domain.AlarmQueueEnvelope
-	if err := json.Unmarshal(raw, &envelope); err != nil {
+	if err := jsonv2.Unmarshal(raw, &envelope); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
-	encoded, err := json.Marshal(envelope.Retry)
+	encoded, err := jsonv2.Marshal(envelope.Retry)
 	if err != nil {
 		t.Fatalf("marshal retry metadata: %v", err)
 	}
 	var retry domain.AlarmQueueRetryMetadata
-	if err := json.Unmarshal(encoded, &retry); err != nil {
+	if err := jsonv2.Unmarshal(encoded, &retry); err != nil {
 		t.Fatalf("unmarshal retry metadata: %v", err)
 	}
 	if retry.RetryAfterMS != 30000 {
@@ -266,7 +266,7 @@ func TestAlarmQueueEnvelopeVersionZeroParsesAtDomainLayer(t *testing.T) {
 	}`
 
 	var env domain.AlarmQueueEnvelope
-	if err := json.Unmarshal([]byte(versionZeroJSON), &env); err != nil {
+	if err := jsonv2.Unmarshal([]byte(versionZeroJSON), &env); err != nil {
 		t.Fatalf("unmarshal version-0 envelope: %v", err)
 	}
 	if env.Version != 0 {

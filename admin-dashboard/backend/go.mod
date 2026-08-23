@@ -1,13 +1,13 @@
 module github.com/kapu/admin-dashboard
 
-go 1.26.6
+go 1.27.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/shared-go v1.54.0
+	github.com/park285/shared-go/v2 v2.0.0
 	github.com/quic-go/quic-go v0.61.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.77

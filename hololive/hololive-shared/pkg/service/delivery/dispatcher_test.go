@@ -31,8 +31,8 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 // mockDeliveryRepository: deliveryRepository mock 구현
@@ -117,7 +117,7 @@ func (m *mockSender) SendMessageWithClientRequestID(ctx context.Context, roomID,
 
 func makePayload(t *testing.T, msg string) string {
 	t.Helper()
-	b, err := json.Marshal(outboxPayload{Message: msg})
+	b, err := jsonv2.Marshal(outboxPayload{Message: msg})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}

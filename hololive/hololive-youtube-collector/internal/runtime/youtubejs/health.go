@@ -3,7 +3,7 @@ package youtubejs
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"mime"
@@ -113,7 +113,7 @@ func doControlRequest(client *http.Client, req *http.Request, action string) (
 }
 
 func (h *Helper) newBootstrapRequest(ctx context.Context, request BootstrapRequest) (*http.Request, error) {
-	payload, err := json.Marshal(request)
+	payload, err := jsonv2.Marshal(request)
 	if err != nil {
 		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassProtocol, fmt.Errorf("marshal youtube.js helper bootstrap: %w", err))
 	}

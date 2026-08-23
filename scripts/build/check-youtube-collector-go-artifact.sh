@@ -124,14 +124,14 @@ if go.get("goamd64") != expected_goamd64:
     errors.append("manifest GOAMD64")
 if go.get("pgo") != "off":
     errors.append("manifest pgo")
-if go.get("tags") != ["sonic"]:
+if go.get("tags") != []:
     errors.append("manifest tags")
 
 expected_binaries = {
     "bin/youtube-collector": {
         "package": "github.com/kapu/hololive-youtube-collector/cmd/runtime/youtube-collector",
         "build_id": f"youtube-collector/{expected_version}/{expected_revision}",
-        "tags": ["sonic"],
+        "tags": [],
     },
     "bin/healthcheck": {
         "package": "github.com/kapu/hololive-youtube-collector/cmd/runtime/healthcheck",

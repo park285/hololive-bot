@@ -11,10 +11,10 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/config"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 const (
@@ -103,7 +103,7 @@ func (s *Store) Create(ctx context.Context) (Session, error) {
 	}
 	now := time.Now().UTC()
 	sess := s.buildSession(id, now)
-	data, err := json.Marshal(sess)
+	data, err := jsonv2.Marshal(sess)
 	if err != nil {
 		return Session{}, err
 	}
@@ -126,7 +126,7 @@ func (s *Store) Get(ctx context.Context, id string) (*Session, error) {
 		return nil, err
 	}
 	var sess Session
-	if err := json.Unmarshal([]byte(data), &sess); err != nil {
+	if err := jsonv2.Unmarshal([]byte(data), &sess); err != nil {
 		return nil, err
 	}
 	normalizeLegacySession(&sess)
@@ -145,7 +145,7 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	var sess Session
-	if err := json.Unmarshal([]byte(data), &sess); err != nil {
+	if err := jsonv2.Unmarshal([]byte(data), &sess); err != nil {
 		return err
 	}
 	normalizeLegacySession(&sess)

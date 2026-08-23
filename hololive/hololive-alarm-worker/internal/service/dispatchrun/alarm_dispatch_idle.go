@@ -9,8 +9,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/pkg/backoff"
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/backoff"
+	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 type alarmDispatchWakeupWaitResult string

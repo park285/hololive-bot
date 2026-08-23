@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/shared-go/pkg/kakaoformat"
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 )
 
 type Facts struct {

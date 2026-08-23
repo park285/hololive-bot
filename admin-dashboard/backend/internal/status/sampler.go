@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 const defaultEndpointSampleTTL = 2 * time.Second
@@ -116,7 +116,7 @@ func (s *Sampler) sampleEndpoint(ctx context.Context, endpoint ServiceEndpoint) 
 		},
 	}
 	var payload healthPayload
-	decodeErr := json.NewDecoder(result.resp.Body).Decode(&payload)
+	decodeErr := jsonv2.UnmarshalRead(result.resp.Body, &payload)
 	closeErr := result.resp.Body.Close()
 	if decodeErr != nil {
 		errText := "invalid health payload: " + decodeErr.Error()

@@ -26,8 +26,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/shared-go/pkg/outputguard"
-	"github.com/park285/shared-go/pkg/promptguard"
+	"github.com/park285/shared-go/v2/pkg/outputguard"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"

@@ -25,7 +25,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 func TestCloneSystemStats(t *testing.T) {
@@ -103,7 +103,7 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 
-				if err := json.NewEncoder(w).Encode(map[string]any{"goroutines": 42}); err != nil {
+				if err := jsonv2.MarshalWrite(w, map[string]any{"goroutines": 42}); err != nil {
 					t.Fatalf("encode stats response: %v", err)
 				}
 			},
@@ -125,7 +125,7 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 					},
 				}
 
-				if err := json.NewEncoder(w).Encode(body); err != nil {
+				if err := jsonv2.MarshalWrite(w, body); err != nil {
 					t.Fatalf("encode stats response: %v", err)
 				}
 			},

@@ -27,10 +27,10 @@ import (
 	"log/slog"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/retry"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
@@ -135,7 +135,7 @@ func (r *OutboxRepository) enqueueLegacyBatch(ctx context.Context, items []Outbo
 		})
 	}
 
-	raw, err := json.Marshal(rows)
+	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
 		return fmt.Errorf("enqueue batch: marshal rows: %w", err)
 	}

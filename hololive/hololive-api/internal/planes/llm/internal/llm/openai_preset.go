@@ -23,7 +23,7 @@ package llm
 import (
 	"log/slog"
 
-	"github.com/park285/shared-go/pkg/llm/openaipreset"
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 )
 
 func NewPresetClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) (Client, error) {

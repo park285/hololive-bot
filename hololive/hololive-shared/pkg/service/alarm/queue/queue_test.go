@@ -37,7 +37,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/testutil"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {

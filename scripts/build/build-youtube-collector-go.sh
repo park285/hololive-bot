@@ -132,7 +132,7 @@ command -v sha256sum >/dev/null 2>&1 || {
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "${tmp_dir}"' EXIT
 
-echo "[collector-build] GOWORK=off CGO_ENABLED=0 GOOS=${goos} GOARCH=${goarch} GOAMD64=${goamd64} pgo=off collector_tags=sonic version=${version} revision=${revision}"
+echo "[collector-build] GOWORK=off CGO_ENABLED=0 GOOS=${goos} GOARCH=${goarch} GOAMD64=${goamd64} pgo=off json_codec=go-json-v2 version=${version} revision=${revision}"
 
 collector_build_id="youtube-collector/${version}/${revision}"
 healthcheck_build_id="healthcheck/${version}/${revision}"
@@ -145,7 +145,7 @@ export GOAMD64="${goamd64}"
 
 (
   cd "${collector_dir}"
-  go build -pgo=off -tags sonic -trimpath -buildvcs=false \
+  go build -pgo=off -trimpath -buildvcs=false \
     -ldflags="-s -w -buildid=${collector_build_id} -X main.Version=${version} -X main.Revision=${revision}" \
     -o "${tmp_dir}/youtube-collector" ./cmd/runtime/youtube-collector
   go build -pgo=off -trimpath -buildvcs=false \
@@ -186,13 +186,13 @@ printf '%s\n' \
   "    \"goarch\": \"${goarch}\"," \
   "    \"goamd64\": \"${goamd64}\"," \
   '    "pgo": "off",' \
-  '    "tags": ["sonic"]' \
+  '    "tags": []' \
   '  },' \
   '  "binaries": {' \
   '    "bin/youtube-collector": {' \
   '      "package": "github.com/kapu/hololive-youtube-collector/cmd/runtime/youtube-collector",' \
   "      \"build_id\": \"${collector_build_id}\"," \
-  '      "tags": ["sonic"]' \
+  '      "tags": []' \
   '    },' \
   '    "bin/healthcheck": {' \
   '      "package": "github.com/kapu/hololive-youtube-collector/cmd/runtime/healthcheck",' \

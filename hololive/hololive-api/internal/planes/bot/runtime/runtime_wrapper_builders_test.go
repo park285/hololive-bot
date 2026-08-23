@@ -27,7 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

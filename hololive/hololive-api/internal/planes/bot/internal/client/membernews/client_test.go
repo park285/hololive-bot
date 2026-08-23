@@ -31,7 +31,7 @@ import (
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/testutil"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/membernews"
 )

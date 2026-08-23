@@ -8,6 +8,14 @@
 
 ## 미출시
 
+### 변경
+
+- Go toolchain과 builder 기준을 `1.27.0`으로, `golangci-lint`를 `v2.13.1`로, `staticcheck`를
+  `2026.2.1`로 올렸습니다. Go 1.27 `go fix` modernizer 재작성(`errors.AsType`, `sync/atomic` 타입,
+  `slices.Backward`, 내장 필드 리터럴)을 적용했고, `apperrors.ServiceError`는 생성자·소비자와 같은
+  포인터 리시버로 통일해 `%w` 포장이 Go 1.27 vet 검사를 통과합니다. request id·delivery lock
+  토큰·admin 사용자 id 생성은 `github.com/google/uuid` 대신 Go 1.27 표준 `uuid`를 사용합니다.
+
 ## v3.2.1 - 2026-08-21
 
 ### 수정

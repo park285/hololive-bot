@@ -3,7 +3,7 @@ package youtubedispatch
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -16,10 +16,12 @@ import (
 
 	"github.com/park285/iris-client-go/v2/iris"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
@@ -126,11 +128,11 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 	firstStarted := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	secondStarted := make(chan struct{}, 1)
-	var callCount int32
+	var callCount atomic.Int32
 
 	cache := cachemocks.NewStrictClient()
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		callNumber := atomic.AddInt32(&callCount, 1)
+		callNumber := callCount.Add(1)
 		if callNumber == 1 {
 			close(firstStarted)
 			<-releaseFirst
@@ -181,8 +183,8 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 		t.Fatal("collectRoomsByChannel() did not complete")
 	}
 
-	if atomic.LoadInt32(&callCount) != 2 {
-		t.Fatalf("lookup count = %d, want 2", atomic.LoadInt32(&callCount))
+	if callCount.Load() != 2 {
+		t.Fatalf("lookup count = %d, want 2", callCount.Load())
 	}
 
 	targets, ok := roomsByChannel["UCtarget"]
@@ -1360,7 +1362,7 @@ func findLogEntryByMessage(t *testing.T, logBuffer *safeBuffer, message string) 
 			continue
 		}
 		entry := make(map[string]any)
-		if err := json.Unmarshal(line, &entry); err != nil {
+		if err := jsonv2.Unmarshal(line, &entry); err != nil {
 			t.Fatalf("unmarshal log entry: %v", err)
 		}
 		if entry["msg"] == message {
@@ -1381,7 +1383,7 @@ func findAllSendLogEntriesByMessage(t *testing.T, logBuffer *safeBuffer, message
 			continue
 		}
 		entry := make(map[string]any)
-		if err := json.Unmarshal(line, &entry); err != nil {
+		if err := jsonv2.Unmarshal(line, &entry); err != nil {
 			t.Fatalf("unmarshal log entry: %v", err)
 		}
 		if entry["msg"] == message {
@@ -1617,4 +1619,142 @@ func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
 	if dispatcher.config.SubscriberLookupParallelism != defaults.SubscriberLookupParallelism {
 		t.Fatalf("SubscriberLookupParallelism = %d, want %d", dispatcher.config.SubscriberLookupParallelism, defaults.SubscriberLookupParallelism)
 	}
+}
+
+type outcomeUnknownClaimSpy struct {
+	releaseCalls atomic.Int32
+}
+
+func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, _ claim.DecisionCache) deliveryClaimSelection {
+	selection := deliveryClaimSelection{
+		sendRows:       rows,
+		sendOutboxes:   outboxes,
+		claimTokens:    make([]dispatchstate.ClaimToken, 0, len(rows)),
+		rowClaimTokens: make([][]dispatchstate.ClaimToken, 0, len(rows)),
+	}
+	for i := range rows {
+		token := outcomeUnknownClaimToken(&outboxes[i])
+		selection.claimTokens = append(selection.claimTokens, token)
+		selection.rowClaimTokens = append(selection.rowClaimTokens, []dispatchstate.ClaimToken{token})
+	}
+	return selection
+}
+
+func (s *outcomeUnknownClaimSpy) applyClaimSelection(*dispatchstate.DispatchResult, *sync.Mutex, *deliveryClaimSelection) {
+}
+
+func (s *outcomeUnknownClaimSpy) releaseDeliveryClaims(context.Context, []dispatchstate.ClaimToken) error {
+	return nil
+}
+
+func (s *outcomeUnknownClaimSpy) releaseDeliveryClaimsWithWarning(context.Context, []dispatchstate.ClaimToken, string, ...any) {
+	s.releaseCalls.Add(1)
+}
+
+func outcomeUnknownClaimToken(outbox *domain.YouTubeNotificationOutbox) dispatchstate.ClaimToken {
+	return dispatchstate.ClaimToken{Kind: outbox.Kind, PostID: outbox.ContentID, AuthorizedAt: time.Now().UTC()}
+}
+
+func newOutcomeUnknownTestEngine(sender messagedelivery.MessageSender, renderer *template.Renderer, timeout time.Duration) (*SendEngine, *outcomeUnknownClaimSpy) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := &dispatchstate.Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
+	spy := &outcomeUnknownClaimSpy{}
+	auditLogger := newAuditLogger(nil, nil, logger, cfg, nil)
+	formatter := newMessageFormatter(renderer, cachemocks.NewLenientClient(), logger, nil)
+	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger, spy))
+	return engine, spy
+}
+
+func assertOutcomeUnknownHold(t *testing.T, result *dispatchstate.DispatchResult, spy *outcomeUnknownClaimSpy) {
+	t.Helper()
+	if result.FailedDeliveries != 0 || len(result.FailureBuckets) != 0 {
+		t.Fatalf("failedDeliveries = %d, failureBuckets = %#v, want none (row must stay SENDING for stale quarantine)", result.FailedDeliveries, result.FailureBuckets)
+	}
+	if len(result.SuccessDeliveryIDs) != 0 || len(result.SuccessClaimTokens) != 0 {
+		t.Fatalf("successDeliveryIDs = %#v, successClaimTokens = %#v, want none", result.SuccessDeliveryIDs, result.SuccessClaimTokens)
+	}
+	if len(result.TouchedOutboxIDs) != 0 {
+		t.Fatalf("touchedOutboxIDs = %#v, want none", result.TouchedOutboxIDs)
+	}
+	if got := spy.releaseCalls.Load(); got != 0 {
+		t.Fatalf("claim release calls = %d, want 0 (claim must be held)", got)
+	}
+}
+
+func TestDispatchDeliveryRows_PerRoomOutcomeUnknownHoldsClaim(t *testing.T) {
+	t.Parallel()
+
+	sender := &flowTestSender{}
+	engine, spy := newOutcomeUnknownTestEngine(sender, newSendTestRenderer(t), 5*time.Millisecond)
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+	}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+
+	result := engine.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+
+	if got := sender.calls.Load(); got != 1 {
+		t.Fatalf("sender calls = %d, want 1", got)
+	}
+	assertOutcomeUnknownHold(t, &result, spy)
+}
+
+func TestDispatchClaimedDeliveryRow_PreSendCancelReleasesClaimAndBucketsRetry(t *testing.T) {
+	t.Parallel()
+
+	sender := &flowTestSender{}
+	engine, spy := newOutcomeUnknownTestEngine(sender, nil, time.Second)
+	row := domain.YouTubeNotificationDelivery{ID: 101, OutboxID: 1, RoomID: "room1"}
+	outbox := domain.YouTubeNotificationOutbox{ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`}
+	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&outbox)}
+	result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+	var mu sync.Mutex
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	engine.dispatchClaimedDeliveryRow(ctx, &row, &outbox, map[int64]string{1: "hello"}, map[int64]bool{}, claimTokens, &result, &mu)
+
+	if got := sender.calls.Load(); got != 0 {
+		t.Fatalf("sender calls = %d, want 0 (request must not leave the client)", got)
+	}
+	if got := result.FailureBuckets[deliveryReasonSendMessage]; len(got) != 1 || got[0] != 101 {
+		t.Fatalf("FailureBuckets[%q] = %#v, want [101]", deliveryReasonSendMessage, got)
+	}
+	if result.FailedDeliveries != 1 || len(result.SuccessDeliveryIDs) != 0 {
+		t.Fatalf("failedDeliveries = %d, successDeliveryIDs = %#v, want 1 failure and no success", result.FailedDeliveries, result.SuccessDeliveryIDs)
+	}
+	if got := result.TouchedOutboxIDs; len(got) != 1 || got[0] != 1 {
+		t.Fatalf("touchedOutboxIDs = %#v, want [1]", got)
+	}
+	if got := spy.releaseCalls.Load(); got != 1 {
+		t.Fatalf("claim release calls = %d, want 1", got)
+	}
+}
+
+func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testing.T) {
+	t.Parallel()
+
+	sender := &flowTestSender{}
+	engine, spy := newOutcomeUnknownTestEngine(sender, nil, 5*time.Millisecond)
+	group := &deliveryGroup{roomID: "room1", channelID: "UCch1", kind: domain.OutboxKindNewShort}
+	validOutboxes := []domain.YouTubeNotificationOutbox{
+		{ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		{ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+	}
+	validRows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 2, RoomID: "room1"},
+	}
+	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&validOutboxes[0]), outcomeUnknownClaimToken(&validOutboxes[1])}
+	rowClaimTokens := [][]dispatchstate.ClaimToken{{claimTokens[0]}, {claimTokens[1]}}
+	formatted := map[int64]string{1: "쇼츠1", 2: "쇼츠2"}
+	result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+	var mu sync.Mutex
+
+	engine.dispatchGroupedClaimedRows(context.Background(), group, validRows, validOutboxes, "쇼츠1\n쇼츠2", formatted, map[int64]bool{}, claimTokens, rowClaimTokens, &result, &mu)
+
+	if got := sender.calls.Load(); got != 1 {
+		t.Fatalf("sender calls = %d, want 1 grouped attempt without per-room fallback", got)
+	}
+	assertOutcomeUnknownHold(t, &result, spy)
 }

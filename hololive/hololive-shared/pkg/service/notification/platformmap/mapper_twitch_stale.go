@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 func (m *Mapper) removeOwnedTwitchLoginMappingsExcept(ctx context.Context, channelID, desiredLogin string) error {

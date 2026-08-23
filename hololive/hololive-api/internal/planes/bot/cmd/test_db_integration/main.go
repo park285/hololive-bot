@@ -31,7 +31,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func main() {

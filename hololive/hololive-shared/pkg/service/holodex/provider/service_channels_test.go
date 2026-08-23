@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	sharedjson "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
@@ -112,7 +112,7 @@ func TestSearchChannels_UsesPaginatedHololiveChannelListCache(t *testing.T) {
 func mustMarshalChannelRawList(t *testing.T, channels []streammapping.ChannelRaw) []byte {
 	t.Helper()
 
-	body, err := sharedjson.Marshal(channels)
+	body, err := jsonv2.Marshal(channels)
 	if err != nil {
 		t.Fatalf("marshal channels: %v", err)
 	}

@@ -2,7 +2,7 @@ package testutil
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,7 +42,7 @@ func TestNewJSONTestServer(t *testing.T) {
 		t.Fatalf("read body: %v", err)
 	}
 	var got payload
-	if err := json.Unmarshal(raw, &got); err != nil {
+	if err := jsonv2.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if got.Message != "hello" {

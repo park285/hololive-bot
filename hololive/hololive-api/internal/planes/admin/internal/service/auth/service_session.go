@@ -27,8 +27,8 @@ import (
 	"log/slog"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/jackc/pgx/v5"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 func (s *Service) Logout(ctx context.Context, token string) error {
@@ -113,7 +113,7 @@ func (s *Service) loadValidSessionPayload(ctx context.Context, key, sessionHash 
 	}
 
 	var data sessionData
-	if err := json.Unmarshal([]byte(rawPayload), &data); err != nil {
+	if err := jsonv2.Unmarshal([]byte(rawPayload), &data); err != nil {
 		return "", sessionData{}, newError(CodeInternal, "failed to decode session", err)
 	}
 	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
@@ -209,7 +209,7 @@ func (s *Service) createSession(ctx context.Context, userID string) (*Session, e
 		ExpiresAt: expiresAt,
 		CreatedAt: now,
 	}
-	payload, err := json.Marshal(&data)
+	payload, err := jsonv2.Marshal(&data)
 	if err != nil {
 		return nil, newError(CodeInternal, "failed to marshal session", err)
 	}

@@ -27,7 +27,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/panicguard"

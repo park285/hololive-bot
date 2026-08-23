@@ -2,7 +2,7 @@ package apphttp
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -62,7 +62,7 @@ func TestProvideBotRouterIrisRoomsRequiresAPIKey(t *testing.T) {
 		t.Fatalf("authorized status = %d, want %d body=%s", res.Code, http.StatusOK, res.Body.String())
 	}
 	var got iris.RoomListResponse
-	if err := json.Unmarshal(res.Body.Bytes(), &got); err != nil {
+	if err := jsonv2.Unmarshal(res.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(got.Rooms) != 1 || got.Rooms[0].ChatID != 123 {

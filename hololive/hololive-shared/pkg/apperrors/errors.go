@@ -137,7 +137,7 @@ type ServiceError struct {
 	Err       error
 }
 
-func (e ServiceError) Error() string {
+func (e *ServiceError) Error() string {
 	message := strings.TrimSpace(e.Message)
 	if message == "" {
 		message = "service error"
@@ -150,7 +150,7 @@ func (e ServiceError) Error() string {
 	return fmt.Sprintf("%s service=%s operation=%s: %v", message, e.Service, e.Operation, e.Err)
 }
 
-func (e ServiceError) Unwrap() error { return e.Err }
+func (e *ServiceError) Unwrap() error { return e.Err }
 
 func NewServiceError(message, service, operation string, cause error) *ServiceError {
 	return &ServiceError{

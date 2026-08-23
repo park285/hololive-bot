@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/pkg/jsonutil"
+	"github.com/park285/shared-go/v2/pkg/jsonutil"
 	"github.com/stretchr/testify/require"
 
 	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"

@@ -145,7 +145,7 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 		h.respondInternalError(c, "Failed to get live streams", "Failed to get live streams", err)
 		return
 	}
-	c.JSON(200, gin.H{"status": "ok", "org": org, "streams": streams})
+	respondJSON(c, 200, gin.H{"status": "ok", "org": org, "streams": streams})
 }
 
 func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
@@ -174,5 +174,5 @@ func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 		h.respondInternalError(c, "Failed to get upcoming streams", "Failed to get upcoming streams", err)
 		return
 	}
-	c.JSON(200, gin.H{"status": "ok", "org": org, "streams": streams})
+	respondJSON(c, 200, gin.H{"status": "ok", "org": org, "streams": streams})
 }

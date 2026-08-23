@@ -2,7 +2,8 @@ package holodexcollector
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"testing"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -106,15 +107,15 @@ func TestParseLiveRowsAcceptsEmptyArray(t *testing.T) {
 
 func TestLiveRunnerKeepsHealthyRowsWhenOneRowIsUnsupported(t *testing.T) {
 	t.Parallel()
-	var rows []json.RawMessage
-	if err := json.Unmarshal(testdata(t, "live.json"), &rows); err != nil {
+	var rows []jsontext.Value
+	if err := jsonv2.Unmarshal(testdata(t, "live.json"), &rows); err != nil {
 		t.Fatal(err)
 	}
-	privated := json.RawMessage(`{
+	privated := jsontext.Value(`{
 		"id":"vidGone04","title":"Privated","channel_id":"UC_A","status":"missing",
 		"start_scheduled":"2026-08-14T11:00:00Z","channel":{"id":"UC_A","photo":"https://img.test/a.jpg","name":"A"}
 	}`)
-	body, err := json.Marshal(append([]json.RawMessage{privated}, rows...))
+	body, err := jsonv2.Marshal(append([]jsontext.Value{privated}, rows...))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,7 @@
 package sourceobservation
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"os"
 	"testing"
 )
@@ -25,7 +25,7 @@ func TestCanonicalJSONV1Fixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	var fixture canonicalJSONFixture
-	if err := json.Unmarshal(raw, &fixture); err != nil {
+	if err := jsonv2.Unmarshal(raw, &fixture); err != nil {
 		t.Fatalf("decode canonical JSON fixture: %v", err)
 	}
 	if fixture.Profile != CanonicalJSONProfileV1 || len(fixture.Cases) == 0 || len(fixture.Rejections) == 0 {
@@ -71,6 +71,6 @@ func assertCanonicalJSONFixtureCase(t *testing.T, testCase *canonicalJSONFixture
 func TestMarshalPayloadV1RejectsInvalidGoString(t *testing.T) {
 	_, err := MarshalPayloadV1(CommunityPayloadV1{ChannelID: string([]byte{0xff})})
 	if err == nil {
-		t.Fatal("typed payload with invalid UTF-8 must be rejected before json.Marshal replacement")
+		t.Fatal("typed payload with invalid UTF-8 must be rejected before jsonv2.Marshal replacement")
 	}
 }

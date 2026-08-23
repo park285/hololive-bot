@@ -25,7 +25,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 

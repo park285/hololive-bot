@@ -23,7 +23,7 @@ import (
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 
-	"github.com/park285/shared-go/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 )

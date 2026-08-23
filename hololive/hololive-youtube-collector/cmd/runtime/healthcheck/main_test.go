@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	"github.com/park285/shared-go/pkg/healthprobe"
+	"github.com/park285/shared-go/v2/pkg/healthprobe"
 )
 
 func TestFetchBodyWithAPIKeyEnvSendsAPIKeyHeader(t *testing.T) {

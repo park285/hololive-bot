@@ -1,12 +1,13 @@
 package dispatchoutbox
 
 import (
+	"encoding/json/jsontext"
 	"strings"
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/shared-go/pkg/json"
 )
 
 func TestBuildLedgerRows_DedupeKeyDoesNotDependOnClaimKeys(t *testing.T) {
@@ -91,9 +92,9 @@ func TestMarshalEventPayload_RemainsRoomAgnostic(t *testing.T) {
 	}
 
 	var decoded struct {
-		Notification map[string]json.RawMessage `json:"notification"`
+		Notification map[string]jsontext.Value `json:"notification"`
 	}
-	if err := json.Unmarshal(payload, &decoded); err != nil {
+	if err := jsonv2.Unmarshal(payload, &decoded); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	for _, key := range []string{"room_id", "roomId", "room", "users"} {

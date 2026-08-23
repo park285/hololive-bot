@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"slices"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -37,7 +37,7 @@ func buildSummaryInputHash(events []domain.MajorEvent) (string, error) {
 		return comparePromptEvents(&a, &b)
 	})
 
-	payload, err := json.Marshal(projected)
+	payload, err := jsonv2.Marshal(projected, jsonv2.Deterministic(true))
 	if err != nil {
 		return "", fmt.Errorf("marshal summary cache input: %w", err)
 	}

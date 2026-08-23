@@ -36,7 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/webhook"
-	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/hololive-api/internal/readiness"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
@@ -69,7 +69,7 @@ func botReadyResponder(ctx context.Context, probe *sharedreadiness.Probe) func(*
 		return readiness.GinHandler(ctx, probe)
 	}
 	return func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"health": health.Get()})
+		ginjson.Respond(c, http.StatusOK, gin.H{"health": health.Get()})
 	}
 }
 

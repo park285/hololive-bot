@@ -60,14 +60,14 @@ case_path_glob_is_not_global() {
 case_expected_counts() {
   local dir="${TMP_ROOT}/counts"
   mkdir -p "${dir}/src"
-  printf 'alpha sonic\nbeta sonic\n' >"${dir}/src/flags.txt"
+  printf 'alpha marker\nbeta marker\n' >"${dir}/src/flags.txt"
   write_rules "${dir}/rules.tsv" \
-    $'HC-TEST\ttrue\tPR-00\tsrc/flags.txt\trequired\tsonic\t2\t2\t'
+    $'HC-TEST\ttrue\tPR-00\tsrc/flags.txt\trequired\tmarker\t2\t2\t'
   run_gate "${dir}" "${dir}/rules.tsv"
   assert_success "expected count range accepts an exact match"
 
   write_rules "${dir}/rules.tsv" \
-    $'HC-TEST\ttrue\tPR-00\tsrc/flags.txt\trequired\tsonic\t3\t3\t'
+    $'HC-TEST\ttrue\tPR-00\tsrc/flags.txt\trequired\tmarker\t3\t3\t'
   run_gate "${dir}" "${dir}/rules.tsv"
   assert_failure "expected count range rejects a shortfall"
 }
@@ -78,7 +78,7 @@ case_comments_do_not_satisfy_forbidden_rule() {
   cat >"${dir}/src/main.go" <<'EOF'
 package main
 
-// -pgo=off -tags sonic
+// -pgo=off -tags alternate
 func main() {}
 EOF
   write_rules "${dir}/rules.tsv" \

@@ -21,8 +21,8 @@
 package scraping
 
 import (
+	"encoding/json/jsontext"
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
-	json "github.com/park285/shared-go/pkg/json"
 	"strings"
 	"testing"
 
@@ -150,7 +150,7 @@ func TestExtractYtInitialData_PrefersRichCandidate(t *testing.T) {
 
 	got, err := initialdata.Extract(html)
 	require.NoError(t, err)
-	assert.True(t, json.Valid([]byte(got)), "추출 결과는 유효 JSON이어야 함")
+	assert.True(t, jsontext.Value(got).IsValid(), "추출 결과는 유효 JSON이어야 함")
 
 	data := gjson.Parse(got)
 	assert.True(t, data.Get("contents.twoColumnBrowseResultsRenderer.tabs").Exists())
@@ -169,7 +169,7 @@ func TestExtractYtInitialData_PrefersRichCandidateAcrossPatterns(t *testing.T) {
 
 	got, err := initialdata.Extract(html)
 	require.NoError(t, err)
-	assert.True(t, json.Valid([]byte(got)))
+	assert.True(t, jsontext.Value(got).IsValid())
 
 	data := gjson.Parse(got)
 	assert.True(t, data.Get("contents.twoColumnBrowseResultsRenderer.tabs").Exists())
@@ -186,7 +186,7 @@ func TestExtractYtInitialData_IgnoresTrailingStatements(t *testing.T) {
 
 	got, err := initialdata.Extract(html)
 	require.NoError(t, err)
-	assert.True(t, json.Valid([]byte(got)))
+	assert.True(t, jsontext.Value(got).IsValid())
 	assert.True(t, strings.Contains(got, `"twoColumnBrowseResultsRenderer"`))
 
 	data := gjson.Parse(got)
@@ -211,7 +211,7 @@ func TestExtractYtInitialData_DOMFallbackSupportsWindowDotAssignment(t *testing.
 
 	got, err := initialdata.Extract(html)
 	require.NoError(t, err)
-	assert.True(t, json.Valid([]byte(got)))
+	assert.True(t, jsontext.Value(got).IsValid())
 
 	data := gjson.Parse(got)
 	assert.Equal(t, "DOMFallback", data.Get("metadata.channelMetadataRenderer.title").String())

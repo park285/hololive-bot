@@ -22,10 +22,10 @@ package middleware
 
 import (
 	"net/http"
+	"uuid"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	sharedlog "github.com/park285/shared-go/pkg/logging"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -53,7 +53,7 @@ func RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		reqID := sanitizedRequestID(c.GetHeader(requestIDHeaderKey))
 		if reqID == "" {
-			reqID = uuid.NewString()
+			reqID = uuid.New().String()
 		}
 		c.Set("request_id", reqID)
 		c.Request = c.Request.WithContext(sharedlog.WithRequestID(c.Request.Context(), reqID))

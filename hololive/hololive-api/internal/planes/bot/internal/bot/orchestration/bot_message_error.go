@@ -26,7 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/park285/iris-client-go/v2/iris"
-	sharedlog "github.com/park285/shared-go/pkg/logging"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
@@ -78,23 +78,19 @@ func (b *Bot) getErrorMessage(err error) string {
 		return messaging.ErrIrisConnectionFailed
 	}
 
-	var apiErr *appErrors.APIError
-	if errors.As(err, &apiErr) {
+	if _, ok := errors.AsType[*appErrors.APIError](err); ok {
 		return messaging.ErrExternalAPICallFailed
 	}
 
-	var keyRotationErr *appErrors.KeyRotationError
-	if errors.As(err, &keyRotationErr) {
+	if _, ok := errors.AsType[*appErrors.KeyRotationError](err); ok {
 		return messaging.ErrExternalAPICallFailed
 	}
 
-	var cacheErr *appErrors.CacheError
-	if errors.As(err, &cacheErr) {
+	if _, ok := errors.AsType[*appErrors.CacheError](err); ok {
 		return messaging.ErrCacheConnectionFailed
 	}
 
-	var validationErr *appErrors.ValidationError
-	if errors.As(err, &validationErr) {
+	if _, ok := errors.AsType[*appErrors.ValidationError](err); ok {
 		return messaging.ErrCommandProcessingFailed
 	}
 

@@ -28,7 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func main() {

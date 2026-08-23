@@ -21,7 +21,7 @@
 package initialdata
 
 import (
-	json "github.com/park285/shared-go/pkg/json"
+	"encoding/json/jsontext"
 	"github.com/tidwall/gjson"
 )
 
@@ -48,7 +48,7 @@ func pickBestYtInitialDataCandidate(candidates []string) (string, bool) {
 }
 
 func scoreYtInitialDataCandidate(candidate string) int {
-	if !json.Valid([]byte(candidate)) {
+	if !jsontext.Value(candidate).IsValid() {
 		return -1_000_000
 	}
 

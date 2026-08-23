@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 func ResolveStreamChannelID(stream *domain.Stream, defaultChannelID string) string {

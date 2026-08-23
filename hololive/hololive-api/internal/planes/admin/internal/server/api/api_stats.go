@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -34,8 +35,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/pkg/ginjson"
-	"github.com/park285/shared-go/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 var systemStatsStreamInterval = 5 * time.Second
@@ -176,7 +177,12 @@ func (h *StatsHandler) writeSystemStats(
 		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
 		return false
 	}
-	if err := conn.WriteJSON(stats); err != nil {
+	payload, err := jsonv2.Marshal(stats)
+	if err != nil {
+		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
+		return false
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
 		return false
 	}

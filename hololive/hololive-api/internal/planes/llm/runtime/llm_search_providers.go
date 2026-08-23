@@ -27,8 +27,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
-	"github.com/park285/shared-go/pkg/httputil"
-	"github.com/park285/shared-go/pkg/promptguard"
+	"github.com/park285/shared-go/v2/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"

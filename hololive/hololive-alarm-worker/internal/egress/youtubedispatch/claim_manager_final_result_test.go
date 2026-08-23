@@ -3,7 +3,7 @@ package youtubedispatch
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"log/slog"
 	"testing"
@@ -374,7 +374,7 @@ func findAllLogEntriesByMessage(t *testing.T, logBuffer *bytes.Buffer, message s
 			continue
 		}
 		entry := make(map[string]any)
-		if err := json.Unmarshal(line, &entry); err != nil {
+		if err := jsonv2.Unmarshal(line, &entry); err != nil {
 			t.Fatalf("unmarshal log entry: %v", err)
 		}
 		if entry["msg"] == message {

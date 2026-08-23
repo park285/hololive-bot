@@ -1,15 +1,15 @@
 # rule_id	enabled	owner_pr	path_glob	polarity	regex	min	max	allowlist
 HC-002	true	PR-03	hololive/hololive-youtube-collector/youtubejs/src/fetch-transport.mjs	required	new ProxyAgent	1	1	-
 HC-009	true	PR-00	scripts/build/build-youtube-collector-go.sh	required	-pgo=off	1	2	-
-HC-009	true	PR-00	scripts/build/build-youtube-collector-go.sh	required	-tags\s+sonic	1	1	-
+HC-009	true	PR-00	scripts/build/build-youtube-collector-go.sh	forbidden	-tags	0	0	-
 HC-009	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	required	build-youtube-collector-go\.sh	1	1	-
 HC-009	true	PR-00	scripts/deploy/ap-host-native-deploy.sh	required	build-youtube-collector-go\.sh	1	1	-
 HC-009	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	forbidden	\sgo\s+build\s	0	0	-
 HC-009	true	PR-00	scripts/deploy/ap-host-native-deploy.sh	forbidden	\sgo\s+build\s	0	0	-
-HC-010	true	PR-00	hololive/hololive-youtube-collector/Makefile	required	-tags\s+go_json	1	1	-
-HC-010	true	PR-00	scripts/build/build-youtube-collector-go.sh	forbidden	go_json	0	0	-
-HC-010	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	forbidden	go_json	0	0	-
-HC-010	true	PR-00	scripts/deploy/ap-host-native-deploy.sh	forbidden	go_json	0	0	-
+HC-010	true	PR-00	hololive/hololive-youtube-collector/Makefile	forbidden	-tags	0	0	-
+HC-010	true	PR-00	scripts/build/build-youtube-collector-go.sh	forbidden	-tags	0	0	-
+HC-010	true	PR-00	hololive/hololive-youtube-collector/Dockerfile	forbidden	-tags	0	0	-
+HC-010	true	PR-00	scripts/deploy/ap-host-native-deploy.sh	forbidden	-tags	0	0	-
 HC-011	true	PR-10	hololive/hololive-youtube-collector/internal/runtime/collectorruntime/readiness_handler.go	required	handoff_processed	1	1	-
 HC-011	true	PR-10	scripts/deploy/lib/ap-collector-readiness.sh	required	handoff_processed	1	1	-
 HC-012	true	PR-10	scripts/deploy/ap-deploy-version_test.sh	required	same remote block that validates readiness	1	1	-

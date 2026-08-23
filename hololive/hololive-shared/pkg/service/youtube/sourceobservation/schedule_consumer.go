@@ -2,7 +2,7 @@ package sourceobservation
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -38,7 +38,7 @@ func (c *Consumer) reconcileSchedule(
 
 func scheduleEvidenceFromObservation(observation *Observation) (schedule.Evidence, error) {
 	var payload contract.ScheduleSnapshotV1
-	if err := json.Unmarshal(observation.Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return schedule.Evidence{}, fmt.Errorf("decode schedule payload: %w", err)
 	}
 	items := make([]schedule.Item, 0, len(payload.Items))

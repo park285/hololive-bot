@@ -1,14 +1,15 @@
 package settings
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
 
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 const StackWorkerProfileFileEnv = "STACK_WORKER_PROFILE_FILE"
@@ -121,8 +122,8 @@ func decodeWorkerSettings(loaded *workercontract.LoadedProfile, workerID string,
 	if err := workercontract.DecodeSettings(worker.Settings, destination); err != nil {
 		return fmt.Errorf("decode %s settings: %w", workerID, err)
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(worker.Settings, &fields); err != nil {
+	var fields map[string]jsontext.Value
+	if err := jsonv2.Unmarshal(worker.Settings, &fields); err != nil {
 		return fmt.Errorf("decode %s settings keys: %w", workerID, err)
 	}
 	actual := make([]string, 0, len(fields))

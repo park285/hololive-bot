@@ -24,7 +24,10 @@ import (
 	"net/http"
 	"strings"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 
@@ -32,8 +35,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
+
+func bindJSON(c *gin.Context, destination any) error {
+	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
+		return err
+	}
+	if binding.Validator == nil {
+		return nil
+	}
+	return binding.Validator.ValidateStruct(destination)
+}
 
 func registerMajorEventInternalRoutes(router *gin.Engine, authConfig httputil.AdminAuthConfig, repository *majorevent.Repository) {
 	if router == nil || repository == nil {
@@ -61,14 +74,14 @@ func getMajorEventSubscriptionHandler(repository *majorevent.Repository) gin.Han
 			return
 		}
 
-		c.JSON(http.StatusOK, subscription.SubscriptionStatusResponse{Subscribed: subscribed})
+		ginjson.Respond(c, http.StatusOK, subscription.SubscriptionStatusResponse{Subscribed: subscribed})
 	}
 }
 
 func subscribeMajorEventHandler(repository *majorevent.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req subscription.SubscribeRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := bindJSON(c, &req); err != nil {
 			sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
 			return
 		}
@@ -84,7 +97,7 @@ func subscribeMajorEventHandler(repository *majorevent.Repository) gin.HandlerFu
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status": "subscribed"})
+		ginjson.Respond(c, http.StatusOK, gin.H{"status": "subscribed"})
 	}
 }
 
@@ -101,6 +114,6 @@ func unsubscribeMajorEventHandler(repository *majorevent.Repository) gin.Handler
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status": "unsubscribed"})
+		ginjson.Respond(c, http.StatusOK, gin.H{"status": "unsubscribed"})
 	}
 }

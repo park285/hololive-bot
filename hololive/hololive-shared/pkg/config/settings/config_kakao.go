@@ -24,7 +24,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 const aclModeBlacklist = "blacklist"

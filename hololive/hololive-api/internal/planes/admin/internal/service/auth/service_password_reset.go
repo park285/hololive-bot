@@ -156,8 +156,7 @@ func (s *Service) applyPasswordReset(
 		return claimTokenAndUpdatePassword(ctx, tx, tokenHash, passwordHash, now)
 	})
 	if err != nil {
-		var authErr *Error
-		if stdErrors.As(err, &authErr) {
+		if authErr, ok := stdErrors.AsType[*Error](err); ok {
 			return "", authErr
 		}
 		return "", newError(CodeInternal, "failed to apply password reset transaction", err)

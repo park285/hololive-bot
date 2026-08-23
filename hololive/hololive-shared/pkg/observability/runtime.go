@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"sync"
 
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
-	"github.com/park285/shared-go/pkg/telemetry"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/telemetry"
 )
 
 type Runtime interface {

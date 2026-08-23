@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -281,8 +281,7 @@ func newOfficialScheduleSourceError(reason officialScheduleReason, statusCode in
 }
 
 func (s *Service) logOfficialScheduleAPIError(err error) {
-	var sourceErr *officialScheduleSourceError
-	if errors.As(err, &sourceErr) {
+	if sourceErr, ok := errors.AsType[*officialScheduleSourceError](err); ok {
 		s.logger.Warn("Official schedule API request failed",
 			slog.String("reason", string(sourceErr.reason)),
 			slog.Int("status_code", sourceErr.statusCode),

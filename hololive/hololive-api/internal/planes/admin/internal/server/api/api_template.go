@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type messageResponse struct {
@@ -95,7 +95,7 @@ func (h *TemplateHandler) GetTemplates(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, templateListResponse{Templates: templates})
+	ginjson.Respond(c, 200, templateListResponse{Templates: templates})
 }
 
 func (h *TemplateHandler) GetTemplateByKey(c *gin.Context) {
@@ -121,7 +121,7 @@ func (h *TemplateHandler) GetTemplateByKey(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, templateDetailResponse{
+	ginjson.Respond(c, 200, templateDetailResponse{
 		TemplateKey: key,
 		Default:     defaultTmpl,
 		Overrides:   overrides,
@@ -130,7 +130,7 @@ func (h *TemplateHandler) GetTemplateByKey(c *gin.Context) {
 
 func (h *TemplateHandler) UpsertTemplate(c *gin.Context) {
 	var req templateUpsertRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
@@ -158,7 +158,7 @@ func (h *TemplateHandler) UpsertTemplate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, tmpl)
+	ginjson.Respond(c, 200, tmpl)
 }
 
 func (h *TemplateHandler) respondTemplateSaveError(c *gin.Context, key domain.TemplateKey, err error) {
@@ -194,7 +194,7 @@ func (h *TemplateHandler) DeleteTemplateOverride(c *gin.Context) {
 
 func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {
 	var req templatePreviewRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
@@ -216,7 +216,7 @@ func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, templatePreviewResponse{
+	ginjson.Respond(c, 200, templatePreviewResponse{
 		Rendered:       rendered,
 		SampleDataUsed: sampleData,
 	})
@@ -262,7 +262,7 @@ func (h *TemplateHandler) GetTemplateRevisions(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, templateRevisionsResponse{
+	ginjson.Respond(c, 200, templateRevisionsResponse{
 		TemplateKey: key,
 		ChannelID:   channelPtr,
 		Revisions:   revisions,
@@ -298,5 +298,5 @@ func (h *TemplateHandler) GetTemplateRevision(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, revision)
+	ginjson.Respond(c, 200, revision)
 }

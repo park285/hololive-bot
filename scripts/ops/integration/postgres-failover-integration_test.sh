@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-POSTGRES_IMAGE="postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
+POSTGRES_IMAGE="postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2"
 
 # shellcheck source=scripts/ops/integration/lib/postgres-failover-integration-lib.sh
 source "${SCRIPT_DIR}/lib/postgres-failover-integration-lib.sh"
@@ -107,6 +107,7 @@ start_primary() {
     --shm-size 128m \
     --env POSTGRES_DB="${DB_NAME}" --env POSTGRES_USER="${ADMIN_USER}" \
     --env POSTGRES_PASSWORD="${ADMIN_PASSWORD}" --env PGDATA=/var/lib/postgresql/pgdata \
+    --env POSTGRES_INITDB_ARGS="--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8" \
     -v "${PRIMARY_VOLUME}:/var/lib/postgresql" \
     -v "${TMP_DIR}/postgres/pg_hba.conf:/etc/postgres-config/pg_hba.conf:ro" \
     -v "${TMP_DIR}/init:/docker-entrypoint-initdb.d:ro" -v "${PRIMARY_TLS_VOLUME}:/etc/postgres-tls:ro" \

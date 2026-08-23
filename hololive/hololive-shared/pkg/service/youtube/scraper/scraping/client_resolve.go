@@ -28,7 +28,7 @@ import (
 	"time"
 
 	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 // fetchPage: YouTube 페이지 HTML 가져오기 (5xx 에러 시 재시도 포함)

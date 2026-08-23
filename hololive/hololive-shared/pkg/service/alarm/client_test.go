@@ -28,8 +28,8 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -177,7 +177,7 @@ func TestClientHandlesNullProviderData(t *testing.T) {
 func TestClientRejectsUnsuccessfulEnvelope(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(APIResponse{Success: false, Error: "alarm_add_failed", Message: "add failed"}))
+		require.NoError(t, jsonv2.MarshalWrite(w, APIResponse{Success: false, Error: "alarm_add_failed", Message: "add failed"}))
 	}))
 	t.Cleanup(server.Close)
 
@@ -191,7 +191,7 @@ func TestClientSendsAPIKeyHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "secret-key", r.Header.Get("X-API-Key"))
 		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(APIResponse{Success: true, Data: map[string]bool{"added": true}}))
+		require.NoError(t, jsonv2.MarshalWrite(w, APIResponse{Success: true, Data: map[string]bool{"added": true}}))
 	}))
 	t.Cleanup(server.Close)
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/testutil"
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func newRefreshTestService(t *testing.T) (result0 *Service, value1 string) {

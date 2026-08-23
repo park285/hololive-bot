@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/alicebob/miniredis/v2"
-	"github.com/park285/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/admin-dashboard/internal/config"
@@ -24,7 +24,7 @@ func newTestStore(t *testing.T) (*Store, *miniredis.Miniredis) {
 
 func seedSession(t *testing.T, mr *miniredis.Miniredis, sess *Session) {
 	t.Helper()
-	data, err := json.Marshal(sess)
+	data, err := jsonv2.Marshal(sess)
 	require.NoError(t, err)
 	require.NoError(t, mr.Set(sessionKey(sess.ID), string(data)))
 	mr.SetTTL(sessionKey(sess.ID), time.Hour)

@@ -13,11 +13,11 @@ import (
 	"testing/fstest"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/park285/shared-go/pkg/httputil"
-	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
@@ -154,7 +154,7 @@ func newTestRuntime(t *testing.T, store sessionStore, mutate func(*config.Config
 	if mutate != nil {
 		mutate(&cfg)
 	}
-	openapiJSON, err := json.Marshal(openapi.Spec(cfg.RuntimeVersion))
+	openapiJSON, err := openapi.MarshalSpec(cfg.RuntimeVersion)
 	require.NoError(t, err)
 	return &Runtime{
 		cfg:             cfg,
@@ -184,7 +184,7 @@ func doRequest(handler http.Handler, req *http.Request) *httptest.ResponseRecord
 func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var payload map[string]any
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload), "body: %s", rec.Body.String())
+	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &payload), "body: %s", rec.Body.String())
 	return payload
 }
 
@@ -758,8 +758,11 @@ func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 
 	for want := 1; want <= 2; want++ {
 		require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+		messageType, payload, err := conn.ReadMessage()
+		require.NoError(t, err)
+		require.Equal(t, websocket.TextMessage, messageType)
 		var frame status.SystemStats
-		require.NoError(t, conn.ReadJSON(&frame))
+		require.NoError(t, jsonv2.Unmarshal(payload, &frame))
 		require.Equal(t, want, frame.ThreadCount)
 	}
 }

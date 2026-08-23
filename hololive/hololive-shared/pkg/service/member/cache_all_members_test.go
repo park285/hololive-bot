@@ -44,11 +44,11 @@ func testMembers() []*domain.Member {
 func TestCacheAllMembers_ReusesSnapshotAcrossCalls(t *testing.T) {
 	t.Parallel()
 
-	var calls int64
+	var calls atomic.Int64
 	c := &Cache{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			atomic.AddInt64(&calls, 1)
+			calls.Add(1)
 			return testMembers(), nil
 		},
 	}
@@ -63,7 +63,7 @@ func TestCacheAllMembers_ReusesSnapshotAcrossCalls(t *testing.T) {
 		}
 	}
 
-	if n := atomic.LoadInt64(&calls); n != 1 {
+	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times, want 1 (steady-state must not reload)", n)
 	}
 
@@ -78,11 +78,11 @@ func TestCacheAllMembers_ReusesSnapshotAcrossCalls(t *testing.T) {
 func TestCacheAllMembers_ReloadsAfterInvalidateAll(t *testing.T) {
 	t.Parallel()
 
-	var calls int64
+	var calls atomic.Int64
 	c := &Cache{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			atomic.AddInt64(&calls, 1)
+			calls.Add(1)
 			return testMembers(), nil
 		},
 	}
@@ -97,7 +97,7 @@ func TestCacheAllMembers_ReloadsAfterInvalidateAll(t *testing.T) {
 		t.Fatalf("second AllMembers() error = %v", err)
 	}
 
-	if n := atomic.LoadInt64(&calls); n != 2 {
+	if n := calls.Load(); n != 2 {
 		t.Fatalf("loader called %d times, want 2 (invalidation must force one reload)", n)
 	}
 }
@@ -105,12 +105,12 @@ func TestCacheAllMembers_ReloadsAfterInvalidateAll(t *testing.T) {
 func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 	t.Parallel()
 
-	var calls int64
+	var calls atomic.Int64
 	c := &Cache{
 		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		snapshotTTL: time.Minute,
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			atomic.AddInt64(&calls, 1)
+			calls.Add(1)
 			return testMembers(), nil
 		},
 	}
@@ -123,14 +123,14 @@ func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 	if _, err := c.AllMembers(context.Background()); err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
-	if n := atomic.LoadInt64(&calls); n != 1 {
+	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times, want 1 (expired snapshot must reload)", n)
 	}
 
 	if _, err := c.AllMembers(context.Background()); err != nil {
 		t.Fatalf("second AllMembers() error = %v", err)
 	}
-	if n := atomic.LoadInt64(&calls); n != 1 {
+	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times, want 1 (fresh snapshot must be reused)", n)
 	}
 }
@@ -138,12 +138,12 @@ func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 func TestCacheAllMembers_ConcurrentCallsConvergeToSingleLoad(t *testing.T) {
 	t.Parallel()
 
-	var calls int64
+	var calls atomic.Int64
 	release := make(chan struct{})
 	c := &Cache{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			atomic.AddInt64(&calls, 1)
+			calls.Add(1)
 			<-release
 			return testMembers(), nil
 		},
@@ -169,7 +169,7 @@ func TestCacheAllMembers_ConcurrentCallsConvergeToSingleLoad(t *testing.T) {
 	close(release)
 	wg.Wait()
 
-	if n := atomic.LoadInt64(&calls); n != 1 {
+	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times under concurrent stampede, want 1", n)
 	}
 	for i := range goroutines {
@@ -186,12 +186,12 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 	t.Parallel()
 
 	stale := testMembers()
-	var calls int64
+	var calls atomic.Int64
 	c := &Cache{
 		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		snapshotTTL: time.Minute,
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
-			atomic.AddInt64(&calls, 1)
+			calls.Add(1)
 			return nil, fmt.Errorf("db outage")
 		},
 	}
@@ -207,7 +207,7 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 	if len(got) != len(stale) {
 		t.Fatalf("AllMembers() len = %d, want %d (expired snapshot must be returned, not empty)", len(got), len(stale))
 	}
-	if n := atomic.LoadInt64(&calls); n != 1 {
+	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times, want 1 (reload attempted once before fallback)", n)
 	}
 	if snap := c.allMembersSnapshot.Load(); snap == nil {

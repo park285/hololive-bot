@@ -1,6 +1,6 @@
 package settings
 
-import "github.com/park285/shared-go/pkg/workercontract"
+import "github.com/park285/shared-go/v2/pkg/workercontract"
 
 type BotWebhookInboxWorkerSettings struct {
 	MaxBodyBytes            int64 `json:"max_body_bytes"`

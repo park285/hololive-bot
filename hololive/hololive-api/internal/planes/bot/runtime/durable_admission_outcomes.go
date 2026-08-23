@@ -8,7 +8,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func workerAttemptOutcome(err error) workercontract.AttemptOutcome {

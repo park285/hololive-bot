@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GO_VERSION=1.26.6
+ARG GO_VERSION=1.27.0
 ARG ALPINE_VERSION=3.24
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown
@@ -55,7 +55,7 @@ WORKDIR /workspace/hololive-bot/hololive/hololive-api
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -tags sonic -trimpath -buildvcs=false \
+    go build -pgo=off -trimpath -buildvcs=false \
       -ldflags="-s -w -buildid= -X main.Version=${VERSION}" \
       -o /dist/bin/hololive-api ./cmd/hololive-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \

@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -372,7 +372,7 @@ func decodePayloadMap(t *testing.T, values map[string]string) map[string]testPay
 	decoded := make(map[string]testPayload, len(values))
 	for key, value := range values {
 		var payload testPayload
-		require.NoError(t, json.Unmarshal([]byte(value), &payload))
+		require.NoError(t, jsonv2.Unmarshal([]byte(value), &payload))
 		decoded[key] = payload
 	}
 	return decoded

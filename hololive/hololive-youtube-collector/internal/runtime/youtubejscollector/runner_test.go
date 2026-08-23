@@ -2,7 +2,7 @@ package youtubejscollector
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io/fs"
 	"os"
 	"strings"
@@ -251,7 +251,7 @@ func TestChannelPhotoDoesNotFetchMediaOrSynthesizeFingerprint(t *testing.T) {
 		if observations[i].ObservationKind != contract.KindChannelPhoto {
 			continue
 		}
-		if err := json.Unmarshal(observations[i].Payload, &payload); err != nil {
+		if err := jsonv2.Unmarshal(observations[i].Payload, &payload); err != nil {
 			t.Fatal(err)
 		}
 		found = true
@@ -319,7 +319,7 @@ func TestViewerRunnerKeepsHiddenCountTyped(t *testing.T) {
 		return
 	}
 	var payload contract.ViewerSampleV1
-	if err := json.Unmarshal(observations[0].Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(observations[0].Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if payload.Availability != "HIDDEN" || payload.ViewerCount != nil {
@@ -368,11 +368,9 @@ func TestChannelRunnerRejectsMismatchedLiveIdentity(t *testing.T) {
 func TestCommunityRunnerRejectsNullRows(t *testing.T) {
 	t.Parallel()
 	result := youtubejs.CommunityResult{
-		Posts: []*parser.CommunityPost{nil},
-		Pagination: youtubejs.Pagination{
-			PageCount: 1, Exhausted: true, Continuity: string(contract.ContinuityContiguous),
-			TerminationReason: youtubejs.TerminationExhausted,
-		},
+		Posts:     []*parser.CommunityPost{nil},
+		PageCount: 1, Exhausted: true, Continuity: string(contract.ContinuityContiguous),
+		TerminationReason: youtubejs.TerminationExhausted,
 	}
 	output, err := NewCommunityRunner(&communityFake{result: result}, 10).Collect(
 		context.Background(), youtubeInput(t, "UC_TEST", "community_collect", contract.KindCommunityPage),
@@ -403,7 +401,7 @@ func TestViewerRunnerSameSlotRetryKeepsSampleIdentity(t *testing.T) {
 		t.Fatalf("first=%#v second=%#v, want one observation each", firstObservations, secondObservations)
 		return
 	}
-	if err := json.Unmarshal(firstObservations[0].Payload, &payload); err != nil {
+	if err := jsonv2.Unmarshal(firstObservations[0].Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if !payload.SampleWindowStart.Equal(input.Lease().ScheduledFor) {
@@ -516,7 +514,7 @@ func loadJSON(t *testing.T, name string, dest any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(raw, dest); err != nil {
+	if err := jsonv2.Unmarshal(raw, dest); err != nil {
 		t.Fatal(err)
 	}
 }

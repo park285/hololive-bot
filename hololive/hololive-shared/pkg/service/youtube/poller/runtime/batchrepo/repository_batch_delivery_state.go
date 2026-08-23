@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -154,7 +154,7 @@ func resolveNotificationReactivationPostID(kind domain.OutboxKind, contentID, pa
 
 func resolveShortNotificationReactivationPostID(contentID, payload string) string {
 	var parsed shortNotificationPublishedAtPayload
-	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+	if err := jsonv2.Unmarshal([]byte(payload), &parsed); err != nil {
 		return strings.TrimSpace(contentID)
 	}
 	return firstNonBlankNotificationPostID(parsed.CanonicalPostID, contentID, parsed.VideoID)
@@ -162,7 +162,7 @@ func resolveShortNotificationReactivationPostID(contentID, payload string) strin
 
 func resolveCommunityNotificationReactivationPostID(contentID, payload string) string {
 	var parsed communityNotificationPublishedAtPayload
-	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+	if err := jsonv2.Unmarshal([]byte(payload), &parsed); err != nil {
 		return strings.TrimSpace(contentID)
 	}
 	return firstNonBlankNotificationPostID(parsed.CanonicalPostID, contentID, parsed.PostID)

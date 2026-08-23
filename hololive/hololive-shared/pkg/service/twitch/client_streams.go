@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/park285/shared-go/pkg/httputil"
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
@@ -276,7 +276,7 @@ func (c *Client) validateStreamsResponse(resp *http.Response) error {
 func (c *Client) decodeStreamsResponse(body []byte) (*StreamsResponse, error) {
 	var result StreamsResponse
 
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err := jsonv2.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 

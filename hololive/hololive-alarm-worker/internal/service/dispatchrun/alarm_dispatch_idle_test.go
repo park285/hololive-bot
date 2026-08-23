@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 func TestPGIdleWaiterConsumesWakeupAndResetsBackoff(t *testing.T) {

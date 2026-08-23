@@ -24,7 +24,7 @@ test:
 .PHONY: build-bin
 build-bin:
 	mkdir -p bin
-	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -ldflags="-X main.Version=$(VERSION)" -o bin/alarm-worker ./cmd/alarm-worker
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-X main.Version=$(VERSION)" -o bin/alarm-worker ./cmd/alarm-worker
 
 .PHONY: version
 version:

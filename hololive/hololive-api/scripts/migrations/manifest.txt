@@ -42,3 +42,4 @@
 042 181_reply_outbox_discarded_retention_index.sql
 043 182_epoch2_legacy_ledger_cleanup.sql
 044 183_postgres_idle_transaction_timeout.sql
+045 184_source_observation_retention_lateral.sql

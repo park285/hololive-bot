@@ -2,7 +2,8 @@ package holodexcollector
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"io/fs"
 	"os"
 	"sort"
@@ -65,7 +66,7 @@ func TestRunnerSameSlotRetryKeepsViewerSampleIdentity(t *testing.T) {
 			continue
 		}
 		var payload contract.ViewerSampleV1
-		if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		if err := jsonv2.Unmarshal(envelope.Payload, &payload); err != nil {
 			t.Fatal(err)
 		}
 		if !payload.SampleWindowStart.Equal(input.Lease().ScheduledFor) {
@@ -85,7 +86,7 @@ func TestRunnerKeepsHiddenViewerTyped(t *testing.T) {
 			continue
 		}
 		var payload contract.ViewerSampleV1
-		if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		if err := jsonv2.Unmarshal(envelope.Payload, &payload); err != nil {
 			t.Fatal(err)
 		}
 		if payload.Availability != "HIDDEN" || payload.ViewerCount != nil {
@@ -101,14 +102,17 @@ func TestRunnerKeepsHiddenViewerTyped(t *testing.T) {
 func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 	t.Parallel()
 	body := testdata(t, "live.json")
-	var rows []json.RawMessage
-	if err := json.Unmarshal(body, &rows); err != nil {
+	var rows []jsontext.Value
+	if err := jsonv2.Unmarshal(body, &rows); err != nil {
 		t.Fatal(err)
+	}
+	if rows == nil {
+		t.Fatal("live.json must decode into a non-nil array")
 	}
 	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
 		rows[i], rows[j] = rows[j], rows[i]
 	}
-	reversed, err := json.Marshal(rows)
+	reversed, err := jsonv2.Marshal(rows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +319,7 @@ func hashes(t *testing.T, output collectutil.RunOutput) string {
 		}
 		return pairs[i].Subject < pairs[j].Subject
 	})
-	encoded, err := json.Marshal(pairs)
+	encoded, err := jsonv2.Marshal(pairs)
 	if err != nil {
 		t.Fatalf("marshal observation hashes: %v", err)
 	}

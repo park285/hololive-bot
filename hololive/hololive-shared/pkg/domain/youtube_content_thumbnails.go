@@ -24,7 +24,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 type ThumbnailsJSON []ThumbnailEntry
@@ -39,7 +39,7 @@ func (t ThumbnailsJSON) Value() (driver.Value, error) {
 	if t == nil {
 		return nil, nil
 	}
-	data, err := json.Marshal(t)
+	data, err := jsonv2.Marshal(t)
 	if err != nil {
 		return nil, fmt.Errorf("marshal thumbnails: %w", err)
 	}
@@ -56,7 +56,7 @@ func (t *ThumbnailsJSON) Scan(value any) error {
 	if !ok {
 		return fmt.Errorf("failed to scan ThumbnailsJSON: expected []byte, got %T", value)
 	}
-	if err := json.Unmarshal(bytes, t); err != nil {
+	if err := jsonv2.Unmarshal(bytes, t); err != nil {
 		return fmt.Errorf("unmarshal thumbnails: %w", err)
 	}
 	return nil

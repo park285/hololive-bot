@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260630-hololive-blocked-body-signature-source-classification",
+  "title": "blocked body signature는 전역 cooldown으로 직결하지 않고 source-level suspicious/blocked 분류로 승격하며 snapshot fallback 1회 뒤 channel-source failure로 기록한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-06-30",
+  "summary": "final URL이 blocked이면 ErrBlockedResponse로 재시도·parser 없이 현재 hard-block 정책을 유지한다. body signature가 suspicious이면 generic-content 오탐 guard를 통과했는지 확인하고 browser_snapshot fetcher가 있으면 snapshot fallback을 1회 시도해 성공 시 그 body를 쓰며, fallback도 suspicious이면 channel-source failure로 기록하고 global hard cooldown은 만들지 않는다. ErrBlockedBodySignature sentinel이 이를 구현한다.",
+  "sources": [
+    "docs/current/architecture/code-based-performance-scraping-sql-refactor-20260630.md#제안 정책"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-shared/pkg/service/youtube/scraper/scraping/client_http.go"
+  ],
+  "supersedes": []
+}

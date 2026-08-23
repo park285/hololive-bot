@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/shared-go/pkg/retry"
+	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 func (r *Runner) Start(ctx context.Context) error {

@@ -24,7 +24,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/park285/shared-go/pkg/outputguard"
+	"github.com/park285/shared-go/v2/pkg/outputguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"

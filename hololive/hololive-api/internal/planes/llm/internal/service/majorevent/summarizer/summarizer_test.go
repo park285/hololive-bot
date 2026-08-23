@@ -28,10 +28,10 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/promptguard"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 )
 
 func TestAssembleSummaryText_WithHighlightsAndOngoing(t *testing.T) {
@@ -181,13 +181,13 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(original)
+	data, err := jsonv2.Marshal(original)
 	if err != nil {
 		t.Fatalf("marshal error: %v", err)
 	}
 
 	var parsed summaryResponse
-	if err := json.Unmarshal(data, &parsed); err != nil {
+	if err := jsonv2.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("unmarshal error: %v", err)
 	}
 

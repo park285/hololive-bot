@@ -2,7 +2,7 @@ package collectorruntime
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -304,12 +304,12 @@ func TestRDY013ReadyJSONKeepsLegacyFieldsAndAdditiveTypes(t *testing.T) {
 	store := mustStubStore(t, deps.store)
 	store.statuses = []handoffStatus{{ObservationID: 61, Status: new(contract.StatusProcessed)}}
 	body := evaluateReadiness(context.Background(), &deps)
-	raw, err := json.Marshal(body)
+	raw, err := jsonv2.Marshal(body)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var decoded map[string]any
-	if err := json.Unmarshal(raw, &decoded); err != nil {
+	if err := jsonv2.Unmarshal(raw, &decoded); err != nil {
 		t.Fatal(err)
 	}
 	for _, field := range []string{"status", "helper", "first_success", "handoff_status", "pending_queue"} {

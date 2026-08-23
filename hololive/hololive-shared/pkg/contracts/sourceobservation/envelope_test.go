@@ -1,7 +1,7 @@
 package sourceobservation
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"strings"
 	"testing"
 	"time"
@@ -79,7 +79,7 @@ func TestViewerSampleIdentityPreservesEqualValueInNextWindow(t *testing.T) {
 
 func TestViewerSampleIdentityRejectsMalformedPayload(t *testing.T) {
 	envelope := newViewerEnvelope(t, time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC), 123)
-	envelope.Payload = json.RawMessage(`{"channel_id":"UC_TEST"}`)
+	envelope.Payload = jsontext.Value(`{"channel_id":"UC_TEST"}`)
 	if _, err := ObservationKeyForEnvelope(&envelope, []byte(`{"channel_id":"UC_TEST"}`)); err == nil || !strings.Contains(err.Error(), "build viewer sample observation key") {
 		t.Fatalf("ObservationKeyForEnvelope() error = %v, want viewer identity error", err)
 	}
@@ -100,11 +100,11 @@ func TestSnapshotObservationIdentityRejectsUnencodableTime(t *testing.T) {
 
 func TestEnvelopeRejectsUnknownAndDuplicatePayloadFields(t *testing.T) {
 	base := newCommunityEnvelope(t, time.Now().UTC().Truncate(time.Second))
-	base.Payload = json.RawMessage(`{"channel_id":"UC_TEST","posts":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true},"unexpected":true}`)
+	base.Payload = jsontext.Value(`{"channel_id":"UC_TEST","posts":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true},"unexpected":true}`)
 	if _, err := PrepareEnvelope(base); err == nil {
 		t.Fatal("unknown payload field must be rejected")
 	}
-	base.Payload = json.RawMessage(`{"channel_id":"UC_TEST","channel_id":"UC_OTHER","posts":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true}}`)
+	base.Payload = jsontext.Value(`{"channel_id":"UC_TEST","channel_id":"UC_OTHER","posts":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true}}`)
 	if _, err := PrepareEnvelope(base); err == nil {
 		t.Fatal("duplicate payload field must be rejected")
 	}
@@ -119,22 +119,22 @@ func TestStrictJSONRejectsNonCanonicalFieldsAtEveryContractLevel(t *testing.T) {
 		{
 			name: "envelope",
 			raw:  `{"Provider":"youtubejs"}`,
-			want: "canonical field",
+			want: "unknown object member",
 		},
 		{
 			name: "lease",
 			raw:  `{"lease":{"OwnerInstance":"collector-a"}}`,
-			want: "canonical field",
+			want: "unknown object member",
 		},
 		{
 			name: "payload",
 			raw:  `{"Channel_ID":"UC_TEST"}`,
-			want: "canonical field",
+			want: "unknown object member",
 		},
 		{
 			name: "nested payload",
 			raw:  `{"channel_id":"UC_TEST","posts":[],"coverage":{"Channel_ID":"UC_TEST"}}`,
-			want: "canonical field",
+			want: "unknown object member",
 		},
 	}
 	for _, tt := range tests {
@@ -153,7 +153,7 @@ func TestStrictJSONRejectsNonCanonicalFieldsAtEveryContractLevel(t *testing.T) {
 	}
 
 	base := newCommunityEnvelope(t, time.Now().UTC().Truncate(time.Second))
-	base.Payload = json.RawMessage(`{"channel_id":"UC_TEST","Channel_ID":"UC_TEST","posts":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true}}`)
+	base.Payload = jsontext.Value(`{"channel_id":"UC_TEST","Channel_ID":"UC_TEST","posts":[],"coverage":{"channel_id":"UC_TEST","max_results":10,"page_count":1,"exhausted":true}}`)
 	if _, err := PrepareEnvelope(base); err == nil {
 		t.Fatal("case-folded duplicate payload aliases must be rejected")
 	}
@@ -181,7 +181,7 @@ func TestStrictJSONRejectsInvalidUnicode(t *testing.T) {
 func TestPaginatedPayloadCompletenessRequiresExhaustedCoverage(t *testing.T) {
 	tests := []struct {
 		kind    ObservationKind
-		payload json.RawMessage
+		payload jsontext.Value
 	}{
 		{
 			kind: KindCommunityPage,
@@ -272,7 +272,7 @@ func TestTypedPayloadRejectsNonNilZeroTimes(t *testing.T) {
 	tests := []struct {
 		name    string
 		kind    ObservationKind
-		payload json.RawMessage
+		payload jsontext.Value
 	}{
 		{
 			name: "community post",
@@ -320,7 +320,7 @@ func TestTypedCoverageBindsLiveAndMetadataEntries(t *testing.T) {
 	validTests := []struct {
 		name    string
 		kind    ObservationKind
-		payload json.RawMessage
+		payload jsontext.Value
 	}{
 		{
 			name: "live session channel and status",
@@ -347,7 +347,7 @@ func TestTypedCoverageBindsLiveAndMetadataEntries(t *testing.T) {
 		{
 			name: "channel stats field",
 			kind: KindChannelStats,
-			payload: func() json.RawMessage {
+			payload: func() jsontext.Value {
 				count := int64(10)
 				return mustMarshalPayload(t, ChannelStatsV1{
 					ChannelID: "UC_TEST", SubscriberCount: &count,
@@ -383,7 +383,7 @@ func TestTypedCoverageBindsLiveAndMetadataEntries(t *testing.T) {
 	invalidTests := []struct {
 		name    string
 		kind    ObservationKind
-		payload json.RawMessage
+		payload jsontext.Value
 	}{
 		{
 			name: "live session channel outside coverage",
@@ -410,7 +410,7 @@ func TestTypedCoverageBindsLiveAndMetadataEntries(t *testing.T) {
 		{
 			name: "channel stats field outside coverage",
 			kind: KindChannelStats,
-			payload: func() json.RawMessage {
+			payload: func() jsontext.Value {
 				count := int64(10)
 				return mustMarshalPayload(t, ChannelStatsV1{
 					ChannelID: "UC_TEST", SubscriberCount: &count,
@@ -450,7 +450,7 @@ func TestTypedCoverageBindsItemTimes(t *testing.T) {
 	tests := []struct {
 		name    string
 		kind    ObservationKind
-		payload json.RawMessage
+		payload jsontext.Value
 	}{
 		{
 			name: "video before coverage",
@@ -610,7 +610,7 @@ func TestRequiredCollectionFieldsCanonicalizeMissingAndNullToEmpty(t *testing.T)
 			var canonicalPayload string
 			var payloadSHA256 string
 			for i, raw := range []string{tt.missing, tt.nullValue, tt.emptyValue} {
-				prepared, err := PrepareEnvelope(newPaginatedEnvelope(t, tt.kind, json.RawMessage(raw), CompletenessPartial))
+				prepared, err := PrepareEnvelope(newPaginatedEnvelope(t, tt.kind, jsontext.Value(raw), CompletenessPartial))
 				if err != nil {
 					t.Fatalf("variant %d: %v", i, err)
 				}
@@ -738,7 +738,7 @@ func newViewerEnvelope(t *testing.T, window time.Time, count int64) Envelope {
 	}
 }
 
-func mustMarshalPayload(t *testing.T, value any) json.RawMessage {
+func mustMarshalPayload(t *testing.T, value any) jsontext.Value {
 	t.Helper()
 	payload, err := MarshalPayloadV1(value)
 	if err != nil {
@@ -747,7 +747,7 @@ func mustMarshalPayload(t *testing.T, value any) json.RawMessage {
 	return payload
 }
 
-func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload json.RawMessage, completeness Completeness) Envelope {
+func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload jsontext.Value, completeness Completeness) Envelope {
 	t.Helper()
 	scheduledFor := time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC)
 	return Envelope{

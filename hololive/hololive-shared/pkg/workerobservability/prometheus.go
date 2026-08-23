@@ -1,13 +1,13 @@
 package workerobservability
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"net/http"
 	"sort"
 	"time"
 
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -78,7 +78,7 @@ func DiagnosticsHandler(registry *workercontract.Registry) http.Handler {
 			http.Error(writer, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 			return
 		}
-		body, err := json.Marshal(envelope)
+		body, err := jsonv2.Marshal(envelope)
 		if err != nil {
 			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return

@@ -3,7 +3,7 @@ package youtubedispatch
 import (
 	"strings"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -41,7 +41,7 @@ func validateCommunityOutboxPayload(item *domain.YouTubeNotificationOutbox) bool
 
 func decodeOutboxPayloadMap(payload string) (map[string]any, bool) {
 	var raw map[string]any
-	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+	if err := jsonv2.Unmarshal([]byte(payload), &raw); err != nil {
 		return nil, false
 	}
 

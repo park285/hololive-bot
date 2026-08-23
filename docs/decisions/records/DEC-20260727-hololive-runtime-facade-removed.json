@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260727-hololive-runtime-facade-removed",
+  "title": "hololive runtime alias facade를 제거하고 semantic owner package를 직접 import한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-07-27",
+  "summary": "2026-06-26에 admin-api·kakao-bot-go·llm-sched 세 모듈이 각각 runtime/runtime.go로 노출하던 alias facade는 내부 타입을 재수출하기만 했다. 2026-07-27 semantic tree 정리(c054646b2)가 compatibility facade와 re-export를 모두 제거하고 shared config·server·provider와 YouTube runtime을 실제 semantic owner package로 옮겼으며, context·NilAway·deploy manifest·구조 게이트를 새 경계에 맞췄다. 2026-08-23 기준 hololive-api/internal/planes/*/runtime은 재수출이 아니라 각 plane의 실제 조립 코드를 담는다.",
+  "sources": [
+    "iris-stack@db3927cf0ed1:docs/agent-workflows/plans/2026-07-19-stack-code-audit-refactoring-proposal.md#7. 사용자 결정 필요 사항"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive-bot@c054646b2"
+  ],
+  "supersedes": [
+    "DEC-20260719-hololive-alias-facade-retention"
+  ]
+}

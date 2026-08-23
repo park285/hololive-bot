@@ -16,7 +16,7 @@ import (
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func InitAlarmDependencies(

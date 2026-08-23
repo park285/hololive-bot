@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"sort"
 
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 // GetACLStatus 현재 ACL 상태 반환.

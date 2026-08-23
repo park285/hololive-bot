@@ -2,7 +2,7 @@ package scraping
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"sync"
 	"testing"
@@ -28,13 +28,13 @@ func (s *channelHealthTestStore) Get(_ context.Context, key string, dest any) er
 	if !ok {
 		return errors.New("not found")
 	}
-	return json.Unmarshal(raw, dest)
+	return jsonv2.Unmarshal(raw, dest)
 }
 
 func (s *channelHealthTestStore) Set(_ context.Context, key string, value any, _ time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	raw, err := json.Marshal(value)
+	raw, err := jsonv2.Marshal(value)
 	if err != nil {
 		return err
 	}

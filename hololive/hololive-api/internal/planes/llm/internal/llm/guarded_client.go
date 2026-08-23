@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	json "github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/outputguard"
+	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/outputguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 )
@@ -43,7 +43,7 @@ func (c *GuardedClient) validateGeneratedJSON(systemPrompt, text string) error {
 	}
 
 	var value any
-	if err := json.Unmarshal([]byte(text), &value); err != nil {
+	if err := jsonv2.Unmarshal([]byte(text), &value); err != nil {
 		return fmt.Errorf("decode generated json for output guard: %w", err)
 	}
 	return validateGeneratedValue(c.guard, value)

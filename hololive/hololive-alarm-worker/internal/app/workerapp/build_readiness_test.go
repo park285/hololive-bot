@@ -2,7 +2,7 @@ package workerapp
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -64,7 +64,7 @@ func serveAlarmWorkerReady(t *testing.T, handler gin.HandlerFunc) *httptest.Resp
 func decodeReadyPayload(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode readiness payload: %v raw=%s", err, rec.Body.String())
 	}
 	return payload

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func validateWorkerShapes(workers map[string]workercontract.WorkerProfile, shapes map[string]workerShape) []string {

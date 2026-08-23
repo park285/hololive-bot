@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	json "github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
@@ -66,7 +66,7 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]any{
+		if err := jsonv2.MarshalWrite(w, map[string]any{
 			"code": 200,
 			"content": map[string]any{
 				"scheduledLives": []map[string]any{
@@ -123,7 +123,7 @@ func TestServiceGetChannelSchedule_MergesMatchingHolodexStream(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]any{
+		if err := jsonv2.MarshalWrite(w, map[string]any{
 			"code": 200,
 			"content": map[string]any{
 				"scheduledLives": []map[string]any{
@@ -191,7 +191,7 @@ func TestServiceGetChannelSchedule_FiltersChzzkSchedulesOutsideHoursWindow(t *te
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]any{
+		if err := jsonv2.MarshalWrite(w, map[string]any{
 			"code": 200,
 			"content": map[string]any{
 				"scheduledLives": []map[string]any{

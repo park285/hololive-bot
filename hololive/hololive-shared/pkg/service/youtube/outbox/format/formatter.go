@@ -26,7 +26,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -122,7 +122,7 @@ func populateTemplateData(data *TemplateData, item *domain.YouTubeNotificationOu
 
 func buildVideoTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
 	var p VideoPayload
-	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
 		return fmt.Errorf("unmarshal video payload: %w", err)
 	}
 	data.Title = p.Title
@@ -140,7 +140,7 @@ func VideoTemplateURL(kind domain.OutboxKind, videoID string) string {
 
 func buildCommunityTemplateData(data *TemplateData, payload string) error {
 	var p CommunityPayload
-	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+	if err := jsonv2.Unmarshal([]byte(payload), &p); err != nil {
 		return fmt.Errorf("unmarshal community payload: %w", err)
 	}
 	data.ContentText = p.ContentText
@@ -151,7 +151,7 @@ func buildCommunityTemplateData(data *TemplateData, payload string) error {
 
 func buildMilestoneTemplateData(data *TemplateData, payload string) error {
 	var p MilestonePayload
-	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+	if err := jsonv2.Unmarshal([]byte(payload), &p); err != nil {
 		return fmt.Errorf("unmarshal milestone payload: %w", err)
 	}
 	data.Milestone = p.Milestone
@@ -254,7 +254,7 @@ func BuildGroupedItemData(item *domain.YouTubeNotificationOutbox) GroupedItemDat
 
 func buildGroupedVideoItemData(item *domain.YouTubeNotificationOutbox) GroupedItemData {
 	var p VideoPayload
-	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
+	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
 		return GroupedItemData{}
 	}
 	return GroupedItemData{
@@ -265,7 +265,7 @@ func buildGroupedVideoItemData(item *domain.YouTubeNotificationOutbox) GroupedIt
 
 func buildGroupedCommunityItemData(payload string) GroupedItemData {
 	var p CommunityPayload
-	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+	if err := jsonv2.Unmarshal([]byte(payload), &p); err != nil {
 		return GroupedItemData{}
 	}
 	return GroupedItemData{

@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type setACLRequest struct {
@@ -137,7 +137,7 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 		Room string `json:"room" binding:"required"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
@@ -177,7 +177,7 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 		Room string `json:"room" binding:"required"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
@@ -243,7 +243,7 @@ func (h *RoomHandler) publishACLChange(ctx context.Context, reason, room, mode s
 
 func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
 	var req setACLRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 

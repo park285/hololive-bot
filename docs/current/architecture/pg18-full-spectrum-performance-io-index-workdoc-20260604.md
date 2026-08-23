@@ -81,7 +81,7 @@ PG18의 `pg_stat_statements`, `EXPLAIN (ANALYZE, BUFFERS)`, `pg_stat_io`를 기�
 
 ### 결정 H1 — PostgreSQL image pinning
 
-운영 환경 변수에서는 `POSTGRES_IMAGE=postgres:18.4`로 pinning한다. Compose fallback은 `postgres:18`을 유지해도 되지만, production env는 patch version까지 고정한다.
+운영 환경 변수에서는 `POSTGRES_IMAGE=postgres:18.6-alpine`로 pinning한다. Compose fallback도 patch version과 digest를 함께 고정한다.
 
 이유:
 
@@ -93,12 +93,12 @@ PG18의 `pg_stat_statements`, `EXPLAIN (ANALYZE, BUFFERS)`, `pg_stat_io`를 기�
 
 ```env
 # 운영 env 원본
-POSTGRES_IMAGE=postgres:18.4
+POSTGRES_IMAGE=postgres:18.6-alpine
 ```
 
 > 현행: 이 결정은 env가 아니라 Compose 기본값에서 digest까지 고정하는 형태로
 > 안착했습니다. `deploy/compose/docker-compose.prod.yml`의
-> `${POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:…}`이 정본이고
+> `${POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:…}`이 정본이고
 > `compose.env`는 이 값을 override하지 않습니다. Alpine 변형과 digest 고정은
 > 메타레포의 `tools/checks/check-stack-db-access-policy.sh`가 강제합니다.
 
@@ -341,7 +341,7 @@ PG18은 multicolumn B-tree skip scan을 지원하지만, 현재 주요 쿼리는
 
 ### Phase 1 — env / Compose 정렬
 
-1. 운영 env에 `POSTGRES_IMAGE=postgres:18.4` 설정
+1. 운영 env에 `POSTGRES_IMAGE=postgres:18.6-alpine` 설정
 2. 서비스별 `POSTGRES_POOL_*` env 추가
 3. `docker compose config`로 렌더링 확인
 
@@ -544,7 +544,7 @@ ALTER TABLE IF EXISTS youtube_notification_delivery RESET (
 
 `hololive-bot`의 PG18 최적화는 이미 Track A에서 핵심 GUC와 관측이 적용되어 있다. 남은 완결 작업은 다음 3가지다.
 
-1. `postgres:18.4` image pinning
+1. `postgres:18.6-alpine` image pinning
 2. 서비스별 PostgreSQL pool cap 명시화
 3. hot table autovacuum storage parameter 추가
 

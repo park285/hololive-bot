@@ -12,7 +12,7 @@ import (
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/park285/iris-client-go/v2/webhook"
-	sharedh3 "github.com/park285/shared-go/pkg/h3"
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/quic-go/quic-go/http3"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"

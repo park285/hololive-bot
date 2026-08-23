@@ -9,12 +9,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
-	"github.com/park285/shared-go/pkg/json"
 )
 
 func TestEnqueueDeliveries_NoSubscribersMarksShortSentAtWithCanonicalTimestamp(t *testing.T) {
@@ -116,7 +116,7 @@ func TestDeliveryRepositoryStoresShortPublishedAtAndSentAtWithCanonicalTimestamp
 	var payload struct {
 		PublishedAt *time.Time `json:"published_at,omitempty"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(updatedOutbox.Payload), &payload))
+	require.NoError(t, jsonv2.Unmarshal([]byte(updatedOutbox.Payload), &payload))
 	require.NotNil(t, payload.PublishedAt)
 	require.Equal(t, yttimestamp.Canonical.Location, payload.PublishedAt.UTC().Location())
 	require.Equal(t, "2026-04-10T01:10:00Z", payload.PublishedAt.UTC().Format(yttimestamp.Canonical.Layout))

@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 // Valkey 키 접두사 (alarmservice alarm_types.go 별칭과 1:1 대응)

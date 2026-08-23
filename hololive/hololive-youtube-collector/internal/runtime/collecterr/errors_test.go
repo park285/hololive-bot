@@ -64,8 +64,7 @@ func TestERR006WrapWithRetryNormalizePreserveErrorChain(t *testing.T) {
 	if !errors.Is(retried, cause) {
 		t.Fatal("WithRetry lost cause")
 	}
-	var typed *Error
-	if !errors.As(retried, &typed) {
+	if _, ok := errors.AsType[*Error](retried); !ok {
 		t.Fatal("errors.As lost typed error")
 	}
 	if normalized := Normalize(retried); normalized == nil || !errors.Is(normalized, cause) {

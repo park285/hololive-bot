@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -276,7 +276,7 @@ func isYouTubeScraperSourceLevelFallbackError(err error) bool {
 
 func (h *Service) mapAndCacheChannelsLiveStatus(ctx context.Context, channelIDs []string, body []byte) ([]*domain.Stream, error) {
 	var rawStreams []streammapping.StreamRaw
-	if err := json.Unmarshal(body, &rawStreams); err != nil {
+	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal channels live status: %w", err)
 	}
 

@@ -33,8 +33,8 @@ run_in_admin_backend() (
 check_go_toolchain() {
   actual="$(go env GOVERSION)"
   case "${actual}" in
-    go1.26.*) ;;
-    *) echo "expected go1.26.x toolchain, got ${actual}" >&2; exit 1 ;;
+    go1.27.*) ;;
+    *) echo "expected go1.27.x toolchain, got ${actual}" >&2; exit 1 ;;
   esac
 }
 

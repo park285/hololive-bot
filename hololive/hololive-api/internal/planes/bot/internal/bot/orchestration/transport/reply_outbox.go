@@ -22,7 +22,7 @@ package transport
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -62,7 +62,7 @@ func DispatchStoredReply(ctx context.Context, client iris.BotClient, room string
 		return errors.New("dispatch stored reply: iris client is nil")
 	}
 	var reply StoredReply
-	if err := json.Unmarshal(payload, &reply); err != nil {
+	if err := jsonv2.Unmarshal(payload, &reply); err != nil {
 		return fmt.Errorf("%w: decode: %w", ErrStoredReplyInvalid, err)
 	}
 	opts := make([]iris.SendOption, 0, 2)
@@ -160,7 +160,7 @@ func ReplyClientRequestID(identity string, ordinal uint64) string {
 }
 
 func encodeStoredReply(reply *StoredReply) (string, error) {
-	payload, err := json.Marshal(reply)
+	payload, err := jsonv2.Marshal(reply)
 	if err != nil {
 		return "", err
 	}

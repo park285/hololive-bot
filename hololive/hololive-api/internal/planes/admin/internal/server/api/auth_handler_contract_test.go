@@ -2,7 +2,7 @@ package api_test
 
 import (
 	"context"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"io"
 	"log/slog"
 	"net/http"
@@ -52,7 +52,7 @@ func assertAuthErrorBody(t *testing.T, body []byte, wantErrorCode string) {
 		Success bool   `json:"success"`
 		Error   string `json:"error"`
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
+	if err := jsonv2.Unmarshal(body, &parsed); err != nil {
 		t.Fatalf("decode response %q: %v", body, err)
 	}
 	if parsed.Success {

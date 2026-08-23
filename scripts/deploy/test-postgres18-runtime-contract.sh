@@ -35,8 +35,8 @@ image_pattern = re.compile(
 image_matches = image_pattern.findall(compose)
 if len(image_matches) != 1:
     errors.append("expected exactly one digest-pinned PostgreSQL 18 image default")
-elif int(image_matches[0]) < 4:
-    errors.append(f"PostgreSQL image default must be 18.4 or newer, got 18.{image_matches[0]}")
+elif int(image_matches[0]) < 6:
+    errors.append(f"PostgreSQL image default must be 18.6 or newer, got 18.{image_matches[0]}")
 
 pgdata_pattern = re.compile(
     r"^[ \t]*PGDATA:[ \t]*/var/lib/postgresql/pgdata[ \t]*$",
@@ -59,9 +59,13 @@ child_mount_pattern = re.compile(
 if child_mount_pattern.search(compose):
     errors.append("direct child data-directory mounts defeat the PostgreSQL 18 parent-volume upgrade contract")
 
+if "--locale-provider=builtin" not in compose or "--builtin-locale=C.UTF-8" not in compose:
+    errors.append("PostgreSQL volume must be initialized with the builtin C.UTF-8 locale provider")
+
 for token in (
     "server_version_num",
-    "180004",
+    "180006",
+    "datlocprovider",
     "data_checksums",
     "data_directory",
     "/var/lib/postgresql/pgdata",
@@ -79,7 +83,8 @@ if "CREATE EXTENSION IF NOT EXISTS pg_stat_statements" not in extension_bootstra
 
 for token in (
     "server_version_num",
-    "180004",
+    "180006",
+    "datlocprovider",
     "data_checksums",
     "data_directory",
     "io_method",

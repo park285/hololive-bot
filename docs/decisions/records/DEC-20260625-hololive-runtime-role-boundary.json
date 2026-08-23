@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260625-hololive-runtime-role-boundary",
+  "title": "hololive runtime 소유권 분리를 config 검증으로 강제한다: runtime별 loader를 두고 bot·admin-api·llm-scheduler·youtube-producer는 proactive egress 소유와 dispatcher 활성화를 거부한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-06-25",
+  "summary": "bot 바이너리는 LoadBotRuntime, alarm-worker는 LoadAlarmWorkerRuntime을 쓰고 일반 Load는 호환용으로만 남긴다. non-egress runtime은 시작 시 proactive egress ownership과 dispatcher activation을 거부한다. 이후 DEC-20260730-hololive-alarm-egress-lease-removed가 scheduler role 축만 완화했고, hololive-api 통합(DEC-20260626-hololive-api-three-runtime-consolidation)이 LoadHololiveAPIRuntime을 추가했다.",
+  "sources": [
+    "docs/current/architecture/runtime-role-boundary-analysis-20260625.md#Code decision in this PR"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-alarm-worker/cmd/alarm-worker/main.go",
+    "hololive/hololive-shared/pkg/config/settings/runtime_role_validation.go"
+  ],
+  "supersedes": []
+}

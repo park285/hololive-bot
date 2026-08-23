@@ -1,7 +1,7 @@
 package readiness
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -74,14 +74,14 @@ func canonicalizeGolden(t *testing.T, raw []byte) string {
 	t.Helper()
 
 	var payload map[string]any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := jsonv2.Unmarshal(raw, &payload); err != nil {
 		t.Fatalf("golden unmarshal: %v, raw=%s", err, raw)
 	}
 	normalizeGoldenDynamicFields(t, payload)
 	if nested, ok := payload["health"].(map[string]any); ok {
 		normalizeGoldenDynamicFields(t, nested)
 	}
-	out, err := json.Marshal(payload)
+	out, err := jsonv2.Marshal(payload, jsonv2.Deterministic(true))
 	if err != nil {
 		t.Fatalf("golden marshal: %v", err)
 	}

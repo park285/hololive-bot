@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
 	"github.com/kapu/admin-dashboard/internal/session"
@@ -274,7 +275,11 @@ func writeSystemStatsFrame(conn *websocket.Conn, stats any) bool {
 	if err := setWriteDeadline(conn); err != nil {
 		return false
 	}
-	return conn.WriteJSON(stats) == nil
+	payload, err := jsonv2.Marshal(stats)
+	if err != nil {
+		return false
+	}
+	return conn.WriteMessage(websocket.TextMessage, payload) == nil
 }
 
 func closeConn(conn *websocket.Conn) {

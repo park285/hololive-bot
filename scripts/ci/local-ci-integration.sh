@@ -10,7 +10,7 @@ INTEGRATION_TAG_PACKAGES=(
     ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
     ./hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo
 )
-INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15}"
+INTEGRATION_POSTGRES_IMAGE="${INTEGRATION_POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}"
 INTEGRATION_VALKEY_IMAGE="${INTEGRATION_VALKEY_IMAGE:-valkey/valkey:9.1.1-alpine3.24@sha256:ee91f7a174ac4d6a6b0685b3a60e321f0a9dbbb691f9b0e285be2ba1d1be8328}"
 INTEGRATION_TEST_DB_CONTAINER=""
 INTEGRATION_TEST_VALKEY_CONTAINER=""
@@ -67,6 +67,7 @@ provision_integration_test_database() {
         --env POSTGRES_USER="${postgres_user}" \
         --env POSTGRES_PASSWORD="${postgres_password}" \
         --env POSTGRES_DB="${postgres_database}" \
+        --env POSTGRES_INITDB_ARGS="--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8" \
         "${INTEGRATION_POSTGRES_IMAGE}")"
     trap cleanup_integration_test_services EXIT
 

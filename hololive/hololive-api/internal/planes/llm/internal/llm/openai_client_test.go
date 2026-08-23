@@ -23,7 +23,7 @@ package llm
 import (
 	"bytes"
 	"context"
-	stdjson "encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -36,7 +36,7 @@ import (
 	"testing"
 
 	"github.com/openai/openai-go/v3"
-	sharedllm "github.com/park285/shared-go/pkg/llm"
+	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
 )
 
 func mustNewClient(t *testing.T, baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
@@ -158,7 +158,7 @@ func testOpenAIAPIError(t *testing.T) *openai.Error {
 
 	apiErr := &openai.Error{}
 	raw := `{"code":"rate_limit","message":"private raw provider response","param":"messages","type":"rate_limit_error"}`
-	if err := stdjson.Unmarshal([]byte(raw), apiErr); err != nil {
+	if err := jsonv2.Unmarshal([]byte(raw), apiErr); err != nil {
 		t.Fatalf("unmarshal openai error: %v", err)
 	}
 	apiErr.StatusCode = http.StatusTooManyRequests

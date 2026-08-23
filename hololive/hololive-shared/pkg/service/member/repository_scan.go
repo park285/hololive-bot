@@ -26,8 +26,8 @@ import (
 	"fmt"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/jackc/pgx/v5"
-	"github.com/park285/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -291,7 +291,7 @@ func (r *Repository) scanMemberWithPhoto(
 	twitchUserID *string,
 ) (*domain.Member, error) {
 	var aliases domain.Aliases
-	if err := json.Unmarshal(aliasesJSON, &aliases); err != nil {
+	if err := jsonv2.Unmarshal(aliasesJSON, &aliases); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal aliases: %w", err)
 	}
 

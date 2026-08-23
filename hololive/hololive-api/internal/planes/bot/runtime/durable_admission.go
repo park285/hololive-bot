@@ -3,7 +3,7 @@ package botruntime
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,7 +20,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/webhook"
-	"github.com/park285/shared-go/pkg/workercontract"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -72,7 +72,7 @@ func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error 
 	if roomID == "" {
 		roomID = strings.TrimSpace(msg.Room)
 	}
-	payload, err := json.Marshal(msg)
+	payload, err := jsonv2.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal webhook inbox payload: %w", err)
 	}
@@ -267,7 +267,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 		return err
 	}
 	var msg webhook.Message
-	if err := json.Unmarshal(claim.Payload, &msg); err != nil {
+	if err := jsonv2.Unmarshal(claim.Payload, &msg); err != nil {
 		if _, abandonErr := r.inbox.Abandon(ctx, claim.MessageID, token, "stored webhook payload is not decodable"); abandonErr != nil {
 			r.logError("abandon poison webhook", abandonErr)
 			return errors.Join(err, abandonErr)

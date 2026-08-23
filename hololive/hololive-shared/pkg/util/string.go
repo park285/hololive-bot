@@ -23,7 +23,7 @@ package util
 import (
 	"strings"
 
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 func FirstNonEmptyString(values ...string) string {

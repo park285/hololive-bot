@@ -1,7 +1,7 @@
 package sourceobservation
 
 import (
-	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +28,7 @@ func TestScheduleCollaboTalentNamesNormalizeAndRejectOverflow(t *testing.T) {
 		t.Fatalf("prepare: %v", err)
 	}
 	var snapshot ScheduleSnapshotV1
-	if err := json.Unmarshal(prepared.Payload, &snapshot); err != nil {
+	if err := jsonv2.Unmarshal(prepared.Payload, &snapshot); err != nil {
 		t.Fatal(err)
 	}
 	if len(snapshot.Items) != 1 {

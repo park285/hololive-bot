@@ -1,7 +1,7 @@
 package settings
 
 import (
-	sharedlogging "github.com/park285/shared-go/pkg/logging"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func LoggingConfigFrom(cfg *Config) sharedlogging.Config {

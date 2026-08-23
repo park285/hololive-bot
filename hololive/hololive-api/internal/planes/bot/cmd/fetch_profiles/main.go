@@ -22,6 +22,7 @@ package main
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
@@ -34,11 +35,11 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/pkg/json"
-	"github.com/park285/shared-go/pkg/stringutil"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 func main() {
@@ -289,7 +290,7 @@ func writeJSONFile(path string, value any) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	data, err := json.MarshalIndent(value, "", "  ")
+	data, err := jsonv2.Marshal(value, jsonv2.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}

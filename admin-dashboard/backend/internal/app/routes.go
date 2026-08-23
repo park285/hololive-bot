@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	"github.com/kapu/admin-dashboard/internal/holo"
 	"github.com/kapu/admin-dashboard/internal/httpx"

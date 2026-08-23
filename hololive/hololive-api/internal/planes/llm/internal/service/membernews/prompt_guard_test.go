@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	model "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/park285/shared-go/pkg/promptguard"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 )
 
 func TestFilterPromptCandidates(t *testing.T) {

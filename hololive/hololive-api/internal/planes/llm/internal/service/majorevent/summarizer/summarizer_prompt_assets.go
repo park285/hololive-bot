@@ -12,7 +12,7 @@ import (
 	"sync"
 	"text/template"
 
-	json "github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 )
 
 //go:embed graduated_members.json prompts/*.tmpl
@@ -72,7 +72,7 @@ var initPrompts = sync.OnceValue(func() promptsResult {
 		r.err = fmt.Errorf("read graduated_members.json: %w", err)
 		return r
 	}
-	if unmarshalErr := json.Unmarshal(graduatedMembersJSON, &parsedGraduatedData); unmarshalErr != nil {
+	if unmarshalErr := jsonv2.Unmarshal(graduatedMembersJSON, &parsedGraduatedData); unmarshalErr != nil {
 		r.err = fmt.Errorf("parse graduated_members.json: %w", unmarshalErr)
 		return r
 	}

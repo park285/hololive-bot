@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	jsonv2 "encoding/json/v2"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
-	json "github.com/park285/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -96,7 +96,7 @@ func assertCacheBackedSettingsUpdateResponse(t *testing.T, rec *httptest.Respons
 	}
 
 	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
@@ -124,7 +124,7 @@ func collectPublishedConfigUpdates(
 		select {
 		case message := <-receivedMessages:
 			var update contractssettings.ConfigUpdateV1
-			if err := json.Unmarshal([]byte(message.Message), &update); err != nil {
+			if err := jsonv2.Unmarshal([]byte(message.Message), &update); err != nil {
 				t.Fatalf("decode published update: %v", err)
 			}
 			updates[update.Type] = update
@@ -144,7 +144,7 @@ func assertScraperProxyConfigUpdate(t *testing.T, updates map[string]contractsse
 		t.Fatalf("missing scraper proxy update: %+v", updates)
 	}
 	var scraperPayload contractssettings.ScraperProxyPayloadV1
-	if err := json.Unmarshal(scraperUpdate.Payload, &scraperPayload); err != nil {
+	if err := jsonv2.Unmarshal(scraperUpdate.Payload, &scraperPayload); err != nil {
 		t.Fatalf("decode scraper proxy payload: %v", err)
 	}
 	if !scraperPayload.Enabled {
@@ -160,7 +160,7 @@ func assertAlarmAdvanceConfigUpdate(t *testing.T, updates map[string]contractsse
 		t.Fatalf("missing alarm advance update: %+v", updates)
 	}
 	var alarmPayload contractssettings.AlarmAdvanceMinutesPayloadV1
-	if err := json.Unmarshal(alarmUpdate.Payload, &alarmPayload); err != nil {
+	if err := jsonv2.Unmarshal(alarmUpdate.Payload, &alarmPayload); err != nil {
 		t.Fatalf("decode alarm advance payload: %v", err)
 	}
 	if alarmPayload.Minutes != 7 {

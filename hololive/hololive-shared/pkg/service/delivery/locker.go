@@ -25,9 +25,9 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
-	"github.com/park285/shared-go/pkg/json"
+	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
@@ -61,8 +61,8 @@ type valkeyNotificationLocker struct {
 
 func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey string, ttl time.Duration) (value0 string, ok1 bool, err error) {
 	token := uuid.New().String()
-	// json.Marshal로 직렬화 (cache.Get이 json.Unmarshal 사용)
-	tokenJSON, err := json.Marshal(token)
+	// jsonv2.Marshal로 직렬화 (cache.Get이 jsonv2.Unmarshal 사용)
+	tokenJSON, err := jsonv2.Marshal(token)
 	if err != nil {
 		return "", false, fmt.Errorf("marshal lock token: %w", err)
 	}
@@ -80,8 +80,8 @@ func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey strin
 }
 
 func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token string) error {
-	// json.Marshal(token) → CompareAndDelete로 원자적 해제
-	tokenJSON, err := json.Marshal(token)
+	// jsonv2.Marshal(token) → CompareAndDelete로 원자적 해제
+	tokenJSON, err := jsonv2.Marshal(token)
 	if err != nil {
 		return fmt.Errorf("marshal lock token: %w", err)
 	}
