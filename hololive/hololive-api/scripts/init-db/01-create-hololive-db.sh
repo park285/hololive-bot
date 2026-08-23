@@ -156,6 +156,7 @@ if [ -n "${HOLOLIVE_REPLICATOR_PASSWORD}" ]; then
   psql -v ON_ERROR_STOP=1 \
     --username "${POSTGRES_USER}" \
     --dbname "postgres" \
+    --set=hololive_db="${HOLOLIVE_DB_NAME}" \
     --set=hololive_replicator="${HOLOLIVE_REPLICATOR_USER}" \
     --set=hololive_replicator_password="${HOLOLIVE_REPLICATOR_PASSWORD}" <<'EOSQL'
 SELECT format('CREATE ROLE %I LOGIN REPLICATION PASSWORD %L', :'hololive_replicator', :'hololive_replicator_password')
