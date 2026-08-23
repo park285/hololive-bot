@@ -148,6 +148,9 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 	if err := validateDeliverySendRequest(req); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("send delivery message before request: %w", err)
+	}
 
 	sendCtx := ctx
 	cancel := func() {}
@@ -163,13 +166,54 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 		err = d.sender.SendMessage(sendCtx, req.roomID, req.message)
 	}
 	if err != nil {
-		if errors.Is(context.Cause(sendCtx), errDeliverySendTimeout) {
-			return fmt.Errorf("send delivery message timed out after %s: %w", d.config.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
-		}
-		return fmt.Errorf("send delivery message: %w", err)
+		return d.wrapDeliverySendError(sendCtx, err)
 	}
 
 	return nil
+}
+
+func (d *SendEngine) wrapDeliverySendError(sendCtx context.Context, err error) error {
+	if errors.Is(context.Cause(sendCtx), errDeliverySendTimeout) {
+		return fmt.Errorf("send delivery message timed out after %s: %w", d.config.DeliverySendTimeout, errors.Join(errDeliverySendOutcomeUnknown, errDeliverySendTimeout, err))
+	}
+	if deliverySendOutcomeUnknown(err) {
+		return fmt.Errorf("send delivery message: %w", errors.Join(errDeliverySendOutcomeUnknown, err))
+	}
+	return fmt.Errorf("send delivery message: %w", err)
+}
+
+// 결과 미확정(outcome unknown) 송신은 claim 해제도, FailureBuckets/Success 기록도 하지 않는다.
+// 행이 SENDING+locked 상태로 남아야 QuarantineStaleSending(LockTimeout)이 격리하며,
+// 여기서 실패로 처리하면 이미 Iris에 도달했을 수 있는 메시지가 재전송되어 중복 게시된다.
+func (d *SendEngine) recordPerRoomSendOutcomeUnknown(
+	row *domain.YouTubeNotificationDelivery,
+	sendReq deliverySendRequest,
+	sendErr error,
+) {
+	d.logger.Warn("Per-room delivery send outcome unknown, holding row for stale sending quarantine",
+		slog.Int64("delivery_id", row.ID),
+		slog.Int64("outbox_id", row.OutboxID),
+		slog.String("room_id", row.RoomID),
+		dedupeKeyLogAttr(sendReq.dedupeKeys),
+		slog.Any("error", sendErr))
+}
+
+func (d *SendEngine) recordGroupedSendOutcomeUnknown(
+	group *deliveryGroup,
+	validRows []domain.YouTubeNotificationDelivery,
+	sendReq deliverySendRequest,
+	sendErr error,
+) {
+	roomID, channelID, kind := groupedDeliveryFields(group)
+	d.logger.Warn("Grouped delivery send outcome unknown, holding rows for stale sending quarantine",
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
+		slog.String("kind", string(kind)),
+		slog.Int("count", len(validRows)),
+		slog.Any("delivery_ids", collectDeliveryIDs(validRows)),
+		slog.Any("outbox_ids", collectDeliveryOutboxIDs(validRows)),
+		dedupeKeyLogAttr(sendReq.dedupeKeys),
+		slog.Any("error", sendErr))
 }
 
 func (d *SendEngine) deliveryParallelism() int {

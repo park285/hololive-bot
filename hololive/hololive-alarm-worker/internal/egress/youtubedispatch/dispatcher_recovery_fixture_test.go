@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 type recoveryInputFixtureSpec struct {
@@ -29,8 +30,10 @@ type recoveryInputFixtureSpec struct {
 type recoveryInputFixture struct {
 	sentOutbox      domain.YouTubeNotificationOutbox
 	pendingOutbox   domain.YouTubeNotificationOutbox
+	servedOutbox    domain.YouTubeNotificationOutbox
 	sentDelivery    domain.YouTubeNotificationDelivery
 	pendingDelivery domain.YouTubeNotificationDelivery
+	servedDelivery  domain.YouTubeNotificationDelivery
 	sentPostID      string
 	pendingPostID   string
 }
@@ -90,15 +93,37 @@ func TestSeedCommunityShortsRecoveryInputFixtureCreatesSentAndPendingPosts(t *te
 
 			var outboxes []deliveryTestOutboxModel
 			require.NoError(t, findDeliveryTestRowsOrdered(db, &outboxes, "content_id ASC").Error)
-			require.Len(t, outboxes, 2)
+			require.Len(t, outboxes, 3)
 			require.Equal(t, tc.spec.sentContentID, fixture.sentOutbox.ContentID)
 			require.Equal(t, tc.spec.pendingContentID, fixture.pendingOutbox.ContentID)
+			require.NotEqual(t, fixture.sentOutbox.ID, fixture.servedOutbox.ID)
+			require.NotEqual(t, fixture.sentOutbox.ContentID, fixture.servedOutbox.ContentID)
+			require.Equal(t, fixture.sentPostID, telemetry.ResolveTelemetryPostID(fixture.servedOutbox.Kind, fixture.servedOutbox.ContentID, fixture.servedOutbox.Payload))
+
+			var servedOutbox deliveryTestOutboxModel
+			require.NoError(t, firstDeliveryTestRow(db, &servedOutbox, fixture.servedOutbox.ID).Error)
+			require.Equal(t, string(domain.OutboxStatusSent), servedOutbox.Status)
+			require.NotNil(t, servedOutbox.SentAt)
+			require.Equal(t, tc.spec.alreadySentAt, servedOutbox.SentAt.UTC())
 
 			var deliveries []deliveryTestDeliveryModel
 			require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveries, "id ASC").Error)
-			require.Len(t, deliveries, 2)
+			require.Len(t, deliveries, 3)
 			require.Equal(t, tc.spec.roomID, fixture.sentDelivery.RoomID)
 			require.Equal(t, tc.spec.roomID, fixture.pendingDelivery.RoomID)
+			require.Equal(t, tc.spec.roomID, fixture.servedDelivery.RoomID)
+
+			var sentDelivery deliveryTestDeliveryModel
+			require.NoError(t, firstDeliveryTestRow(db, &sentDelivery, fixture.sentDelivery.ID).Error)
+			require.Equal(t, string(domain.OutboxStatusPending), sentDelivery.Status)
+			require.Nil(t, sentDelivery.SentAt)
+
+			var servedDelivery deliveryTestDeliveryModel
+			require.NoError(t, firstDeliveryTestRow(db, &servedDelivery, fixture.servedDelivery.ID).Error)
+			require.Equal(t, fixture.servedOutbox.ID, servedDelivery.OutboxID)
+			require.Equal(t, string(domain.OutboxStatusSent), servedDelivery.Status)
+			require.NotNil(t, servedDelivery.SentAt)
+			require.Equal(t, tc.spec.alreadySentAt, servedDelivery.SentAt.UTC())
 
 			var trackingRows []deliveryTestTrackingModel
 			require.NoError(t, findDeliveryTestRows(db, &trackingRows).Error)
@@ -167,8 +192,22 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 		NextAttemptAt: spec.retryReadyAt,
 		CreatedAt:     spec.pendingDetectedAt,
 	}
+	// idx_yno_kind_content·idx_ynd_outbox_room 유니크 인덱스 때문에 같은 (kind, content_id)나
+	// 같은 (outbox_id, room_id)로는 SENT 행을 둘 수 없어, canonical_post_id만 같은 재등록 outbox로 만든다.
+	servedItem := domain.YouTubeNotificationOutbox{
+		Kind:          spec.kind,
+		ChannelID:     spec.channelID,
+		ContentID:     spec.sentContentID + "-served",
+		Payload:       spec.sentPayload,
+		Status:        domain.OutboxStatusSent,
+		AttemptCount:  1,
+		NextAttemptAt: spec.alreadySentAt,
+		CreatedAt:     spec.sentDetectedAt,
+		SentAt:        new(spec.alreadySentAt),
+	}
 	require.NoError(t, insertDeliveryTestRows(db, &sentItem).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &pendingItem).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &servedItem).Error)
 
 	sentPostID := store.CanonicalDeliveryPostID(spec.kind, sentItem.ContentID)
 	pendingPostID := store.CanonicalDeliveryPostID(spec.kind, pendingItem.ContentID)
@@ -231,14 +270,26 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 		NextAttemptAt: spec.retryReadyAt,
 		CreatedAt:     spec.pendingDetectedAt,
 	}
+	servedDelivery := domain.YouTubeNotificationDelivery{
+		OutboxID:      servedItem.ID,
+		RoomID:        spec.roomID,
+		Status:        domain.OutboxStatusSent,
+		AttemptCount:  1,
+		NextAttemptAt: spec.alreadySentAt,
+		CreatedAt:     spec.sentDetectedAt,
+		SentAt:        new(spec.alreadySentAt),
+	}
 	require.NoError(t, insertDeliveryTestRows(db, &sentDelivery).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &pendingDelivery).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &servedDelivery).Error)
 
 	return recoveryInputFixture{
 		sentOutbox:      sentItem,
 		pendingOutbox:   pendingItem,
+		servedOutbox:    servedItem,
 		sentDelivery:    sentDelivery,
 		pendingDelivery: pendingDelivery,
+		servedDelivery:  servedDelivery,
 		sentPostID:      sentPostID,
 		pendingPostID:   pendingPostID,
 	}

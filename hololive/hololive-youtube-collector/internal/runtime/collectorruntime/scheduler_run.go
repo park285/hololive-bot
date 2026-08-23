@@ -93,7 +93,7 @@ func (e *collectionExecutor) runAcquired(ctx context.Context, registration Regis
 	e.workerTracker.EndAttempt(attemptID)
 	e.workerTotals.RecordAttempt(collectionAttemptOutcome(err))
 	e.metrics.ObserveAttempt(spec.Provider, spec.CollectionJobKind, attemptResult(err), time.Since(started))
-	if e.handleLeaseRunOutcome(runResult, spec) {
+	if e.handleLeaseRunOutcome(runResult, spec, &proof) {
 		return
 	}
 	e.handleRunError(ctx, lease, spec, &proof, err)
@@ -112,7 +112,7 @@ func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
 	}
 }
 
-func (e *collectionExecutor) handleLeaseRunOutcome(runResult joblease.LeaseRunResult, spec *joblease.JobSpec) bool {
+func (e *collectionExecutor) handleLeaseRunOutcome(runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) bool {
 	if leaseRunCompletesWithoutAction(runResult.Outcome) {
 		return true
 	}
@@ -121,10 +121,27 @@ func (e *collectionExecutor) handleLeaseRunOutcome(runResult joblease.LeaseRunRe
 		return true
 	}
 	if leaseRunIsSupervisionFailure(runResult.Outcome) {
-		e.reportFatal(&FatalRuntimeError{Phase: "lease_supervision", Err: runResult.Err})
+		e.observeSupervisionFailure(runResult, spec, proof)
 		return true
 	}
 	return false
+}
+
+func (e *collectionExecutor) observeSupervisionFailure(runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+	phase := "cleanup"
+	if runResult.Outcome == joblease.LeaseRunReleasedAfterRenewFailure {
+		phase = phaseRenew
+		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phaseRenew)
+	}
+	e.failSupervision(phase, runResult.Err, spec, proof)
+}
+
+func (e *collectionExecutor) failSupervision(phase string, err error, spec *joblease.JobSpec, proof *contract.LeaseProof) {
+	diagnostic := collecterr.DiagnosticOf(err)
+	e.logFailure(phase, string(diagnostic.Code()), string(diagnostic.Class()), diagnostic.Detail(), spec, proof)
+	if fatalCollectionError(err) {
+		e.reportFatal(&FatalRuntimeError{Phase: "lease_supervision", Err: err})
+	}
 }
 
 func leaseRunCompletesWithoutAction(outcome joblease.LeaseRunOutcome) bool {
@@ -143,7 +160,7 @@ func (e *collectionExecutor) handleRunError(
 	err error,
 ) {
 	if supersededError(err) {
-		e.handleSuperseded(ctx, lease)
+		e.handleSuperseded(ctx, lease, spec, proof)
 		return
 	}
 	if ignoreRunError(err) {
@@ -166,11 +183,12 @@ func fatalCollectionError(err error) bool {
 	return class == collecterr.ClassInternal || class == collecterr.ClassProtocol
 }
 
-func (e *collectionExecutor) handleSuperseded(ctx context.Context, lease joblease.Lease) {
+func (e *collectionExecutor) handleSuperseded(ctx context.Context, lease joblease.Lease, spec *joblease.JobSpec, proof *contract.LeaseProof) {
 	releaseErr := e.releaseSuperseded(ctx, lease)
-	if releaseErr != nil && !errors.Is(releaseErr, joblease.ErrFenceLost) {
-		e.reportFatal(&FatalRuntimeError{Phase: "lease_supervision", Err: releaseErr})
+	if releaseErr == nil || errors.Is(releaseErr, joblease.ErrFenceLost) {
+		return
 	}
+	e.failSupervision("release", releaseErr, spec, proof)
 }
 
 func (e *collectionExecutor) releaseSuperseded(ctx context.Context, lease joblease.Lease) error {
