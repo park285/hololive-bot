@@ -11,13 +11,13 @@ found_file="${tmp_dir}/found"
 unexpected_file="${tmp_dir}/unexpected"
 stale_file="${tmp_dir}/stale"
 
-sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$ALLOWLIST" | sort -u > "$allowed_file"
+sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$ALLOWLIST" | LC_ALL=C sort -u > "$allowed_file"
 
 cd "$ROOT_DIR"
 {
   git ls-files
   git ls-files --others --exclude-standard
-} | sort -u | while IFS= read -r file_path; do
+} | LC_ALL=C sort -u | while IFS= read -r file_path; do
   case "$file_path" in
     docs/history/*|docs/current/architecture/youtube-producer-retirement.allowlist)
       continue
@@ -27,10 +27,10 @@ cd "$ROOT_DIR"
   if rg -I -q -i 'hololive-youtube-producer|youtube-producer|YOUTUBE_PRODUCER|YouTubeProducer' -- "$file_path"; then
     printf '%s\n' "$file_path"
   fi
-done | sort -u > "$found_file"
+done | LC_ALL=C sort -u > "$found_file"
 
-comm -23 "$found_file" "$allowed_file" > "$unexpected_file"
-comm -13 "$found_file" "$allowed_file" > "$stale_file"
+LC_ALL=C comm -23 "$found_file" "$allowed_file" > "$unexpected_file"
+LC_ALL=C comm -13 "$found_file" "$allowed_file" > "$stale_file"
 if [[ -s "$unexpected_file" ]]; then
   echo "unexpected retired youtube-producer references:" >&2
   sed 's/^/  /' "$unexpected_file" >&2

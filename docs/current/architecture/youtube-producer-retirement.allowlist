@@ -31,6 +31,12 @@ docs/current/architecture/youtube-three-provider-convergence-contract-v2-2026081
 docs/current/handoffs/2026-08-14-youtube-convergence-task3-implementation-handoff.md
 docs/current/handoffs/2026-08-14-youtube-convergence-task4-implementation-handoff.md
 docs/current/plans/2026-08-08-birthday-stream-alarm-v3.md
+docs/decisions/INDEX.md
+docs/decisions/records/DEC-20260604-hololive-youtube-producer-multi-worker-budget.json
+docs/decisions/records/DEC-20260605-hololive-youtube-producer-resilience-v6.json
+docs/decisions/records/DEC-20260612-hololive-pgo-default-expansion.json
+docs/decisions/records/DEC-20260625-hololive-runtime-role-boundary.json
+docs/decisions/records/DEC-20260814-hololive-youtube-three-provider-convergence-v2.json
 docs/design/2026-04-09-hololive-improved-version-page-todo.md
 docs/design/2026-04-09-page14-shared-cleanup-inventory.md
 docs/design/2026-05-15-repo-structure-refactor-worklog.md
