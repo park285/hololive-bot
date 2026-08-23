@@ -14,6 +14,9 @@ func bindJSON(c *gin.Context, destination any) error {
 	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
 		return err
 	}
+	if binding.Validator == nil {
+		return nil
+	}
 	return binding.Validator.ValidateStruct(destination)
 }
 
