@@ -13,12 +13,12 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 
-	queueProtected := insertRetentionObservation(t, pool, "youtubejs", "community_page", base, "queue-protected")
-	replayProtected := insertRetentionObservation(t, pool, "youtubejs", "community_page", base.Add(time.Hour), "replay-protected")
-	headProtected := insertRetentionObservation(t, pool, "youtubejs", "live_snapshot", base.Add(2*time.Hour), "head-protected")
-	oldestEligible := insertRetentionObservation(t, pool, "youtubejs", "live_snapshot", base.Add(3*time.Hour), "oldest-eligible")
-	nextEligible := insertRetentionObservation(t, pool, "youtubejs", "community_page", base.Add(4*time.Hour), "next-eligible")
-	recent := insertRetentionObservation(t, pool, "youtubejs", "live_snapshot", base.Add(48*time.Hour), "recent")
+	queueProtected := insertRetentionObservation(t, pool, "community_page", base, "queue-protected")
+	replayProtected := insertRetentionObservation(t, pool, "community_page", base.Add(time.Hour), "replay-protected")
+	headProtected := insertRetentionObservation(t, pool, "live_snapshot", base.Add(2*time.Hour), "head-protected")
+	oldestEligible := insertRetentionObservation(t, pool, "live_snapshot", base.Add(3*time.Hour), "oldest-eligible")
+	nextEligible := insertRetentionObservation(t, pool, "community_page", base.Add(4*time.Hour), "next-eligible")
+	recent := insertRetentionObservation(t, pool, "live_snapshot", base.Add(48*time.Hour), "recent")
 
 	if _, err := pool.Exec(context.Background(),
 		`INSERT INTO public.source_observation_queue (observation_id) VALUES ($1)`, queueProtected,
@@ -58,7 +58,7 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 func TestSourceObservationRetentionBatchRejectsInvalidBudgets(t *testing.T) {
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	observationID := insertRetentionObservation(t, pool, "youtubejs", "community_page", base, "guarded")
+	observationID := insertRetentionObservation(t, pool, "community_page", base, "guarded")
 	cutoff := base.Add(24 * time.Hour)
 
 	tests := []struct {
@@ -87,8 +87,8 @@ func TestSourceObservationRetentionBatchRejectsInvalidBudgets(t *testing.T) {
 func TestSourceObservationRetentionBatchSkipsLockedRows(t *testing.T) {
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	lockedID := insertRetentionObservation(t, pool, "youtubejs", "community_page", base, "locked")
-	nextID := insertRetentionObservation(t, pool, "youtubejs", "community_page", base.Add(time.Hour), "next")
+	lockedID := insertRetentionObservation(t, pool, "community_page", base, "locked")
+	nextID := insertRetentionObservation(t, pool, "community_page", base.Add(time.Hour), "next")
 
 	tx, err := pool.Begin(context.Background())
 	if err != nil {
@@ -245,12 +245,12 @@ func TestSourceObservationRetentionCandidatePlanUsesKindReceivedIndex(t *testing
 func insertRetentionObservation(
 	t *testing.T,
 	pool *pgxpool.Pool,
-	provider string,
 	kind string,
 	receivedAt time.Time,
 	key string,
 ) int64 {
 	t.Helper()
+	const provider = "youtubejs"
 	var id int64
 	if err := pool.QueryRow(context.Background(), `
 		INSERT INTO public.source_observations (
