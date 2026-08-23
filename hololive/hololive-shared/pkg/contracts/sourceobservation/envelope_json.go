@@ -24,6 +24,13 @@ func decodeStrictJSON(raw []byte, destination any) error {
 }
 
 func validateJSONStructure(raw []byte) error {
+	if err := validateSingleJSONValue(raw); err != nil {
+		return err
+	}
+	return validateJSONDepth(raw)
+}
+
+func validateSingleJSONValue(raw []byte) error {
 	decoder := jsontext.NewDecoder(bytes.NewReader(raw))
 	if _, err := decoder.ReadValue(); err != nil {
 		return fmt.Errorf("decode json: %w", err)
@@ -34,8 +41,11 @@ func validateJSONStructure(raw []byte) error {
 		}
 		return fmt.Errorf("decode json trailing data: %w", err)
 	}
+	return nil
+}
 
-	decoder.Reset(bytes.NewReader(raw))
+func validateJSONDepth(raw []byte) error {
+	decoder := jsontext.NewDecoder(bytes.NewReader(raw))
 	for {
 		if _, err := decoder.ReadToken(); err != nil {
 			if errors.Is(err, io.EOF) {
