@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260512-hololive-alarm-http-provider-ownership",
+  "title": "alarm.http provider는 단계적으로 alarm-worker가 소유하고 admin-api는 compatibility provider로만 남긴다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-05-12",
+  "summary": "alarm-worker가 shared alarm route registrar로 /internal/alarm/* provider route set을 등록하고 admin-api는 compatibility provider로 남기는 staged migration이다. 2026-06-26 hololive-api 통합 계획이 같은 방향(alarm domain owner와 같은 process, bot/admin 배포가 provider 가용성을 흔들지 않음)을 확정했고, 2026-08-23 기준 hololive-api 코드에서는 /internal/alarm 경로 문자열이 확인되지 않으며 shared contracts 패키지만 경로를 소유한다.",
+  "sources": [
+    "docs/design/alarm-http-provider-ownership.md#Decision"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-shared/pkg/contracts/alarm/contracts.go"
+  ],
+  "supersedes": []
+}

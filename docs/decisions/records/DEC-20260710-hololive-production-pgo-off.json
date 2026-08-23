@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260710-hololive-production-pgo-off",
+  "title": "hololive production 빌드는 PGO를 쓰지 않는다(-pgo=off 고정, 수집 도구는 연구 전용)",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-07-10",
+  "summary": "hololive-api, hololive-alarm-worker, youtube-collector, admin-dashboard의 production compile은 -pgo=off를 명시한다. scripts/ci/pgo-off-policy.tsv가 정본이며 off 행만 허용하고 check-pgo-default.sh가 on 행을 거부한다. Compose에는 GO_PGO_FILE build arg도 env override도 없다. 향후 PGO 도입은 별도 승인된 설계와 evidence path가 필요하다. 이 결정이 OD-2(갱신 주기)와 OD-6(적용 대상 확대)을 대체한다.",
+  "sources": [
+    "iris-stack@db3927cf0ed1:docs/performance_reliability_program_v2/README.md#Performance Reliability Execution Program (historical)",
+    "iris-stack@db3927cf0ed1:docs/performance_reliability_program_v2/28_open_decisions.md#OD-2 — hololive PGO profile refresh cadence",
+    "iris-stack@db3927cf0ed1:docs/performance_reliability_program_v2/28_open_decisions.md#OD-6 — PGO default 적용 대상 확대",
+    "docs/current/runbooks/pgo.md#현재 정책"
+  ],
+  "evidence": [
+    "docs/current/runbooks/pgo.md"
+  ],
+  "implementation": [
+    "hololive-bot@910f07419",
+    "scripts/ci/check-pgo-default.sh"
+  ],
+  "supersedes": [
+    "DEC-20260612-hololive-pgo-refresh-cadence",
+    "DEC-20260612-hololive-pgo-default-expansion"
+  ]
+}

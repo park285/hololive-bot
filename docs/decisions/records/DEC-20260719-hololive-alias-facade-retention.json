@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260719-hololive-alias-facade-retention",
+  "title": "hololive alias facade를 stable composition surface로 유지할지 축약할지",
+  "decision_status": "superseded",
+  "delivery_status": "unknown",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-07-19",
+  "summary": "runtime 패키지가 내부 구현을 type alias로 재수출하던 facade 계층의 존폐 질문이다. 2026-07-27 semantic tree 정리가 이 facade를 제거하고 direct import로 전환하면서 축약으로 결론이 났고 DEC-20260727-hololive-runtime-facade-removed가 이 결정을 대체했다.",
+  "sources": [
+    "iris-stack@db3927cf0ed1:docs/agent-workflows/plans/2026-07-19-stack-code-audit-refactoring-proposal.md#7. 사용자 결정 필요 사항"
+  ],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": []
+}

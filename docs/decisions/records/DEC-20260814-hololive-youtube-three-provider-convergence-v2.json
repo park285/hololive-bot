@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260814-hololive-youtube-three-provider-convergence-v2",
+  "title": "youtube three-provider convergence contract v2: immutable evidence와 mutable processing queue를 분리하고 payload별 typed coverage를 쓰며 공용 map coverage를 금지한다",
+  "decision_status": "accepted",
+  "delivery_status": "in_progress",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-14",
+  "summary": "2026-08-14 observation-target 문서와 convergence 계획을 코드 수준으로 대체하는 규범 문서다. Community WIP의 legacy/shadow/authoritative 구조, 중앙 singleton collector, youtube-producer consumer 구조는 중간 WIP라 최종 branch에 남기지 않는다. coverage는 공용 map[string]any가 아니라 각 payload V1이 자신의 typed coverage(ChannelListCoverageV1, GlobalChannelCoverageV1 등)를 포함하고 contract validator는 kind별 payload를 strict JSON decode한다. 2026-08-23 기준 youtube-collector mapper에 coverage 타입이 들어가 있다.",
+  "sources": [
+    "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#근거와 신규 설계 결정의 구분",
+    "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#5.1 공통 원칙"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/mapper.go"
+  ],
+  "supersedes": []
+}

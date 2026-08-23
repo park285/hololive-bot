@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260719-hololive-admin-auth-unification",
+  "title": "hololive admin auth: /api/holo 세션 기반 authz 통합 vs API-key 단일 유지와 세션 계통 제거",
+  "decision_status": "proposed",
+  "delivery_status": "unknown",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-07-19",
+  "summary": "admin plane에 두 인증 계통이 병렬로 있다. 어느 쪽으로 통합할지 결정되지 않았다.",
+  "sources": [
+    "iris-stack@db3927cf0ed1:docs/agent-workflows/plans/2026-07-19-stack-code-audit-refactoring-proposal.md#7. 사용자 결정 필요 사항"
+  ],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": [],
+  "review": {
+    "after": "2026-09-30"
+  }
+}

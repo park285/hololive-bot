@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260612-hololive-pgo-default-expansion",
+  "title": "hololive PGO default 적용 대상 확대 여부",
+  "decision_status": "superseded",
+  "delivery_status": "not_applicable",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-06-12",
+  "summary": "bot과 alarm-worker 외에 llm-scheduler, youtube-producer, admin-api로 PGO를 확대할지 묻는 질문이었다. 2026-07-10에 production 빌드 전체가 -pgo=off로 전환되면서 확대 대신 철회로 귀결되었다.",
+  "sources": [
+    "iris-stack@db3927cf0ed1:docs/performance_reliability_program_v2/28_open_decisions.md#OD-6 — PGO default 적용 대상 확대"
+  ],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": []
+}

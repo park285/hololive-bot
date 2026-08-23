@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260730-hololive-alarm-egress-lease-removed",
+  "title": "alarm egress scale-out: egress-owner lease와 ALARM_WORKER_EGRESS_LEASE_ENABLED를 삭제하고 production validator는 scheduler role만 완화한 두 profile을 열거한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-07-30",
+  "summary": "notification:egress-owner:alarm-worker lease와 플래그를 제거한다. production validator는 단일 profile 강제 대신 {NOTIFICATION_SCHEDULER_ROLE=worker, NOTIFICATION_EGRESS_ROLE=owner}(현행 단일 인스턴스)와 {NOTIFICATION_SCHEDULER_ROLE=off, NOTIFICATION_EGRESS_ROLE=owner}(미래 egress 전용 인스턴스)를 열거하며 NOTIFICATION_EGRESS_ROLE=owner는 계속 강제한다. 2026-08-23 기준 코드에 ALARM_WORKER_EGRESS_LEASE_ENABLED는 남아 있지 않다.",
+  "sources": [
+    "docs/current/architecture/alarm-egress-scale-out-decisions-20260730.md#결정"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-shared/pkg/config/settings/runtime_role_validation.go"
+  ],
+  "supersedes": []
+}

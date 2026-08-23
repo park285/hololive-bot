@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260719-hololive-api-pool-isolation",
+  "title": "hololive-api의 plane별 DB pool 3중을 장애 격리 설계로 수용할지 공유 pool로 합칠지",
+  "decision_status": "proposed",
+  "delivery_status": "unknown",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-07-19",
+  "summary": "plane import 격리는 실증되었으나 pool을 셋으로 둔 의도는 확인되지 않았다. 수용한다면 budget 문서화가 따른다.",
+  "sources": [
+    "iris-stack@db3927cf0ed1:docs/agent-workflows/plans/2026-07-19-stack-code-audit-refactoring-proposal.md#7. 사용자 결정 필요 사항"
+  ],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": [],
+  "review": {
+    "after": "2026-09-30"
+  }
+}
