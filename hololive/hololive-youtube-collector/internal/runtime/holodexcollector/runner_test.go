@@ -106,6 +106,9 @@ func TestRunnerPreservesReorderedResponseHash(t *testing.T) {
 	if err := jsonv2.Unmarshal(body, &rows); err != nil {
 		t.Fatal(err)
 	}
+	if rows == nil {
+		t.Fatal("live.json must decode into a non-nil array")
+	}
 	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
 		rows[i], rows[j] = rows[j], rows[i]
 	}
