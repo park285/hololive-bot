@@ -128,7 +128,6 @@ func newHolodexHTTPClient(timeout time.Duration) *http.Client {
 
 	protocols := new(http.Protocols)
 
-	protocols.SetHTTP1(true)
 	protocols.SetHTTP2(true)
 
 	transport.Protocols = protocols

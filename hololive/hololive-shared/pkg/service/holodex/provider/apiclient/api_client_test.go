@@ -90,12 +90,55 @@ func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing
 		t.Fatalf("ResponseHeaderTimeout = %s, want %s", gotTransport.ResponseHeaderTimeout, wantTransport.ResponseHeaderTimeout)
 	}
 
-	if gotTransport.Protocols == nil || !gotTransport.Protocols.HTTP1() || !gotTransport.Protocols.HTTP2() {
-		t.Fatalf("Protocols = %v, want HTTP/1 and HTTP/2", gotTransport.Protocols)
+	if gotTransport.Protocols == nil || gotTransport.Protocols.HTTP1() || !gotTransport.Protocols.HTTP2() {
+		t.Fatalf("Protocols = %v, want encrypted HTTP/2 only", gotTransport.Protocols)
 	}
 
 	if gotTransport.Protocols.UnencryptedHTTP2() {
 		t.Fatal("Protocols unexpectedly enables unencrypted HTTP/2")
+	}
+}
+
+func TestNewHolodexHTTPClientNegotiatesHTTP2(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("X-Test-Protocol-Major", fmt.Sprint(req.ProtoMajor))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	client := newHolodexHTTPClient(time.Second)
+	clientTransport, ok := client.Transport.(*http.Transport)
+
+	if !ok {
+		t.Fatalf("client transport type = %T, want *http.Transport", client.Transport)
+	}
+
+	serverTransport, ok := server.Client().Transport.(*http.Transport)
+
+	if !ok {
+		t.Fatalf("server transport type = %T, want *http.Transport", server.Client().Transport)
+	}
+
+	clientTransport.TLSClientConfig = serverTransport.TLSClientConfig.Clone()
+
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
+	if err != nil {
+		t.Fatalf("create HTTP/2 request: %v", err)
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("GET HTTP/2 test server: %v", err)
+	}
+	defer response.Body.Close()
+
+	if got := response.Header.Get("X-Test-Protocol-Major"); got != "2" {
+		t.Fatalf("negotiated protocol major = %q, want 2", got)
 	}
 }
 
