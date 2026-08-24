@@ -60,11 +60,8 @@ func (b *Bot) sendImages(ctx context.Context, room string, images [][]byte, opts
 }
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {
-	if err := b.ensureTransport().SendError(ctx, room, errorMsg); err != nil {
-		return fmt.Errorf("%w", err)
-	}
-
-	return nil
+	//nolint:wrapcheck // transport가 send error message context를 소유하므로 이 위임 계층은 원인을 그대로 전달한다.
+	return b.ensureTransport().SendError(ctx, room, errorMsg)
 }
 
 // outcome이 unknown이면 reply가 이미 전달됐을 수 있어, 오류 응답을 덧붙이면 중복 발화가 된다.

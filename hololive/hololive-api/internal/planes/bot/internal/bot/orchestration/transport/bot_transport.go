@@ -110,11 +110,8 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	if err := t.dispatchMessage(sendCtx, room, message, useMarkdown); err != nil {
-		return fmt.Errorf("%w", err)
-	}
-
-	return nil
+	//nolint:wrapcheck // dispatch 내부가 reply path context를 소유하므로 SendMessage는 결과를 그대로 전달한다.
+	return t.dispatchMessage(sendCtx, room, message, useMarkdown)
 }
 
 func (t *CommandTransport) dispatchMessage(ctx context.Context, room, message string, useMarkdown bool) error {
@@ -122,11 +119,8 @@ func (t *CommandTransport) dispatchMessage(ctx context.Context, room, message st
 	emission := issueReplyEmission(ctx)
 
 	if t.replyOutboxWriter() != nil {
-		if err := t.recordTextReply(ctx, room, message, emission, useMarkdown); err != nil {
-			return fmt.Errorf("%w", err)
-		}
-
-		return nil
+		//nolint:wrapcheck // recordTextReply가 record reply context를 소유하므로 dispatch 계층은 중복 context를 붙이지 않는다.
+		return t.recordTextReply(ctx, room, message, emission, useMarkdown)
 	}
 
 	if err := t.sendMessage(ctx, room, message, emission.clientRequestID, useMarkdown, opts...); err != nil {

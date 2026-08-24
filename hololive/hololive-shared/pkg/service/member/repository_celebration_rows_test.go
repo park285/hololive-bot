@@ -7,22 +7,22 @@ import (
 )
 
 func scanFullCelebrationRow(dest []any, id int, name, channelID string, aliases []byte) {
-	assignScanDest[int](dest[0], id)
-	assignScanDest[string](dest[1], "slug")
+	assignScanDest(dest[0], id)
+	assignScanDest(dest[1], "slug")
 
 	cid := channelID
-	assignScanDest[*string](dest[2], &cid)
-	assignScanDest[string](dest[3], name)
+	assignScanDest(dest[2], &cid)
+	assignScanDest(dest[3], name)
 	assignScanDest[*string](dest[4], nil)
 	assignScanDest[*string](dest[5], nil)
 	assignScanDest[*string](dest[6], nil)
-	assignScanDest[string](dest[7], "active")
-	assignScanDest[bool](dest[8], false)
-	assignScanDest[[]byte](dest[9], aliases)
+	assignScanDest(dest[7], "active")
+	assignScanDest(dest[8], false)
+	assignScanDest(dest[9], aliases)
 	assignScanDest[*string](dest[10], nil)
-	assignScanDest[string](dest[11], "hololive")
+	assignScanDest(dest[11], "hololive")
 	assignScanDest[*string](dest[12], nil)
-	assignScanDest[string](dest[13], "holodex")
+	assignScanDest(dest[13], "holodex")
 	assignScanDest[*string](dest[14], nil)
 	assignScanDest[*time.Time](dest[15], nil)
 	assignScanDest[*time.Time](dest[16], nil)
@@ -89,15 +89,15 @@ func TestCollectCalendarEntriesFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			scanFullCelebrationRow(dest, 1, "Suisei", testChannelUC1, []byte("not-json"))
-			assignScanDest[string](dest[17], "birthday")
-			assignScanDest[int](dest[18], 3)
+			assignScanDest(dest[17], "birthday")
+			assignScanDest(dest[18], 3)
 
 			return nil
 		}},
 		{scan: func(dest ...any) error {
 			scanFullCelebrationRow(dest, 2, "Miko", testChannelUC2, []byte(`{"ko":["미코"]}`))
-			assignScanDest[string](dest[17], "birthday")
-			assignScanDest[int](dest[18], 4)
+			assignScanDest(dest[17], "birthday")
+			assignScanDest(dest[18], 4)
 
 			return nil
 		}},
@@ -128,8 +128,8 @@ func TestCollectCalendarEntriesFromRows_JoinsRowsErr(t *testing.T) {
 		rows: []fakeMemberRow{
 			{scan: func(dest ...any) error {
 				scanFullCelebrationRow(dest, 1, "Suisei", testChannelUC1, []byte(`{"ko":["스이세이"]}`))
-				assignScanDest[string](dest[17], "birthday")
-				assignScanDest[int](dest[18], 3)
+				assignScanDest(dest[17], "birthday")
+				assignScanDest(dest[18], 3)
 
 				return nil
 			}},

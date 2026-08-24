@@ -17,11 +17,10 @@ type channelReconcileSteps[E, S, D any] struct {
 	applications func(D) []Application
 }
 
-func reconcileChannelSubject[E, S, D any](
+func (steps channelReconcileSteps[E, S, D]) reconcile(
 	ctx context.Context,
 	tx dbx.Tx,
 	claimed *Observation,
-	steps channelReconcileSteps[E, S, D],
 ) (ReconcileResult, error) {
 	evidence, err := steps.evidence(claimed)
 	if err != nil {

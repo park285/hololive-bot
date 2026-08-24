@@ -15,7 +15,7 @@ func (c *Consumer) reconcilePhoto(
 	tx dbx.Tx,
 	claimed *Observation,
 ) (ReconcileResult, error) {
-	result, err := reconcileChannelSubject(ctx, tx, claimed, channelReconcileSteps[photo.Evidence, photo.State, photo.Decision]{
+	steps := channelReconcileSteps[photo.Evidence, photo.State, photo.Decision]{
 		name:      "photo",
 		subject:   func(evidence photo.Evidence) string { return evidence.Sample.ChannelID },
 		evidence:  photoEvidenceFromObservation,
@@ -25,7 +25,9 @@ func (c *Consumer) reconcilePhoto(
 		},
 		persist:      persistPhotoDecision,
 		applications: func(decision photo.Decision) []Application { return mapPhotoApplications(decision.Applications) },
-	})
+	}
+
+	result, err := steps.reconcile(ctx, tx, claimed)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("reconcile photo: %w", err)
 	}

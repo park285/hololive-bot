@@ -95,7 +95,8 @@ type Bot struct {
 func NewBot(deps *Dependencies) (*Bot, error) {
 	holodexRuntime, err := validateBotDependencies(deps)
 	if err != nil {
-		return nil, fmt.Errorf("%w", err)
+		//nolint:wrapcheck // 생성자 중간 계층은 leaf dependency 오류에 새 정보를 추가하지 않는다.
+		return nil, err
 	}
 
 	core, messaging, data := deps.coreDeps(), deps.messagingDeps(), deps.dataDeps()

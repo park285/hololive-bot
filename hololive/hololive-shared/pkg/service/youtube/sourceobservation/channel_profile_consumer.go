@@ -15,7 +15,7 @@ func (c *Consumer) reconcileProfile(
 	tx dbx.Tx,
 	claimed *Observation,
 ) (ReconcileResult, error) {
-	result, err := reconcileChannelSubject(ctx, tx, claimed, channelReconcileSteps[profile.Evidence, profile.State, profile.Decision]{
+	steps := channelReconcileSteps[profile.Evidence, profile.State, profile.Decision]{
 		name:      "profile",
 		subject:   func(evidence profile.Evidence) string { return evidence.Sample.ChannelID },
 		evidence:  profileEvidenceFromObservation,
@@ -25,7 +25,9 @@ func (c *Consumer) reconcileProfile(
 		},
 		persist:      persistProfileDecision,
 		applications: func(decision profile.Decision) []Application { return mapProfileApplications(decision.Applications) },
-	})
+	}
+
+	result, err := steps.reconcile(ctx, tx, claimed)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("reconcile profile: %w", err)
 	}

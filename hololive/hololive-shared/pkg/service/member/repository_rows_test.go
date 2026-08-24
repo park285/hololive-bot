@@ -89,26 +89,26 @@ func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
 				return errors.New("scan destination count mismatch")
 			}
 
-			assignScanDest[int](dest[0], 1)
-			assignScanDest[string](dest[1], "ookami-mio")
+			assignScanDest(dest[0], 1)
+			assignScanDest(dest[1], "ookami-mio")
 
 			channelID := "UC_MIO"
-			assignScanDest[*string](dest[2], &channelID)
-			assignScanDest[string](dest[3], "Ookami Mio")
+			assignScanDest(dest[2], &channelID)
+			assignScanDest(dest[3], "Ookami Mio")
 			assignScanDest[*string](dest[4], nil)
 
 			koreanName := "오오카미 미오"
-			assignScanDest[*string](dest[5], &koreanName)
+			assignScanDest(dest[5], &koreanName)
 
 			shortKoreanName := "미오"
-			assignScanDest[*string](dest[6], &shortKoreanName)
-			assignScanDest[string](dest[7], "active")
-			assignScanDest[bool](dest[8], false)
-			assignScanDest[[]byte](dest[9], []byte(`{"ko":["미오"]}`))
+			assignScanDest(dest[6], &shortKoreanName)
+			assignScanDest(dest[7], "active")
+			assignScanDest(dest[8], false)
+			assignScanDest(dest[9], []byte(`{"ko":["미오"]}`))
 			assignScanDest[*string](dest[10], nil)
-			assignScanDest[string](dest[11], "hololive")
+			assignScanDest(dest[11], "hololive")
 			assignScanDest[*string](dest[12], nil)
-			assignScanDest[string](dest[13], "holodex")
+			assignScanDest(dest[13], "holodex")
 			assignScanDest[*string](dest[14], nil)
 
 			return nil
@@ -133,43 +133,43 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
-			assignScanDest[int](dest[0], 1)
-			assignScanDest[string](dest[1], "suisei")
+			assignScanDest(dest[0], 1)
+			assignScanDest(dest[1], "suisei")
 
 			channelID := testChannelUC1
-			assignScanDest[*string](dest[2], &channelID)
-			assignScanDest[string](dest[3], "Suisei")
+			assignScanDest(dest[2], &channelID)
+			assignScanDest(dest[3], "Suisei")
 			assignScanDest[*string](dest[4], nil)
 			assignScanDest[*string](dest[5], nil)
 			assignScanDest[*string](dest[6], nil)
-			assignScanDest[string](dest[7], "active")
-			assignScanDest[bool](dest[8], false)
-			assignScanDest[[]byte](dest[9], []byte("not-json"))
+			assignScanDest(dest[7], "active")
+			assignScanDest(dest[8], false)
+			assignScanDest(dest[9], []byte("not-json"))
 			assignScanDest[*string](dest[10], nil)
-			assignScanDest[string](dest[11], "hololive")
+			assignScanDest(dest[11], "hololive")
 			assignScanDest[*string](dest[12], nil)
-			assignScanDest[string](dest[13], "holodex")
+			assignScanDest(dest[13], "holodex")
 			assignScanDest[*string](dest[14], nil)
 
 			return nil
 		}},
 		{scan: func(dest ...any) error {
-			assignScanDest[int](dest[0], 2)
-			assignScanDest[string](dest[1], "miko")
+			assignScanDest(dest[0], 2)
+			assignScanDest(dest[1], "miko")
 
 			channelID := testChannelUC2
-			assignScanDest[*string](dest[2], &channelID)
-			assignScanDest[string](dest[3], "Miko")
+			assignScanDest(dest[2], &channelID)
+			assignScanDest(dest[3], "Miko")
 			assignScanDest[*string](dest[4], nil)
 			assignScanDest[*string](dest[5], nil)
 			assignScanDest[*string](dest[6], nil)
-			assignScanDest[string](dest[7], "active")
-			assignScanDest[bool](dest[8], false)
-			assignScanDest[[]byte](dest[9], []byte(`{"ko":["미코"]}`))
+			assignScanDest(dest[7], "active")
+			assignScanDest(dest[8], false)
+			assignScanDest(dest[9], []byte(`{"ko":["미코"]}`))
 			assignScanDest[*string](dest[10], nil)
-			assignScanDest[string](dest[11], "hololive")
+			assignScanDest(dest[11], "hololive")
 			assignScanDest[*string](dest[12], nil)
-			assignScanDest[string](dest[13], "holodex")
+			assignScanDest(dest[13], "holodex")
 			assignScanDest[*string](dest[14], nil)
 
 			return nil
@@ -197,22 +197,22 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 			return errors.New("scan mismatch")
 		}},
 		{scan: func(dest ...any) error {
-			assignScanDest[int](dest[0], 2)
+			assignScanDest(dest[0], 2)
 
 			channelID := testChannelUC2
-			assignScanDest[*string](dest[1], &channelID)
-			assignScanDest[string](dest[2], "Miko")
+			assignScanDest(dest[1], &channelID)
+			assignScanDest(dest[2], "Miko")
 			assignScanDest[*string](dest[3], nil)
 			assignScanDest[*string](dest[4], nil)
 			assignScanDest[*string](dest[5], nil)
-			assignScanDest[bool](dest[6], false)
-			assignScanDest[[]byte](dest[7], []byte(`{"ko":["미코"]}`))
+			assignScanDest(dest[6], false)
+			assignScanDest(dest[7], []byte(`{"ko":["미코"]}`))
 
 			photo := "https://example.com/miko.jpg"
-			assignScanDest[*string](dest[8], &photo)
-			assignScanDest[string](dest[9], "hololive")
+			assignScanDest(dest[8], &photo)
+			assignScanDest(dest[9], "hololive")
 			assignScanDest[*string](dest[10], nil)
-			assignScanDest[string](dest[11], "holodex")
+			assignScanDest(dest[11], "holodex")
 			assignScanDest[*string](dest[12], nil)
 
 			return nil
@@ -238,41 +238,41 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
-			assignScanDest[int](dest[0], 1)
-			assignScanDest[string](dest[1], "suisei")
+			assignScanDest(dest[0], 1)
+			assignScanDest(dest[1], "suisei")
 
 			channelID := testChannelUC1
-			assignScanDest[*string](dest[2], &channelID)
-			assignScanDest[string](dest[3], "Suisei")
+			assignScanDest(dest[2], &channelID)
+			assignScanDest(dest[3], "Suisei")
 			assignScanDest[*string](dest[4], nil)
 			assignScanDest[*string](dest[5], nil)
 			assignScanDest[*string](dest[6], nil)
-			assignScanDest[string](dest[7], "active")
-			assignScanDest[bool](dest[8], false)
-			assignScanDest[[]byte](dest[9], []byte(`{"ko":["스이세이"]}`))
-			assignScanDest[string](dest[10], "hololive")
+			assignScanDest(dest[7], "active")
+			assignScanDest(dest[8], false)
+			assignScanDest(dest[9], []byte(`{"ko":["스이세이"]}`))
+			assignScanDest(dest[10], "hololive")
 			assignScanDest[*string](dest[11], nil)
-			assignScanDest[string](dest[12], "holodex")
+			assignScanDest(dest[12], "holodex")
 			assignScanDest[*string](dest[13], nil)
 
 			return nil
 		}},
 		{scan: func(dest ...any) error {
-			assignScanDest[int](dest[0], 2)
-			assignScanDest[string](dest[1], "miko")
+			assignScanDest(dest[0], 2)
+			assignScanDest(dest[1], "miko")
 
 			channelID := testChannelUC2
-			assignScanDest[*string](dest[2], &channelID)
-			assignScanDest[string](dest[3], "Miko")
+			assignScanDest(dest[2], &channelID)
+			assignScanDest(dest[3], "Miko")
 			assignScanDest[*string](dest[4], nil)
 			assignScanDest[*string](dest[5], nil)
 			assignScanDest[*string](dest[6], nil)
-			assignScanDest[string](dest[7], "active")
-			assignScanDest[bool](dest[8], false)
-			assignScanDest[[]byte](dest[9], []byte("not-json"))
-			assignScanDest[string](dest[10], "hololive")
+			assignScanDest(dest[7], "active")
+			assignScanDest(dest[8], false)
+			assignScanDest(dest[9], []byte("not-json"))
+			assignScanDest(dest[10], "hololive")
 			assignScanDest[*string](dest[11], nil)
-			assignScanDest[string](dest[12], "holodex")
+			assignScanDest(dest[12], "holodex")
 			assignScanDest[*string](dest[13], nil)
 
 			return nil

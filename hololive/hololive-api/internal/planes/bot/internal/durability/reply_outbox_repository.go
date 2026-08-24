@@ -207,7 +207,8 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 		normalized.ClientRequestID,
 	)
 	if err != nil {
-		return ReplyOutboxInserted, fmt.Errorf("%w", safeMessageRepositoryError("insert reply outbox row", normalized.MessageID, err))
+		//nolint:wrapcheck // sanitizer가 operation과 익명 message token을 이미 소유하므로 중간 repository context를 추가하지 않는다.
+		return ReplyOutboxInserted, safeMessageRepositoryError("insert reply outbox row", normalized.MessageID, err)
 	}
 
 	if tag.RowsAffected() == 1 {
@@ -231,8 +232,9 @@ func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, ent
 	err := r.pool.QueryRow(ctx, replyOutboxConflictSQL, entry.MessageID, entry.Phase, entry.Ordinal).
 		Scan(&recordedHash, &recordedClientRequestID)
 	if err != nil {
+		//nolint:wrapcheck // sanitizer가 operation과 익명 message token을 이미 소유하므로 중간 repository context를 추가하지 않는다.
 		return ReplyOutboxAlreadyRecorded,
-			fmt.Errorf("%w", safeMessageRepositoryError("inspect reply outbox row", entry.MessageID, err))
+			safeMessageRepositoryError("inspect reply outbox row", entry.MessageID, err)
 	}
 
 	if recordedHash != payloadHash || recordedClientRequestID != entry.ClientRequestID {
