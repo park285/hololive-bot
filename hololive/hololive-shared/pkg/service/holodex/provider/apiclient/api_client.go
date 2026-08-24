@@ -98,6 +98,8 @@ func NewHolodexAPIClient(
 		httpClient = newHolodexHTTPClient(holodexCfg.Timeout)
 	}
 
+	configureHolodexHTTP2(httpClient)
+
 	maxBody := settings.DefaultMaxResponseBodyBytes
 
 	return &APIClient{
@@ -120,10 +122,17 @@ func NewHolodexAPIClient(
 
 func newHolodexHTTPClient(timeout time.Duration) *http.Client {
 	client := httputil.NewExternalAPIClient(timeout)
+
+	configureHolodexHTTP2(client)
+
+	return client
+}
+
+func configureHolodexHTTP2(client *http.Client) {
 	transport, ok := client.Transport.(*http.Transport)
 
 	if !ok {
-		panic("httputil.NewExternalAPIClient transport contract changed")
+		return
 	}
 
 	protocols := new(http.Protocols)
@@ -131,8 +140,6 @@ func newHolodexHTTPClient(timeout time.Duration) *http.Client {
 	protocols.SetHTTP2(true)
 
 	transport.Protocols = protocols
-
-	return client
 }
 
 func (c *APIClient) getNextAPIKey() string {

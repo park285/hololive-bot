@@ -142,6 +142,28 @@ func TestNewHolodexHTTPClientNegotiatesHTTP2(t *testing.T) {
 	}
 }
 
+func TestNewHolodexAPIClientConfiguresProvidedStandardTransportForHTTP2(t *testing.T) {
+	t.Parallel()
+
+	holodexCfg := settings.DefaultHolodexOperationalConfig()
+	provided := httputil.NewProfiledClient(httputil.TransportProfile{Timeout: holodexCfg.Timeout})
+	client := NewHolodexAPIClient(provided, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, &holodexCfg)
+
+	if client.httpClient != provided {
+		t.Fatal("NewHolodexAPIClient() replaced the provided client")
+	}
+
+	transport, ok := provided.Transport.(*http.Transport)
+
+	if !ok {
+		t.Fatalf("provided transport type = %T, want *http.Transport", provided.Transport)
+	}
+
+	if transport.Protocols == nil || transport.Protocols.HTTP1() || !transport.Protocols.HTTP2() {
+		t.Fatalf("Protocols = %v, want encrypted HTTP/2 only", transport.Protocols)
+	}
+}
+
 func TestHolodexAPIClientSingleKey(t *testing.T) {
 	logger := slog.Default()
 	client := &APIClient{
