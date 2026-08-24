@@ -89,6 +89,14 @@ func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing
 	if gotTransport.ResponseHeaderTimeout != wantTransport.ResponseHeaderTimeout {
 		t.Fatalf("ResponseHeaderTimeout = %s, want %s", gotTransport.ResponseHeaderTimeout, wantTransport.ResponseHeaderTimeout)
 	}
+
+	if gotTransport.Protocols == nil || !gotTransport.Protocols.HTTP1() || !gotTransport.Protocols.HTTP2() {
+		t.Fatalf("Protocols = %v, want HTTP/1 and HTTP/2", gotTransport.Protocols)
+	}
+
+	if gotTransport.Protocols.UnencryptedHTTP2() {
+		t.Fatal("Protocols unexpectedly enables unencrypted HTTP/2")
+	}
 }
 
 func TestHolodexAPIClientSingleKey(t *testing.T) {
